@@ -208,3 +208,22 @@ __marimo__/
 
 # BMad
 _bmad/
+
+# Node
+node_modules/
+.pnpm-lock.yaml
+
+# Frontend build artifacts
+frontend/.nuxt/
+frontend/.output/
+frontend/node_modules/
+
+# Python virtual environment
+venv/
+backend/venv/
+
+# Python benchmarks
+.benchmarks/
+
+# macOS
+.DS_Store
