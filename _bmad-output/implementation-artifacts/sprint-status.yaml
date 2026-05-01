@@ -1,0 +1,98 @@
+# generated: 2026-04-30
+# last_updated: 2026-04-30
+# project: ai-for-investor
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: /Users/yunjinqi/Documents/new_projects/ai-for-investor/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when first story is created (via create-story)
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review before 'done'
+
+generated: 2026-04-30
+last_updated: 2026-04-30
+project: ai-for-investor
+project_key: NOKEY
+tracking_system: file-system
+story_location: /Users/yunjinqi/Documents/new_projects/ai-for-investor/_bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: done
+  1-1-backend-application-skeleton-and-health-check: done
+  1-2-database-and-cache-connectivity-baseline: done
+  1-3-development-environment-and-quality-commands: done
+  1-4-request-logging-and-request-id-baseline: done
+  1-5-architecture-decision-and-migration-baseline: done
+  epic-1-retrospective: done
+  epic-2: done
+  2-1-email-registration-and-password-policy: done
+  2-2-email-verification-flow: done
+  2-3-login-logout-and-current-user-session: done
+  2-4-password-reset-flow: done
+  2-5-role-based-access-control-and-admin-bootstrap: done
+  2-6-authentication-frontend-pages-and-route-guards: done
+  epic-2-retrospective: done
+  epic-3: done
+  3-1-public-blog-listing-and-detail-pages: done
+  3-2-category-tag-and-search-support: done
+  3-3-admin-blog-crud-and-publishing-workflow: done
+  3-4-markdown-rendering-and-content-safety: done
+  3-5-seo-rss-and-structured-metadata: done
+  3-6-seed-content-and-editorial-templates: done
+  epic-3-retrospective: done
+  epic-4: done
+  4-1-forum-categories-and-public-browsing: done
+  4-2-thread-and-reply-creation: done
+  4-3-author-edit-and-delete-controls: done
+  4-4-moderation-actions-and-reporting: done
+  4-5-forum-theme-system-and-user-preference: done
+  4-6-community-rules-and-seed-discussion-plan: done
+  epic-4-retrospective: done
+  epic-5: done
+  5-1-github-discovery-configuration-and-collection: done
+  5-2-project-deduplication-and-snapshot-storage: done
+  5-3-project-scoring-and-human-review: done
+  5-4-public-project-library-and-detail-pages: done
+  5-5-weekly-report-candidate-pool: done
+  epic-5-retrospective: done
+  epic-6: done
+  6-1-tool-catalog-and-tool-detail-pages: done
+  6-2-tool-manifest-and-admin-configuration: done
+  6-3-tool-job-creation-and-ownership: done
+  6-4-worker-execution-and-job-state-machine: done
+  6-5-tool-result-display-and-usage-history: done
+  6-6-tool-security-and-supply-chain-checks: done
+  epic-6-retrospective: done
+  epic-7: done
+  7-1-end-to-end-test-coverage-for-core-paths: done
+  7-2-responsive-ui-and-error-pages: done
+  7-3-legal-privacy-and-risk-disclosure-pages: done
+  7-4-observability-and-operational-dashboards: done
+  7-5-backup-restore-and-rollback-readiness: done
+  7-6-launch-content-and-community-seed-package: done
+  epic-7-retrospective: done

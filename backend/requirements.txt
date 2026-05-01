@@ -1,0 +1,51 @@
+# FastAPI and ASGI
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncmy==0.2.9
+alembic==1.13.1
+pymongo==4.6.1
+motor==3.3.2
+redis==5.0.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+argon2-cffi==23.1.0
+email-validator==2.1.0.post1
+
+# HTTP and API
+httpx==0.26.0
+aiohttp==3.9.3
+tenacity==8.2.3
+
+# Markdown and content
+markdown==3.5.2
+bleach==6.1.0
+markdown-it-py==3.0.0
+Pygments==2.17.2
+
+# Utils
+pydantic==2.6.1
+pydantic-settings==2.1.0
+python-dotenv==1.0.1
+python-dateutil==2.8.2
+boto3==1.34.34
+aiofiles==23.2.1
+Pillow==10.2.0
+
+# Worker
+arq==0.25.0
+
+# Logging and monitoring
+structlog==24.1.0
+sentry-sdk==1.42.0
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.4
+pytest-cov==4.1.0
+fakeredis==2.21.0

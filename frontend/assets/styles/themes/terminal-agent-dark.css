@@ -1,0 +1,19 @@
+[data-theme="terminal-agent-dark"] {
+  --color-bg: #0a0a0a;
+  --color-surface: #141414;
+  --color-surface-muted: #1e1e1e;
+  --color-border: #2a2a2a;
+  --color-border-strong: #3a3a3a;
+  --color-text: #e4e4e7;
+  --color-text-muted: #a1a1aa;
+  --color-text-subtle: #71717a;
+  --color-primary: #22c55e;
+  --color-primary-hover: #16a34a;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-code-bg: #000000;
+  --color-focus-ring: #22c55e;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-popover: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+}
