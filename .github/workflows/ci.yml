@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check for generated artifacts
         run: ./scripts/ci/check-generated-artifacts.sh
@@ -32,10 +32,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -52,10 +52,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -72,10 +72,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -168,10 +168,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -232,10 +232,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -279,10 +279,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -342,10 +342,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -423,10 +423,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -453,10 +453,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -483,10 +483,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -513,10 +513,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -552,12 +552,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -611,7 +611,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           file: src/backend/coverage.xml
           flags: backend
@@ -635,10 +635,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -706,7 +706,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history so the scan can catch secrets in any commit, not just
           # the current tree.
@@ -804,10 +804,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -859,10 +859,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -879,7 +879,7 @@ jobs:
         run: node ../../scripts/dev/coverage_core_summary.mjs
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           file: src/frontend/coverage/coverage-final.json
           flags: frontend
@@ -903,10 +903,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -977,16 +977,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download frontend build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: src/frontend/dist/
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -1093,10 +1093,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -1143,17 +1143,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: src/frontend/package-lock.json
 
       - name: Set up Python (for check_i18n_coverage.py)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -1228,10 +1228,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -1240,7 +1240,7 @@ jobs:
             config/requirements-dev.lock
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -1321,10 +1321,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -1370,10 +1370,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -1501,7 +1501,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Collect job durations and cache status
         uses: actions/github-script@v7
