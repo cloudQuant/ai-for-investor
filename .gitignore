@@ -54,6 +54,7 @@ Thumbs.db
 .omo/
 .opencode/
 .windsurf/
+.joyincode
 
 # Local linked worktrees
 .worktrees/
