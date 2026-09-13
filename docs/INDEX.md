@@ -1,4 +1,4 @@
-# AI for Investor 文档导航
+# ai-for-investor 文档导航
 
 本目录按“发布文档、当前工程文档、历史归档”组织。不要从历史方案或旧截图推断当前产品行为；功能、接口和命令应优先以发布站点、运行中的 OpenAPI 和测试为准。
 
@@ -48,7 +48,7 @@ python -m mkdocs build -f docs/mkdocs.yml --strict
 
 ## 发布与外部入口
 
-- 中文站点（GitHub Pages）：<https://cloudquant.github.io/backtrader_web/>
-- English site（GitHub Pages）：<https://cloudquant.github.io/backtrader_web/en/>
+- 中文站点（GitHub Pages）：<https://cloudquant.github.io/ai-for-investor/>
+- English site（GitHub Pages）：<https://cloudquant.github.io/ai-for-investor/en/>
 - 运行中 API：`http://localhost:8000/docs`
 - 部署流水线：`.github/workflows/docs.yml`（master 上 `docs/**` 变更自动重建）

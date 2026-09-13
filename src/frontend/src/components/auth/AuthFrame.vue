@@ -16,7 +16,7 @@
               <TrendCharts />
             </el-icon>
           </span>
-          <span>AI for Investor</span>
+          <span>ai-for-investor</span>
         </div>
 
         <div class="auth-heading">

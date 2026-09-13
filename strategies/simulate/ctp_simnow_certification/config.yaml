@@ -1,7 +1,7 @@
 strategy:
   name: "SimNow CTP 模拟认证工作区"
   description: "面向初学者的 SimNow 33 项 CTP 认证与交易验证工作区。真实执行需显式确认。"
-  author: "backtrader_web"
+  author: "ai_for_investor"
   category: "simulate"
 
 params:

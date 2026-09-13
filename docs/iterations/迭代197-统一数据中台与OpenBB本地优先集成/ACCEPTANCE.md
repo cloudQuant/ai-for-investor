@@ -201,11 +201,11 @@ G4 建议在 staging 连续观察至少 5 个交易 session，包含一次闭市
 这些是后续开发/验收命令模板，本次未执行。`tests/market_data_platform/` 和 `scripts/acceptance/iteration197_data_platform.py` 尚待实施，不能将当前不存在的命令写成已通过。macOS Python 命令一律使用用户 Anaconda base；Provider runner 的独立锁定环境由验收脚本调用。
 
 ```bash
-cd /Users/yunjinqi/Downloads/backtrader_web/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest -q tests/market_data_platform/
 /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest -q tests/test_market_instrument_api.py tests/test_market_instrument_freshness.py tests/test_market_data_coverage_service.py tests/test_market_data_precheck_service.py tests/test_data_trust_api.py tests/test_akshare_script_service.py tests/test_akshare_scheduler.py
 /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff check app/services/market_data app/models/market_data_platform.py app/schemas/market_data_platform.py tests/market_data_platform
-cd /Users/yunjinqi/Downloads/backtrader_web/src/frontend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
 npm run typecheck
 npm run test -- --run
 npm run build

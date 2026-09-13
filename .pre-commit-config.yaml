@@ -1,4 +1,4 @@
-# Pre-commit hooks for Backtrader Web
+# Pre-commit hooks for ai-for-investor
 # Install: pip install pre-commit && pre-commit install
 # Run manually: pre-commit run --all-files
 

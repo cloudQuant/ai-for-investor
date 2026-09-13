@@ -2,14 +2,14 @@
 
 ## 1. 概述
 
-本文档基于 **TBQuant3 实际运行界面截图** 和 **backtrader_web 前后端源码** 的深入对比分析，提出具体的界面改进和功能完善方案。
+本文档基于 **TBQuant3 实际运行界面截图** 和 **ai_for_investor 前后端源码** 的深入对比分析，提出具体的界面改进和功能完善方案。
 
 **参考来源**:
 - TBQuant3 v1.3.9.4 运行截图 (30+ 张，保存在 `docs/tbquant_screenshots/`)
 - TBQuant3 安装目录分析 (`D:\program\TBQuant`)
 - [TBQuant3帮助文档](https://tbq3.tbquant.net/helper)
-- backtrader_web 前端源码 (15个页面, 13个组件)
-- backtrader_web 后端源码 (23个API模块, 20+个服务)
+- ai_for_investor 前端源码 (15个页面, 13个组件)
+- ai_for_investor 后端源码 (23个API模块, 20+个服务)
 
 **创建时间**: 2026-03-13
 
@@ -17,11 +17,11 @@
 
 ## 2. 功能对比总表
 
-> 基于 TBQuant3 实际截图 vs backtrader_web 源码的逐项对比
+> 基于 TBQuant3 实际截图 vs ai_for_investor 源码的逐项对比
 
-### 2.1 backtrader_web 已实现且与 TBQuant3 对齐的功能
+### 2.1 ai_for_investor 已实现且与 TBQuant3 对齐的功能
 
-| 功能 | TBQuant3 | backtrader_web | 质量评估 |
+| 功能 | TBQuant3 | ai_for_investor | 质量评估 |
 |-----|---------|---------------|---------|
 | 策略创建/编辑 | 公式管理器 + TB语言编辑器 | StrategyPage + Monaco编辑器(Python) | 基本对齐 |
 | 策略模板库 | 内置多种策略模板 | 策略Gallery + 分类筛选(6类) | 基本对齐 |
@@ -33,9 +33,9 @@
 | 回测结果分析 | 绩效报告 | EquityCurve/DrawdownChart/TradeSignalChart 等6个图表组件 | 基本对齐 |
 | 自动交易调度 | 模式运行管理 | AutoTradingScheduler + 交易时段配置 | 基本对齐 |
 
-### 2.2 backtrader_web 独有优势（TBQuant3 不具备）
+### 2.2 ai_for_investor 独有优势（TBQuant3 不具备）
 
-| 功能 | backtrader_web 实现 | 价值 |
+| 功能 | ai_for_investor 实现 | 价值 |
 |-----|-------------------|------|
 | **Web访问** | 浏览器随时访问，无需安装 | 远程管理、跨平台 |
 | **策略版本控制** | Git风格分支/回滚/版本对比 | 策略迭代管理 |
@@ -46,11 +46,11 @@
 | **组合管理** | PortfolioPage + 资产配置 | 组合分析 |
 | **月度收益热力图** | ReturnHeatmap组件 | 可视化分析 |
 
-### 2.3 TBQuant3 有但 backtrader_web 缺失的功能
+### 2.3 TBQuant3 有但 ai_for_investor 缺失的功能
 
 > 以下是基于**实际截图**确认的功能差距，按影响程度排序
 
-| # | 功能 | TBQuant3 实现(截图来源) | 对 backtrader_web 的价值 | 优先级 |
+| # | 功能 | TBQuant3 实现(截图来源) | 对 ai_for_investor 的价值 | 优先级 |
 |---|-----|----------------------|----------------------|-------|
 | 1 | **实时策略监控面板** | 监控器 + 模式运行(策略菜单截图) | 策略运行状态一览，快速启停 | P0 |
 | 2 | **实时资金曲线** | 策略菜单独立入口"实时资金曲线" | 运行中策略的实时权益推送 | P0 |
@@ -74,7 +74,7 @@
 
 #### 现状问题
 
-backtrader_web 的 SimulatePage 和 LiveTradingPage 提供了实例列表和启停操作，但**缺少集中监控视图**。用户需要逐一点击进入各实例详情页才能了解运行状态，没有全局概览。
+ai_for_investor 的 SimulatePage 和 LiveTradingPage 提供了实例列表和启停操作，但**缺少集中监控视图**。用户需要逐一点击进入各实例详情页才能了解运行状态，没有全局概览。
 
 #### TBQuant3 参考 (来自策略菜单截图)
 
@@ -135,7 +135,7 @@ TBQuant3 的"监控器"和"模式运行管理"提供：
 
 #### 现状问题
 
-backtrader_web 的 EquityCurve 组件只展示**回测完成后**的静态曲线。策略运行过程中（模拟/实盘）没有实时资金推送。
+ai_for_investor 的 EquityCurve 组件只展示**回测完成后**的静态曲线。策略运行过程中（模拟/实盘）没有实时资金推送。
 
 #### TBQuant3 参考
 
@@ -201,7 +201,7 @@ const props = defineProps({
 
 #### 现状问题
 
-backtrader_web 后端已有 `sandbox.py` 实现策略代码安全检查，但**前端没有集成验证按钮**。用户编写策略代码后只能运行回测才能发现错误，体验差。
+ai_for_investor 后端已有 `sandbox.py` 实现策略代码安全检查，但**前端没有集成验证按钮**。用户编写策略代码后只能运行回测才能发现错误，体验差。
 
 #### TBQuant3 参考
 
@@ -310,7 +310,7 @@ async def validate_strategy_code(request: ValidateRequest):
 
 #### 现状
 
-backtrader_web 有 `KlineChart.vue` 组件，但仅用于回测结果展示（BacktestResultPage）。
+ai_for_investor 有 `KlineChart.vue` 组件，但仅用于回测结果展示（BacktestResultPage）。
 
 #### TBQuant3 参考 (来自截图 08_after_dialog.png)
 
@@ -347,7 +347,7 @@ TBQuant3 的K线图表功能包含：
 
 #### 现状
 
-backtrader_web 使用传统的单页面路由切换，同一时间只能查看一个功能页面。
+ai_for_investor 使用传统的单页面路由切换，同一时间只能查看一个功能页面。
 
 #### TBQuant3 参考
 
@@ -386,7 +386,7 @@ TBQuant3 支持多Tab并行工作(截图中可见"行情报价"、"T型报价"�
 
 #### 现状
 
-backtrader_web 仅通过侧边栏导航，没有工具栏快捷入口。
+ai_for_investor 仅通过侧边栏导航，没有工具栏快捷入口。
 
 #### TBQuant3 参考 (来自 toolbar_detail.png)
 
@@ -518,7 +518,7 @@ StrategyPage 的"我的策略"Tab使用平铺的表格列表，无分组功能�
 
 #### 现状
 
-backtrader_web 已有 ThemeToggle 组件支持 dark/light 切换，但深色主题并非默认，且可能未对所有组件充分适配。
+ai_for_investor 已有 ThemeToggle 组件支持 dark/light 切换，但深色主题并非默认，且可能未对所有组件充分适配。
 
 #### TBQuant3 参考 (所有截图均为深色主题)
 
@@ -569,7 +569,7 @@ TBQuant3 全局使用深蓝黑色主题 (#0D0D1A 背景)，所有截图一致。
 
 ## 7. 附录
 
-### 7.1 backtrader_web 现有技术栈
+### 7.1 ai_for_investor 现有技术栈
 
 | 层级 | 技术 |
 |-----|------|
@@ -610,10 +610,10 @@ TBQuant3 全局使用深蓝黑色主题 (#0D0D1A 背景)，所有截图一致。
 | 1.1 | 2026-03-13 | 添加本地 TBQuant 安装目录探索结果 |
 | 1.2 | 2026-03-13 | 新增界面布局方案、策略分组管理、快捷键系统、风控面板等改进方案 |
 | 2.0 | 2026-03-13 | 添加 TBQuant3 实际运行界面截图分析 |
-| **3.0** | **2026-03-13** | **全面重写**: 基于TBQuant3截图 + backtrader_web源码的逐项对比分析；明确已有/缺失/独有功能；P0-P3优先级改进方案含具体代码和文件改动清单 |
+| **3.0** | **2026-03-13** | **全面重写**: 基于TBQuant3截图 + ai_for_investor源码的逐项对比分析；明确已有/缺失/独有功能；P0-P3优先级改进方案含具体代码和文件改动清单 |
 
 ---
 
 *文档版本: 3.0*
 *最后更新: 2026-03-13*
-*分析方法: TBQuant3 实际截图(30+张) + backtrader_web 源码分析(前端15页面+13组件, 后端23API+20服务)*
+*分析方法: TBQuant3 实际截图(30+张) + ai_for_investor 源码分析(前端15页面+13组件, 后端23API+20服务)*

@@ -1,4 +1,4 @@
-# AI for Investor v0.2.0 RC1 Release Notes
+# ai-for-investor v0.2.0 RC1 Release Notes
 
 > Release candidate: `v0.2.0-rc1`
 > Status: candidate build for validation, not the final v0.2.0 production release

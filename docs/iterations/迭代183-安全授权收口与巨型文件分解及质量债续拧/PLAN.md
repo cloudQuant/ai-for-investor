@@ -62,7 +62,7 @@
 | 静默吞异常 | `ai_strategy_research_service.py:2489,4401,10761,4984,3239,3267,4553,5394` + `task_manager.py:73,106,113,161` + `trading_workspace_service.py:1244` 等；`:4401`/`:10761` 脱敏失败返回**未脱敏** record | 🔴 AI 研究链路错误不可观测，部分泄露敏感字段 |
 | 可观测性缺口 | `utils/tracing.py` `business_span()` 完整实现但**全仓零调用**；`/health` 不检查 Redis/AI provider/broker 网关 | 🟠 175 §5 OTel 业务 span 承诺未兑现 |
 | portfolio N+1 | `api/portfolio/api.py:1041-1063` `_portfolio_sources` 循环内每次 `_persist_source_asset_specs` 独立开 session+查询 | 🟠 热路径 N+1 |
-| 仓库卫生 | `MagicMock/`（72B，测试泄漏）、`lost_codes.pkl`（295B）被 tracked；`reports/` **133MB** tracked；根目录 `AKSHARE_TASK_TODO.md` 320KB / `BACKTRADER_WEB_STRESS_MONITORING.md` 411KB / `UI_OPTIMIZATION_TODO.md` 88KB；`src/frontend/artifacts/` 33MB untracked 未忽略 | 🟠 仓库膨胀与误入库 |
+| 仓库卫生 | `MagicMock/`（72B，测试泄漏）、`lost_codes.pkl`（295B）被 tracked；`reports/` **133MB** tracked；根目录 `AKSHARE_TASK_TODO.md` 320KB / `AI_FOR_INVESTOR_STRESS_MONITORING.md` 411KB / `UI_OPTIMIZATION_TODO.md` 88KB；`src/frontend/artifacts/` 33MB untracked 未忽略 | 🟠 仓库膨胀与误入库 |
 | i18n 硬编码 | `.vue` 中 **649 处**硬编码中文未走 `t()`，`DataPage.vue` 最严重（table label 全硬编码） | 🟠 en-US 下显示中文 |
 | a11y | 354 个 `el-icon` 中 159 个缺 `aria-hidden`/`aria-label`（45%） | 🟡 可访问性 |
 | 分层违规 | `workspace_service.py:98` lazy import `app.api.analytics._resolve_log_dir`（service→api 反向）；`ai_observability/budget.py:40` `AIBudgetExceededError(HTTPException)`；API 层直接 `db.commit()`（stock_analysis/airflow_callback/ai_observability/portfolio） | 🟠 架构债 |
@@ -321,7 +321,7 @@
 | `lost_codes.pkl` | 295B | 是 | 不明 pickle 二进制 |
 | `reports/` | **133MB** / 260 文件 | 是 | akshare 数据完整性审计 JSON/MD，使仓库膨胀 |
 | `AKSHARE_TASK_TODO.md` | 320KB | 是 | 根目录大 TODO |
-| `BACKTRADER_WEB_STRESS_MONITORING.md` | 411KB | 是 | 根目录大文档 |
+| `AI_FOR_INVESTOR_STRESS_MONITORING.md` | 411KB | 是 | 根目录大文档 |
 | `UI_OPTIMIZATION_TODO.md` | 88KB | 是 | 根目录大 TODO |
 | `src/frontend/artifacts/` | **33MB** / 156 PNG | 否 | 设计截图未忽略 |
 | `data/datas/*/`（8 目录） | ~3MB | 否 | 回测样本数据未忽略 |

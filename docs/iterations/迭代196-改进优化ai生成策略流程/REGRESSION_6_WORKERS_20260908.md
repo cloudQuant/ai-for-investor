@@ -6,7 +6,7 @@
 
 | 项目 | 冻结值 | 判定 |
 | --- | --- | --- |
-| 实现工作树 | `/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust` | 本地实现来源 |
+| 实现工作树 | `/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust` | 本地实现来源 |
 | 分支 | `codex/iteration-196-ai-research-trust` | 本地实现来源 |
 | 基础/当前提交 | `a18bcf52682686c30d919fe02d6fd734ee4271b9` | 工作树仍有大量未提交变更，不能作为 candidate seal |
 | 后端 Python 来源摘要 | `03513ad1302d16e567ec180705181ac85be7d18fd25b88f5a13669de80988ec1` | 对 `app/`、`tests/`、`alembic/`、`scripts/` 下所有 `*.py` 排序、逐文件 SHA-256 后再汇总；功能跑前、功能跑后、性能跑后相同 |

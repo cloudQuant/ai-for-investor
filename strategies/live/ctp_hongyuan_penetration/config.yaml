@@ -1,7 +1,7 @@
 strategy:
   name: "宏源期货 CTP 穿透式认证工作区"
   description: "宏源期货仿真环境的 33 项 CTP 穿透式认证工作区。真实执行需显式确认。"
-  author: "backtrader_web"
+  author: "ai_for_investor"
   category: "live"
 
 params:

@@ -2,7 +2,7 @@
 
 > 判定：`LOCAL_T1_PASS`，只覆盖当前源码下的本地服务、SQLite/SQLAlchemy 合同和受控 fake/HTTP adapter。
 > 发布边界：`IMPLEMENTATION_ACCEPTED=NO-GO`、`PROTOCOL_PRODUCTION_ENABLED=NO-GO`、candidate research/promotion=`BLOCKED/NO-GO`。
-> 实现工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`
+> 实现工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`
 > 需求/验收：`FR-DATA-014`、`FR-TASK-011～012`、`AC-SEAL-007`、`AC-TASK-008`。
 
 ## 1. 本切片闭合的协议

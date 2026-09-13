@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# AI for Investor - 一键服务器部署脚本
+# ai-for-investor - 一键服务器部署脚本
 #
 # 适用于全新的 Ubuntu 22.04 / 24.04 LTS 服务器
 # 用法:
@@ -285,7 +285,7 @@ log_step "8/10 配置 systemd 后端服务"
 
 cat > /etc/systemd/system/ai-for-investor.service <<EOF
 [Unit]
-Description=AI for Investor API
+Description=ai-for-investor API
 After=network.target mysql.service
 Wants=mysql.service
 
@@ -419,7 +419,7 @@ DB_STATUS=$(echo "$HEALTH" | python3 -c "import sys,json;print(json.load(sys.std
 # 保存凭据
 ###############################################################################
 cat > "${CREDENTIALS_FILE}" <<EOF
-# AI for Investor 部署凭据 - 请妥善保管！
+# ai-for-investor 部署凭据 - 请妥善保管！
 # 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
 
 MySQL root 密码:     ${MYSQL_ROOT_PASSWORD}

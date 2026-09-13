@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1040" viewBox="0 0 1440 1040" role="img" aria-labelledby="title desc">
-  <title id="title">AI for Investor 系统架构图</title>
-  <desc id="desc">AI for Investor 从投资需求、AI 投研、数据回测、模拟交易到实盘审核的分层系统架构。</desc>
+  <title id="title">ai-for-investor 系统架构图</title>
+  <desc id="desc">ai-for-investor 从投资需求、AI 投研、数据回测、模拟交易到实盘审核的分层系统架构。</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#f8fafc"/>
@@ -46,7 +46,7 @@
 
   <rect width="1440" height="1040" fill="url(#bg)"/>
 
-  <text x="72" y="64" class="title">AI for Investor 系统架构</text>
+  <text x="72" y="64" class="title">ai-for-investor 系统架构</text>
   <text x="72" y="96" class="subtitle">以 AI 投研编排为核心，连接数据、回测、策略版本、模拟交易、人工审核与实盘准备，形成可验证、可优化、可审计的投资闭环。</text>
 
   <rect x="72" y="128" width="1296" height="104" class="panel"/>

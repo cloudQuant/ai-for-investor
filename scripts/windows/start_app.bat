@@ -26,7 +26,7 @@ set "ASYNC_LOG=%LOG_DIR%\start_app.%RUN_TOKEN%.async.log"
 type nul > "%ASYNC_LOG%"
 
 echo ======================================
-echo   AI for Investor - 后台启动中
+echo   ai-for-investor - 后台启动中
 echo ======================================
 echo.
 echo [INFO] 已提交到后台执行
@@ -41,7 +41,7 @@ exit /b 0
 :run
 
 echo ======================================
-echo   AI for Investor - 启动项目
+echo   ai-for-investor - 启动项目
 echo ======================================
 echo.
 

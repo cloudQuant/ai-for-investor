@@ -1,6 +1,6 @@
 # 数据库设计
 
-本文档描述 AI for Investor 的数据库模型设计。
+本文档描述 ai-for-investor 的数据库模型设计。
 
 ## 数据库选择
 

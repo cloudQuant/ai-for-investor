@@ -1,6 +1,6 @@
 # 迭代 196：2026-09-07 六 worker 分层回归记录
 
-日期：2026-09-07。候选工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`；分支：`codex/iteration-196-ai-research-trust`；基底提交：`a18bcf52682686c30d919fe02d6fd734ee4271b9`。
+日期：2026-09-07。候选工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`；分支：`codex/iteration-196-ai-research-trust`；基底提交：`a18bcf52682686c30d919fe02d6fd734ee4271b9`。
 
 > 当前判定：后端 `LOCAL_REGRESSION_PASS_WITH_PARTIAL_ENV_FREEZE`；前端 `LOCAL_PASS_UNSUPPORTED_RUNTIME`。holdout claim/start 候选在同一冻结 `app/tests` 来源及只读 Backtrader 导入快照下，功能与性能两条互斥通道共收集并划分 5,708 cases，其中 5,579 passed、129 skipped、0 failure/error；其余 Anaconda 依赖没有完整冻结。前端 1,345 项单测、类型检查和生产构建命令在本机通过，但本机 Node 25.1.0 超出项目声明的 `>=20 <25`。最新后端证据见第 8 节；第 2～4 节较早结果保留为同日历史基线。
 >
@@ -69,7 +69,7 @@ pytest-benchmark 在 xdist 下会明确禁用 benchmark，而且共享负载会�
 ### 3.1 六 worker 功能通道
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 BLIS_NUM_THREADS=1 \
 PYTHONPATH=/private/tmp/iter196-final-6core.YhgaM8/pythonpath-snapshot.ITzNQN \
@@ -88,7 +88,7 @@ PYTHONPATH=/private/tmp/iter196-final-6core.YhgaM8/pythonpath-snapshot.ITzNQN \
 ### 3.2 串行性能通道
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 BLIS_NUM_THREADS=1 \
 PYTHONPATH=/private/tmp/iter196-final-6core.YhgaM8/pythonpath-snapshot.ITzNQN \
@@ -133,7 +133,7 @@ PYTHONPATH=/private/tmp/iter196-final-6core.YhgaM8/pythonpath-snapshot.ITzNQN \
 ## 5. 前端结果
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/frontend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/frontend
 npm run test -- --run --minWorkers=6 --maxWorkers=6 \
   --reporter=basic --reporter=json \
   --outputFile.json=/private/tmp/iter196-final-6core.YhgaM8/frontend-vitest-6core.json

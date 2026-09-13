@@ -267,7 +267,7 @@ ELIF Phase == 4:
 #### 输出文档结构
 
 ```markdown
-# Backtrader Web — Epics & Stories
+# ai-for-investor — Epics & Stories
 
 ## 摘要
 

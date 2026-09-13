@@ -29,7 +29,7 @@ describe('LoginPage', () => {
 
   it('renders login form', () => {
     const wrapper = doMount()
-    expect(wrapper.text()).toContain('AI for Investor')
+    expect(wrapper.text()).toContain('ai-for-investor')
     // i18n mock returns keys
     expect(wrapper.text()).toContain('auth.loginTitle')
     expect(wrapper.text()).toContain('auth.login')

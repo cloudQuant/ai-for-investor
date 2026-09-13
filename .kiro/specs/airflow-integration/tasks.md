@@ -2,7 +2,7 @@
 
 ## Overview
 
-将 Apache Airflow 集成到 backtrader_web 数据管理模块，实现编排后端抽象（OrchestratorBackend）、Airflow REST API 适配、DAG 自动生成、回调机制、迁移工具和前端管理界面。采用增量实现策略，从基础抽象接口开始，逐步构建各组件并最终集成。
+将 Apache Airflow 集成到 ai_for_investor 数据管理模块，实现编排后端抽象（OrchestratorBackend）、Airflow REST API 适配、DAG 自动生成、回调机制、迁移工具和前端管理界面。采用增量实现策略，从基础抽象接口开始，逐步构建各组件并最终集成。
 
 ## Tasks
 

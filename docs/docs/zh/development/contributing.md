@@ -1,7 +1,7 @@
 # 贡献指南
 
-如何为 AI for Investor 贡献代码与文档。本地开发、测试与代码规范的完整说明见根目录
-[CONTRIBUTING.md](https://github.com/cloudQuant/backtrader_web/blob/master/CONTRIBUTING.md)。
+如何为 ai-for-investor 贡献代码与文档。本地开发、测试与代码规范的完整说明见根目录
+[CONTRIBUTING.md](https://github.com/cloudQuant/ai-for-investor/blob/master/CONTRIBUTING.md)。
 
 ## 分支模型（iteration 195）
 
@@ -19,14 +19,14 @@
 2. 克隆你自己的 fork（把 `YOUR_USERNAME` 替换成你的用户名）：
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/backtrader_web.git
-   cd backtrader_web
+   git clone https://github.com/YOUR_USERNAME/ai_for_investor.git
+   cd ai-for-investor
    ```
 
 3. 添加 upstream 远端，并基于 `dev` 创建分支：
 
    ```bash
-   git remote add upstream https://github.com/cloudQuant/backtrader_web.git
+   git remote add upstream https://github.com/cloudQuant/ai-for-investor.git
    git fetch upstream
    git checkout -b feature/your-feature upstream/dev
    ```
@@ -44,7 +44,7 @@
 
 - Bug：使用 Bug Report 表单，附最小复现步骤与环境信息。
 - 功能建议：使用 Feature Request 表单。
-- 使用问题：请在 [Discussions](https://github.com/cloudQuant/backtrader_web/discussions)
+- 使用问题：请在 [Discussions](https://github.com/cloudQuant/ai-for-investor/discussions)
   提问，不要新建 question issue。
 
 ## 行为约定

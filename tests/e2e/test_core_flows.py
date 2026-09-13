@@ -1,5 +1,5 @@
 """
-E2E tests for AI for Investor core user flows.
+E2E tests for ai-for-investor core user flows.
 
 Covers:
 1. Registration

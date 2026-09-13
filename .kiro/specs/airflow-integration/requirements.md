@@ -2,7 +2,7 @@
 
 ## Introduction
 
-将 Apache Airflow 集成到 backtrader_web 项目的数据管理模块中，作为现有 APScheduler 内存调度器的增强替代方案。系统采用**优雅降级**策略：当 Airflow 可用时优先使用 Airflow 进行任务编排（支持 DAG 依赖、分布式执行、可视化监控）；当 Airflow 不可用时自动回退到现有 APScheduler，确保系统始终可用。支持本地开发环境直接安装调试和 Docker 容器化生产部署两种模式。
+将 Apache Airflow 集成到 ai_for_investor 项目的数据管理模块中，作为现有 APScheduler 内存调度器的增强替代方案。系统采用**优雅降级**策略：当 Airflow 可用时优先使用 Airflow 进行任务编排（支持 DAG 依赖、分布式执行、可视化监控）；当 Airflow 不可用时自动回退到现有 APScheduler，确保系统始终可用。支持本地开发环境直接安装调试和 Docker 容器化生产部署两种模式。
 
 ## Glossary
 
@@ -11,7 +11,7 @@
 - **DAG**: 有向无环图（Directed Acyclic Graph），Airflow 中定义任务依赖关系的核心概念
 - **DAG_Run**: DAG 的一次具体执行实例
 - **Task_Instance**: DAG 中单个任务的一次执行实例
-- **Airflow_Adapter**: backtrader_web 后端中封装 Airflow REST API 调用的服务层组件
+- **Airflow_Adapter**: ai_for_investor 后端中封装 Airflow REST API 调用的服务层组件
 - **DAG_Generator**: 将 DataScript 元数据和依赖关系转换为 Airflow DAG Python 文件的组件
 - **DataScript**: 现有的数据抓取脚本元数据模型（`ak_data_scripts` 表）
 - **ScheduledTask**: 现有的定时任务模型（`ak_scheduled_tasks` 表）
@@ -38,7 +38,7 @@
 
 ### Requirement 2: Airflow REST API 适配层
 
-**User Story:** 作为后端开发者，我希望有一个统一的适配层封装 Airflow REST API 调用，以便 backtrader_web 后端能可靠地与 Airflow 交互。
+**User Story:** 作为后端开发者，我希望有一个统一的适配层封装 Airflow REST API 调用，以便 ai_for_investor 后端能可靠地与 Airflow 交互。
 
 #### Acceptance Criteria
 
@@ -80,7 +80,7 @@
 
 ### Requirement 5: 前端任务管理界面
 
-**User Story:** 作为数据管理员，我希望通过 backtrader_web 前端界面管理和监控 Airflow 任务，以便无需直接访问 Airflow Web UI 即可完成日常操作。
+**User Story:** 作为数据管理员，我希望通过 ai_for_investor 前端界面管理和监控 Airflow 任务，以便无需直接访问 Airflow Web UI 即可完成日常操作。
 
 #### Acceptance Criteria
 
@@ -110,11 +110,11 @@
 
 ### Requirement 7: 任务执行与回调
 
-**User Story:** 作为系统管理员，我希望 Airflow 任务执行结果能同步回 backtrader_web 数据库，以便在统一界面查看完整的执行历史。
+**User Story:** 作为系统管理员，我希望 Airflow 任务执行结果能同步回 ai_for_investor 数据库，以便在统一界面查看完整的执行历史。
 
 #### Acceptance Criteria
 
-1. WHEN Airflow Task_Instance 执行完成时，THE DAG 定义 SHALL 通过回调机制（`on_success_callback` / `on_failure_callback`）向 backtrader_web 后端发送执行结果
+1. WHEN Airflow Task_Instance 执行完成时，THE DAG 定义 SHALL 通过回调机制（`on_success_callback` / `on_failure_callback`）向 ai_for_investor 后端发送执行结果
 2. THE 回调 SHALL 将执行结果写入 `ak_task_executions` 表，包含 execution_id、状态、开始时间、结束时间、持续时长和错误信息
 3. THE 回调 SHALL 记录数据变更信息（`rows_before` 和 `rows_after`），与现有 TaskExecution 模型保持一致
 4. WHEN 回调请求失败时，THE DAG 定义 SHALL 重试回调最多 3 次，间隔 10 秒

@@ -1,4 +1,4 @@
-# AI for Investor
+# ai-for-investor
 
 **An AI + quant platform that takes traders from research questions to strategy drafts, backtests, and trading workflows.**
 
@@ -6,15 +6,15 @@
 [![Vue 3](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg?logo=vuedotjs&logoColor=white)](https://vuejs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/cloudQuant/backtrader_web/ci.yml?branch=master&label=CI&logo=githubactions&logoColor=white)](https://github.com/cloudQuant/backtrader_web/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/cloudQuant/ai-for-investor/ci.yml?branch=master&label=CI&logo=githubactions&logoColor=white)](https://github.com/cloudQuant/ai-for-investor/actions)
 
 [中文文档](README.md) | **English**
 
-[中文文档](https://cloudquant.github.io/backtrader_web/) · [English docs](https://cloudquant.github.io/backtrader_web/en/) · [Local API docs](http://localhost:8000/docs)
+[中文文档](https://cloudquant.github.io/ai-for-investor/) · [English docs](https://cloudquant.github.io/ai-for-investor/en/) · [Local API docs](http://localhost:8000/docs)
 
 ---
 
-AI for Investor is an AI + quantitative trading MVP for developers, traders, and small research teams who want to turn market knowledge and natural-language strategy ideas into executable research workflows. Strategy development, backtesting, parameter optimization, paper trading, live trading, knowledge-base Q&A, and AI-assisted research are integrated in one product.
+ai-for-investor is an AI + quantitative trading MVP for developers, traders, and small research teams who want to turn market knowledge and natural-language strategy ideas into executable research workflows. Strategy development, backtesting, parameter optimization, paper trading, live trading, knowledge-base Q&A, and AI-assisted research are integrated in one product.
 
 ## Highlights
 
@@ -77,8 +77,8 @@ AI for Investor is an AI + quantitative trading MVP for developers, traders, and
 
 ```bash
 # Clone
-git clone https://github.com/cloudQuant/backtrader_web.git
-cd backtrader_web
+git clone https://github.com/cloudQuant/ai-for-investor.git
+cd ai-for-investor
 
 # Backend
 cd src/backend
@@ -249,7 +249,7 @@ Frontend coverage thresholds are tightened gradually from measured baselines:
 ## Project Structure
 
 ```
-backtrader_web/
+ai-for-investor/
 ├── src/
 │   ├── backend/              # FastAPI backend
 │   │   ├── app/
@@ -309,8 +309,8 @@ See [docs/explanation/STRATEGIC_ROADMAP.md](docs/explanation/STRATEGIC_ROADMAP.m
 
 | Document | Description |
 | -------- | ----------- |
-| [Published docs (English)](https://cloudquant.github.io/backtrader_web/en/) | Online documentation site (GitHub Pages) |
-| [Published docs (中文)](https://cloudquant.github.io/backtrader_web/) | Online documentation site (GitHub Pages) |
+| [Published docs (English)](https://cloudquant.github.io/ai-for-investor/en/) | Online documentation site (GitHub Pages) |
+| [Published docs (中文)](https://cloudquant.github.io/ai-for-investor/) | Online documentation site (GitHub Pages) |
 | [Installation Guide](docs/guides/INSTALLATION.md) | Environment setup and installation |
 | [Quick Start](docs/guides/QUICKSTART.md) | 5-minute first backtest tutorial |
 | [API Usage Guide](docs/guides/API_GUIDE.md) | REST API examples and best practices |
@@ -339,7 +339,7 @@ Other resources in the cloudQuant quant ecosystem:
 | [backtrader](https://github.com/cloudQuant/backtrader) | Professional Python algorithmic trading framework (backtesting + live trading); the core fork powering this repo's strategy research engine. |
 | [backtrader-skills](https://github.com/cloudQuant/backtrader-skills) | Offline, independently installable strategy author/review/test product: turns local datasets and StrategySpec v1 into pytest strategies or three-file bundles, statically reviewed and validated in isolated child processes. |
 | [backtrader-mcp](https://github.com/cloudQuant/backtrader-mcp) | Local-first MCP server: CSVs become immutable datasets, typed strategy intent becomes private drafts, and reviewed drafts run in bounded subprocesses with durable status and reports (offline, backtest-only). |
-| [backtrader_web](https://github.com/cloudQuant/backtrader_web) | This repository: a web-based full-cycle Backtrader strategy management tool covering backtesting analysis, paper trading, live execution, and data management. |
+| [ai-for-investor](https://github.com/cloudQuant/ai-for-investor) | This repository: a web-based full-cycle Backtrader strategy management tool covering backtesting analysis, paper trading, live execution, and data management. |
 | [backtrader-agent](https://github.com/cloudQuant/backtrader-agent) | Offline-first strategy-authoring agent runtime: content-addressed storage, strategy-spec validation, 14 scaffolds, static review, hash-bound approvals, fixed child-process execution, and session provenance. |
 | [fincore](https://github.com/cloudQuant/fincore) | Unified Python toolkit integrating financial metrics, performance analysis, backtesting, AI-driven insights, and multi-database/data source support for quantitative finance workflows. |
 
@@ -351,7 +351,7 @@ Other resources in the cloudQuant quant ecosystem:
 
 <p align="center">
   Built with ❤️ for the quantitative trading community<br>
-  <a href="https://github.com/cloudQuant/backtrader_web">GitHub</a> ·
-  <a href="https://github.com/cloudQuant/backtrader_web/issues">Issues</a> ·
-  <a href="https://github.com/cloudQuant/backtrader_web/discussions">Discussions</a>
+  <a href="https://github.com/cloudQuant/ai-for-investor">GitHub</a> ·
+  <a href="https://github.com/cloudQuant/ai-for-investor/issues">Issues</a> ·
+  <a href="https://github.com/cloudQuant/ai-for-investor/discussions">Discussions</a>
 </p>

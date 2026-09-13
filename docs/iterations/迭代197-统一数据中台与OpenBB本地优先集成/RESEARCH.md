@@ -7,7 +7,7 @@
 
 | 对象 | 本地位置 / 基线 | 用途 |
 | --- | --- | --- |
-| ai-for-investor | `/Users/yunjinqi/Downloads/backtrader_web`；`dev@a18bcf52682686c30d919fe02d6fd734ee4271b9` | 本次设计的当前代码 |
+| ai-for-investor | `/Users/yunjinqi/Documents/new_projects/ai-for-investor`；`dev@a18bcf52682686c30d919fe02d6fd734ee4271b9` | 本次设计的当前代码 |
 | OpenBB | `/Users/yunjinqi/Documents/new_projects/OpenBB`；`3e071fcc2cd9f891cac6040ae60296dba76dab46`，提交时间 2026-07-20 | 核心、插件、数据模型、具体 Fetcher 源码 |
 | openbb-docs | `/Users/yunjinqi/Documents/new_projects/openbb-docs`；`acd5b2bf2d8603f574bd6b2da2e15e1aae8b017d`，2026-08-24 | 现行 `content/odp` 文档；旧 `old_platform_stash` 不作为现行 API 权威 |
 | agents-for-openbb | `/Users/yunjinqi/Documents/new_projects/agents-for-openbb`；`aa1073d2b098ae6cf597dabf0635822aa808dd81`，2026-07-01 | widget 数据请求、引用、流式工具边界 |

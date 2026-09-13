@@ -524,7 +524,7 @@ async def test_migration_maps_parameters(tmp_path, db_with_parameterized_task):
 **级别：** L3 E2E
 **步骤：**
 1. 停止 Airflow 服务
-2. 重启 backtrader_web 后端
+2. 重启 ai_for_investor 后端
 3. 检查日志输出
 4. 通过 API 创建定时任务
 5. 手动触发执行
@@ -541,7 +541,7 @@ async def test_migration_maps_parameters(tmp_path, db_with_parameterized_task):
 **步骤：**
 1. 系统以 APScheduler 模式运行
 2. 启动 Airflow 服务
-3. 重启 backtrader_web 后端（或等待下次健康检查）
+3. 重启 ai_for_investor 后端（或等待下次健康检查）
 4. 检查编排状态
 
 **预期结果：** 系统切换到 Airflow 模式，现有任务继续正常调度

@@ -108,7 +108,7 @@ Frontend:
 ## Example README Section
 
 ```markdown
-# AI for Investor
+# ai-for-investor
 
 ![CI - Quality Checks](https://github.com/YOUR_USERNAME/ai-for-investor/workflows/CI%20-%20Quality%20Checks/badge.svg)
 ![E2E Tests](https://github.com/YOUR_USERNAME/ai-for-investor/workflows/E2E%20-%20End-to-End%20Tests/badge.svg)

@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "scripts/ops"))
 
 from run_akshare_todo import TODO_PATH, TodoTask, parse_todo, status_counts  # noqa: E402
 
-META_DB_DEFAULT = "backtrader_web"
+META_DB_DEFAULT = "ai_for_investor"
 DATA_DB_DEFAULT = "akshare_data"
 DATE_COLUMN_PRIORITY = (
     "trade_date",
@@ -89,8 +89,8 @@ def db_config_from_url(env_name: str, default_database: str) -> DbConfig:
     return DbConfig(
         host=os.environ.get("DB_HOST", "127.0.0.1"),
         port=int(os.environ.get("DB_PORT", "3306")),
-        user=os.environ.get("DB_USER", "backtrader_web"),
-        password=os.environ.get("DB_PASSWORD", "BacktraderWeb_2026"),
+        user=os.environ.get("DB_USER", "ai_for_investor"),
+        password=os.environ.get("DB_PASSWORD", "AiForInvestor_2026"),
         database=default_database,
     )
 

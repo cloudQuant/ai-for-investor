@@ -7,7 +7,7 @@
 
 ## Overview
 
-This document summarizes the security enhancements implemented for the Backtrader Web platform following industry best practices.
+This document summarizes the security enhancements implemented for the ai-for-investor platform following industry best practices.
 
 ---
 
@@ -236,7 +236,7 @@ While all security improvements are complete, potential future enhancements coul
 
 **Project Status**: ✅ **ALL SECURITY IMPROVEMENTS COMPLETE**
 
-The Backtrader Web platform now has:
+The ai-for-investor platform now has:
 - ✅ Enhanced authentication with refresh tokens
 - ✅ Comprehensive input validation
 - ✅ Secure configuration management

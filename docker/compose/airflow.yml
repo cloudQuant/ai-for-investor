@@ -1,6 +1,6 @@
 version: "3.8"
 
-# Apache Airflow deployment for AI for Investor data orchestration.
+# Apache Airflow deployment for ai-for-investor data orchestration.
 # Usage:
 #   docker compose -f docker-compose.yml -f docker/compose/airflow.yml up -d
 #   Access Airflow UI: http://localhost:8080 (admin/admin)

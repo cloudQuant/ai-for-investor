@@ -33,7 +33,7 @@ FinceptTerminal 是一个 Qt/C++ 桌面金融终端，核心价值不在 Qt UI �
 4. **不直接复制受限代码**：FinceptTerminal README 标明 AGPL/商业许可约束；默认采用 clean-room 迁移，借鉴能力与接口形态，重新按当前项目架构实现。
 5. **行业最佳实践优先**：不确定处采用 provider registry、schema validation、secrets isolation、async task、rate limiting、idempotent ingestion、audit log、least privilege。
 
-> **当前边界说明**：本节保留的是迭代 170 立项时的历史表述；当前生效边界已在迭代 171 中收口为：`broker` 统一能力继续沉淀在独立 `bt_api_py` 仓及后续 `bt_api_xx` 包中，`backtrader_web` 不再继续扩 broker registry / adapter / native-paper 实装平台。
+> **当前边界说明**：本节保留的是迭代 170 立项时的历史表述；当前生效边界已在迭代 171 中收口为：`broker` 统一能力继续沉淀在独立 `bt_api_py` 仓及后续 `bt_api_xx` 包中，`ai_for_investor` 不再继续扩 broker registry / adapter / native-paper 实装平台。
 
 ### 0.2 Clean-room 迁移规范与许可证审计（P0 阻断项）
 
@@ -577,12 +577,12 @@ npm run typecheck
 
 - 后端新增切片：`python` 包装器运行 `pytest tests/test_data_topic_hub.py tests/test_broker_contract.py tests/test_data_governance_compat.py tests/test_instruments_service.py tests/test_risk_free_rate.py tests/test_ws_gateway.py tests/test_portfolio_ledger.py tests/test_equity_research.py tests/test_news_intelligence.py tests/test_options_chain.py tests/test_scanners.py tests/test_quant_tools.py tests/test_backward_compat_iter170.py -q --tb=short`，**23 passed**。
 - 向后兼容守门回放：`python` 包装器运行 `pytest tests/test_backward_compat_iter170.py -q --tb=short`，**1 passed**。
-- Broker contract 守门回放：`python` 包装器运行 `pytest tests/test_broker_contract.py -q --tb=short`，**2 passed**；`bt_api_py.brokers.mock` 当前来自 editable 独立仓 `/Users/yunjinqi/Documents/new_projects/bt_api/bt_api_py`，且 `src/backend/.coveragerc` 的 `source=app` 仅统计 backend `app` 包，因此 `backtrader_web` 仓内不再把 `--cov=bt_api_py.brokers.mock` 视作稳定验收命令。
+- Broker contract 守门回放：`python` 包装器运行 `pytest tests/test_broker_contract.py -q --tb=short`，**2 passed**；`bt_api_py.brokers.mock` 当前来自 editable 独立仓 `/Users/yunjinqi/Documents/new_projects/bt_api/bt_api_py`，且 `src/backend/.coveragerc` 的 `source=app` 仅统计 backend `app` 包，因此 `ai_for_investor` 仓内不再把 `--cov=bt_api_py.brokers.mock` 视作稳定验收命令。
 - 独立 `bt_api_py` coverage 守门回放：在 `/Users/yunjinqi/Documents/new_projects/bt_api/bt_api_py` 新增 `tests/test_broker_contract.py` 最小 contract smoke 后，执行 `pytest tests/test_broker_contract.py --cov=bt_api_py.brokers.mock --cov-report=term-missing -q --tb=short`，**10 passed，MockBrokerAdapter 100.00% coverage**。
 - 后端静态检查：`python -m ruff check ...`（覆盖新 API / service / model / tests），**All checks passed**。
 - 前端最小入口验证：`npm run test -- src/test/api/iteration170.test.ts src/test/views/PortfolioLedgerPage.test.ts src/test/router/index.test.ts src/test/components/common/AppLayout.test.ts --run`，**47 passed**。
 - 前端类型检查：`npm run typecheck`，**通过**。
-- 独立 `bt_api_py` 烟测：执行 `MockBrokerAdapter` + `run_broker_contract_cases` 返回 `passed=True`，`GatewayBridgeAdapter.health()` 返回 `adapter='gateway_bridge'`，说明当前环境已可从 `backtrader_web` 导入新 broker contract 子包。
+- 独立 `bt_api_py` 烟测：执行 `MockBrokerAdapter` + `run_broker_contract_cases` 返回 `passed=True`，`GatewayBridgeAdapter.health()` 返回 `adapter='gateway_bridge'`，说明当前环境已可从 `ai_for_investor` 导入新 broker contract 子包。
 - 8.4 / 170C 收口验证：`python` 包装器运行 `pytest tests/test_options_chain.py tests/test_news_classifier.py tests/test_quant_tools.py tests/perf/test_data_topic_hub_perf.py tests/perf/test_ws_gateway_perf.py tests/perf/test_portfolio_import_perf.py tests/perf/test_option_pricing_perf.py -q`，**12 passed**；benchmark 表输出覆盖 DataTopicHub `peek/fan-out`、WS gateway broadcast、portfolio import、single-strike greeks。
 - 170C 前端补强验证：`npm run test -- src/test/api/iteration170.test.ts src/test/views/PortfolioLedgerPage.test.ts src/test/views/ScannerPage.test.ts src/test/views/OptionsChainPage.test.ts src/test/views/QuantToolsPage.test.ts --run`，**9 passed**。
 
@@ -631,8 +631,8 @@ npm run typecheck
 
 ## 10. 后续迭代建议
 
-- **迭代171**：承接 170 中仍停留在 MVP / placeholder / in-memory / hard-coded 层的 Fincept 能力，重点包括：`Data Connector Registry` 产品化、`Portfolio Ledger` 持久化与分析接入、`Equity Research / News Intelligence / Options Chain / Scanner` 从 demo/MVP 提升为真实产品能力，以及补齐 `FINCEPT_TERMINAL_GAP_ANALYSIS.md` 与 `WS_GATEWAY_MIGRATION.md` 并启动现有 WS 路由向 `ws_gateway` 的逐项迁移；`broker` 相关深化迁移转由 `bt_api_py / bt_api_xx` 生态承接，不在 `backtrader_web` 内继续扩 broker 平台。
-- **迭代172**：`bt_api_xx` 首批 14 个券商扩展包落地，优先完成 `Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww` 的独立包规划与分批实现，主实施仓为独立 `bt_api` 生态，`backtrader_web` 只保留消费边界与文档协同。
+- **迭代171**：承接 170 中仍停留在 MVP / placeholder / in-memory / hard-coded 层的 Fincept 能力，重点包括：`Data Connector Registry` 产品化、`Portfolio Ledger` 持久化与分析接入、`Equity Research / News Intelligence / Options Chain / Scanner` 从 demo/MVP 提升为真实产品能力，以及补齐 `FINCEPT_TERMINAL_GAP_ANALYSIS.md` 与 `WS_GATEWAY_MIGRATION.md` 并启动现有 WS 路由向 `ws_gateway` 的逐项迁移；`broker` 相关深化迁移转由 `bt_api_py / bt_api_xx` 生态承接，不在 `ai_for_investor` 内继续扩 broker 平台。
+- **迭代172**：`bt_api_xx` 首批 14 个券商扩展包落地，优先完成 `Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww` 的独立包规划与分批实现，主实施仓为独立 `bt_api` 生态，`ai_for_investor` 只保留消费边界与文档协同。
 - **迭代173**：Qt 桌面应用可行性评估与 UI 复刻路线，基于稳定后的 Web 产品能力选择是否建设桌面端。
 - **迭代174**：另类数据与全球宏观情报（地缘、航运、卫星、政府开放数据）产品化。
 - **迭代175**：删除 `ak_*` 表（取消 T2.5 双写兼容层），完全切到 `dg_*`。

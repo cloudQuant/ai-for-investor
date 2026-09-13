@@ -14,7 +14,7 @@ primary_platform:
   - other
 
 # Core Configuration Values
-project_name: backtrader_web
+project_name: ai_for_investor
 user_name: cloud
 communication_language: Chinese
 document_output_language: English

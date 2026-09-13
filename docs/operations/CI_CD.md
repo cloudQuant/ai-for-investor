@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI for Investor project uses GitHub Actions for continuous integration and continuous deployment. The CI/CD pipeline ensures code quality, runs automated tests, and validates pull requests before merging.
+The ai-for-investor project uses GitHub Actions for continuous integration and continuous deployment. The CI/CD pipeline ensures code quality, runs automated tests, and validates pull requests before merging.
 
 ## Workflows
 

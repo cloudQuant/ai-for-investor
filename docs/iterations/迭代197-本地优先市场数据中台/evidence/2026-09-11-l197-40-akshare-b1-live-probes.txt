@@ -7,7 +7,7 @@
 ## 执行范围与命令模板
 
 ```text
-cd /Users/yunjinqi/Downloads/backtrader_web/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend
 AKSHARE_MARKET_DATA_RUNNER="<conda>/bin/python -I -S <abs>/scripts/akshare_market_data_runner.py" \
 AKSHARE_RUNNER_HOME=/tmp/iter197-akshare-runner/home \
 AKSHARE_RUNNER_WORKDIR=/tmp/iter197-akshare-runner/workdir \

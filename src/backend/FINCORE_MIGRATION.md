@@ -5,7 +5,7 @@ standardized financial metrics calculation system.
 
 ## Overview
 
-The AI for Investor platform uses **fincore 0.5** for standardized return-based
+The ai-for-investor platform uses **fincore 0.5** for standardized return-based
 metric calculations. Fincore 0.5 is a breaking, domain-oriented release: it
 does not expose root-level metric functions or the old Empyrical/Pyfolio/
 Alphalens facades. This integration therefore calls the owning metric modules

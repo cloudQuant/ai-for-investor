@@ -3,9 +3,9 @@ recorded_at=2026-09-11
 
 [candidate]
 commit=2dfb691bf52ada3c707c8af4c4ae5f7b14b9413c
-worktree=/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-l33-verification
+worktree=/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-l33-verification
 git_status_short=<empty; clean detached worktree>
-backend_cwd=/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-l33-verification/src/backend
+backend_cwd=/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-l33-verification/src/backend
 
 [environment]
 python=3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:49:36) [Clang 16.0.6 ]

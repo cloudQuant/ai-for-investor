@@ -2,7 +2,7 @@
 
 日期：2026-09-11
 候选提交：`70e94148b8494ddb222d555513f809d76ca478c8`
-工作树：`/Users/yunjinqi/Downloads/backtrader_web`
+工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor`
 候选洁净性：执行前 `git status --short` 为空；acceptance runner 记录 `CANDIDATE_CLEAN_OR_ALLOWLISTED`、`dirty_count=0`、`unallowlisted_dirty_count=0`。
 
 ## 执行范围
@@ -10,12 +10,12 @@
 本收据只覆盖统一矩阵的 `AC-17` / `AC-197-MATRIX-017` 的离线 `G1` 切片，覆盖当前两个页面已支持的七类资产：`stock`、`futures`、`bond`、`fund`、`option`、`fx`、`crypto`。
 
 ```text
-cd /Users/yunjinqi/Downloads/backtrader_web/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   scripts/acceptance/iteration197_data_platform.py \
   --mode offline --case AC-17 --asset-type all \
   --output /tmp/iter197-ac17-openbb-g1-clean-70e94148-a \
-  --project-root /Users/yunjinqi/Downloads/backtrader_web
+  --project-root /Users/yunjinqi/Documents/new_projects/ai-for-investor
 ```
 
 运行器和候选元数据：

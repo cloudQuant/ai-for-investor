@@ -4,7 +4,7 @@
 
 上一轮已经把 AI 聊天页中的执行状态逻辑抽到了 composable：
 
-- [useStrategyDraftWorkspaceExecution.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/composables/useStrategyDraftWorkspaceExecution.ts)
+- [useStrategyDraftWorkspaceExecution.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/composables/useStrategyDraftWorkspaceExecution.ts)
 
 但当时它仍然直接依赖：
 
@@ -36,7 +36,7 @@
 
 新增测试文件：
 
-- [useStrategyDraftWorkspaceExecution.test.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/test/composables/useStrategyDraftWorkspaceExecution.test.ts)
+- [useStrategyDraftWorkspaceExecution.test.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/test/composables/useStrategyDraftWorkspaceExecution.test.ts)
 
 当前覆盖：
 

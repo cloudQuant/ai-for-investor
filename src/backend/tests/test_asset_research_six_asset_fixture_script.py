@@ -42,7 +42,7 @@ def test_six_asset_fixture_runner_accepts_only_its_disposable_mysql_namespace(
 @pytest.mark.parametrize(
     "database_url",
     [
-        "mysql+aiomysql://fixture:fixture@127.0.0.1/backtrader_web",
+        "mysql+aiomysql://fixture:fixture@127.0.0.1/ai_for_investor",
         "mysql+aiomysql://fixture:fixture@127.0.0.1/codex_iter191_capacity_acceptance",
         "postgresql+asyncpg://fixture:fixture@127.0.0.1/codex_iter191_six_asset_acceptance",
     ],

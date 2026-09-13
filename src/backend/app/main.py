@@ -34,9 +34,9 @@ settings = get_settings()
 logger = setup_logger(__name__)
 
 APP_DESCRIPTION = """
-# AI for Investor API
+# ai-for-investor API
 
-AI for Investor provides authenticated REST endpoints and WebSocket streams for
+ai-for-investor provides authenticated REST endpoints and WebSocket streams for
 strategy management, backtests, optimization, portfolio workflows, and
 monitoring, with AI-assisted quantitative research workflows.
 
@@ -59,7 +59,7 @@ monitoring, with AI-assisted quantitative research workflows.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    logger.info("Starting AI for Investor API...")
+    logger.info("Starting ai-for-investor API...")
     app.state.startup_logger = logger
     app.state.ensure_database_ready = ensure_database_ready
     await run_startup(app, settings)
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Semantic retrieval warm-up failed; lexical fallback remains available")
     logger.info("Application ready - accepting requests")
     yield
-    logger.info("Shutting down AI for Investor API...")
+    logger.info("Shutting down ai-for-investor API...")
 
     shutdown_mgr = GracefulShutdownManager()
     await shutdown_mgr.initiate(app)
@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI for Investor API",
+    title="ai-for-investor API",
     description=APP_DESCRIPTION,
     version="2.0.0",
     docs_url="/docs",

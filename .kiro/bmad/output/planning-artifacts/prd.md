@@ -1,7 +1,7 @@
 ---
 stepsCompleted: ['step-01-init', 'step-02-discovery', 'step-02b-vision', 'step-02c-executive-summary', 'step-03-success', 'step-04-journeys', 'step-05-domain', 'step-06-innovation', 'step-07-project-type', 'step-08-scoping', 'step-09-functional', 'step-10-nonfunctional', 'step-11-polish']
 inputDocuments:
-  - "product-brief-backtrader_web-2026-02-23.md"
+  - "product-brief-ai_for_investor-2026-02-23.md"
   - "迭代114-项目完成度分析.md"
   - "迭代101-技术设计文档.md"
   - "迭代101-用户故事与验收标准.md"
@@ -20,7 +20,7 @@ classification:
   projectContext: 'brownfield'
 ---
 
-# Product Requirements Document - backtrader_web
+# Product Requirements Document - ai_for_investor
 
 **Author:** cloud
 **Date:** 2026-02-23
@@ -31,7 +31,7 @@ classification:
 
 ## Executive Summary
 
-**backtrader_web** is an open-source investment-research integration platform based on the Backtrader engine, providing full-process support from strategy research to live trading management for quantitative traders. The platform solves core pain points in strategy validation, risk management, and trading execution through intuitive web visualization, strategy-parameter separation design, real-time monitoring, and professional performance analysis powered by fincore.
+**ai_for_investor** is an open-source investment-research integration platform based on the Backtrader engine, providing full-process support from strategy research to live trading management for quantitative traders. The platform solves core pain points in strategy validation, risk management, and trading execution through intuitive web visualization, strategy-parameter separation design, real-time monitoring, and professional performance analysis powered by fincore.
 
 **Target Users:** Independent quantitative traders, quantitative researchers, quantitative developers, team managers
 
@@ -106,7 +106,7 @@ classification:
 - Complete fincore integration with all metrics standardized
 
 **12-Month Outcomes:**
-- Recognized as #1 choice for Backtrader Web UI
+- Recognized as #1 choice for ai-for-investor UI
 - 2000+ GitHub Stars, 30+ active contributors
 - 5+ enterprise/team deployments
 
@@ -157,7 +157,7 @@ classification:
 Li Ming is a 3-year experienced independent quantitative trader trading full-time from home. He's familiar with Python and Backtrader but tired of command-line operations and manual result analysis. He needs to quickly validate strategy ideas and run them safely in production.
 
 **Opening Scene (First Contact):**
-Li Ming discovers backtrader_web while searching for Backtrader visualization tools on GitHub. He's attracted by the "open-source investment-research integration" description and decides to try.
+Li Ming discovers ai_for_investor while searching for Backtrader visualization tools on GitHub. He's attracted by the "open-source investment-research integration" description and decides to try.
 
 **Rising Action (Exploration Process):**
 1. Visits documentation, sees pip install guide
@@ -189,7 +189,7 @@ First week of live trading, Li Ming receives an alert notification on his phone 
 Wang Fang is a researcher at a quantitative hedge fund, needing to report strategy performance to fund managers. She needs to run hundreds of parameter batches and generate professional reports, but command-line approach is too slow.
 
 **Opening Scene (First Contact):**
-Wang Fang's colleague recommended backtrader_web, saying it can batch optimize parameters and export professional reports.
+Wang Fang's colleague recommended ai_for_investor, saying it can batch optimize parameters and export professional reports.
 
 **Rising Action (Exploration Process):**
 1. Installs platform and imports existing strategy code
@@ -219,7 +219,7 @@ Wang Fang's team strategy management is now systematic, version control lets eve
 Zhang Wei is technical lead at a quant firm, needs to integrate backtesting platform into company systems, but concerned about data security.
 
 **Opening Scene (First Contact):**
-Zhang Wei evaluated several commercial platforms, but none met security requirements. He discovered backtrader_web — open source, self-hosted, fully meeting requirements.
+Zhang Wei evaluated several commercial platforms, but none met security requirements. He discovered ai_for_investor — open source, self-hosted, fully meeting requirements.
 
 **Rising Action (Exploration Process):**
 1. Deploys platform on company servers
@@ -247,7 +247,7 @@ Company's investment-research system is fully connected, from data acquisition t
 Mr. Chen is a fund manager, doesn't write code, but needs to understand team strategy performance and risk status.
 
 **Opening Scene (First Contact):**
-Mr. Chen feels the team's tools are too scattered, lacking overall visibility. CTO recommended backtrader_web.
+Mr. Chen feels the team's tools are too scattered, lacking overall visibility. CTO recommended ai_for_investor.
 
 **Rising Action (Exploration Process):**
 1. Logs into platform to see visualization dashboard
@@ -366,7 +366,7 @@ Mr. Chen checks team strategy performance daily, understands each member's contr
 
 ### Project-Type Overview
 
-backtrader_web is a full-stack quantitative trading platform consisting of:
+ai_for_investor is a full-stack quantitative trading platform consisting of:
 - **Backend**: FastAPI RESTful API with WebSocket support
 - **Frontend**: Vue3 SPA (Single Page Application)
 - **Real-time**: WebSocket for live trading and backtest updates

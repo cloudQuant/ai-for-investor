@@ -31,8 +31,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/ci/check_remote_sync.py \
-            --source https://github.com/cloudQuant/backtrader_web.git \
-            --mirror https://gitee.com/yunjinqi/backtrader_web.git \
+            --source https://github.com/cloudQuant/ai-for-investor.git \
+            --mirror https://gitee.com/yunjinqi/ai-for-investor.git \
             --branches master dev \
             --exceptions .github/governance/remote-sync-exceptions.json \
             --output remote-sync-evidence.json 2>&1 | tee remote-sync-summary.txt

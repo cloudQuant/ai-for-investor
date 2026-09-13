@@ -44,7 +44,7 @@
 
 ```bash
 # Run all E2E tests
-cd /Users/yunjinqi/Documents/量化交易框架/backtrader_web
+cd /Users/yunjinqi/Documents/量化交易框架/ai_for_investor
 python -m pytest tests/e2e/ -v
 
 # Run only new tests

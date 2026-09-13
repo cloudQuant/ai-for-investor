@@ -1,6 +1,6 @@
 # 宏源期货 CTP 穿透式认证工作区
 
-这是 `backtrader_web` 内的宏源期货 CTP 穿透式认证策略工作区。它包含 33 个认证场景和独立证据目录，适用于宏源期货提供的仿真/认证账户；不要用生产账户执行这些场景。
+这是 `ai_for_investor` 内的宏源期货 CTP 穿透式认证策略工作区。它包含 33 个认证场景和独立证据目录，适用于宏源期货提供的仿真/认证账户；不要用生产账户执行这些场景。
 
 ## 安全约定
 
@@ -11,7 +11,7 @@
 ## 配置与预检
 
 ```bash
-cd /Users/yunjinqi/Downloads/backtrader_web
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor
 cp strategies/live/ctp_hongyuan_penetration/.env.example \
   strategies/live/ctp_hongyuan_penetration/.env
 ```

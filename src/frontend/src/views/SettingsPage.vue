@@ -342,7 +342,7 @@
             <div class="settings-about">
               <div>
                 <span>{{ t('userSettings.version') }}</span>
-                <strong>AI for Investor v1.0.0</strong>
+                <strong>ai-for-investor v1.0.0</strong>
               </div>
               <div>
                 <span>{{ t('userSettings.stack') }}</span>

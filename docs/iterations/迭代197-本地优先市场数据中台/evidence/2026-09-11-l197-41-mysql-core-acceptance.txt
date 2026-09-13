@@ -2,12 +2,12 @@
 
 日期：2026-09-11（深夜会话）
 候选提交：harness `83d01792…`（`feat(market-data): add mysql acceptance harness`）与迁移修复 `d46e1a84…`（`fix(market-data): make migration chain runnable on mysql 9.4`）
-执行环境：本机 Homebrew MySQL 9.4.0（127.0.0.1:3306）、conda base（aiomysql 0.3.2 / pymysql 1.4.6）。root 凭据仅由操作员在命令行提供，未写入任何仓库文件或本收据；`--apply` 只创建 UUID 临时库 `iter197_mysql_acceptance_<12hex>` 并在 `finally` 删除，未触碰 `backtrader_web`/`akshare_data` 应用库（该用户在本轮未获得任何新授权）。
+执行环境：本机 Homebrew MySQL 9.4.0（127.0.0.1:3306）、conda base（aiomysql 0.3.2 / pymysql 1.4.6）。root 凭据仅由操作员在命令行提供，未写入任何仓库文件或本收据；`--apply` 只创建 UUID 临时库 `iter197_mysql_acceptance_<12hex>` 并在 `finally` 删除，未触碰 `ai_for_investor`/`akshare_data` 应用库（该用户在本轮未获得任何新授权）。
 
 ## 执行命令（密码以 `<root-password>` 占位）
 
 ```text
-cd /Users/yunjinqi/Downloads/backtrader_web/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend
 conda run --no-capture-output -n base python \
   scripts/verify_iteration197_mysql_acceptance.py \
   --apply --mysql-admin-url "mysql://root:<root-password>@127.0.0.1:3306/mysql"

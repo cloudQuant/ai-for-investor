@@ -326,7 +326,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--repo",
-        default="cloudQuant/backtrader_web",
+        default="cloudQuant/ai-for-investor",
         help="owner/repository for --live",
     )
     parser.add_argument(

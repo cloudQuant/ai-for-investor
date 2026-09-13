@@ -2,7 +2,7 @@
 
 ## Introduction
 
-本需求文档定义了将 Backtrader Web 战略路线图（docs/STRATEGIC_ROADMAP.md）拆分为可执行的 Epics 和 Stories 的完整规范。路线图包含 4 个阶段（Phase 1-4）、16 个子模块、约 70+ 个具体任务项。每个 Phase 对应 1 个 Epic，子模块作为 Epic 内的分组，每个具体任务行对应 1 个 Story（预计 60-80 个 Stories）。每个 Story 采用完整格式，包含验收标准（AC）、优先级、预估工期、依赖关系和负责方向。
+本需求文档定义了将 ai-for-investor 战略路线图（docs/STRATEGIC_ROADMAP.md）拆分为可执行的 Epics 和 Stories 的完整规范。路线图包含 4 个阶段（Phase 1-4）、16 个子模块、约 70+ 个具体任务项。每个 Phase 对应 1 个 Epic，子模块作为 Epic 内的分组，每个具体任务行对应 1 个 Story（预计 60-80 个 Stories）。每个 Story 采用完整格式，包含验收标准（AC）、优先级、预估工期、依赖关系和负责方向。
 
 ## Glossary
 

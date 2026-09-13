@@ -245,8 +245,8 @@ cd src/backend
 pytest tests/perf/ --benchmark-only --benchmark-json=perf-baseline.json -v
 
 # Docker 发布预演（不推送）
-docker build -f src/backend/Dockerfile -t backtrader-web-backend:v0.2.0-rc1-dryrun .
-docker build -f docker/frontend.dev.Dockerfile -t backtrader-web-frontend:v0.2.0-rc1-dryrun src/frontend/
+docker build -f src/backend/Dockerfile -t ai-for-investor-backend:v0.2.0-rc1-dryrun .
+docker build -f docker/frontend.dev.Dockerfile -t ai-for-investor-frontend:v0.2.0-rc1-dryrun src/frontend/
 
 # 仓库卫生（维持 165 基线）
 git ls-files | grep -E "(coverage\.(xml|json)|backtrader\.db|\.DS_Store)" \

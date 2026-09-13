@@ -2,7 +2,7 @@
 
 日期：2026-09-11
 代码候选：`acece716c5e4fb146edc1568555f56c9e8dba77d`
-工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-b2-record-model`
+工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-b2-record-model`
 
 ## 本地开发验证
 

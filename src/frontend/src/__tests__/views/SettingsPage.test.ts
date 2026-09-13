@@ -82,7 +82,7 @@ describe('SettingsPage', () => {
     expect(wrapper.text()).toContain('我的 AI 用量')
     expect(wrapper.text()).toContain('关于')
     expect(wrapper.text()).toContain('账户与个人 AI 配置')
-    expect(wrapper.text()).toContain('AI for Investor')
+    expect(wrapper.text()).toContain('ai-for-investor')
   })
 
   it('loads current user AI usage on mount', async () => {

@@ -2,7 +2,7 @@
 Airflow DAG management API endpoints.
 
 Provides DAG listing, triggering, status querying, and log viewing
-through the AI for Investor interface. Only available when Airflow backend is active.
+through the ai-for-investor interface. Only available when Airflow backend is active.
 """
 
 import typing

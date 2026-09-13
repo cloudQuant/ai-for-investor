@@ -1,5 +1,5 @@
 """
-AI for Investor - Quantitative backtest visualization framework.
+ai-for-investor - Quantitative backtest visualization framework.
 
 This package provides web-based visualization for backtrader backtest results.
 

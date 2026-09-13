@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide covers the supported local development setup for AI for Investor.
+This guide covers the supported local development setup for ai-for-investor.
 
 ## Prerequisites
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-本文档定义了 Backtrader Web 量化交易平台按照行业最佳实践进行系统性改进优化的需求。改进范围涵盖测试质量、安全加固、代码质量、性能可观测性、DevOps 基础设施、前端工程化、文档体验和数据库管理八个维度。采用分阶段交付策略，优先处理高风险、高收益的改进项。
+本文档定义了 ai-for-investor 量化交易平台按照行业最佳实践进行系统性改进优化的需求。改进范围涵盖测试质量、安全加固、代码质量、性能可观测性、DevOps 基础设施、前端工程化、文档体验和数据库管理八个维度。采用分阶段交付策略，优先处理高风险、高收益的改进项。
 
 ## Glossary
 
@@ -199,7 +199,7 @@
 2. IF 环境变量 `OTEL_ENABLED` 设置为 `true`（不区分大小写，同时接受 `1` 和 `yes`），THEN THE 后端服务 SHALL 在应用启动阶段完成 OpenTelemetry SDK 初始化，并在日志中输出包含服务名称和 collector 地址的初始化成功信息
 3. WHILE 环境变量 `OTEL_ENABLED` 设置为 `true`，THE OpenTelemetry 集成 SHALL 为每个 FastAPI 入站请求生成 trace span、为每个 SQLAlchemy 数据库查询生成 trace span、以及为每个 httpx 出站 HTTP 调用生成 trace span，并将 span 数据通过 OTLP gRPC 协议导出至配置的 collector
 4. WHILE `OTEL_ENABLED` 未设置或值不为 `true`/`1`/`yes`，THE 后端服务 SHALL 正常运行，不加载 OpenTelemetry SDK 的 TracerProvider，且请求处理延迟增加不超过 1 毫秒
-5. THE 配置 SHALL 支持通过环境变量 `OTEL_EXPORTER_OTLP_ENDPOINT` 指定 collector 地址，默认值为 `http://localhost:4317`，并支持通过 `OTEL_SERVICE_NAME` 指定服务名称，默认值为 `backtrader-web-api`
+5. THE 配置 SHALL 支持通过环境变量 `OTEL_EXPORTER_OTLP_ENDPOINT` 指定 collector 地址，默认值为 `http://localhost:4317`，并支持通过 `OTEL_SERVICE_NAME` 指定服务名称，默认值为 `ai-for-investor-api`
 6. IF `OTEL_ENABLED` 为 `true` 且配置的 collector 地址不可达，THEN THE 后端服务 SHALL 继续正常处理请求而不阻塞或崩溃，并在日志中记录 collector 连接失败的警告信息
 
 ### Requirement 15: 健康检查端点 CI 验证

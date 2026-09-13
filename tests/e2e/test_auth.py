@@ -18,7 +18,7 @@ class TestAuthPages:
         page.wait_for_load_state("networkidle")
         
         # 检查页面标题
-        expect(page.locator("h1")).to_contain_text("AI for Investor")
+        expect(page.locator("h1")).to_contain_text("ai-for-investor")
         
         # 检查表单元素
         expect(page.locator('input[placeholder="用户名"]')).to_be_visible()
@@ -33,7 +33,7 @@ class TestAuthPages:
         page.goto(f"{FRONTEND_URL}/register")
         page.wait_for_load_state("networkidle")
 
-        # 检查页面标题 (i18n: auth.registerTitle = "创建 AI for Investor 账号")
+        # 检查页面标题 (i18n: auth.registerTitle = "创建 ai-for-investor 账号")
         expect(page.locator("h1")).to_contain_text("账号")
 
         # 检查表单元素（优先用稳定的 data-testid）

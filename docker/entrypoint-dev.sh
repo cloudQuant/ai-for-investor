@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== AI for Investor Backend Dev Entrypoint ==="
+echo "=== ai-for-investor Backend Dev Entrypoint ==="
 
 # Wait for database to be ready
 MAX_RETRIES=30

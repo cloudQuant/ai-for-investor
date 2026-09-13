@@ -1,4 +1,4 @@
-# backtrader_web（AI for Investor）自部署商业化市场调研报告
+# ai_for_investor（ai-for-investor）自部署商业化市场调研报告
 
 - **调研日期**：2026-09-02 ～ 2026-09-03
 - **调研方法**：本地代码库全量审查 + GitHub API 竞品查证 + 定价页直接抓取 + 依赖包许可证实证
@@ -27,7 +27,7 @@
 |---|---|
 | 规模 | 后端 26.6 万行 Python + 前端 14 万行 Vue/TS；599 commits（2026-01 至今），**单人开发** |
 | 测试/CI | 4,774 个后端测试函数、26-job CI（含 gitleaks/bandit/a11y/i18n/Lighthouse 门禁）——同体量个人项目中罕见 |
-| 部署 | Docker Compose 生产覆盖（MySQL/Redis/Nginx/certbot + healthcheck + 密钥强制）✅；但实际仅支持 Linux；`scripts/ops/docker_deploy.sh` 默认 GIT_REPO 地址写错（`ai-for-investor` vs 实际 `backtrader_web`）、默认克隆 dev 分支；备份仅手动脚本 |
+| 部署 | Docker Compose 生产覆盖（MySQL/Redis/Nginx/certbot + healthcheck + 密钥强制）✅；但实际仅支持 Linux；`scripts/ops/docker_deploy.sh` 默认 GIT_REPO 地址写错（`ai-for-investor` vs 实际 `ai_for_investor`）、默认克隆 dev 分支；备份仅手动脚本 |
 | 多用户 | JWT 认证 + 按用户数据隔离 ✅；但 `require_permission` 全库 **0 次调用**，brokers/portfolio/sync 等多个业务端点**无鉴权**，`audit.py:99` 的 `is_admin` 门禁因 TokenPayload 无该字段而恒为 False；无用户管理后台——卖团队版不合格 |
 | 实盘 | 真实下单（ZMQ + 显式 gateway_id + 风控闸门），5 类网关预设（CTP/IB/币安/OKX/MT5），交易工作区服务 2,850 行；CTP 依赖 git-lfs 二进制且 macOS segfault，IB 依赖浏览器 cookie 会话 |
 | AI | 7 家 LLM 提供商（OpenAI/Anthropic/Ollama/火山方舟/硅基流动/Together/Groq）+ 用户自带 key + 预算控制 ✅；但 **litellm/chromadb/sentence-transformers 不在 `requirements-prod.lock`**——开箱 Docker 版没有 AI 对话和语义检索 |
@@ -45,7 +45,7 @@
 - 后果：闭源卖 license、闭源插件、传统 open-core 全部不可行。
 - **三条出路**（详见附录 A 决策树）：
   - **路径 A（接受 GPL）**：整体改 GPLv3，商业上限 = 卖服务/托管/支持（GPL 不禁止收费，但用户可自由再分发）——零成本零风险的基线。
-  - **路径 B（进程隔离）**：backtrader_web 不再 import，改为子进程/IPC 调用独立 GPL 执行器（用户自装）。FSF 立场认为 arm's length 通信的独立程序不构成单一作品——法律上较模糊但重构成本中等。
+  - **路径 B（进程隔离）**：ai_for_investor 不再 import，改为子进程/IPC 调用独立 GPL 执行器（用户自装）。FSF 立场认为 arm's length 通信的独立程序不构成单一作品——法律上较模糊但重构成本中等。
   - **路径 C（clean-room 重写）**：迁移到 `back-trader-cpp`，若确认为 clean-room 重写（未复制 GPL 代码的"表达"）则可自选许可。**唯一能解锁闭源商业版的路径**，需法律+技术双重确认（附录 A）。
 
 ---
@@ -61,7 +61,7 @@
 | LEAN | 21,454 | Apache 2.0 | **open-core**：引擎开源 + QuantConnect 云收费 | 全球 open-core 标杆 |
 | jesse | 8,406 | **MIT** | 框架免费 + jesse.trade 站点订阅（定价未验证） | **最直接对标**：self-hosted + 隐私优先 + MCP/AI 助手集成 + ML 管线 + Monte Carlo，加密赛道，开发活跃（ML/RL 管线持续迭代中） |
 | akquant | 2,220 | — | — | **AkShare 作者出品**（Rust+Python），A 股赛道的直接竞争威胁 |
-| **backtrader_web** | **9** | MIT（冲突） | 无 | 本产品 |
+| **ai_for_investor** | **9** | MIT（冲突） | 无 | 本产品 |
 
 **关键洞察：**
 1. 赛道极度拥挤，头部全部免费。任何收费必须回答「用户为什么不用免费的 freqtrade/vn.py/backtrader」。
@@ -163,7 +163,7 @@
 
 ```
 clean-room 确认成功（技术审计 + 律师意见双绿）
-  → back-trader-cpp 选 MIT/Apache → backtrader_web 迁移引擎 → open-core 双授权可行
+  → back-trader-cpp 选 MIT/Apache → ai_for_investor 迁移引擎 → open-core 双授权可行
 clean-room 不确定 / 律师意见模糊
   → 路径 B：进程隔离（backtrader 移出默认分发，改子进程/IPC 调用，法律上较模糊、成本低）
   → 或 路径 A：接受 GPL（整体改 GPLv3，只卖服务/托管/支持）
@@ -183,7 +183,7 @@ clean-room 不确定 / 律师意见模糊
 ### 第 1 周：阻断项（P0——不修不能公开发布）
 
 - [ ] **许可证一致性**：LICENSE / README 徽章 / `src/backend/pyproject.toml` 三处对齐。短期方案：加 NOTICE 文件披露 backtrader GPLv3 传染（按附录 A 路径选择执行）
-- [ ] **docker_deploy.sh 修复**：`GIT_REPO` 默认地址错误（`ai-for-investor` → `backtrader_web`）；默认克隆分支 dev → master
+- [ ] **docker_deploy.sh 修复**：`GIT_REPO` 默认地址错误（`ai-for-investor` → `ai_for_investor`）；默认克隆分支 dev → master
 - [ ] **无鉴权端点收敛**：`brokers.py`、`portfolio_api.py`、`prompt_templates.py`、`sync_api.py`、`live_trading_api.py`（遗留）、`ai_observability.py` 接入 `get_current_user`
 - [ ] **audit.py:99 is_admin bug**：TokenPayload 无 is_admin 字段导致审计管理端点恒 403——补充字段或改查库
 - [ ] **生产镜像 AI 依赖**：litellm / chromadb / sentence-transformers 进 `requirements-prod.lock`，或提供 `ai-full` 镜像变体；`.env.example` 的 `AI_CHAT_ENABLED` 配置流程写入部署文档
@@ -227,11 +227,11 @@ clean-room 不确定 / 律师意见模糊
 
 | 数据 | 来源 |
 |---|---|
-| 代码库全量审查（依赖锁、鉴权、RBAC、AI 依赖、数据源、部署脚本、测试规模、git 活跃度） | 本地仓库 `/Users/yunjinqi/Downloads/backtrader_web` |
+| 代码库全量审查（依赖锁、鉴权、RBAC、AI 依赖、数据源、部署脚本、测试规模、git 活跃度） | 本地仓库 `/Users/yunjinqi/Documents/new_projects/ai-for-investor` |
 | backtrader 1.9.78.123 = GPLv3+ | 本地 site-packages dist-info 实证 |
 | cloudQuant/backtrader = GPLv3、1.86x 提速、生态结构 | GitHub README |
 | jesse-ai/jesse = MIT、self-hosted + MCP/AI 特性 | GitHub LICENSE / README |
-| 竞品星数（freqtrade 53,945 / qlib 48,209 / vnpy 45,066 / backtrader 23,114 / LEAN 21,454 / jesse 8,406 / akquant 2,220 / backtrader_web 9） | GitHub API（2026-09-02） |
+| 竞品星数（freqtrade 53,945 / qlib 48,209 / vnpy 45,066 / backtrader 23,114 / LEAN 21,454 / jesse 8,406 / akquant 2,220 / ai_for_investor 9） | GitHub API（2026-09-02） |
 | vn.py「MIT + 永久免费 + Elite 版 + 上海韦纳软件科技有限公司」 | vnpy.com 首页 |
 | QuantConnect 全量定价（Researcher $84 → Institution $1,272/月 + 算力/支持/数据分层） | quantconnect.com/pricing 页面 JSON（2026-09-03） |
 

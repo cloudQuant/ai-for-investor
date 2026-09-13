@@ -1,4 +1,4 @@
-# AI for Investor 量化交易管理平台 - 技术文档
+# ai-for-investor 量化交易管理平台 - 技术文档
 
 ## 目录
 

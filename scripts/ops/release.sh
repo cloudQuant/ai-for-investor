@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Release Script for AI for Investor v0.1.0
+# Release Script for ai-for-investor v0.1.0
 #
 # Usage:
 #   ./scripts/release.sh              # Dry run (shows what would happen)
@@ -24,7 +24,7 @@ if [[ "${1:-}" == "--execute" ]]; then
 fi
 
 echo "╔══════════════════════════════════════════════╗"
-echo "║  AI for Investor Release v${VERSION}            ║"
+echo "║  ai-for-investor Release v${VERSION}            ║"
 echo "║  Mode: $(if $DRY_RUN; then echo 'DRY RUN'; else echo 'EXECUTE'; fi)                            ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
@@ -132,7 +132,7 @@ fi
 echo ""
 echo "▶ Step 7: Creating GitHub Release..."
 
-RELEASE_NOTES="## AI for Investor v${VERSION} — Initial Public Release
+RELEASE_NOTES="## ai-for-investor v${VERSION} — Initial Public Release
 
 ### Highlights
 

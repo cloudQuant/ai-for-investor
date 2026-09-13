@@ -1,4 +1,4 @@
-# AI-for-Investor 产品方案
+# ai-for-investor 产品方案
 
 > **战略方向：** ToC 主导，ToB 支持  
 > **文档用途：** 公司产品立项与资源决策  
@@ -9,7 +9,7 @@
 
 ## 一、项目结论与立项建议
 
-AI-for-Investor 的长期方向是开放式 AI 投研助手：
+ai-for-investor 的长期方向是开放式 AI 投研助手：
 
 > **以数据与交易能力为底座，以用户自定义、发布和订阅投研功能与策略为生态的 ToC 投资研究平台。**
 
@@ -26,7 +26,7 @@ AI 是降低门槛和连接工作流的入口，不是产品的全部。数据�
 
 ### 2.1 产品北极星
 
-AI-for-Investor 从 AI 驱动的投研平台升级为 AI 投研助手，提供逐步完善的数据和交易功能、基本投研功能与策略；每个用户都可以按自己的需求创建、发布和订阅投研功能与策略。
+ai-for-investor 从 AI 驱动的投研平台升级为 AI 投研助手，提供逐步完善的数据和交易功能、基本投研功能与策略；每个用户都可以按自己的需求创建、发布和订阅投研功能与策略。
 
 对用户的一句话价值是：
 
@@ -181,7 +181,7 @@ ToB 不作为 ToC 继续推进的前提。ToC 验证形成的策略、投研功�
 
 ### 4.3 核心差异化
 
-AI-for-Investor 不竞争“谁能更快回答股票问题”，而竞争“谁能让投资结论更可信、能力更开放”：
+ai-for-investor 不竞争“谁能更快回答股票问题”，而竞争“谁能让投资结论更可信、能力更开放”：
 
 1. AI 与非 AI 投研功能并存；
 2. 主观投研和量化策略统一在一个平台；
@@ -375,7 +375,7 @@ AkShare 等开源接口不能自动证明底层数据具有商业展示和再分
 
 ## 十一、结论
 
-AI-for-Investor 的长期方向是开放式 AI 投研助手：
+ai-for-investor 的长期方向是开放式 AI 投研助手：
 
 > **以数据与交易能力为底座，以用户自定义、发布和订阅投研功能与策略为生态的 ToC 投资研究平台。**
 
@@ -400,8 +400,8 @@ AI-for-Investor 的长期方向是开放式 AI 投研助手：
 
 ## 参考资料
 
-- **[S1]** [AI-for-Investor 当前 README](../../README.md)
-- **[S2]** [AI-for-Investor 项目介绍](ai-for-investor-project-introduction.md)
+- **[S1]** [ai-for-investor 当前 README](../../README.md)
+- **[S2]** [ai-for-investor 项目介绍](ai-for-investor-project-introduction.md)
 - **[S3]** [证监会网站转引中国结算 2025 年投资者统计](https://www.csrc.gov.cn/shanxi/c106408/c7640729/content.shtml)
 - **[S4]** [BigQuant 官方产品文档](https://bigquant.com/doc/)
 - **[S5]** [聚宽官方介绍](https://www.joinquant.com/about)

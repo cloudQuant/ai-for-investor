@@ -2,7 +2,7 @@
 
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 将 backtrader_web 交付为可在 macOS、Ubuntu 和 Windows 11 上安全安装、启动、停止、重启、升级和排障的产品，并把关键操作纳入可检索、可关联、可验收的日志与发布治理体系。
+**Goal:** 将 ai_for_investor 交付为可在 macOS、Ubuntu 和 Windows 11 上安全安装、启动、停止、重启、升级和排障的产品，并把关键操作纳入可检索、可关联、可验收的日志与发布治理体系。
 
 **Architecture:** 产品发行版采用 Docker Compose 优先的本地产品档（Linux 容器同时运行于 macOS、Ubuntu、Windows 11 的 Docker Desktop/Engine），以避免用户分别安装 Python、Node、MySQL、Redis 后产生不可复现的组合。根目录的 start_app、stop_app、restart_app 脚本只做稳定入口；平台特定控制器只管理本 Compose 项目，绝不按端口或模糊进程名杀进程。现有原生启动链保留为开发者模式，不能再被描述为生产产品启动方式。
 
@@ -86,7 +86,7 @@
         backups/
         launcher-events.jsonl
 
-产品 Compose project name 固定为 backtrader-web-product，但每个命令必须从运行目录读取配置，不得操作同机任意其他 Compose project。数据库、Redis 和后端只在内部网络暴露；默认仅将前端绑定到 127.0.0.1:8080。对外网暴露、反向代理、TLS、独立 MySQL 或实盘网关必须使用另一个服务器部署档并明确配置。
+产品 Compose project name 固定为 ai-for-investor-product，但每个命令必须从运行目录读取配置，不得操作同机任意其他 Compose project。数据库、Redis 和后端只在内部网络暴露；默认仅将前端绑定到 127.0.0.1:8080。对外网暴露、反向代理、TLS、独立 MySQL 或实盘网关必须使用另一个服务器部署档并明确配置。
 
 ### 2.2 生命周期状态机
 
@@ -291,7 +291,7 @@ Expected: 测试在新文件实现前失败；当前 local/prod 档不被误判�
 Run:
 
     /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python scripts/ci/verify_product_compose.py
-    docker compose --project-name backtrader-web-product-ci --env-file docker/product.env.example -f docker/docker-compose.yml -f docker/compose/product.yml config
+    docker compose --project-name ai-for-investor-product-ci --env-file docker/product.env.example -f docker/docker-compose.yml -f docker/compose/product.yml config
 
 Expected: 配置验证通过；示例文件不会含真实凭据，也不会展开为对外暴露数据库。
 

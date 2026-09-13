@@ -4,7 +4,7 @@
 
 ## 1. 实现范围
 
-- 实现工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`；
+- 实现工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`；
 - 分支：`codex/iteration-196-ai-research-trust`；
 - 基础/当前提交：`a18bcf52682686c30d919fe02d6fd734ee4271b9`；
 - 核心落点：审批 composable、研究工作台审批面板、研究 workflow 类型、versioned error catalog 及严格校验脚本；

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI for Investor framework includes a comprehensive logging system built on top of [loguru](https://github.com/Delgan/loguru), providing structured logging, sensitive data filtering, and multiple log outputs.
+The ai-for-investor framework includes a comprehensive logging system built on top of [loguru](https://github.com/Delgan/loguru), providing structured logging, sensitive data filtering, and multiple log outputs.
 
 ## Features
 

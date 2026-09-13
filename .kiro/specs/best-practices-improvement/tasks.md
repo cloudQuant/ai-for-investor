@@ -2,7 +2,7 @@
 
 ## Overview
 
-Systematic improvement of the Backtrader Web platform following industry best practices, organized into 4 phases with dependency ordering. Phase 1 (Quick Wins) establishes foundational tooling consistency; Phase 2 (CI Enhancement) builds on that to strengthen quality gates; Phase 3 (Infrastructure) adds development environment and observability; Phase 4 (Monitoring) adds security scanning and performance auditing.
+Systematic improvement of the ai-for-investor platform following industry best practices, organized into 4 phases with dependency ordering. Phase 1 (Quick Wins) establishes foundational tooling consistency; Phase 2 (CI Enhancement) builds on that to strengthen quality gates; Phase 3 (Infrastructure) adds development environment and observability; Phase 4 (Monitoring) adds security scanning and performance auditing.
 
 ## Tasks
 
@@ -144,7 +144,7 @@ Systematic improvement of the Backtrader Web platform following industry best pr
     - Update `src/backend/app/telemetry.py`: remove ImportError fallback logic, add OTEL_ENABLED env var check (accepts true/1/yes case-insensitive)
     - When enabled: initialize TracerProvider, instrument FastAPI/SQLAlchemy/httpx, export via OTLP gRPC
     - When disabled: skip SDK initialization, zero overhead
-    - Support OTEL_EXPORTER_OTLP_ENDPOINT (default localhost:4317) and OTEL_SERVICE_NAME (default backtrader-web-api)
+    - Support OTEL_EXPORTER_OTLP_ENDPOINT (default localhost:4317) and OTEL_SERVICE_NAME (default ai-for-investor-api)
     - Handle unreachable collector gracefully: log warning, continue serving
     - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6_
 

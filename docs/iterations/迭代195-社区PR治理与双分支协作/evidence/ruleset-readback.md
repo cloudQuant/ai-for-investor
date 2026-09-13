@@ -18,11 +18,11 @@
 附到对应记录，而不是填写猜测值：
 
 ```bash
-gh api repos/cloudQuant/backtrader_web/rulesets --paginate
-gh api repos/cloudQuant/backtrader_web/codeowners/errors
+gh api repos/cloudQuant/ai-for-investor/rulesets --paginate
+gh api repos/cloudQuant/ai-for-investor/codeowners/errors
 /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python \
   scripts/ci/verify_github_governance.py --live \
-  --repo cloudQuant/backtrader_web --manifest-dir .github/governance/rulesets
+  --repo cloudQuant/ai-for-investor --manifest-dir .github/governance/rulesets
 ```
 
 这些命令用于读回和比对；它们不授权创建、修改、删除 Ruleset，也不授权 bypass、push 或 merge。

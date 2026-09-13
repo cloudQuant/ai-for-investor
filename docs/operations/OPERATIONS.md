@@ -1,6 +1,6 @@
 # Operations Guide
 
-This guide covers system administration, maintenance, and troubleshooting for the AI for Investor platform.
+This guide covers system administration, maintenance, and troubleshooting for the ai-for-investor platform.
 
 ## Task Execution Model and Multi-Instance Limits
 

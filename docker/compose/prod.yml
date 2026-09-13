@@ -1,5 +1,5 @@
 ###############################################################################
-# AI for Investor - Production Docker Compose
+# ai-for-investor - Production Docker Compose
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker/compose/prod.yml up -d

@@ -8,7 +8,7 @@
 
 运行环境是本机 Homebrew MySQL **9.4.0** 的独立、临时、无密码实例及名称受限的空 schema
 `codex_iter191_six_asset_20260803_final`。先对该 schema 执行 `alembic upgrade head`，最终 revision 为
-`20260811_asset_research_task_leases`。没有读取或写入共享 `backtrader_web` 数据库、账户、外部来源或真实市场数据。
+`20260811_asset_research_task_leases`。没有读取或写入共享 `ai_for_investor` 数据库、账户、外部来源或真实市场数据。
 验收结束后，三个仅用于本次尝试的 `codex_iter191_six_asset_*` schema 已删除、临时实例已停止，数据目录已移至系统废纸篓；共享数据库未受影响。
 
 夹具来源 `iter191-six-asset-fixture-source` 仅在临时 schema 中注册为 `RESEARCH_APPROVED`；数据适配器是进程内确定性夹具，明确记录 `external_network_used=false`、`market_data_used=false`、`execution_enabled=false`。该来源不会使共享环境的 capability 打开。

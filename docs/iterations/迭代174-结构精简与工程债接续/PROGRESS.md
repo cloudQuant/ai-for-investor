@@ -21,7 +21,7 @@
 |---|---|---|---|
 | A1 | 根目录 docker-compose 收敛 | ✅ | `0cc7b9d3` 完成；根 1 个 base + `docker/compose/{airflow,ci,dev,local,prod}.yml` |
 | A2 | 启动脚本归一 | ✅ | `0cc7b9d3` 完成；`scripts/app.sh` + 根目录 shim |
-| A3 | 根目录残留清理 | 🟡 | `backtrader.db → data/dev/`、根 `__pycache__` 已清；空目录 `backtrader_web/` 仍被 `examples/demo_*.py` 引用，本轮保留并在 §0 文档化 |
+| A3 | 根目录残留清理 | 🟡 | `backtrader.db → data/dev/`、根 `__pycache__` 已清；空目录 `ai-for-investor/` 仍被 `examples/demo_*.py` 引用，本轮保留并在 §0 文档化 |
 | A4 | 运行时目录隔离 | ⚪ | 顺延：`runtime/`、`logs/`、`workspace_units/`、`strategies/`、`datas/`、`dags/` 涉及外部数据，需 RFC |
 | A5 | scripts 64 个分层 | ⚪ | 见下方专题，需要联动改 14 处 CI 与 ~30 处 docs |
 | A6 | src 多包澄清 | ⚪ | 需要 `src/README.md` + 决定 `src/clientportal.gw/` 与 `src/dags/` 归属 |

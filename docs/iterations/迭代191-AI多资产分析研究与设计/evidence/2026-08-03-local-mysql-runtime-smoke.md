@@ -2,7 +2,7 @@
 
 ## 范围
 
-本证据只覆盖本机共享开发库 `backtrader_web` 的迁移、应用生命周期、认证和
+本证据只覆盖本机共享开发库 `ai_for_investor` 的迁移、应用生命周期、认证和
 fail-closed 数据源门禁。它不代表任何外部数据源、六类资产真实研报、T1 观察或 T2
 方向信号已经通过。
 
@@ -11,7 +11,7 @@ fail-closed 数据源门禁。它不代表任何外部数据源、六类资产�
 ## 前置状态
 
 - MySQL：本机 Homebrew MySQL `9.4.0`，监听 `127.0.0.1:3306`；
-- 应用配置的数据库：`backtrader_web`；
+- 应用配置的数据库：`ai_for_investor`；
 - 起始 Alembic revision：`20260810_asset_research_option_context_binding`；
 - 起始资产运行事实：`asset_analysis_tasks`、来源注册、主数据、schedule、prediction、
   outcome、registry 等均为 0 行；已有 `asset_specs=8` 未被本次变更修改。

@@ -2,7 +2,7 @@
 
 > 判定：`LOCAL_T1_PASS`，仅覆盖 server-owned holdout request command 的本地 HTTP/数据库合同。
 > 发布边界：`IMPLEMENTATION_ACCEPTED=NO-GO`、`PROTOCOL_PRODUCTION_ENABLED=NO-GO`、candidate research/promotion=`BLOCKED/NO-GO`。
-> 实现工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`
+> 实现工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`
 > 本页证据冻结时的迁移 head：`20260907_ai_research_holdout_request`
 > 后续状态：内部 claim/start 已完成本地 T1，当前 head 为 `20260907_ai_research_holdout_claim`；见 [后续证据](HOLDOUT_CLAIM_START_20260907.md)。本页的 150 项结果仍保持其原始 request-only 范围。
 
@@ -35,7 +35,7 @@
 工作目录：
 
 ```text
-/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 ```
 
 命令：

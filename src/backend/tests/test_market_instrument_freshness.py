@@ -37,7 +37,7 @@ async def test_market_instrument_hides_warehouse_access_denied_details():
 
     class DeniedWarehouseService(MarketInstrumentService):
         async def _lookup_stock_warehouse(self, **_kwargs):
-            raise RuntimeError("Access denied for user 'backtrader_web' to database 'akshare_data'")
+            raise RuntimeError("Access denied for user 'ai_for_investor' to database 'akshare_data'")
 
     payload = await DeniedWarehouseService()._lookup_warehouse(
         asset_type="stock",

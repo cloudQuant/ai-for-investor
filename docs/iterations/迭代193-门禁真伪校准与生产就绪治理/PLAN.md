@@ -33,7 +33,7 @@
 | CI/CD | Lighthouse CI 是死门禁（配置路径错误 + `\|\|` 吞退出码，`ci.yml:966-968`）；monorepo-check 空转（未装任何工具，全部 skip，`ci.yml:1243-1265`）；`pull_request_target` 执行不受信任的 PR 代码（`pr-check.yml:6-7,151-181`） |
 | 前端 | `useStrategyPage.ts` 6795 行、`StrategyPage.vue` 3122 行（"god 文件分解"只抽了 3 个弹窗）；i18n "CJK 清零"未完成（600+ 行硬编码中文，`StrategyPage.vue:229-365` 等）；ratchet 红灯 3 项前端违规 |
 | 可观测性 | 审计清理任务从未被调度（`cleanup_old_records` 已实现但零调用方，`audit_service.py:282-330`）；生产 OTel 默认关闭且 SDK 无 shutdown（`telemetry.py` + `prod.yml`）；业务日志无 request_id/user_id 上下文（`utils/logger.py:46-70` InterceptHandler 丢弃 extra） |
-| 文档/DX | `README.en.md` 16 个死链接 + 错误仓库名（`ai-for-investor.git` vs 实际 `cloudQuant/backtrader_web`）；`CONTRIBUTING.md:21` 克隆命令指向不存在的仓库；uv workspace 仍声明已空壳化的 `src/bt_api_py` 为成员 → `make check-all` 必然失败（根 `pyproject.toml:13-14`） |
+| 文档/DX | `README.en.md` 16 个死链接 + 错误仓库名（`ai-for-investor.git` vs 实际 `cloudQuant/ai-for-investor`）；`CONTRIBUTING.md:21` 克隆命令指向不存在的仓库；uv workspace 仍声明已空壳化的 `src/bt_api_py` 为成员 → `make check-all` 必然失败（根 `pyproject.toml:13-14`） |
 
 ### 0.3 已做好的地方（审计确认，避免重复治理）
 
@@ -346,7 +346,7 @@
 ### Task L：文档与 DX 一致性
 
 **Files:**
-- Modify: `README.en.md`（16 个死链接改 Diátaxis 新路径；`ai-for-investor.git` → `cloudQuant/backtrader_web.git`；docker 路径 `docker/docker-compose.yml`）
+- Modify: `README.en.md`（16 个死链接改 Diátaxis 新路径；`ai-for-investor.git` → `cloudQuant/ai-for-investor.git`；docker 路径 `docker/docker-compose.yml`）
 - Modify: `CONTRIBUTING.md:21`（克隆命令修正）；`CONTRIBUTING.md:142-171`（workspace 成员与 `uv.lock` 说明同步 D-3）
 - Modify: 根 `pyproject.toml:13-14`、`scripts/dev/check_all.sh:24`（`src/bt_api_py` 已空壳化，移出 members 或恢复其 pyproject）
 - Modify: `CHANGELOG.md`（补 176-192 摘要（按迭代归并）、版本块逆序、死链接修正、releases URL）

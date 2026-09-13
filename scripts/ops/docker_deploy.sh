@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ###############################################################################
-# AI for Investor - Docker 一键部署脚本
+# ai-for-investor - Docker 一键部署脚本
 #
 # 适用于全新的 Ubuntu 22.04 / 24.04 LTS 服务器
 # 服务器可以是完全空白的 (连 Docker 都没有)
@@ -276,7 +276,7 @@ ENV_FILE="${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}"
 mkdir -p "$(dirname "${ENV_FILE}")"
 
 cat > "${ENV_FILE}" <<EOF
-# ===== AI for Investor Docker 配置 =====
+# ===== ai-for-investor Docker 配置 =====
 # 自动生成于 $(date '+%Y-%m-%d %H:%M:%S')
 # 此文件由 docker compose --env-file ${ENV_FILE_RELATIVE_PATH} 读取
 
@@ -371,7 +371,7 @@ docker compose "${COMPOSE_ARGS[@]}" ps
 ###############################################################################
 CREDENTIALS_FILE="/root/.ai-for-investor_credentials"
 cat > "${CREDENTIALS_FILE}" <<EOF
-# AI for Investor Docker 部署凭据 - 请妥善保管!
+# ai-for-investor Docker 部署凭据 - 请妥善保管!
 # 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
 
 MySQL 主机:          ${DB_HOST}
@@ -392,7 +392,7 @@ chmod 600 "${CREDENTIALS_FILE}"
 ###############################################################################
 echo ""
 echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}  AI for Investor Docker 部署完成!${NC}"
+echo -e "${GREEN}  ai-for-investor Docker 部署完成!${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""
 echo -e "  访问地址:     ${BLUE}http://${SERVER_DOMAIN}${NC}"

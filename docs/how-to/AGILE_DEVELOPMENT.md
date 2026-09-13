@@ -1,4 +1,4 @@
-# AI for Investor 敏捷开发文档
+# ai-for-investor 敏捷开发文档
 
 > 基于迭代100需求，按照行业最佳实践构建的敏捷开发文档
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-本设计文档描述 Backtrader Web 第二轮最佳实践改进的技术方案。涵盖前端 Element Plus 按需导入、后端 API 响应缓存、前端错误边界与重试、速率限制响应头、优雅停机、Pinia 状态持久化、OpenAPI 文档增强和 CI 缓存优化八个模块的架构设计。
+本设计文档描述 ai-for-investor 第二轮最佳实践改进的技术方案。涵盖前端 Element Plus 按需导入、后端 API 响应缓存、前端错误边界与重试、速率限制响应头、优雅停机、Pinia 状态持久化、OpenAPI 文档增强和 CI 缓存优化八个模块的架构设计。
 
 ## Architecture
 

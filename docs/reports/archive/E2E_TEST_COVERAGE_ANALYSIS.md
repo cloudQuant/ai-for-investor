@@ -1,6 +1,6 @@
 # E2E Test Coverage Analysis Report
 
-> Generated: 2026-02-24 | Project: backtrader_web
+> Generated: 2026-02-24 | Project: ai_for_investor
 
 ## 1. Executive Summary
 
