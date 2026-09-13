@@ -8,8 +8,8 @@
 
 | 远端 | ref | SHA |
 |---|---|---|
-| GitHub `cloudQuant/backtrader_web` | `master` | `605d4d0e1cf1ad6627483aab6c4cef2a742b3d0f` |
-| Gitee `yunjinqi/backtrader_web` | `master` | `3d05130635f50c45adeaa4514af246380ff00451` |
+| GitHub `cloudQuant/ai-for-investor` | `master` | `605d4d0e1cf1ad6627483aab6c4cef2a742b3d0f` |
+| Gitee `yunjinqi/ai-for-investor` | `master` | `3d05130635f50c45adeaa4514af246380ff00451` |
 | GitHub / Gitee | `dev` | `ebec2a0adf0f239784edbe4d2f3221ac581bd65e`（两端一致） |
 
 发现方式：计划编制基线采集（`git ls-remote --heads`），见 `evidence/preflight.md` §2。

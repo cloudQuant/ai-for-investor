@@ -2,12 +2,12 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
   - "prd.md"
-  - "product-brief-backtrader_web-2026-02-23.md"
+  - "product-brief-ai_for_investor-2026-02-23.md"
 workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-02-23'
-project_name: 'backtrader_web'
+project_name: 'ai_for_investor'
 user_name: 'cloud'
 date: '2026-02-23'
 ---
@@ -83,7 +83,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 ### Project Type Assessment
 
-**Brownfield Project** - backtrader_web is a mature quantitative trading platform with existing technology stack. Starter template evaluation is not applicable.
+**Brownfield Project** - ai_for_investor is a mature quantitative trading platform with existing technology stack. Starter template evaluation is not applicable.
 
 ### Current Technology Stack (Existing)
 
@@ -281,7 +281,7 @@ src/backend/tests/
 ### Complete Project Directory Structure
 
 ```
-backtrader_web/
+ai-for-investor/
 ├── docs/                           # Project documentation
 │   ├── LOGGING.md                   # Logging documentation
 │   ├── 迭代*.md                     # Iteration records
@@ -688,5 +688,5 @@ src/backend/app/
 ---
 
 *Architecture Document completed via BMAD workflow on 2026-02-23*
-*Project: backtrader_web - Quantitative Trading Research & Investment Management Platform*
+*Project: ai_for_investor - Quantitative Trading Research & Investment Management Platform*
 *Workflow Type: Implementation Architecture*

@@ -250,7 +250,7 @@ class TestSetupLogger:
         log_dir = Path(get_settings().LOG_DIR).resolve()
 
         assert log_dir != repo_logs.resolve()
-        assert log_dir.name.startswith("backtrader_web_pytest_logs_")
+        assert log_dir.name.startswith("ai_for_investor_pytest_logs_")
 
     def test_error_file_handler_never_diagnoses_local_variables(self, monkeypatch, tmp_path: Path):
         """Exception stacks retain control flow but must not serialize locals."""

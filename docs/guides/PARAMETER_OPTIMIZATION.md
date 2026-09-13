@@ -1,6 +1,6 @@
 # 参数优化指南
 
-本文档介绍 AI for Investor 的策略参数优化功能。
+本文档介绍 ai-for-investor 的策略参数优化功能。
 
 ## 1. 概述
 

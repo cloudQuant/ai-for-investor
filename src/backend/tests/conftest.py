@@ -44,7 +44,7 @@ os.environ["AI_CHAT_MODEL"] = ""
 # Vector retrieval is an optional runtime integration.  API tests exercise the
 # deterministic lexical fallback unless a test explicitly injects a fake index.
 os.environ["RAG_VECTOR_ENABLED"] = "false"
-_TEST_LOG_DIR = Path(tempfile.mkdtemp(prefix="backtrader_web_pytest_logs_"))
+_TEST_LOG_DIR = Path(tempfile.mkdtemp(prefix="ai_for_investor_pytest_logs_"))
 os.environ["LOG_DIR"] = str(_TEST_LOG_DIR)
 # ``bt_api_py`` initializes an spdlog file sink at import time.  Each xdist
 # worker imports this conftest independently, so binding its optional log

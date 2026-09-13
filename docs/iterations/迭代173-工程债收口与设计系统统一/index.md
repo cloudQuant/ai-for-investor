@@ -5,7 +5,7 @@
 > **前置基线**:
 > - 迭代 169 已完成切片棘轮、性能基线与 v0.2.0 RC，但 `REFACTORING_BACKLOG.md` 中多项 P0/P1 工程债延期至本轮收口
 > - 迭代 170/171 已完成 FinceptTerminal MVP 与产品化深化；broker 边界已固化在 `bt_api_py / bt_api_xx`
-> - 迭代 172 已完成首批 14 个 `bt_api_xx` 券商扩展包独立落地，`backtrader_web` 保持 consumer-only 边界
+> - 迭代 172 已完成首批 14 个 `bt_api_xx` 券商扩展包独立落地，`ai_for_investor` 保持 consumer-only 边界
 > - v0.2.0-rc1 已发版（2026-05-24），CHANGELOG `Known Boundaries` 仍挂账 AI 可观测性、多模型路由、VaR/CVaR/因子/归因/市场状态前端落地、回测链路 60% 降耗
 > **核心目标**:
 > 把 169/171 留下、并在 170-172 期间持续累积的工程债与产品化债，沿“安全配置 + 大文件切片 + 设计系统统一 + 性能与可观测性补完 + 迭代流程收口”五个维度做一次性收口，让 v0.2.0 从 RC 走到可发布 GA 的临界点。
@@ -65,7 +65,7 @@
 为防止范围漂移，以下事项**明确排除**：
 
 - ❌ 不接受新功能 PRD；任何新需求一律记到 174+
-- ❌ 不在 `backtrader_web` 内新增 broker 适配（172 已固化边界，新 broker 走 `bt_api_xx`）
+- ❌ 不在 `ai_for_investor` 内新增 broker 适配（172 已固化边界，新 broker 走 `bt_api_xx`）
 - ❌ 不做 FinceptTerminal 新批迁移；171 残项 T2/T7/T10 走独立线 173B，**不并入本计划**
 - ❌ 不做数据库 schema 大改；如必须改，单独 RFC，不挂 173
 - ❌ 不重做整站视觉重构；本迭代只做“颜色 token 单一来源化 + 关键大视图拆分 + 文档化设计契约”，不动信息架构

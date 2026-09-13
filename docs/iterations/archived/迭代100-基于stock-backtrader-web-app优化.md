@@ -1,7 +1,7 @@
 ### 背景
 backtrader已经比较完善了，我想要借鉴量化投资框架中其他项目的优势，继续改进优化backtrader。
 
-> **📋 敏捷开发文档**: 本迭代已转化为独立项目 `backtrader_web`，详细的敏捷开发文档请查看:  
+> **📋 敏捷开发文档**: 本迭代已转化为独立项目 `ai_for_investor`，详细的敏捷开发文档请查看:
 > **[docs/AGILE_DEVELOPMENT.md](../AGILE_DEVELOPMENT.md)**
 > 
 > 包含: 产品愿景、用户故事、Sprint规划、技术架构、开发规范等
@@ -512,7 +512,7 @@ from backtrader.web.domain.schemas import (
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="Backtrader Web API",
+    title="ai-for-investor API",
     description="Backtrader量化交易回测Web服务",
     version="1.0.0",
 )
@@ -551,7 +551,7 @@ api_router = APIRouter(prefix="/api/v1")
 # 健康检查
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "backtrader-web"}
+    return {"status": "healthy", "service": "ai-for-investor"}
 
 # 回测相关API
 backtest_router = APIRouter(prefix="/backtest", tags=["backtest"])
@@ -1246,7 +1246,7 @@ from backtrader.web.charts.result import ResultChart
 
 # 页面配置
 st.set_page_config(
-    page_title="Backtrader Web",
+    page_title="ai-for-investor",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -1264,7 +1264,7 @@ services = get_services()
 
 # 侧边栏
 with st.sidebar:
-    st.title("📈 Backtrader Web")
+    st.title("📈 ai-for-investor")
     st.markdown("---")
 
     page = st.radio(
@@ -1277,7 +1277,7 @@ with st.sidebar:
 
 # 首页
 if page == "首页":
-    st.title("欢迎使用 Backtrader Web")
+    st.title("欢迎使用 ai-for-investor")
     st.markdown("""
     这是一个基于 Backtrader 的量化交易回测 Web 应用。
 
@@ -2235,10 +2235,10 @@ Week 16-17: 测试部署 ████████
 
 ### 方案对比
 
-| 维度 | 方案A: 独立项目 (backtrader-web) | 方案B: 集成到backtrader |
+| 维度 | 方案A: 独立项目 (ai-for-investor) | 方案B: 集成到backtrader |
 |------|--------------------------------|------------------------|
 | **代码结构** | 独立仓库，独立版本 | 作为backtrader子模块 |
-| **安装方式** | `pip install backtrader-web` | `pip install backtrader[web]` |
+| **安装方式** | `pip install ai-for-investor` | `pip install backtrader[web]` |
 | **依赖管理** | 独立requirements.txt | 可选依赖 (extras_require) |
 | **发布周期** | 独立发布，灵活迭代 | 随backtrader版本发布 |
 | **用户群体** | 需要Web功能的用户单独安装 | 所有用户可选启用 |
@@ -2258,7 +2258,7 @@ Week 16-17: 测试部署 ████████
 
 **项目结构:**
 ```
-backtrader-web/               # 独立仓库
+ai-for-investor/               # 独立仓库
 ├── backend/                  # FastAPI后端
 │   ├── app/
 │   │   ├── api/
@@ -2276,10 +2276,10 @@ backtrader-web/               # 独立仓库
 **使用方式:**
 ```bash
 pip install backtrader
-pip install backtrader-web
+pip install ai-for-investor
 
 # 启动
-backtrader-web serve --port 8000
+ai-for-investor serve --port 8000
 ```
 
 ### 方案B: 集成到backtrader
@@ -2319,8 +2319,8 @@ backtrader/
 
 **集成方式:**
 ```python
-# backtrader-web 通过公开API与backtrader交互
-from backtrader_web import WebServer
+# ai-for-investor 通过公开API与backtrader交互
+from ai_for_investor import WebServer
 import backtrader as bt
 
 cerebro = bt.Cerebro()

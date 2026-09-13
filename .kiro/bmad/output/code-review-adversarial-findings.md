@@ -1,6 +1,6 @@
 # Adversarial Code Review — 发现报告
 
-**项目**: Backtrader Web  
+**项目**: ai-for-investor
 **评审日期**: 2025-03-10  
 **评审范围**: 后端核心代码 (router, main, strategy_service, exception_handling, simulation API)
 

@@ -3,7 +3,7 @@
 日期：2026-09-11
 实现候选：`e2bfc19e20ecb5f130d898ae3f1615b5118e031b`
 实现提交范围：`b4f5905f..e2bfc19e`
-工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-b2-family-evidence`
+工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-b2-family-evidence`
 
 ## 已实现的内部机制
 

@@ -1,7 +1,7 @@
 # Contributing
 
-How to contribute code and documentation to AI for Investor. The full local-development,
-testing, and style guide lives in the root [CONTRIBUTING.md](https://github.com/cloudQuant/backtrader_web/blob/master/CONTRIBUTING.md).
+How to contribute code and documentation to ai-for-investor. The full local-development,
+testing, and style guide lives in the root [CONTRIBUTING.md](https://github.com/cloudQuant/ai-for-investor/blob/master/CONTRIBUTING.md).
 
 ## Branch model (iteration 195)
 
@@ -19,14 +19,14 @@ rejected by the PR Governance gate.
 2. Clone your fork (replace `YOUR_USERNAME` with your own username):
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/backtrader_web.git
-   cd backtrader_web
+   git clone https://github.com/YOUR_USERNAME/ai_for_investor.git
+   cd ai-for-investor
    ```
 
 3. Add the upstream remote and base your work on `dev`:
 
    ```bash
-   git remote add upstream https://github.com/cloudQuant/backtrader_web.git
+   git remote add upstream https://github.com/cloudQuant/ai-for-investor.git
    git fetch upstream
    git checkout -b feature/your-feature upstream/dev
    ```
@@ -47,7 +47,7 @@ rejected by the PR Governance gate.
 
 - Bugs: use the Bug Report form with minimal reproduction steps and environment details.
 - Features: use the Feature Request form.
-- Questions: ask in [Discussions](https://github.com/cloudQuant/backtrader_web/discussions)
+- Questions: ask in [Discussions](https://github.com/cloudQuant/ai-for-investor/discussions)
   instead of opening a question issue.
 
 ## Code of conduct

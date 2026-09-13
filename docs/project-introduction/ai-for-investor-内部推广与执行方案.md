@@ -1,4 +1,4 @@
-# AI-for-Investor
+# ai-for-investor
 
 ## 一、产品价值重塑
 
@@ -58,7 +58,7 @@
 
 - 演示站：https://aifortrader.cn/（可直接体验）
 - 公司内部部署地址：根据实际部署情况提供（建议使用公司内网域名）
-- GitHub开源代码：https://github.com/cloudQuant/backtrader_web
+- GitHub开源代码：https://github.com/cloudQuant/ai-for-investor
 
 **首批用户招募：**
 
@@ -301,7 +301,7 @@
 
 | 资源     | 地址                                         |
 | -------- | -------------------------------------------- |
-| 开源代码 | https://github.com/cloudQuant/backtrader_web |
+| 开源代码 | https://github.com/cloudQuant/ai-for-investor |
 | 在线演示 | https://aifortrader.cn/                      |
 | 中文文档 | https://aifortrader.cn/docs/zh/              |
 | 英文文档 | https://aifortrader.cn/en/                   |
@@ -310,8 +310,8 @@
 
 ```bash
 # 克隆代码
-git clone https://github.com/cloudQuant/backtrader_web.git
-cd backtrader_web
+git clone https://github.com/cloudQuant/ai-for-investor.git
+cd ai-for-investor
 
 # Docker一键部署
 docker compose -f docker/docker-compose.yml -f docker/compose/dev.yml up -d

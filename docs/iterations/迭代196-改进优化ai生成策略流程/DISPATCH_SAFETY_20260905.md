@@ -21,7 +21,7 @@
 ## 2. 验证
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load \
   --junitxml=/private/tmp/iter196-current-head.WAaH1k/dispatch-settlement-final.xml \

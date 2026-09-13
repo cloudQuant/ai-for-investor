@@ -1,6 +1,6 @@
 # 迭代 196 六进程回归与并发问题处置
 
-日期：2026-09-05。工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`。
+日期：2026-09-05。工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`。
 
 > 历史快照提示（2026-09-07）：本文保留 2026-09-05～06 的实际失败、修复和冻结跑次，正文中的“最新”仅相对于该历史时间线。当前候选的互斥功能/性能通道、固定依赖、沙箱 ready 协议及最终来源摘要见 [2026-09-07 六 worker 分层回归](REGRESSION_6_WORKERS_20260907.md)；不得用本文旧数字覆盖后续源码。
 
@@ -11,7 +11,7 @@
 ## 最新：版本化发现工作流与原子阶段完成（2026-09-06）
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q --tb=short -n 6 --dist load --maxschedchunk=8 \
   --durations=15 \
@@ -34,7 +34,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 ## 历史：发现 HTTP、搜索占位与 trial 发布（2026-09-06）
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q --tb=short -n 6 --dist load --maxschedchunk=8 \
   --durations=15 \
@@ -56,7 +56,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 ## 历史：发现执行记录与派发增量（2026-09-06）
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --maxschedchunk=8 \
   --durations=20 --tb=short \
@@ -82,7 +82,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 后端使用用户 Anaconda base 环境，pytest-xdist 固定 `-n 6`。最初按文件分配（`--dist loadfile`）以减轻进程发现测试之间的干扰；JUnit 随后显示 `test_ai_strategy_research_service.py` 独占一个 worker、累计 469.81 秒，形成长尾。脚本测试完成局部隔离后，最终改用 `--dist load` 按用例动态分配，使慢文件也能分摊到六个 worker。这里的“6 核”表示六个 pytest worker，并非操作系统 CPU affinity 限制。
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --durations=15 \
   --junitxml=/private/tmp/iter196-current-head.WAaH1k/backend-full-6-load.xml tests
@@ -135,7 +135,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 最新历史分页、run/task/candidate 直链恢复、双流轮询和请求所有权修复已由主代理重新验证：
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/frontend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/frontend
 npm run test -- --run --minWorkers=6 --maxWorkers=6 \
   --reporter=basic --reporter=json \
   --outputFile.json=/private/tmp/iter196-current-head.WAaH1k/frontend-full-6.json
@@ -150,7 +150,7 @@ Vitest 1.6.0 在本机应同时指定 min/max 为 6，单设 max 会与机器默
 ## 本批冻结源码的完整后端结果
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --maxschedchunk=8 \
   --durations=20 \
@@ -168,7 +168,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 ## 响应、时钟与生成执行器增量的统一回归
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --maxschedchunk=8 \
   tests/test_ai_research_*.py --tb=short \
@@ -186,7 +186,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 ## HTTP 生成部署、出站敏感字段与阶段时钟的统一回归
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --maxschedchunk=8 \
   tests/test_ai_research_*.py tests/test_config.py --tb=short \
@@ -202,7 +202,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-re
 ## 历史冻结源码：provider/stage-clock 完整后端目录结果
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --maxschedchunk=8 \
   --durations=20 --tb=short \
@@ -245,7 +245,7 @@ rg --files -0 app tests scripts alembic -g '*.py' \
 ### 完整后端目录
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load --maxschedchunk=8 \
   --durations=20 --tb=short \

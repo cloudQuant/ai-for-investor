@@ -347,7 +347,7 @@ frontend-i18n:
 from contextlib import contextmanager
 from opentelemetry import trace
 
-_tracer = trace.get_tracer("backtrader-web")
+_tracer = trace.get_tracer("ai-for-investor")
 
 @contextmanager
 def business_span(name: str, **attrs):

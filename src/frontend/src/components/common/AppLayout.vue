@@ -14,7 +14,7 @@
           </el-icon>
         </span>
         <span class="sidebar-brand-copy">
-          <span class="sidebar-brand-name">AI for Investor</span>
+          <span class="sidebar-brand-name">ai-for-investor</span>
           <span class="sidebar-brand-context">{{ currentDomainLabel }}</span>
         </span>
       </div>
@@ -65,7 +65,7 @@
               </el-icon>
             </span>
             <span class="sidebar-brand-copy">
-              <span class="sidebar-brand-name">AI for Investor</span>
+              <span class="sidebar-brand-name">ai-for-investor</span>
               <span class="sidebar-brand-context">{{ currentDomainLabel }}</span>
             </span>
           </div>
@@ -308,7 +308,7 @@ const pageTitle = computed(() => {
   if (activeCapability.value) {
     return capabilityLabel(activeCapability.value)
   }
-  return currentDomainLabel.value || 'AI for Investor'
+  return currentDomainLabel.value || 'ai-for-investor'
 })
 
 function resolveIcon(name: string): Component {

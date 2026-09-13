@@ -1,6 +1,6 @@
 # 代码质量分析报告
 
-**项目**: Backtrader Web  
+**项目**: ai-for-investor
 **分析日期**: 2026-03-10  
 **范围**: 后端 (Python) + 前端 (Vue/TypeScript)
 

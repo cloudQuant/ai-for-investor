@@ -1,6 +1,6 @@
 # 迭代126 - 迁移 akshare_web 到数据管理 - 文档索引
 
-> **迭代目标**：将 `akshare_web` 的数据治理能力整合进 `backtrader_web` 的“数据管理”域  
+> **迭代目标**：将 `akshare_web` 的数据治理能力整合进 `ai_for_investor` 的“数据管理”域
 > **文档状态**：已按当前项目真实代码基线重构  
 > **交付对象**：产品、前端、后端、测试
 
@@ -20,7 +20,7 @@
 
 ## 2. 本迭代要解决什么问题
 
-当前 `backtrader_web` 已有 `数据管理` 页面，但能力主要集中在：
+当前 `ai_for_investor` 已有 `数据管理` 页面，但能力主要集中在：
 
 - 股票 K 线查询
 - 期货 Gateway 账户与持仓查询
@@ -45,8 +45,8 @@
 - akshare 迁移能力使用新的页面、服务、API 和模型承接
 - 后端 API 继续归属 `/api/v1/data/*`
 - akshare 迁移过来的管理表使用 `ak_` 前缀，避免与主业务表冲突
-- **数据库引擎**：采用**两个 MySQL 数据库**——`backtrader_web` + `akshare_data`
-- 本迭代包含历史数据迁移：`akshare_web` 管理库数据与当前 SQLite 业务数据都要迁入 `backtrader_web`
+- **数据库引擎**：采用**两个 MySQL 数据库**——`ai_for_investor` + `akshare_data`
+- 本迭代包含历史数据迁移：`akshare_web` 管理库数据与当前 SQLite 业务数据都要迁入 `ai_for_investor`
 - 迁移完成后，运行时不再依赖 SQLite
 - **本迭代不对接回测**：akshare 数据仅作为数据治理能力落户，回测对接留给下一个迭代
 - **前向兼容设计**：数据模型为后续对接回测预留扩展字段
@@ -71,16 +71,16 @@
 
 | # | 决策项 | 结论 |
 |---|--------|------|
-| 1 | 是否迁移 akshare_web 历史数据 | ✅ 迁移到 `backtrader_web` MySQL |
-| 2 | SQLite 现有业务数据 | ✅ 迁移到 `backtrader_web` MySQL，迁移后停用 SQLite |
-| 3 | akshare 管理表命名 | ✅ 使用 `ak_` 前缀落入 `backtrader_web` MySQL |
+| 1 | 是否迁移 akshare_web 历史数据 | ✅ 迁移到 `ai_for_investor` MySQL |
+| 2 | SQLite 现有业务数据 | ✅ 迁移到 `ai_for_investor` MySQL，迁移后停用 SQLite |
+| 3 | akshare 管理表命名 | ✅ 使用 `ak_` 前缀落入 `ai_for_investor` MySQL |
 | 4 | 接口管理权限边界 | ✅ 仅管理员可操作（详见迭代计划 7.1） |
 | 5 | 调度器部署假设 | ✅ 单实例部署 |
 | 6 | 数据采集脚本迁移范围 | ✅ 分批迁移，首版优先最小闭环 |
-| 7 | 数据库引擎方案 | ✅ 运行时只保留 `backtrader_web` + `akshare_data` 两个 MySQL |
+| 7 | 数据库引擎方案 | ✅ 运行时只保留 `ai_for_investor` + `akshare_data` 两个 MySQL |
 | 8 | 是否对接回测 | ✅ 本迭代不对接，留给下一个迭代 |
 | 9 | 是否修改 `/api/v1/data/kline` | ✅ 不修改 |
-| 10 | `backtrader_web` MySQL 若不存在 | ✅ 本迭代负责创建 |
+| 10 | `ai_for_investor` MySQL 若不存在 | ✅ 本迭代负责创建 |
 
 详细决策依据见 `迭代计划.md` 第 2.0 节、第 3.3 节、第 7 节。
 
@@ -93,15 +93,15 @@
 ### 后端
 
 ```text
-src/backend/app/db/database.py               # 主业务切换到 backtrader_web MySQL
+src/backend/app/db/database.py               # 主业务切换到 ai_for_investor MySQL
 src/backend/app/db/akshare_data_database.py  # 独立 akshare_data MySQL engine
 src/backend/app/models/akshare_mgmt.py       # 新增：7 张 ak_ 前缀管理表模型
 src/backend/app/schemas/akshare_mgmt.py      # 新增
 src/backend/app/services/akshare_*.py        # 新增：多个服务文件
 src/backend/app/api/akshare_*.py             # 新增：5 个 router 文件
 src/backend/alembic/                         # 主库 MySQL schema 与迁移脚本
-scripts/migrate_sqlite_to_mysql.py           # 新增：SQLite -> backtrader_web 数据迁移
-scripts/migrate_akshare_web_to_mysql.py      # 新增：akshare_web -> backtrader_web 管理数据迁移
+scripts/migrate_sqlite_to_mysql.py           # 新增：SQLite -> ai_for_investor 数据迁移
+scripts/migrate_akshare_web_to_mysql.py      # 新增：akshare_web -> ai_for_investor 管理数据迁移
 src/backend/.env.example                     # 更新 DATABASE_URL / AKSHARE_DATA_DATABASE_URL
 ```
 

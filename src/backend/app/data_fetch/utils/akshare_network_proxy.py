@@ -168,7 +168,7 @@ def _default_env_files() -> list[Path]:
     paths = [Path.cwd() / ".env"]
     module_path = Path(__file__).resolve()
     for parent in module_path.parents:
-        if parent.name in {"backend", "backtrader_web"}:
+        if parent.name in {"backend", "ai-for-investor"}:
             paths.append(parent / ".env")
     return paths
 

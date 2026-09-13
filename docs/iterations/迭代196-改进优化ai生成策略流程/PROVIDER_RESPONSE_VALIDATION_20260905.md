@@ -35,7 +35,7 @@
 - 两个改动文件 Ruff check 通过，已按项目格式化。
 
 ```sh
-cd /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust/src/backend
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust/src/backend
 /Users/yunjinqi/opt/anaconda3/bin/conda run --no-capture-output -n base python \
   -m pytest -p no:rerunfailures -q -n 6 --dist load \
   tests/test_ai_research_llm_gateway.py tests/test_ai_research_generation_materialization.py \

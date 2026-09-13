@@ -9,7 +9,7 @@
 **Architecture**: Layered REST API + SPA
 
 ```
-backtrader_web/
+ai-for-investor/
 ├── src/                          # 源代码根目录
 │   ├── backend/                  # FastAPI 后端 (Part: backend)
 │   │   ├── app/

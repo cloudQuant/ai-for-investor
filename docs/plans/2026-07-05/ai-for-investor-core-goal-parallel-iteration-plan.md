@@ -1,10 +1,10 @@
-# AI for Investor 核心目标并行迭代计划
+# ai-for-investor 核心目标并行迭代计划
 
 > **验收状态（2026-07-17）**: ❌ 未完成（三方向平均 ~73%，核心闭环可运行）。验收结论见 [`ACCEPTANCE.md`](./ACCEPTANCE.md)；收尾缺口移入 [迭代 184](../../iterations/迭代184-核心目标并行迭代计划验收收尾/PLAN.md)。
 
 ## 一、核心目标
 
-AI for Investor 的核心目标是：
+ai-for-investor 的核心目标是：
 
 > 将用户的保值增值需求、投资想法和交易假设，自动转化为覆盖股票、债券、基金、期货、期权、外汇等资产的可验证、可优化、可部署投资策略，并形成从想法、投研、回测、优化、模拟交易、人工审核到实盘投资交易的完整闭环。
 
@@ -32,9 +32,9 @@ AI for Investor 的核心目标是：
 
 ### 系统架构图
 
-这张图强调 AI for Investor 的核心优势：以 AI 投研编排为中枢，把用户需求、数据、策略、回测、优化、模拟交易、人工审核和实盘准备连接成闭环。
+这张图强调 ai-for-investor 的核心优势：以 AI 投研编排为中枢，把用户需求、数据、策略、回测、优化、模拟交易、人工审核和实盘准备连接成闭环。
 
-![AI for Investor 系统架构图](./ai-for-investor-architecture.svg)
+![ai-for-investor 系统架构图](./ai-for-investor-architecture.svg)
 
 ## 三、并行开发总原则
 
@@ -772,7 +772,7 @@ RiskRule
 
 ## 十二、最终产品形态
 
-完成本计划后，AI for Investor 应该具备以下产品闭环：
+完成本计划后，ai-for-investor 应该具备以下产品闭环：
 
 ```text
 投资需求

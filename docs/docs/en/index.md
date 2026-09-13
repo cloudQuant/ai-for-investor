@@ -1,11 +1,11 @@
 ---
-title: AI for Investor
+title: ai-for-investor
 description: An AI-assisted research, validation, and trading-support platform for quantitative teams
 ---
 
-# AI for Investor
+# ai-for-investor
 
-AI for Investor connects natural-language research, knowledge retrieval, strategy development, backtest validation, trading workspaces, and portfolio-risk views into an auditable quantitative research workflow. It accelerates research; it does not replace data validation, risk controls, or human trading decisions.
+ai-for-investor connects natural-language research, knowledge retrieval, strategy development, backtest validation, trading workspaces, and portfolio-risk views into an auditable quantitative research workflow. It accelerates research; it does not replace data validation, risk controls, or human trading decisions.
 
 [Get started](./getting-started/index.md){ .md-button }
 
@@ -57,7 +57,7 @@ AI for Investor connects natural-language research, knowledge retrieval, strateg
 | [backtrader](https://github.com/cloudQuant/backtrader) | Professional Python algorithmic trading framework (backtesting + live trading); the core fork behind this platform's research engine. |
 | [backtrader-skills](https://github.com/cloudQuant/backtrader-skills) | Offline strategy author/review/test product: datasets + StrategySpec v1 → pytest strategies or three-file bundles with static review and child-process validation. |
 | [backtrader-mcp](https://github.com/cloudQuant/backtrader-mcp) | Local-first MCP server: frozen CSV datasets, typed strategy drafts, bounded subprocess runs with status and reports (offline, backtest-only). |
-| [backtrader_web](https://github.com/cloudQuant/backtrader_web) | This platform: web-based full-cycle Backtrader strategy management (backtesting analysis, paper trading, live execution, data management). |
+| [ai_for_investor](https://github.com/cloudQuant/ai-for-investor) | This platform: web-based full-cycle Backtrader strategy management (backtesting analysis, paper trading, live execution, data management). |
 | [backtrader-agent](https://github.com/cloudQuant/backtrader-agent) | Offline-first strategy-authoring agent runtime: content-addressed storage, spec validation, scaffolds, static review, and hash-bound execution. |
 | [fincore](https://github.com/cloudQuant/fincore) | Unified Python toolkit: financial metrics, performance analysis, backtesting, AI insights, and multi-database/data source support. |
 

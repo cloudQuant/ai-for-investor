@@ -6,7 +6,7 @@
 
 ## 1. 实现范围与信任前提
 
-候选代码位于 `/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`，不是主 checkout 的运行服务；本批没有启用 feature flag、访问真实供应商、修改业务库或部署。
+候选代码位于 `/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`，不是主 checkout 的运行服务；本批没有启用 feature flag、访问真实供应商、修改业务库或部署。
 
 | 层 | 实现合同 |
 | --- | --- |

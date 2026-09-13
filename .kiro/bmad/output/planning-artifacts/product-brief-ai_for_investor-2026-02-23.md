@@ -10,7 +10,7 @@ date: 2026-02-23
 author: cloud
 ---
 
-# Product Brief: backtrader_web
+# Product Brief: ai_for_investor
 
 <!-- Content will be appended sequentially through collaborative workflow steps -->
 
@@ -18,7 +18,7 @@ author: cloud
 
 ## Executive Summary
 
-**backtrader_web** is an open-source quantitative trading research and investment management platform built on the Backtrader engine, dedicated to solving the core pain points of quantitative traders throughout the entire workflow of strategy research, backtesting validation, paper trading, and live trading management.
+**ai_for_investor** is an open-source quantitative trading research and investment management platform built on the Backtrader engine, dedicated to solving the core pain points of quantitative traders throughout the entire workflow of strategy research, backtesting validation, paper trading, and live trading management.
 
 Through an intuitive web visualization interface, strategy-parameter separation design, real-time monitoring, and in-depth performance analysis, we enable quantitative traders to focus on strategies themselves rather than tool usage. Our goal is to become the **best open-source investment research management tool**, enabling individual traders and small-to-medium institutions to have professional-grade quantitative trading capabilities.
 
@@ -52,7 +52,7 @@ These problems lead to:
 
 ### Proposed Solution
 
-**backtrader_web** provides:
+**ai_for_investor** provides:
 
 - 🖥️ **Intuitive Web Interface**: All operations through visual interface, backtest results at a glance
 - 📦 **Strategy-Parameter Separation**: YAML configuration files manage parameters, code and configuration decoupled, supporting batch parameter optimization
@@ -172,7 +172,7 @@ These problems lead to:
 ```
 Discovery Phase
    │
-   ├─ Sees backtrader_web on GitHub/tech forums
+   ├─ Sees ai_for_investor on GitHub/tech forums
    ├─ Learns about visualized backtesting + real-time monitoring
    └─ Decides to try
    │
@@ -238,7 +238,7 @@ Long-term Value
 
 | Goal | Metric | Target |
 |------|--------|--------|
-| **Market Position** | Become the preferred platform in Backtrader ecosystem | #1 choice for Backtrader Web UI |
+| **Market Position** | Become the preferred platform in Backtrader ecosystem | #1 choice for ai-for-investor UI |
 | **Community Scale** | GitHub Stars | 2000+ |
 | **Contributor Network** | Active contributors | 30+ |
 | **Enterprise Readiness** | Enterprise deployment cases | 5+ teams/companies |

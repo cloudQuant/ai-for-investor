@@ -1,7 +1,7 @@
 # Implementation Readiness Assessment Report
 
 **Date:** 2026-02-23
-**Project:** backtrader_web
+**Project:** ai_for_investor
 
 ## Document Inventory
 
@@ -9,7 +9,7 @@
 
 | Document Type | File | Size | Status |
 |---------------|------|------|--------|
-| Product Brief | product-brief-backtrader_web-2026-02-23.md | ~12 KB | ✅ Complete |
+| Product Brief | product-brief-ai_for_investor-2026-02-23.md | ~12 KB | ✅ Complete |
 | PRD | prd.md | ~27 KB | ✅ Complete |
 | Architecture | architecture.md | ~22 KB | ✅ Complete |
 | Epics & Stories | epics.md | ~18 KB | ✅ Complete |
@@ -376,5 +376,5 @@ The planning artifacts are of high quality and provide a solid foundation for AI
 
 **Assessment Date:** 2026-02-23
 **Assessor:** BMAD Implementation Readiness Workflow
-**Project:** backtrader_web
+**Project:** ai_for_investor
 **Status:** ✅ READY FOR IMPLEMENTATION

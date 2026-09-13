@@ -23,9 +23,9 @@
 
 涉及文件：
 
-- [strategy.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/app/api/strategy.py)
-- [strategy_service.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/app/services/strategy_service.py)
-- [strategy.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/app/schemas/strategy.py)
+- [strategy.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/api/strategy.py)
+- [strategy_service.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/services/strategy_service.py)
+- [strategy.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/schemas/strategy.py)
 
 ### 2. AI 草稿添加到工作区
 
@@ -41,8 +41,8 @@ AI 聊天页新增“添加到工作区”流程：
 
 涉及文件：
 
-- [AIChatPage.vue](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/views/AIChatPage.vue)
-- [strategy.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/api/strategy.ts)
+- [AIChatPage.vue](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AIChatPage.vue)
+- [strategy.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/api/strategy.ts)
 
 ### 3. 测试补齐
 
@@ -54,8 +54,8 @@ AI 聊天页新增“添加到工作区”流程：
 
 涉及文件：
 
-- [test_strategy_api.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/tests/test_strategy_api.py)
-- [AIChatPage.test.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/test/views/AIChatPage.test.ts)
+- [test_strategy_api.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/test_strategy_api.py)
+- [AIChatPage.test.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/test/views/AIChatPage.test.ts)
 
 ## 结果
 

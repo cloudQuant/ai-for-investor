@@ -2,13 +2,13 @@
 
 > **文档状态**: 已优化，作为后续开发基线
 > **最后更新**: 2026-04-23
-> **迭代目标**: 在 backtrader_web 中引入知识库与 AI 问答能力，并保证方案与现有前后端架构一致
+> **迭代目标**: 在 ai_for_investor 中引入知识库与 AI 问答能力，并保证方案与现有前后端架构一致
 
 ---
 
 ## 1. 迭代目标
 
-本迭代目标不是把 ReqDocs 整体照搬进来，而是将其“知识库 + AI 问答”核心能力迁移并适配到 backtrader_web。
+本迭代目标不是把 ReqDocs 整体照搬进来，而是将其“知识库 + AI 问答”核心能力迁移并适配到 ai_for_investor。
 
 本轮交付必须满足：
 
@@ -23,11 +23,11 @@
 
 ### 2.1 已确认事实
 
-1. backtrader_web 当前前端主菜单位于：
+1. ai_for_investor 当前前端主菜单位于：
    - `src/frontend/src/components/common/AppLayout.vue`
-2. backtrader_web 当前主路由位于：
+2. ai_for_investor 当前主路由位于：
    - `src/frontend/src/router/index.ts`
-3. backtrader_web 后端 API 统一通过以下方式挂载：
+3. ai_for_investor 后端 API 统一通过以下方式挂载：
    - `src/backend/app/api/router.py`
    - `src/backend/app/main.py` 中 `app.include_router(api_router, prefix="/api/v1")`
 4. 可选功能模块使用 `_register_optional_router()` 进行优雅注册。
@@ -35,7 +35,7 @@
 
 ### 2.2 当前源码结论（已核对）
 
-已确认 `ReqDocs` 源码位于 `backtrader_web` 同级目录，且以下模块真实存在：
+已确认 `ReqDocs` 源码位于 `ai_for_investor` 同级目录，且以下模块真实存在：
 
 - 后端 API：
   - `ReqDocs/backend/app/api/v1/rag.py`
@@ -62,7 +62,7 @@
 1. ReqDocs 的“知识库”本质上是 **`projects + documents`** 语义，而非独立 `knowledge_base` 表。
 2. ReqDocs 的 RAG 与 KB Chat 大量使用 **整数 ID**、`project_id`、`knowledge_base_id(int)`。
 3. ReqDocs 后端是 **FastAPI + MySQL + MongoDB + Redis + Celery + SurrealDB**；
-   backtrader_web 则应只迁移必要能力，不能照搬其基础设施复杂度。
+   ai_for_investor 则应只迁移必要能力，不能照搬其基础设施复杂度。
 4. ReqDocs 的 KB Chat 当前并非真正 RAG 驱动，而是更偏向“读取最近文档内容作为上下文”的知识库问答；
    真正 RAG 主流程在 `rag.py + rag_service.py + surrealdb_service.py` 中。
 5. ReqDocs 前端知识库页 `KnowledgeBase.vue` 已内嵌知识库列表、文档树、导入、AI问答侧栏，是重要 UI 参考来源。
@@ -165,7 +165,7 @@
 
 | 主题 | 结论 | 说明 |
 |------|------|------|
-| 迁移策略 | **能力迁移 + 架构适配** | 不是机械复制 ReqDocs 文件，而是按 backtrader_web 现有结构落地 |
+| 迁移策略 | **能力迁移 + 架构适配** | 不是机械复制 ReqDocs 文件，而是按 ai_for_investor 现有结构落地 |
 | 领域映射 | **Project → KnowledgeBase，Document → KBDocument** | ReqDocs 源实现以项目/文档体系为核心，迁移时需要语义重命名与结构裁剪 |
 | 菜单入口 | **AI问答独立入口，知识库独立入口** | 满足用户指定的侧边栏位置要求 |
 | AI助手定位 | **作为 P1 能力** | 可以作为 AI 问答页内扩展能力或独立二级页面，不阻塞 P0 |

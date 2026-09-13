@@ -2,7 +2,7 @@
 
 ## Overview
 
-本设计文档描述 Backtrader Web 平台按照行业最佳实践进行系统性改进的技术方案。改进涵盖 16 个需求，分为四个实施阶段：
+本设计文档描述 ai-for-investor 平台按照行业最佳实践进行系统性改进的技术方案。改进涵盖 16 个需求，分为四个实施阶段：
 
 - **Phase 1（快速收益）**：Req 5 Pre-Commit 版本同步、Req 3 安全扫描升级、Req 4 JWT 迁移、Req 16 Markdown 安全配置
 - **Phase 2（CI 增强）**：Req 1 覆盖率门禁、Req 2 Mypy 类型检查、Req 7 ESLint v9、Req 9 OpenAPI 验证、Req 10 数据库迁移规范

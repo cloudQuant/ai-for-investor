@@ -10,8 +10,8 @@
 ## Local development
 
 ```bash
-git clone https://github.com/cloudQuant/backtrader_web.git
-cd backtrader_web
+git clone https://github.com/cloudQuant/ai-for-investor.git
+cd ai-for-investor
 
 ./scripts/dev/verify-dev-env.sh --preinstall
 

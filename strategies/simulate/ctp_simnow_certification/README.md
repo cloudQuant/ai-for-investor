@@ -1,6 +1,6 @@
 # SimNow CTP 模拟认证工作区
 
-这是面向初学者的 SimNow CTP 工作区。它保留了 33 个认证场景，包括登录、下单、平仓、撤单、连接监测、阈值告警、错误处理、应急处理和日志证据；源码来自项目中的 CTP 认证套件，并已适配为 `backtrader_web` 的策略模板。
+这是面向初学者的 SimNow CTP 工作区。它保留了 33 个认证场景，包括登录、下单、平仓、撤单、连接监测、阈值告警、错误处理、应急处理和日志证据；源码来自项目中的 CTP 认证套件，并已适配为 `ai_for_investor` 的策略模板。
 
 ## 安全约定
 
@@ -11,7 +11,7 @@
 ## 第一次使用
 
 ```bash
-cd /Users/yunjinqi/Downloads/backtrader_web
+cd /Users/yunjinqi/Documents/new_projects/ai-for-investor
 cp strategies/simulate/ctp_simnow_certification/.env.example \
   strategies/simulate/ctp_simnow_certification/.env
 ```

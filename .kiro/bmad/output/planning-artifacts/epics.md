@@ -6,14 +6,14 @@ completedAt: '2026-02-23'
 inputDocuments:
   - "prd.md"
   - "architecture.md"
-  - "product-brief-backtrader_web-2026-02-23.md"
+  - "product-brief-ai_for_investor-2026-02-23.md"
 ---
 
-# backtrader_web - Epic Breakdown
+# ai_for_investor - Epic Breakdown
 
 ## Overview
 
-This document provides the complete epic and story breakdown for backtrader_web, decomposing the requirements from the PRD and Architecture requirements into implementable stories.
+This document provides the complete epic and story breakdown for ai_for_investor, decomposing the requirements from the PRD and Architecture requirements into implementable stories.
 
 **Project Context:** Brownfield - Existing features complete, focusing on fincore integration and deployment documentation.
 
@@ -462,5 +462,5 @@ So that 保持系统稳定运行并快速解决问题.
 ---
 
 *Epics and Stories document completed via BMAD workflow on 2026-02-23*
-*Project: backtrader_web - Quantitative Trading Research & Investment Management Platform*
+*Project: ai_for_investor - Quantitative Trading Research & Investment Management Platform*
 *Workflow Type: Create Epics and Stories*

@@ -1,5 +1,5 @@
 1. 市场数据中报错：部分数据源不可用
-akshare_data 查询失败: (pymysql.err.OperationalError) (1044, "Access denied for user 'backtrader_web'@'127.0.0.1' to database 'akshare_data'") (Background on this error at: https://sqlalche.me/e/20/e3q8)  你需要修复这个问题；
+akshare_data 查询失败: (pymysql.err.OperationalError) (1044, "Access denied for user 'ai_for_investor'@'127.0.0.1' to database 'akshare_data'") (Background on this error at: https://sqlalche.me/e/20/e3q8)  你需要修复这个问题；
 
 
 2.

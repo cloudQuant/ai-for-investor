@@ -1,6 +1,6 @@
-# Contributing to AI for Investor
+# Contributing to ai-for-investor
 
-Thank you for your interest in contributing to AI for Investor! This document provides guidelines and instructions for contributors.
+Thank you for your interest in contributing to ai-for-investor! This document provides guidelines and instructions for contributors.
 
 ## Table of Contents
 
@@ -30,13 +30,13 @@ This repository uses a two-branch model:
 
 ```bash
 # 1. Fork the repository on GitHub, then clone YOUR fork:
-git clone https://github.com/YOUR_USERNAME/backtrader_web.git
-cd backtrader_web
+git clone https://github.com/YOUR_USERNAME/ai_for_investor.git
+cd ai-for-investor
 
 # 2. Replace YOUR_USERNAME above with your own GitHub username.
 
 # 3. Add the upstream remote so you can stay in sync with the canonical repo:
-git remote add upstream https://github.com/cloudQuant/backtrader_web.git
+git remote add upstream https://github.com/cloudQuant/ai-for-investor.git
 git fetch upstream
 
 # 4. Base your work on dev (see Branch Model above):

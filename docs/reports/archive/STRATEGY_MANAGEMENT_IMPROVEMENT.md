@@ -1,6 +1,6 @@
 # 策略管理功能完善计划
 
-> 参考 TBQuant3 的策略管理功能，完善 backtrader_web 的策略管理界面
+> 参考 TBQuant3 的策略管理功能，完善 ai_for_investor 的策略管理界面
 
 ## 一、TBQuant3 策略管理功能概述
 
@@ -94,7 +94,7 @@
 
 ---
 
-## 二、backtrader_web 当前功能分析
+## 二、ai_for_investor 当前功能分析
 
 ### 2.1 已实现功能
 
@@ -422,7 +422,7 @@ class StrategyUnit(Base):
 - 编译按钮（Ctrl+F7快捷键）
 - 公式分组管理
 
-**backtrader_web 建议采用**:
+**ai_for_investor 建议采用**:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  策略管理                                    [编译] [+新建]   │
@@ -468,7 +468,7 @@ class StrategyUnit(Base):
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**backtrader_web 编辑器改进**:
+**ai_for_investor 编辑器改进**:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  策略编辑器 - DualMA.py                    [验证][保存][运行]│
@@ -522,7 +522,7 @@ class StrategyUnit(Base):
 
 ---
 
-## 五、backtrader_web 界面改进建议
+## 五、ai_for_investor 界面改进建议
 
 ### 5.1 整体布局重构
 
@@ -539,7 +539,7 @@ class StrategyUnit(Base):
 **建议采用 TBQuant 风格布局**:
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ backtrader_web                           用户 ⚙           │
+│ ai_for_investor                           用户 ⚙           │
 ├──────────┬──────────────────────────────────────────────────┤
 │          │                                                   │
 │ 📊 仪表盘 │  主内容区                                        │
@@ -612,7 +612,7 @@ class StrategyUnit(Base):
 | 警告 | #CE9178 | 橙色 |
 | 错误 | #F48771 | 红色 |
 
-**建议 backtrader_web 采用**:
+**建议 ai_for_investor 采用**:
 - 保持当前 Element Plus 组件样式
 - 引入深色主题选项
 - 代码编辑器使用 VS Code 深色主题
@@ -633,7 +633,7 @@ class StrategyUnit(Base):
 | Ctrl+F | 查找 |
 | Ctrl+H | 替换 |
 
-**建议 backtrader_web 支持**:
+**建议 ai_for_investor 支持**:
 | 快捷键 | 功能 |
 |-------|------|
 | Ctrl+S | 保存策略 |

@@ -26,7 +26,7 @@ foundation 后追加下列 expand 迁移：
 > PostgreSQL 不属于本迭代的运行、CI 或 Go/No-Go 前提。项目其他既有模块的多数据库
 > 兼容策略不因本决策被删除。
 
-> MySQL 9.4.0 是本机客户端、`mysqld` 二进制和当前 `backtrader_web` 服务端的实测版本。
+> MySQL 9.4.0 是本机客户端、`mysqld` 二进制和当前 `ai_for_investor` 服务端的实测版本。
 > `test_mysql_contract.py` 以 `SELECT VERSION() = '9.4.0'` 固定该契约；升级数据库版本时
 > 必须先更新本计划、重新运行真实契约和发布评审，不能静默放宽版本范围。
 

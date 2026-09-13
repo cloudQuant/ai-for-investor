@@ -162,7 +162,7 @@ def _build_improvement_messages(
         {
             "role": "system",
             "content": (
-                "你是 AI for Investor 的量化策略研究员。你只输出 JSON，不输出 Markdown。"
+                "你是 ai-for-investor 的量化策略研究员。你只输出 JSON，不输出 Markdown。"
                 "你需要基于上一轮回测指标改进 Backtrader 策略脚本，目标是提高样本内 Sharpe，"
                 "同时降低过拟合和不可执行风险。返回字段必须是："
                 "name, description, code, params, category, assumptions, risk_points, "

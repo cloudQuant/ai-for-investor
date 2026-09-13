@@ -1,7 +1,7 @@
 # Akshare Manual Execution Todo
 
 - Generated: 2026-06-22 00:30:46 CST
-- Source: `backtrader_web.ak_scheduled_tasks` joined with `ak_data_scripts`
+- Source: `ai_for_investor.ak_scheduled_tasks` joined with `ak_data_scripts`
 - Total tasks: 1047
 - Current mode: scheduled tasks remain paused; this file is for manual draining.
 

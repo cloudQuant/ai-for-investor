@@ -1,6 +1,6 @@
 # 当前候选迁移头的实际数据库验收
 
-日期：2026-09-05。候选工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`。
+日期：2026-09-05。候选工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`。
 
 > 历史证据提示：本文实际执行的是当时的 candidate-freeze receipt head。当前唯一 head 已推进为 `20260907_ai_research_holdout_claim`；它只有本地 SQLite/schema/FSM 合同证据，真实 PostgreSQL/MySQL 尚未重跑。最新状态见 [HOLDOUT_CLAIM_START_20260907.md](HOLDOUT_CLAIM_START_20260907.md)，不得把本文三数据库会话外推到新 head。
 

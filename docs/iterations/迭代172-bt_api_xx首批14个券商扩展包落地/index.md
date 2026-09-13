@@ -3,7 +3,7 @@
 > **文档状态**: 已完成（首批 14 个券商扩展包已在独立 `bt_api` 生态完成实现、验证、推送与 CI 收口）
 > **创建日期**: 2026-05-26
 > **前置基线**: 迭代 170 已完成 FinceptTerminal 能力迁移底座与 broker 边界收口；迭代 171 继续推进 Web 产品化缺口；`bt_api_alpaca / bt_api_ib_web / bt_api_mt5 / bt_api_binance / bt_api_okx / bt_api_ctp` 已作为当前已实现基线存在
-> **核心目标**: 在不把 broker 主实现回流到 `backtrader_web` 的前提下，基于既有 old plugin mode 模板，完成首批 14 个缺失券商扩展包的统一实现规划与执行切片：`Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww`。
+> **核心目标**: 在不把 broker 主实现回流到 `ai_for_investor` 的前提下，基于既有 old plugin mode 模板，完成首批 14 个缺失券商扩展包的统一实现规划与执行切片：`Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww`。
 
 ---
 
@@ -13,7 +13,7 @@
 
 - `bt_api_py` 是统一 broker / exchange 能力入口
 - `bt_api_xx` 是按交易所 / 券商拆分的独立扩展包
-- `backtrader_web` 只做消费、展示、配置映射、审计与文档，不再承担 broker adapter 主实现
+- `ai_for_investor` 只做消费、展示、配置映射、审计与文档，不再承担 broker adapter 主实现
 
 当前已明确存在并应视为已实现的基线包包括：
 
@@ -24,7 +24,7 @@
 - `bt_api_okx`
 - `bt_api_ctp`
 
-在此前对 FinceptTerminal broker inventory 的盘点中，仍有 14 个优先券商尚未进入 `bt_api_xx` 生态。迭代 172 的作用不是在 `backtrader_web` 仓内直接编码这些 broker，而是：
+在此前对 FinceptTerminal broker inventory 的盘点中，仍有 14 个优先券商尚未进入 `bt_api_xx` 生态。迭代 172 的作用不是在 `ai_for_investor` 仓内直接编码这些 broker，而是：
 
 1. 把这 14 个扩展包纳入同一轮明确执行范围。
 2. 固化统一的包命名、注册名、old plugin mode 形态与验收标准。
@@ -90,7 +90,7 @@
   - 原因：已作为当前已实现基线存在，不在本轮新增名单内。
 - `MetaTrader4 / MetaApi`
   - 原因：桥接性质更强，运行环境与验证路径明显不同，延后到后续迭代。
-- `backtrader_web` 内部 broker registry / adapter / native integration 新实现
+- `ai_for_investor` 内部 broker registry / adapter / native integration 新实现
   - 原因：与既定边界冲突。
 - `Quant Tool Registry MCP server 化` 与 `AI Quant Lab` 深化
   - 原因：本轮 172 优先级切换到 broker 生态扩展，相关工作顺延。
@@ -102,7 +102,7 @@
 - Core repo: `/Users/yunjinqi/Documents/new_projects/bt_api/bt_api_py`
 - External package root: `/Users/yunjinqi/Documents/new_projects/bt_api/`
 
-`backtrader_web` 在 172 中仅承担：
+`ai_for_investor` 在 172 中仅承担：
 
 - 迭代文档与边界说明
 - 消费侧 alias / capability / 配置映射的最小配合
@@ -118,7 +118,7 @@
 | 形态一致性 | 已明确 old plugin mode，但只有 Alpaca 刚完成清晰样板收口 | 所有新增包统一遵循 `bt_api.plugins + register_plugin(registry, runtime_factory)` |
 | 批量交付能力 | 目前更像单包推进 | 抽象出可复用模板、共享测试片段与统一验收口径 |
 | bt_api_py 消费链 | 已验证 Alpaca 插件发现与消费 | 所有新增包都必须能被 `BtApi` 发现、创建 feed、更新余额并完成最小订阅/请求 smoke test |
-| backtrader_web 边界 | 171 已明确收口，但后续执行次序未固化 | 明确 172 为 broker 生态扩展批次，web 侧继续只做消费方 |
+| ai_for_investor 边界 | 171 已明确收口，但后续执行次序未固化 | 明确 172 为 broker 生态扩展批次，web 侧继续只做消费方 |
 
 ---
 
@@ -128,7 +128,7 @@
 
 1. **全部新增券商都走独立 `bt_api_xx` 包**。
 2. **全部新增包统一采用 old plugin mode**。
-3. **`backtrader_web` 不承接任何 broker 主实现**。
+3. **`ai_for_investor` 不承接任何 broker 主实现**。
 4. **优先复用 `bt_api_alpaca` 已收口的模板结构**。
 5. **先打通 package skeleton / plugin registration / `BtApi` 消费，再扩深资产类型与高级能力**。
 
@@ -245,7 +245,7 @@
 
 - [x] 通过各扩展包内 `test_bt_api_integration.py` 覆盖 `PluginLoader / ExchangeRegistry / BtApi` 消费 smoke slice
 - [x] 既有 `PluginLoader / ExchangeRegistry / BtApi` 消费链未因新增 14 个扩展包而破坏
-- [x] `backtrader_web` 继续只保留消费侧 alias / capability / 文档协同，不回流 broker 实现
+- [x] `ai_for_investor` 继续只保留消费侧 alias / capability / 文档协同，不回流 broker 实现
 
 ---
 
@@ -262,7 +262,7 @@
 7. `GatewayAdapter` 支持 `connect / disconnect / get_balance / get_positions / place_order / cancel_order`
 8. 包内测试通过：`plugin / exchange_data / runtime_feed / contract`
 9. README 说明安装、使用、限制项与测试命令
-10. 不依赖 `backtrader_web` 私有实现
+10. 不依赖 `ai_for_investor` 私有实现
 
 ---
 
@@ -296,16 +296,16 @@
 
 ---
 
-## 8. 与 `backtrader_web` 的协同边界
+## 8. 与 `ai_for_investor` 的协同边界
 
-172 中 `backtrader_web` 可以做：
+172 中 `ai_for_investor` 可以做：
 
 - 新增迭代与架构文档
 - 记录 broker capability matrix
 - 在消费侧维护最小 alias / provider name / exchange_type 归一化说明
 - 为后续配置页、健康检查页、能力展示页补最小展示层兼容
 
-172 中 `backtrader_web` 不做：
+172 中 `ai_for_investor` 不做：
 
 - 不新增 broker runtime / adapter 主实现
 - 不在本仓定义第二套 plugin loader / registry
@@ -350,7 +350,7 @@
 ### 172T5：消费层与文档收口（跨仓）
 
 - [x] 通过各扩展包 `test_bt_api_integration.py` 固化 `PluginLoader / ExchangeRegistry / BtApi` 消费 smoke path
-- [x] `backtrader_web` 记录统一消费边界与配置映射
+- [x] `ai_for_investor` 记录统一消费边界与配置映射
 - [x] 14 个包均补齐统一 README / 安装 / 验证命令
 
 ---
@@ -363,7 +363,7 @@
 - 所有包都能被 `PluginLoader` 发现
 - 所有包都能通过 `ExchangeRegistry` 被 `BtApi` 消费
 - 至少完成：`balance / account / quote-or-kline / place_order / cancel_order` 的最小闭环
-- `backtrader_web` 仍保持 consumer-only 边界
+- `ai_for_investor` 仍保持 consumer-only 边界
 
 ### 10.2 技术验收
 
@@ -382,7 +382,7 @@
 
 - 14 个券商扩展包均已完成独立包落地
 - `Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww` 对应仓库已完成 push 后 `CI = success`
-- `backtrader_web` 在 172 中继续保持 consumer-only 边界，未回流任何 broker 主实现
+- `ai_for_investor` 在 172 中继续保持 consumer-only 边界，未回流任何 broker 主实现
 
 ---
 
@@ -393,4 +393,4 @@
 - **迭代 173**：`MetaTrader4 / MetaApi` 桥接、剩余 broker 长尾、以及 `Quant Tool Registry` MCP server 化 / AI Quant Lab 深化
 - **迭代 174**：全球市场扩展、复杂终端工作台深化、以及更强消费层产品化收口
 
-但在 172 未完成前，不建议重新把 broker 工作分流回 `backtrader_web`。
+但在 172 未完成前，不建议重新把 broker 工作分流回 `ai_for_investor`。

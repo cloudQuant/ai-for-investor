@@ -11,7 +11,7 @@
 > - 更新日期：2026-09-08
 > - 文档基线/当前提交：`a18bcf52682686c30d919fe02d6fd734ee4271b9`
 > - 实施分支：`codex/iteration-196-ai-research-trust`
-> - 实施工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`
+> - 实施工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`
 
 > 历史预算切片：完整后端5,216通过、129跳过、601.36秒，6 worker；379项 v2 全过。不可变 HTTP 请求、Token/金额联合预算、快照持久化及严格派发拒绝的证据见 [预算交付记录](MODEL_BUDGET_BUNDLE_20260905.md)。历史跑次保留在 [回归记录](REGRESSION_6_WORKERS_20260905.md)，不作为后续源码证明。独立评估/审批/沙箱图、全入口预算与组对账仍有本地开发工作，真实供应商计费上界另需审核；整体验收保持 `NO-GO`。
 
@@ -76,7 +76,7 @@
 | holdout claim/start 局部 T1 | claim/request/authorization/evaluator/promotion/API/migration/dataset/freeze 相邻合同，限制原生数学库各 1 线程，`pytest -p no:rerunfailures -q --tb=short -n 6 --dist load --maxschedchunk=8 ...`；见 [独立证据](HOLDOUT_CLAIM_START_20260907.md) | 184 passed、42 warnings、48.06秒、exit0；11文件 manifest SHA-256 `a1fde1...d9c`。只证明内部 claim/start、lease/heartbeat/recovery、本地并发、迁移及相邻合同；实际 sealed evaluation/checkpoint/finalize 为 `NOT_RUN` |
 | 当前依赖来源 | 只读 `PYTHONPATH` 快照 | 快照 SHA-256 `34a1e78d...bee1`，但 `backtrader 1.3.0` 不满足项目声明 `>=1.9.78.123`；依赖可复现性保持 `NO-GO` |
 | 当前静态检查 | 全仓 Ruff、compileall、format、diff/冲突扫描及 scoped 检查 | `ruff check app tests alembic scripts`、conda base `python -m compileall -q app tests alembic scripts`、`git diff --check`、冲突扫描 PASS；**全仓 `ruff format --check` FAIL：16 files would reformat**。本轮审批/迁移/frontend scoped format PASS；不得称为全静态绿 |
-| 当前 Git 候选身份 | worktree/branch/commit 读回 | `/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`、`codex/iteration-196-ai-research-trust`、`a18bcf52682686c30d919fe02d6fd734ee4271b9`；仍有大量未提交变更，`G0 provenance/candidate seal=NO-GO` |
+| 当前 Git 候选身份 | worktree/branch/commit 读回 | `/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`、`codex/iteration-196-ai-research-trust`、`a18bcf52682686c30d919fe02d6fd734ee4271b9`；仍有大量未提交变更，`G0 provenance/candidate seal=NO-GO` |
 | 当前迁移 head | 审批权威 schema 与本地 migration 合同 | 唯一 head `20260908_ai_research_approval_authority`；独立 suite 135/135，SQLite/PostgreSQL/MySQL/MariaDB 离线 SQL 4/4 与 heads PASS。真实 PostgreSQL/MySQL/MariaDB online、触发器/函数、跨进程竞争和 operational rollback 均为 `NOT_RUN_CURRENT_HEAD`，见 [当前迁移验收](CURRENT_HEAD_MIGRATION_20260908.md) |
 | 历史迁移基线 | SQLite/PostgreSQL 空库与聚焦 migration 契约 | `HISTORICAL_BASELINE`：当时的 upgrade/check、降级/重升及 19/31 项聚焦结果只证明对应历史源码，不替代当前 head 或运行中任务 operational rollback |
 | 历史 legacy data-trust PostgreSQL 兼容 | 一次性 PostgreSQL 17.7 上的服务与实际 FastAPI precheck | `HISTORICAL_BASELINE`：当时 39 项及 `200/failed` 结果只证明对应历史源码，不作为当前候选 HTTP 证据 |

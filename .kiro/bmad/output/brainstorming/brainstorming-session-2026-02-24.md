@@ -1,7 +1,7 @@
 ---
 stepsCompleted: [1, 2, 3]
 inputDocuments: []
-session_topic: '为 Backtrader Web 添加 E2E 测试 - 使用 Playwright 测试前端关键流程'
+session_topic: '为 ai-for-investor 添加 E2E 测试 - 使用 Playwright 测试前端关键流程'
 session_goals: '使用 Playwright 测试前端关键用户流程，确保前端与后端 API 集成正常，覆盖核心业务场景'
 selected_approach: 'user-selected'
 techniques_used: ['SCAMPER Method']
@@ -16,7 +16,7 @@ context_file: ''
 
 ## 会话概述
 
-**主题:** 为 Backtrader Web 量化交易平台添加端到端（E2E）测试
+**主题:** 为 ai-for-investor 量化交易平台添加端到端（E2E）测试
 
 **目标:**
 - 使用 Playwright 测试前端关键用户流程

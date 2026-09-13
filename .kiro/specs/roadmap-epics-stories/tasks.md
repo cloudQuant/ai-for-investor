@@ -9,7 +9,7 @@
 - [ ] 1. 创建输出文档骨架
   - [ ] 1.1 创建 `docs/EPICS_AND_STORIES.md` 文件，编写文档标题、摘要表框架和 4 个 Epic 的占位结构
     - 创建文件 `docs/EPICS_AND_STORIES.md`
-    - 编写 H1 标题 `# Backtrader Web — Epics & Stories`
+    - 编写 H1 标题 `# ai-for-investor — Epics & Stories`
     - 编写摘要表（Epic 总数=4，Story 总数待填充，各 Epic Story 数待填充）
     - 为 4 个 Epic 创建 H2 标题占位（含时间范围）
     - 每个 Epic 下创建 4 个 Sub_Module 的 H3 标题占位

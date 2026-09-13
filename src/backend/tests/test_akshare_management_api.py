@@ -116,7 +116,7 @@ def test_akshare_data_database_url_falls_back_to_mysql_database_url(monkeypatch)
     monkeypatch.setattr(
         akshare_db_module.settings,
         "DATABASE_URL",
-        "mysql+aiomysql://root:secret@127.0.0.1:3306/backtrader_web?charset=utf8mb4",
+        "mysql+aiomysql://root:secret@127.0.0.1:3306/ai_for_investor?charset=utf8mb4",
     )
 
     resolved_url = akshare_db_module._resolve_akshare_data_database_url()
@@ -138,7 +138,7 @@ def test_data_fetch_db_config_falls_back_to_mysql_database_url(monkeypatch):
     monkeypatch.setattr(
         db_config_module.settings,
         "DATABASE_URL",
-        "mysql+aiomysql://root:secret@127.0.0.1:3307/backtrader_web?charset=utf8mb4",
+        "mysql+aiomysql://root:secret@127.0.0.1:3307/ai_for_investor?charset=utf8mb4",
     )
 
     config = db_config_module._build_db_config()

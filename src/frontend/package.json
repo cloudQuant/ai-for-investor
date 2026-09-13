@@ -1,7 +1,7 @@
 {
   "name": "ai-for-investor-frontend",
   "version": "0.1.0",
-  "description": "AI for Investor 前端应用",
+  "description": "ai-for-investor 前端应用",
   "type": "module",
   "engines": {
     "node": ">=20 <25"

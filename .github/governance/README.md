@@ -79,7 +79,7 @@ Use a sanitized fixture while developing the contract:
 ```
 
 After D3 grants a read-only capability check, `--live --repo
-cloudQuant/backtrader_web` only invokes GitHub CLI `api` GET endpoints to list
+cloudQuant/ai-for-investor` only invokes GitHub CLI `api` GET endpoints to list
 Rulesets and retrieve their details. A difference exits non-zero and produces
 both a concise human report and JSON. The verifier never creates, updates,
 deletes, applies, pushes, or bypasses a Rule.

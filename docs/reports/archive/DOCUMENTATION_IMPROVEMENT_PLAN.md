@@ -2,7 +2,7 @@
 
 > **✅ 已完成** — Actions A~N 已于 2026-02-24 全部执行完毕。本文档保留作为历史参考。
 
-> Generated: 2026-02-24 | Project: backtrader_web
+> Generated: 2026-02-24 | Project: ai_for_investor
 
 ## 1. Current State Assessment
 

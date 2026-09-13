@@ -571,7 +571,7 @@ class TestVerifierCli:
             ruleset_id = int(command[-1].rsplit("/", maxsplit=1)[-1])
             return json.dumps(next(item for item in raw_rulesets if item["id"] == ruleset_id))
 
-        loaded = verifier.load_live_rulesets("cloudQuant/backtrader_web", runner=runner)
+        loaded = verifier.load_live_rulesets("cloudQuant/ai-for-investor", runner=runner)
 
         assert [item["name"] for item in loaded] == [item["name"] for item in raw_rulesets]
         assert commands[0] == [
@@ -581,7 +581,7 @@ class TestVerifierCli:
             "GET",
             "--paginate",
             "--slurp",
-            "repos/cloudQuant/backtrader_web/rulesets",
+            "repos/cloudQuant/ai-for-investor/rulesets",
         ]
         assert all(command[:4] == ["gh", "api", "--method", "GET"] for command in commands)
         payload_flags = {
@@ -616,4 +616,4 @@ class TestVerifierCli:
             return json.dumps(_fixture()["rulesets"][0])
 
         with pytest.raises(ValueError, match="non-object entry"):
-            verifier.load_live_rulesets("cloudQuant/backtrader_web", runner=runner)
+            verifier.load_live_rulesets("cloudQuant/ai-for-investor", runner=runner)

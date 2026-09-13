@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-20
-**Deciders:** AI for Investor Team
+**Deciders:** ai-for-investor Team
 
 ## Context
 

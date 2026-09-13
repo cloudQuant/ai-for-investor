@@ -3,9 +3,9 @@ recorded_at=2026-09-11
 
 [candidate]
 commit=7bc3aa620f25aa463bc9ca8f12f8e153baf490f7
-worktree=/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-l34-verification
+worktree=/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-l34-verification
 git_status_short=<empty; clean detached worktree>
-frontend_cwd=/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-l34-verification/src/frontend
+frontend_cwd=/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-l34-verification/src/frontend
 
 [environment]
 node=v25.1.0
@@ -30,7 +30,7 @@ playwright_exit_code=0
 
 [vitest_stdout]
 
- RUN  v1.6.0 /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-l34-verification/src/frontend
+ RUN  v1.6.0 /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-l34-verification/src/frontend
 
 (node:17567) Warning: `--localstorage-file` was provided without a valid path
 (Use `node --trace-warnings ...` to show where the warning was created)

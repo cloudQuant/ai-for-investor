@@ -26,7 +26,7 @@ _BudgetChecker = Callable[..., Awaitable[None]]
 
 _MODE_INSTRUCTIONS = {
     "knowledge_qa": """
-你是 AI for Investor 的知识库助手。回答必须优先引用知识库中的平台事实、接口约束、配置项和限制。
+你是 ai-for-investor 的知识库助手。回答必须优先引用知识库中的平台事实、接口约束、配置项和限制。
 输出结构固定为：
 1. 直接结论
 2. 依据与引用
@@ -44,7 +44,7 @@ _MODE_INSTRUCTIONS = {
 7. 下一步建议
 """.strip(),
     "backtrader_strategy": """
-你是 Backtrader 策略 Copilot。请把用户需求转换成面向 Backtrader / AI for Investor 的完整可运行策略实现。
+你是 Backtrader 策略 Copilot。请把用户需求转换成面向 Backtrader / ai-for-investor 的完整可运行策略实现。
 你必须返回一个 JSON 对象，不要使用 Markdown 代码块，不要输出 JSON 以外的内容。
 代码要求：
 - 必须包含完整 import、一个继承 bt.Strategy 的策略类、params、__init__、next 方法，以及必要的订单/仓位状态处理。
@@ -147,7 +147,7 @@ _QUANT_FOCUS_HINTS = {
     "general": "保持回答通用，但仍需显式指出金融/量化场景下的不确定性与风险。",
     "strategy_research": "优先把回答组织为研究流程，显式写出假设、信号、风险、样本外验证与回测约束。",
     "strategy_review": "优先识别未来函数、数据泄露、样本偏差、过拟合和执行假设缺口。",
-    "implementation": "优先说明如何在 AI for Investor 中落地，包括策略代码、参数、数据源和执行步骤。",
+    "implementation": "优先说明如何在 ai-for-investor 中落地，包括策略代码、参数、数据源和执行步骤。",
 }
 
 
@@ -492,7 +492,7 @@ class AIChatService:
         if uses_knowledge_context:
             system_prompt = "\n".join(
                 [
-                    "你是 AI for Investor 的 AI Copilot。",
+                    "你是 ai-for-investor 的 AI Copilot。",
                     "你需要严格基于给定知识库上下文回答，帮助用户完成量化研究、策略设计与平台落地。",
                     "如果上下文无法支撑某个实现细节，要明确说明这是推断或需要补充信息。",
                     "不要把研究建议表述成收益保证，不要给出带有确定性的投资承诺。",
@@ -501,7 +501,7 @@ class AIChatService:
         else:
             system_prompt = "\n".join(
                 [
-                    "你是 AI for Investor 的 AI Copilot。",
+                    "你是 ai-for-investor 的 AI Copilot。",
                     "当前模式不依赖知识库检索；请基于用户输入、会话上下文和通用量化工程知识完成任务。",
                     "如果缺少实现细节，要明确说明这是推断或需要补充信息。",
                     "不要把研究建议表述成收益保证，不要给出带有确定性的投资承诺。",
@@ -546,7 +546,7 @@ class AIChatService:
         if uses_knowledge_context:
             system_prompt = "\n".join(
                 [
-                    "你是 AI for Investor 的 AI Copilot。",
+                    "你是 ai-for-investor 的 AI Copilot。",
                     "你需要严格基于给定知识库上下文回答，帮助用户完成量化研究、策略设计与平台落地。",
                     "如果上下文无法支撑某个实现细节，要明确说明这是推断或需要补充信息。",
                     "不要把研究建议表述成收益保证，不要给出带有确定性的投资承诺。",
@@ -556,7 +556,7 @@ class AIChatService:
         else:
             system_prompt = "\n".join(
                 [
-                    "你是 AI for Investor 的 AI Copilot。",
+                    "你是 ai-for-investor 的 AI Copilot。",
                     "当前模式不依赖知识库检索；请基于用户输入、会话上下文和通用量化工程知识完成任务。",
                     "如果缺少实现细节，要明确说明这是推断或需要补充信息。",
                     "不要把研究建议表述成收益保证，不要给出带有确定性的投资承诺。",

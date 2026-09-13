@@ -2,7 +2,7 @@
 
 > 判定：`LOCAL_T1_PASS`，仅覆盖内部 Evaluator claim/start、lease fencing、heartbeat 和保守恢复的本地服务/数据库合同。
 > 发布边界：`IMPLEMENTATION_ACCEPTED=NO-GO`、`PROTOCOL_PRODUCTION_ENABLED=NO-GO`、candidate research/promotion=`BLOCKED/NO-GO`。
-> 实现工作树：`/Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-196-ai-research-trust`
+> 实现工作树：`/Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-196-ai-research-trust`
 > 当前迁移 head：`20260907_ai_research_holdout_claim`
 
 ## 1. 本切片交付了什么

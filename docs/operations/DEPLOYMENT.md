@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-This guide covers deploying the AI for Investor platform to a production server.
+This guide covers deploying the ai-for-investor platform to a production server.
 
 ## System Requirements
 
@@ -106,7 +106,7 @@ Create `/etc/systemd/system/backtrader.service`:
 
 ```ini
 [Unit]
-Description=AI for Investor Backend
+Description=ai-for-investor Backend
 After=network.target postgresql.service
 
 [Service]

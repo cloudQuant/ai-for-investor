@@ -1,4 +1,4 @@
-# AI for Investor Docker Compose base file.
+# ai-for-investor Docker Compose base file.
 #
 # Use this file together with one environment-specific file under docker/compose/:
 #   docker compose -f docker-compose.yml -f docker/compose/dev.yml up

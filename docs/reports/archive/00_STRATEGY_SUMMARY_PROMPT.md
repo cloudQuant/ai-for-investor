@@ -1,6 +1,6 @@
 # 📝 策略归纳总结提示词文档
 
-**目的**: 指导 Claude（或其他 AI 模型）为 `/home/yun/Documents/backtrader_web/strategies` 文件夹中的策略文件生成**高质量、详细的策略文档**。
+**目的**: 指导 Claude（或其他 AI 模型）为 `/home/yun/Documents/ai-for-investor/strategies` 文件夹中的策略文件生成**高质量、详细的策略文档**。
 
 **使用场景**: 当有新的策略 HTML 文件需要转换为 Markdown 格式的策略文档时使用此提示词。
 
@@ -9,12 +9,12 @@
 ## 📋 **1. 任务概述**
 
 ### 1.1 目标
-为 `/home/yun/Documents/backtrader_web/strategies` 文件夹中的每个策略 HTML 文件生成**高质量、详细、专业的 Markdown 格式策略文档**。
+为 `/home/yun/Documents/ai-for-investor/strategies` 文件夹中的每个策略 HTML 文件生成**高质量、详细、专业的 Markdown 格式策略文档**。
 
 ### 1.2 输入
 - **输入目录**: `/home/yun/Downloads/论文/论文` (HTML 文件所在目录）
-- **输出目录**: `/home/yun/Documents/backtrader_web/strategies` (Markdown 文档输出目录)
-- **进度文件**: `/home/yun/Documents/backtrader_web/strategies/99_PROGRESS.json` (进度追踪文件)
+- **输出目录**: `/home/yun/Documents/ai-for-investor/strategies` (Markdown 文档输出目录)
+- **进度文件**: `/home/yun/Documents/ai-for-investor/strategies/99_PROGRESS.json` (进度追踪文件)
 
 ### 1.3 输出
 - **文档格式**: Markdown (`.md`)
@@ -521,8 +521,8 @@ class [策略名称]Strategy(bt.Strategy):
 
 ### 5.1 任务输入
 - **原始 HTML 文件**: `/home/yun/Downloads/论文/论文/[策略名称].html`
-- **输出目录**: `/home/yun/Documents/backtrader_web/strategies/`
-- **进度文件**: `/home/yun/Documents/backtrader_web/strategies/99_PROGRESS.json`
+- **输出目录**: `/home/yun/Documents/ai-for-investor/strategies/`
+- **进度文件**: `/home/yun/Documents/ai-for-investor/strategies/99_PROGRESS.json`
 
 ### 5.2 任务执行流程
 1. **读取 HTML 文件**: 读取原始 HTML 文件内容
@@ -600,7 +600,7 @@ HTML 文件路径: [HTML 文件路径]
 - 其他策略 (Other)
 
 ## 输出格式
-将生成的 Markdown 文档保存到: /home/yun/Documents/backtrader_web/strategies/[文件名].md
+将生成的 Markdown 文档保存到: /home/yun/Documents/ai-for-investor/strategies/[文件名].md
 
 ## 质量标准
 - 详细性: 文档必须详细，包含所有必要的章节
@@ -1142,7 +1142,7 @@ class [策略名称]Strategy(bt.Strategy):
 ## 输出要求
 
 ### 输出路径
-- 输出目录: `/home/yun/Documents/backtrader_web/strategies/`
+- 输出目录: `/home/yun/Documents/ai-for-investor/strategies/`
 - 文件命名: `XXX_[策略名称].md` (XXX = 索引)
 - 文件格式: Markdown (`.md`)
 
@@ -1152,7 +1152,7 @@ class [策略名称]Strategy(bt.Strategy):
 
 ### 进度更新
 - 每生成一个文档，更新进度文件
-- 进度文件: `/home/yun/Documents/backtrader_web/strategies/99_PROGRESS.json`
+- 进度文件: `/home/yun/Documents/ai-for-investor/strategies/99_PROGRESS.json`
 - 进度文件格式: JSON
 
 ## 最终检查清单

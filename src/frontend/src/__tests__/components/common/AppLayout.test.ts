@@ -225,7 +225,7 @@ describe('AppLayout', () => {
     it('应该显示应用标题', async () => {
       const AppLayout = (await import('@/components/common/AppLayout.vue')).default
       const wrapper = mount(AppLayout, { global: getGlobalConfig() })
-      expect(wrapper.text()).toContain('AI for Investor')
+      expect(wrapper.text()).toContain('ai-for-investor')
     })
   })
 

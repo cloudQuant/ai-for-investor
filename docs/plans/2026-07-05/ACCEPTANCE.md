@@ -1,4 +1,4 @@
-# AI for Investor 核心目标并行迭代计划 - 验收结论
+# ai-for-investor 核心目标并行迭代计划 - 验收结论
 
 > **验收对象**: `docs/plans/2026-07-05/ai-for-investor-core-goal-parallel-iteration-plan.md`
 > **验收日期**: 2026-07-17

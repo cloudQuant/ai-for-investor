@@ -23,7 +23,7 @@
 
 ### WP1：生成式 AI Provider 接入
 
-- 新增 [ai_chat_service.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/app/services/ai_chat_service.py)
+- 新增 [ai_chat_service.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/services/ai_chat_service.py)
 - 新增 `AI_CHAT_*` 配置项
 - 支持通过兼容 `chat/completions` 的模型端点生成答案
 
@@ -31,7 +31,7 @@
 
 ### WP2：RAG 能力改造
 
-- [rag_service.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/app/services/rag_service.py)
+- [rag_service.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/services/rag_service.py)
   - 先检索，再决定是否走生成式回答
   - 无模型时给出明确的降级说明
   - 支持按模式生成不同风格的输出
@@ -40,7 +40,7 @@
 
 ### WP3：AI 聊天服务安全修复
 
-- [kb_chat_service.py](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/backend/app/services/kb_chat_service.py)
+- [kb_chat_service.py](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/services/kb_chat_service.py)
   - 修复历史会话读取未按用户归属校验的问题
   - 修复删除会话恒返回成功的问题
   - 新建会话标题按模式自动命名
@@ -49,9 +49,9 @@
 
 ### WP4：前端 AI Copilot 模式化
 
-- [AIChatPage.vue](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/views/AIChatPage.vue)
-- [kbChat.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/api/kbChat.ts)
-- [kbChat.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/stores/kbChat.ts)
+- [AIChatPage.vue](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AIChatPage.vue)
+- [kbChat.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/api/kbChat.ts)
+- [kbChat.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/stores/kbChat.ts)
 
 新增：
 
@@ -66,9 +66,9 @@
 
 ### WP5：文档补齐
 
-- 新增 [AI_STRATEGY_COPILOT.md](/Users/yunjinqi/Documents/new_projects/backtrader_web/docs/AI_STRATEGY_COPILOT.md)
-- 更新 [INDEX.md](/Users/yunjinqi/Documents/new_projects/backtrader_web/docs/INDEX.md)
-- 更新 [README.md](/Users/yunjinqi/Documents/new_projects/backtrader_web/README.md)
+- 新增 [AI_STRATEGY_COPILOT.md](/Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/AI_STRATEGY_COPILOT.md)
+- 更新 [INDEX.md](/Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/INDEX.md)
+- 更新 [README.md](/Users/yunjinqi/Documents/new_projects/ai-for-investor/README.md)
 
 状态：已完成
 

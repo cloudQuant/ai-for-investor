@@ -2,14 +2,14 @@
 
 ## Overview
 
-本设计将 Apache Airflow 集成到 backtrader_web 数据管理模块中，作为现有 APScheduler 的增强替代方案。核心设计理念是**编排后端抽象**——通过定义统一的 `OrchestratorBackend` 接口，使 APScheduler 和 Airflow 各自实现具体类，系统在启动时自动检测 Airflow 健康状态并选择后端，实现优雅降级。
+本设计将 Apache Airflow 集成到 ai_for_investor 数据管理模块中，作为现有 APScheduler 的增强替代方案。核心设计理念是**编排后端抽象**——通过定义统一的 `OrchestratorBackend` 接口，使 APScheduler 和 Airflow 各自实现具体类，系统在启动时自动检测 Airflow 健康状态并选择后端，实现优雅降级。
 
 **关键设计决策：**
 
 1. **策略模式 + 自动检测**：`OrchestratorBackend` 抽象基类定义统一调度接口，`APSchedulerBackend` 和 `AirflowBackend` 分别实现。启动时通过健康检查自动选择。
 2. **httpx 异步客户端**：Airflow Adapter 使用 `httpx.AsyncClient` 封装 REST API v1，支持连接池复用和超时控制。
 3. **Jinja2 模板生成 DAG**：DAG Generator 从 DataScript 元数据读取信息，通过 Jinja2 模板渲染生成标准 DAG Python 文件。
-4. **HTTP 回调同步结果**：DAG 中的任务通过 `on_success_callback` / `on_failure_callback` 向 backtrader_web 后端 POST 执行结果。
+4. **HTTP 回调同步结果**：DAG 中的任务通过 `on_success_callback` / `on_failure_callback` 向 ai_for_investor 后端 POST 执行结果。
 5. **数据源工厂模式**：根据 `DataScript.source` 字段动态选择数据提供者类（`AkshareToMySql`、`TushareToMySql` 等）。
 
 ## Architecture
@@ -18,7 +18,7 @@
 
 ```mermaid
 graph TB
-    subgraph "backtrader_web Backend (FastAPI)"
+    subgraph "ai_for_investor Backend (FastAPI)"
         API[API Layer<br/>/api/v1/data/tasks<br/>/api/v1/data/airflow/dags]
         SVC[AkshareSchedulerService]
         OB[OrchestratorBackend<br/>抽象接口]
@@ -38,7 +38,7 @@ graph TB
     end
 
     subgraph "Data Layer"
-        DB[(MySQL<br/>backtrader_web DB)]
+        DB[(MySQL<br/>ai_for_investor DB)]
         DW[(MySQL<br/>Akshare Data Warehouse)]
     end
 
@@ -207,7 +207,7 @@ from airflow.utils.dates import days_ago
 import httpx
 
 default_args = {
-    "owner": "backtrader_web",
+    "owner": "ai_for_investor",
     "retries": {{ retries }},
     "retry_delay": timedelta(minutes=5),
     "execution_timeout": timedelta(seconds={{ timeout }}),

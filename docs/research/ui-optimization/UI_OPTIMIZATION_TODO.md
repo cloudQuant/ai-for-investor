@@ -1,4 +1,4 @@
-# AI for Investor UI Optimization TODO
+# ai-for-investor UI Optimization TODO
 
 Last updated: 2026-07-12
 

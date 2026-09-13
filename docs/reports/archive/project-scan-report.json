@@ -6,15 +6,15 @@
   },
   "mode": "full_rescan",
   "scan_level": "deep",
-  "project_root": "/Users/yunjinqi/Documents/量化交易框架/backtrader_web",
-  "project_knowledge": "/Users/yunjinqi/Documents/量化交易框架/backtrader_web/docs",
+  "project_root": "/Users/yunjinqi/Documents/量化交易框架/ai_for_investor",
+  "project_knowledge": "/Users/yunjinqi/Documents/量化交易框架/ai-for-investor/docs",
   "project_types": [
     {"part_id": "backend", "project_type_id": "backend", "display_name": "FastAPI Backend"},
     {"part_id": "frontend", "project_type_id": "web", "display_name": "Vue 3 Frontend"}
   ],
   "repository_type": "multi-part",
   "project_classification": {
-    "name": "Backtrader Web",
+    "name": "ai-for-investor",
     "description": "Full-stack quantitative trading management platform",
     "primary_language": "Python + TypeScript",
     "architecture_pattern": "Layered MVC with REST API",

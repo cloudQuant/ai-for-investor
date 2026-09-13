@@ -1,4 +1,4 @@
-"""One-time structured data migration from ReqDocs into AI for Investor."""
+"""One-time structured data migration from ReqDocs into ai-for-investor."""
 
 from __future__ import annotations
 

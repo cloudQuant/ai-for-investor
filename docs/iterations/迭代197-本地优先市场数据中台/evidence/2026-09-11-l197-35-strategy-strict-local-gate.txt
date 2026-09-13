@@ -10,7 +10,7 @@ PASS.
 
 Candidate
 ---------
-worktree: /Users/yunjinqi/Downloads/backtrader_web/.worktrees/codex/iteration-197-strategy-strict-run-gate
+worktree: /Users/yunjinqi/Documents/new_projects/ai-for-investor/.worktrees/codex/iteration-197-strategy-strict-run-gate
 branch: codex/iteration-197-strategy-strict-run-gate
 base dev commit: c7e6164568d6e0255adf409192bd62dd266b11da
 candidate commit: 16fa23a24007d78798dd3f264fee301627ff3122

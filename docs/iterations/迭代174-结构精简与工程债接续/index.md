@@ -4,7 +4,7 @@
 > **创建日期**: 2026-05-27
 > **前置基线**:
 > - 迭代 173 已发起「安全配置 + 大文件切片 + 设计系统 + 性能与 AI 可观测性 + 流程清场」五维收口；其「后续接续（174 候选）」已显式列出本轮承接对象（见 173 §9）
-> - 迭代 172 已完成首批 14 个 `bt_api_xx` 券商扩展包独立落地，`backtrader_web` 保持 consumer-only 边界，broker 相关重构不进本轮
+> - 迭代 172 已完成首批 14 个 `bt_api_xx` 券商扩展包独立落地，`ai_for_investor` 保持 consumer-only 边界，broker 相关重构不进本轮
 > - v0.2.0-rc1 已发版（2026-05-24），距 GA 仍需把"Known Boundaries 与工程残债"收到尾
 > - 本轮基于 2026-05-27 项目骨架审计，识别出 173 未覆盖的 4 类结构性债（根目录散乱、API/Service 平铺过密、文档无分类、scripts 64 个无层级）
 > **核心目标**:
@@ -23,7 +23,7 @@
 
 | 维度 | 证据（命令） | 当前数字 |
 |---|---|---|
-| 根目录视觉噪音 | `ls /Users/yunjinqi/Documents/new_projects/backtrader_web \| wc -l` | 30+ 项；6 个 `docker-compose.*.yml`、6 个 `start/stop/restart_app.{sh,bat}`、空目录 `backtrader_web/`、根目录 `backtrader.db`、`__pycache__/` |
+| 根目录视觉噪音 | `ls /Users/yunjinqi/Documents/new_projects/ai-for-investor \| wc -l` | 30+ 项；6 个 `docker-compose.*.yml`、6 个 `start/stop/restart_app.{sh,bat}`、空目录 `ai-for-investor/`、根目录 `backtrader.db`、`__pycache__/` |
 | API 平铺 | `ls src/backend/app/api \| grep -v __pycache__ \| wc -l` | 58 个 `.py` 平铺；5 个 `akshare_*`、4 个 `strategy*`、5 个 `data*`、2 个 `live_trading*`、2 个 `portfolio*`、3 个 `deps*` 全平铺 |
 | Service 平铺 | `ls src/backend/app/services \| grep -v __pycache__ \| wc -l` | 92 个；其中 7 个 `optimization_*`、5 个 `gateway_*`、4 个 `akshare_*`、3 个 `backtest_*` 平铺 |
 | 后端 800 行硬线超标 | `find src/backend/app -name '*.py' \| xargs wc -l \| awk '$1>800'` | 173 收口后仍剩 ≥10 个文件 ≥800 行（见 §3.1） |
@@ -75,7 +75,7 @@
 - ❌ 不重做 173 已完成的颜色 token、安全默认值翻转、AI sink；仅在 174 收尾时确认 173 验收门已绿
 - ❌ 不引入新语言、新框架、新构建工具（仍是 Python 3.10+ / FastAPI / SQLAlchemy 2.x / Vue 3 / Vite）
 - ❌ 不动数据库 schema；如必须改，单独 RFC，不挂 174
-- ❌ 不在 `backtrader_web` 内新增 broker 适配（172 已固化边界）
+- ❌ 不在 `ai_for_investor` 内新增 broker 适配（172 已固化边界）
 - ❌ 不做 FinceptTerminal 新批迁移；173B 残项独立线程不并入
 - ❌ 不重做 UI 信息架构；本轮 D 主线只动文档目录与设计系统 v0.2（按钮/字号/卡片落地），不动顶层路由
 - ❌ 不做整站性能二轮优化；173 已达成 60% 降耗目标后保持
@@ -100,7 +100,7 @@
 |---|---|---|---|---|
 | A1 | 根目录 docker-compose 收敛 | 根目录 6 个 `docker-compose.*.yml` → 根 1 个 `docker-compose.yml` + `docker/compose/{dev,prod,ci,airflow,local}.yml` 各为 override；或用 `profiles:` 收到单文件 | `docker compose -f docker-compose.yml -f docker/compose/dev.yml config` 全部 5 套环境 schema 合法 | M |
 | A2 | 启动脚本归一 | 根目录 6 个 `{start,stop,restart}_app.{sh,bat}` → `scripts/app.sh` + `scripts/app.bat` 单入口（参数 `start\|stop\|restart\|status`）；根目录 6 个文件保留为 1 行 forward 兼容 shim（含 deprecation 注释） | `./start_app.sh` 行为不变；`./scripts/app.sh start` 与原行为对等 | S |
-| A3 | 根目录残留清理 | 删除空目录 `backtrader_web/`（仅有 `__pycache__`）；`backtrader.db` 移到 `data/dev/backtrader.db` + 更新默认 SQLite 路径；根 `__pycache__` 加入 `.gitignore` 并 `git rm -rf --cached` | `ls /` 无以上 4 项；新克隆 + `make dev` 仍能跑通 | S |
+| A3 | 根目录残留清理 | 删除空目录 `ai-for-investor/`（仅有 `__pycache__`）；`backtrader.db` 移到 `data/dev/backtrader.db` + 更新默认 SQLite 路径；根 `__pycache__` 加入 `.gitignore` 并 `git rm -rf --cached` | `ls /` 无以上 4 项；新克隆 + `make dev` 仍能跑通 | S |
 | A4 | 运行时目录隔离 | `runtime/`、`logs/`、`workspace_units/`、`strategies/`、`datas/`、`dags/`（如是运行时产出） → 统一到 `var/` 根；通过 env var `APP_RUNTIME_DIR` 切换；保留旧路径符号链接 1 个迭代周期 | 默认配置下应用启动后产出物落到 `var/`；`tests/` 不动 | M |
 | A5 | scripts 64 个分层 | `scripts/` 平铺 64 项 → `scripts/{ops,diagnostics,migrate,ci,dev}/` 五个子目录；`scripts/README.md` 索引；`diag_err.txt / diag_out.txt` 加入 `.gitignore` 并清理；同名文件以脚本调用方为准（如 CI yaml） | `ls scripts/ -d */` 输出 5 项；CI green | M |
 | A6 | src 多包澄清 | `src/clientportal.gw/` → `vendor/clientportal.gw/`（明确 vendored）；`src/dags/` vs 根 `dags/` 二选一并删另一份；`src/bt_api_py/` 与 `src/backend/` 关系在 `src/README.md` 中显式说明（package / sub-package / vendored 哪种） | `src/README.md` 存在；CI 与文档 build 不破 | M |
@@ -278,7 +278,7 @@ docs/
 |---|---|---|---|
 | E1 | AI Prompt 治理后半段 | 167 残项；173 §4.2 明确推到 174 | 至少 3 类 Prompt 走 registry（KB Chat、Strategy Copilot、Risk Advisor）；CI lint 强制 prompt 注册 |
 | E2 | 前端覆盖率二级棘轮 | 173 C5 已 45/50/55，174 → 60/65/65 | `vitest.config.ts` 阈值更新；CI 红线 |
-| E3 | Docker Hub 发版自动化 | 173 §1.2 明确不做，留 174 | GitHub Actions release workflow 推 `cloudquant/backtrader-web:v0.2.x` tag |
+| E3 | Docker Hub 发版自动化 | 173 §1.2 明确不做，留 174 | GitHub Actions release workflow 推 `cloudquant/ai-for-investor:v0.2.x` tag |
 | E4 | 173B（FinceptTerminal T2/T7/T10）收口对齐 | 见 `迭代173B-171残项独立收口摘要.md` | 174 不直接做 T2/T7/T10，但需在 §10 给出明确的下批承接（175 或 173B 独立线） |
 | E5 | `REFACTORING_BACKLOG.md` 同步 | backlog 中本轮承诺消化的条目直接删除（173 D4 已建立此规范） | 删除 §3.1 全部 C1-C15 对应 backlog 条目 + §3 / §4 子包化对应条目 |
 | E6 | `iterations/README.md` 更新 | 173 收口、174 在列、175 候选预告 | README 表格中 174 行存在；173 标记 "已完成"（前置） |
@@ -297,7 +297,7 @@ docs/
 
 | 维度 | 量化指标 | 测量方法 |
 |---|---|---|
-| 仓库骨架 | 根目录可见项 ≤ 18 | `ls /Users/yunjinqi/Documents/new_projects/backtrader_web \| wc -l` |
+| 仓库骨架 | 根目录可见项 ≤ 18 | `ls /Users/yunjinqi/Documents/new_projects/ai-for-investor \| wc -l` |
 | scripts 分层 | scripts/ 子目录 = 5，平铺 .py/.sh = 0 | `find scripts/ -maxdepth 1 -type f \| wc -l` |
 | API 子包化 | `app/api/` 平铺文件数 ≤ 25 | `ls app/api/*.py \| wc -l`（不含子包内文件） |
 | Service 子包化 | `app/services/` 平铺文件数 ≤ 50 | `ls app/services/*.py \| wc -l` |

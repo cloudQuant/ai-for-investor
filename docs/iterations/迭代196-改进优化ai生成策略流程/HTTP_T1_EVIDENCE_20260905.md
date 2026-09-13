@@ -18,7 +18,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| OpenAPI 路由发现 | `GET /openapi.json` 返回 `AI for Investor API`，并包含 `/api/v1/strategy/ai-research/v2/hypotheses`。 |
+| OpenAPI 路由发现 | `GET /openapi.json` 返回 `ai-for-investor API`，并包含 `/api/v1/strategy/ai-research/v2/hypotheses`。 |
 | 认证和身份边界 | 两个独立测试用户经实际注册/登录接口取得会话；第二个用户读取第一个用户的 run 返回 `404`。 |
 | 默认关闭 | 在独立的默认配置进程中，已认证用户 `POST /api/v1/strategy/ai-research/v2/hypotheses` 返回 `409` 和稳定消息 `AI_RESEARCH_PROTOCOL_V2_DISABLED`。 |
 | 真实候选 UI/API | `e2e/a11y/trusted_ai_research.real.spec.ts` 在真实 `/investment/strategies` 页面完成实际认证会话、草稿、确认、dataset、epoch、`PASS` precheck、run 提交与 workbench 读取；对应 v2 响应依次为 `201/200/201/201/201/201/200`。 |

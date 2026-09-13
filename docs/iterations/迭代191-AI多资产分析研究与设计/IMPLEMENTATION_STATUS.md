@@ -14,7 +14,7 @@
 
 | 判定范围 | 结论 | 可复现证据 / 边界 |
 | --- | --- | --- |
-| P0 研究框架、迁移链与前端工作台 | **GO（代码、隔离和本机共享开发 MySQL 验收）** | 一次性 MySQL 9.4.0 已完成包含 `20260811` 的 `upgrade head → downgrade 20260801 → upgrade head` 及真实 schema/interactive task-runner 合同；其中用户取消先提交、worker 晚到终态的 compare-and-set/rollback 合同也为 `3 passed`，详见 [取消竞争证据](./evidence/2026-08-03-mysql-task-cancellation-contract.md)。本轮新增的六资产隔离任务验收以 6 个实际任务走完快照、预测、18 个资产专属 outcome 与研报，详见[夹具证据](./evidence/2026-08-03-six-asset-interactive-task-fixture.md)。2026-08-03 对本机 `backtrader_web` 再做 0 行运行事实预检后，已执行 `20260810 → 20260811`，确认四个租约列和 claim 索引，且 rollback-only MySQL 合同通过；短暂启动的应用健康检查为 200，任务轮询器正常运行。登录后的 capability 仅返回六类关闭资产，创建研究被 `SOURCE_CAPABILITY_UNAVAILABLE` 拒绝且任务表仍为 0 行。SQLite migration/orchestrator、Ruff/Mypy、前端构建和浏览器夹具亦通过。 |
+| P0 研究框架、迁移链与前端工作台 | **GO（代码、隔离和本机共享开发 MySQL 验收）** | 一次性 MySQL 9.4.0 已完成包含 `20260811` 的 `upgrade head → downgrade 20260801 → upgrade head` 及真实 schema/interactive task-runner 合同；其中用户取消先提交、worker 晚到终态的 compare-and-set/rollback 合同也为 `3 passed`，详见 [取消竞争证据](./evidence/2026-08-03-mysql-task-cancellation-contract.md)。本轮新增的六资产隔离任务验收以 6 个实际任务走完快照、预测、18 个资产专属 outcome 与研报，详见[夹具证据](./evidence/2026-08-03-six-asset-interactive-task-fixture.md)。2026-08-03 对本机 `ai_for_investor` 再做 0 行运行事实预检后，已执行 `20260810 → 20260811`，确认四个租约列和 claim 索引，且 rollback-only MySQL 合同通过；短暂启动的应用健康检查为 200，任务轮询器正常运行。登录后的 capability 仅返回六类关闭资产，创建研究被 `SOURCE_CAPABILITY_UNAVAILABLE` 拒绝且任务表仍为 0 行。SQLite migration/orchestrator、Ruff/Mypy、前端构建和浏览器夹具亦通过。 |
 | T1 真实资产研究观察 | **NO-GO** | 共享 MySQL 的 `asset_data_source_registry`、`asset_instruments`、`asset_schedule_manifests`、预测、结果与模型登记表均为 0 行；没有获批来源、版本化身份、日历或真实覆盖证据。 |
 | T2 方向信号晋级 | **NO-GO** | 尚无真实的 point-in-time walk-forward、至少 200 条成熟行动信号、校准/基线、前瞻影子统计或审批事件；因此公共输出继续固定为研究观察，不能成为买卖指令。 |
 
@@ -274,7 +274,7 @@ MySQL 9.4.0，确认其运行事实表为 0 行（不触碰已有 8 条 `asset_s
 runner claim/释放合同为 `2 passed`。该 schema 为 `codex_iter191_*` 临时库，测试结束后已删除容器；
 它不是共享开发库，也没有读写任何业务数据。
 
-随后对本机共享开发 `backtrader_web` 执行了同一条 `20260810 → 20260811` expand migration：升级前
+随后对本机共享开发 `ai_for_investor` 执行了同一条 `20260810 → 20260811` expand migration：升级前
 `asset_analysis_tasks` 与其他运行事实表均为 0 行；升级后 revision 为
 `20260811_asset_research_task_leases`，任务表仍为 0 行，`lease_token`、`lease_expires_at`、
 `lease_heartbeat_at`、`attempt_count` 和 `ix_asset_task_runner_claim` 均存在。真实 MySQL

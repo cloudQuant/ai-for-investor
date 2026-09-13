@@ -11,23 +11,23 @@
 
 | # | 命令 | HTTP/退出状态 | 摘要 |
 |---|---|---|---|
-| 1 | `gh repo view cloudQuant/backtrader_web --json defaultBranchRef,visibility` | 0 (200) | 默认分支 `master`；可见性 `PUBLIC` |
-| 2 | `gh api repos/cloudQuant/backtrader_web/rulesets --paginate` | 0 (200) | 返回空数组 `[]`：当前无任何 Ruleset |
-| 3 | `gh api repos/cloudQuant/backtrader_web/branches/master/protection` | 404 | `"Branch not protected"` — 传统 Branch Protection 未启用（有效基线证据） |
-| 4 | `gh api repos/cloudQuant/backtrader_web/branches/dev/protection` | 404 | 同上，`dev` 亦未保护 |
-| 5 | `gh api repos/cloudQuant/backtrader_web/codeowners/errors` | 0 (200) | `{"errors":[]}` — CODEOWNERS 无解析错误 |
-| 6 | `gh label list --repo cloudQuant/backtrader_web --limit 100` | 0 (200) | `bug, documentation, duplicate, enhancement, good first issue, help wanted, invalid, merge-ready, question, wontfix`。注意：历史遗留 label `merge-ready` 已存在 |
-| 7 | `git ls-remote --heads https://github.com/cloudQuant/backtrader_web.git master dev` | 0 | GitHub: `master=605d4d0e…`, `dev=ebec2a0a…` |
-| 8 | `git ls-remote --heads https://gitee.com/yunjinqi/backtrader_web.git master dev` | 0 | Gitee: `master=3d051306…`, `dev=ebec2a0a…` |
+| 1 | `gh repo view cloudQuant/ai-for-investor --json defaultBranchRef,visibility` | 0 (200) | 默认分支 `master`；可见性 `PUBLIC` |
+| 2 | `gh api repos/cloudQuant/ai-for-investor/rulesets --paginate` | 0 (200) | 返回空数组 `[]`：当前无任何 Ruleset |
+| 3 | `gh api repos/cloudQuant/ai-for-investor/branches/master/protection` | 404 | `"Branch not protected"` — 传统 Branch Protection 未启用（有效基线证据） |
+| 4 | `gh api repos/cloudQuant/ai-for-investor/branches/dev/protection` | 404 | 同上，`dev` 亦未保护 |
+| 5 | `gh api repos/cloudQuant/ai-for-investor/codeowners/errors` | 0 (200) | `{"errors":[]}` — CODEOWNERS 无解析错误 |
+| 6 | `gh label list --repo cloudQuant/ai-for-investor --limit 100` | 0 (200) | `bug, documentation, duplicate, enhancement, good first issue, help wanted, invalid, merge-ready, question, wontfix`。注意：历史遗留 label `merge-ready` 已存在 |
+| 7 | `git ls-remote --heads https://github.com/cloudQuant/ai-for-investor.git master dev` | 0 | GitHub: `master=605d4d0e…`, `dev=ebec2a0a…` |
+| 8 | `git ls-remote --heads https://gitee.com/yunjinqi/ai-for-investor.git master dev` | 0 | Gitee: `master=3d051306…`, `dev=ebec2a0a…` |
 
 ## 2. 四个远端 ref SHA 登记
 
 | 远端 | 分支 | SHA（短） | 说明 |
 |---|---|---|---|
-| GitHub (`cloudQuant/backtrader_web`) | master | `605d4d0e` | 权威端（D1 推荐） |
-| GitHub (`cloudQuant/backtrader_web`) | dev | `ebec2a0a` | 日常集成 |
-| Gitee (`yunjinqi/backtrader_web`) | master | `3d051306` | **与 GitHub master 不同 SHA → 镜像漂移**，登记于 `.github/governance/decisions/remote-sync-incident.md` |
-| Gitee (`yunjinqi/backtrader_web`) | dev | `ebec2a0a` | 与 GitHub dev 一致 |
+| GitHub (`cloudQuant/ai-for-investor`) | master | `605d4d0e` | 权威端（D1 推荐） |
+| GitHub (`cloudQuant/ai-for-investor`) | dev | `ebec2a0a` | 日常集成 |
+| Gitee (`yunjinqi/ai-for-investor`) | master | `3d051306` | **与 GitHub master 不同 SHA → 镜像漂移**，登记于 `.github/governance/decisions/remote-sync-incident.md` |
+| Gitee (`yunjinqi/ai-for-investor`) | dev | `ebec2a0a` | 与 GitHub dev 一致 |
 
 结论：`dev` 双远端一致；`master` 双远端已漂移。监控只报告差异，不自动同步或覆盖任一远端。
 
@@ -37,7 +37,7 @@
 2. `master`/`dev` 均无 Branch Protection 且 Ruleset 列表为空：文档承诺在 Ruleset 应用前不具备服务器端强制力。
 3. CODEOWNERS 存在且无 errors，仅保护 iteration 193 ratchet 基线文件；新增领域 owner 时必须保留既有条目。owner 使用真实用户 `@cloudQuant`（GitHub 用户类型为 `User`，已验证存在）。
 4. `pr-check.yml` 同时监听 `pull_request` + `pull_request_target`，顶层权限含 `pull-requests: write`，并执行 checkout/install 与自动贴 `merge-ready` 标签——P0 特权执行风险，Task 2 处理。
-5. `deploy-preview.yml` 构建前端 artifact 却评论虚构 URL `https://pr-N.backtrader-web.preview.dev`——Task 5 改为如实命名。
+5. `deploy-preview.yml` 构建前端 artifact 却评论虚构 URL `https://pr-N.ai-for-investor.preview.dev`——Task 5 改为如实命名。
 6. `docker-publish.yml` 接受任意 `v*` tag 和手动输入 tag，未验证 tag 指向 `master` HEAD——Task 5 收紧。
 7. 仓库布局：交易适配目录为 `src/bt_api_py/`；根 `dags/` 与 `tests/unit/scripts/` 不存在，本迭代不创建虚假路径规则。
 

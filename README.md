@@ -1,4 +1,4 @@
-# AI for Investor
+# ai-for-investor
 
 AI 驱动的量化研究、策略生成、回测验证与交易辅助平台。
 
@@ -7,11 +7,11 @@ AI 驱动的量化研究、策略生成、回测验证与交易辅助平台。
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-teal.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[中文文档](https://cloudquant.github.io/backtrader_web/) · [English docs](https://cloudquant.github.io/backtrader_web/en/) · [本地 API 文档](http://localhost:8000/docs)
+[中文文档](https://cloudquant.github.io/ai-for-investor/) · [English docs](https://cloudquant.github.io/ai-for-investor/en/) · [本地 API 文档](http://localhost:8000/docs)
 
 ## 项目定位
 
-AI for Investor 面向量化交易者与投研团队，将自然语言研究、知识库检索、策略开发、数据预检、回测验证、交易工作区和组合风险观察连接成可追溯的工作流。它帮助研究人员更快形成和验证假设，但不替代数据校验、风险控制或人工交易决策。
+ai-for-investor 面向量化交易者与投研团队，将自然语言研究、知识库检索、策略开发、数据预检、回测验证、交易工作区和组合风险观察连接成可追溯的工作流。它帮助研究人员更快形成和验证假设，但不替代数据校验、风险控制或人工交易决策。
 
 ## 从问题到可验证结果
 
@@ -45,8 +45,8 @@ AI for Investor 面向量化交易者与投研团队，将自然语言研究、�
 ### 本地开发
 
 ```bash
-git clone https://github.com/cloudQuant/backtrader_web.git
-cd backtrader_web
+git clone https://github.com/cloudQuant/ai-for-investor.git
+cd ai-for-investor
 
 ./scripts/dev/verify-dev-env.sh --preinstall
 
@@ -113,7 +113,7 @@ docker compose -f docker/docker-compose.yml -f docker/compose/prod.yml up -d
 ## 项目结构
 
 ```text
-backtrader_web/
+ai-for-investor/
 ├── src/
 │   ├── backend/             # FastAPI、SQLAlchemy、Backtrader 与领域服务
 │   └── frontend/            # Vue 3、TypeScript、Pinia 与 ECharts
@@ -173,8 +173,8 @@ python scripts/ci/check_doc_links.py
 
 | 目标 | 入口 |
 | --- | --- |
-| 在线文档（中文） | <https://cloudquant.github.io/backtrader_web/> |
-| 在线文档（English） | <https://cloudquant.github.io/backtrader_web/en/> |
+| 在线文档（中文） | <https://cloudquant.github.io/ai-for-investor/> |
+| 在线文档（English） | <https://cloudquant.github.io/ai-for-investor/en/> |
 | 产品概览与投研流程 | [项目介绍](docs/project-introduction/ai-for-investor-project-introduction.md) / [中文文档首页源码](docs/docs/zh/index.md) |
 | 安装、知识库、市场数据、策略与回测 | [快速开始与功能文档](docs/docs/zh/getting-started/index.md) |
 | 架构、API、数据库与配置 | [开发文档](docs/docs/zh/development/index.md) |
@@ -186,14 +186,14 @@ python scripts/ci/check_doc_links.py
 
 ## 相关项目
 
-与 backtrader_web 同属 cloudQuant 量化体系的相关资源：
+与 ai_for_investor 同属 cloudQuant 量化体系的相关资源：
 
 | 项目 | 简介 |
 | --- | --- |
 | [backtrader](https://github.com/cloudQuant/backtrader) | 专业 Python 算法交易框架（回测 + 实盘），本仓库策略研究引擎的基础 fork。 |
 | [backtrader-skills](https://github.com/cloudQuant/backtrader-skills) | 离线可独立安装的策略"作者/评审/测试"产品：把本地数据集与 StrategySpec v1 转成 pytest 策略或三文件包，静态评审后在独立子进程中验证。 |
 | [backtrader-mcp](https://github.com/cloudQuant/backtrader-mcp) | 本地优先的 MCP 服务器：CSV 固化为不可变数据集，类型化策略意图转为私有草稿，经评审后在受限子进程中运行并产出状态与报告（离线、仅回测）。 |
-| [backtrader_web](https://github.com/cloudQuant/backtrader_web) | 本仓库：基于 Web 的 Backtrader 全周期策略管理工具，覆盖回测分析、模拟交易、实盘执行与数据管理。 |
+| [ai-for-investor](https://github.com/cloudQuant/ai-for-investor) | 本仓库：基于 Web 的 Backtrader 全周期策略管理工具，覆盖回测分析、模拟交易、实盘执行与数据管理。 |
 | [backtrader-agent](https://github.com/cloudQuant/backtrader-agent) | 离线优先的策略编写 agent 运行时：内容寻址存储、策略规范校验、14 种脚手架、静态评审、哈希绑定审批、固定子进程执行与会话溯源。 |
 | [fincore](https://github.com/cloudQuant/fincore) | 统一 Python 工具集：金融指标、绩效分析、回测、AI 洞察与多数据库/多数据源支持，服务量化金融工作流。 |
 

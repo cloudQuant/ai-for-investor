@@ -1,6 +1,6 @@
 # generated: 2026-03-23
 # last_updated: 2026-05-20
-# project: backtrader_web
+# project: ai_for_investor
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: _bmad-output/implementation-artifacts
@@ -36,7 +36,7 @@
 
 generated: 2026-03-23
 last_updated: 2026-05-20
-project: backtrader_web
+project: ai_for_investor
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts

@@ -20,7 +20,7 @@
 
 新增：
 
-- [useStrategyDraftWorkspaceExecution.ts](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/composables/useStrategyDraftWorkspaceExecution.ts)
+- [useStrategyDraftWorkspaceExecution.ts](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/composables/useStrategyDraftWorkspaceExecution.ts)
 
 职责集中到 composable：
 
@@ -35,7 +35,7 @@
 
 更新：
 
-- [AIChatPage.vue](/Users/yunjinqi/Documents/new_projects/backtrader_web/src/frontend/src/views/AIChatPage.vue)
+- [AIChatPage.vue](/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AIChatPage.vue)
 
 优化点：
 

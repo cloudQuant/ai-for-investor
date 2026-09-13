@@ -3,7 +3,7 @@
 > **文档状态**: 进行中（已完成 T1 / T3 / T4 / T5 / T6 / T8 / T9 / T11 / T12，本轮剩余 T2 / T7 / T10 的进一步收口）
 > **创建日期**: 2026-05-26
 > **前置基线**: 迭代 170 已完成适合 Web/FastAPI 架构的核心 MVP 与关键验收件，但未完成完整产品化迁移
-> **核心目标**: 将迭代 170 中仍停留在 MVP / placeholder / in-memory / hard-coded 层的 FinceptTerminal 能力继续迁移为可持续演进的 Web 产品能力，优先闭合 `data_connectors / portfolio_ledger / equity_research / news_intelligence / options_chain / scanners / ws_gateway migration / quant_tools` 的产品化缺口；`broker` 统一能力继续沉淀在 `bt_api_py` / `bt_api_xx` 生态中，由 `backtrader_web` 以统一消费方身份接入，而不是在本仓内继续扩 broker 产品层。
+> **核心目标**: 将迭代 170 中仍停留在 MVP / placeholder / in-memory / hard-coded 层的 FinceptTerminal 能力继续迁移为可持续演进的 Web 产品能力，优先闭合 `data_connectors / portfolio_ledger / equity_research / news_intelligence / options_chain / scanners / ws_gateway migration / quant_tools` 的产品化缺口；`broker` 统一能力继续沉淀在 `bt_api_py` / `bt_api_xx` 生态中，由 `ai_for_investor` 以统一消费方身份接入，而不是在本仓内继续扩 broker 产品层。
 
 ---
 
@@ -15,7 +15,7 @@
 - 这些能力已经具备了 **最小后端闭环、最小前端入口、最小测试与文档**，因此可以视为一轮成功的 clean-room MVP 收口。
 - 但多个模块仍明显停留在 **演示级 / 最小可验收级**，距离“完整迁移 + 产品化实现 + 可持续演进”还有差距。
 - 因此，迭代 171 不应再重复搭底座，而应聚焦 **把 170 的 MVP 深化为真实产品能力**。
-- **Broker 边界需要收口**：`backtrader_web` 不继续承接 broker adapter / registry / native integration 的产品化，相关能力转由 `bt_api_py` 及按交易所/券商拆分的 `bt_api_xx` 包演进。
+- **Broker 边界需要收口**：`ai_for_investor` 不继续承接 broker adapter / registry / native integration 的产品化，相关能力转由 `bt_api_py` 及按交易所/券商拆分的 `bt_api_xx` 包演进。
 
 同时要明确：**不是 FinceptTerminal 的所有内容都应该迁移**。以下内容继续排除在迁移范围外：
 
@@ -49,8 +49,8 @@
 | 能力 | 当前状态 | 直接证据 | 171 处理方向 |
 |---|---|---|---|
 | Data Connector Registry | **部分迁移** | `app/services/data_connectors/executor.py` 在未注册 callable 时直接返回 mock rows；`app/api/data_governance.py` 只有 bootstrap/list/preview/create_job 最小接口 | 做真实 provider 执行、任务状态机、参数/质量规则治理、非 mock preview |
-| Broker API / `bt_api_py` | **跨仓迁移项** | 独立仓当前只有 `base.py / types.py / errors.py / mock.py / gateway_bridge.py`，缺更完整的生态拆分与兼容层 | 在 `bt_api_py` 中继续统一 broker contract / `btapibroker` / compatibility layer，并将交易所/券商下沉到独立 `bt_api_xx` 包；`backtrader_web` 只消费稳定接口 |
-| Broker Profiles | **存量 MVP（171 不扩张）** | `app/services/broker_profiles.py` 目前实际构造的是 `GatewayBridgeAdapter`，不是完整 registry 驱动的多 broker 体系 | 不在 `backtrader_web` 中继续扩 broker 产品层；现有 web 侧只保留兼容消费边界或后续收敛 |
+| Broker API / `bt_api_py` | **跨仓迁移项** | 独立仓当前只有 `base.py / types.py / errors.py / mock.py / gateway_bridge.py`，缺更完整的生态拆分与兼容层 | 在 `bt_api_py` 中继续统一 broker contract / `btapibroker` / compatibility layer，并将交易所/券商下沉到独立 `bt_api_xx` 包；`ai_for_investor` 只消费稳定接口 |
+| Broker Profiles | **存量 MVP（171 不扩张）** | `app/services/broker_profiles.py` 目前实际构造的是 `GatewayBridgeAdapter`，不是完整 registry 驱动的多 broker 体系 | 不在 `ai_for_investor` 中继续扩 broker 产品层；现有 web 侧只保留兼容消费边界或后续收敛 |
 | Portfolio Ledger | **部分迁移** | `app/services/portfolio_ledger.py` 纯内存字典实现，无 SQLAlchemy 模型；无 dividend / benchmark / tags / notes / richer cashflow typing | 做持久化账本、分红/现金流/基准/分析接入 |
 | Equity Research | **部分迁移** | `app/services/equity_research.py` 只有 `search/quote/history/technicals`，且 quote/history 为硬编码示例数据；`app/api/equity_research.py` 无 `info/financials/peers` | 做真实数据源接入与详情接口补齐 |
 | News Intelligence | **部分迁移** | `app/services/news_intelligence.py` 只维护内存 `_sources/_articles`，规则分类简单，无 RSS 拉取调度 / cluster 模型 / AI 摘要持久化 | 做真实 source/article/analysis/cluster 模型和抓取链路 |
@@ -73,7 +73,7 @@
 - **通过 registry / adapter / job state machine 组合**，而不是单文件内聚合实现
 - **前端可操作**，而不是 demo button / seed button / 单表格展示
 - **验证闭环完整**，包含回归、性能、降级路径、权限与审计
-- **broker 能力外置**，`backtrader_web` 不再长出自己的 broker 平台，而是消费 `bt_api_py` / `bt_api_xx` 的统一能力
+- **broker 能力外置**，`ai_for_investor` 不再长出自己的 broker 平台，而是消费 `bt_api_py` / `bt_api_xx` 的统一能力
 
 ### 2.2 171 不做什么
 
@@ -82,7 +82,7 @@
 - Qt 桌面 UI 复刻
 - Fincept 脚本逐文件复制
 - 一次性接全 16 个券商原生适配
-- 不在 `backtrader_web` 中继续新增 broker registry / adapter / native/paper 实装
+- 不在 `ai_for_investor` 中继续新增 broker registry / adapter / native/paper 实装
 - MCP Server 对外暴露
 - 完整 AI Quant Lab / 训练编排 / RL / HFT
 
@@ -91,9 +91,9 @@
 ### 2.3 Broker 边界约束
 
 - `bt_api_py` 继续作为统一 broker contract 与 `btapibroker` 的宿主。
-- 一个交易所 / 券商对应一个独立 `bt_api_xx` 包，避免继续把接入实现堆进 `backtrader_web`。
-- 新 broker 能力优先在 `bt_api_xx -> bt_api_py -> backtrader/btapibroker` 链路落地，不在 `backtrader_web` 内部复刻一套 broker 平台。
-- `backtrader_web` 只保留统一消费、展示、调度、审计与边界文档，不继续承担 broker adapter 的主实现职责。
+- 一个交易所 / 券商对应一个独立 `bt_api_xx` 包，避免继续把接入实现堆进 `ai_for_investor`。
+- 新 broker 能力优先在 `bt_api_xx -> bt_api_py -> backtrader/btapibroker` 链路落地，不在 `ai_for_investor` 内部复刻一套 broker 平台。
+- `ai_for_investor` 只保留统一消费、展示、调度、审计与边界文档，不继续承担 broker adapter 的主实现职责。
 - 详细演进路线见：`docs/archive/plans/2026-q2/2026-05-26-bt-api-ecosystem-design.md`。
 - 实施计划见：`docs/archive/plans/2026-q2/2026-05-26-bt-api-ecosystem-implementation-plan.md`。
 - 首个扩展包规范见：`docs/archive/plans/2026-q2/2026-05-26-first-bt-api-xx-package-spec.md`。
@@ -128,9 +128,9 @@
 
 - [x] **T4**: `bt_api_py / bt_api_xx` broker 生态协同（跨仓前置，不在本仓内直接实现 broker adapter）
   - `bt_api_py` 继续维护统一 broker contract、`btapibroker` 与兼容层
-  - 各交易所 / 券商拆分为独立 `bt_api_xx` 包，而不是继续塞进 `backtrader_web`
+  - 各交易所 / 券商拆分为独立 `bt_api_xx` 包，而不是继续塞进 `ai_for_investor`
   - 新包必须兼容现有 `bt_api_py` 模式与 backtrader 集成路径
-  - `backtrader_web` 仅在接口消费点、配置映射点、文档边界上做最小配合
+  - `ai_for_investor` 仅在接口消费点、配置映射点、文档边界上做最小配合
 
 ### 171B：组合与市场情报模块产品化（P0/P1）
 
@@ -188,7 +188,7 @@
 ### 4.1 功能验收
 
 - Data Governance 不再依赖 mock preview 才能演示 provider 能力
-- `backtrader_web` 不新增 broker adapter / registry / native/paper 实装，broker 能力继续由 `bt_api_py` / `bt_api_xx` 生态提供
+- `ai_for_investor` 不新增 broker adapter / registry / native/paper 实装，broker 能力继续由 `bt_api_py` / `bt_api_xx` 生态提供
 - `bt_api_py` 继续承担统一 broker contract 与 `btapibroker`，新增交易所/券商扩展遵循 `bt_api_xx` 独立包模式并兼容现有接入方式
 - Portfolio Ledger 数据可持久化、支持 dividend 与 benchmark
 - Equity Research 支持 `search / quote / info / history / financials / technicals / peers`
@@ -201,7 +201,7 @@
 ### 4.2 技术验收
 
 - 不破坏 170 的向后兼容基线
-- 不在 `backtrader_web` 内新增与 `bt_api_py` 职责重复的 broker 平台代码
+- 不在 `ai_for_investor` 内新增与 `bt_api_py` 职责重复的 broker 平台代码
 - 新增持久化模型都有迁移 / schema 兜底
 - 新增接口都具备测试与类型约束
 - 需要外部 provider 的路径都有 degraded fallback
@@ -219,7 +219,7 @@
 171 的定位则是：
 
 - **把 170 中尚未完成产品化的 FinceptTerminal 能力继续迁移并收口**
-- **其中 broker 相关深化迁移转由 `bt_api_py / bt_api_xx` 生态承接，`backtrader_web` 只保留统一消费边界**
+- **其中 broker 相关深化迁移转由 `bt_api_py / bt_api_xx` 生态承接，`ai_for_investor` 只保留统一消费边界**
 
 因此，171 不是新方向，而是 170 的自然延续与深化。
 
@@ -229,7 +229,7 @@
 
 若 171 完成后仍有余量，再进入：
 
-- **迭代 172**：`bt_api_xx` 首批 14 个券商扩展包落地，优先完成 `Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww` 的独立包规划与分批实现，主实施仓为独立 `bt_api` 生态，`backtrader_web` 继续保持 consumer-only 边界。
+- **迭代 172**：`bt_api_xx` 首批 14 个券商扩展包落地，优先完成 `Tradier / Saxo / Zerodha / Upstox / Angel One / Fyers / Dhan / Shoonya / AliceBlue / 5paisa / IIFL / Kotak / Motilal / Groww` 的独立包规划与分批实现，主实施仓为独立 `bt_api` 生态，`ai_for_investor` 继续保持 consumer-only 边界。
 - **迭代 173**：`MetaTrader4 / MetaApi` 等桥接型 broker、`Quant Tool Registry` MCP server 化、AI Quant Lab 深化，以及更多全球市场扩展 / 更复杂终端工作台。
 
 但在 171 完成前，不建议继续扩散范围。

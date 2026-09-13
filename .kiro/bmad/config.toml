@@ -11,7 +11,7 @@
 # ─────────────────────────────────────────────────────────────────
 
 [core]
-project_name = "backtrader_web"
+project_name = "ai_for_investor"
 document_output_language = "English"
 output_folder = "{project-root}/.kiro/bmad/output"
 
