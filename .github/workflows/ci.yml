@@ -323,7 +323,7 @@ jobs:
         run: python scripts/ci/check_openapi_examples.py openapi.json
 
       - name: Archive OpenAPI schema
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openapi-schema
           path: openapi.json
@@ -620,7 +620,7 @@ jobs:
 
       - name: Archive coverage report
         if: matrix.python-version == '3.11'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage-report
           path: src/backend/htmlcov/
@@ -688,7 +688,7 @@ jobs:
             --desc
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-security-reports
@@ -760,7 +760,7 @@ jobs:
           fi
 
       - name: Upload gitleaks report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: gitleaks-report
@@ -784,7 +784,7 @@ jobs:
             --exit-code 1
 
       - name: Upload gitleaks PR report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always() && github.event_name == 'pull_request'
         with:
           name: gitleaks-pr-report
@@ -887,7 +887,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Archive coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage-report
           path: src/frontend/coverage/
@@ -961,7 +961,7 @@ jobs:
           bash ../../scripts/ci/compare_bundle_size.sh dist "${BASE_BYTES:-}"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: src/frontend/dist/
@@ -1073,7 +1073,7 @@ jobs:
 
       - name: Archive Lighthouse reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
           path: ./lighthouse-reports/
@@ -1129,7 +1129,7 @@ jobs:
 
       - name: Upload a11y trace
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: a11y-traces
           path: src/frontend/test-results/
@@ -1304,7 +1304,7 @@ jobs:
 
       - name: Upload smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-smoke-traces
           path: |
