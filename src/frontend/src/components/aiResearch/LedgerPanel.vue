@@ -1,12 +1,32 @@
 <template>
-  <section class="trusted-panel" aria-labelledby="trusted-ledger-title">
-    <header><span>03</span><div><h3 id="trusted-ledger-title">{{ t('strategy.aiResearchTrusted.ledger.title') }}</h3><p>{{ t('strategy.aiResearchTrusted.ledger.description') }}</p></div></header>
-    <ol v-if="ledger.length" class="trusted-panel__list">
-      <li v-for="item in ledger" :key="String(item.id)">
+  <section
+    class="trusted-panel"
+    aria-labelledby="trusted-ledger-title"
+  >
+    <header>
+      <span>03</span><div>
+        <h3 id="trusted-ledger-title">
+          {{ t('strategy.aiResearchTrusted.ledger.title') }}
+        </h3><p>{{ t('strategy.aiResearchTrusted.ledger.description') }}</p>
+      </div>
+    </header>
+    <ol
+      v-if="ledger.length"
+      class="trusted-panel__list"
+    >
+      <li
+        v-for="item in ledger"
+        :key="String(item.id)"
+      >
         <strong>#{{ item.ordinal }} · {{ item.stage }}</strong><span>{{ item.status }}</span><small>{{ item.counts_as_market_trial ? t('strategy.aiResearchTrusted.ledger.marketTrial') : t('strategy.aiResearchTrusted.ledger.technicalRecord') }}</small>
       </li>
     </ol>
-    <p v-else class="trusted-panel__empty">{{ t('strategy.aiResearchTrusted.ledger.empty') }}</p>
+    <p
+      v-else
+      class="trusted-panel__empty"
+    >
+      {{ t('strategy.aiResearchTrusted.ledger.empty') }}
+    </p>
   </section>
 </template>
 

@@ -188,7 +188,7 @@ class OptionsChainService:
         raw_leg = raw_row.get(side)
         leg_payload = raw_leg if isinstance(raw_leg, dict) else {}
         iv = self._to_float(self._first_present(leg_payload.get("iv"), raw_row.get(f"{side}_iv")))
-        leg = {
+        leg: dict[str, object] = {
             "oi": self._normalize_quantity(
                 self._first_present(leg_payload.get("oi"), raw_row.get(f"{side}_oi"))
             ),
@@ -341,7 +341,7 @@ class OptionsChainService:
                 total_loss += max(settlement - strike, 0.0) * call_oi
                 total_loss += max(strike - settlement, 0.0) * put_oi
             losses[settlement] = total_loss
-        return min(losses, key=losses.get)
+        return min(losses, key=lambda strike: losses[strike])
 
     @staticmethod
     def calculate_greeks(spot: float, strike: float, iv: float, is_call: bool) -> dict[str, float]:

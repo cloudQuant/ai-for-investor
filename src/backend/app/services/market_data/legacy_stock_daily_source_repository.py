@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from sqlalchemy import text
+from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -201,7 +202,7 @@ async def inspect_legacy_stock_daily_source_schema(
     return _schema_from_rows(rows)
 
 
-def _schema_from_rows(rows: Sequence[Mapping[str, object]]) -> LegacyStockDailySourceSchema:
+def _schema_from_rows(rows: Sequence[RowMapping]) -> LegacyStockDailySourceSchema:
     """Build the fixed schema descriptor from SQLite ``PRAGMA table_info`` rows."""
     by_name: dict[str, LegacyStockDailySourceColumn] = {}
     for row in rows:
@@ -262,7 +263,8 @@ def _require_isolated_sqlite(db: AsyncSession) -> None:
     # A file-backed SQLite URL can be the application's actual warehouse.
     # This test/development-only adapter must never open it, even when the
     # caller happens to know the exact legacy table name and schema digest.
-    if bind.url.database not in {None, ":memory:"}:
+    engine = bind.engine if isinstance(bind, Connection) else bind
+    if engine.url.database not in {None, ":memory:"}:
         raise LegacyStockDailySourceRepositoryError(
             "LEGACY_STOCK_DAILY_SOURCE_CONNECTION_NOT_ISOLATED"
         )

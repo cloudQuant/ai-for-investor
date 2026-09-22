@@ -36,6 +36,7 @@ class ComparisonUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200, description="Comparison name")
     description: str | None = Field(None, description="Comparison description")
     backtest_task_ids: list[str] | None = Field(None, description="Backtest task ID list")
+    is_favorite: bool | None = Field(None, description="Whether favorited")
     is_public: bool | None = Field(None, description="Whether public")
 
 

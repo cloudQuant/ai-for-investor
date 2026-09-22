@@ -402,7 +402,7 @@ class InvestmentMandateService:
 
     @staticmethod
     def _request_has_explicit_prompt(request: AIStrategyResearchRunRequest) -> bool:
-        fields_set = getattr(request, "model_fields_set", set())
+        fields_set: object = getattr(request, "model_fields_set", None)
         return isinstance(fields_set, set) and "prompt" in fields_set
 
     @classmethod
@@ -456,6 +456,7 @@ class InvestmentMandateService:
         return (
             structured_goal.get("prompt_origin") == "auto_generated"
             and structured_goal.get("auto_basis_schema_version") == _AUTO_BASIS_SCHEMA_VERSION
+            and isinstance(stored_digest, str)
             and self._is_auto_basis_digest(stored_digest)
             and hmac.compare_digest(
                 stored_digest,
@@ -479,7 +480,7 @@ class InvestmentMandateService:
         }
 
     @staticmethod
-    def _is_auto_basis_digest(value: Any) -> bool:
+    def _is_auto_basis_digest(value: object) -> bool:
         return (
             isinstance(value, str)
             and len(value) == 64

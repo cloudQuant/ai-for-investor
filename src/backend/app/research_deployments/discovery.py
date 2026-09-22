@@ -165,6 +165,12 @@ def _positive_int(value: object) -> int:
 def _finite_positive_timeout(value: object) -> float:
     """Reject non-finite values before the HTTP adapter receives a deadline."""
 
-    if type(value) not in {int, float} or not math.isfinite(value) or value <= 0:
-        raise ValueError("invalid deployment timeout")
-    return float(value)
+    if type(value) is int:
+        if value <= 0:
+            raise ValueError("invalid deployment timeout")
+        return float(value)
+    if type(value) is float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("invalid deployment timeout")
+        return value
+    raise ValueError("invalid deployment timeout")

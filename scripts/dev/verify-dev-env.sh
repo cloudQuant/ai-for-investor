@@ -86,13 +86,22 @@ run_preinstall_checks() {
   check_command python || true
 
   if command -v node >/dev/null 2>&1; then
-    local node_version node_major
+    local node_version node_major node_minor node_minor_num
     node_version="$(node -p "process.versions.node")"
-    node_major="${node_version%%.*}"
-    if [ "$node_major" = "20" ]; then
-      print_ok "Node.js $node_version matches the required 20.x baseline"
+    if [[ "$node_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+      node_major="${BASH_REMATCH[1]}"
+      node_minor="${BASH_REMATCH[2]}"
+      node_minor_num=$((10#$node_minor))
+      if { [ "$node_major" = "20" ] && [ "$node_minor_num" -ge 19 ]; } || \
+        { [ "$node_major" = "22" ] && [ "$node_minor_num" -ge 13 ]; } || \
+        [ "$node_major" = "24" ]; then
+        print_ok "Node.js $node_version matches the supported frontend engine range (^20.19.0 || ^22.13.0 || ^24.0.0)"
+      else
+        print_error "Node.js $node_version detected. Use Node.js ^20.19.0, ^22.13.0, or ^24.0.0."
+        echo "   Suggested fix: nvm install 20 && nvm use 20"
+      fi
     else
-      print_error "Node.js $node_version detected. Use Node.js 20.x for this project."
+      print_error "Node.js $node_version detected. Use a stable Node.js release covered by ^20.19.0, ^22.13.0, or ^24.0.0."
       echo "   Suggested fix: nvm install 20 && nvm use 20"
     fi
   fi

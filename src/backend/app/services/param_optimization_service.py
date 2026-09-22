@@ -503,12 +503,22 @@ def _finalize_backtest_optimization_task(task_id: str, persist_to_db: bool) -> N
         )
 
 
+async def _backtest_failure_message(backtest_service: BacktestService, task_id: str) -> str:
+    result = await backtest_service.get_result(task_id)
+    if result is not None and isinstance(result.error_message, str) and result.error_message:
+        return f"Backtest failed: {result.error_message}"
+    return "Backtest failed: result unavailable"
+
+
 async def _wait_for_backtest_completion(
     backtest_service: BacktestService,
     task_id: str,
     timeout: int = 600,
 ) -> Any:
     status = await backtest_service.get_task_status(task_id)
+
+    if status == TaskStatus.FAILED:
+        raise RuntimeError(await _backtest_failure_message(backtest_service, task_id))
 
     if status != TaskStatus.PENDING and status != TaskStatus.RUNNING:
         return await backtest_service.get_result(task_id)
@@ -523,8 +533,7 @@ async def _wait_for_backtest_completion(
         if status == TaskStatus.COMPLETED:
             return await backtest_service.get_result(task_id)
         if status == TaskStatus.FAILED:
-            result = await backtest_service.get_result(task_id)
-            raise RuntimeError(f"Backtest failed: {result.error_message}")
+            raise RuntimeError(await _backtest_failure_message(backtest_service, task_id))
         if status == TaskStatus.CANCELLED:
             raise RuntimeError("Backtest task cancelled")
 

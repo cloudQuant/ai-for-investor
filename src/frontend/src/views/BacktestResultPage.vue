@@ -26,8 +26,12 @@
       <div class="backtest-result-copy">
         <span class="backtest-result-kicker">{{ t('backtest.resultHeroKicker') }}</span>
         <div class="backtest-result-title-row">
-          <h1 id="backtest-result-title">{{ strategyNameFromQuery || backtestSummary.strategy_id }}</h1>
-          <el-tag effect="plain">{{ backtestSummary.symbol }}</el-tag>
+          <h1 id="backtest-result-title">
+            {{ strategyNameFromQuery || backtestSummary.strategy_id }}
+          </h1>
+          <el-tag effect="plain">
+            {{ backtestSummary.symbol }}
+          </el-tag>
         </div>
         <p>{{ error || t('backtest.loadingFullDetail') }}</p>
       </div>
@@ -42,8 +46,16 @@
         </article>
       </div>
       <div class="backtest-summary-first-actions">
-        <el-button v-if="error" @click="loadData">{{ t('backtest.retry') }}</el-button>
-        <span v-else class="backtest-summary-first-loading">{{ t('common.loading') }}</span>
+        <el-button
+          v-if="error"
+          @click="loadData"
+        >
+          {{ t('backtest.retry') }}
+        </el-button>
+        <span
+          v-else
+          class="backtest-summary-first-loading"
+        >{{ t('common.loading') }}</span>
       </div>
     </section>
 

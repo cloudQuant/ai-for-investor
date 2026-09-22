@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// DOMPurify relies on real Node.prototype.nodeName semantics; happy-dom can remove allowed tags.
+// Keep jsdom scoped to Markdown tests; other frontend tests remain in happy-dom.
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

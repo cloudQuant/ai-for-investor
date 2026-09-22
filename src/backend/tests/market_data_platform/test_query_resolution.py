@@ -350,6 +350,31 @@ async def test_query_resolver_rejects_every_unbound_public_product_before_catalo
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "binding",
+    [
+        {"family_id": "stock.realtime", "family_contract_version": None},
+        {"family_id": None, "family_contract_version": "market-data-family-v1"},
+    ],
+)
+async def test_query_resolver_rejects_half_bound_public_family_before_catalog(
+    binding: dict[str, str | None],
+) -> None:
+    """Resolver rejects incomplete bindings even on internally copied requests."""
+    request = _request().model_copy(update=binding)
+    async with async_session_maker() as db:
+        resolver = MarketDataQueryResolver(
+            catalog=DataCatalogResolver(db),
+            identities=MarketDataIdentityResolver(db),
+        )
+
+        with pytest.raises(MarketDataQueryResolutionError) as rejected:
+            await resolver.resolve(request)
+
+    assert rejected.value.code == "DATA_FAMILY_BINDING_REQUIRED"
+
+
+@pytest.mark.asyncio
 async def test_query_resolver_rejects_a_bound_unconfigured_multi_record_family() -> None:
     """A family key is not sufficient until its record-key and coverage model are ready."""
 

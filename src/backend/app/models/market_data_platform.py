@@ -10,15 +10,14 @@ quality, and revision provenance.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import date, datetime, timezone
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
-    Column,
     Date,
     DateTime,
     ForeignKey,
@@ -32,10 +31,21 @@ from sqlalchemy import (
     inspect,
 )
 from sqlalchemy.dialects import mysql
-from sqlalchemy.orm import relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from app.db.database import Base
 from app.models.identifier_types import exact_identifier_string
+
+if TYPE_CHECKING:
+    from app.models.asset_research import AssetInstrument
+    from app.models.data_governance import DgDataset, DgProvider
+
+
+MarketDataJSONScalar: TypeAlias = str | int | float | bool | None
+MarketDataJSONValue: TypeAlias = (
+    MarketDataJSONScalar | list["MarketDataJSONValue"] | dict[str, "MarketDataJSONValue"]
+)
+MarketDataJSONMapping: TypeAlias = dict[str, MarketDataJSONValue]
 
 _SHA256_LENGTH = 64
 _CALENDAR_COVERAGE_PAYLOAD_KEY = "coverage"
@@ -126,22 +136,22 @@ class MdPublication(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    entity_type = Column(String(64), nullable=False)
-    entity_id = Column(String(36), nullable=False)
-    entity_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    published_at = Column(PITDateTime, nullable=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    entity_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
     # ``published_at`` is the historical physical column name.  ``visible_at``
     # is the public semantic name used by Iteration 197's complete visibility
     # anchor.  Keeping the synonym avoids a destructive table rewrite while
     # preventing callers from treating an ORM ``created_at`` as a seal time.
-    visible_at = synonym("published_at")
+    visible_at: Mapped[datetime | None] = synonym("published_at")
     # Pending receipts have no sequence.  Every sealed receipt receives one
     # unique, globally monotonic value in the post-commit transaction.
-    visibility_sequence = Column(BigInteger, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    visibility_sequence: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    release_hold = relationship(
+    release_hold: Mapped[MdPublicationReleaseHold | None] = relationship(
         "MdPublicationReleaseHold",
         back_populates="publication",
         passive_deletes=True,
@@ -207,8 +217,8 @@ class MdPublicationReleaseHold(Base):
         Index("ix_md_publication_release_hold_state_created", "state", "created_at"),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    publication_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    publication_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_publications.id",
@@ -217,7 +227,7 @@ class MdPublicationReleaseHold(Base):
         ),
         nullable=False,
     )
-    source_snapshot_id = Column(
+    source_snapshot_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_source_snapshots.id",
@@ -226,17 +236,23 @@ class MdPublicationReleaseHold(Base):
         ),
         nullable=False,
     )
-    workflow_kind = Column(String(64), nullable=False)
-    state = Column(String(16), nullable=False)
-    intent_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    quarantine_code = Column(String(128), nullable=True)
-    quarantined_at = Column(PITDateTime, nullable=True)
-    promotion_evidence_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
-    promoted_at = Column(PITDateTime, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    workflow_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    intent_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    quarantine_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    quarantined_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    promotion_evidence_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
+    promoted_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    publication = relationship("MdPublication", back_populates="release_hold")
-    source_snapshot = relationship("MdSourceSnapshot", back_populates="release_hold")
+    publication: Mapped[MdPublication] = relationship(
+        "MdPublication", back_populates="release_hold"
+    )
+    source_snapshot: Mapped[MdSourceSnapshot] = relationship(
+        "MdSourceSnapshot", back_populates="release_hold"
+    )
 
 
 class MdVisibilitySequenceAllocator(Base):
@@ -263,10 +279,10 @@ class MdVisibilitySequenceAllocator(Base):
     # A fixed singleton row (``singleton_id = 1``): autoincrement must stay
     # off, or the MySQL dialect renders AUTO_INCREMENT and then rejects the
     # singleton CHECK constraint with error 3818.
-    singleton_id = Column(Integer, primary_key=True, autoincrement=False)
-    next_visibility_sequence = Column(BigInteger, nullable=False)
-    last_visible_at = Column(PITDateTime, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    singleton_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    next_visibility_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_visible_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 class MdInstrumentIdentityRevision(Base):
@@ -315,8 +331,8 @@ class MdInstrumentIdentityRevision(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    instrument_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    instrument_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "asset_instruments.id",
@@ -325,19 +341,19 @@ class MdInstrumentIdentityRevision(Base):
         ),
         nullable=False,
     )
-    canonical_id = Column(exact_identifier_string(512), nullable=False)
-    asset_type = Column(exact_identifier_string(16), nullable=False)
-    market = Column(exact_identifier_string(128), nullable=True)
-    symbol = Column(exact_identifier_string(128), nullable=False)
-    metadata_version = Column(String(64), nullable=False)
-    identity_json = Column(JSON, default=dict, nullable=False)
-    valid_from = Column(PITDateTime, nullable=False)
-    valid_to = Column(PITDateTime, nullable=True)
-    revision_number = Column(Integer, nullable=False)
-    revision_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    canonical_id: Mapped[str] = mapped_column(exact_identifier_string(512), nullable=False)
+    asset_type: Mapped[str] = mapped_column(exact_identifier_string(16), nullable=False)
+    market: Mapped[str | None] = mapped_column(exact_identifier_string(128), nullable=True)
+    symbol: Mapped[str] = mapped_column(exact_identifier_string(128), nullable=False)
+    metadata_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    identity_json: Mapped[MarketDataJSONMapping] = mapped_column(JSON, default=dict, nullable=False)
+    valid_from: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    valid_to: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    instrument = relationship("AssetInstrument")
+    instrument: Mapped[AssetInstrument] = relationship("AssetInstrument")
 
 
 class MdCalendarImportLock(Base):
@@ -345,8 +361,8 @@ class MdCalendarImportLock(Base):
 
     __tablename__ = "md_calendar_import_locks"
 
-    calendar_code = Column(String(128), primary_key=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    calendar_code: Mapped[str] = mapped_column(String(128), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 class MdCapabilityLedgerEntry(Base):
@@ -414,22 +430,22 @@ class MdCapabilityLedgerEntry(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    capability_id = Column(String(192), nullable=False)
-    revision = Column(Integer, nullable=False)
-    descriptor_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    evidence_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    declared_capability = Column(Boolean, nullable=False, default=False)
-    installed_capability = Column(Boolean, nullable=False, default=False)
-    verified_capability = Column(Boolean, nullable=False, default=False)
-    verified_at = Column(PITDateTime, nullable=True)
-    verified_until = Column(PITDateTime, nullable=True)
-    authorized_capability = Column(Boolean, nullable=False, default=False)
-    authorized_at = Column(PITDateTime, nullable=True)
-    authorized_until = Column(PITDateTime, nullable=True)
-    effective_from = Column(PITDateTime, nullable=False)
-    effective_until = Column(PITDateTime, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    capability_id: Mapped[str] = mapped_column(String(192), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    descriptor_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    evidence_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    declared_capability: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    installed_capability: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    verified_capability: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    verified_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    verified_until: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    authorized_capability: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    authorized_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    authorized_until: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    effective_until: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 class MdFetchLease(Base):
@@ -459,13 +475,13 @@ class MdFetchLease(Base):
         Index("ix_md_fetch_lease_expires_at", "expires_at"),
     )
 
-    lease_key_sha256 = Column(String(_SHA256_LENGTH), primary_key=True)
-    owner_token = Column(String(64), nullable=True)
-    fence_token = Column(BigInteger, nullable=False)
-    expires_at = Column(PITDateTime, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
-    updated_at = Column(PITDateTime, default=_utcnow, nullable=False)
-    released_at = Column(PITDateTime, nullable=True)
+    lease_key_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), primary_key=True)
+    owner_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fence_token: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
+    released_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
 
 
 class MdInstrumentLookupKey(Base):
@@ -515,11 +531,11 @@ class MdInstrumentLookupKey(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    asset_type = Column(exact_identifier_string(16), nullable=False)
-    market = Column(exact_identifier_string(128), nullable=False)
-    symbol = Column(exact_identifier_string(128), nullable=False)
-    instrument_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    asset_type: Mapped[str] = mapped_column(exact_identifier_string(16), nullable=False)
+    market: Mapped[str] = mapped_column(exact_identifier_string(128), nullable=False)
+    symbol: Mapped[str] = mapped_column(exact_identifier_string(128), nullable=False)
+    instrument_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "asset_instruments.id",
@@ -528,17 +544,17 @@ class MdInstrumentLookupKey(Base):
         ),
         nullable=False,
     )
-    canonical_id = Column(exact_identifier_string(512), nullable=False)
-    metadata_version = Column(String(64), nullable=False)
-    is_active = Column(Boolean, nullable=False, default=True)
+    canonical_id: Mapped[str] = mapped_column(exact_identifier_string(512), nullable=False)
+    metadata_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # NULL for inactive history allows multiple historical versions on every
     # supported SQL engine; ACTIVE gives each exact triple one active row.
-    active_lookup_scope = Column(String(16), nullable=True)
-    valid_from = Column(PITDateTime, default=_utcnow, nullable=False)
-    valid_to = Column(PITDateTime, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    active_lookup_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    valid_from: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
+    valid_to: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    instrument = relationship("AssetInstrument")
+    instrument: Mapped[AssetInstrument] = relationship("AssetInstrument")
 
 
 @event.listens_for(MdInstrumentLookupKey, "before_insert")
@@ -576,8 +592,8 @@ class MdDataSeries(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    dataset_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    dataset_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "dg_datasets.id",
@@ -586,20 +602,22 @@ class MdDataSeries(Base):
         ),
         nullable=False,
     )
-    canonical_id = Column(String(512), nullable=False)
-    data_kind = Column(String(64), nullable=False)
-    frequency = Column(String(16), nullable=True)
-    semantic_key_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    semantic_identity_json = Column(JSON, default=dict, nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    canonical_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    data_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    frequency: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    semantic_key_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    semantic_identity_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    dataset = relationship("DgDataset")
-    observation_revisions = relationship(
+    dataset: Mapped[DgDataset] = relationship("DgDataset")
+    observation_revisions: Mapped[list[MdObservationRevision]] = relationship(
         "MdObservationRevision",
         back_populates="series",
         passive_deletes=True,
     )
-    b2_completeness_receipts = relationship(
+    b2_completeness_receipts: Mapped[list[MdB2CompletenessReceipt]] = relationship(
         "MdB2CompletenessReceipt",
         back_populates="series",
         passive_deletes=True,
@@ -633,13 +651,13 @@ class MdSourcePayload(Base):
         ),
     )
 
-    content_sha256 = Column(String(_SHA256_LENGTH), primary_key=True)
-    payload_format = Column(String(128), nullable=False)
-    canonical_payload_bytes = Column(CanonicalPayloadBytes, nullable=False)
-    payload_bytes = Column(BigInteger, nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), primary_key=True)
+    payload_format: Mapped[str] = mapped_column(String(128), nullable=False)
+    canonical_payload_bytes: Mapped[bytes] = mapped_column(CanonicalPayloadBytes, nullable=False)
+    payload_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    source_snapshot_references = relationship(
+    source_snapshot_references: Mapped[list[MdSourceSnapshotPayloadRef]] = relationship(
         "MdSourceSnapshotPayloadRef",
         back_populates="source_payload",
         passive_deletes=True,
@@ -735,8 +753,8 @@ class MdSourceSnapshot(Base):
         Index("ix_md_source_snapshot_payload_sha256", "payload_sha256"),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    provider_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    provider_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "dg_providers.id",
@@ -745,54 +763,66 @@ class MdSourceSnapshot(Base):
         ),
         nullable=False,
     )
-    platform = Column(String(64), nullable=False)
-    source_id = Column(String(255), nullable=False)
-    adapter_id = Column(String(128), nullable=False)
-    endpoint_version = Column(String(128), nullable=False)
+    platform: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    adapter_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    endpoint_version: Mapped[str] = mapped_column(String(128), nullable=False)
     # Legacy name retained because existing rows and downstream reports use it
     # as the public query fingerprint.  Do not repurpose it as provider-call
     # identity: a query can legitimately produce multiple external attempts.
-    request_fingerprint_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    provider_request_id = Column(String(128), nullable=True)
-    provider_request_fingerprint_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
-    query_fingerprint_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
-    source_authorization_state = Column(String(32), nullable=True)
-    source_authorization_descriptor_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
+    request_fingerprint_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    provider_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider_request_fingerprint_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
+    query_fingerprint_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
+    source_authorization_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_authorization_descriptor_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
     # A local-first provider fetch binds immutable evidence to the exact durable
     # lease generation that staged it. The owner token is intentionally omitted:
     # a monotonically increasing fence is enough to prove that a later takeover
     # superseded this receipt without persisting a process-local secret.
-    fetch_lease_key_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
-    fetch_lease_fence_token = Column(BigInteger, nullable=True)
-    payload_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    request_json = Column(JSON, default=dict, nullable=False)
-    payload_manifest_json = Column(JSON, default=dict, nullable=False)
-    payload_uri = Column(Text, nullable=True)
-    provenance_json = Column(JSON, default=dict, nullable=False)
-    source_observed_at = Column(PITDateTime, nullable=True)
-    source_published_at = Column(PITDateTime, nullable=True)
-    retrieved_at = Column(PITDateTime, nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    fetch_lease_key_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
+    fetch_lease_fence_token: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    payload_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    request_json: Mapped[MarketDataJSONMapping] = mapped_column(JSON, default=dict, nullable=False)
+    payload_manifest_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    payload_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provenance_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    source_observed_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    source_published_at: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    provider = relationship("DgProvider")
-    shared_source_payload_ref = relationship(
+    provider: Mapped[DgProvider] = relationship("DgProvider")
+    shared_source_payload_ref: Mapped[MdSourceSnapshotPayloadRef | None] = relationship(
         "MdSourceSnapshotPayloadRef",
         back_populates="source_snapshot",
         passive_deletes=True,
         uselist=False,
     )
-    observation_revisions = relationship(
+    observation_revisions: Mapped[list[MdObservationRevision]] = relationship(
         "MdObservationRevision",
         back_populates="source_snapshot",
         passive_deletes=True,
     )
-    release_hold = relationship(
+    release_hold: Mapped[MdPublicationReleaseHold | None] = relationship(
         "MdPublicationReleaseHold",
         back_populates="source_snapshot",
         passive_deletes=True,
         uselist=False,
     )
-    b2_completeness_receipts = relationship(
+    b2_completeness_receipts: Mapped[list[MdB2CompletenessReceipt]] = relationship(
         "MdB2CompletenessReceipt",
         back_populates="source_snapshot",
         passive_deletes=True,
@@ -821,7 +851,7 @@ class MdSourceSnapshotPayloadRef(Base):
         Index("ix_md_source_snapshot_payload_ref_content", "content_sha256"),
     )
 
-    source_snapshot_id = Column(
+    source_snapshot_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_source_snapshots.id",
@@ -830,7 +860,7 @@ class MdSourceSnapshotPayloadRef(Base):
         ),
         primary_key=True,
     )
-    content_sha256 = Column(
+    content_sha256: Mapped[str] = mapped_column(
         String(_SHA256_LENGTH),
         ForeignKey(
             "md_source_payloads.content_sha256",
@@ -839,11 +869,15 @@ class MdSourceSnapshotPayloadRef(Base):
         ),
         nullable=False,
     )
-    payload_role = Column(String(128), nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    payload_role: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    source_snapshot = relationship("MdSourceSnapshot", back_populates="shared_source_payload_ref")
-    source_payload = relationship("MdSourcePayload", back_populates="source_snapshot_references")
+    source_snapshot: Mapped[MdSourceSnapshot] = relationship(
+        "MdSourceSnapshot", back_populates="shared_source_payload_ref"
+    )
+    source_payload: Mapped[MdSourcePayload] = relationship(
+        "MdSourcePayload", back_populates="source_snapshot_references"
+    )
 
 
 class MdB2CompletenessReceipt(Base):
@@ -910,8 +944,8 @@ class MdB2CompletenessReceipt(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    series_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    series_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_data_series.id",
@@ -920,7 +954,7 @@ class MdB2CompletenessReceipt(Base):
         ),
         nullable=False,
     )
-    source_snapshot_id = Column(
+    source_snapshot_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_source_snapshots.id",
@@ -929,21 +963,29 @@ class MdB2CompletenessReceipt(Base):
         ),
         nullable=False,
     )
-    family_id = Column(String(128), nullable=False)
-    family_contract_version = Column(String(128), nullable=False)
-    selector_kind = Column(String(16), nullable=False)
-    event_at = Column(PITDateTime, nullable=False)
-    selector_dimensions_json = Column(JSON, default=dict, nullable=False)
-    selector_digest = Column(String(_SHA256_LENGTH), nullable=False)
-    manifest_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    expected_record_count = Column(Integer, nullable=False)
-    zero_record_evidence_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
-    receipt_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    family_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    family_contract_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    selector_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_at: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    selector_dimensions_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    selector_digest: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    expected_record_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    zero_record_evidence_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
+    receipt_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    series = relationship("MdDataSeries", back_populates="b2_completeness_receipts")
-    source_snapshot = relationship("MdSourceSnapshot", back_populates="b2_completeness_receipts")
-    manifest_entries = relationship(
+    series: Mapped[MdDataSeries] = relationship(
+        "MdDataSeries", back_populates="b2_completeness_receipts"
+    )
+    source_snapshot: Mapped[MdSourceSnapshot] = relationship(
+        "MdSourceSnapshot", back_populates="b2_completeness_receipts"
+    )
+    manifest_entries: Mapped[list[MdB2CompletenessManifestEntry]] = relationship(
         "MdB2CompletenessManifestEntry",
         back_populates="receipt",
         passive_deletes=True,
@@ -961,7 +1003,7 @@ class MdB2CompletenessManifestEntry(Base):
         ),
     )
 
-    receipt_id = Column(
+    receipt_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_b2_completeness_receipts.id",
@@ -970,10 +1012,14 @@ class MdB2CompletenessManifestEntry(Base):
         ),
         primary_key=True,
     )
-    semantic_record_key_sha256 = Column(String(_SHA256_LENGTH), primary_key=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    semantic_record_key_sha256: Mapped[str] = mapped_column(
+        String(_SHA256_LENGTH), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    receipt = relationship("MdB2CompletenessReceipt", back_populates="manifest_entries")
+    receipt: Mapped[MdB2CompletenessReceipt] = relationship(
+        "MdB2CompletenessReceipt", back_populates="manifest_entries"
+    )
 
 
 class MdObservationRevision(Base):
@@ -1035,8 +1081,8 @@ class MdObservationRevision(Base):
         Index("ix_md_observation_revision_available", "available_at"),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    series_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    series_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_data_series.id",
@@ -1045,10 +1091,10 @@ class MdObservationRevision(Base):
         ),
         nullable=False,
     )
-    event_time = Column(PITDateTime, nullable=False)
-    event_end = Column(PITDateTime, nullable=True)
-    available_at = Column(PITDateTime, nullable=False)
-    source_snapshot_id = Column(
+    event_time: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    event_end: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    available_at: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    source_snapshot_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_source_snapshots.id",
@@ -1057,33 +1103,41 @@ class MdObservationRevision(Base):
         ),
         nullable=False,
     )
-    quality_status = Column(String(32), nullable=False)
-    quality_policy_version = Column(String(128), nullable=False)
-    quality_details_json = Column(JSON, default=dict, nullable=False)
-    fields_json = Column(JSON, default=dict, nullable=False)
-    fields_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    revision_number = Column(Integer, nullable=False)
-    revision_key_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    normalization_version = Column(String(128), nullable=False)
-    semantic_record_key = Column(
+    quality_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    quality_policy_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    quality_details_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    fields_json: Mapped[MarketDataJSONMapping] = mapped_column(JSON, default=dict, nullable=False)
+    fields_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision_key_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    normalization_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    semantic_record_key: Mapped[str] = mapped_column(
         Text,
         default=SINGLE_RECORD_SEMANTIC_KEY_CANONICAL_JSON,
         nullable=False,
     )
-    semantic_record_key_sha256 = Column(
+    semantic_record_key_sha256: Mapped[str] = mapped_column(
         String(_SHA256_LENGTH),
         default=SINGLE_RECORD_SEMANTIC_KEY_SHA256,
         nullable=False,
     )
     # Preserve upstream-provided trace metadata verbatim.  It is never an
     # identity input and cannot replace the server-normalized semantic key.
-    source_record_key = Column(String(512), nullable=True)
-    provenance_json = Column(JSON, default=dict, nullable=False)
-    committed_at = Column(PITDateTime, nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    source_record_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    provenance_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    committed_at: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    series = relationship("MdDataSeries", back_populates="observation_revisions")
-    source_snapshot = relationship("MdSourceSnapshot", back_populates="observation_revisions")
+    series: Mapped[MdDataSeries] = relationship(
+        "MdDataSeries", back_populates="observation_revisions"
+    )
+    source_snapshot: Mapped[MdSourceSnapshot] = relationship(
+        "MdSourceSnapshot", back_populates="observation_revisions"
+    )
 
 
 class MdCalendarSnapshot(Base):
@@ -1139,14 +1193,16 @@ class MdCalendarSnapshot(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    calendar_code = Column(String(128), nullable=False)
-    calendar_version = Column(String(128), nullable=False)
-    timezone_name = Column(String(128), nullable=False)
-    source_registry_id = Column(String(128), nullable=True)
-    source_governance_state = Column(String(32), nullable=True)
-    source_governance_descriptor_sha256 = Column(String(_SHA256_LENGTH), nullable=True)
-    source_snapshot_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    calendar_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    calendar_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    timezone_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_registry_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source_governance_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_governance_descriptor_sha256: Mapped[str | None] = mapped_column(
+        String(_SHA256_LENGTH), nullable=True
+    )
+    source_snapshot_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey(
             "md_source_snapshots.id",
@@ -1155,14 +1211,16 @@ class MdCalendarSnapshot(Base):
         ),
         nullable=True,
     )
-    snapshot_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    definition_json = Column(JSON, default=dict, nullable=False)
-    effective_from = Column(Date, nullable=True)
-    effective_to = Column(Date, nullable=True)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    definition_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    source_snapshot = relationship("MdSourceSnapshot")
-    events = relationship(
+    source_snapshot: Mapped[MdSourceSnapshot | None] = relationship("MdSourceSnapshot")
+    events: Mapped[list[MdCalendarEvent]] = relationship(
         "MdCalendarEvent", back_populates="calendar_snapshot", passive_deletes=True
     )
 
@@ -1205,8 +1263,8 @@ class MdCalendarEvent(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    calendar_snapshot_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    calendar_snapshot_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_calendar_snapshots.id",
@@ -1215,18 +1273,22 @@ class MdCalendarEvent(Base):
         ),
         nullable=False,
     )
-    trading_date = Column(Date, nullable=False)
-    event_type = Column(String(64), nullable=False)
-    session_code = Column(String(128), nullable=False)
-    is_trading_day = Column(Boolean, nullable=False, default=False)
-    event_start = Column(PITDateTime, nullable=True)
-    event_end = Column(PITDateTime, nullable=True)
-    coverage_event_key = Column(String(128), nullable=True)
-    event_payload_json = Column(JSON, default=dict, nullable=False)
-    event_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    trading_date: Mapped[date] = mapped_column(Date, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    is_trading_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    event_start: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    event_end: Mapped[datetime | None] = mapped_column(PITDateTime, nullable=True)
+    coverage_event_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    event_payload_json: Mapped[MarketDataJSONMapping] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    event_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
-    calendar_snapshot = relationship("MdCalendarSnapshot", back_populates="events")
+    calendar_snapshot: Mapped[MdCalendarSnapshot] = relationship(
+        "MdCalendarSnapshot", back_populates="events"
+    )
 
 
 @event.listens_for(MdCalendarEvent, "before_insert")
@@ -1335,37 +1397,37 @@ class MdResearchDataBinding(Base):
         Index("ix_md_rdb_status_created", "status", "created_at"),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    user_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("users.id", name="fk_md_rdb_user", ondelete="RESTRICT"),
         nullable=False,
     )
-    intent_id = Column(String(128), nullable=False)
-    binding_hash = Column(String(_SHA256_LENGTH), nullable=False)
-    binding_schema_version = Column(String(64), nullable=False)
-    status = Column(String(16), nullable=False, default="ACTIVE")
-    artifact_relative_path = Column(String(512), nullable=False)
-    artifact_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    artifact_size_bytes = Column(BigInteger, nullable=False)
-    manifest_json = Column(JSON, default=dict, nullable=False)
-    manifest_sha256 = Column(String(_SHA256_LENGTH), nullable=False)
-    canonical_id = Column(exact_identifier_string(512), nullable=False)
-    instrument_metadata_version = Column(String(128), nullable=False)
-    dataset_code = Column(String(255), nullable=False)
-    family_id = Column(String(128), nullable=False)
-    family_contract_version = Column(String(64), nullable=False)
-    data_kind = Column(String(64), nullable=False)
-    frequency = Column(String(32), nullable=False)
-    source_policy_id = Column(String(128), nullable=False)
-    query_fingerprint = Column(String(_SHA256_LENGTH), nullable=False)
-    knowledge_cutoff = Column(PITDateTime, nullable=False)
-    identity_knowledge_cutoff = Column(PITDateTime, nullable=False)
-    visibility_at = Column(PITDateTime, nullable=False)
-    visibility_sequence = Column(BigInteger, nullable=False)
-    identity_visibility_at = Column(PITDateTime, nullable=False)
-    identity_visibility_sequence = Column(BigInteger, nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    intent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    binding_hash: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    binding_schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE")
+    artifact_relative_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    artifact_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    artifact_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    manifest_json: Mapped[MarketDataJSONMapping] = mapped_column(JSON, default=dict, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    canonical_id: Mapped[str] = mapped_column(exact_identifier_string(512), nullable=False)
+    instrument_metadata_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    dataset_code: Mapped[str] = mapped_column(String(255), nullable=False)
+    family_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    family_contract_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    data_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    frequency: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_policy_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    query_fingerprint: Mapped[str] = mapped_column(String(_SHA256_LENGTH), nullable=False)
+    knowledge_cutoff: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    identity_knowledge_cutoff: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    visibility_at: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    visibility_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    identity_visibility_at: Mapped[datetime] = mapped_column(PITDateTime, nullable=False)
+    identity_visibility_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 class MdResearchDataBindingScope(Base):
@@ -1384,7 +1446,7 @@ class MdResearchDataBindingScope(Base):
         Index("ix_md_rdb_scope_workspace", "workspace_id", "created_at"),
     )
 
-    binding_id = Column(
+    binding_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_research_data_bindings.id",
@@ -1393,10 +1455,10 @@ class MdResearchDataBindingScope(Base):
         ),
         primary_key=True,
     )
-    user_id = Column(String(36), nullable=False)
-    intent_id = Column(String(128), nullable=False)
-    workspace_id = Column(String(36), nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    intent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 class MdResearchDataBindingConsumer(Base):
@@ -1416,8 +1478,8 @@ class MdResearchDataBindingConsumer(Base):
         Index("ix_md_rdb_consumer_lookup", "binding_id", "workspace_id", "intent_id"),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    binding_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    binding_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_research_data_bindings.id",
@@ -1426,11 +1488,11 @@ class MdResearchDataBindingConsumer(Base):
         ),
         nullable=False,
     )
-    user_id = Column(String(36), nullable=False)
-    intent_id = Column(String(128), nullable=False)
-    workspace_id = Column(String(36), nullable=False)
-    unit_id = Column(String(36), nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    intent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    unit_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 class MdResearchDataBindingRevocation(Base):
@@ -1447,8 +1509,8 @@ class MdResearchDataBindingRevocation(Base):
         Index("ix_md_rdb_revocation_created", "created_at"),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    binding_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    binding_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey(
             "md_research_data_bindings.id",
@@ -1457,11 +1519,11 @@ class MdResearchDataBindingRevocation(Base):
         ),
         nullable=False,
     )
-    actor_user_id = Column(String(36), nullable=True)
-    status = Column(String(16), nullable=False)
-    reason_code = Column(String(128), nullable=False)
-    revoked_at = Column(PITDateTime, default=_utcnow, nullable=False)
-    created_at = Column(PITDateTime, default=_utcnow, nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    revoked_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(PITDateTime, default=_utcnow, nullable=False)
 
 
 def _deny_immutable_mutation(_mapper: Any, _connection: Any, target: Any) -> None:

@@ -22,14 +22,46 @@ def _query_local_futures_spec(symbol: str) -> dict[str, Any]:
     except Exception:
         return {}
 
+    database_host = DB_CONFIG.get("host")
+    database_user = DB_CONFIG.get("user")
+    database_password = DB_CONFIG.get("password")
+    database_name = DB_CONFIG.get("database")
+    if (
+        not isinstance(database_host, str)
+        or not database_host.strip()
+        or not isinstance(database_user, str)
+        or not database_user.strip()
+        or not isinstance(database_password, str)
+        or not isinstance(database_name, str)
+        or not database_name.strip()
+    ):
+        return {}
+
+    configured_port = DB_CONFIG.get("port")
+    if isinstance(configured_port, bool):
+        return {}
+    if configured_port in (None, "", 0):
+        database_port = 3306
+    elif isinstance(configured_port, int):
+        database_port = configured_port
+    elif isinstance(configured_port, str):
+        try:
+            database_port = int(configured_port)
+        except ValueError:
+            return {}
+    else:
+        return {}
+    if not 1 <= database_port <= 65535:
+        return {}
+
     connection = None
     try:
         connection = pymysql.connect(
-            host=DB_CONFIG.get("host"),
-            user=DB_CONFIG.get("user"),
-            password=DB_CONFIG.get("password"),
-            database=DB_CONFIG.get("database"),
-            port=int(DB_CONFIG.get("port") or 3306),
+            host=database_host,
+            user=database_user,
+            password=database_password,
+            database=database_name,
+            port=database_port,
             connect_timeout=1,
             read_timeout=1,
             cursorclass=pymysql.cursors.DictCursor,

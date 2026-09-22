@@ -7,7 +7,10 @@
       v-if="loading"
       class="portfolio-loading"
     >
-      <el-icon class="is-loading portfolio-loading__icon" aria-hidden="true">
+      <el-icon
+        class="is-loading portfolio-loading__icon"
+        aria-hidden="true"
+      >
         <Loading />
       </el-icon>
       <span>{{ t('common.loading') }}</span>
@@ -159,7 +162,10 @@
                   v-if="isTabLoading('positions')"
                   class="portfolio-querying"
                 >
-                  <el-icon class="is-loading" aria-hidden="true">
+                  <el-icon
+                    class="is-loading"
+                    aria-hidden="true"
+                  >
                     <Loading />
                   </el-icon>
                   <span>{{ t('portfolio.querying') }}</span>
@@ -194,150 +200,150 @@
                     size="small"
                     class="portfolio-table"
                   >
-                  <el-table-column
-                    prop="strategy_name"
-                    :label="t('portfolio.colStrategy')"
-                    min-width="180"
-                  />
-                  <el-table-column
-                    prop="data_name"
-                    :label="t('portfolio.colSymbol')"
-                    width="120"
-                  />
-                  <el-table-column
-                    :label="t('portfolio.colDirection')"
-                    width="90"
-                    align="center"
-                  >
-                    <template #default="{ row }">
-                      <el-tag
-                        :type="positionDirectionTag(row)"
-                        size="small"
-                      >
-                        {{ directionLabel(row.direction) }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colLongPosition')"
-                    width="100"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatPositionSize(row.long_position) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colShortPosition')"
-                    width="100"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatPositionSize(row.short_position) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colSize')"
-                    width="100"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatPositionSize(row.size) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colCostPrice')"
-                    width="110"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatNumber(row.price, 4) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colLatestPrice')"
-                    width="110"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatNumber(row.latest_price ?? row.price, 4) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colMarketValue')"
-                    width="130"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatMoney(row.market_value) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colPositionPnl')"
-                    width="120"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      <span :class="signedValueClass(row.position_pnl || 0)">
-                        {{ formatSignedMoney(row.position_pnl || 0) }}
-                      </span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colMarginValue')"
-                    width="110"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatOptionalMoney(row.margin_value) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('workspaceDialogs.leverage')"
-                    width="90"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatNumber(row.leverage, 2) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colCommission')"
-                    width="100"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ formatNumber(row.commission, 2) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colValuationStatus')"
-                    width="130"
-                    align="center"
-                  >
-                    <template #default="{ row }">
-                      <el-tooltip
-                        :content="valuationTooltip(row)"
-                        placement="top"
-                      >
+                    <el-table-column
+                      prop="strategy_name"
+                      :label="t('portfolio.colStrategy')"
+                      min-width="180"
+                    />
+                    <el-table-column
+                      prop="data_name"
+                      :label="t('portfolio.colSymbol')"
+                      width="120"
+                    />
+                    <el-table-column
+                      :label="t('portfolio.colDirection')"
+                      width="90"
+                      align="center"
+                    >
+                      <template #default="{ row }">
                         <el-tag
-                          :type="valuationStatusTag(row)"
+                          :type="positionDirectionTag(row)"
                           size="small"
                         >
-                          {{ valuationStatusLabel(row) }}
+                          {{ directionLabel(row.direction) }}
                         </el-tag>
-                      </el-tooltip>
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    prop="updated_at"
-                    :label="t('portfolio.colUpdatedAt')"
-                    width="160"
-                  >
-                    <template #default="{ row }">
-                      {{ formatDateTime(row.updated_at) }}
-                    </template>
-                  </el-table-column>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colLongPosition')"
+                      width="100"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatPositionSize(row.long_position) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colShortPosition')"
+                      width="100"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatPositionSize(row.short_position) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colSize')"
+                      width="100"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatPositionSize(row.size) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colCostPrice')"
+                      width="110"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatNumber(row.price, 4) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colLatestPrice')"
+                      width="110"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatNumber(row.latest_price ?? row.price, 4) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colMarketValue')"
+                      width="130"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatMoney(row.market_value) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colPositionPnl')"
+                      width="120"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        <span :class="signedValueClass(row.position_pnl || 0)">
+                          {{ formatSignedMoney(row.position_pnl || 0) }}
+                        </span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colMarginValue')"
+                      width="110"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatOptionalMoney(row.margin_value) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('workspaceDialogs.leverage')"
+                      width="90"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatNumber(row.leverage, 2) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colCommission')"
+                      width="100"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ formatNumber(row.commission, 2) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colValuationStatus')"
+                      width="130"
+                      align="center"
+                    >
+                      <template #default="{ row }">
+                        <el-tooltip
+                          :content="valuationTooltip(row)"
+                          placement="top"
+                        >
+                          <el-tag
+                            :type="valuationStatusTag(row)"
+                            size="small"
+                          >
+                            {{ valuationStatusLabel(row) }}
+                          </el-tag>
+                        </el-tooltip>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      prop="updated_at"
+                      :label="t('portfolio.colUpdatedAt')"
+                      width="160"
+                    >
+                      <template #default="{ row }">
+                        {{ formatDateTime(row.updated_at) }}
+                      </template>
+                    </el-table-column>
                   </el-table>
                 </template>
               </div>
@@ -356,7 +362,10 @@
                   v-if="isTabLoading('trades')"
                   class="portfolio-querying"
                 >
-                  <el-icon class="is-loading" aria-hidden="true">
+                  <el-icon
+                    class="is-loading"
+                    aria-hidden="true"
+                  >
                     <Loading />
                   </el-icon>
                   <span>{{ t('portfolio.querying') }}</span>
@@ -379,82 +388,82 @@
                     class="portfolio-table"
                     max-height="500"
                   >
-                  <el-table-column
-                    prop="strategy_name"
-                    :label="t('portfolio.colStrategy')"
-                    min-width="180"
-                  />
-                  <el-table-column
-                    prop="data_name"
-                    :label="t('portfolio.colSymbolShort')"
-                    width="100"
-                  />
-                  <el-table-column
-                    :label="t('portfolio.colDirection')"
-                    width="80"
-                    align="center"
-                  >
-                    <template #default="{ row }">
-                      <span :class="tradeDirectionClass(row.direction)">
-                        {{ tradeDirectionLabel(row.direction) }}
-                      </span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    prop="dtopen"
-                    :label="t('portfolio.colOpenDate')"
-                    width="160"
-                  />
-                  <el-table-column
-                    prop="dtclose"
-                    :label="t('portfolio.colCloseDate')"
-                    width="160"
-                  />
-                  <el-table-column
-                    :label="t('portfolio.colPrice')"
-                    width="100"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ row.price.toFixed(2) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colSizeShort')"
-                    width="80"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ row.size }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colCommission')"
-                    width="100"
-                    align="right"
-                  >
-                    <template #default="{ row }">
-                      {{ row.commission.toFixed(2) }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colNetPnl')"
-                    width="120"
-                    align="right"
-                    sortable
-                  >
-                    <template #default="{ row }">
-                      <span :class="row.pnlcomm >= 0 ? 'text-green-600' : 'text-red-600'">
-                        {{ row.pnlcomm >= 0 ? '+' : '' }}{{ row.pnlcomm.toFixed(2) }}
-                      </span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column
-                    :label="t('portfolio.colHoldingDays')"
-                    prop="barlen"
-                    width="100"
-                    align="center"
-                  />
+                    <el-table-column
+                      prop="strategy_name"
+                      :label="t('portfolio.colStrategy')"
+                      min-width="180"
+                    />
+                    <el-table-column
+                      prop="data_name"
+                      :label="t('portfolio.colSymbolShort')"
+                      width="100"
+                    />
+                    <el-table-column
+                      :label="t('portfolio.colDirection')"
+                      width="80"
+                      align="center"
+                    >
+                      <template #default="{ row }">
+                        <span :class="tradeDirectionClass(row.direction)">
+                          {{ tradeDirectionLabel(row.direction) }}
+                        </span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      prop="dtopen"
+                      :label="t('portfolio.colOpenDate')"
+                      width="160"
+                    />
+                    <el-table-column
+                      prop="dtclose"
+                      :label="t('portfolio.colCloseDate')"
+                      width="160"
+                    />
+                    <el-table-column
+                      :label="t('portfolio.colPrice')"
+                      width="100"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ row.price.toFixed(2) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colSizeShort')"
+                      width="80"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ row.size }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colCommission')"
+                      width="100"
+                      align="right"
+                    >
+                      <template #default="{ row }">
+                        {{ row.commission.toFixed(2) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colNetPnl')"
+                      width="120"
+                      align="right"
+                      sortable
+                    >
+                      <template #default="{ row }">
+                        <span :class="row.pnlcomm >= 0 ? 'text-green-600' : 'text-red-600'">
+                          {{ row.pnlcomm >= 0 ? '+' : '' }}{{ row.pnlcomm.toFixed(2) }}
+                        </span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('portfolio.colHoldingDays')"
+                      prop="barlen"
+                      width="100"
+                      align="center"
+                    />
                   </el-table>
                 </template>
               </div>
@@ -496,7 +505,10 @@
                   v-if="isTabLoading('equity')"
                   class="portfolio-querying"
                 >
-                  <el-icon class="is-loading" aria-hidden="true">
+                  <el-icon
+                    class="is-loading"
+                    aria-hidden="true"
+                  >
                     <Loading />
                   </el-icon>
                   <span>{{ t('portfolio.querying') }}</span>
@@ -542,7 +554,10 @@
                   v-if="isTabLoading('allocation')"
                   class="portfolio-querying"
                 >
-                  <el-icon class="is-loading" aria-hidden="true">
+                  <el-icon
+                    class="is-loading"
+                    aria-hidden="true"
+                  >
                     <Loading />
                   </el-icon>
                   <span>{{ t('portfolio.querying') }}</span>
@@ -688,7 +703,7 @@ const allocationChartRef = ref<HTMLElement | null>(null)
 let pnlChart: echarts.ECharts | null = null
 let drawdownChart: echarts.ECharts | null = null
 let allocationChart: echarts.ECharts | null = null
-let echartsLoader: Promise<typeof import('echarts')> | null = null
+let echartsLoader: Promise<typeof echarts> | null = null
 
 function loadEcharts() {
   echartsLoader ??= import('echarts')

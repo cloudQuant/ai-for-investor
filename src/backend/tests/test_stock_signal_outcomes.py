@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
 from app.models.stock_signal import StockSignalPrediction
 from app.services.stock_signal.outcomes import evaluate_outcome
 from app.services.stock_signal.performance import build_performance_summary
@@ -96,3 +98,21 @@ def test_watch_is_never_part_of_actioned_success_rate() -> None:
     assert summary["actioned_scorable_count"] == 2
     assert summary["actioned_success_count"] == 1
     assert summary["actioned_success_rate"] == 0.5
+
+
+@pytest.mark.parametrize("threshold", [-100.0, float("-inf"), "-inf", 10**400])
+def test_non_finite_or_invalid_success_thresholds_do_not_create_profit(threshold: object) -> None:
+    buy = _record("BUY")
+    buy.horizon_20d_return = -0.001
+    buy.policy_snapshot_json["buy_success_threshold_bps"] = threshold
+    sell = _record("SELL")
+    sell.horizon_20d_return = 0.001
+    sell.policy_snapshot_json["sell_success_threshold_bps"] = threshold
+
+    summary = build_performance_summary([buy, sell], symbol="600000.SH")
+    actions = {action["action"]: action for action in summary["actions"]}
+
+    assert actions["BUY"]["scorable_count"] == 1
+    assert actions["BUY"]["success_count"] == 0
+    assert actions["SELL"]["scorable_count"] == 1
+    assert actions["SELL"]["success_count"] == 0

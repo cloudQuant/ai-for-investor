@@ -3990,10 +3990,12 @@ describe('StrategyPage', () => {
     const { strategyApi } = await import('@/api/strategy')
     const baseResult = await strategyApi.runAIResearchLoop({ prompt: 'seed', symbol: '000001.SZ' })
     vi.mocked(strategyApi.runAIResearchLoop).mockClear()
-    const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler()
-      return 0
-    }) as typeof window.setTimeout)
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation((
+      (handler: TimerHandler, timeout?: number) => {
+        if (timeout === 1500 && typeof handler === 'function') handler()
+        return 0
+      }
+    ) as typeof window.setTimeout)
     ;(strategyApi as any).submitAIResearchTask = vi.fn().mockResolvedValue({
       task_id: 'long-research-task',
       status: 'running',
@@ -4146,10 +4148,12 @@ describe('StrategyPage', () => {
 
   it('restores completed async AI research result from task summary when history lookup fails', async () => {
     const { strategyApi } = await import('@/api/strategy')
-    const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler) => {
-      if (typeof handler === 'function') handler()
-      return 0
-    }) as typeof window.setTimeout)
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation((
+      (handler: TimerHandler, timeout?: number) => {
+        if (timeout === 1500 && typeof handler === 'function') handler()
+        return 0
+      }
+    ) as typeof window.setTimeout)
     ;(strategyApi as any).submitAIResearchTask = vi.fn().mockResolvedValue({
       task_id: 'summary-task',
       status: 'running',
@@ -6467,6 +6471,7 @@ describe('StrategyPage', () => {
 
   it('shows expired live candidate records as requiring paper review', async () => {
     const wrapper = doMount()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.aiResearchRuns = [{
       run_id: 'expired-live-run',

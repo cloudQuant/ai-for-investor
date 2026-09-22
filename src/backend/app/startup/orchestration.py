@@ -12,10 +12,23 @@ def _get_logger(app: FastAPI):
 
 
 async def register(app: FastAPI, settings: Any) -> None:
+    startup_logger = _get_logger(app)
+
+    # Iteration 199: independent THS history scheduler (main database, not the
+    # AkShare warehouse). Fail-closed and disabled unless explicitly enabled.
+    try:
+        from app.services.market_data.ths_scheduler import ThsMarketDataScheduler
+
+        ths_scheduler = ThsMarketDataScheduler.from_settings(settings)
+        await ths_scheduler.start()
+        app.state.ths_market_data_scheduler = ths_scheduler
+        startup_logger.info(f"THS market-data scheduler: {ths_scheduler.describe()}")
+    except Exception:
+        startup_logger.exception("Failed to start THS market-data scheduler")
+
     if not settings.AKSHARE_DATA_DATABASE_URL:
         return
 
-    startup_logger = _get_logger(app)
     try:
         from app.api.airflow_dags import set_orchestration_backend
         from app.services.orchestration.detector import BackendDetector
@@ -60,3 +73,10 @@ async def shutdown(app: FastAPI, settings: Any) -> None:
             await akshare_scheduler_service.shutdown()
         except Exception:
             startup_logger.exception("Failed to shutdown akshare scheduler")
+
+    ths_scheduler = getattr(app.state, "ths_market_data_scheduler", None)
+    if ths_scheduler is not None:
+        try:
+            await ths_scheduler.shutdown()
+        except Exception:
+            startup_logger.exception("Failed to shutdown THS market-data scheduler")

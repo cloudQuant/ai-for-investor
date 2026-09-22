@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import math
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+import anyio
 import httpx
 
 from app.services.research.holdout_execution_contract import (
@@ -112,7 +112,7 @@ class HttpSealedHoldoutExecutor:
     ) -> bytes:
         snapshot = command.snapshot
         try:
-            async with asyncio.timeout(self._timeout_seconds):
+            with anyio.fail_after(self._timeout_seconds):
                 async with httpx.AsyncClient(
                     transport=self._transport,
                     timeout=httpx.Timeout(self._timeout_seconds),
@@ -199,9 +199,15 @@ def _image_digest(value: object) -> str:
 
 
 def _timeout(value: object) -> float:
-    if type(value) not in {int, float} or not math.isfinite(value) or not 0 < value <= 3600:
-        raise ValueError
-    return float(value)
+    if type(value) is int:
+        if not 0 < value <= 3600:
+            raise ValueError
+        return float(value)
+    if type(value) is float:
+        if not math.isfinite(value) or not 0 < value <= 3600:
+            raise ValueError
+        return value
+    raise ValueError
 
 
 def _headers(response: httpx.Response, *, limit: int) -> None:

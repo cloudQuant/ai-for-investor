@@ -5,4 +5,4 @@
 # (Caps per Requirement 1.5: ≤5 categories per subpackage; mirrored in
 # docs/iterations/迭代175-质量加固与可观测性纵深/PROGRESS.md §1 "已知尾巴")
 
-__all__ = []
+__all__: list[str] = []

@@ -493,7 +493,41 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-type GatewayCredentials = Record<string, any>
+type GatewayCredentialScalar = string | number | boolean | null | undefined
+
+interface GatewayCredentials {
+  account_id?: string
+  access_token?: string
+  api_key?: string
+  app_id?: string
+  asset_type?: string
+  auth_code?: string
+  base_url?: string
+  broker_id?: string
+  cookie_browser?: string
+  cookie_output?: string
+  cookie_path?: string
+  cookie_source?: string
+  login?: string | number
+  login_browser?: string
+  login_headless?: boolean
+  login_mode?: string
+  login_timeout?: string | number
+  md_front?: string
+  passphrase?: string
+  password?: string
+  secret_key?: string
+  server?: string
+  symbol_suffix?: string
+  td_front?: string
+  testnet?: boolean
+  timeout?: string | number
+  user_id?: string
+  username?: string
+  verify_ssl?: boolean
+  ws_uri?: string
+  [key: string]: GatewayCredentialScalar
+}
 
 interface GatewayConnectForm {
   exchange_type: string

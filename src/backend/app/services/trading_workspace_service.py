@@ -11,9 +11,10 @@ import asyncio
 import json
 import logging
 import shutil
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import date, datetime
 from decimal import Decimal
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ from app.services.ai_research_provenance import (
     issue_ai_research_paper_runtime_metrics_observation,
     verify_ai_research_paper_runtime_anchor_for_unit,
 )
+from app.services.asset_info.gateway_specs import persist_asset_specs, query_local_asset_spec
+from app.services.asset_info.positions import normalize_gateway_position
 from app.services.auto_trading_scheduler import get_auto_trading_scheduler
 from app.services.live_trading.metadata import SERVER_RUNTIME_LAUNCH_ID_FIELD
 from app.services.live_trading_manager import get_live_trading_manager
@@ -43,9 +46,6 @@ from app.services.trading_asset_info_service import (
     POSITION_SIZE_FIELD_KEYS,
     SHORT_POSITION_FIELD_KEYS,
     gateway_position_symbol,
-    normalize_gateway_position,
-    persist_asset_specs,
-    query_local_asset_spec,
     signed_gateway_size,
     split_bidirectional_position_row,
     symbol_aliases,
@@ -322,9 +322,10 @@ def _now_local_text() -> str:
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        result = float(value)
+    except (OverflowError, TypeError, ValueError):
         return default
+    return result if isfinite(result) else default
 
 
 def _json_safe_value(value: Any) -> Any:
@@ -437,7 +438,7 @@ def _metadata_from_config(config: dict[str, Any], symbol: str) -> dict[str, Any]
 def _merge_unit_contract_metadata(
     specs: dict[str, dict[str, Any]],
     unit: StrategyUnit,
-    instance: dict[str, Any] | None,
+    instance: Mapping[str, object] | None,
     symbols: list[str],
 ) -> dict[str, dict[str, Any]]:
     completed = {str(key): dict(value) for key, value in specs.items() if isinstance(value, dict)}
@@ -659,7 +660,7 @@ def _clear_runtime_logs_before_start(runtime_dir: Path) -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _instance_log_dir(instance: dict[str, Any] | None) -> Path | None:
+def _instance_log_dir(instance: Mapping[str, object] | None) -> Path | None:
     if not instance:
         return None
 
@@ -849,10 +850,8 @@ class TradingWorkspaceService:
                 return "short"
             if text == "flat":
                 return "flat"
-            try:
-                code = int(float(value))
-            except (TypeError, ValueError):
-                code = None
+            numeric_code = _safe_float(value, float("nan"))
+            code = int(numeric_code) if isfinite(numeric_code) else None
             key_text = key.lower()
             if key_text in {"trade_action", "position_type", "type"}:
                 if code == 0:
@@ -888,29 +887,35 @@ class TradingWorkspaceService:
             if abs(size) <= EPSILON:
                 if direction in {"long", "short"}:
                     key = f"{symbol}:{direction}"
-                    current_flat = latest_flat_by_key.get(key)
-                    if current_flat is None or (timestamp, index) >= (
-                        current_flat[1],
-                        current_flat[0],
+                    current_flat_by_key = latest_flat_by_key.get(key)
+                    if current_flat_by_key is None or (timestamp, index) >= (
+                        current_flat_by_key[1],
+                        current_flat_by_key[0],
                     ):
                         latest_flat_by_key[key] = (index, timestamp, symbol, row)
                     continue
-                current_flat = latest_flat_by_symbol.get(symbol)
-                if current_flat is None or (timestamp, index) >= (
-                    current_flat[1],
-                    current_flat[0],
+                current_flat_by_symbol = latest_flat_by_symbol.get(symbol)
+                if current_flat_by_symbol is None or (timestamp, index) >= (
+                    current_flat_by_symbol[1],
+                    current_flat_by_symbol[0],
                 ):
                     latest_flat_by_symbol[symbol] = (index, timestamp, row)
                 continue
             key = f"{symbol}:{direction}"
-            current = latest_by_key.get(key)
-            if current is None or (timestamp, index) >= (current[1], current[0]):
+            current_position_by_key = latest_by_key.get(key)
+            if current_position_by_key is None or (timestamp, index) >= (
+                current_position_by_key[1],
+                current_position_by_key[0],
+            ):
                 latest_by_key[key] = (index, timestamp, symbol, row)
 
         latest_nonflat_by_symbol: dict[str, tuple[int, str]] = {}
         for index, timestamp, symbol, _row in latest_by_key.values():
-            current = latest_nonflat_by_symbol.get(symbol)
-            if current is None or (timestamp, index) >= (current[1], current[0]):
+            current_nonflat_by_symbol = latest_nonflat_by_symbol.get(symbol)
+            if current_nonflat_by_symbol is None or (timestamp, index) >= (
+                current_nonflat_by_symbol[1],
+                current_nonflat_by_symbol[0],
+            ):
                 latest_nonflat_by_symbol[symbol] = (index, timestamp)
 
         selected: list[tuple[int, dict[str, Any]]] = []
@@ -930,17 +935,17 @@ class TradingWorkspaceService:
                 continue
             selected.append((index, row))
         for symbol, (index, timestamp, row) in latest_flat_by_symbol.items():
-            latest_nonflat = latest_nonflat_by_symbol.get(symbol)
-            if latest_nonflat is None or (timestamp, index) >= (
-                latest_nonflat[1],
-                latest_nonflat[0],
+            latest_nonflat_for_symbol = latest_nonflat_by_symbol.get(symbol)
+            if latest_nonflat_for_symbol is None or (timestamp, index) >= (
+                latest_nonflat_for_symbol[1],
+                latest_nonflat_for_symbol[0],
             ):
                 selected.append((index, row))
         for key, (index, timestamp, _symbol, row) in latest_flat_by_key.items():
-            latest_nonflat = latest_by_key.get(key)
-            if latest_nonflat is None or (timestamp, index) >= (
-                latest_nonflat[1],
-                latest_nonflat[0],
+            latest_nonflat_for_key = latest_by_key.get(key)
+            if latest_nonflat_for_key is None or (timestamp, index) >= (
+                latest_nonflat_for_key[1],
+                latest_nonflat_for_key[0],
             ):
                 selected.append((index, row))
         return [row for _index, row in sorted(selected, key=lambda item: item[0])]
@@ -978,7 +983,7 @@ class TradingWorkspaceService:
         cls,
         unit: StrategyUnit,
         symbol: str,
-        instance: dict[str, Any] | None = None,
+        instance: Mapping[str, object] | None = None,
         *extra_configs: dict[str, Any],
     ):
         instance_params = _safe_dict((instance or {}).get("params"))
@@ -1110,7 +1115,7 @@ class TradingWorkspaceService:
     def _sync_unit_contract_metadata_from_instance(
         cls,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
     ) -> bool:
         if is_server_owned_ai_research_unit(unit):
             # Paper-review provenance binds the initial research handoff.  A
@@ -1123,10 +1128,9 @@ class TradingWorkspaceService:
             return False
 
         params = _safe_dict(getattr(unit, "params", None))
+        raw_current_metadata = params.get("contract_metadata")
         current_metadata = (
-            dict(params.get("contract_metadata"))
-            if isinstance(params.get("contract_metadata"), dict)
-            else {}
+            dict(raw_current_metadata) if isinstance(raw_current_metadata, dict) else {}
         )
         changed = False
         for key, value in instance_metadata.items():
@@ -1160,10 +1164,9 @@ class TradingWorkspaceService:
             return False
 
         params = _safe_dict(getattr(unit, "params", None))
+        raw_current_metadata = params.get("contract_metadata")
         current_metadata = (
-            dict(params.get("contract_metadata"))
-            if isinstance(params.get("contract_metadata"), dict)
-            else {}
+            dict(raw_current_metadata) if isinstance(raw_current_metadata, dict) else {}
         )
         changed = False
         for key, value in asset_specs.items():
@@ -1186,7 +1189,7 @@ class TradingWorkspaceService:
     def _unit_asset_spec_symbols(
         cls,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
     ) -> list[str]:
         candidates: list[str] = []
         _append_symbol_candidate(candidates, getattr(unit, "symbol", None))
@@ -1215,7 +1218,7 @@ class TradingWorkspaceService:
         cls,
         manager: Any,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
     ) -> bool:
         if is_server_owned_ai_research_unit(unit):
             return False
@@ -1254,7 +1257,7 @@ class TradingWorkspaceService:
     def _refresh_unit_asset_specs_from_local(
         cls,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None = None,
+        instance: Mapping[str, object] | None = None,
     ) -> bool:
         if is_server_owned_ai_research_unit(unit):
             return False
@@ -1267,7 +1270,8 @@ class TradingWorkspaceService:
         runtime_dir = str((instance or {}).get("runtime_dir") or "").strip()
         if runtime_dir:
             try:
-                persist_asset_specs(Path(runtime_dir).expanduser(), instance or {}, asset_specs)
+                manager_instance = instance if isinstance(instance, dict) else dict(instance or {})
+                persist_asset_specs(Path(runtime_dir).expanduser(), manager_instance, asset_specs)
             except Exception:
                 pass
         return cls._sync_unit_contract_metadata_from_specs(unit, asset_specs)
@@ -1278,7 +1282,7 @@ class TradingWorkspaceService:
         manager: Any,
         unit: StrategyUnit,
         instance_id: str,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
     ) -> list[str]:
         query_positions = getattr(manager, "query_instance_gateway_positions", None)
         if not callable(query_positions):
@@ -1443,7 +1447,7 @@ class TradingWorkspaceService:
     def _unit_position_symbol_aliases(
         cls,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
     ) -> set[str]:
         candidates: list[str] = []
         _append_symbol_candidate(candidates, getattr(unit, "symbol", None))
@@ -1470,7 +1474,7 @@ class TradingWorkspaceService:
     def _gateway_position_rows(
         cls,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
     ) -> list[dict[str, Any]] | None:
         instance_id = str((instance or {}).get("id") or unit.trading_instance_id or "").strip()
         if not instance_id:
@@ -1575,7 +1579,7 @@ class TradingWorkspaceService:
         cls,
         snapshot: dict[str, Any],
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
         positions: list[dict[str, Any]],
     ) -> float | None:
         long_position = 0.0
@@ -1777,7 +1781,7 @@ class TradingWorkspaceService:
     def _build_snapshot(
         cls,
         unit: StrategyUnit,
-        instance: dict[str, Any] | None,
+        instance: Mapping[str, object] | None,
         *,
         full_log: bool = True,
         include_gateway_positions: bool = True,
@@ -2169,7 +2173,11 @@ class TradingWorkspaceService:
                         if isinstance(unit.unit_settings, dict)
                         else {}
                     )
-                    paper_runtime_anchor = unit_settings.get(AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD)
+                    raw_paper_runtime_anchor = unit_settings.get(
+                        AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD
+                    )
+                    if isinstance(raw_paper_runtime_anchor, dict):
+                        paper_runtime_anchor = raw_paper_runtime_anchor
                     if not verify_ai_research_paper_runtime_anchor_for_unit(
                         paper_runtime_anchor,
                         user_id=user_id,
@@ -2308,6 +2316,7 @@ class TradingWorkspaceService:
                     )
 
                 already_running = False
+                started: Mapping[str, object]
                 if instance is not None and str(instance.get("status") or "").lower() == "running":
                     started = instance
                     already_running = True

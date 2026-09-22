@@ -10,12 +10,13 @@ and falls back to an in-memory cache otherwise.
 
 import asyncio
 import hashlib
+import hmac
 import json
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any, ParamSpec, Protocol, TypeVar
+from typing import Any, ParamSpec, Protocol, TypeVar, cast
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -60,7 +61,7 @@ class RedisCacheBackend:
     async def get(self, key: str) -> bytes | None:
         """Get cached value from Redis."""
         result = await self._redis.get(key)
-        return result
+        return cast(bytes | None, result)
 
     async def set(self, key: str, value: bytes, ttl: int) -> None:
         """Set cached value in Redis with TTL."""
@@ -162,19 +163,50 @@ def get_cache_backend() -> CacheBackend:
     return _cache_backend
 
 
-def _build_cache_key(key_prefix: str, path: str, query_params: dict[str, Any]) -> str:
+def _build_cache_key(
+    key_prefix: str,
+    path: str,
+    query_params: dict[str, Any],
+    *,
+    user_scope_hash: str | None = None,
+) -> str:
     """Build cache key from prefix, path, and sorted query params MD5.
 
-    Format: {key_prefix}:{path}:{md5(sorted_query_params)}
+    Unscoped format: {key_prefix}:{path}:{md5(sorted_query_params)}
+    User-scoped format: {key_prefix}:user:{user_scope_hash}:{path}:{md5(sorted_query_params)}
     """
     sorted_params = sorted(query_params.items())
     params_str = json.dumps(sorted_params, sort_keys=True, default=str)
     params_hash = hashlib.md5(params_str.encode(), usedforsecurity=False).hexdigest()
+    if user_scope_hash:
+        return f"{key_prefix}:user:{user_scope_hash}:{path}:{params_hash}"
     return f"{key_prefix}:{path}:{params_hash}"
 
 
+def _user_scope_hash(current_user: object) -> str | None:
+    """Return a keyed, non-reversible cache partition for a resolved user."""
+    try:
+        user_id = getattr(current_user, "sub", None)
+        if not isinstance(user_id, str) or not user_id.strip():
+            return None
+
+        secret_key = get_settings().SECRET_KEY
+        if not isinstance(secret_key, str) or not secret_key:
+            return None
+
+        message = b"response-cache-user-v1\0" + user_id.encode("utf-8")
+        return hmac.new(secret_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    except Exception:
+        # A malformed principal or unavailable cache-key secret must never
+        # fall back to a shared cache namespace.
+        return None
+
+
 def cache_response(
-    ttl: int = 60, key_prefix: str = "api"
+    ttl: int = 60,
+    key_prefix: str = "api",
+    *,
+    vary_by_current_user: bool = False,
 ) -> Callable[[Callable[P, Awaitable[TResponse]]], Callable[P, Awaitable[Response]]]:
     """API response cache decorator for FastAPI route handlers.
 
@@ -185,13 +217,16 @@ def cache_response(
     Args:
         ttl: Cache expiration time in seconds (1-86400).
         key_prefix: Cache key prefix, max 64 characters.
+        vary_by_current_user: Partition cache entries by a keyed hash of the
+            authenticated ``current_user.sub``. If no valid resolved subject is
+            available, the endpoint is executed without reading or writing cache.
 
     Returns:
         Decorator function.
 
     Example:
         @router.get("/strategies")
-        @cache_response(ttl=30, key_prefix="strategies")
+        @cache_response(ttl=30, key_prefix="strategies", vary_by_current_user=True)
         async def list_strategies(request: Request):
             ...
     """
@@ -215,10 +250,23 @@ def cache_response(
             if request is None or request.method.upper() != "GET":
                 return await func(*args, **kwargs)
 
+            user_scope_hash = None
+            if vary_by_current_user:
+                user_scope_hash = _user_scope_hash(kwargs.get("current_user"))
+                if user_scope_hash is None:
+                    # Never let an unresolved/malformed identity read or write
+                    # the unscoped cache entry for this path.
+                    return await func(*args, **kwargs)
+
             # Build cache key
             path = request.url.path
             query_params = dict(request.query_params)
-            cache_key = _build_cache_key(key_prefix, path, query_params)
+            cache_key = _build_cache_key(
+                key_prefix,
+                path,
+                query_params,
+                user_scope_hash=user_scope_hash,
+            )
 
             backend = get_cache_backend()
 
@@ -291,6 +339,7 @@ def cache_response(
                 response.headers["X-Cache"] = "MISS"
                 return response
 
+        wrapper.__dict__["_cache_response_vary_by_current_user"] = vary_by_current_user
         return wrapper
 
     return decorator

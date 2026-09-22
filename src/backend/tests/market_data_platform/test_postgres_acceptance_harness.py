@@ -502,10 +502,17 @@ async def test_fault_checkpoint_controller_cancels_at_exact_reviewed_phase() -> 
     spec = harness._FAULT_PHASE_SPECS[3]
     controller = harness._FaultCheckpointController(cancellation_phase=spec.phase)
 
-    for phase in harness._fault_reached_phases(spec)[:-1]:
+    for phase in harness._fault_reached_phases(spec):
+        if phase == spec.phase:
+            break
         await controller.checkpoint(phase)
     with pytest.raises(asyncio.CancelledError):
         await controller.checkpoint(spec.phase)
+    # The production ``finally`` cleanup still reaches the lease-release
+    # boundary after the cancellation surfaces: the real service completes
+    # the durable release before re-raising, so the controller records that
+    # checkpoint too.
+    await controller.checkpoint(harness._FAULT_PHASE_LEASE_RELEASE_STARTED)
 
     assert controller.reached_phases == list(harness._fault_reached_phases(spec))
 

@@ -53,6 +53,28 @@ async def test_custom_factor_service_evaluates_safe_expression():
     assert result.values == [pytest.approx(0.1), pytest.approx(-0.05)]
 
 
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        pytest.param("+close", [1.25, -2.5, None], id="unary-positive"),
+        pytest.param("-close", [-1.25, 2.5, None], id="unary-negative"),
+    ],
+)
+def test_custom_factor_service_evaluates_unary_signs_and_missing_records(
+    expression: str,
+    expected: list[float | None],
+) -> None:
+    from app.services.factor_lib.custom import CustomFactorService
+
+    result = CustomFactorService().calculate(
+        expression=expression,
+        records=[{"close": 1.25}, {"close": -2.5}, {"close": None}],
+    )
+
+    assert result.status == "ok"
+    assert result.values == expected
+
+
 @pytest.mark.asyncio
 async def test_custom_factor_service_rejects_unsafe_expression():
     from app.services.factor_lib.custom import CustomFactorService

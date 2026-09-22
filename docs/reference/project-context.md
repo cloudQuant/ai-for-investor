@@ -16,7 +16,7 @@
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Backend | Python + FastAPI + SQLAlchemy 2.0 (async) | Python 3.10+ |
-| Frontend | Vue 3 + TypeScript + Vite + Element Plus | Node 20+ |
+| Frontend | Vue 3 + TypeScript + Vite + Element Plus | Node ^20.19.0 / ^22.13.0 / ^24.0.0 |
 | Database | SQLite (default) / PostgreSQL / MySQL | Multi-driver |
 | Backtest Engine | Backtrader + fincore (metrics) | 1.9.78+ |
 | AI/RAG | OpenAI-compatible chat/completions + vector search | Optional |

@@ -8,7 +8,8 @@ the receipt is created and again in the task-creation transaction.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from math import isfinite
+from typing import Any, TypeGuard
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -400,8 +401,32 @@ def _details(
     }
 
 
-def _has_non_empty_sequence(value: Any) -> bool:
-    return isinstance(value, list) and bool(value)
+def _manifest_dict(value: object) -> dict[str, object]:
+    """Return only string-keyed metadata maps; malformed JSON fails closed."""
+
+    if not isinstance(value, dict):
+        return {}
+    manifest: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            manifest[key] = item
+    return manifest
+
+
+def _normalized_symbols(value: object) -> list[str] | None:
+    """Accept a non-empty list of non-blank symbols and normalize whitespace."""
+
+    if not isinstance(value, list) or not value:
+        return None
+    symbols: list[str] = []
+    for symbol in value:
+        if not isinstance(symbol, str):
+            return None
+        normalized = symbol.strip()
+        if not normalized:
+            return None
+        symbols.append(normalized)
+    return symbols
 
 
 def _has_non_empty_text(value: Any) -> bool:
@@ -412,12 +437,12 @@ def _snapshot_metadata_errors(dataset: ResearchDatasetSnapshot) -> list[str]:
     """Return explicit reasons when a stored/imported snapshot is not research-ready."""
 
     errors: list[str] = []
-    instruments = dataset.instrument_manifest or {}
-    source = dataset.source_manifest or {}
-    split = dataset.split_manifest or {}
-    execution = dataset.execution_policy or {}
+    instruments = _manifest_dict(dataset.instrument_manifest)
+    source = _manifest_dict(dataset.source_manifest)
+    split = _manifest_dict(dataset.split_manifest)
+    execution = _manifest_dict(dataset.execution_policy)
 
-    if not _has_non_empty_sequence(instruments.get("symbols")):
+    if _normalized_symbols(instruments.get("symbols")) is None:
         errors.append("RESEARCH_DATA_PRECHECK_INSTRUMENTS_MISSING")
     for key in ("asset_class", "identity_scheme"):
         if not _has_known_text(instruments.get(key)):
@@ -487,21 +512,25 @@ def _hypothesis_dataset_binding_errors(
     payload = hypothesis.canonical_payload or {}
     errors: list[str] = []
     scope = payload.get("asset_scope")
-    hypothesis_symbols = scope.get("symbols") if isinstance(scope, dict) else None
-    dataset_symbols = (dataset.instrument_manifest or {}).get("symbols")
+    hypothesis_symbols = _normalized_symbols(
+        scope.get("symbols") if isinstance(scope, dict) else None
+    )
+    instruments = _manifest_dict(dataset.instrument_manifest)
+    dataset_symbols = _normalized_symbols(instruments.get("symbols"))
     if (
-        not _has_non_empty_sequence(hypothesis_symbols)
-        or not _has_non_empty_sequence(dataset_symbols)
+        hypothesis_symbols is None
+        or dataset_symbols is None
         or set(hypothesis_symbols) != set(dataset_symbols)
     ):
         errors.append("RESEARCH_DATA_PRECHECK_HYPOTHESIS_INSTRUMENT_MISMATCH")
-    if (dataset.source_manifest or {}).get("frequency") != payload.get("frequency"):
+    source = _manifest_dict(dataset.source_manifest)
+    if source.get("frequency") != payload.get("frequency"):
         errors.append("RESEARCH_DATA_PRECHECK_HYPOTHESIS_FREQUENCY_MISMATCH")
 
     time_window = payload.get("time_window")
     start = _parse_timestamp(time_window.get("start")) if isinstance(time_window, dict) else None
     end = _parse_timestamp(time_window.get("end")) if isinstance(time_window, dict) else None
-    split = dataset.split_manifest or {}
+    split = _manifest_dict(dataset.split_manifest)
     split_start = _parse_timestamp(split.get("start"))
     split_end = _parse_timestamp(split.get("end"))
     if (
@@ -514,7 +543,7 @@ def _hypothesis_dataset_binding_errors(
     ):
         errors.append("RESEARCH_DATA_PRECHECK_HYPOTHESIS_TIME_WINDOW_MISMATCH")
     information_cutoff = _parse_timestamp(payload.get("information_cutoff"))
-    source_as_of = _parse_timestamp((dataset.source_manifest or {}).get("as_of_at"))
+    source_as_of = _parse_timestamp(source.get("as_of_at"))
     if (
         information_cutoff is None
         or source_as_of is None
@@ -524,7 +553,7 @@ def _hypothesis_dataset_binding_errors(
         errors.append("RESEARCH_DATA_PRECHECK_HYPOTHESIS_INFORMATION_CUTOFF_MISMATCH")
 
     cost_model = payload.get("cost_model")
-    execution = dataset.execution_policy or {}
+    execution = _manifest_dict(dataset.execution_policy)
     if not isinstance(cost_model, dict) or any(
         not _same_number(cost_model.get(key), execution.get(key))
         for key in ("commission_bps", "slippage_bps")
@@ -571,8 +600,14 @@ def _has_known_text(value: Any) -> bool:
     return _has_non_empty_text(value) and value.strip().upper() not in {"UNKNOWN", "BLOCKED", "N/A"}
 
 
-def _is_nonnegative_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) >= 0
+def _is_nonnegative_number(value: object) -> TypeGuard[int | float]:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        number = float(value)
+    except OverflowError:
+        return False
+    return isfinite(number) and number >= 0
 
 
 def _same_number(left: Any, right: Any) -> bool:

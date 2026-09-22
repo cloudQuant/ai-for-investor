@@ -16,6 +16,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from typing import BinaryIO
 
 import pytest
 
@@ -125,6 +126,37 @@ def _process_is_alive(process_id: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+def _mark_target_stderr_eof_before_stdout(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    protocol_check: bool,
+    marker_path: Path,
+) -> None:
+    """Release a fake runner only after the parent observes its stderr EOF."""
+    actual_popen = subprocess.Popen
+    original_reader = openbb_runner._read_openbb_runner_stream_bounded
+    target_stderr_file_descriptors: set[int] = set()
+
+    def observed_popen(
+        command_value: tuple[str, ...], *args: object, **kwargs: object
+    ) -> subprocess.Popen[bytes]:
+        process = actual_popen(command_value, *args, **kwargs)
+        is_protocol_check = command_value[-1:] == ("--protocol-self-check",)
+        if is_protocol_check == protocol_check and process.stderr is not None:
+            target_stderr_file_descriptors.add(process.stderr.fileno())
+        return process
+
+    async def observed_reader(stream: BinaryIO, *args: object, **kwargs: object) -> object:
+        file_descriptor = stream.fileno()
+        result = await original_reader(stream, *args, **kwargs)
+        if file_descriptor in target_stderr_file_descriptors:
+            marker_path.write_text("stderr EOF", encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(openbb_runner.subprocess, "Popen", observed_popen)
+    monkeypatch.setattr(openbb_runner, "_read_openbb_runner_stream_bounded", observed_reader)
 
 
 @pytest.fixture(autouse=True)
@@ -649,6 +681,69 @@ async def test_openbb_subprocess_provider_rejects_missing_or_non_v2_protocol_dec
 
 
 @pytest.mark.asyncio
+async def test_openbb_protocol_self_check_accepts_receipt_after_stderr_eof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clean stderr EOF cannot hide a later valid protocol receipt."""
+    stderr_eof_observed = tmp_path / "protocol-stderr-eof-observed"
+    receipt_written = tmp_path / "protocol-receipt-written"
+    _mark_target_stderr_eof_before_stdout(
+        monkeypatch,
+        protocol_check=True,
+        marker_path=stderr_eof_observed,
+    )
+    script = tmp_path / "protocol_stderr_eof_runner.py"
+    script.write_text(
+        f"""
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+if sys.argv[1:] != ["--protocol-self-check"]:
+    raise SystemExit("request execution is outside this protocol self-check test")
+sys.stderr.close()
+try:
+    os.close(2)
+except OSError:
+    pass
+time.sleep(0.5)
+Path({str(receipt_written)!r}).touch()
+json.dump(
+    {{
+        "protocol_version": "openbb-market-data-v2",
+        "protocol_self_check_version": "openbb-market-data-protocol-self-check-v1",
+        "transport_version": "openbb-jsonl-parent-stdin-ack-v2",
+        "status": "ready",
+    }},
+    sys.stdout,
+)
+sys.stdout.write("\\n")
+sys.stdout.flush()
+ack_fd = os.getenv("OPENBB_PROTOCOL_SELF_CHECK_ACK_FD")
+if ack_fd is not None:
+    try:
+        os.read(int(ack_fd), 1)
+    except (OSError, ValueError):
+        pass
+""",
+        encoding="utf-8",
+    )
+    runner = openbb_subprocess_provider._OpenBBSubprocessRunner(
+        command=_isolated_runner_command(script),
+        environment=_openbb_runner_environment(),
+        workdir=_openbb_runner_workdir(),
+    )
+
+    await runner.attest_protocol(timeout_seconds=5.0)
+
+    assert stderr_eof_observed.exists()
+    assert stderr_eof_observed.stat().st_mtime_ns <= receipt_written.stat().st_mtime_ns
+
+
+@pytest.mark.asyncio
 async def test_openbb_subprocess_provider_runs_a_v2_declared_runner_after_fixed_preflight(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -702,6 +797,87 @@ json.dump(
     assert result.source_revision == "declared-v2-v1"
     assert launched_commands == [(*command, "--protocol-self-check"), command]
     assert "OPENBB_MARKET_DATA_RUNNER_PROTOCOL" not in _openbb_runner_environment()
+
+
+@pytest.mark.asyncio
+async def test_openbb_request_accepts_receipt_after_stderr_eof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clean stderr EOF cannot hide a later valid request receipt."""
+    stderr_eof_observed = tmp_path / "request-stderr-eof-observed"
+    receipt_written = tmp_path / "request-receipt-written"
+    _mark_target_stderr_eof_before_stdout(
+        monkeypatch,
+        protocol_check=False,
+        marker_path=stderr_eof_observed,
+    )
+    script = _runner_script(
+        tmp_path,
+        f"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+request = json.loads(sys.stdin.buffer.readline())
+sys.stderr.close()
+try:
+    os.close(2)
+except OSError:
+    pass
+time.sleep(0.5)
+Path({str(receipt_written)!r}).touch()
+raw_payload = {{"format": "openbb-records-pre-normalization-v1", "records": []}}
+raw_payload_sha256 = hashlib.sha256(
+    json.dumps(raw_payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+).hexdigest()
+json.dump(
+    {{
+        "protocol_version": "openbb-market-data-v2",
+        "request_id": request["request_id"],
+        "request": request["request"],
+        "provider_id": "openbb:yfinance",
+        "retrieved_at": "2026-01-04T00:00:00+00:00",
+        "source_revision": "request-after-stderr-eof-v1",
+        "raw_payload": raw_payload,
+        "raw_payload_sha256": raw_payload_sha256,
+        "records": [],
+        "warnings": [],
+    }},
+    sys.stdout,
+)
+sys.stdout.write("\\n")
+sys.stdout.flush()
+""",
+    )
+
+    request = _request()
+    request_bytes = json.dumps(
+        {
+            "protocol_version": "openbb-market-data-v2",
+            "request_id": request.request_id,
+            "request": request.dto_payload,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    runner = openbb_subprocess_provider._OpenBBSubprocessRunner(
+        command=_isolated_runner_command(script),
+        environment=_openbb_runner_environment(),
+        workdir=_openbb_runner_workdir(),
+    )
+
+    await runner.attest_protocol(timeout_seconds=5.0)
+    stdout, _stderr = await runner.execute(request_bytes, timeout_seconds=5.0)
+
+    assert json.loads(stdout.data.decode("utf-8"))["source_revision"] == (
+        "request-after-stderr-eof-v1"
+    )
+    assert stderr_eof_observed.exists()
+    assert stderr_eof_observed.stat().st_mtime_ns <= receipt_written.stat().st_mtime_ns
 
 
 @pytest.mark.asyncio

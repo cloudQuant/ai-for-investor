@@ -7,11 +7,11 @@ Supports account monitoring, strategy monitoring, and system monitoring.
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TYPE_CHECKING, TypeAlias
 
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -20,9 +20,17 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.backtest import BacktestTask
+    from app.models.paper_trading import Account, Order, Position
+    from app.models.strategy import Strategy
+    from app.models.user import User
+
+JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
 
 
 class AlertType(str, Enum):
@@ -89,63 +97,85 @@ class Alert(Base):
         Index("ix_alerts_dedupe_key", "dedupe_key"),
     )
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
 
     # Alert information
-    alert_type = Column(String(20), nullable=False, index=True)  # Alert type
-    severity = Column(String(20), default=AlertSeverity.INFO, nullable=False)  # Alert severity
-    status = Column(
+    alert_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # Alert type
+    severity: Mapped[str] = mapped_column(
+        String(20), default=AlertSeverity.INFO, nullable=False
+    )  # Alert severity
+    status: Mapped[str] = mapped_column(
         String(20), default=AlertStatus.ACTIVE, nullable=False, index=True
     )  # Alert status
-    title = Column(String(200), nullable=False)  # Alert title
-    message = Column(Text, nullable=False)  # Alert message
-    details = Column(JSON, nullable=True)  # Additional details (JSON)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)  # Alert title
+    message: Mapped[str] = mapped_column(Text, nullable=False)  # Alert message
+    details: Mapped[JSONValue | None] = mapped_column(
+        JSON, nullable=True
+    )  # Additional details (JSON)
 
     # Associated objects
-    rule_id = Column(String(36), ForeignKey("alert_rules.id"), nullable=True, index=True)
-    strategy_id = Column(String(36), ForeignKey("strategies.id"), nullable=True, index=True)
-    backtest_task_id = Column(
+    rule_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("alert_rules.id"), nullable=True, index=True
+    )
+    strategy_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("strategies.id"), nullable=True, index=True
+    )
+    backtest_task_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("backtest_tasks.id"), nullable=True, index=True
     )
-    account_id = Column(
+    account_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("paper_trading_accounts.id"), nullable=True, index=True
     )
-    position_id = Column(
+    position_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("paper_trading_positions.id"), nullable=True, index=True
     )
-    order_id = Column(String(36), ForeignKey("paper_trading_orders.id"), nullable=True, index=True)
-    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=True, index=True)
-    unit_id = Column(String(36), ForeignKey("strategy_units.id"), nullable=True, index=True)
-    instance_id = Column(String(36), nullable=True, index=True)
-    dedupe_key = Column(String(200), nullable=True)
+    order_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("paper_trading_orders.id"), nullable=True, index=True
+    )
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("workspaces.id"), nullable=True, index=True
+    )
+    unit_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("strategy_units.id"), nullable=True, index=True
+    )
+    instance_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Trigger conditions
-    trigger_type = Column(String(50), nullable=False)  # Trigger type (threshold, rate, manual)
-    trigger_value = Column(Float, nullable=True)  # Trigger value
-    threshold_value = Column(Float, nullable=True)  # Threshold value
+    trigger_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # Trigger type (threshold, rate, manual)
+    trigger_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # Trigger value
+    threshold_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # Threshold value
 
     # Meta information
-    is_read = Column(Boolean, default=False, nullable=False)  # Whether read
-    is_notification_sent = Column(
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # Whether read
+    is_notification_sent: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )  # Whether notification sent
-    resolved_at = Column(DateTime, nullable=True)  # Resolution time
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # Resolution time
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
-    user = relationship("User", back_populates="alerts")
-    strategy = relationship("Strategy", backref="alerts")
-    backtest_task = relationship("BacktestTask", backref="alerts")
-    account = relationship("Account", backref="alerts")
-    position = relationship("Position", backref="alerts")
-    order = relationship("Order", backref="alerts")
-    notifications = relationship("AlertNotification", back_populates="alert")
+    user: Mapped["User"] = relationship("User", back_populates="alerts")
+    strategy: Mapped["Strategy"] = relationship("Strategy", backref="alerts")
+    backtest_task: Mapped["BacktestTask"] = relationship("BacktestTask", backref="alerts")
+    account: Mapped["Account"] = relationship("Account", backref="alerts")
+    position: Mapped["Position"] = relationship("Position", backref="alerts")
+    order: Mapped["Order"] = relationship("Order", backref="alerts")
+    notifications: Mapped[list["AlertNotification"]] = relationship(
+        "AlertNotification", back_populates="alert"
+    )
 
 
 class AlertRule(Base):
@@ -171,41 +201,57 @@ class AlertRule(Base):
 
     __tablename__ = "alert_rules"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
 
     # Rule configuration
-    alert_type = Column(String(20), nullable=False)  # Alert type
-    severity = Column(String(20), default=AlertSeverity.WARNING, nullable=False)  # Alert severity
-    name = Column(String(200), nullable=False)  # Rule name
-    description = Column(Text, nullable=True)  # Rule description
+    alert_type: Mapped[str] = mapped_column(String(20), nullable=False)  # Alert type
+    severity: Mapped[str] = mapped_column(
+        String(20), default=AlertSeverity.WARNING, nullable=False
+    )  # Alert severity
+    name: Mapped[str] = mapped_column(String(200), nullable=False)  # Rule name
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # Rule description
 
     # Trigger conditions
-    trigger_type = Column(String(50), nullable=False)  # Trigger type (threshold, rate, cross)
-    trigger_config = Column(JSON, nullable=False)  # Trigger configuration
+    trigger_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # Trigger type (threshold, rate, cross)
+    trigger_config: Mapped[dict[str, JSONValue]] = mapped_column(
+        JSON, nullable=False
+    )  # Trigger configuration
 
     # Notification configuration
-    notification_enabled = Column(
+    notification_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )  # Whether notifications enabled
-    notification_channels = Column(JSON, default=list, nullable=False)  # Notification channels
+    notification_channels: Mapped[list[JSONValue]] = mapped_column(
+        JSON, default=list, nullable=False
+    )  # Notification channels
 
     # Status
-    is_active = Column(Boolean, default=True, nullable=False)  # Whether active
-    triggered_count = Column(Integer, default=0, nullable=False)  # Trigger count
-    last_triggered_at = Column(DateTime, nullable=True)  # Last triggered time
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)  # Whether active
+    triggered_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )  # Trigger count
+    last_triggered_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )  # Last triggered time
 
     # Meta information
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
-    user = relationship("User", back_populates="alert_rules")
-    alerts = relationship("Alert", backref="rule")
+    user: Mapped["User"] = relationship("User", back_populates="alert_rules")
+    alerts: Mapped[list["Alert"]] = relationship("Alert", backref="rule")
 
 
 class AlertNotification(Base):
@@ -224,14 +270,22 @@ class AlertNotification(Base):
 
     __tablename__ = "alert_notifications"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    alert_id = Column(String(36), ForeignKey("alerts.id"), nullable=False, index=True)
-    channel = Column(String(50), nullable=False)  # Notification channel (email, sms, push, webhook)
-    status = Column(String(20), nullable=False)  # Notification status (sent, failed, pending)
-    message = Column(Text, nullable=True)  # Notification message
-    error = Column(Text, nullable=True)  # Error message
-    sent_at = Column(DateTime, nullable=True)  # Send time
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    alert_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("alerts.id"), nullable=False, index=True
+    )
+    channel: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # Notification channel (email, sms, push, webhook)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # Notification status (sent, failed, pending)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)  # Notification message
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)  # Error message
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # Send time
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     # Relationships
-    alert = relationship("Alert", back_populates="notifications")
+    alert: Mapped["Alert"] = relationship("Alert", back_populates="notifications")

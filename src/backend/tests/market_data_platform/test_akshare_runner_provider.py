@@ -21,6 +21,7 @@ from app.services.market_data.akshare_provider import (
     AkShareMarketDataProvider,
     AkShareProviderError,
     _akshare_runner_environment,
+    _await_runner_cleanup,
 )
 from app.services.market_data.provider_contracts import AKSHARE_PROVIDER_CONTRACT_REGISTRY
 from app.services.market_data.providers import MarketDataProviderRequest
@@ -117,6 +118,35 @@ def _process_is_alive(process_id: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ignore_cancelled", [False, True])
+async def test_runner_cleanup_preserves_cancelled_error_policy(ignore_cancelled: bool) -> None:
+    """Only the explicit ignore flag suppresses a cancelled cleanup task."""
+
+    async def cancelled_cleanup() -> None:
+        raise asyncio.CancelledError
+
+    cleanup_task = asyncio.create_task(cancelled_cleanup())
+
+    if ignore_cancelled:
+        assert (
+            await _await_runner_cleanup(
+                cleanup_task,
+                ignore_cancelled=True,
+            )
+            is False
+        )
+    else:
+        with pytest.raises(AkShareProviderError) as cleanup_error:
+            await _await_runner_cleanup(
+                cleanup_task,
+                ignore_cancelled=False,
+            )
+        assert cleanup_error.value.code == "AKSHARE_RUNNER_CLEANUP_FAILED"
+
+    assert cleanup_task.cancelled()
 
 
 _VALID_RESPONSE_SCRIPT = """

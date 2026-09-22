@@ -123,7 +123,7 @@ async def submit_optimization_task_internal(
             param_ranges=param_ranges,
             n_workers=n_workers,
         )
-        task_id = db_task.id
+        task_id = str(db_task.id)
 
         submit_optimization(
             strategy_id=strategy_id,
@@ -174,7 +174,7 @@ async def submit_backtest_optimization_task_internal(
             param_ranges=param_spec or {},
             n_workers=n_workers,
         )
-        task_id = db_task.id
+        task_id = str(db_task.id)
 
         submit_backtest_optimization(
             user_id=user_id,

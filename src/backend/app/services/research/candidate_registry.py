@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeGuard
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -995,6 +995,10 @@ async def _require_generation_provenance(
         policy_version = payload["policy_version"]
     except (KeyError, TypeError, UnicodeDecodeError, ValueError):
         raise ValueError(denied) from None
+    code_artifact = await session.get(ResearchArtifact, candidate.code_artifact_id)
+    dependency_artifact = await session.get(ResearchArtifact, candidate.dependency_artifact_id)
+    if code_artifact is None or dependency_artifact is None:
+        raise ValueError(denied)
     expected_payload = {
         "schema_version": "research-generation-manifest-v1",
         "stage": "GENERATE",
@@ -1012,16 +1016,12 @@ async def _require_generation_provenance(
         "code_artifact": {
             "id": candidate.code_artifact_id,
             "kind": "strategy_code",
-            "content_hash": (
-                await session.get(ResearchArtifact, candidate.code_artifact_id)
-            ).content_hash,
+            "content_hash": code_artifact.content_hash,
         },
         "dependency_artifact": {
             "id": candidate.dependency_artifact_id,
             "kind": "dependency_lock",
-            "content_hash": (
-                await session.get(ResearchArtifact, candidate.dependency_artifact_id)
-            ).content_hash,
+            "content_hash": dependency_artifact.content_hash,
         },
         "environment_hash": candidate.environment_hash,
         "cost_model_hash": candidate.cost_model_hash,
@@ -1197,7 +1197,7 @@ def _verified_dataset_identity_hash(dataset: ResearchDatasetSnapshot) -> str:
     return value
 
 
-def _is_sha256(value: object) -> bool:
+def _is_sha256(value: object) -> TypeGuard[str]:
     if not isinstance(value, str) or len(value) != 64:
         return False
     try:

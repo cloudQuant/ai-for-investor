@@ -78,7 +78,7 @@ class StockResearchCompatibilityAdapter:
         pairs: list[tuple[dict[str, object], dict[str, object]]] = []
         for record in records:
             mapped = self.record_payload(record).model_dump(mode="json")
-            legacy = {
+            legacy: dict[str, object] = {
                 "reference": str(record.id),
                 "canonical_id": str(record.symbol).upper(),
                 "cutoff_at": record.as_of_date.isoformat(),

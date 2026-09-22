@@ -12,6 +12,10 @@
 
 > L-197-41 在本机真实 MySQL 9.4.0 上完成 E-197-07 的 MySQL 侧核心验收：一次性 UUID 临时库中完整迁移链升级到唯一 head，`utf8mb4_bin` 身份列、`DATETIME(6)` PIT 精度、`RB0`/`rb0` case-distinct 解析、发布时刻 ±1µs 可见性边界与非空库受治理 downgrade 拒绝全部通过。验收驱动修复了四个此前未被任何离线测试发现的 MySQL 方言缺陷（AUTO_INCREMENT/CHECK 冲突、两处 CHECK 反射文本规范化、`grant` 保留字别名）。PostgreSQL 侧演练仍未运行，E-197-07 整体保持未完成。详见[收据](evidence/2026-09-11-l197-41-mysql-core-acceptance.txt)。
 
+> L-197-42（2026-09-18）在 akshare 升级 1.18.96 后重跑 AkShare B1 真实探测：`fund.nav`（适配器缺陷修复：≤1.18.64 的 `fund_etf_fund_info_em` 对东财当前 14 字段响应做位置式列名赋值稳定抛错，1.18.96 改为按字段名 rename；仓库依赖下限同步升至 `akshare>=1.18.96`）与 `fund.liquidity`（上游间歇空返回恢复）各完成一次真实完整闭环 `PASS`；`stock.liquidity`、`fx.range` 仍 `FAIL`——东财 push2his/外汇行情端点对本网络持续拒绝连接（上游/网络层，非适配器缺陷）。`E-197-04` 整体保持 `FAIL` 直至全部路线恢复。详见[收据](evidence/2026-09-18-l197-42-akshare-b1-live-probe-rerun.txt)。
+
+> L-197-43（2026-09-18）完成 E-197-07 的 PostgreSQL 侧核心验收（本机 PG 17.7，`verify_iteration197_postgres_acceptance.py --apply` 全绿：迁移链唯一 head、双连接 UTC、双进程精确缺口单次确定性调用、5 个取消故障相位、stale fence 拒绝与 terminated owner 租约接管、独立连接租约争用、legacy 截断 CHECK 名可移植迁移）。验收驱动以 TDD 修复三个迁移 PG 方言缺陷（`evidence_command` 绑定参数歧义与 `tgenabled` bytes、`holdout_executions`/`approval_authority` 的 CHECK 反射形态归一化）与两个 harness 缺陷（`_fault_reached_phases` 预期模型、terminated 场景对已杀 leader 共享 Event 的 `set()` 死锁）。E-197-07 升级为 `PASS`（MySQL+PG 核心）。详见[收据](evidence/2026-09-18-l197-43-postgres-core-acceptance.txt)。
+
 ## 1. 验收目的、边界与判定语言
 
 本验收确认迭代 197 所定义的本地优先读取链路是否满足以下结果：
@@ -183,10 +187,10 @@ npm run lint
 | E-197-01 | 第 4 节完整 `pytest` 命令 | AO-01 至 AO-07 与中台配置的离线契约 | `NOT_RUN` | 候选提交上的完整 stdout 摘要、退出码 0、测试总数。 |
 | E-197-02 | 第 4 节 Ruff 命令 | 新增/修改的中台模块和测试 | `NOT_RUN` | 候选提交上的退出码 0；若工具未安装，应记录为 `BLOCKED`，不得静默跳过。 |
 | E-197-03 | `alembic heads` 与升级后 schema 审计 | 196/197 整合后的单 head 和 binding scope/consumer/revocation 表 | `NOT_RUN`（正式候选） | 输出恰有一个 head，临时隔离库升级后存在四张 binding receipt 表；MySQL/PostgreSQL 仍需独立演练。 |
-| E-197-04 | 真实 AkShare 受控探测 | 实时路由及四个 B1 候选路由的字段、时间窗、回执和写回 | `FAIL`（四路线子用例均已执行且全部失败：`stock.liquidity` 2026-09-09 零行；`fund.liquidity`、`fund.nav`、`fx.range` 2026-09-11 晚间见第 8.1 节与 L-197-40 收据——间歇空返回/限流、上游字段漂移稳定码、零行快照） | 第 8.1 节的匿名化请求/响应摘要、来源回执和本地复读证据；成功前不得升级状态。 |
+| E-197-04 | 真实 AkShare 受控探测 | 实时路由及四个 B1 候选路由的字段、时间窗、回执和写回 | `FAIL`（整体），分路线细化（2026-09-18 L-197-42 重跑后）：`fund.nav` **PASS**（akshare 升级 1.18.96 修复 `fund_etf_fund_info_em` 位置式列名 bug 后完整闭环）；`fund.liquidity` **PASS**（2026-09-11 间歇空返回已恢复，完整闭环）；`stock.liquidity`、`fx.range` 仍 `FAIL`（东财 push2hs/外汇行情端点对本网络持续拒绝连接，上游/网络层问题，非适配器缺陷；L-197-23 曾记录 stock.liquidity 单次成功，路线呈间歇性） | 第 8.1 节的匿名化请求/响应摘要、来源回执和本地复读证据；stock.liquidity/fx.range 在上游恢复并按同命令模板重跑成功前不得升级。 |
 | E-197-05 | 真实 OpenBB 隔离运行器探测 | runner 环境、协议、上游许可与写回 | `BLOCKED` | 第 8.2 节的隔离进程、镜像/动态导入闭包、许可证/出网审计、协议日志摘要、原始载荷 hash、回执和本地复读证据；当前 permit matrix 为空。fork `24d06a7657ab9e19d07b5ba4f801394a440287a1` / `openbb-yfinance 1.6.3.post1` 只是 `1d` daily end-bound 构件候选，正常请求在动态扩展导入前拒绝，不能记为成功验证。L-197-24 的 Python 启动隔离回归只证明本地拒绝次序，不能替代本项。 |
 | E-197-06 | `/data/market`、`/investment/strategies` 端到端回归 | 页面灰度、授权、回退防护、196 工件绑定 | `NOT_RUN`（正式浏览器/API/数据库三方）；L-197-34 仅为 `/data/market` 的静态 fixture 浏览器协议回归，L-197-35 仅为策略页组件/API-route fixture 严格本地门控回归。 | 保存浏览器/API/数据库三方一致证据；196 冻结和桥接不等于浏览器或真实数据通过。 |
-| E-197-07 | MySQL/PostgreSQL UTC session、PIT 与 exact-identity collation 演练 | 时区、跨连接写入/读取、迁移、恢复及 `RB0`/`rb0` 精确身份 | `PARTIAL`：MySQL 侧核心 `PASS`（L-197-41：MySQL 9.4.0 临时库迁移到唯一 head，`utf8mb4_bin` 身份列、`DATETIME(6)` 微秒、`RB0`/`rb0` case-distinct、发布 ±1µs PIT 边界、非空 downgrade 拒绝）；PostgreSQL 侧仍 `NOT_RUN`（无 PG 实例/URL），MySQL 侧多连接/恢复扩展未包含 | 每个新连接的会话时区输出、边界时间写入/读取、迁移和恢复记录，以及 authority/projection/lookup 的 MySQL `utf8mb4_bin`、PostgreSQL `C` 实际列审计和 case-distinct lookup 回归。 |
+| E-197-07 | MySQL/PostgreSQL UTC session、PIT 与 exact-identity collation 演练 | 时区、跨连接写入/读取、迁移、恢复及 `RB0`/`rb0` 精确身份 | `PASS`（双引擎核心）：MySQL 侧核心 `PASS`（L-197-41：MySQL 9.4.0 临时库迁移到唯一 head，`utf8mb4_bin` 身份列、`DATETIME(6)` 微秒、`RB0`/`rb0` case-distinct、发布 ±1µs PIT 边界、非空 downgrade 拒绝）；PostgreSQL 侧核心 `PASS`（L-197-43：PG 17.7 临时库迁移到唯一 head、双连接 UTC、双进程精确缺口单次调用、5 取消相位、stale/terminated 接管、独立连接租约、legacy 约束可移植；验收驱动以 TDD 修复 3 个迁移 PG 方言缺陷与 2 个 harness 预期缺陷）。两侧的多连接恢复扩展/备份恢复演练仍 `NOT_RUN` | 每个新连接的会话时区输出、边界时间写入/读取、迁移和恢复记录，以及 authority/projection/lookup 的 MySQL `utf8mb4_bin`、PostgreSQL `C` 实际列审计和 case-distinct lookup 回归。 |
 | E-197-08 | 多 worker/多进程同缺口及事实写入并发 | 跨进程 writer lease/fencing、故障接管和零重复外部访问 | `NOT_RUN` | L-197-10 已在 disposable PostgreSQL 以两个 OS 进程和确定性 provider 证明一个精确缺口只有一次调用，且 follower 从本地重读；仍需真实 AkShare/OpenBB、应用 HTTP worker、故障接管与崩溃恢复证据。普通 AkShare provider 的同步 thread timeout 不能杀死底层调用，故超时后的零重复 I/O 为 `NO-GO`，直至可终止 runner 或租约 heartbeat 设计通过验收；CFFEX HTTP source 当前已硬禁用。calendar import lock 不适用于 observation 写入。 |
 | E-197-09 | OpenBB 操作系统级隔离 | service account/container、挂载、凭据与工作目录 | `NOT_RUN` | runner 账户/容器配置、挂载清单、权限审计和一次实际小窗口回填。L-197-24 的 `-I -S` 与惰性 manifest 测试不证明操作系统、容器、DNS、代理或凭据隔离。 |
 | E-197-10 | 策略页 `research_cache_fill` 灰度 | 显式用户动作、后端写入开关、研究用途授权、receipt 与 196 工件隔离 | `NOT_RUN` | 前端显式预检、后端开关与已批准研究用途 source registry、浏览器/API/数据库三方证据。 |
@@ -396,7 +400,7 @@ L-197-35 进一步记录策略研究执行前的本地开发门控：当 durable
 | --- | --- | --- |
 | SQLite 升级/降级与离线方言渲染的自动化契约 | `PASS`（当前本地开发回归） | L-197-21 覆盖 shared payload/ref 的 SQLite `foreign_keys=ON` 已填充 parent 升级、非空 downgrade 拒绝及 MySQL MEDIUMBLOB/PostgreSQL BYTEA 离线渲染；这不替代 MySQL/PostgreSQL 真实方言与 UTC/PIT 演练。 |
 | MySQL 准生产升级、UTC session、PIT 与恢复演练 | `NOT_RUN` | 需要经授权的可恢复数据库副本、每连接 UTC 验证、维护窗口和跨连接证据；fresh upgrade 必须按第 7.1 节在 writer drain 下同时设置十二项 `MARKET_DATA_*_MAINTENANCE_FENCE=confirmed`，其中包括 shared-binding、visibility-anchor、source-receipt-evidence、source-governance、fetch-lease、exact-identity、constraint-portability、shared-source-payload、capability-ledger、publication-release-hold、semantic-record-key 和 B2-completeness-evidence。fetch lease/capability ledger 的 MySQL downgrade 均硬拒绝，非空 release hold、nonempty observation fact table 或 B2 receipt/manifest evidence 的 downgrade 也拒绝。MySQL `DATETIME` 时区语义不能靠 SQLite 推定。 |
-| PostgreSQL 准生产升级、UTC session、PIT 与恢复演练 | `NOT_RUN` | L-197-10 已在 disposable PostgreSQL 证明 fresh 与 predecessor→head 升级、两个 UTC session、截断 CHECK 名修复和清理；仍需要经授权的可恢复副本、PIT A/B publication、exact-identity 真实列审计与恢复演练。 |
+| PostgreSQL 准生产升级、UTC session、PIT 与恢复演练 | `PASS`（核心，L-197-43） | L-197-43 已在 disposable PostgreSQL 17.7 完成完整迁移链、双连接 UTC、双进程精确缺口/取消/接管故障演练与 legacy 约束可移植迁移；L-197-10 早期已证明 fresh 与 predecessor→head 升级。仍需要经授权的可恢复副本、PIT A/B publication 细项、exact-identity 真实列审计与备份恢复演练。 |
 | 多进程 calendar import lock 与 observation/source writer 并发 | `NOT_RUN` | L-197-10 已以真实 PostgreSQL 的两个 OS 进程、确定性 provider 和 durable lease 验证一个精确缺口仅一次调用及 follower 本地重读；calendar lock 的跨连接行为、真实 provider、故障接管和连续分段导入仍需真实方言演练。 |
 | 196/197 Alembic 单 head 合并 | `PASS`（本地隔离 SQLite） | `20260909_ai_research_market_data_merge` 后依次追加 binding、consumer、shared payload、`20260910_market_data_capability_ledger`、`20260911_market_data_deferred_publications`、`20260911_market_data_semantic_record_keys` 与 `20260911_market_data_b2_completeness_evidence`，当前唯一 head 为后者；ledger 不 seed 活动能力，release hold 也不发布任何 receipt，semantic key 只为历史行回填 fixed singleton，B2 receipt/manifest 也不启用 public family，SQLite 非空 downgrade 与 MySQL fail-closed downgrade 均有本地回归。MySQL/PostgreSQL 的真实升级仍为 `NOT_RUN`。 |
 
@@ -412,7 +416,13 @@ L-197-35 进一步记录策略研究执行前的本地开发门控：当 durable
 4. 验证超时、并发槽耗尽、超大响应和不支持的资产/数据类型产生稳定码，不绕过限制调用另一函数或返回样例。
 5. 成功案例必须保留匿名化的请求语义、`provider_id`、source revision、source snapshot ID、行数、字段哈希和后续 `local_only` 复读证据；不得记录账户凭据或完整未授权原始载荷。
 
-当前状态：`FAIL`。四个实际启用 AkShare 路线的真实子用例均已执行且全部失败：2026-09-09 的 `stock.liquidity`（`stock_zh_a_hist("600000")` 小窗口返回零可用行）与 2026-09-11 晚间的 `fund.liquidity`（`AKSHARE_ZERO_USABLE_OBSERVATIONS`：同机早前 `fund_etf_hist_em("510300","daily","20260901","20260910","")` 曾返回 8 行真实日线，随后同参数、跨标的（510050/159915/600000）与跨窗口全部 0 行，等待 60 秒以上重试仍空，判上游间歇性空返回/IP 限流）、`fund.nav`（`AKSHARE_RUNNER_ERROR`：akshare 1.18.64 `fund_etf_fund_info_em` 稳定抛 `ValueError` 列数不匹配，上游字段漂移；adapter 以稳定码拒绝回执且零持久化）、`fx.range`（`AKSHARE_ZERO_USABLE_OBSERVATIONS`：`forex_hist_em("USDCNH")` 稳定返回 0 行快照形态）。三次探测的 coverage 均为 `incomplete`，没有 observation、publication 或 `local_only` 复读产生。这些失败均来自上游当前返回形态，不是本项目适配器把错误结果误存为成功的证据；本地控制面（四 family profile 合同、route 镜像、稳定码与 fail-closed 边界）已由离线 13 条回归证明。在上游恢复可用数据窗口（或更换网络出口、修复 `fund_etf_fund_info_em` 列映射）并按同命令模板重跑成功前，任何一条路线都不得记为 `PASS`，也不得以离线 fixture 替代真实重试。完整命令、直接探测证据与判定见 [L-197-40 收据](evidence/2026-09-11-l197-40-akshare-b1-live-probes.txt)。
+当前状态：`FAIL`（整体）。分路线状态（2026-09-18 L-197-42 重跑后细化）：
+
+- **`fund.nav`：PASS**（单路线真实闭环）。根因为 akshare ≤1.18.64 的 `fund_etf_fund_info_em` 对东财当前 14 字段响应做位置式列名赋值（硬编码 13 列）稳定抛 `ValueError`；上游数据本身可用。升级 akshare 1.18.96（改为按字段名 rename，输出列与适配器契约一致）并将仓库依赖下限升至 `akshare>=1.18.96` 后，同命令模板重跑获得完整闭环：1 次 provider 调用 → 1 行归一化 → 1 source snapshot + 1 observation revision → 独立 `local_only` 重读 0 网络。
+- **`fund.liquidity`：PASS**（单路线真实闭环）。2026-09-11 的间歇空返回（`AKSHARE_ZERO_USABLE_OBSERVATIONS`）已自行恢复；同命令模板重跑获得与上述相同的完整闭环证据。
+- **`stock.liquidity`、`fx.range`：仍 FAIL**。2026-09-18 两次重跑均为 `AKSHARE_FETCH_FAILED`：直连探测证实东财 push2his/外汇行情端点对本机出口持续拒绝连接（`RemoteDisconnected`），而东财基金子域正常——上游/网络层问题，非本项目适配器缺陷。在上游恢复（或更换网络出口）并按同命令模板重跑成功前保持 `FAIL`，不得以离线 fixture 替代。
+
+历史记录（2026-09-11 L-197-40）：四个实际启用 AkShare 路线的真实子用例均已执行且全部失败：2026-09-09 的 `stock.liquidity`（`stock_zh_a_hist("600000")` 小窗口返回零可用行）与 2026-09-11 晚间的 `fund.liquidity`（`AKSHARE_ZERO_USABLE_OBSERVATIONS`：同机早前 `fund_etf_hist_em("510300","daily","20260901","20260910","")` 曾返回 8 行真实日线，随后同参数、跨标的（510050/159915/600000）与跨窗口全部 0 行，等待 60 秒以上重试仍空，判上游间歇性空返回/IP 限流）、`fund.nav`（`AKSHARE_RUNNER_ERROR`：akshare 1.18.64 `fund_etf_fund_info_em` 稳定抛 `ValueError` 列数不匹配，上游字段漂移；adapter 以稳定码拒绝回执且零持久化）、`fx.range`（`AKSHARE_ZERO_USABLE_OBSERVATIONS`：`forex_hist_em("USDCNH")` 稳定返回 0 行快照形态）。这些失败均来自上游当前返回形态，不是本项目适配器把错误结果误存为成功的证据；本地控制面（四 family profile 合同、route 镜像、稳定码与 fail-closed 边界）已由离线 13 条回归证明。完整命令、直接探测证据与判定见 [L-197-40 收据](evidence/2026-09-11-l197-40-akshare-b1-live-probes.txt)与 [L-197-42 收据](evidence/2026-09-18-l197-42-akshare-b1-live-probe-rerun.txt)。
 
 ### 8.2 OpenBB 隔离运行器验证
 
@@ -454,7 +464,7 @@ L-197-35 进一步记录策略研究执行前的本地开发门控：当 durable
 | 整合闸门 | 通过条件 | 当前状态 |
 | --- | --- | --- |
 | IG-196-01：接口冻结 | 196 的研究、策略、回测输入输出与数据工件 schema 已冻结，并有冻结收据。 | `PASS`（集成基线） |
-| IG-196-02：迁移单头 | 196 与 197 的 Alembic 链已合并，`alembic heads` 恰一个 head，隔离升级演练通过。 | `PASS`（当前 head 为 `20260911_market_data_b2_completeness_evidence`；MySQL/PostgreSQL 仍 `NOT_RUN`） |
+| IG-196-02：迁移单头 | 196 与 197 的 Alembic 链已合并，`alembic heads` 恰一个 head，隔离升级演练通过。 | `PASS`（当前 head 为 `20260911_market_data_b2_completeness_evidence`；MySQL 9.4 临时库 L-197-41 与 PostgreSQL 17.7 临时库 L-197-43 均已实际升级到唯一 head） |
 | IG-196-03：工件绑定 | AI 研究的 strict local artifact 含 canonical identity、metadata version、数据系列、来源策略、PIT、revision/source snapshot、manifest/CSV hash，且绑定到 exact workspace/unit/intent。 | `PASS`（本地安全回归；真实数据仍 `NOT_RUN`） |
 | IG-196-04：页面灰度 | `/data/market` 在功能开关下使用 v2，`/investment/strategies` 在严格工件链可用后消费 v2；两个页面均无旧样例/模糊回退。 | `NOT_RUN` |
 | IG-196-05：端到端回归 | 相同用户权限、相同请求在灰度前后均可解释；开关关闭可回到受支持的旧接口，不删除 197 的证据事实。 | `NOT_RUN` |

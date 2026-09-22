@@ -107,22 +107,25 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    manifest: true,
     sourcemap: ENABLE_BUILD_SOURCEMAP,
     rollupOptions: {
       output: {
-        // Iteration 175 §7 — vendor chunks split for cache reuse and to keep the
-        // entry chunk small. Each key matches a node_modules path prefix; the
-        // five sets are mutually exclusive so a dependency lands in exactly one
-        // chunk. See docs/reference/frontend-bundle-budget.md for the active
-        // gzip budgets per chunk.
+        // Keep the app-wide UI/framework modules and Vite's preload helper in
+        // one shared chunk. This avoids loading a large lazy chunk just to reach
+        // the helper and keeps /login within its all-assets request budget.
         manualChunks(id: string) {
+          const normalizedId = id.replace(/\\/g, '/')
+          if (normalizedId.includes('vite/preload-helper.js')) return 'application-vendor'
           if (
             id.includes('node_modules/element-plus/') ||
-            id.includes('node_modules/@element-plus/')
+            id.includes('node_modules/@element-plus/') ||
+            id.includes('node_modules/vue-router/') ||
+            id.includes('node_modules/pinia/') ||
+            normalizedId.includes('/src/components/LanguageSwitcher.vue') ||
+            normalizedId.includes('/src/components/common/ThemeSwitcher.vue')
           )
-            return 'element-plus'
-          if (id.includes('node_modules/vue-router/')) return 'vue-router'
-          if (id.includes('node_modules/pinia/')) return 'pinia'
+            return 'application-vendor'
           // echarts ships zrender as runtime dep — keep them together.
           if (
             id.includes('node_modules/echarts/') ||

@@ -20,6 +20,7 @@ from app.models.ai_research_v2 import (
     ResearchStageAttempt,
     ResearchTask,
 )
+from app.services.research.artifact_broker import StageOutputContext
 from app.services.research.canonical import content_hash
 from app.services.research.database_clock import DatabaseUtcNow
 from app.services.research.discovery_search_budget import lock_search_epoch
@@ -29,6 +30,7 @@ from app.services.research.discovery_trial_materialization import (
 )
 from app.services.research.generation_materialization import (
     GenerationMaterializationProposal,
+    GenerationStageContext,
     ResearchGenerationMaterializer,
 )
 from app.services.research.task_runner import append_research_task_event
@@ -37,9 +39,9 @@ from app.services.research.workflow_graph import expected_next_stage
 _TERMINAL_STATUSES = frozenset({"SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"})
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _GenerationCompletionContext:
-    """Internal lease context passed to the server-owned materializer."""
+    """Mutable structural adapter for the materializer context protocols."""
 
     task_id: str
     run_id: str
@@ -297,36 +299,44 @@ class ResearchStageAttemptService:
                 run = await session.get(ResearchRun, task.run_id)
                 if run is None:
                     raise ValueError("RESEARCH_STAGE_ATTEMPT_RUN_NOT_FOUND")
-                materialization = await self._generation_materializer.materialize_in_session(
+                generation_materializer = self._generation_materializer
+                if generation_materializer is None:
+                    raise ValueError("RESEARCH_GENERATION_MATERIALIZER_UNAVAILABLE")
+                generation_context: GenerationStageContext = _GenerationCompletionContext(
+                    task_id=task.id,
+                    run_id=run.id,
+                    user_id=task.user_id,
+                    stage_attempt_id=attempt.id,
+                    lease_token=lease_token,
+                    stage=attempt.stage,
+                    request_hash=run.request_hash,
+                    trace_id=task.trace_id,
+                )
+                materialization = await generation_materializer.materialize_in_session(
                     session,
                     task=task,
                     attempt=attempt,
-                    context=_GenerationCompletionContext(
-                        task_id=task.id,
-                        run_id=run.id,
-                        user_id=task.user_id,
-                        stage_attempt_id=attempt.id,
-                        lease_token=lease_token,
-                        stage=attempt.stage,
-                        request_hash=run.request_hash,
-                        trace_id=task.trace_id,
-                    ),
+                    context=generation_context,
                     proposal=generation_proposal,
                 )
                 output_artifact_id = materialization.output_artifact_id
             if discovery_execution_id is not None:
-                publication = await self._discovery_materializer.publish_in_session(
+                discovery_materializer = self._discovery_materializer
+                if discovery_materializer is None:
+                    raise ValueError("RESEARCH_DISCOVERY_MATERIALIZER_UNAVAILABLE")
+                discovery_context: StageOutputContext = _GenerationCompletionContext(
+                    task_id=task.id,
+                    run_id=run.id,
+                    user_id=task.user_id,
+                    stage_attempt_id=attempt.id,
+                    lease_token=lease_token,
+                    stage=attempt.stage,
+                    request_hash=run.request_hash,
+                    trace_id=task.trace_id,
+                )
+                publication = await discovery_materializer.publish_in_session(
                     session,
-                    context=_GenerationCompletionContext(
-                        task_id=task.id,
-                        run_id=run.id,
-                        user_id=task.user_id,
-                        stage_attempt_id=attempt.id,
-                        lease_token=lease_token,
-                        stage=attempt.stage,
-                        request_hash=run.request_hash,
-                        trace_id=task.trace_id,
-                    ),
+                    context=discovery_context,
                     execution_id=discovery_execution_id,
                 )
                 if publication.status != status or publication.error_code != error_code:

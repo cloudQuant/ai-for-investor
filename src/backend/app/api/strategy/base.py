@@ -63,16 +63,14 @@ from app.services.ai_strategy_research_config_profiles import (
 from app.services.ai_strategy_research_objective_optimizer import (
     AIStrategyResearchObjectiveOptimizer,
 )
-from app.services.ai_strategy_research_service import (
-    AIStrategyResearchService,
-    redact_ai_strategy_research_payload,
-)
+from app.services.ai_strategy_research_service import AIStrategyResearchService
 from app.services.ai_strategy_research_task_manager import (
     AIStrategyResearchTaskManager,
     get_ai_strategy_research_task_manager,
 )
 from app.services.ai_strategy_research_version_service import AIStrategyResearchVersionService
 from app.services.investment_mandate_service import InvestmentMandateService
+from app.services.research.paper_handoff import redact_ai_strategy_research_payload
 from app.services.research_pipeline_event_service import ResearchPipelineEventService
 from app.services.strategy_service import (
     StrategyService,
@@ -271,10 +269,10 @@ def _model_has_persisted_field(value: typing.Any, field: str) -> bool:
     that a source request was blank-auto.  ``model_fields_set`` preserves that
     distinction when an older persisted JSON object is parsed.
     """
-    fields = getattr(value, "model_fields_set", None)
+    fields: object = getattr(value, "model_fields_set", None)
     if fields is None:
         fields = getattr(value, "__fields_set__", set())
-    return field in fields
+    return isinstance(fields, set) and field in fields
 
 
 def _trusted_auto_continuation_source(
@@ -482,7 +480,7 @@ async def create_strategy(
 
 
 @router.get("/", response_model=StrategyListResponse, summary="List strategies")
-@cache_response(ttl=30, key_prefix="strategies")
+@cache_response(ttl=30, key_prefix="strategies", vary_by_current_user=True)
 async def list_strategies(
     request: Request,
     current_user: typing.Any = Depends(get_current_user),

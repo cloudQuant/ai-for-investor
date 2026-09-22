@@ -6,7 +6,7 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeGuard
 
 from app.db import database
 from app.models.ai_research_v2 import ResearchModelInvocation, ResearchRun
@@ -569,6 +569,12 @@ def _safe_sampling_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     return safe
 
 
+def _is_non_negative_token_count(value: object) -> TypeGuard[int]:
+    """Accept only non-negative builtin ints as token counters."""
+
+    return type(value) is int and value >= 0
+
+
 def _verified_token_count(usage: Mapping[str, Any]) -> int | None:
     """Accept adapter totals only when all supplied counter forms agree."""
 
@@ -576,10 +582,13 @@ def _verified_token_count(usage: Mapping[str, Any]) -> int | None:
     for first, second in (("input", "output"), ("prompt_tokens", "completion_tokens")):
         if first not in usage and second not in usage:
             continue
-        values = (usage.get(first), usage.get(second))
-        if any(type(value) is not int or value < 0 for value in values):
+        first_value = usage.get(first)
+        second_value = usage.get(second)
+        if not _is_non_negative_token_count(first_value) or not _is_non_negative_token_count(
+            second_value
+        ):
             return None
-        totals.append(sum(values))
+        totals.append(first_value + second_value)
     if "total_tokens" in usage:
         total = usage["total_tokens"]
         if type(total) is not int or total < 0:

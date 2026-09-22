@@ -1,13 +1,25 @@
 <template>
-  <section class="trusted-workbench" aria-labelledby="trusted-workbench-title" data-test="trusted-research-workbench">
+  <section
+    class="trusted-workbench"
+    aria-labelledby="trusted-workbench-title"
+    data-test="trusted-research-workbench"
+  >
     <header class="trusted-workbench__header">
       <div>
         <span>{{ t('strategy.aiResearchTrusted.protocol') }}</span>
-        <h2 id="trusted-workbench-title">{{ t('strategy.aiResearchTrusted.title') }}</h2>
+        <h2 id="trusted-workbench-title">
+          {{ t('strategy.aiResearchTrusted.title') }}
+        </h2>
         <p>{{ t('strategy.aiResearchTrusted.subtitle') }}</p>
       </div>
       <div class="trusted-workbench__header-actions">
-        <button type="button" :disabled="!runtime.activeRunId.value || runtime.loading.value" @click="refresh">{{ t('strategy.aiResearchTrusted.refreshEvidence') }}</button>
+        <button
+          type="button"
+          :disabled="!runtime.activeRunId.value || runtime.loading.value"
+          @click="refresh"
+        >
+          {{ t('strategy.aiResearchTrusted.refreshEvidence') }}
+        </button>
         <button
           v-if="runtime.draft.value === null && runtime.preparedRun.value === null"
           type="button"
@@ -15,7 +27,9 @@
           data-test="trusted-research-create-draft"
           :disabled="!hasCompletePreregistration || runtime.submitting.value"
           @click="createDraft"
-        >{{ t('strategy.aiResearchTrusted.createDraft') }}</button>
+        >
+          {{ t('strategy.aiResearchTrusted.createDraft') }}
+        </button>
         <button
           v-else-if="runtime.preparedRun.value === null"
           type="button"
@@ -23,7 +37,9 @@
           data-test="trusted-research-confirm-precheck"
           :disabled="!hasCompletePreregistration || runtime.submitting.value"
           @click="confirmAndPrepare"
-        >{{ t('strategy.aiResearchTrusted.confirmAndPrecheck') }}</button>
+        >
+          {{ t('strategy.aiResearchTrusted.confirmAndPrecheck') }}
+        </button>
         <button
           v-else-if="needsPrecheckRetry"
           type="button"
@@ -41,7 +57,9 @@
           data-test="trusted-research-start-run"
           :disabled="!canStartPreparedRun || runtime.submitting.value"
           @click="startPreparedRun"
-        >{{ t('strategy.aiResearchTrusted.startResearch') }}</button>
+        >
+          {{ t('strategy.aiResearchTrusted.startResearch') }}
+        </button>
       </div>
     </header>
 
@@ -55,17 +73,71 @@
       @load-more="loadMoreHistory"
     />
 
-    <form class="trusted-workbench__form" @submit.prevent="createDraft">
-      <label>{{ t('strategy.aiResearchTrusted.question') }}<input v-model.trim="form.question" required maxlength="500" :placeholder="t('strategy.aiResearchTrusted.questionPlaceholder')"></label>
-      <label>{{ t('strategy.aiResearchTrusted.economicMechanism') }}<input v-model.trim="form.economicMechanism" required maxlength="500" :placeholder="t('strategy.aiResearchTrusted.economicMechanismPlaceholder')"></label>
-      <label>{{ t('strategy.aiResearchTrusted.symbol') }}<input v-model.trim="form.symbol" required maxlength="50" placeholder="RB0"></label>
-      <label>{{ t('strategy.aiResearchTrusted.frequency') }}<input v-model.trim="form.frequency" required maxlength="32" placeholder="1d"></label>
-      <label>{{ t('strategy.aiResearchTrusted.startDate') }}<input v-model="form.startDate" required type="date"></label>
-      <label>{{ t('strategy.aiResearchTrusted.endDate') }}<input v-model="form.endDate" required type="date"></label>
-      <label>{{ t('strategy.aiResearchTrusted.informationCutoff') }}<input v-model="form.informationCutoff" required type="datetime-local"></label>
-      <label>{{ t('strategy.aiResearchTrusted.slippageBps') }}<input v-model.number="form.slippageBps" required min="0" step="0.1" type="number"></label>
-      <label>{{ t('strategy.aiResearchTrusted.maxParticipationRate') }}<input v-model.number="form.maxParticipationRate" required min="0.0001" max="1" step="0.01" type="number"></label>
-      <label>{{ t('strategy.aiResearchTrusted.maxTrials') }}<input v-model.number="form.maxTrials" required min="1" step="1" type="number"></label>
+    <form
+      class="trusted-workbench__form"
+      @submit.prevent="createDraft"
+    >
+      <label>{{ t('strategy.aiResearchTrusted.question') }}<input
+        v-model.trim="form.question"
+        required
+        maxlength="500"
+        :placeholder="t('strategy.aiResearchTrusted.questionPlaceholder')"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.economicMechanism') }}<input
+        v-model.trim="form.economicMechanism"
+        required
+        maxlength="500"
+        :placeholder="t('strategy.aiResearchTrusted.economicMechanismPlaceholder')"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.symbol') }}<input
+        v-model.trim="form.symbol"
+        required
+        maxlength="50"
+        placeholder="RB0"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.frequency') }}<input
+        v-model.trim="form.frequency"
+        required
+        maxlength="32"
+        placeholder="1d"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.startDate') }}<input
+        v-model="form.startDate"
+        required
+        type="date"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.endDate') }}<input
+        v-model="form.endDate"
+        required
+        type="date"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.informationCutoff') }}<input
+        v-model="form.informationCutoff"
+        required
+        type="datetime-local"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.slippageBps') }}<input
+        v-model.number="form.slippageBps"
+        required
+        min="0"
+        step="0.1"
+        type="number"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.maxParticipationRate') }}<input
+        v-model.number="form.maxParticipationRate"
+        required
+        min="0.0001"
+        max="1"
+        step="0.01"
+        type="number"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.maxTrials') }}<input
+        v-model.number="form.maxTrials"
+        required
+        min="1"
+        step="1"
+        type="number"
+      ></label>
       <label>
         {{ t('strategy.aiResearchTrusted.objectReceiptId') }}
         <input
@@ -77,8 +149,18 @@
         >
         <small>{{ t('strategy.aiResearchTrusted.objectReceiptHelp') }}</small>
       </label>
-      <label>{{ t('strategy.aiResearchTrusted.profileId') }}<input v-model.trim="form.profileId" required maxlength="128" data-test="trusted-research-profile-id"></label>
-      <label>{{ t('strategy.aiResearchTrusted.profileVersion') }}<input v-model.trim="form.profileVersion" required maxlength="128" data-test="trusted-research-profile-version"></label>
+      <label>{{ t('strategy.aiResearchTrusted.profileId') }}<input
+        v-model.trim="form.profileId"
+        required
+        maxlength="128"
+        data-test="trusted-research-profile-id"
+      ></label>
+      <label>{{ t('strategy.aiResearchTrusted.profileVersion') }}<input
+        v-model.trim="form.profileVersion"
+        required
+        maxlength="128"
+        data-test="trusted-research-profile-version"
+      ></label>
     </form>
 
     <section
@@ -96,7 +178,11 @@
           <pre data-test="trusted-research-canonical-payload">{{ draftPayload }}</pre>
         </details>
       </div>
-      <button type="button" data-test="trusted-research-discard-draft" @click="runtime.invalidateDraft">
+      <button
+        type="button"
+        data-test="trusted-research-discard-draft"
+        @click="runtime.invalidateDraft"
+      >
         {{ t('strategy.aiResearchTrusted.discardDraft') }}
       </button>
     </section>
@@ -111,17 +197,35 @@
         <strong>{{ t('strategy.aiResearchTrusted.precheckStatus', { status: runtime.preparedRun.value.precheck.status }) }}</strong>
         <p>{{ t('strategy.aiResearchTrusted.precheckTiming', { checkedAt: runtime.preparedRun.value.precheck.checked_at, expiresAt: runtime.preparedRun.value.precheck.expires_at }) }}</p>
         <code>{{ runtime.preparedRun.value.precheck.input_hash }}</code>
-        <p v-if="runtime.preparedRun.value.precheck.reason_code" class="trusted-workbench__precheck-reason">
+        <p
+          v-if="runtime.preparedRun.value.precheck.reason_code"
+          class="trusted-workbench__precheck-reason"
+        >
           {{ runtime.preparedRun.value.precheck.reason_code }}
         </p>
       </div>
-      <span class="trusted-workbench__status" :data-status="runtime.preparedRun.value.precheck.status">
+      <span
+        class="trusted-workbench__status"
+        :data-status="runtime.preparedRun.value.precheck.status"
+      >
         {{ runtime.preparedRun.value.precheck.status }}
       </span>
     </section>
 
-    <p v-if="runtime.errorCode.value" class="trusted-workbench__error" role="alert">{{ errorMessage }}</p>
-    <p v-if="runtime.submitting.value" class="trusted-workbench__busy" aria-live="polite">{{ t('strategy.aiResearchTrusted.submitting') }}</p>
+    <p
+      v-if="runtime.errorCode.value"
+      class="trusted-workbench__error"
+      role="alert"
+    >
+      {{ errorMessage }}
+    </p>
+    <p
+      v-if="runtime.submitting.value"
+      class="trusted-workbench__busy"
+      aria-live="polite"
+    >
+      {{ t('strategy.aiResearchTrusted.submitting') }}
+    </p>
 
     <div class="trusted-workbench__grid">
       <HypothesisPanel :hypothesis="runtime.workbench.value?.hypothesis" />
@@ -157,7 +261,11 @@
         :candidates="runtime.workbench.value?.candidates"
         @select-candidate="setApprovalCandidate"
       />
-      <DecisionPanel :decisions="runtime.workbench.value?.decisions" :can-cancel="canCancel" @cancel="cancel" />
+      <DecisionPanel
+        :decisions="runtime.workbench.value?.decisions"
+        :can-cancel="canCancel"
+        @cancel="cancel"
+      />
       <TaskEventTimeline
         :task-id="runtime.activeTaskId.value"
         :events="runtime.taskEvents.value"

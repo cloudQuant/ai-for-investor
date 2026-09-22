@@ -16,6 +16,7 @@ import secrets
 import subprocess
 import sys
 import threading
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from types import TracebackType
 from typing import Any, cast
@@ -558,10 +559,10 @@ class LiveTradingManager:
 
     @staticmethod
     def _instance_order_owner_ids(instance_id: str, instance: dict[str, Any]) -> set[str]:
-        params = instance.get("params") if isinstance(instance.get("params"), dict) else {}
-        workspace_unit = (
-            params.get("workspace_unit") if isinstance(params.get("workspace_unit"), dict) else {}
-        )
+        raw_params = instance.get("params")
+        params = raw_params if isinstance(raw_params, dict) else {}
+        raw_workspace_unit = params.get("workspace_unit")
+        workspace_unit = raw_workspace_unit if isinstance(raw_workspace_unit, dict) else {}
         candidates = {
             str(instance_id or "").strip(),
             str(instance.get("id") or "").strip(),
@@ -624,7 +625,8 @@ class LiveTradingManager:
         )
         message = str(open_order_cancel.get("message") or "failed to cancel open orders")
         exc = RuntimeError(f"停止策略前撤销交易所挂单失败：{message}")
-        exc.open_order_cancel = open_order_cancel
+        # Dynamic attribute for downstream/debug consumers; mirrors the __dict__ read path.
+        exc.__dict__["open_order_cancel"] = open_order_cancel
         raise exc
 
     def _gateway_key_for_instance_unlocked(self, instance_id: str) -> str:
@@ -747,8 +749,9 @@ class LiveTradingManager:
                         if isinstance(params.get("contract_metadata"), dict)
                         else {}
                     )
+                    raw_instance_params = instance.get("params")
                     instance_params = (
-                        instance.get("params") if isinstance(instance.get("params"), dict) else {}
+                        raw_instance_params if isinstance(raw_instance_params, dict) else {}
                     )
                     resolved_metadata = instance_params.get("contract_metadata")
                     if isinstance(resolved_metadata, dict):
@@ -1334,23 +1337,23 @@ class LiveTradingManager:
                             instances[str(instance_id)] = current
                             _save_instances(instances)
                 try:
-                    result = cast(
-                        StartResult,
-                        await live_execution_service.start_instance(
-                            instance_id=instance_id,
-                            user_id=user_id,
-                            load_instances=_load_instances,
-                            save_instances=_save_instances,
-                            is_pid_alive=_is_pid_alive,
-                            resolve_strategy_dir=self._resolve_strategy_dir,
-                            build_subprocess_env=self._build_subprocess_env,
-                            release_gateway_for_instance=self._release_gateway_for_instance,
-                            wait_process_callback=self._wait_process,
-                            processes=self._processes,
-                            stopping_instances=self._stopping_instances,
-                            instance_lock=_AsyncInstanceStoreLock(),
-                        ),
+                    raw_result = await live_execution_service.start_instance(
+                        instance_id=instance_id,
+                        user_id=user_id,
+                        load_instances=_load_instances,
+                        save_instances=_save_instances,
+                        is_pid_alive=_is_pid_alive,
+                        resolve_strategy_dir=self._resolve_strategy_dir,
+                        build_subprocess_env=self._build_subprocess_env,
+                        release_gateway_for_instance=self._release_gateway_for_instance,
+                        wait_process_callback=self._wait_process,
+                        processes=self._processes,
+                        stopping_instances=self._stopping_instances,
+                        instance_lock=_AsyncInstanceStoreLock(),
                     )
+                    raw_result.pop(_SERVER_ATTESTED_PAPER_RUNTIME_FIELD, None)
+                    raw_result.pop(_SERVER_ATTESTED_PAPER_RUNTIME_DIGEST_FIELD, None)
+                    result = cast(StartResult, raw_result)
                 finally:
                     if (
                         server_attested
@@ -1371,8 +1374,6 @@ class LiveTradingManager:
                                     str(instance_id), None
                                 )
                                 self._pending_managed_workspace_instances.discard(str(instance_id))
-                result.pop(_SERVER_ATTESTED_PAPER_RUNTIME_FIELD, None)
-                result.pop(_SERVER_ATTESTED_PAPER_RUNTIME_DIGEST_FIELD, None)
                 return result
 
     async def stop_instance(
@@ -1462,7 +1463,7 @@ class LiveTradingManager:
         *,
         enforce_ai_research_paper_runtime: bool = False,
     ) -> dict[str, StartResult]:
-        start_instance_callback = self.start_instance
+        start_instance_callback: Callable[[str], Awaitable[StartResult]] = self.start_instance
         if user_id is not None or enforce_ai_research_paper_runtime:
 
             async def start_owned_instance(instance_id: str) -> StartResult:
@@ -1508,7 +1509,7 @@ class LiveTradingManager:
                 if str(instance.get("status") or "").strip().casefold() != "running":
                     continue
                 await assert_ai_research_paper_runtime_stop_allowed(instance_id, user_id)
-        stop_instance_callback = self.stop_instance
+        stop_instance_callback: Callable[[str], Awaitable[StopResult]] = self.stop_instance
         if user_id is not None or allow_server_owned_ai_research_stop:
 
             async def stop_owned_instance(instance_id: str) -> StopResult:

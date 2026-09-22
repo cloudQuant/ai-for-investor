@@ -252,7 +252,7 @@ class AnalyticsService:
         for year in years:
             year_returns = [r.return_pct for r in returns if r.year == year]
             # Compound annual return calculation
-            total = 1
+            total: float = 1.0
             for r in year_returns:
                 total *= 1 + r
             summary[year] = round(total - 1, 6)
@@ -278,7 +278,7 @@ class AnalyticsService:
         closes = [k.get("close", 0) for k in klines]
 
         def ma(period: int) -> list[float | None]:
-            result = [None] * (period - 1)
+            result: list[float | None] = [None] * (period - 1)
             for i in range(period - 1, len(closes)):
                 avg = sum(closes[i - period + 1 : i + 1]) / period
                 result.append(round(avg, 4))

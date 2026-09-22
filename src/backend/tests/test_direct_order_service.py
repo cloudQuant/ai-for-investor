@@ -26,6 +26,122 @@ class TestDirectOrderServiceMapOrderType:
         assert DirectOrderService._map_order_type(OrderType.STOP_LIMIT) == "stop_limit"
 
 
+class TestDirectOrderServiceNumericBoundaries:
+    @pytest.mark.parametrize("value", [None, "", "invalid", float("nan"), float("inf")])
+    def test_invalid_order_sizes_are_rejected(self, value):
+        with pytest.raises(ValueError, match="quantity"):
+            DirectOrderService._normalise_order_size(value, default=None)
+
+    @pytest.mark.parametrize(
+        "value",
+        ["inf", "-inf", "nan", float("inf"), float("-inf"), float("nan")],
+    )
+    def test_non_finite_position_direction_values_are_ignored(self, value):
+        assert DirectOrderService._position_direction_from_value("positionIdx", value) is None
+        assert DirectOrderService._position_side_value({"positionIdx": value}) is None
+
+    @pytest.mark.parametrize(
+        ("key", "value", "expected"),
+        [
+            ("trade_action", "0", "long"),
+            ("trade_action", "1", "short"),
+            ("PosiDirection", "2", "long"),
+            ("PosiDirection", "3", "short"),
+            ("positionIdx", "1.0", "long"),
+            ("positionIdx", "2.0", "short"),
+        ],
+    )
+    def test_valid_position_direction_code_mappings_are_preserved(self, key, value, expected):
+        assert DirectOrderService._position_direction_from_value(key, value) == expected
+        assert DirectOrderService._position_side_value({"positionIdx": "1.0"}) == "long"
+        assert DirectOrderService._position_side_value({"positionIdx": "2.0"}) == "short"
+
+    @pytest.mark.parametrize("value", [None, "invalid", float("nan"), float("inf")])
+    def test_invalid_gateway_position_numbers_are_ignored(self, value):
+        assert DirectOrderService._position_size({"volume": value}) == 0.0
+        assert DirectOrderService._position_number({"profit": value}, "profit") is None
+
+    @pytest.mark.parametrize("value", ["invalid", float("nan"), float("inf")])
+    def test_invalid_order_prices_fail_closed(self, value):
+        with pytest.raises(ValueError, match="price must be a valid number"):
+            DirectOrderService._validate_live_order_prices(
+                {"price": value},
+                {"price_tick": 0.01},
+            )
+
+    def test_valid_numeric_strings_keep_existing_order_path(self):
+        assert DirectOrderService._normalise_order_size("2.5", default=None) == 2.5
+        assert DirectOrderService._position_size({"volume": "1.25"}) == 1.25
+        assert DirectOrderService._position_number({"profit": "3.5"}, "profit") == 3.5
+
+    def test_overflowing_order_size_is_rejected(self):
+        with pytest.raises(ValueError, match="quantity"):
+            DirectOrderService._normalise_order_size(10**400, default=None)
+
+    @pytest.mark.parametrize(
+        ("order_type", "field", "error_message", "gateway_id", "gateway_context"),
+        [
+            (OrderType.LIMIT, "price", "limit order requires", None, ""),
+            (
+                OrderType.STOP,
+                "stop_loss",
+                "stop order requires a positive trigger price",
+                None,
+                "",
+            ),
+            (
+                OrderType.MARKET,
+                "stop_loss",
+                "stop_loss must be a positive price",
+                "manual:MT5:demo",
+                "MT5",
+            ),
+            (
+                OrderType.MARKET,
+                "take_profit",
+                "take_profit must be a positive price",
+                "manual:MT5:demo",
+                "MT5",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_build_order_payload_rejects_non_finite_prices_without_asset_spec(
+        self,
+        order_type,
+        field,
+        error_message,
+        gateway_id,
+        gateway_context,
+        value,
+    ):
+        service = DirectOrderService()
+        intent = TradingIntent(
+            action=TradeAction.BUY,
+            symbol="XAUUSD",
+            quantity=0.1,
+            order_type=order_type,
+            confidence=0.9,
+            **{field: value},
+        )
+
+        with (
+            patch.object(service, "_gateway_context_text", return_value=gateway_context),
+            patch.object(service, "_gateway_asset_spec", return_value={}) as asset_spec,
+        ):
+            with pytest.raises(ValueError, match=error_message):
+                service._build_order_payload(intent, gateway_id=gateway_id)
+
+        asset_spec.assert_called_once_with(gateway_id, "XAUUSD")
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [("12.5", 12.5), (12, 12.0), (12.5, 12.5)],
+    )
+    def test_normalise_order_price_preserves_valid_numeric_inputs(self, value, expected):
+        assert DirectOrderService._normalise_order_price(value, "invalid price") == expected
+
+
 class TestDirectOrderServiceBuildOrderPayload:
     """Test ZMQ order payload building."""
 
@@ -2842,6 +2958,26 @@ class TestDirectOrderServiceLiveTrade:
 
 class TestDirectOrderServiceFindGateway:
     """Test gateway discovery."""
+
+    def test_find_gateway_uses_gateway_manual_discovery(self):
+        service = DirectOrderService()
+        intent = TradingIntent(action=TradeAction.BUY, exchange="binance", confidence=0.9)
+        gateways = {"manual:BINANCE:demo": {"manual": True}}
+        connected = [
+            {"gateway_key": "manual:BINANCE:demo", "exchange_type": "BINANCE"},
+        ]
+
+        with (
+            patch.object(service, "_get_gateways_dict", return_value=gateways),
+            patch(
+                "app.services.gateway.manual.list_connected_gateways",
+                return_value=connected,
+            ) as list_connected_gateways,
+        ):
+            result = service._find_available_gateway(intent)
+
+        assert result == "manual:BINANCE:demo"
+        list_connected_gateways.assert_called_once_with(gateways)
 
     def test_find_gateway_exception_returns_none(self):
         service = DirectOrderService()

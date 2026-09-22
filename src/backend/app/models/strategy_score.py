@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -15,7 +16,7 @@ class StrategyScoreModel(Base):
 
     __tablename__ = "strategy_scores"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     backtest_id = Column(String(36), ForeignKey("backtest_tasks.id"), unique=True, index=True)
     total_score = Column(Float, default=0)
     level = Column(String(5), default="D")

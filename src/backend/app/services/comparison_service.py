@@ -64,16 +64,13 @@ class ComparisonService:
         Raises:
             ValueError: If any of the specified backtest tasks do not exist.
         """
-        # Verify that all backtest tasks exist
-        for task_id in backtest_task_ids:
-            result = await self.backtest_service.get_result(task_id)
-            if not result:
-                raise ValueError(f"Backtest task not found: {task_id}")
-
-        # Retrieve all backtest results
+        # Fetch and validate each requested backtest result once so it cannot
+        # disappear between validation and payload construction.
         backtest_results = {}
         for task_id in backtest_task_ids:
             result = await self.backtest_service.get_result(task_id)
+            if result is None:
+                raise ValueError(f"Backtest task not found: {task_id}")
             backtest_results[task_id] = {
                 "strategy_id": result.strategy_id,
                 "symbol": result.symbol,
@@ -160,7 +157,7 @@ class ComparisonService:
             Dictionary containing metric comparisons for total return,
             annual return, Sharpe ratio, maximum drawdown, and win rate.
         """
-        metrics_comparison = {
+        metrics_comparison: dict[str, dict[str, Any]] = {
             "total_return": {},
             "annual_return": {},
             "sharpe_ratio": {},
@@ -192,7 +189,7 @@ class ComparisonService:
             win rate), the maximum value is selected. For maximum drawdown,
             the minimum value is selected.
         """
-        best_metrics = {
+        best_metrics: dict[str, dict[str, str | float | None]] = {
             "total_return": {"task_id": None, "value": float("-inf")},
             "annual_return": {"task_id": None, "value": float("-inf")},
             "sharpe_ratio": {"task_id": None, "value": float("-inf")},
@@ -239,7 +236,7 @@ class ComparisonService:
             Dictionary containing aligned dates and equity curves for comparison.
             The curves are aligned to a common date timeline for proper comparison.
         """
-        equity_comparison = {
+        equity_comparison: dict[str, Any] = {
             "dates": [],
             "curves": {},
         }
@@ -284,7 +281,7 @@ class ComparisonService:
         Returns:
             Dictionary containing trade counts and win rates for each backtest.
         """
-        trades_comparison = {
+        trades_comparison: dict[str, Any] = {
             "trade_counts": {},
             "win_rates": {},
         }
@@ -317,7 +314,7 @@ class ComparisonService:
             Dictionary containing maximum drawdown values and drawdown curves
             for each backtest result.
         """
-        drawdown_comparison = {
+        drawdown_comparison: dict[str, Any] = {
             "max_drawdowns": {},
             "drawdown_curves": {},
         }
@@ -350,11 +347,13 @@ class ComparisonService:
         if not comparison or comparison.user_id != user_id:
             return None
 
-        update_dict = {}
+        update_dict: dict[str, object] = {}
         if update_data.name is not None:
             update_dict["name"] = update_data.name
         if update_data.description is not None:
             update_dict["description"] = update_data.description
+        if update_data.is_favorite is not None:
+            update_dict["is_favorite"] = update_data.is_favorite
         if update_data.is_public is not None:
             update_dict["is_public"] = update_data.is_public
         if update_data.backtest_task_ids is not None:
@@ -383,6 +382,8 @@ class ComparisonService:
             update_dict["updated_at"] = datetime.now(timezone.utc)
             comparison = await self.comparison_repo.update(comparison_id, update_dict)
 
+        if comparison is None:
+            return None
         return self._to_response(comparison)
 
     async def delete_comparison(
@@ -454,7 +455,7 @@ class ComparisonService:
         Returns:
             A tuple containing (list of comparisons, total count).
         """
-        filters = {"user_id": user_id}
+        filters: dict[str, str | bool] = {"user_id": user_id}
 
         # If filtering by public status, adjust filters accordingly
         if is_public is not None:

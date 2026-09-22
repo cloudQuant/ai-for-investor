@@ -137,6 +137,46 @@ def test_akshare_proxy_detection_reads_proxy_port_from_env_file(monkeypatch, tmp
     assert detected == "http://127.0.0.1:18890"
 
 
+def test_default_request_get_disables_environment_proxies_and_forwards_options(monkeypatch):
+    from app.data_fetch.utils import akshare_network_proxy as proxy
+
+    response = object()
+    sessions = []
+
+    class FakeSession:
+        def __init__(self):
+            self.trust_env = True
+            self.request = None
+            sessions.append(self)
+
+        def get(self, url, **kwargs):
+            self.request = (url, kwargs)
+            return response
+
+    monkeypatch.setattr(proxy.requests, "Session", FakeSession)
+
+    result = proxy._default_request_get(
+        "https://example.invalid/probe",
+        params={"page": "1"},
+        headers={"User-Agent": "test"},
+        timeout=0.5,
+        proxies={"https": "http://127.0.0.1:8080"},
+    )
+
+    assert result is response
+    assert len(sessions) == 1
+    assert sessions[0].trust_env is False
+    assert sessions[0].request == (
+        "https://example.invalid/probe",
+        {
+            "params": {"page": "1"},
+            "headers": {"User-Agent": "test"},
+            "timeout": 0.5,
+            "proxies": {"https": "http://127.0.0.1:8080"},
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_akshare_script_execution_configures_network_proxy(monkeypatch):
     import app.services.akshare.script as script_module

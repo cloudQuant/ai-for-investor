@@ -20,6 +20,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 _F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
 _BudgetChecker = Callable[..., Awaitable[None]]
+_DEFAULT_QUEUE_MAXSIZE = 1000
 _OBSERVABILITY_KWARGS = {
     "completion_tokens",
     "model_name",
@@ -33,6 +34,12 @@ _OBSERVABILITY_KWARGS = {
 }
 
 
+def _normalize_queue_maxsize(value: object) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return _DEFAULT_QUEUE_MAXSIZE
+
+
 def hash_prompt(prompt: str) -> str:
     """Return a SHA-256 digest for prompt text without storing the prompt."""
     return hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest()
@@ -43,7 +50,13 @@ class AICallLogSink:
 
     def __init__(self, queue_maxsize: int | None = None) -> None:
         settings = get_settings()
-        self._queue_maxsize = queue_maxsize or getattr(settings, "AI_CALL_LOG_QUEUE_MAXSIZE", 1000)
+        configured_queue_maxsize = getattr(
+            settings, "AI_CALL_LOG_QUEUE_MAXSIZE", _DEFAULT_QUEUE_MAXSIZE
+        )
+        selected_queue_maxsize = (
+            queue_maxsize if queue_maxsize is not None else configured_queue_maxsize
+        )
+        self._queue_maxsize = _normalize_queue_maxsize(selected_queue_maxsize)
         self._queue: asyncio.Queue[AICallLogCreate | None] = asyncio.Queue(
             maxsize=self._queue_maxsize
         )

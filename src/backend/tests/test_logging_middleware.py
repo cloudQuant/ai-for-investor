@@ -16,6 +16,13 @@ from starlette.requests import Request
 class TestLoggingMiddleware:
     """Tests for LoggingMiddleware."""
 
+    def test_query_sanitizer_redacts_secrets_and_preserves_repeated_values(self) -> None:
+        from app.middleware.logging import _sanitize_query_params
+
+        sanitized = _sanitize_query_params("token=not-a-real-secret&tag=alpha&tag=beta")
+
+        assert sanitized == "{'token': '***REDACTED***', 'tag': ['alpha', 'beta']}"
+
     def test_initialization(self):
         """Test middleware initialization."""
         from app.middleware.logging import LoggingMiddleware

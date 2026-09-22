@@ -316,9 +316,9 @@ class AIChatService:
         seen: set[str] = set()
         for item_id in ranked_ids:
             normalized_id = str(item_id)
-            item = by_id.get(normalized_id)
-            if item is not None and normalized_id not in seen:
-                ordered.append(item)
+            candidate = by_id.get(normalized_id)
+            if candidate is not None and normalized_id not in seen:
+                ordered.append(candidate)
                 seen.add(normalized_id)
         if not ordered:
             return candidates, False
@@ -761,7 +761,7 @@ class AIChatService:
             payload = json.loads(json_text)
             strategy_payload = payload.get("strategy_draft", payload)
             draft = AIStrategyDraft.model_validate(strategy_payload)
-            from app.services.ai_strategy_research_service import _validate_strategy_code_draft
+            from app.services.research.robustness import _validate_strategy_code_draft
 
             _validate_strategy_code_draft(draft.code)
         except Exception as exc:

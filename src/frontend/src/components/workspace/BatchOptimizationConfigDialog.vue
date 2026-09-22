@@ -151,7 +151,9 @@
               size="small"
               @click="form.param_layers.splice($index, 1)"
             >
-              <el-icon aria-hidden="true"><Delete /></el-icon>
+              <el-icon aria-hidden="true">
+                <Delete />
+              </el-icon>
             </el-button>
           </template>
         </el-table-column>

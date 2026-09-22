@@ -281,11 +281,14 @@ class MarketDataCoverageService:
                 limit=per_profile_limit,
             )
             for row in rows:
+                symbol = row.get("symbol")
+                if not isinstance(symbol, str) or not symbol.strip():
+                    continue
                 end_date = _iso_date_text(row.get("end_date"))
                 quality_status = _warehouse_quality_status(profile.asset_type, end_date)
                 values = {
                     "asset_type": profile.asset_type,
-                    "symbol": str(row["symbol"]),
+                    "symbol": symbol,
                     "timeframe": profile.timeframe,
                     "provider": "akshare_data",
                     "start_date": _iso_date_text(row.get("start_date")),
@@ -300,14 +303,14 @@ class MarketDataCoverageService:
                 model = await self._upsert_coverage(values)
                 reports = _warehouse_freshness_reports(
                     asset_type=profile.asset_type,
-                    symbol=values["symbol"],
+                    symbol=symbol,
                     timeframe=profile.timeframe,
                     latest_date=end_date,
                     quality_status=quality_status,
                 )
                 await self._replace_quality_reports(
                     asset_type=profile.asset_type,
-                    symbol=values["symbol"],
+                    symbol=symbol,
                     timeframe=profile.timeframe,
                     provider="akshare_data",
                     reports=reports,

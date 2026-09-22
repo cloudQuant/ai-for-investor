@@ -1,8 +1,13 @@
 <template>
-  <section class="asset-detail-panel" aria-labelledby="bond-panel-title">
+  <section
+    class="asset-detail-panel"
+    aria-labelledby="bond-panel-title"
+  >
     <div class="panel-head">
       <span class="panel-kicker">{{ t('assetResearch.bondPanel.kicker') }}</span>
-      <h3 id="bond-panel-title">{{ t('assetResearch.bondPanel.title') }}</h3>
+      <h3 id="bond-panel-title">
+        {{ t('assetResearch.bondPanel.title') }}
+      </h3>
     </div>
     <dl class="detail-grid">
       <div>

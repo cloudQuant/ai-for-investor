@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from hashlib import sha256
-from typing import Any
+from typing import Any, TypeGuard
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
@@ -702,6 +702,7 @@ class IndependentEvaluator:
                 status=status,
             )
             return terminal
+        raise ValueError("INDEPENDENT_EVALUATOR_STATE_INVALID")
 
 
 async def _reject_command_authority_for_candidate(
@@ -876,7 +877,7 @@ def _require_requested_terminal_match(
         raise ValueError("INDEPENDENT_EVALUATOR_TERMINAL_INCONSISTENT")
 
 
-def _is_sha256(value: object) -> bool:
+def _is_sha256(value: object) -> TypeGuard[str]:
     return (
         isinstance(value, str)
         and len(value) == 64

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 
 import pytest
@@ -15,10 +16,13 @@ from app.models.market_data_platform import (
     MdObservationRevision,
     MdPublication,
 )
+from app.services.market_data.multi_record import B2ReportSelector, B2SliceSelector
 from app.services.market_data.multi_record_evidence import (
     B2CompletenessEvidenceError,
     B2CompletenessEvidenceIssuer,
     B2CompletenessEvidenceRequest,
+    _selector_from_receipt,
+    durable_b2_completeness_evidence_from_receipt,
 )
 from app.services.market_data.publication import (
     PUBLICATION_B2_COMPLETENESS_RECEIPT,
@@ -77,7 +81,7 @@ def _request(
     *,
     series_id: str,
     source_snapshot_id: str,
-    expected_record_dimensions: tuple[dict[str, object], ...] = (_option_dimensions(),),
+    expected_record_dimensions: Iterable[Mapping[str, object]] = (_option_dimensions(),),
     event_at: datetime | None = None,
     zero_record_evidence: dict[str, object] | None = None,
 ) -> B2CompletenessEvidenceRequest:
@@ -128,6 +132,78 @@ async def test_issuer_derives_one_durable_manifest_receipt_and_stages_its_public
     assert publication.entity_id == receipt.id
     assert publication.entity_sha256 == receipt.receipt_sha256
     assert publication.published_at is None
+
+
+@pytest.mark.asyncio
+async def test_issuer_accepts_one_shot_expected_dimensions_and_sorts_manifest_hashes() -> None:
+    """The expected dimensions are consumed once and stored in canonical hash order."""
+    series_id, source_snapshot_id = await _persist_b2_source(strikes=("100", "105"))
+    expected_dimensions = (_option_dimensions(strike=strike) for strike in ("105", "100"))
+
+    async with async_session_maker() as db:
+        staged = await B2CompletenessEvidenceIssuer(db).stage(
+            _request(
+                series_id=series_id,
+                source_snapshot_id=source_snapshot_id,
+                expected_record_dimensions=expected_dimensions,
+            )
+        )
+        await db.commit()
+        entries = tuple(
+            (
+                await db.execute(
+                    select(MdB2CompletenessManifestEntry.semantic_record_key_sha256)
+                    .where(MdB2CompletenessManifestEntry.receipt_id == staged.receipt_id)
+                    .order_by(MdB2CompletenessManifestEntry.semantic_record_key_sha256)
+                )
+            ).scalars()
+        )
+
+    assert entries == tuple(sorted(staged.selector.expected_record_key_sha256s or ()))
+
+
+@pytest.mark.parametrize(
+    ("selector_kind", "family_id", "selector_dimensions", "selector_type"),
+    [
+        (
+            "slice",
+            "option.derivative",
+            {"underlying": "IF", "expiry": "2026-10-30"},
+            B2SliceSelector,
+        ),
+        (
+            "report",
+            "futures.inventory",
+            {"report_date": "2026-09-11", "commodity": "IF"},
+            B2ReportSelector,
+        ),
+    ],
+)
+def test_selector_from_receipt_preserves_slice_and_report_payload(
+    selector_kind: str,
+    family_id: str,
+    selector_dimensions: dict[str, object],
+    selector_type: type[B2SliceSelector] | type[B2ReportSelector],
+) -> None:
+    """Receipt reconstruction keeps each selector's family and exact payload."""
+    expected_hashes = ("b" * 64, "a" * 64)
+
+    selector = _selector_from_receipt(
+        family_id=family_id,
+        family_contract_version="market-data-family-v1",
+        selector_kind=selector_kind,
+        selector_dimensions=selector_dimensions,
+        expected_hashes=expected_hashes,
+    )
+    expected_selector = selector_type(
+        family_id=family_id,
+        family_contract_version="market-data-family-v1",
+        selector_dimensions=selector_dimensions,
+        expected_record_key_sha256s=expected_hashes,
+    )
+
+    assert type(selector) is selector_type
+    assert selector == expected_selector
 
 
 @pytest.mark.asyncio
@@ -209,6 +285,32 @@ async def test_issuer_requires_server_hashed_zero_evidence_for_an_empty_exact_ev
         receipt.zero_record_evidence_sha256
         == hashlib.sha256(b'{"attestation":"no contracts reported"}').hexdigest()
     )
+
+
+@pytest.mark.asyncio
+async def test_durable_zero_certificate_rejects_a_missing_persisted_digest() -> None:
+    """A tampered zero-evidence digest cannot become a durable certificate."""
+    series_id, source_snapshot_id = await _persist_b2_source()
+
+    async with async_session_maker() as db:
+        staged = await B2CompletenessEvidenceIssuer(db).stage(
+            _request(
+                series_id=series_id,
+                source_snapshot_id=source_snapshot_id,
+                expected_record_dimensions=(),
+                event_at=_at(11),
+                zero_record_evidence={"attestation": "no contracts reported"},
+            )
+        )
+        await db.commit()
+        receipt = await db.get(MdB2CompletenessReceipt, staged.receipt_id)
+        assert receipt is not None
+        receipt.zero_record_evidence_sha256 = None
+
+        with pytest.raises(B2CompletenessEvidenceError) as rejected:
+            durable_b2_completeness_evidence_from_receipt(receipt, ())
+
+    assert rejected.value.code == "B2_COMPLETENESS_RECEIPT_INVALID"
 
 
 @pytest.mark.asyncio

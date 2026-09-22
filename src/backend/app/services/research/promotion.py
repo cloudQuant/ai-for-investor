@@ -663,16 +663,15 @@ class PromotionGateEngine:
                 ).all()
             )
             evaluation_ids = {decision.evaluation_id for decision in decision_rows}
-            if (
-                len(decision_rows) != len(_REQUIRED_GATE_CODES)
-                or len(evaluation_ids) != 1
-                or None in evaluation_ids
-            ):
+            if len(decision_rows) != len(_REQUIRED_GATE_CODES) or len(evaluation_ids) != 1:
+                return False
+            evaluation_id = next(iter(evaluation_ids))
+            if evaluation_id is None:
                 return False
             result = await self.read_result_in_session(
                 session,
                 candidate_id=candidate_id,
-                evaluation_id=next(iter(evaluation_ids)),
+                evaluation_id=evaluation_id,
                 policy_version=policy_version,
                 input_evidence_hash=input_evidence_hash,
             )
@@ -706,13 +705,15 @@ class PromotionGateEngine:
         if receipt_fingerprint is None:
             raise ValueError("PROMOTION_RESULT_INVALID")
         evaluation = await session.get(ResearchEvaluation, evaluation_id, with_for_update=True)
+        if evaluation is None:
+            raise ValueError("PROMOTION_RESULT_INVALID")
         receipt_artifact = (
             await session.get(
                 ResearchArtifact,
                 evaluation.returns_artifact_id,
                 with_for_update=True,
             )
-            if evaluation is not None and evaluation.returns_artifact_id is not None
+            if evaluation.returns_artifact_id is not None
             else None
         )
         if receipt_artifact is not None and receipt_artifact.kind == _SEALED_RECEIPT_KIND:
@@ -2023,7 +2024,7 @@ def _valid_evaluation_timeline(
     consumed_at = _utc_datetime(authorization.consumed_at)
     disclosed_at = _utc_datetime(epoch.disclosed_at)
     started_at = _utc_datetime(evaluation.started_at)
-    if None in {issued_at, consumed_at, disclosed_at, started_at}:
+    if issued_at is None or consumed_at is None or disclosed_at is None or started_at is None:
         return False
     if not issued_at <= consumed_at == disclosed_at <= started_at:
         return False
@@ -2032,11 +2033,9 @@ def _valid_evaluation_timeline(
     if phase == "RECORD":
         return completed_at is None and closed_at is None
     if phase == "TERMINAL_READ":
-        return (
-            completed_at is not None
-            and closed_at is not None
-            and started_at <= completed_at <= closed_at
-        )
+        if completed_at is None or closed_at is None:
+            return False
+        return started_at <= completed_at <= closed_at
     return False
 
 

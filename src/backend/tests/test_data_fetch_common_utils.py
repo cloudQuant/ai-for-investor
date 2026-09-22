@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from app.data_fetch.core.mysql_base import MysqlBase
-from app.data_fetch.providers.akshare_to_mysql import FuncThread
+from app.data_fetch.providers.akshare_to_mysql import AkshareToMySql, FuncThread
 from app.data_fetch.utils.common_utils import retry_on_exception
 
 
@@ -255,3 +255,151 @@ def test_save_data_drops_columns_that_failed_auto_add(monkeypatch):
         "INSERT IGNORE INTO `WIDE_TABLE` (`known_new`, `data_date`) VALUES (%s, %s)",
         [["ok", "2026-06-21"]],
     )
+
+
+@pytest.mark.parametrize("row", [None, ()])
+def test_get_latest_date_returns_none_for_an_empty_fetchone(monkeypatch, row):
+    class FakeCursor:
+        def execute(self, sql, params=()):
+            self.executed = (sql, params)
+
+        def fetchone(self):
+            return row
+
+    service = MysqlBase({})
+    cursor = FakeCursor()
+    service.cursor = cursor
+    service.connection = object()
+    monkeypatch.setattr(service, "connect_db", lambda: None)
+    monkeypatch.setattr(service, "disconnect_db", lambda: None)
+
+    assert service.get_latest_date("prices") is None
+    assert cursor.executed == ("SELECT MAX(BASEDATE) FROM prices", ())
+
+
+def test_get_data_by_columns_handles_missing_description(monkeypatch):
+    class FakeCursor:
+        description = None
+
+        def execute(self, sql):
+            self.executed = sql
+
+        def fetchall(self):
+            return []
+
+        def close(self):
+            pass
+
+    class FakeConnection:
+        def __init__(self, cursor):
+            self._cursor = cursor
+
+        def cursor(self):
+            return self._cursor
+
+    service = MysqlBase({})
+    cursor = FakeCursor()
+    service.connection = FakeConnection(cursor)
+    monkeypatch.setattr(service, "connect_db", lambda: None)
+    monkeypatch.setattr(service, "disconnect_db", lambda: None)
+
+    result = service.get_data_by_columns("prices", ["close"])
+
+    assert result.empty
+    assert cursor.executed == "SELECT close FROM prices"
+
+
+def test_connect_db_establishes_connection_and_recovers_missing_cursor(monkeypatch):
+    class FakeCursor:
+        def close(self):
+            pass
+
+    class FakeConnection:
+        def __init__(self):
+            self.created_cursors = []
+
+        def is_connected(self):
+            return True
+
+        def cursor(self):
+            cursor = FakeCursor()
+            self.created_cursors.append(cursor)
+            return cursor
+
+        def close(self):
+            pass
+
+    connection = FakeConnection()
+    monkeypatch.setattr(
+        "app.data_fetch.core.mysql_base.mysql.connector.connect",
+        lambda **config: connection,
+    )
+    service = MysqlBase({})
+
+    service.connect_db()
+    assert service.connection is connection
+    assert service.cursor is connection.created_cursors[0]
+
+    service.cursor = None
+    service.connect_db()
+    assert service.cursor is connection.created_cursors[1]
+
+
+def test_akshare_to_mysql_save_data_preserves_row_count_with_fake_database(monkeypatch):
+    class FakeCursor:
+        def __init__(self):
+            self.fetchone_value = None
+            self.executed = []
+            self.inserted = None
+
+        def execute(self, sql, params=()):
+            self.executed.append((sql, params))
+            if sql.startswith("SHOW TABLES LIKE"):
+                self.fetchone_value = ("FAKE_TABLE",)
+
+        def fetchone(self):
+            return self.fetchone_value
+
+        def fetchall(self):
+            return [("value",)]
+
+        def executemany(self, sql, data):
+            self.inserted = (sql, data)
+
+    class FakeConnection:
+        def __init__(self):
+            self.commits = 0
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            pass
+
+    service = AkshareToMySql({})
+    cursor = FakeCursor()
+    connection = FakeConnection()
+    service.cursor = cursor
+    service.connection = connection
+    monkeypatch.setattr(service, "connect_db", lambda: None)
+    monkeypatch.setattr(service, "disconnect_db", lambda: None)
+
+    result = service.save_data(pd.DataFrame({"value": [1, 2]}), "FAKE_TABLE")
+
+    assert result == 2
+    assert cursor.inserted == (
+        "INSERT INTO `FAKE_TABLE` (`value`) VALUES (%s)",
+        [[1], [2]],
+    )
+    assert connection.commits == 1
+
+
+def test_akshare_to_mysql_save_data_returns_false_for_empty_input(monkeypatch):
+    service = AkshareToMySql({})
+    monkeypatch.setattr(
+        service,
+        "connect_db",
+        lambda: (_ for _ in ()).throw(AssertionError("empty data must not connect")),
+    )
+
+    assert service.save_data(pd.DataFrame(), "FAKE_TABLE") is False

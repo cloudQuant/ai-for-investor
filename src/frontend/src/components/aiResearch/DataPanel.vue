@@ -1,13 +1,34 @@
 <template>
-  <section class="trusted-panel" aria-labelledby="trusted-data-title">
-    <header><span>02</span><div><h3 id="trusted-data-title">{{ t('strategy.aiResearchTrusted.data.title') }}</h3><p>{{ t('strategy.aiResearchTrusted.data.description') }}</p></div></header>
-    <dl v-if="dataset" class="trusted-panel__facts">
+  <section
+    class="trusted-panel"
+    aria-labelledby="trusted-data-title"
+  >
+    <header>
+      <span>02</span><div>
+        <h3 id="trusted-data-title">
+          {{ t('strategy.aiResearchTrusted.data.title') }}
+        </h3><p>{{ t('strategy.aiResearchTrusted.data.description') }}</p>
+      </div>
+    </header>
+    <dl
+      v-if="dataset"
+      class="trusted-panel__facts"
+    >
       <div><dt>{{ t('strategy.aiResearchTrusted.data.partition') }}</dt><dd>{{ dataset.partition_kind }}</dd></div>
-      <div><dt>{{ t('strategy.aiResearchTrusted.data.snapshotHash') }}</dt><dd class="trusted-panel__hash">{{ dataset.content_hash }}</dd></div>
+      <div>
+        <dt>{{ t('strategy.aiResearchTrusted.data.snapshotHash') }}</dt><dd class="trusted-panel__hash">
+          {{ dataset.content_hash }}
+        </dd>
+      </div>
       <div><dt>{{ t('strategy.aiResearchTrusted.data.policy') }}</dt><dd>{{ dataset.dataset_policy_version }}</dd></div>
       <div><dt>{{ t('strategy.aiResearchTrusted.data.pitCutoff') }}</dt><dd>{{ dataset.point_in_time_cutoff }}</dd></div>
     </dl>
-    <p v-else class="trusted-panel__empty">{{ t('strategy.aiResearchTrusted.data.empty') }}</p>
+    <p
+      v-else
+      class="trusted-panel__empty"
+    >
+      {{ t('strategy.aiResearchTrusted.data.empty') }}
+    </p>
   </section>
 </template>
 

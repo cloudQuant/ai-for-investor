@@ -64,11 +64,14 @@
             v-if="readmeLoading"
             class="flex justify-center py-8"
           >
-            <el-icon class="is-loading text-2xl" aria-hidden="true">
+            <el-icon
+              class="is-loading text-2xl"
+              aria-hidden="true"
+            >
               <Loading />
             </el-icon>
           </div>
-          <!-- eslint-disable vue/no-v-html -- Strategy readme Markdown is sanitized in this component. -->
+          <!-- eslint-disable vue/no-v-html -- sanitizedReadme is renderMarkdown output backed by DOMPurify tag, attribute, and URI allowlists. -->
           <div
             v-else-if="readmeContent"
             class="prose prose-sm max-w-none readme-content"
@@ -83,6 +86,7 @@
         <el-tab-pane
           :label="t('strategy.strategyCode')"
           name="code"
+          lazy
         >
           <MonacoEditor
             :model-value="template.code"

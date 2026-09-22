@@ -155,17 +155,17 @@ describe('exportUtils', () => {
       status: 'completed',
     } as any
 
-    let createURL: ReturnType<typeof vi.fn<[], string>>
+    let createURL: ReturnType<typeof vi.fn<() => string>>
     let revokeURL: ReturnType<typeof vi.fn>
-    let click: ReturnType<typeof vi.fn>
+    let click: ReturnType<typeof vi.fn<() => void>>
     let createElementOriginal: typeof document.createElement
 
     beforeEach(() => {
-      click = vi.fn()
+      click = vi.fn<() => void>()
       createElementOriginal = document.createElement
       document.createElement = vi.fn((tag: string) => {
         const el = createElementOriginal.call(document, tag) as HTMLAnchorElement
-        if (tag === 'a') el.click = click
+        if (tag === 'a') el.click = () => click()
         return el
       }) as any
       createURL = vi.fn(() => 'blob:test')

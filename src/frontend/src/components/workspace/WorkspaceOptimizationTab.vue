@@ -34,7 +34,9 @@
                 size="small"
                 @click="handleOpenFile"
               >
-                <el-icon aria-hidden="true"><FolderOpened /></el-icon>
+                <el-icon aria-hidden="true">
+                  <FolderOpened />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -46,7 +48,9 @@
                 size="small"
                 @click="handleSaveResults"
               >
-                <el-icon aria-hidden="true"><Download /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Download />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -63,7 +67,9 @@
                 type="primary"
                 @click="handleApplyBest"
               >
-                <el-icon aria-hidden="true"><Check /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Check />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -76,7 +82,9 @@
                 type="success"
                 @click="handleApplyBestAndOpen"
               >
-                <el-icon aria-hidden="true"><Position /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Position />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -88,7 +96,9 @@
                 size="small"
                 @click="handleTestReport"
               >
-                <el-icon aria-hidden="true"><Document /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Document />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -104,7 +114,9 @@
                 :type="viewMode === 'table' ? 'primary' : ''"
                 @click="viewMode = 'table'"
               >
-                <el-icon aria-hidden="true"><Grid /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Grid />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -116,7 +128,9 @@
                 :type="viewMode === 'analysis' ? 'primary' : ''"
                 @click="viewMode = 'analysis'"
               >
-                <el-icon aria-hidden="true"><Operation /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Operation />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -131,7 +145,9 @@
                 size="small"
                 @click="showFilter = !showFilter"
               >
-                <el-icon aria-hidden="true"><Filter /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Filter />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -142,7 +158,9 @@
                 size="small"
                 @click="handleReset"
               >
-                <el-icon aria-hidden="true"><RefreshLeft /></el-icon>
+                <el-icon aria-hidden="true">
+                  <RefreshLeft />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -157,7 +175,9 @@
                 size="small"
                 @click="showStatTimeDialog = true"
               >
-                <el-icon aria-hidden="true"><Timer /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Timer />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -168,7 +188,9 @@
                 size="small"
                 @click="showCalcMethodDialog = true"
               >
-                <el-icon aria-hidden="true"><Operation /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Operation />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -179,7 +201,9 @@
                 size="small"
                 @click="showCustomFieldsDialog = true"
               >
-                <el-icon aria-hidden="true"><SetUp /></el-icon>
+                <el-icon aria-hidden="true">
+                  <SetUp />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -194,7 +218,9 @@
                 size="small"
                 @click="loadResults"
               >
-                <el-icon aria-hidden="true"><Refresh /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Refresh />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -205,7 +231,9 @@
                 size="small"
                 @click="handleSetDefault"
               >
-                <el-icon aria-hidden="true"><Star /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Star />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -396,7 +424,10 @@
       v-else-if="loading"
       class="flex justify-center py-10"
     >
-      <el-icon class="is-loading text-2xl text-blue-500" aria-hidden="true">
+      <el-icon
+        class="is-loading text-2xl text-blue-500"
+        aria-hidden="true"
+      >
         <Loading />
       </el-icon>
     </div>

@@ -405,7 +405,7 @@ def _gateway_config_value(gateway: dict[str, Any] | None, field: str) -> Any:
 def _positive_spec_number(spec: dict[str, Any], *keys: str) -> bool:
     for key in keys:
         value = spec.get(key)
-        if value in (None, ""):
+        if value is None or value == "":
             continue
         try:
             if float(value) > 0:

@@ -7,12 +7,11 @@ introduced in iteration 124.
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, TypeAlias
 
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -24,6 +23,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
+
+
+WorkspaceJSONScalar: TypeAlias = str | int | float | bool | None
+WorkspaceJSONValue: TypeAlias = (
+    WorkspaceJSONScalar | list["WorkspaceJSONValue"] | dict[str, "WorkspaceJSONValue"]
+)
+WorkspaceJSONMapping: TypeAlias = dict[str, WorkspaceJSONValue]
 
 
 class Workspace(Base):
@@ -54,14 +63,16 @@ class Workspace(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
-    name = Column(String(200), nullable=False)
-    description = Column(Text, nullable=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     workspace_type: Mapped[str] = mapped_column(
         String(32), nullable=False, default="research", index=True
     )
-    settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=True)
-    trading_config = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    settings: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict, nullable=True)
+    trading_config: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
@@ -70,8 +81,8 @@ class Workspace(Base):
     )
 
     # Relationships
-    user = relationship("User", back_populates="workspaces")
-    strategy_units = relationship(
+    user: Mapped["User"] = relationship("User", back_populates="workspaces")
+    strategy_units: Mapped[list["StrategyUnit"]] = relationship(
         "StrategyUnit",
         back_populates="workspace",
         cascade="all, delete-orphan",
@@ -120,47 +131,49 @@ class StrategyUnit(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    workspace_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    group_name = Column(String(200), nullable=True, default="")
-    strategy_id = Column(String(100), nullable=True)
-    strategy_name = Column(String(200), nullable=True, default="")
-    symbol = Column(String(50), nullable=True, default="")
-    symbol_name = Column(String(200), nullable=True, default="")
-    timeframe = Column(String(10), nullable=True, default="1d")
-    timeframe_n = Column(Integer, default=1)
-    category = Column(String(100), nullable=True, default="")
-    sort_order = Column(Integer, default=0)
+    group_name: Mapped[str | None] = mapped_column(String(200), nullable=True, default="")
+    strategy_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    strategy_name: Mapped[str | None] = mapped_column(String(200), nullable=True, default="")
+    symbol: Mapped[str | None] = mapped_column(String(50), nullable=True, default="")
+    symbol_name: Mapped[str | None] = mapped_column(String(200), nullable=True, default="")
+    timeframe: Mapped[str | None] = mapped_column(String(10), nullable=True, default="1d")
+    timeframe_n: Mapped[int | None] = mapped_column(Integer, default=1)
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True, default="")
+    sort_order: Mapped[int | None] = mapped_column(Integer, default=0)
 
     # Configuration JSON fields
-    data_config = Column(JSON, default=dict)
-    unit_settings = Column(JSON, default=dict)
-    params = Column(JSON, default=dict)
-    optimization_config = Column(JSON, default=dict)
-    trading_mode = Column(String(20), nullable=False, default="paper")
-    gateway_config = Column(JSON, default=dict)
-    lock_trading = Column(Boolean, nullable=False, default=False)
-    lock_running = Column(Boolean, nullable=False, default=False)
-    trading_instance_id = Column(String(36), nullable=True)
-    trading_snapshot = Column(JSON, default=dict)
+    data_config: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
+    unit_settings: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
+    params: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
+    optimization_config: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
+    trading_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="paper")
+    gateway_config: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
+    lock_trading: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    lock_running: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    trading_instance_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    trading_snapshot: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
 
     # Run state
-    run_status = Column(String(20), default="idle")
-    run_count = Column(Integer, default=0)
-    last_run_time = Column(Float, nullable=True)
-    last_task_id = Column(String(36), nullable=True)
-    last_optimization_task_id = Column(String(36), nullable=True)
-    bar_count = Column(Integer, nullable=True)
-    metrics_snapshot = Column(JSON, default=dict)
+    run_status: Mapped[str | None] = mapped_column(String(20), default="idle")
+    run_count: Mapped[int | None] = mapped_column(Integer, default=0)
+    last_run_time: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_optimization_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    bar_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metrics_snapshot: Mapped[WorkspaceJSONMapping | None] = mapped_column(JSON, default=dict)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
-    workspace = relationship("Workspace", back_populates="strategy_units")
+    workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="strategy_units")

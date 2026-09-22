@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi import HTTPException
-from starlette.websockets import WebSocketDisconnect
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 
 @pytest.mark.asyncio
 async def test_comparison_api_happy_and_error_branches():
     from app.api import comparison as comparison_api
-    from app.schemas.comparison import ComparisonResponse
+    from app.schemas.comparison import ComparisonResponse, ComparisonUpdate
 
     user = SimpleNamespace(sub="u1")
     other_user = SimpleNamespace(sub="u2")
@@ -36,20 +36,37 @@ async def test_comparison_api_happy_and_error_branches():
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+    public_cmp_obj = cmp_obj.model_copy(update={"id": "public", "is_public": True})
 
     class _Svc:
+        def __init__(self):
+            self.update_calls = []
+            self.get_calls = []
+
         async def create_comparison(self, **kwargs):
             return cmp_obj
 
         async def get_comparison(self, comparison_id: str, user_id: str):
+            self.get_calls.append((comparison_id, user_id))
             if comparison_id == "missing":
                 return None
-            return cmp_obj
+            comparison = {"c1": cmp_obj, "public": public_cmp_obj}.get(comparison_id)
+            if comparison is None:
+                return None
+            if not comparison.is_public and comparison.user_id != user_id:
+                return None
+            return comparison
 
-        async def update_comparison(self, comparison_id: str, user_id: str, update_data):
+        async def update_comparison(
+            self, comparison_id: str, user_id: str, update_data: ComparisonUpdate
+        ):
+            self.update_calls.append((comparison_id, user_id, update_data))
             if comparison_id == "missing":
                 return None
-            cmp_obj.is_favorite = update_data.get("is_favorite", cmp_obj.is_favorite)  # type: ignore[misc]
+            if update_data.name is not None:
+                cmp_obj.name = update_data.name
+            if update_data.is_favorite is not None:
+                cmp_obj.is_favorite = update_data.is_favorite
             return cmp_obj
 
         async def delete_comparison(self, comparison_id: str, user_id: str):
@@ -70,34 +87,52 @@ async def test_comparison_api_happy_and_error_branches():
     with pytest.raises(HTTPException) as e:
         await comparison_api.get_comparison_detail("missing", current_user=user, service=svc)
     assert e.value.status_code == 404
+    assert svc.get_calls[-1] == ("missing", "u1")
 
-    # detail: 403 when not owner and not public
+    # The service hides private non-owner records, so the route returns 404.
     with pytest.raises(HTTPException) as e:
         await comparison_api.get_comparison_detail("c1", current_user=other_user, service=svc)
-    assert e.value.status_code == 403
+    assert e.value.status_code == 404
+    assert svc.get_calls[-1] == ("c1", "u2")
 
     # detail: success
     assert (
         await comparison_api.get_comparison_detail("c1", current_user=user, service=svc) is cmp_obj
     )
+    assert svc.get_calls[-1] == ("c1", "u1")
+
+    # Public records are visible to non-owners through the service contract.
+    assert (
+        await comparison_api.get_comparison_detail("public", current_user=other_user, service=svc)
+        is public_cmp_obj
+    )
+    assert svc.get_calls[-1] == ("public", "u2")
 
     # update: 404
+    missing_update = ComparisonUpdate()
     with pytest.raises(HTTPException) as e:
         await comparison_api.update_comparison(
-            "missing", SimpleNamespace(model_dump=lambda **k: {}), current_user=user, service=svc
+            "missing", missing_update, current_user=user, service=svc
         )
     assert e.value.status_code == 404
+    assert svc.update_calls[-1] == ("missing", "u1", missing_update)
+    assert svc.update_calls[-1][2] is missing_update
 
     # update: success
+    update_request = ComparisonUpdate(name="new", is_favorite=True)
     assert (
         await comparison_api.update_comparison(
             "c1",
-            SimpleNamespace(model_dump=lambda **k: {"name": "new"}),
+            update_request,
             current_user=user,
             service=svc,
         )
         is cmp_obj
     )
+    assert svc.update_calls[-1] == ("c1", "u1", update_request)
+    assert svc.update_calls[-1][2] is update_request
+    assert cmp_obj.name == "new"
+    assert cmp_obj.is_favorite is True
 
     # delete: 404
     with pytest.raises(HTTPException) as e:
@@ -120,12 +155,21 @@ async def test_comparison_api_happy_and_error_branches():
     assert fav["comparison_id"] == "c1"
     assert isinstance(fav["is_favorite"], bool)
 
-    # share: 403 when not owner
+    # Sharing a private non-owner record is hidden by the service as not found.
     with pytest.raises(HTTPException) as e:
         await comparison_api.share_comparison(
             "c1", {"shared_with_user_ids": ["u3"]}, current_user=other_user, service=svc
         )
+    assert e.value.status_code == 404
+    assert svc.get_calls[-1] == ("c1", "u2")
+
+    # A public record is visible, but only its owner can share it.
+    with pytest.raises(HTTPException) as e:
+        await comparison_api.share_comparison(
+            "public", {"shared_with_user_ids": ["u3"]}, current_user=other_user, service=svc
+        )
     assert e.value.status_code == 403
+    assert svc.get_calls[-1] == ("public", "u2")
 
     # share: explicit not implemented
     with pytest.raises(HTTPException) as e:
@@ -133,6 +177,7 @@ async def test_comparison_api_happy_and_error_branches():
             "c1", {"shared_with_user_ids": ["u3"]}, current_user=user, service=svc
         )
     assert e.value.status_code == 501
+    assert svc.get_calls[-1] == ("c1", "u1")
 
     # data endpoints
     assert (await comparison_api.get_metrics_comparison("c1", current_user=user, service=svc))[
@@ -185,6 +230,17 @@ async def test_analytics_api_detail_kline_monthly_export_and_error():
             return {"years": [], "returns": []}
 
     svc = _Svc()
+    get_backtest_data_calls: list[tuple[str, object, str | None, bool, bool]] = []
+
+    def _assert_get_backtest_data_call(
+        call: tuple[str, object, str | None, bool, bool],
+        *,
+        task_id: str,
+        backtest_service: object,
+        include_logs: bool,
+        include_klines: bool,
+    ) -> None:
+        assert call == (task_id, backtest_service, user.sub, include_logs, include_klines)
 
     fake_result = {
         "task_id": "t1",
@@ -207,81 +263,164 @@ async def test_analytics_api_detail_kline_monthly_export_and_error():
         "created_at": "2023-01-01T00:00:00Z",
     }
 
-    async def _fake_get_backtest_data(task_id, backtest_service, user_id=None, **kwargs):
-        del backtest_service, user_id, kwargs
+    async def _fake_get_backtest_data(
+        task_id: str,
+        backtest_service: object,
+        user_id: str | None = None,
+        include_logs: bool = True,
+        include_klines: bool = True,
+    ) -> dict | None:
+        get_backtest_data_calls.append(
+            (task_id, backtest_service, user_id, include_logs, include_klines)
+        )
         return fake_result if task_id == "t1" else None
 
     with patch.object(analytics_api, "get_backtest_data", side_effect=_fake_get_backtest_data):
+        detail_backtest_service = object()
         detail = await analytics_api.get_backtest_detail(
-            "t1", current_user=user, service=svc, backtest_service=object()
+            "t1", current_user=user, service=svc, backtest_service=detail_backtest_service
         )
         assert detail.task_id == "t1"
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=detail_backtest_service,
+            include_logs=False,
+            include_klines=False,
+        )
 
+        missing_backtest_service = object()
         with pytest.raises(HTTPException) as e:
             await analytics_api.get_backtest_detail(
-                "missing", current_user=user, service=svc, backtest_service=object()
+                "missing",
+                current_user=user,
+                service=svc,
+                backtest_service=missing_backtest_service,
             )
         assert e.value.status_code == 404
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="missing",
+            backtest_service=missing_backtest_service,
+            include_logs=False,
+            include_klines=False,
+        )
 
+        kline_backtest_service = object()
         kline = await analytics_api.get_kline_with_signals(
             "t1",
             start_date="2023-01-10",
             end_date="2023-01-10",
             current_user=user,
             service=svc,
-            backtest_service=object(),
+            backtest_service=kline_backtest_service,
         )
-        assert len(kline.klines) == 1
+        assert [item.date for item in kline.klines] == ["2023-01-10"]
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=kline_backtest_service,
+            include_logs=True,
+            include_klines=True,
+        )
 
         # log indicators branch
         fake_result2 = dict(fake_result)
         fake_result2["log_indicators"] = {"x": [1.0]}
 
-        async def _fake_get_backtest_data2(task_id, backtest_service, user_id=None, **kwargs):
-            del task_id, backtest_service, user_id, kwargs
+        async def _fake_get_backtest_data2(
+            task_id: str,
+            backtest_service: object,
+            user_id: str | None = None,
+            include_logs: bool = True,
+            include_klines: bool = True,
+        ) -> dict:
+            get_backtest_data_calls.append(
+                (task_id, backtest_service, user_id, include_logs, include_klines)
+            )
             return fake_result2
 
         with patch.object(analytics_api, "get_backtest_data", side_effect=_fake_get_backtest_data2):
+            kline2_backtest_service = object()
             kline2 = await analytics_api.get_kline_with_signals(
                 "t1",
                 current_user=user,
                 service=svc,
-                backtest_service=object(),
+                backtest_service=kline2_backtest_service,
             )
         assert kline2.indicators == {"x": [1.0]}
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=kline2_backtest_service,
+            include_logs=True,
+            include_klines=True,
+        )
 
+        monthly_backtest_service = object()
         monthly = await analytics_api.get_monthly_returns(
-            "t1", current_user=user, service=svc, backtest_service=object()
+            "t1", current_user=user, service=svc, backtest_service=monthly_backtest_service
         )
         assert monthly == {"years": [], "returns": []}
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=monthly_backtest_service,
+            include_logs=False,
+            include_klines=False,
+        )
 
+        csv_backtest_service = object()
         csv_resp = await analytics_api.export_backtest_results(
             "t1",
             format="csv",
             current_user=user,
             service=svc,
-            backtest_service=object(),
+            backtest_service=csv_backtest_service,
         )
         assert csv_resp.media_type == "text/csv"
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=csv_backtest_service,
+            include_logs=True,
+            include_klines=True,
+        )
 
+        json_backtest_service = object()
         json_resp = await analytics_api.export_backtest_results(
             "t1",
             format="json",
             current_user=user,
             service=svc,
-            backtest_service=object(),
+            backtest_service=json_backtest_service,
         )
         assert json_resp.media_type == "application/json"
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=json_backtest_service,
+            include_logs=True,
+            include_klines=True,
+        )
 
+        invalid_format_backtest_service = object()
         with pytest.raises(HTTPException) as e:
             await analytics_api.export_backtest_results(
                 "t1",
                 format="nope",
                 current_user=user,
                 service=svc,
-                backtest_service=object(),
+                backtest_service=invalid_format_backtest_service,
             )
         assert e.value.status_code == 400
+        _assert_get_backtest_data_call(
+            get_backtest_data_calls[-1],
+            task_id="t1",
+            backtest_service=invalid_format_backtest_service,
+            include_logs=True,
+            include_klines=True,
+        )
 
 
 @pytest.mark.asyncio
@@ -409,7 +548,10 @@ async def test_backtest_enhanced_api_run_list_and_reports_and_websocket_disconne
         resp = await bt_api.run_backtest(req, current_user=user, service=svc)
         assert resp.task_id == "t1"
 
-    ok = await bt_api.get_backtest_result("t1", request=Mock(), current_user=user, service=svc)
+    # Handler-only calls deliberately bypass cache_response; ASGI cache behavior is tested in test_cache_response.py.
+    ok = await bt_api.get_backtest_result.__wrapped__(
+        "t1", request=Mock(), current_user=user, service=svc
+    )
     assert ok.task_id == "t1"
 
     ok_status = await bt_api.get_backtest_status("t1", current_user=user, service=svc)
@@ -419,7 +561,9 @@ async def test_backtest_enhanced_api_run_list_and_reports_and_websocket_disconne
     assert ok_del["message"] == "Deleted successfully"
 
     with pytest.raises(HTTPException) as e:
-        await bt_api.get_backtest_result("missing", request=Mock(), current_user=user, service=svc)
+        await bt_api.get_backtest_result.__wrapped__(
+            "missing", request=Mock(), current_user=user, service=svc
+        )
     assert e.value.status_code == 404
 
     with pytest.raises(HTTPException) as e:
@@ -441,7 +585,10 @@ async def test_backtest_enhanced_api_run_list_and_reports_and_websocket_disconne
     assert "spreadsheetml" in excel.media_type
 
     # WebSocket disconnect branch.
-    ws = SimpleNamespace()
+    ws = Mock(spec=WebSocket)
+    ws.receive_text = AsyncMock(side_effect=WebSocketDisconnect())
+    ws.send_json = AsyncMock()
+    ws.close = AsyncMock()
     with (
         patch.object(bt_api.ws_manager, "connect", new=AsyncMock()),
         patch.object(bt_api.ws_manager, "disconnect") as disc,
@@ -452,9 +599,8 @@ async def test_backtest_enhanced_api_run_list_and_reports_and_websocket_disconne
             return_value=(SimpleNamespace(sub="u1"), "access-token"),
         ),
     ):
-        svc.get_task_status = AsyncMock(
-            side_effect=[SimpleNamespace(value="running"), WebSocketDisconnect()]
-        )  # type: ignore[method-assign]
+        svc.get_task_status = AsyncMock(return_value=SimpleNamespace(value="running"))  # type: ignore[method-assign]
         svc.get_result = AsyncMock(return_value=None)  # type: ignore[method-assign]
         await bt_api.websocket_endpoint(ws, "t1")
-        disc.assert_called()
+        ws.receive_text.assert_awaited_once()
+        disc.assert_called_once_with(ws, "t1", f"client_{id(ws)}")

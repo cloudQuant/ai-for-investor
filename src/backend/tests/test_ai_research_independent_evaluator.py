@@ -212,6 +212,19 @@ async def test_resume_evaluation_rejects_coordinated_terminal_hash_tampering(
             evaluator_identity="ai_research_evaluator",
         )
 
+    async with async_session_maker() as session:
+        stored = await session.get(ResearchEvaluation, evaluation.id)
+        assert stored is not None
+        stored.gate_inputs = {**stored.gate_inputs, "input_evidence_hash": None}
+        await session.commit()
+
+    with pytest.raises(ValueError, match="^PROMOTION_RESULT_INVALID$"):
+        await IndependentEvaluator(dataset_registry=stranded["datasets"]).resume_evaluation(
+            evaluation_id=evaluation.id,
+            policy=_promotion_policy(),
+            evaluator_identity="ai_research_evaluator",
+        )
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(

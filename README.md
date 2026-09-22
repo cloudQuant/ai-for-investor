@@ -38,7 +38,7 @@ ai-for-investor 面向量化交易者与投研团队，将自然语言研究、�
 ### 环境要求
 
 - Python 3.10+
-- Node.js 20+
+- Node.js ^20.19.0, ^22.13.0, or ^24.0.0
 - Git
 - Docker Compose v2（可选）
 

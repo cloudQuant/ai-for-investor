@@ -20,7 +20,9 @@
             data-test="news-desk-action-analysis"
             @click="analysisVisible = true"
           >
-            <el-icon aria-hidden="true"><Search /></el-icon>
+            <el-icon aria-hidden="true">
+              <Search />
+            </el-icon>
             <span>{{ t('newsIntel.btnSentimentAnalysis') }}</span>
           </button>
           <button
@@ -29,7 +31,9 @@
             data-test="news-desk-action-import"
             @click="importVisible = true"
           >
-            <el-icon aria-hidden="true"><Plus /></el-icon>
+            <el-icon aria-hidden="true">
+              <Plus />
+            </el-icon>
             <span>{{ t('newsIntel.btnArticleImport') }}</span>
           </button>
           <button
@@ -38,7 +42,9 @@
             data-test="news-desk-action-filter"
             @click="filterVisible = true"
           >
-            <el-icon aria-hidden="true"><Filter /></el-icon>
+            <el-icon aria-hidden="true">
+              <Filter />
+            </el-icon>
             <span>{{ t('newsIntel.btnFiltering') }}</span>
           </button>
           <button
@@ -47,7 +53,9 @@
             data-test="news-desk-action-rss-refresh"
             @click="rssRefreshVisible = true"
           >
-            <el-icon aria-hidden="true"><Refresh /></el-icon>
+            <el-icon aria-hidden="true">
+              <Refresh />
+            </el-icon>
             <span>{{ t('newsIntel.btnRefreshRss') }}</span>
           </button>
           <button
@@ -56,7 +64,9 @@
             data-test="news-desk-action-rss-schedule"
             @click="rssScheduleVisible = true"
           >
-            <el-icon aria-hidden="true"><Refresh /></el-icon>
+            <el-icon aria-hidden="true">
+              <Refresh />
+            </el-icon>
             <span>{{ t('newsIntel.btnAutoRefresh') }}</span>
           </button>
           <button
@@ -65,7 +75,9 @@
             data-test="news-source-governance-button"
             @click="toggleSourceConfig"
           >
-            <el-icon aria-hidden="true"><Setting /></el-icon>
+            <el-icon aria-hidden="true">
+              <Setting />
+            </el-icon>
             <span>{{ t('newsIntel.btnSourceGovernance') }}</span>
           </button>
         </div>
@@ -171,7 +183,9 @@
                 :disabled="!scope.row.id"
                 @click="showArticleContent(scope.row)"
               >
-                <el-icon aria-hidden="true"><Document /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Document />
+                </el-icon>
                 {{ t('newsIntel.btnViewContent') }}
               </el-button>
               <el-button
@@ -201,7 +215,9 @@
         v-loading="articleContentLoading"
         class="news-article-content"
       >
-        <p v-if="articleContent">{{ articleContent }}</p>
+        <p v-if="articleContent">
+          {{ articleContent }}
+        </p>
         <el-empty
           v-else-if="!articleContentLoading"
           :description="t('newsIntel.noSummary')"
@@ -229,7 +245,9 @@
             :loading="loading"
             @click="analyzeHeadline"
           >
-            <el-icon aria-hidden="true"><Search /></el-icon>
+            <el-icon aria-hidden="true">
+              <Search />
+            </el-icon>
             {{ t('newsIntel.btnAnalyze') }}
           </el-button>
         </div>
@@ -271,7 +289,9 @@
             :loading="loading"
             @click="ingest"
           >
-            <el-icon aria-hidden="true"><Plus /></el-icon>
+            <el-icon aria-hidden="true">
+              <Plus />
+            </el-icon>
             {{ t('newsIntel.btnIngest') }}
           </el-button>
         </div>
@@ -293,9 +313,18 @@
             clearable
             :placeholder="t('newsIntel.sentimentPh')"
           >
-            <el-option label="BULLISH" value="BULLISH" />
-            <el-option label="BEARISH" value="BEARISH" />
-            <el-option label="NEUTRAL" value="NEUTRAL" />
+            <el-option
+              label="BULLISH"
+              value="BULLISH"
+            />
+            <el-option
+              label="BEARISH"
+              value="BEARISH"
+            />
+            <el-option
+              label="NEUTRAL"
+              value="NEUTRAL"
+            />
           </el-select>
           <el-input
             v-model="filterTicker"
@@ -310,7 +339,9 @@
             :loading="loading"
             @click="loadArticles"
           >
-            <el-icon aria-hidden="true"><Filter /></el-icon>
+            <el-icon aria-hidden="true">
+              <Filter />
+            </el-icon>
             {{ t('newsIntel.btnApplyFilter') }}
           </el-button>
         </div>
@@ -340,7 +371,9 @@
           :loading="loading"
           @click="pullSource"
         >
-          <el-icon aria-hidden="true"><Refresh /></el-icon>
+          <el-icon aria-hidden="true">
+            <Refresh />
+          </el-icon>
           {{ t('newsIntel.btnRefreshRss') }}
         </el-button>
         <div
@@ -372,10 +405,22 @@
           class="news-refresh-interval"
           :aria-label="t('newsIntel.rssRefreshInterval')"
         >
-          <el-option :label="t('newsIntel.rssRefreshMinutes', { minutes: 5 })" :value="5" />
-          <el-option :label="t('newsIntel.rssRefreshMinutes', { minutes: 15 })" :value="15" />
-          <el-option :label="t('newsIntel.rssRefreshMinutes', { minutes: 30 })" :value="30" />
-          <el-option :label="t('newsIntel.rssRefreshMinutes', { minutes: 60 })" :value="60" />
+          <el-option
+            :label="t('newsIntel.rssRefreshMinutes', { minutes: 5 })"
+            :value="5"
+          />
+          <el-option
+            :label="t('newsIntel.rssRefreshMinutes', { minutes: 15 })"
+            :value="15"
+          />
+          <el-option
+            :label="t('newsIntel.rssRefreshMinutes', { minutes: 30 })"
+            :value="30"
+          />
+          <el-option
+            :label="t('newsIntel.rssRefreshMinutes', { minutes: 60 })"
+            :value="60"
+          />
         </el-select>
       </section>
     </el-dialog>

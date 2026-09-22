@@ -44,8 +44,14 @@ for details.
 ```bash
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
+# Local/legacy compatibility install (non-locking; respects Python markers).
 pip install -r requirements.txt
 ```
+
+For an audited, reproducible Python 3.11 production install, use
+`config/requirements-prod.lock` from the repository root, then install the
+backend package with `--no-deps`; see the
+[deployment guide](../../docs/operations/DEPLOYMENT.md).
 
 ### 2. Configure Environment
 

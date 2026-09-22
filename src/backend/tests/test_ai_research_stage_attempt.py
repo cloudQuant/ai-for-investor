@@ -14,9 +14,42 @@ from app.models.ai_research_v2 import (
 )
 from app.models.user import User
 from app.services.research.artifact_broker import ArtifactBroker, ArtifactDescriptor
+from app.services.research.generation_materialization import GenerationMaterializationProposal
 from app.services.research.stage_attempt import ResearchStageAttemptService
 from app.services.research.task_runner import DurableResearchTaskRunner
 from app.services.research.workflow_worker import StageExecutionContext
+
+
+@pytest.mark.asyncio
+async def test_stage_attempt_generation_proposal_requires_materializer() -> None:
+    service = ResearchStageAttemptService()
+    proposal = GenerationMaterializationProposal(
+        model_invocation_id="invocation-unmaterialized",
+        model_output="{}",
+    )
+
+    with pytest.raises(ValueError, match="RESEARCH_GENERATION_MATERIALIZER_UNAVAILABLE"):
+        await service.complete(
+            task_id="task-unmaterialized",
+            lease_token="lease-unmaterialized",
+            attempt_id="attempt-unmaterialized",
+            status="SUCCEEDED",
+            generation_proposal=proposal,
+        )
+
+
+@pytest.mark.asyncio
+async def test_stage_attempt_discovery_proposal_requires_materializer() -> None:
+    service = ResearchStageAttemptService()
+
+    with pytest.raises(ValueError, match="RESEARCH_DISCOVERY_MATERIALIZER_UNAVAILABLE"):
+        await service.complete(
+            task_id="task-unpublished",
+            lease_token="lease-unpublished",
+            attempt_id="attempt-unpublished",
+            status="SUCCEEDED",
+            discovery_execution_id="d" * 64,
+        )
 
 
 @pytest.mark.asyncio

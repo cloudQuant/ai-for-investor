@@ -285,7 +285,7 @@ def _merge_ai_improvement(
         notes = [f"AI模型 {model_id} 已生成第 {iteration + 1} 版策略改稿"]
     else:
         notes = [f"AI模型 {model_id} 改稿", *notes]
-    metadata = {
+    metadata: dict[str, object] = {
         "source": "ai_model",
         "provider": provider or "unknown",
         "model_id": model_id,

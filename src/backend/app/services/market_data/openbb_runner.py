@@ -620,7 +620,7 @@ class _OpenBBSubprocessRunner:
             stderr_prefix = await stderr_task
             if stderr_prefix.exceeded_limit:
                 return None, stderr_prefix
-            return await collector_task
+            return await collector_task, None
 
         completion_task = asyncio.create_task(collect_receipt_or_stderr_limit())
         initial_cancellation = False
@@ -778,7 +778,7 @@ class _OpenBBSubprocessRunner:
             stderr_prefix = await stderr_task
             if stderr_prefix.exceeded_limit:
                 return None, stderr_prefix
-            return await collector_task
+            return await collector_task, None
 
         completion_task = asyncio.create_task(collect_receipt_or_stderr_limit())
         initial_cancellation = False

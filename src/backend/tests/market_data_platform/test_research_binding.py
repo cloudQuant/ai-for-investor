@@ -916,6 +916,22 @@ async def test_runtime_binding_rechecks_owner_signature_subset_and_artifact_dige
         assert runtime.query_semantics["full_window_start"] == "2026-01-05T00:00:00.000000Z"
         assert runtime.query_semantics["full_window_end"] == "2026-01-07T00:00:00.000000Z"
 
+        with pytest.raises(MarketDataResearchBindingError) as incomplete_semantics:
+            await service.resolve_runtime_binding(
+                user_id=owner.id,
+                binding_id=str(config["market_data_binding_id"]),
+                binding_hash=str(config["market_data_binding_hash"]),
+                signature=str(config["market_data_binding_signature"]),
+                workspace_id=workspace_id,
+                unit_id=unit_id,
+                intent_id=str(config["market_data_binding_intent_id"]),
+                symbol="600000",
+                timeframe="1d",
+                timeframe_n=1,
+                start="2026-01-06",
+            )
+        assert incomplete_semantics.value.code == "MARKET_DATA_BINDING_RUNTIME_SEMANTICS_REQUIRED"
+
         with pytest.raises(MarketDataResearchBindingError) as cross_owner:
             await service.resolve_runtime_binding(
                 user_id=other.id,

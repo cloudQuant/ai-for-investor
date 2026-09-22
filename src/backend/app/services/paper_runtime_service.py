@@ -207,10 +207,14 @@ class PaperRuntimeService:
                 )
                 rows = list(result.scalars().all())
                 has_more = len(rows) > limit
-                points = rows[:limit]
+                cursor_points = rows[:limit]
                 return PaperRuntimeSnapshotPage(
-                    points=points,
-                    next_cursor=self._encode_cursor(points[-1]) if has_more and points else None,
+                    points=cursor_points,
+                    next_cursor=(
+                        self._encode_cursor(cursor_points[-1])
+                        if has_more and cursor_points
+                        else None
+                    ),
                     sampled=False,
                     sampling="none",
                 )
@@ -613,17 +617,26 @@ class PaperRuntimeService:
             )
             if not exceeded:
                 continue
-            rejected_rule_ids.append(rule.id)
+            alert_metadata = self._rule_alert_metadata(rule)
+            if alert_metadata is None:
+                return await self._reject_risk(
+                    user_id,
+                    instance_id,
+                    "invalid-rule-alert-metadata",
+                    "Risk rule has invalid alert metadata.",
+                )
+            rule_id, severity = alert_metadata
+            rejected_rule_ids.append(rule_id)
             messages.append(message)
             await self.emit_alert(
                 user_id,
                 instance_id,
                 alert_type="risk",
-                severity=rule.severity,
+                severity=severity,
                 title="模拟交易风控拒单",
                 message=message,
-                details={"rule_id": rule.id, "rule_version": rule.version},
-                dedupe_key=f"{instance_id}:risk-rule:{rule.id}:v{rule.version}",
+                details={"rule_id": rule_id, "rule_version": rule.version},
+                dedupe_key=f"{instance_id}:risk-rule:{rule_id}:v{rule.version}",
             )
 
         if rejected_rule_ids:
@@ -711,21 +724,41 @@ class PaperRuntimeService:
             )
             if not exceeded:
                 continue
-            rejected.append(rule.id)
+            alert_metadata = self._rule_alert_metadata(rule)
+            if alert_metadata is None:
+                return await self._reject_risk(
+                    user_id,
+                    instance_id,
+                    "invalid-rule-alert-metadata",
+                    "Risk rule has invalid alert metadata.",
+                )
+            rule_id, severity = alert_metadata
+            rejected.append(rule_id)
             messages.append(message)
             await self.emit_alert(
                 user_id,
                 instance_id,
                 alert_type="risk",
-                severity=rule.severity,
+                severity=severity,
                 title="模拟交易成交后风控告警",
                 message=message,
-                details={"rule_id": rule.id, "rule_version": rule.version, "phase": "post_fill"},
-                dedupe_key=f"{instance_id}:post-fill-risk:{rule.id}:v{rule.version}",
+                details={"rule_id": rule_id, "rule_version": rule.version, "phase": "post_fill"},
+                dedupe_key=f"{instance_id}:post-fill-risk:{rule_id}:v{rule.version}",
             )
         if rejected:
             return PaperRuntimeRiskDecision(False, "; ".join(messages), tuple(rejected))
         return PaperRuntimeRiskDecision(True)
+
+    @staticmethod
+    def _rule_alert_metadata(rule: RiskRule) -> tuple[str, str] | None:
+        """Validate a rule's persisted ID and severity before building an alert."""
+        rule_id = rule.id
+        severity = rule.severity
+        if not isinstance(rule_id, str) or not rule_id.strip():
+            return None
+        if not isinstance(severity, str) or not severity.strip():
+            return None
+        return rule_id, severity
 
     async def _reject_risk(
         self,

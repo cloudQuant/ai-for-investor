@@ -7,7 +7,16 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, Generic, TypeVar
 
-from sqlalchemy import asc, delete, desc, func, select, update
+from sqlalchemy import (
+    CursorResult,
+    Result,
+    asc,
+    delete,
+    desc,
+    func,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import BaseRepository
@@ -43,6 +52,17 @@ class SQLRepository(BaseRepository[T], Generic[T]):
         async with async_session_maker() as session:
             yield session
 
+    @staticmethod
+    def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
+        """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
+        if isinstance(result, CursorResult):
+            return result.rowcount or 0
+        return 0
+
+    def _id_column(self):
+        """Direct mapped ``id`` attribute of the model class (see _apply_filters)."""
+        return self.model_class.__dict__["id"]
+
     async def _finalize_write(self, session: AsyncSession) -> None:
         if self._owns_session:
             await session.commit()
@@ -76,17 +96,15 @@ class SQLRepository(BaseRepository[T], Generic[T]):
 
     async def get_by_id(self, id: str) -> T | None:
         async with self._session_scope() as session:
-            result = await session.execute(
-                select(self.model_class).where(self.model_class.id == id)
-            )
+            result = await session.execute(select(self.model_class).where(self._id_column() == id))
             return result.scalar_one_or_none()
 
     async def update(self, id: str, data: dict[str, Any], refresh: bool = True) -> T | None:
         async with self._session_scope() as session:
             result = await session.execute(
-                update(self.model_class).where(self.model_class.id == id).values(**data)
+                update(self.model_class).where(self._id_column() == id).values(**data)
             )
-            if not result.rowcount:
+            if not self._cursor_rowcount(result):
                 if self._owns_session:
                     await session.rollback()
                 return None
@@ -97,16 +115,14 @@ class SQLRepository(BaseRepository[T], Generic[T]):
                 return None
 
             refreshed = await session.execute(
-                select(self.model_class).where(self.model_class.id == id)
+                select(self.model_class).where(self._id_column() == id)
             )
             return refreshed.scalar_one_or_none()
 
     async def delete(self, id: str) -> bool:
         async with self._session_scope() as session:
-            result = await session.execute(
-                delete(self.model_class).where(self.model_class.id == id)
-            )
-            if not result.rowcount:
+            result = await session.execute(delete(self.model_class).where(self._id_column() == id))
+            if not self._cursor_rowcount(result):
                 if self._owns_session:
                     await session.rollback()
                 return False
@@ -159,7 +175,7 @@ class SQLRepository(BaseRepository[T], Generic[T]):
         """Check existence with LIMIT 1 for early exit (more efficient than full count)."""
         async with self._session_scope() as session:
             query = self._apply_filters(
-                select(self.model_class.id).limit(1),
+                select(self._id_column()).limit(1),
                 filters,
             )
             result = await session.execute(query)
@@ -182,10 +198,10 @@ class SQLRepository(BaseRepository[T], Generic[T]):
 
         async with self._session_scope() as session:
             result = await session.execute(
-                update(self.model_class).where(self.model_class.id.in_(ids)).values(**data)
+                update(self.model_class).where(self._id_column().in_(ids)).values(**data)
             )
             await self._finalize_write(session)
-            return BulkUpdateResult(rowcount=result.rowcount or 0)
+            return BulkUpdateResult(rowcount=self._cursor_rowcount(result))
 
     async def bulk_delete(self, ids: builtins.list[str]) -> int:
         if not ids:
@@ -193,10 +209,10 @@ class SQLRepository(BaseRepository[T], Generic[T]):
 
         async with self._session_scope() as session:
             result = await session.execute(
-                delete(self.model_class).where(self.model_class.id.in_(ids))
+                delete(self.model_class).where(self._id_column().in_(ids))
             )
             await self._finalize_write(session)
-            return result.rowcount or 0
+            return self._cursor_rowcount(result)
 
     async def get_by_fields(self, filters: dict[str, Any], limit: int = 1) -> builtins.list[T]:
         async with self._session_scope() as session:

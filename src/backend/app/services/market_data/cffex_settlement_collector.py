@@ -44,6 +44,7 @@ from app.services.market_data.providers import (
 )
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.store import (
+    DeferredProviderFetch,
     MarketDataStore,
     PersistedProviderFetch,
 )
@@ -477,10 +478,20 @@ class CffexSettlementCollector:
                             # let recovery inspect Store's published/hidden
                             # boundary rather than fabricating a prefix.
                             raise cancellation from persistence_error
+                        if not isinstance(persisted, PersistedProviderFetch):
+                            if persisted_fetches:
+                                raise CffexSettlementCollectorPartialPublishCancelledError(
+                                    persisted_fetches
+                                ) from cancellation
+                            raise cancellation
                         persisted_fetches.append(persisted)
                         raise CffexSettlementCollectorPartialPublishCancelledError(
                             persisted_fetches
                         ) from cancellation
+                    if not isinstance(persisted, PersistedProviderFetch):
+                        raise CffexSettlementCollectorError(
+                            "CFFEX_SETTLEMENT_DEFERRED_RECEIPT_UNSUPPORTED"
+                        )
                     persisted_fetches.append(persisted)
             except Exception as exc:
                 if persisted_fetches:
@@ -1306,8 +1317,8 @@ def _utc_now() -> datetime:
 
 
 async def _await_persistence_after_cancellation(
-    persistence_task: asyncio.Task[PersistedProviderFetch],
-) -> PersistedProviderFetch:
+    persistence_task: asyncio.Task[PersistedProviderFetch | DeferredProviderFetch],
+) -> PersistedProviderFetch | DeferredProviderFetch:
     """Finish one shielded Store critical section despite repeated cancels.
 
     The caller re-raises cancellation immediately after this task returns, but

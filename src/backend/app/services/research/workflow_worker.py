@@ -395,20 +395,16 @@ class ResearchProtocolWorker:
                     )
 
             try:
-                completion_kwargs = {
-                    "task_id": task.id,
-                    "lease_token": claim.lease_token,
-                    "attempt_id": attempt.id,
-                    "status": outcome.status,
-                    "output_artifact_id": outcome.output_artifact_id,
-                    "error_code": outcome.error_code,
-                    "next_stage": expected_next_stage if outcome.status == "SUCCEEDED" else None,
-                    "generation_proposal": outcome.generation_proposal,
-                }
-                if outcome.discovery_execution_id is not None:
-                    completion_kwargs["discovery_execution_id"] = outcome.discovery_execution_id
                 completed_attempt = await self._stage_attempts.complete(
-                    **completion_kwargs,
+                    task_id=task.id,
+                    lease_token=claim.lease_token,
+                    attempt_id=attempt.id,
+                    status=outcome.status,
+                    output_artifact_id=outcome.output_artifact_id,
+                    error_code=outcome.error_code,
+                    next_stage=(expected_next_stage if outcome.status == "SUCCEEDED" else None),
+                    generation_proposal=outcome.generation_proposal,
+                    discovery_execution_id=outcome.discovery_execution_id,
                 )
             except ValueError as exc:
                 return await self._finalize_error(

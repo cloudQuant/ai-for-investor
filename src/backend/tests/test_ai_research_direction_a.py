@@ -335,8 +335,10 @@ async def test_investment_mandate_allows_auto_prompt_generation_without_relaxing
         )
 
 
-async def test_investment_mandate_rejects_forged_auto_origin_without_server_basis_digest(
+@pytest.mark.parametrize("stored_digest", [None, 123, b"0" * 64, "z" * 64])
+async def test_investment_mandate_rejects_forged_auto_origin_without_valid_server_basis_digest(
     monkeypatch,
+    stored_digest: object,
 ):
     """A client label alone cannot make an arbitrary prompt reusable as auto workflow."""
     service = InvestmentMandateService()
@@ -353,6 +355,7 @@ async def test_investment_mandate_rejects_forged_auto_origin_without_server_basi
         structured_goal={
             "timeframe": request.timeframe,
             "prompt_origin": "auto_generated",
+            "auto_basis_digest": stored_digest,
         },
         asset_scope={"symbol": request.symbol, "symbol_name": request.symbol_name},
         timeframe=request.timeframe,

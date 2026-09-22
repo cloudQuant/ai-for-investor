@@ -1001,6 +1001,71 @@ def test_position_log_row_direction_treats_bybit_position_idx_zero_as_one_way():
     )
 
 
+def test_position_log_row_direction_converts_numeric_codes_and_falls_back_to_size() -> None:
+    assert (
+        TradingWorkspaceService._position_log_row_direction(
+            {"data_name": "BTCUSDT", "positionIdx": "2.0", "size": 1},
+            1.0,
+        )
+        == "short"
+    )
+    assert (
+        TradingWorkspaceService._position_log_row_direction(
+            {"data_name": "BTCUSDT", "positionIdx": "invalid", "size": -1},
+            -1.0,
+        )
+        == "short"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf"), "1e999999", 10**1000],
+)
+def test_safe_float_uses_default_for_overflow_and_nonfinite_values(value: object) -> None:
+    assert trading_workspace_service_module._safe_float(value, 7.0) == 7.0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "direction"),
+    [
+        ("trade_action", "0", "long"),
+        ("trade_action", "1", "short"),
+        ("PosiDirection", "2", "long"),
+        ("PosiDirection", "3", "short"),
+        ("positionIdx", "1", "long"),
+        ("positionIdx", "2", "short"),
+    ],
+)
+def test_position_log_row_direction_preserves_numeric_code_mappings(
+    field: str,
+    value: str,
+    direction: str,
+) -> None:
+    row = {field: value, "size": 0}
+
+    assert TradingWorkspaceService._position_log_row_direction(row, 0.0) == direction
+
+
+@pytest.mark.parametrize(
+    ("position_code", "size", "direction"),
+    [
+        (float("nan"), 1.0, "long"),
+        (float("inf"), -1.0, "short"),
+        (float("-inf"), 1.0, "long"),
+        ("1e999999", -1.0, "short"),
+    ],
+)
+def test_position_log_row_direction_falls_back_for_nonfinite_codes(
+    position_code: object,
+    size: float,
+    direction: str,
+) -> None:
+    row = {"positionIdx": position_code, "size": size}
+
+    assert TradingWorkspaceService._position_log_row_direction(row, size) == direction
+
+
 def test_latest_position_rows_directional_flat_keeps_opposite_side():
     rows = [
         {
@@ -3492,6 +3557,122 @@ def test_symbols_for_instance_includes_existing_contract_metadata(tmp_path):
     assert "al2601" in symbols
 
 
+def test_refresh_unit_asset_specs_mutates_original_manager_instance_dict(tmp_path, monkeypatch):
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    (runtime_dir / "config.yaml").write_text("params: {}\n", encoding="utf-8")
+    asset_specs = {
+        "IF2609": {
+            "symbol": "IF2609",
+            "multiplier": 300,
+            "source": "local_asset_spec",
+        }
+    }
+    unit = SimpleNamespace(
+        trading_mode="paper",
+        symbol="IF2609",
+        params={},
+        data_config={},
+        unit_settings={},
+        gateway_config={},
+    )
+    instance = {"runtime_dir": str(runtime_dir), "params": {"symbol": "IF2609"}}
+
+    def complete_local_specs(_specs, symbols):
+        assert symbols == ["IF2609"]
+        return asset_specs
+
+    monkeypatch.setattr(
+        trading_workspace_service_module,
+        "_complete_asset_specs_from_local",
+        complete_local_specs,
+    )
+
+    refreshed = TradingWorkspaceService._refresh_unit_asset_specs_from_local(unit, instance)
+
+    assert refreshed is True
+    assert instance["params"]["contract_metadata"]["IF2609"]["multiplier"] == 300
+    assert instance["params"]["contract_metadata"]["IF2609"]["source"] == "local_asset_spec"
+
+
+def test_sync_unit_contract_metadata_from_instance_preserves_siblings() -> None:
+    sibling = {"symbol": "RB2610", "multiplier": 10, "source": "existing-local"}
+    unit = SimpleNamespace(
+        trading_mode="paper",
+        unit_settings={},
+        params={
+            "contract_metadata": {
+                "IF2609": {
+                    "symbol": "IF2609",
+                    "multiplier": 300,
+                    "margin_rate": 0.1,
+                    "source": "existing-unit",
+                },
+                "RB2610": sibling,
+            }
+        },
+    )
+    instance = {
+        "params": {
+            "contract_metadata": {
+                "IF2609": {
+                    "symbol": "IF2609",
+                    "commission_rate": 0.000023,
+                    "source": "manager",
+                }
+            }
+        }
+    }
+
+    changed = TradingWorkspaceService._sync_unit_contract_metadata_from_instance(unit, instance)
+
+    assert changed is True
+    metadata = unit.params["contract_metadata"]
+    assert metadata["RB2610"] == sibling
+    assert metadata["IF2609"]["multiplier"] == 300
+    assert metadata["IF2609"]["margin_rate"] == 0.1
+    assert metadata["IF2609"]["commission_rate"] == 0.000023
+    assert metadata["IF2609"]["source"] == "existing-unit+manager"
+
+
+def test_sync_unit_contract_metadata_from_specs_preserves_siblings() -> None:
+    sibling = {"symbol": "RB2610", "multiplier": 10, "source": "existing-local"}
+    unit = SimpleNamespace(
+        trading_mode="paper",
+        unit_settings={},
+        params={
+            "contract_metadata": {
+                "IF2609": {
+                    "symbol": "IF2609",
+                    "multiplier": 300,
+                    "margin_rate": 0.1,
+                    "source": "existing-unit",
+                },
+                "RB2610": sibling,
+            }
+        },
+    )
+
+    changed = TradingWorkspaceService._sync_unit_contract_metadata_from_specs(
+        unit,
+        {
+            "IF2609": {
+                "symbol": "IF2609",
+                "commission_rate": 0.000023,
+                "source": "gateway",
+            }
+        },
+    )
+
+    assert changed is True
+    metadata = unit.params["contract_metadata"]
+    assert metadata["RB2610"] == sibling
+    assert metadata["IF2609"]["multiplier"] == 300
+    assert metadata["IF2609"]["margin_rate"] == 0.1
+    assert metadata["IF2609"]["commission_rate"] == 0.000023
+    assert metadata["IF2609"]["source"] == "existing-unit+gateway"
+
+
 def test_load_runtime_config_ignores_non_text_config_reader():
     config_path = SimpleNamespace()
     config_path.is_file = lambda: True
@@ -4822,6 +5003,85 @@ async def test_start_units_keeps_already_running_instance_running(tmp_path, monk
 
 
 @pytest.mark.asyncio
+async def test_start_units_uses_start_result_for_running_snapshot(tmp_path, monkeypatch) -> None:
+    from app.types.live_trading import StartResult
+
+    runtime_dir = tmp_path / "runtime"
+    (runtime_dir / "logs").mkdir(parents=True)
+    unit = SimpleNamespace(
+        id="unit-start-result",
+        workspace_id="ws-start-result",
+        group_name="测试",
+        strategy_id="simulate/gateway_dual_ma",
+        strategy_name="Start result unit",
+        symbol="",
+        symbol_name="",
+        timeframe="1m",
+        timeframe_n=1,
+        category="stock",
+        data_config={},
+        unit_settings={},
+        params={},
+        optimization_config={},
+        gateway_config={},
+        trading_mode="paper",
+        lock_running=False,
+        lock_trading=False,
+        trading_instance_id="inst-start-result",
+        run_status="idle",
+        run_count=4,
+        trading_snapshot={},
+        metrics_snapshot={},
+        bar_count=None,
+        last_run_time=None,
+    )
+
+    monkeypatch.setattr(
+        workspace_unit_runtime,
+        "sync_trading_unit_runtime",
+        lambda *_args, **_kwargs: runtime_dir,
+    )
+    monkeypatch.setattr(workspace_unit_runtime, "unit_dir", lambda *_args: runtime_dir)
+
+    class FakeManager:
+        def get_instance(self, instance_id: str, user_id: str | None = None) -> dict[str, object]:
+            assert instance_id == "inst-start-result"
+            assert user_id == "user-1"
+            return {
+                "id": instance_id,
+                "status": "stopped",
+                "runtime_dir": str(runtime_dir),
+            }
+
+        async def start_instance(self, _instance_id: str) -> StartResult:
+            return {"status": "running", "message": "started", "pid": 12345}
+
+        def remove_instance(self, *_args: object, **_kwargs: object) -> None:
+            raise AssertionError("matching runtime directories must keep the instance")
+
+    monkeypatch.setattr(
+        trading_workspace_service_module,
+        "get_live_trading_manager",
+        lambda: FakeManager(),
+    )
+
+    results = await TradingWorkspaceService().start_units([unit], user_id="user-1")
+
+    assert results == [
+        {
+            "unit_id": "unit-start-result",
+            "task_id": "inst-start-result",
+            "status": "running",
+            "already_running": False,
+        }
+    ]
+    assert unit.run_status == "running"
+    assert unit.run_count == 5
+    assert unit.trading_snapshot["instance_status"] == "running"
+    assert unit.trading_snapshot["instance_id"] == "inst-start-result"
+
+
+@pytest.mark.asyncio
 async def test_start_units_syncs_runtime_contract_metadata_to_unit(tmp_path, monkeypatch):
     runtime_dir = tmp_path / "runtime"
     runtime_dir.mkdir(parents=True)
@@ -5272,6 +5532,99 @@ async def test_hydrate_units_does_not_initialize_live_manager_for_idle_paper_uni
 
     assert isinstance(changed, bool)
     assert unit.run_status == "idle"
+
+
+@pytest.mark.asyncio
+async def test_start_units_fails_closed_for_non_mapping_paper_runtime_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import Mock
+
+    from app.services.ai_research_provenance import AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD
+
+    unit = SimpleNamespace(
+        id="unit-invalid-paper-anchor",
+        workspace_id="ws-invalid-paper-anchor",
+        group_name="AI Paper",
+        strategy_id="simulate/gateway_dual_ma",
+        strategy_name="Invalid Paper Anchor",
+        symbol="IF2609",
+        symbol_name="沪深300",
+        timeframe="1m",
+        timeframe_n=1,
+        category="future",
+        data_config={},
+        unit_settings={AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD: "not-an-anchor"},
+        params={},
+        optimization_config={},
+        gateway_config={},
+        trading_mode="paper",
+        lock_running=False,
+        lock_trading=False,
+        trading_instance_id=None,
+        run_status="idle",
+        run_count=0,
+        trading_snapshot={},
+        metrics_snapshot={},
+        bar_count=None,
+        last_run_time=None,
+    )
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.add_instance_calls = 0
+
+        def add_instance(self, *_args: object, **_kwargs: object) -> dict[str, str]:
+            self.add_instance_calls += 1
+            return {"id": "unexpected-instance"}
+
+    class NoopRiskGate:
+        def assert_trading_unit_pre_run(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    manager = FakeManager()
+    runtime_sync_calls: list[str] = []
+
+    def unexpected_runtime_sync(*_args: object, **_kwargs: object) -> None:
+        runtime_sync_calls.append("called")
+        raise AssertionError("invalid paper anchor must fail before runtime sync")
+
+    real_verifier = (
+        trading_workspace_service_module.verify_ai_research_paper_runtime_anchor_for_unit
+    )
+    verifier_spy = Mock(wraps=real_verifier)
+    monkeypatch.setattr(
+        trading_workspace_service_module, "get_live_trading_manager", lambda: manager
+    )
+    # Force the guarded path so this test isolates anchor validation rather
+    # than changing the existing server-owned unit classification contract.
+    monkeypatch.setattr(
+        trading_workspace_service_module,
+        "is_server_owned_ai_research_paper_runtime",
+        lambda _unit: True,
+    )
+    monkeypatch.setattr(trading_workspace_service_module, "RiskGateService", NoopRiskGate)
+    monkeypatch.setattr(
+        trading_workspace_service_module,
+        "verify_ai_research_paper_runtime_anchor_for_unit",
+        verifier_spy,
+    )
+    monkeypatch.setattr(
+        workspace_unit_runtime,
+        "sync_trading_unit_runtime",
+        unexpected_runtime_sync,
+    )
+
+    results = await TradingWorkspaceService().start_units([unit], user_id="user-1")
+
+    assert results[0]["status"] == "failed"
+    assert results[0]["error"] == "AI_RESEARCH_PAPER_RUNTIME_PROVENANCE_INVALID"
+    assert unit.run_status == "failed"
+    assert verifier_spy.call_count == 1
+    assert verifier_spy.call_args is not None
+    assert verifier_spy.call_args.args[0] is None
+    assert runtime_sync_calls == []
+    assert manager.add_instance_calls == 0
 
 
 @pytest.mark.asyncio

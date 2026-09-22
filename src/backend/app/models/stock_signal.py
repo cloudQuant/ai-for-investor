@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from typing import Literal, TypeAlias
 
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     Date,
     DateTime,
     Float,
@@ -19,6 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -31,31 +32,46 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
+JSONMapping: TypeAlias = dict[str, JSONValue]
+SignalAction: TypeAlias = Literal["BUY", "SELL", "WATCH"]
+
+
 class StockSignalRun(Base):
     """An idempotent audit record for a scheduled signal batch."""
 
     __tablename__ = "stock_signal_runs"
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    run_key = Column(String(64), nullable=False, unique=True)
-    owner_scope = Column(String(80), nullable=False, default="system", index=True)
-    source = Column(String(32), nullable=False, default="nightly_sse50", index=True)
-    universe_code = Column(String(32), nullable=False, default="SSE50", index=True)
-    as_of_date = Column(Date, nullable=False, index=True)
-    scheduled_for_at = Column(DateTime, nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    finished_at = Column(DateTime, nullable=True)
-    status = Column(String(20), nullable=False, default="pending", index=True)
-    expected_count = Column(Integer, nullable=False, default=0)
-    created_count = Column(Integer, nullable=False, default=0)
-    eligible_count = Column(Integer, nullable=False, default=0)
-    degraded_count = Column(Integer, nullable=False, default=0)
-    failed_count = Column(Integer, nullable=False, default=0)
-    universe_snapshot_json = Column(JSON, nullable=False, default=list)
-    config_snapshot_json = Column(JSON, nullable=False, default=dict)
-    error_summary_json = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime, nullable=False, default=_now)
-    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    run_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    owner_scope: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="system", index=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="nightly_sse50", index=True
+    )
+    universe_code: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="SSE50", index=True
+    )
+    as_of_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    scheduled_for_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    expected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    eligible_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    degraded_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    universe_snapshot_json: Mapped[list[dict[str, str]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    config_snapshot_json: Mapped[JSONMapping] = mapped_column(JSON, nullable=False, default=dict)
+    error_summary_json: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_now, onupdate=_now
+    )
 
 
 class StockSignalPrediction(Base):
@@ -74,56 +90,70 @@ class StockSignalPrediction(Base):
         ),
     )
 
-    id = Column(String(36), primary_key=True, default=_uuid)
-    prediction_key = Column(String(64), nullable=False)
-    run_id = Column(String(36), ForeignKey("stock_signal_runs.id"), nullable=True, index=True)
-    report_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    prediction_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("stock_signal_runs.id"), nullable=True, index=True
+    )
+    report_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("stock_analysis_reports.id"), nullable=True, index=True
     )
-    owner_scope = Column(String(80), nullable=False, default="system", index=True)
-    source = Column(String(32), nullable=False, default="manual", index=True)
-    universe_code = Column(String(32), nullable=False, default="MANUAL", index=True)
-    symbol = Column(String(32), nullable=False, index=True)
-    symbol_name = Column(String(255), nullable=True)
-    market_type = Column(String(32), nullable=False, default="A股")
-    as_of_date = Column(Date, nullable=False, index=True)
-    as_of_at = Column(DateTime, nullable=False)
-    available_at = Column(DateTime, nullable=False)
-    next_trading_date = Column(Date, nullable=True, index=True)
+    owner_scope: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="system", index=True
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual", index=True)
+    universe_code: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="MANUAL", index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    symbol_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    market_type: Mapped[str] = mapped_column(String(32), nullable=False, default="A股")
+    as_of_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    as_of_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    next_trading_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
 
-    signal_action = Column(String(16), nullable=False, default="WATCH", index=True)
-    confidence_score = Column(Float, nullable=False, default=0.0)
-    buy_probability = Column(Float, nullable=True)
-    sell_probability = Column(Float, nullable=True)
-    watch_probability = Column(Float, nullable=True)
-    expected_excess_return = Column(Float, nullable=True)
-    risk_score = Column(Float, nullable=False, default=1.0)
-    eligibility_status = Column(String(20), nullable=False, default="rejected", index=True)
-    quality_reasons_json = Column(JSON, nullable=False, default=list)
-    data_freshness_json = Column(JSON, nullable=False, default=dict)
+    signal_action: Mapped[SignalAction] = mapped_column(
+        String(16), nullable=False, default="WATCH", index=True
+    )
+    confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    buy_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sell_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    watch_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_excess_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_score: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    eligibility_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="rejected", index=True
+    )
+    quality_reasons_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    data_freshness_json: Mapped[JSONMapping] = mapped_column(JSON, nullable=False, default=dict)
 
-    feature_version = Column(String(64), nullable=False)
-    decision_policy_version = Column(String(64), nullable=False)
-    model_version = Column(String(64), nullable=False)
-    feature_snapshot_json = Column(JSON, nullable=False, default=dict)
-    policy_snapshot_json = Column(JSON, nullable=False, default=dict)
-    source_snapshot_hash = Column(String(64), nullable=False)
+    feature_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    feature_snapshot_json: Mapped[JSONMapping] = mapped_column(JSON, nullable=False, default=dict)
+    policy_snapshot_json: Mapped[JSONMapping] = mapped_column(JSON, nullable=False, default=dict)
+    source_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    outcome_status = Column(String(20), nullable=False, default="pending", index=True)
-    outcome_reason = Column(Text, nullable=True)
-    entry_date = Column(Date, nullable=True)
-    entry_price = Column(Float, nullable=True)
-    horizon_1d_return = Column(Float, nullable=True)
-    horizon_5d_return = Column(Float, nullable=True)
-    horizon_20d_return = Column(Float, nullable=True)
-    benchmark_1d_return = Column(Float, nullable=True)
-    benchmark_5d_return = Column(Float, nullable=True)
-    benchmark_20d_return = Column(Float, nullable=True)
-    excess_1d_return = Column(Float, nullable=True)
-    excess_5d_return = Column(Float, nullable=True)
-    excess_20d_return = Column(Float, nullable=True)
-    buy_is_correct_20d = Column(Boolean, nullable=True)
-    sell_is_correct_20d = Column(Boolean, nullable=True)
-    scored_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=_now)
-    updated_at = Column(DateTime, nullable=False, default=_now, onupdate=_now)
+    outcome_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True
+    )
+    outcome_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    entry_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    horizon_1d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    horizon_5d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    horizon_20d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    benchmark_1d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    benchmark_5d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    benchmark_20d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    excess_1d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    excess_5d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    excess_20d_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    buy_is_correct_20d: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    sell_is_correct_20d: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_now, onupdate=_now
+    )

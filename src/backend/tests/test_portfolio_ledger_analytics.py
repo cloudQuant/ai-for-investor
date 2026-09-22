@@ -1,8 +1,10 @@
 from datetime import date, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import AsyncClient
 
+from app.api.portfolio import ledger as portfolio_ledger_api
 from app.services.risk_analytics.benchmark import BenchmarkService
 from tests.conftest import register_and_login
 
@@ -42,6 +44,29 @@ async def _fake_benchmark_fetcher(
         close += 3.5 + ((offset % 4) - 1.5)
         records.append({"date": current_date.isoformat(), "close": round(close, 2)})
     return records
+
+
+@pytest.mark.asyncio
+async def test_portfolio_var_cvar_rejects_unsupported_method_without_calling_service(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, headers = await register_and_login(client, username="ledger_invalid_method_user")
+    analytics_service_factory = MagicMock()
+    monkeypatch.setattr(
+        portfolio_ledger_api,
+        "get_portfolio_ledger_analytics_service",
+        analytics_service_factory,
+    )
+
+    response = await client.get(
+        "/api/v1/portfolio-ledger/test/analytics/var-cvar",
+        headers=headers,
+        params={"method": "unsupported"},
+    )
+
+    assert response.status_code == 422
+    analytics_service_factory.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -86,6 +111,16 @@ async def test_portfolio_ledger_analytics_endpoints(
         headers=headers,
         params={"method": "historical"},
     )
+    parametric_var_cvar = await client.get(
+        f"/api/v1/portfolio-ledger/{portfolio_id}/analytics/var-cvar",
+        headers=headers,
+        params={"method": "parametric"},
+    )
+    monte_carlo_var_cvar = await client.get(
+        f"/api/v1/portfolio-ledger/{portfolio_id}/analytics/var-cvar",
+        headers=headers,
+        params={"method": "monte_carlo"},
+    )
     position_sizing = await client.get(
         f"/api/v1/portfolio-ledger/{portfolio_id}/analytics/position-sizing",
         headers=headers,
@@ -126,6 +161,11 @@ async def test_portfolio_ledger_analytics_endpoints(
     assert var_cvar.json()["status"] == "ok"
     assert var_cvar.json()["observation_count"] == 31
     assert var_cvar.json()["var_95"] is not None
+
+    assert parametric_var_cvar.status_code == 200
+    assert parametric_var_cvar.json()["method"] == "parametric"
+    assert monte_carlo_var_cvar.status_code == 200
+    assert monte_carlo_var_cvar.json()["method"] == "monte_carlo"
 
     assert position_sizing.status_code == 200
     assert position_sizing.json()["portfolio_id"] == portfolio_id

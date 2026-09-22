@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -143,3 +144,56 @@ async def test_warehouse_coverage_filters_symbols_before_grouping():
     assert "HAVING" not in engine.connection.query.upper()
     assert "AND (:symbol IS NULL OR UPPER(" in engine.connection.query
     assert engine.connection.parameters == {"symbol": "000001", "limit": 20}
+
+
+@pytest.mark.asyncio
+async def test_warehouse_coverage_skips_invalid_symbols_and_keeps_freshness_scope(monkeypatch):
+    service = MarketDataCoverageService()
+    stored: list[dict[str, object]] = []
+    report_scopes: list[tuple[str, str]] = []
+    stale_date = (date.today() - timedelta(days=30)).isoformat()
+
+    async def warehouse_rows(**_: object) -> list[dict[str, object]]:
+        return [
+            {"symbol": None, "start_date": stale_date, "end_date": stale_date, "row_count": 2},
+            {"symbol": 123, "start_date": stale_date, "end_date": stale_date, "row_count": 2},
+            {"symbol": "   ", "start_date": stale_date, "end_date": stale_date, "row_count": 2},
+            {
+                "symbol": "000001",
+                "start_date": stale_date,
+                "end_date": stale_date,
+                "row_count": 2,
+            },
+        ]
+
+    async def upsert(values: dict[str, object]):
+        stored.append(values)
+        return {
+            **values,
+            "id": "coverage-1",
+        }
+
+    async def replace_reports(
+        *,
+        asset_type: str,
+        symbol: str,
+        timeframe: str,
+        provider: str,
+        reports: list[dict[str, object]],
+    ) -> None:
+        assert len(reports) == 1
+        assert reports[0]["issue_type"] == "stale_market_data"
+        assert reports[0]["symbol"] == symbol
+        report_scopes.append((symbol, provider))
+
+    monkeypatch.setattr(coverage_service_module, "_get_akshare_data_engine", lambda: object())
+    monkeypatch.setattr(service, "_warehouse_coverage_rows", warehouse_rows)
+    monkeypatch.setattr(service, "_upsert_coverage", upsert)
+    monkeypatch.setattr(service, "_replace_quality_reports", replace_reports)
+
+    response = await service.refresh_warehouse_coverage(asset_type="stock")
+
+    assert response.total == 1
+    assert len(stored) == 1
+    assert stored[0]["symbol"] == "000001"
+    assert report_scopes == [("000001", "akshare_data")]

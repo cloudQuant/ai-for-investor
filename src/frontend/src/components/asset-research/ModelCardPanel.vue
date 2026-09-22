@@ -1,10 +1,18 @@
 <template>
-  <section class="model-card-panel" aria-labelledby="model-card-title">
+  <section
+    class="model-card-panel"
+    aria-labelledby="model-card-title"
+  >
     <div class="panel-head">
       <span class="panel-kicker">{{ t('assetResearch.modelCardPanel.kicker') }}</span>
-      <h3 id="model-card-title">{{ t('assetResearch.modelCardPanel.title') }}</h3>
+      <h3 id="model-card-title">
+        {{ t('assetResearch.modelCardPanel.title') }}
+      </h3>
     </div>
-    <dl v-if="modelCard" class="detail-grid">
+    <dl
+      v-if="modelCard"
+      class="detail-grid"
+    >
       <div>
         <dt>{{ t('assetResearch.modelCardPanel.modelName') }}</dt>
         <dd>{{ modelCard.model_name }}</dd>
@@ -22,7 +30,10 @@
         <dd>{{ modelCard.limitations.join('；') }}</dd>
       </div>
     </dl>
-    <p v-else class="empty-copy">
+    <p
+      v-else
+      class="empty-copy"
+    >
       {{ t('assetResearch.modelCardPanel.noPromotedCard') }}
     </p>
   </section>

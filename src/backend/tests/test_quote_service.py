@@ -407,6 +407,56 @@ def test_running_workspace_symbols_are_grouped_by_gateway_and_deduplicated(monke
     assert item["workspace_names"] == {"IB 工作区"}
 
 
+def test_running_workspace_context_skips_stale_gateway_mapping():
+    QuoteService._instance = None
+    service = QuoteService()
+    manager = SimpleNamespace(
+        _gateways={},
+        _instance_gateways={"instance-stale": "missing-gateway"},
+        list_instances=lambda user_id: [
+            {
+                "id": "instance-stale",
+                "status": "running",
+                "params": {
+                    "symbol": "AAPL",
+                    "workspace_unit": {"workspace_id": "workspace-1"},
+                },
+            }
+        ],
+    )
+
+    context = service._get_running_workspace_context(manager, "user-1")
+
+    assert context == {}
+
+
+def test_source_gateway_states_ignores_null_or_malformed_workspace_state():
+    QuoteService._instance = None
+    service = QuoteService()
+
+    states = service._get_source_gateway_states(
+        None,
+        "IB_WEB",
+        {
+            "null-gateway": {"state": None},
+            "malformed-gateway": {"state": []},
+        },
+    )
+
+    assert states == {}
+
+
+def test_quote_plan_keeps_subscription_when_source_gateway_state_is_missing():
+    QuoteService._instance = None
+    service = QuoteService()
+
+    plans = service._build_quote_plans(None, "IB_WEB", ["AAPL"], {})
+
+    assert plans["IB_WEB"]["state"] is None
+    assert plans["IB_WEB"]["symbols"]["AAPL"]["symbol"] == "AAPL"
+    assert plans["IB_WEB"]["symbols"]["AAPL"]["origins"] == {"subscription"}
+
+
 def test_workspace_gateway_marks_quote_source_available(monkeypatch):
     QuoteService._instance = None
     service = QuoteService()

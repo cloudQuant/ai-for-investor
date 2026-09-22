@@ -30,7 +30,7 @@ from app.services.market_data.publication import (
 )
 
 UTC = timezone.utc
-MANIFEST_VERSION = "market-data-calendar-v1"
+MANIFEST_VERSION: Literal["market-data-calendar-v1"] = "market-data-calendar-v1"
 MAX_CALENDAR_MANIFEST_BYTES = 5 * 1024 * 1024
 _CALENDAR_SOURCE_GOVERNANCE_VERSION = "market-data-calendar-source-governance-v1"
 _APPROVED_LICENSES = frozenset(

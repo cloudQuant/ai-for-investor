@@ -1652,7 +1652,11 @@ def _freshened_run_record_needs_persist(record: AIStrategyResearchRunRecord) -> 
 def _raw_run_record_needs_freshness_persist(raw: dict[str, Any], *, force: bool = False) -> bool:
     if force:
         return True
-    pipeline = raw.get("pipeline") if isinstance(raw.get("pipeline"), dict) else {}
+    pipeline_value = raw.get("pipeline")
+    if isinstance(pipeline_value, dict):
+        pipeline = pipeline_value
+    else:
+        pipeline = {}
     return (
         str(raw.get("paper_review_status") or "") != "live_readiness_expired"
         or bool(raw.get("paper_review_ready_for_live"))

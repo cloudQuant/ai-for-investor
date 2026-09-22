@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -31,13 +32,13 @@ class AuditRecord(Base):
 
     __tablename__ = "audit_records"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     session_id = Column(String(64), nullable=True, index=True)
     event_type = Column(String(50), nullable=False, index=True)
     event_target = Column(String(200), nullable=True)
     page_path = Column(String(500), nullable=False)
-    event_data = Column(Text, nullable=True)
+    event_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     client_timestamp = Column(DateTime, nullable=False)
     server_timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     client_ip = Column(String(45), nullable=True)

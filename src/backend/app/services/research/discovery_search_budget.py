@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import CursorResult, Result, exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_research_v2 import (
@@ -23,6 +23,13 @@ class DiscoverySearchSlot:
     epoch_id: str
     ordinal: int
     budget_hash: str
+
+
+def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
+    """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
+    if isinstance(result, CursorResult):
+        return result.rowcount or 0
+    return 0
 
 
 async def lock_search_epoch(
@@ -76,7 +83,7 @@ async def lock_experiment_epoch(
         .values(status=ResearchExperimentEpoch.status)
         .execution_options(synchronize_session=False)
     )
-    if locked.rowcount != 1:
+    if _cursor_rowcount(locked) != 1:
         raise ValueError(denied_code)
     epoch = await session.get(ResearchExperimentEpoch, epoch_id, populate_existing=True)
     if epoch is None:

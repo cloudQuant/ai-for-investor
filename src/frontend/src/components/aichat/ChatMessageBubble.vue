@@ -4,10 +4,16 @@
     :class="message.role"
   >
     <div class="message-avatar">
-      <el-icon v-if="message.role === 'assistant'" aria-hidden="true">
+      <el-icon
+        v-if="message.role === 'assistant'"
+        aria-hidden="true"
+      >
         <Cpu />
       </el-icon>
-      <el-icon v-else aria-hidden="true">
+      <el-icon
+        v-else
+        aria-hidden="true"
+      >
         <UserFilled />
       </el-icon>
     </div>
@@ -64,17 +70,20 @@
             :title="t('aiChat.copyMessage')"
             @click="emit('copyMessage', message.content)"
           >
-            <el-icon aria-hidden="true"><CopyDocument /></el-icon>
+            <el-icon aria-hidden="true">
+              <CopyDocument />
+            </el-icon>
           </el-button>
         </div>
       </div>
 
-      <!-- eslint-disable-next-line vue/no-v-html -- AI Markdown is rendered then sanitized with DOMPurify. -->
+      <!-- eslint-disable vue/no-v-html -- renderMarkdown returns DOMPurify-sanitized HTML with an allowlisted tag and attribute set. -->
       <div
         v-if="message.role === 'assistant'"
         class="message-content markdown-content"
         v-html="renderedAssistantContent"
       />
+      <!-- eslint-enable vue/no-v-html -->
       <div
         v-else
         class="message-content"

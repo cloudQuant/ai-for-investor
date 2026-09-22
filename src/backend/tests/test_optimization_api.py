@@ -774,6 +774,45 @@ class TestWaitForBacktestCompletion:
         with pytest.raises(RuntimeError, match="failed"):
             await _wait_for_backtest_completion(svc, "t1", timeout=10)
 
+    async def test_failed_without_result_raises_stable_error(self, monkeypatch):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from app.schemas.backtest import TaskStatus
+        from app.services.param_optimization_service import _wait_for_backtest_completion
+
+        sleep = AsyncMock()
+        monkeypatch.setattr("app.services.param_optimization_service.asyncio.sleep", sleep)
+        svc = SimpleNamespace(
+            get_task_status=AsyncMock(side_effect=[TaskStatus.RUNNING, TaskStatus.FAILED]),
+            get_result=AsyncMock(return_value=None),
+        )
+
+        with pytest.raises(RuntimeError, match="Backtest failed: result unavailable"):
+            await _wait_for_backtest_completion(svc, "t1", timeout=10)
+
+        svc.get_result.assert_awaited_once_with("t1")
+
+    async def test_initial_failed_raises_result_error(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from app.schemas.backtest import TaskStatus
+        from app.services.param_optimization_service import _wait_for_backtest_completion
+
+        svc = SimpleNamespace(
+            get_task_status=AsyncMock(return_value=TaskStatus.FAILED),
+            get_result=AsyncMock(
+                return_value=SimpleNamespace(error_message="Strategy execution failed")
+            ),
+        )
+
+        with pytest.raises(RuntimeError, match="Backtest failed: Strategy execution failed"):
+            await _wait_for_backtest_completion(svc, "t1", timeout=10)
+
+        svc.get_task_status.assert_awaited_once_with("t1")
+        svc.get_result.assert_awaited_once_with("t1")
+
     async def test_cancelled_raises(self):
         from types import SimpleNamespace
         from unittest.mock import AsyncMock

@@ -67,7 +67,7 @@ class PortfolioLedgerService:
         items = [
             self._serialize_portfolio(
                 portfolio,
-                transaction_count=await self._transaction_count(portfolio.id),
+                transaction_count=await self._transaction_count(str(portfolio.id)),
             )
             for portfolio in portfolios
         ]
@@ -270,10 +270,12 @@ class PortfolioLedgerService:
     ) -> dict[str, dict[str, float]]:
         positions: dict[str, dict[str, float]] = {}
         for txn in transactions:
-            if txn.trade_type not in _POSITION_TRADE_TYPES or not txn.symbol:
+            trade_type = str(txn.trade_type or "")
+            symbol = str(txn.symbol or "")
+            if trade_type not in _POSITION_TRADE_TYPES or not symbol:
                 continue
             state = positions.setdefault(
-                txn.symbol,
+                symbol,
                 {
                     "quantity": 0.0,
                     "avg_cost": 0.0,
@@ -286,7 +288,7 @@ class PortfolioLedgerService:
             price = float(txn.price)
             previous_quantity = float(state["quantity"])
             previous_avg_cost = float(state["avg_cost"])
-            if txn.trade_type == "buy":
+            if trade_type == "buy":
                 new_quantity = previous_quantity + quantity
                 total_cost = previous_quantity * previous_avg_cost + quantity * price
                 state["quantity"] = new_quantity
@@ -372,17 +374,19 @@ class PortfolioLedgerService:
         positions: dict[str, dict[str, float]],
         transaction: PortfolioLedgerTransactionModel,
     ) -> None:
-        if transaction.trade_type not in _POSITION_TRADE_TYPES or not transaction.symbol:
+        trade_type = str(transaction.trade_type or "")
+        symbol = str(transaction.symbol or "")
+        if trade_type not in _POSITION_TRADE_TYPES or not symbol:
             return
         state = positions.setdefault(
-            transaction.symbol,
+            symbol,
             {"quantity": 0.0, "avg_cost": 0.0, "last_price": 0.0},
         )
         quantity = float(transaction.quantity)
         price = float(transaction.price)
         previous_quantity = float(state["quantity"])
         previous_avg_cost = float(state["avg_cost"])
-        if transaction.trade_type == "buy":
+        if trade_type == "buy":
             new_quantity = previous_quantity + quantity
             total_cost = previous_quantity * previous_avg_cost + quantity * price
             state["quantity"] = new_quantity

@@ -18,12 +18,40 @@ Tests:
 - _trigger_alert method
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+import json
+from datetime import datetime, timezone
+from enum import Enum
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 from app.models.alerts import AlertSeverity, AlertStatus, AlertType
-from app.services.monitoring_service import MonitoringService
+from app.services.monitoring_service import MonitoringService, _enum_wire_text
+
+
+class UnknownWireEnum(str, Enum):
+    """A string enum outside the alert wire contract."""
+
+    CUSTOM = "custom"
+
+
+def test_enum_wire_text_contract():
+    """Known enums use values while unknown values use the documented fallback."""
+    assert _enum_wire_text(AlertType.ACCOUNT) == AlertType.ACCOUNT.value
+    assert _enum_wire_text(AlertSeverity.WARNING) == AlertSeverity.WARNING.value
+    assert _enum_wire_text(AlertStatus.ACTIVE) == AlertStatus.ACTIVE.value
+
+    plain_text = "account"
+    assert _enum_wire_text(plain_text) is plain_text
+
+    unknown_enum = _enum_wire_text(UnknownWireEnum.CUSTOM)
+    assert unknown_enum == str(UnknownWireEnum.CUSTOM)
+    assert type(unknown_enum) is str
+    assert _enum_wire_text(None) == "None"
+
+    unknown_object = object()
+    assert _enum_wire_text(unknown_object) == str(unknown_object)
 
 
 class TestMonitoringServiceInitialization:
@@ -780,6 +808,174 @@ class TestTriggerAlert:
         with patch.object(service, "_send_notification", new_callable=AsyncMock):
             with patch.object(service, "_send_websocket_alert", new_callable=AsyncMock):
                 await service._trigger_alert(mock_rule)
+
+
+@pytest.mark.asyncio
+class TestSendWebhook:
+    """Test webhook payload serialization."""
+
+    @pytest.mark.parametrize(
+        ("alert_type", "severity", "expected_alert_type", "expected_severity"),
+        [
+            (AlertType.ACCOUNT, AlertSeverity.WARNING, "account", "warning"),
+            (AlertType.ACCOUNT.value, AlertSeverity.WARNING.value, "account", "warning"),
+        ],
+    )
+    async def test_send_webhook_uses_wire_values_for_enum_and_string_inputs(
+        self,
+        alert_type,
+        severity,
+        expected_alert_type,
+        expected_severity,
+    ):
+        """Webhook JSON keeps enum values and plain strings on the wire."""
+        service = MonitoringService()
+        service._record_notification = AsyncMock()
+
+        rule = Mock(trigger_config={"webhook": {"url": "https://example.test/hook"}})
+        alert = Mock(
+            id="alert_123",
+            user_id="user_123",
+            alert_type=alert_type,
+            severity=severity,
+            title="Test Alert",
+            message="Test message",
+            details={"source": "test"},
+            created_at=None,
+        )
+
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        response.read.return_value = b""
+
+        with patch(
+            "app.services.monitoring_service.open_safe_webhook", return_value=response
+        ) as mock_open:
+            await service._send_webhook(rule, alert)
+
+        request = mock_open.call_args.args[0]
+        payload = json.loads(request.data)
+
+        assert payload["alert_type"] == expected_alert_type
+        assert payload["severity"] == expected_severity
+        service._record_notification.assert_awaited_once_with(
+            "alert_123", channel="webhook", status="sent", message="ok"
+        )
+
+    async def test_send_webhook_handles_alert_without_created_at(self):
+        """A compatible alert fixture without a timestamp still sends safely."""
+        service = MonitoringService()
+        service._record_notification = AsyncMock()
+
+        rule = SimpleNamespace(trigger_config={"webhook": {"url": "https://example.test/hook"}})
+        alert = SimpleNamespace(
+            id="alert_without_timestamp",
+            user_id="user_123",
+            alert_type=AlertType.ACCOUNT,
+            severity=AlertSeverity.WARNING,
+            title="Test Alert",
+            message="Test message",
+            details={"source": "test"},
+        )
+
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        response.read.return_value = b""
+
+        with patch(
+            "app.services.monitoring_service.open_safe_webhook", return_value=response
+        ) as mock_open:
+            await service._send_webhook(rule, alert)
+
+        payload = json.loads(mock_open.call_args.args[0].data)
+        assert payload["created_at"] is None
+        service._record_notification.assert_awaited_once_with(
+            "alert_without_timestamp", channel="webhook", status="sent", message="ok"
+        )
+
+
+@pytest.mark.asyncio
+class TestAlertSummaryWireValues:
+    """Test summary and grouped alert wire values."""
+
+    async def test_summary_and_by_type_normalize_enum_and_string_inputs(self):
+        """Enum and plain-string alert fields use the same wire keys."""
+        service = MonitoringService()
+        now = datetime.now(timezone.utc)
+        alerts = [
+            SimpleNamespace(
+                id="enum-alert",
+                alert_type=AlertType.ACCOUNT,
+                severity=AlertSeverity.WARNING,
+                status=AlertStatus.ACTIVE,
+                title="Enum alert",
+                message="Enum message",
+                created_at=now,
+            ),
+            SimpleNamespace(
+                id="string-alert",
+                alert_type="account",
+                severity="warning",
+                status="active",
+                title="String alert",
+                message="String message",
+                created_at=now,
+            ),
+        ]
+        service.list_alerts = AsyncMock(return_value=(alerts, len(alerts)))
+
+        summary = await service.get_alert_summary(user_id="user_123", recent_limit=2)
+
+        assert summary["by_type"] == {"account": 2}
+        assert summary["by_severity"] == {"warning": 2}
+        assert summary["by_status"] == {"active": 2}
+        assert summary["recent"] == [
+            {
+                "id": "enum-alert",
+                "alert_type": "account",
+                "severity": "warning",
+                "status": "active",
+                "title": "Enum alert",
+                "message": "Enum message",
+                "created_at": now.isoformat(),
+            },
+            {
+                "id": "string-alert",
+                "alert_type": "account",
+                "severity": "warning",
+                "status": "active",
+                "title": "String alert",
+                "message": "String message",
+                "created_at": now.isoformat(),
+            },
+        ]
+
+        grouped = await service.get_alerts_by_type(
+            user_id="user_123",
+            start_dt=now,
+            end_dt=now,
+        )
+
+        assert grouped == {"by_type": {"account": 2}}
+
+    async def test_summary_handles_alert_without_created_at(self):
+        """Missing timestamps remain safe in the recent-alert projection."""
+        service = MonitoringService()
+        alert = SimpleNamespace(
+            id="missing-timestamp",
+            alert_type=AlertType.ACCOUNT,
+            severity=AlertSeverity.WARNING,
+            status=AlertStatus.ACTIVE,
+            title="Missing timestamp",
+            message="No timestamp on this fixture",
+        )
+        service.list_alerts = AsyncMock(return_value=([alert], 1))
+
+        summary = await service.get_alert_summary(user_id="user_123", recent_limit=1)
+
+        assert summary["recent"][0]["created_at"] is None
 
 
 @pytest.mark.asyncio

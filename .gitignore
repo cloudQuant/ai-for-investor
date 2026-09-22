@@ -152,6 +152,8 @@ src/strategies/
 # 其他
 # =====================================================
 .mypy_cache/
+# Mypy cache produced by the base environment's Python-version cache layout.
+src/backend/3.10/
 .dmypy.json
 .pytype/
 .ipynb_checkpoints

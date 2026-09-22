@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import MappingProxyType
+from typing import TypeGuard
 
 from app.services.market_data.coverage import EventKey, ObservationQuality
 from app.services.market_data.legacy_stock_daily_evidence_gate_adapter import (
@@ -364,6 +365,7 @@ class LegacyStockDailyCanonicalWriterAdapter:
                 expected_publication=publication_by_snapshot.get(snapshot_id),
             )
             for observation in promoted.observations:
+                fields = observation.fields
                 binding = binding_by_key.get((canonical_id, observation.event_at))
                 if (
                     binding is None
@@ -372,6 +374,7 @@ class LegacyStockDailyCanonicalWriterAdapter:
                     or observation.quality is not ObservationQuality.PASS
                     or observation.source_available_at is None
                     or observation.available_at != canonical_write.local_observation_available_at
+                    or not _is_legacy_daily_bar_fields(fields)
                 ):
                     raise LegacyStockDailyCanonicalWriterAdapterError(
                         "LEGACY_STOCK_DAILY_LOCAL_REREAD_WRITE_MISMATCH"
@@ -388,7 +391,7 @@ class LegacyStockDailyCanonicalWriterAdapter:
                         available_at=observation.available_at,
                         observation_revision_id=observation.revision_id,
                         source_snapshot_id=observation.source_snapshot_id,
-                        fields=observation.fields,
+                        fields=fields,
                     )
                 )
                 revision_ids.add(observation.revision_id)
@@ -584,18 +587,25 @@ def _provider_result_for_target(
         },
         "source_batch": _plain_json(batch.raw_payload),
     }
+    observations: list[ProviderMarketObservation] = []
+    for bar in bars:
+        source_available_at = bar.source_available_at
+        if source_available_at is None:
+            raise LegacyStockDailyCanonicalWriterAdapterError(
+                "LEGACY_STOCK_DAILY_CANONICAL_WRITE_INVALID"
+            )
+        observations.append(
+            ProviderMarketObservation(
+                event_at=bar.event_at,
+                available_at=source_available_at,
+                fields=dict(bar.fields),
+            )
+        )
     return ProviderFetchResult(
         provider_id=source_batch_receipt.provider_id,
         source_revision=attestation.source_revision,
         retrieved_at=source_batch_receipt.extracted_at,
-        observations=tuple(
-            ProviderMarketObservation(
-                event_at=bar.event_at,
-                available_at=bar.source_available_at,
-                fields=dict(bar.fields),
-            )
-            for bar in bars
-        ),
+        observations=tuple(observations),
         raw_payload=raw_payload,
         request=request,
         warnings=(
@@ -934,3 +944,13 @@ def _as_utc(value: object, *, field_name: str) -> datetime:
     if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must be timezone-aware")
     return value.astimezone(UTC)
+
+
+def _is_legacy_daily_bar_fields(value: object) -> TypeGuard[Mapping[str, int | float | str]]:
+    """Narrow persisted JSON fields to the primitive types accepted by daily bars."""
+    return isinstance(value, Mapping) and all(
+        isinstance(name, str)
+        and not isinstance(field_value, bool)
+        and isinstance(field_value, (int, float, str))
+        for name, field_value in value.items()
+    )

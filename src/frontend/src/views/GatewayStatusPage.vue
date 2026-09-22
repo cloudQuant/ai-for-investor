@@ -21,10 +21,14 @@
           size="small"
         >
           <el-radio-button value="card">
-            <el-icon aria-hidden="true"><Grid /></el-icon>
+            <el-icon aria-hidden="true">
+              <Grid />
+            </el-icon>
           </el-radio-button>
           <el-radio-button value="table">
-            <el-icon aria-hidden="true"><List /></el-icon>
+            <el-icon aria-hidden="true">
+              <List />
+            </el-icon>
           </el-radio-button>
         </el-radio-group>
         <el-button
@@ -162,7 +166,10 @@
         v-if="loading && visibleGateways.length === 0"
         class="gateway-loading"
       >
-        <el-icon class="is-loading" aria-hidden="true">
+        <el-icon
+          class="is-loading"
+          aria-hidden="true"
+        >
           <Loading />
         </el-icon>
       </div>
@@ -433,11 +440,11 @@
 
     <GatewayConnectDialog
       v-model:visible="showConnectDialog"
-      :connect-form="connectForm"
       v-model:ctp-env="ctpEnv"
       v-model:ctp-group="ctpGroup"
       v-model:mt5-env="mt5Env"
       v-model:ib-env="ibEnv"
+      :connect-form="connectForm"
       :connecting="connecting"
       :on-exchange-change="onExchangeChange"
       :on-ctp-env-change="onCtpEnvChange"

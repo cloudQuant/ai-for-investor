@@ -2,7 +2,7 @@
  * Shared Element Plus component stubs for view tests.
  * These stubs absorb common props and keep the rendered DOM stable.
  */
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, type Component, type Directive } from 'vue'
 import { vi } from 'vitest'
 
 const cardStub = defineComponent({
@@ -177,7 +177,7 @@ const layoutStub = (tag: string, className: string) =>
     },
   })
 
-export const elStubs: Record<string, any> = {
+export const elStubs: Record<string, boolean | Component | Directive> = {
   'el-card': cardStub,
   'el-form': formStub,
   'el-form-item': formItemStub,

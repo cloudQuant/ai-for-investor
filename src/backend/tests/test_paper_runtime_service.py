@@ -67,6 +67,16 @@ async def test_runtime_snapshot_is_owned_idempotent_and_downsampled():
                 "total_equity": 100100 + minute,
             },
         )
+    same_time_snapshot = await service.record_snapshot(
+        user_id,
+        "runtime-instance",
+        {
+            "observed_at": observed_at,
+            "source": "manual",
+            "total_equity": 100099,
+        },
+    )
+    assert same_time_snapshot is not None
 
     points = await service.list_snapshots(user_id, "runtime-instance", max_points=3)
     assert points is not None
@@ -78,7 +88,7 @@ async def test_runtime_snapshot_is_owned_idempotent_and_downsampled():
     assert overview is not None
     assert overview.sampled is True
     assert overview.sampling == "evenly_spaced_raw_points"
-    assert overview.points[0].id == points[0].id
+    assert overview.points[0].id in {first.id, same_time_snapshot.id}
     raw_page = await service.list_snapshot_page(
         user_id,
         "runtime-instance",
@@ -90,13 +100,41 @@ async def test_runtime_snapshot_is_owned_idempotent_and_downsampled():
     assert len(raw_page.points) == 3
     assert raw_page.next_cursor is not None
 
+    all_points = await service.list_snapshot_page(
+        user_id,
+        "runtime-instance",
+        max_points=20,
+    )
+    assert all_points is not None
+    assert [point.id for point in raw_page.points] == [point.id for point in all_points.points[1:4]]
+    final_page = await service.list_snapshot_page(
+        user_id,
+        "runtime-instance",
+        max_points=3,
+        cursor=raw_page.next_cursor,
+    )
+    assert final_page is not None
+    assert [point.id for point in final_page.points] == [
+        point.id for point in all_points.points[4:7]
+    ]
+    assert final_page.next_cursor is not None
+    last_page = await service.list_snapshot_page(
+        user_id,
+        "runtime-instance",
+        max_points=3,
+        cursor=final_page.next_cursor,
+    )
+    assert last_page is not None
+    assert [point.id for point in last_page.points] == [point.id for point in all_points.points[7:]]
+    assert last_page.next_cursor is None
+
     async with async_session_maker() as session:
         count = await session.scalar(
             select(func.count())
             .select_from(PaperEquitySnapshot)
             .where(PaperEquitySnapshot.instance_id == "runtime-instance")
         )
-    assert count == 8
+    assert count == 9
 
 
 async def test_runtime_scopes_rules_alerts_and_handoff_to_owner():
@@ -340,13 +378,14 @@ async def test_pretrade_risk_rejects_before_broker_submit_and_persists_alert():
         )
         saved = list(alerts)
     assert len(saved) == 1
+    assert saved[0].severity == "critical"
     assert saved[0].details == {"rule_id": rule.id, "rule_version": 1}
 
 
 async def test_post_fill_risk_persists_deduplicated_drawdown_alert():
     user_id, _, _ = await _create_runtime()
     service = PaperRuntimeService()
-    await service.create_rule(
+    rule = await service.create_rule(
         user_id,
         {
             "name": "Drawdown cap",
@@ -373,6 +412,7 @@ async def test_post_fill_risk_persists_deduplicated_drawdown_alert():
     )
 
     assert first.allowed is False
+    assert first.rule_ids == (rule.id,)
     assert second.rule_ids == first.rule_ids
     async with async_session_maker() as session:
         alerts = await session.scalars(
@@ -382,7 +422,88 @@ async def test_post_fill_risk_persists_deduplicated_drawdown_alert():
         )
         saved = list(alerts)
     assert len(saved) == 1
+    assert saved[0].severity == "critical"
+    assert saved[0].details == {
+        "rule_id": rule.id,
+        "rule_version": 1,
+        "phase": "post_fill",
+    }
     assert saved[0].details["phase"] == "post_fill"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "severity"),
+    [(None, "critical"), ("invalid-rule", "")],
+    ids=["missing-id", "empty-severity"],
+)
+async def test_pretrade_risk_fails_closed_for_invalid_rule_alert_metadata(
+    monkeypatch,
+    rule_id: str | None,
+    severity: str | None,
+):
+    user_id, _, _ = await _create_runtime()
+    service = PaperRuntimeService()
+    rule = RiskRule(
+        id=rule_id,
+        user_id=user_id,
+        name="Single order cap",
+        rule_type="max_order_size",
+        config={"max_order_size": 1000},
+        severity=severity,
+        is_active=True,
+        version=1,
+        instance_id="runtime-instance",
+    )
+    alerts: list[dict[str, object]] = []
+
+    async def list_rules(_user_id: str, _instance_id: str | None = None) -> list[RiskRule]:
+        return [rule]
+
+    async def emit_alert(
+        _user_id: str,
+        _instance_id: str,
+        *,
+        alert_type: str,
+        severity: str,
+        title: str,
+        message: str,
+        details: dict[str, object] | None = None,
+        dedupe_key: str | None = None,
+    ) -> None:
+        alerts.append(
+            {
+                "alert_type": alert_type,
+                "severity": severity,
+                "title": title,
+                "message": message,
+                "details": details,
+                "dedupe_key": dedupe_key,
+            }
+        )
+
+    monkeypatch.setattr(service, "list_rules", list_rules)
+    monkeypatch.setattr(service, "emit_alert", emit_alert)
+
+    decision = await service.evaluate_pre_order(
+        user_id,
+        "runtime-instance",
+        order_notional=1200,
+        current_equity=100_000,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "Risk rule has invalid alert metadata."
+    assert decision.rule_ids == ()
+    assert alerts == [
+        {
+            "alert_type": "risk",
+            "severity": "critical",
+            "title": "模拟交易风控拒单",
+            "message": "Risk rule has invalid alert metadata.",
+            "details": None,
+            "dedupe_key": "runtime-instance:risk:invalid-rule-alert-metadata",
+        }
+    ]
 
 
 async def test_pretrade_risk_api_rejects_uncovered_runtime(client):

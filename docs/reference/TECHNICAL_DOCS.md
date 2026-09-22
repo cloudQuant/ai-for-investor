@@ -273,7 +273,7 @@ WebSocket 端点共 6 个，覆盖回测进度、模拟账户、策略版本、�
 ```
 
 该脚本会检查：
-- Node.js 版本（要求 20+）
+- Node.js 版本（要求 ^20.19.0、^22.13.0 或 ^24.0.0，与 `src/frontend/package.json` 一致）
 - Python 版本（要求 3.10+）
 - 项目配置文件
 - 安装后可再使用 `./scripts/verify-dev-env.sh --postinstall` 检查 backtrader 和 Analyzer 可用性

@@ -10,6 +10,7 @@ This repository contains a full-stack Backtrader-based backtesting web platform.
 cd src/backend
 python -m venv venv
 source venv/bin/activate
+# Local/legacy compatibility install (non-locking; respects Python markers).
 pip install -r requirements.txt
 cp .env.example .env
 uvicorn app.main:app --reload --port 8000

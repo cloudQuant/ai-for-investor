@@ -7,12 +7,12 @@ code locally, or exposes a remote response/error through its public errors.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import math
 from typing import Any
 from urllib.parse import urlsplit
 
+import anyio
 import httpx
 
 from app.services.research.discovery_execution_contract import (
@@ -88,7 +88,7 @@ class HttpDiscoverySandboxExecutor:
         try:
             # HTTPX phase timeouts do not impose a deadline on the combined
             # connection + request + response stream.  The outer deadline does.
-            async with asyncio.timeout(self._timeout_seconds):
+            with anyio.fail_after(self._timeout_seconds):
                 async with httpx.AsyncClient(
                     transport=self._transport,
                     timeout=httpx.Timeout(
@@ -203,13 +203,15 @@ def _validated_runner_identity(value: object) -> str:
 
 
 def _validated_timeout(value: object) -> float:
-    if (
-        type(value) not in {int, float}
-        or not math.isfinite(value)
-        or not 0 < value <= _MAX_TIMEOUT_SECONDS
-    ):
-        raise ValueError
-    return float(value)
+    if type(value) is int:
+        if not 0 < value <= _MAX_TIMEOUT_SECONDS:
+            raise ValueError
+        return float(value)
+    if type(value) is float:
+        if not math.isfinite(value) or not 0 < value <= _MAX_TIMEOUT_SECONDS:
+            raise ValueError
+        return value
+    raise ValueError
 
 
 def _require_response_headers(response: httpx.Response, *, limit: int) -> None:

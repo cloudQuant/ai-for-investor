@@ -22,6 +22,7 @@ from app.services.strategy.runtime_support import (
     load_strategy_env,
     resolve_strategy_dir,
 )
+from app.services.workspace import market_data_binding_artifacts
 
 
 def _install_fake_research_run_lease(
@@ -459,6 +460,48 @@ class TestFlatLogFilenames:
 
 
 class TestWorkspaceUnitRuntime:
+    @pytest.mark.parametrize(
+        ("gateway_config", "data_section"),
+        [
+            ({"params": 0}, {}),
+            ({"params": {"gateway": []}}, {}),
+            ({"params": {"gateway": {"exchange_type": 7}}}, {}),
+            ({}, {"exchange": 7}),
+        ],
+    )
+    def test_trading_exchange_rejects_malformed_gateway_configuration(
+        self, gateway_config: dict[str, object], data_section: dict[str, object]
+    ) -> None:
+        unit = SimpleNamespace(gateway_config=gateway_config)
+
+        with pytest.raises(ValueError, match="gateway configuration is invalid"):
+            workspace_unit_runtime._trading_exchange_for_unit(unit, "stock", data_section)
+
+    def test_trading_exchange_preserves_valid_gateway_mapping(self) -> None:
+        unit = SimpleNamespace(gateway_config={"params": {"gateway": {"exchange_type": "ib_web"}}})
+
+        assert workspace_unit_runtime._trading_exchange_for_unit(unit, "stock", {}) == "IB_WEB"
+
+    @pytest.mark.parametrize("artifact_size_bytes", [True, 4.0, "4", 0, -1, None])
+    def test_verified_binding_rejects_invalid_artifact_size_scalar(
+        self, tmp_path: Path, artifact_size_bytes: object
+    ) -> None:
+        artifact_path = tmp_path / "data.csv"
+        artifact_path.write_bytes(b"csv")
+
+        with artifact_path.open("rb") as handle:
+            with pytest.raises(
+                workspace_unit_runtime.MarketDataBindingRuntimeError,
+                match="MARKET_DATA_BINDING_RUNTIME_CONFIG_INVALID",
+            ):
+                market_data_binding_artifacts._verify_open_market_data_binding_artifact(
+                    handle,
+                    {
+                        "artifact_size_bytes": artifact_size_bytes,
+                        "artifact_sha256": hashlib.sha256(b"csv").hexdigest(),
+                    },
+                )
+
     @staticmethod
     def _runtime_capability_context(
         *,

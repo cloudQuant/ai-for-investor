@@ -142,6 +142,52 @@ class TestBacktestServiceHelpers:
         assert result.start_date == created_at
         assert result.end_date == created_at
 
+    def test_build_backtest_result_preserves_data_precheck_mapping(self):
+        data_precheck = {"passed": True, "details": {"bar_count": 120}}
+        task = BacktestTask(
+            id="task123",
+            user_id="user1",
+            strategy_id="test_strategy",
+            symbol="000001.SZ",
+            status=TaskStatus.COMPLETED,
+            request_data={"data_precheck": data_precheck},
+            created_at=datetime(2024, 1, 15),
+        )
+
+        result = BacktestService._build_backtest_result(task, None)
+
+        assert result.data_precheck == data_precheck
+
+    def test_build_backtest_result_rejects_non_mapping_data_precheck(self):
+        task = BacktestTask(
+            id="task123",
+            user_id="user1",
+            strategy_id="test_strategy",
+            symbol="000001.SZ",
+            status=TaskStatus.COMPLETED,
+            request_data={"data_precheck": object()},
+            created_at=datetime(2024, 1, 15),
+        )
+
+        with pytest.raises(TypeError, match="data_precheck must be a string-keyed mapping"):
+            BacktestService._build_backtest_result(task, None)
+
+    @pytest.mark.parametrize("data_precheck", [None, {}])
+    def test_build_backtest_result_defaults_empty_data_precheck(self, data_precheck):
+        task = BacktestTask(
+            id="task123",
+            user_id="user1",
+            strategy_id="test_strategy",
+            symbol="000001.SZ",
+            status=TaskStatus.COMPLETED,
+            request_data={"data_precheck": data_precheck},
+            created_at=datetime(2024, 1, 15),
+        )
+
+        result = BacktestService._build_backtest_result(task, None)
+
+        assert result.data_precheck == {}
+
     def test_sanitize_trades_normalizes_legacy_trade_records(self):
         trades = BacktestService._sanitize_trades(
             [

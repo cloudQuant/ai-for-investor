@@ -328,8 +328,8 @@ def _gate_deltas(
     left: list[dict[str, Any]],
     right: list[dict[str, Any]],
     *,
-    left_status: str,
-    right_status: str,
+    left_status: object,
+    right_status: object,
 ) -> dict[str, Any]:
     """Return display-ready gate rows with explicit before/after semantics."""
     left_by_key = {

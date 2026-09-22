@@ -26,7 +26,8 @@
             <el-icon
               v-if="themeStore.mode === theme.value"
               class="theme-check"
-             aria-hidden="true">
+              aria-hidden="true"
+            >
               <Check />
             </el-icon>
           </span>

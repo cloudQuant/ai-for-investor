@@ -6,11 +6,19 @@ import pytest
 from sqlalchemy import select
 
 from app.db.database import async_session_maker
-from app.models.ai_research_v2 import ResearchDatasetSnapshot, ResearchExperimentEpoch
+from app.models.ai_research_v2 import (
+    ResearchDatasetSnapshot,
+    ResearchExperimentEpoch,
+    ResearchHypothesisVersion,
+)
 from app.models.user import User
 from app.services.research.capabilities import CapabilityProfile
 from app.services.research.capability_registry import CapabilityRegistry
-from app.services.research.data_precheck import ResearchDataPrecheckService
+from app.services.research.data_precheck import (
+    ResearchDataPrecheckService,
+    _hypothesis_dataset_binding_errors,
+    _snapshot_metadata_errors,
+)
 from app.services.research.dataset_integrity import (
     DatasetObjectAttestation,
     InMemoryDatasetObjectResolver,
@@ -132,7 +140,7 @@ async def test_data_precheck_blocks_a_snapshot_without_complete_data_lineage(aut
         user_id=context["user_id"],
         dataset_policy_version="dataset-policy-v1",
         partition_kind="DISCOVERY",
-        instrument_manifest={"symbols": ["RB0"]},
+        instrument_manifest={},
         split_manifest={"start": "2022-01-01", "end": "2023-12-31"},
         source_manifest={"provider": "fixture"},
         execution_policy={"fill": "next_bar_open"},
@@ -158,6 +166,154 @@ async def test_data_precheck_blocks_a_snapshot_without_complete_data_lineage(aut
     assert precheck.status == "FAIL"
     assert "RESEARCH_DATA_PRECHECK_SNAPSHOT_METADATA_INCOMPLETE" in precheck.details["errors"]
     assert "DATASET_SNAPSHOT_LEGACY_UNVERIFIED" in precheck.details["errors"]
+    assert "RESEARCH_DATA_PRECHECK_INSTRUMENTS_MISSING" in precheck.details["errors"]
+    assert "RESEARCH_DATA_PRECHECK_HYPOTHESIS_INSTRUMENT_MISMATCH" in precheck.details["errors"]
+    assert "RESEARCH_DATA_PRECHECK_EXECUTION_VOLUME_LIMIT_INVALID" in precheck.details["errors"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("manifest_field", "expected_errors"),
+    [
+        (
+            "instrument_manifest",
+            (
+                "RESEARCH_DATA_PRECHECK_INSTRUMENTS_MISSING",
+                "RESEARCH_DATA_PRECHECK_HYPOTHESIS_INSTRUMENT_MISMATCH",
+            ),
+        ),
+        (
+            "source_manifest",
+            (
+                "RESEARCH_DATA_PRECHECK_SOURCE_PROVIDER_MISSING",
+                "RESEARCH_DATA_PRECHECK_HYPOTHESIS_FREQUENCY_MISMATCH",
+            ),
+        ),
+        (
+            "split_manifest",
+            (
+                "RESEARCH_DATA_PRECHECK_SPLIT_RANGE_INVALID",
+                "RESEARCH_DATA_PRECHECK_HYPOTHESIS_TIME_WINDOW_MISMATCH",
+            ),
+        ),
+        (
+            "execution_policy",
+            (
+                "RESEARCH_DATA_PRECHECK_EXECUTION_MODEL_MISSING",
+                "RESEARCH_DATA_PRECHECK_HYPOTHESIS_COST_MODEL_MISMATCH",
+            ),
+        ),
+    ],
+)
+async def test_data_precheck_rejects_non_dict_dataset_manifests(
+    auth_user,
+    manifest_field: str,
+    expected_errors: tuple[str, ...],
+) -> None:
+    context = await _context(await _user_id(auth_user))
+    dataset = context["dataset"]
+    hypothesis = context["hypothesis"]
+    assert isinstance(dataset, ResearchDatasetSnapshot)
+    assert isinstance(hypothesis, ResearchHypothesisVersion)
+
+    original_manifest = getattr(dataset, manifest_field)
+    setattr(dataset, manifest_field, ["malformed-import"])
+    try:
+        errors = [
+            *_snapshot_metadata_errors(dataset),
+            *_hypothesis_dataset_binding_errors(hypothesis, dataset),
+        ]
+        assert set(expected_errors).issubset(errors)
+    finally:
+        setattr(dataset, manifest_field, original_manifest)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("symbol_owner", ["dataset", "hypothesis"])
+async def test_data_precheck_rejects_unhashable_instrument_symbols(
+    auth_user,
+    symbol_owner: str,
+) -> None:
+    context = await _context(await _user_id(auth_user))
+    dataset = context["dataset"]
+    hypothesis = context["hypothesis"]
+    assert isinstance(dataset, ResearchDatasetSnapshot)
+    assert isinstance(hypothesis, ResearchHypothesisVersion)
+    malformed_symbols: list[object] = [["RB0"]]
+
+    if symbol_owner == "dataset":
+        dataset.instrument_manifest = {
+            **dataset.instrument_manifest,
+            "symbols": malformed_symbols,
+        }
+    else:
+        payload = hypothesis.canonical_payload
+        scope = payload.get("asset_scope")
+        assert isinstance(scope, dict)
+        hypothesis.canonical_payload = {
+            **payload,
+            "asset_scope": {**scope, "symbols": malformed_symbols},
+        }
+
+    errors = [
+        *_snapshot_metadata_errors(dataset),
+        *_hypothesis_dataset_binding_errors(hypothesis, dataset),
+    ]
+    assert "RESEARCH_DATA_PRECHECK_HYPOTHESIS_INSTRUMENT_MISMATCH" in errors
+    if symbol_owner == "dataset":
+        assert "RESEARCH_DATA_PRECHECK_INSTRUMENTS_MISSING" in errors
+
+
+@pytest.mark.asyncio
+async def test_data_precheck_normalizes_valid_instrument_symbols(auth_user) -> None:
+    context = await _context(await _user_id(auth_user))
+    dataset = context["dataset"]
+    hypothesis = context["hypothesis"]
+    assert isinstance(dataset, ResearchDatasetSnapshot)
+    assert isinstance(hypothesis, ResearchHypothesisVersion)
+    dataset.instrument_manifest = {
+        **dataset.instrument_manifest,
+        "symbols": [" RB0 "],
+    }
+
+    payload = hypothesis.canonical_payload
+    scope = payload.get("asset_scope")
+    assert isinstance(scope, dict)
+    hypothesis.canonical_payload = {
+        **payload,
+        "asset_scope": {**scope, "symbols": ["RB0"]},
+    }
+
+    metadata_errors = _snapshot_metadata_errors(dataset)
+    binding_errors = _hypothesis_dataset_binding_errors(hypothesis, dataset)
+    assert "RESEARCH_DATA_PRECHECK_INSTRUMENTS_MISSING" not in metadata_errors
+    assert "RESEARCH_DATA_PRECHECK_HYPOTHESIS_INSTRUMENT_MISMATCH" not in binding_errors
+
+
+@pytest.mark.asyncio
+async def test_data_precheck_rejects_non_finite_commission_and_slippage(auth_user) -> None:
+    context = await _context(await _user_id(auth_user))
+    dataset = context["dataset"]
+    hypothesis = context["hypothesis"]
+    assert isinstance(dataset, ResearchDatasetSnapshot)
+    assert isinstance(hypothesis, ResearchHypothesisVersion)
+    base_execution_policy = dict(dataset.execution_policy)
+    base_payload = dict(hypothesis.canonical_payload)
+    base_cost_model = base_payload.get("cost_model")
+    assert isinstance(base_cost_model, dict)
+
+    for value in (float("inf"), float("-inf"), float("nan")):
+        for key in ("commission_bps", "slippage_bps"):
+            dataset.execution_policy = {**base_execution_policy, key: value}
+            hypothesis.canonical_payload = {
+                **base_payload,
+                "cost_model": {**base_cost_model, key: value},
+            }
+
+            metadata_errors = _snapshot_metadata_errors(dataset)
+            binding_errors = _hypothesis_dataset_binding_errors(hypothesis, dataset)
+            assert f"RESEARCH_DATA_PRECHECK_EXECUTION_{key.upper()}_INVALID" in metadata_errors
+            assert "RESEARCH_DATA_PRECHECK_HYPOTHESIS_COST_MODEL_MISMATCH" in binding_errors
 
 
 @pytest.mark.asyncio

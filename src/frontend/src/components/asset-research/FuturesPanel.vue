@@ -1,8 +1,13 @@
 <template>
-  <section class="asset-detail-panel" aria-labelledby="futures-panel-title">
+  <section
+    class="asset-detail-panel"
+    aria-labelledby="futures-panel-title"
+  >
     <div class="panel-head">
       <span class="panel-kicker">{{ t('assetResearch.futuresPanel.kicker') }}</span>
-      <h3 id="futures-panel-title">{{ t('assetResearch.futuresPanel.title') }}</h3>
+      <h3 id="futures-panel-title">
+        {{ t('assetResearch.futuresPanel.title') }}
+      </h3>
     </div>
     <dl class="detail-grid">
       <div>

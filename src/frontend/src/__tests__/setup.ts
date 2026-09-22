@@ -166,13 +166,15 @@ vi.mock('echarts', () => {
     disconnect: vi.fn(),
     dispose: vi.fn(),
     graphic: {
-      LinearGradient: vi.fn(() => ({
-        color: vi.fn(),
-        x: vi.fn(),
-        y: vi.fn(),
-        x2: vi.fn(),
-        y2: vi.fn(),
-      })),
+      LinearGradient: vi.fn(function LinearGradient() {
+        return {
+          color: vi.fn(),
+          x: vi.fn(),
+          y: vi.fn(),
+          x2: vi.fn(),
+          y2: vi.fn(),
+        }
+      }),
     },
   }
 })

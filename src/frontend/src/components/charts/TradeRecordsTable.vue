@@ -49,7 +49,9 @@
           size="small"
           @click="handleExport"
         >
-          <el-icon aria-hidden="true"><Download /></el-icon>{{ t('charts.trExport') }}
+          <el-icon aria-hidden="true">
+            <Download />
+          </el-icon>{{ t('charts.trExport') }}
         </el-button>
       </div>
     </div>

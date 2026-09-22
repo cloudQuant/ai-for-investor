@@ -1,7 +1,6 @@
 /** Optimization state, persistence, and chart behavior for a workspace. */
 
 import { computed, onMounted, ref, watch, type CSSProperties } from 'vue'
-import 'echarts-gl'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'

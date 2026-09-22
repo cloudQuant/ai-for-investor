@@ -148,7 +148,7 @@ async def export_portfolio(
 )
 async def get_portfolio_var_cvar(
     portfolio_id: str,
-    method: str = "historical",
+    method: typing.Literal["historical", "parametric", "monte_carlo"] = "historical",
     current_user: typing.Any = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> typing.Any:

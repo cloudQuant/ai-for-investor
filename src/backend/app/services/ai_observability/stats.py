@@ -11,6 +11,16 @@ from app.models.ai_call_log import AICallLog
 _FAILED_STATUSES = {"failed", "timeout"}
 
 
+def _created_at_sort_key(item: AICallLog) -> datetime:
+    created_at: datetime = object.__getattribute__(item, "created_at")
+    return created_at
+
+
+def _latency_sort_key(item: AICallLog) -> int:
+    latency_ms: int = object.__getattribute__(item, "latency_ms")
+    return latency_ms
+
+
 class AICallStatsService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -60,7 +70,7 @@ class AICallStatsService:
             model_name=model_name,
         )
         failures = [item for item in logs if str(item.status) in _FAILED_STATUSES]
-        recent = sorted(failures, key=lambda item: item.created_at, reverse=True)[:limit]
+        recent = sorted(failures, key=_created_at_sort_key, reverse=True)[:limit]
         return {
             "summary": self._failure_summary(logs, failures),
             "by_error_code": self._failure_group(
@@ -87,7 +97,7 @@ class AICallStatsService:
             service_name=service_name,
             model_name=model_name,
         )
-        top_calls = sorted(logs, key=lambda item: item.latency_ms, reverse=True)[:limit]
+        top_calls = sorted(logs, key=_latency_sort_key, reverse=True)[:limit]
         return {
             "summary": {
                 "total_calls": len(logs),

@@ -3,10 +3,15 @@ from types import SimpleNamespace
 import pytest
 from starlette.requests import Request as StarletteRequest
 
-from app.api.data.deps import get_current_db_user, require_data_admin_user
+from app.api.data.deps import (
+    get_authorized_market_data_access,
+    get_current_db_user,
+    require_data_admin_user,
+)
 from app.db.database import async_session_maker, create_tables
-from app.models.permission import Role, user_roles
+from app.models.permission import Permission, Role, user_roles
 from app.models.user import User
+from app.services.market_data.access import MarketDataAccessAuthorizer, MarketDataPrincipal
 from app.utils.security import get_password_hash
 
 
@@ -20,6 +25,47 @@ def make_request() -> StarletteRequest:
             "query_string": b"",
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_get_authorized_market_data_access_preserves_authorized_principal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    principal = MarketDataPrincipal(
+        principal_id="user-123",
+        principal_scope="principal-v1:test",
+        tenant_scope="tenant:test",
+        roles=(Role.USER.value,),
+        permissions=(Permission.READ_DATA.value,),
+        entitlement_revision="revision-1",
+    )
+
+    class FakeMarketDataAccessAuthorizer(MarketDataAccessAuthorizer):
+        def __init__(self) -> None:
+            self.principal_users: list[object] = []
+
+        async def principal_for_user(self, user: object) -> MarketDataPrincipal:
+            self.principal_users.append(user)
+            return principal
+
+    access_authorizer = FakeMarketDataAccessAuthorizer()
+    read_checks: list[MarketDataPrincipal] = []
+
+    def require_read_data(*, principal: MarketDataPrincipal) -> None:
+        read_checks.append(principal)
+
+    monkeypatch.setattr(access_authorizer, "require_read_data", require_read_data)
+    current_user = SimpleNamespace(id="user-123")
+
+    access = await get_authorized_market_data_access(
+        current_user=current_user,
+        access_authorizer=access_authorizer,
+    )
+
+    assert access_authorizer.principal_users == [current_user]
+    assert read_checks == [principal]
+    assert access.principal is principal
+    assert access.authorizer is access_authorizer
 
 
 @pytest.mark.asyncio

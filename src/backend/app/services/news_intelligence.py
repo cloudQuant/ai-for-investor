@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import html
 import re
+import typing
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -27,6 +29,17 @@ _RSS_REQUEST_HEADERS = {
 }
 
 
+class _NewsSourceInstance(typing.Protocol):
+    """Scalar fields exposed by a loaded NewsSourceModel ORM instance."""
+
+    id: str
+    name: str
+    url: str
+    tier: int
+    status: str
+    metadata_json: object
+
+
 class NewsIntelligenceService:
     def __init__(self, db: AsyncSession | None = None) -> None:
         self.db = db
@@ -34,9 +47,9 @@ class NewsIntelligenceService:
         self._rss_fetcher = self._default_rss_fetcher
 
     async def add_source(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        self._require_db()
+        db = self._require_db()
         name = str(payload.get("name") or "").strip()
-        result = await self.db.execute(
+        result = await db.execute(
             select(NewsSourceModel).where(
                 NewsSourceModel.owner_id == user_id,
                 NewsSourceModel.name == name,
@@ -52,33 +65,38 @@ class NewsIntelligenceService:
                 status="active",
                 metadata_json=dict(payload.get("metadata") or {}),
             )
-            self.db.add(source)
+            db.add(source)
         else:
-            source.url = str(payload.get("url") or source.url or "").strip()
-            source.tier = int(payload.get("tier") or source.tier or 2)
-            source.status = str(payload.get("status") or source.status or "active")
-            source.metadata_json = dict(payload.get("metadata") or source.metadata_json or {})
-        await self.db.commit()
-        await self.db.refresh(source)
+            # Legacy Column declarations type class attributes, not loaded ORM scalar values.
+            source_row = typing.cast(_NewsSourceInstance, source)
+            source_row.url = str(payload.get("url") or source_row.url or "").strip()
+            source_row.tier = int(payload.get("tier") or source_row.tier or 2)
+            source_row.status = str(payload.get("status") or source_row.status or "active")
+            existing_metadata = source_row.metadata_json
+            if not isinstance(existing_metadata, Mapping):
+                existing_metadata = {}
+            source_row.metadata_json = dict(payload.get("metadata") or existing_metadata or {})
+        await db.commit()
+        await db.refresh(source)
         return self._serialize_source(source)
 
     async def ingest(self, user_id: str, articles: list[dict[str, Any]]) -> dict[str, Any]:
-        self._require_db()
+        db = self._require_db()
         inserted = 0
         source_rows = (
-            (
-                await self.db.execute(
-                    select(NewsSourceModel).where(NewsSourceModel.owner_id == user_id)
-                )
-            )
+            (await db.execute(select(NewsSourceModel).where(NewsSourceModel.owner_id == user_id)))
             .scalars()
             .all()
         )
-        sources = {source.name: source for source in source_rows}
+        sources: dict[str, _NewsSourceInstance] = {}
+        for source_model in source_rows:
+            # Use the loaded-row contract rather than legacy Column class attributes.
+            source_row = typing.cast(_NewsSourceInstance, source_model)
+            sources[source_row.name] = source_row
         canonical_urls = [self._canonicalize_url(str(item.get("url") or "")) for item in articles]
         existing_keys = set(
             (
-                await self.db.execute(
+                await db.execute(
                     select(NewsArticleModel.canonical_url).where(
                         NewsArticleModel.owner_id == user_id,
                         NewsArticleModel.canonical_url.in_(canonical_urls),
@@ -126,9 +144,9 @@ class NewsIntelligenceService:
                 or self._build_summary(headline, classified),
                 status=classified["status"],
             )
-            self.db.add(article)
-            await self.db.flush()
-            self.db.add(
+            db.add(article)
+            await db.flush()
+            db.add(
                 NewsAnalysisModel(
                     owner_id=user_id,
                     article_id=article.id,
@@ -148,7 +166,7 @@ class NewsIntelligenceService:
             await self._hub.push(f"news:category:{record['sentiment'].lower()}", record)
             for ticker in record["tickers"]:
                 await self._hub.push(f"news:symbol:{ticker}", record)
-        await self.db.commit()
+        await db.commit()
         total = await self._article_count(user_id)
         return {"inserted_count": inserted, "total": total}
 
@@ -159,8 +177,8 @@ class NewsIntelligenceService:
         *,
         limit: int = 20,
     ) -> dict[str, Any] | None:
-        self._require_db()
-        result = await self.db.execute(
+        db = self._require_db()
+        result = await db.execute(
             select(NewsSourceModel).where(
                 NewsSourceModel.owner_id == user_id,
                 NewsSourceModel.name == source_name,
@@ -208,7 +226,7 @@ class NewsIntelligenceService:
         ticker: str | None = None,
         cluster_id: str | None = None,
     ) -> dict[str, Any]:
-        self._require_db()
+        db = self._require_db()
         query = select(NewsArticleModel).where(NewsArticleModel.owner_id == user_id)
         if sentiment:
             query = query.where(NewsArticleModel.sentiment == str(sentiment).upper())
@@ -216,7 +234,7 @@ class NewsIntelligenceService:
             query = query.where(NewsArticleModel.source == str(source).strip())
         if cluster_id:
             query = query.where(NewsArticleModel.cluster_id == str(cluster_id).strip())
-        result = await self.db.execute(query.order_by(NewsArticleModel.created_at.desc()))
+        result = await db.execute(query.order_by(NewsArticleModel.created_at.desc()))
         rows = list(result.scalars().all())
         if ticker:
             expected_ticker = str(ticker).strip().upper()
@@ -235,8 +253,8 @@ class NewsIntelligenceService:
 
     async def get_article_content(self, user_id: str, article_id: str) -> dict[str, Any] | None:
         """Return the locally stored article body for the requesting owner only."""
-        self._require_db()
-        result = await self.db.execute(
+        db = self._require_db()
+        result = await db.execute(
             select(NewsArticleModel).where(
                 NewsArticleModel.id == article_id,
                 NewsArticleModel.owner_id == user_id,
@@ -256,8 +274,8 @@ class NewsIntelligenceService:
         }
 
     async def latest(self, user_id: str) -> dict[str, Any]:
-        self._require_db()
-        result = await self.db.execute(
+        db = self._require_db()
+        result = await db.execute(
             select(NewsArticleModel)
             .where(NewsArticleModel.owner_id == user_id)
             .order_by(NewsArticleModel.created_at.desc())
@@ -293,9 +311,9 @@ class NewsIntelligenceService:
         *,
         allow_ai: bool,
     ) -> dict[str, Any]:
-        self._require_db()
+        db = self._require_db()
         result = self.analyze(headline, allow_ai=allow_ai)
-        self.db.add(
+        db.add(
             NewsAnalysisModel(
                 owner_id=user_id,
                 article_id=None,
@@ -307,7 +325,7 @@ class NewsIntelligenceService:
                 provider="rules" if result["status"] == "ok" else "fallback",
             )
         )
-        await self.db.commit()
+        await db.commit()
         return result
 
     @staticmethod
@@ -323,7 +341,8 @@ class NewsIntelligenceService:
         )
 
     async def _article_count(self, user_id: str) -> int:
-        result = await self.db.execute(
+        db = self._require_db()
+        result = await db.execute(
             select(NewsArticleModel.id).where(NewsArticleModel.owner_id == user_id)
         )
         return len(list(result.scalars().all()))
@@ -346,11 +365,13 @@ class NewsIntelligenceService:
         limit: int,
     ) -> list[dict[str, Any]]:
         root = ET.fromstring(feed_text)
-        default_tickers = [
-            str(item).strip()
-            for item in list((source.metadata_json or {}).get("tickers") or [])
-            if str(item).strip()
-        ]
+        metadata_json = source.metadata_json
+        ticker_values: Iterable[object] = ()
+        if isinstance(metadata_json, Mapping):
+            candidate_tickers = metadata_json.get("tickers")
+            if isinstance(candidate_tickers, Iterable):
+                ticker_values = candidate_tickers
+        default_tickers = [str(item).strip() for item in ticker_values if str(item).strip()]
         items: list[dict[str, Any]] = []
         for entry in self._iter_feed_entries(root):
             headline = self._entry_text(entry, "title")
@@ -461,9 +482,10 @@ class NewsIntelligenceService:
             f"impact={classified['impact']} | threat={classified['threat']}"
         )
 
-    def _require_db(self) -> None:
+    def _require_db(self) -> AsyncSession:
         if self.db is None:
             raise RuntimeError("database_session_required")
+        return self.db
 
 
 def get_news_intelligence_service(db: AsyncSession | None = None) -> NewsIntelligenceService:

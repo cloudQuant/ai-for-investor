@@ -18,6 +18,36 @@ def test_max_pain_against_manual():
     assert abs(service.calculate_max_pain(rows) - 100.0) <= 1.0
 
 
+def test_max_pain_returns_first_strike_when_all_open_interest_is_zero():
+    from app.services.options_chain import OptionsChainService
+
+    service = OptionsChainService()
+    rows = [
+        {"strike": 110.0, "call": {"oi": 0}, "put": {"oi": 0}},
+        {"strike": 90.0, "call": {"oi": 0}, "put": {"oi": 0}},
+        {"strike": 100.0, "call": {"oi": 0}, "put": {"oi": 0}},
+    ]
+
+    assert service.calculate_max_pain(rows) == 110.0
+
+
+def test_normalize_leg_preserves_provider_greeks_fields():
+    from app.services.options_chain import OptionsChainService
+
+    service = OptionsChainService()
+    provider_greeks = {"delta": 0.5, "provider_note": "unchanged"}
+
+    leg = service._normalize_leg(
+        {"call": {"oi": 1, "volume": 2, "iv": 0.25, "greeks": provider_greeks}},
+        "call",
+        100.0,
+        100.0,
+    )
+
+    assert leg["greeks"] is provider_greeks
+    assert leg["greeks"] == {"delta": 0.5, "provider_note": "unchanged"}
+
+
 @pytest.mark.asyncio
 async def test_options_chain_calculates_pcr_max_pain_greeks_and_publishes_topics(
     client: AsyncClient,

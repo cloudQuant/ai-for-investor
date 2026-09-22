@@ -14,7 +14,7 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -181,11 +181,11 @@ class B2CompletenessEvidenceIssuer:
         except (TypeError, ValueError) as exc:
             raise B2CompletenessEvidenceError("B2_COMPLETENESS_REQUEST_INVALID") from exc
 
+        expected_hashes = tuple(sorted(selector.expected_record_key_sha256s or ()))
         zero_evidence_sha256 = _zero_evidence_sha256(
-            expected_record_count=len(selector.expected_record_key_sha256s or ()),
+            expected_record_count=len(expected_hashes),
             zero_record_evidence=request.zero_record_evidence,
         )
-        expected_hashes = tuple(sorted(selector.expected_record_key_sha256s or ()))
         manifest_sha256 = _manifest_sha256(expected_hashes)
 
         series = await self._locked_series(series_id)
@@ -481,15 +481,16 @@ def durable_b2_completeness_evidence_from_receipt(
     """Rebuild strict-reader evidence from one verified immutable receipt."""
     selector = assert_b2_completeness_receipt_integrity(receipt, entry_hashes)
     event_at = _stored_utc(receipt.event_at)
-    certificate = (
-        ZeroRecordCertificate(
+    certificate: ZeroRecordCertificate | None = None
+    if not selector.expected_record_key_sha256s:
+        evidence_sha256 = receipt.zero_record_evidence_sha256
+        if not _is_sha256(evidence_sha256):
+            raise B2CompletenessEvidenceError("B2_COMPLETENESS_RECEIPT_INVALID")
+        certificate = ZeroRecordCertificate(
             selector_digest=selector.selector_digest,
             event_at=event_at,
-            evidence_sha256=receipt.zero_record_evidence_sha256,
+            evidence_sha256=evidence_sha256,
         )
-        if not selector.expected_record_key_sha256s
-        else None
-    )
     return DurableB2CompletenessEvidence(
         receipt_id=receipt.id,
         receipt_sha256=receipt.receipt_sha256,
@@ -567,16 +568,20 @@ def _selector_from_receipt(
     selector_dimensions: Mapping[str, object],
     expected_hashes: Sequence[str],
 ) -> B2SliceSelector | B2ReportSelector:
-    kwargs = {
-        "family_id": family_id,
-        "family_contract_version": family_contract_version,
-        "selector_dimensions": selector_dimensions,
-        "expected_record_key_sha256s": expected_hashes,
-    }
     if selector_kind == "slice":
-        return B2SliceSelector(**kwargs)
+        return B2SliceSelector(
+            family_id=family_id,
+            family_contract_version=family_contract_version,
+            selector_dimensions=selector_dimensions,
+            expected_record_key_sha256s=expected_hashes,
+        )
     if selector_kind == "report":
-        return B2ReportSelector(**kwargs)
+        return B2ReportSelector(
+            family_id=family_id,
+            family_contract_version=family_contract_version,
+            selector_dimensions=selector_dimensions,
+            expected_record_key_sha256s=expected_hashes,
+        )
     raise B2CompletenessEvidenceError("B2_COMPLETENESS_RECEIPT_INVALID")
 
 
@@ -693,7 +698,7 @@ def _stored_utc(value: object) -> datetime:
     return value.astimezone(UTC)
 
 
-def _is_sha256(value: object) -> bool:
+def _is_sha256(value: object) -> TypeGuard[str]:
     return (
         isinstance(value, str)
         and len(value) == 64

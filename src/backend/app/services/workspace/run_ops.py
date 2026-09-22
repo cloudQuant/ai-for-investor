@@ -172,11 +172,13 @@ def _schedule_paper_runtime_snapshots(user_id: str, units: list[StrategyUnit]) -
         asyncio.create_task(_initialize_paper_runtime_snapshots(user_id, runtime_snapshots))
 
 
-def _task_runtime_info(task: BacktestTask | None) -> dict[str, Any]:
+def _task_runtime_info(task: BacktestTask | None) -> dict[str, object]:
     if task is None:
         return {}
-    request_data = task.request_data if isinstance(task.request_data, dict) else {}
-    runtime = request_data.get("_runtime") if isinstance(request_data, dict) else {}
+    request_data: dict[str, object] = (
+        task.request_data if isinstance(task.request_data, dict) else {}
+    )
+    runtime = request_data.get("_runtime")
     return runtime if isinstance(runtime, dict) else {}
 
 
@@ -187,7 +189,8 @@ def _unit_run_progress(
     runtime = _task_runtime_info(task)
     raw_progress = runtime.get("progress")
     progress = float(raw_progress) if isinstance(raw_progress, (int, float)) else None
-    message = runtime.get("message") if isinstance(runtime.get("message"), str) else None
+    raw_message = runtime.get("message")
+    message = raw_message if isinstance(raw_message, str) else None
     if progress is None:
         if run_status in {"queued", "idle"}:
             progress = 0.0

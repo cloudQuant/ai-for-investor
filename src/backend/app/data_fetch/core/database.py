@@ -3,20 +3,74 @@ Database base class for data fetch operations
 """
 
 import logging
+from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from types import TracebackType
-from typing import Any
+from typing import Any, Literal, Protocol
 
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 import pytz
+from mysql.connector.abstracts import MySQLCursorAbstract
+from mysql.connector.types import (
+    DescriptionType,
+    MySQLConvertibleType,
+    RowItemType,
+    RowType,
+)
+
+_DatabaseRow = RowType | dict[str, RowItemType]
+_DatabaseParams = Sequence[MySQLConvertibleType] | dict[str, MySQLConvertibleType]
+
+
+class _DatabaseCursor(Protocol):
+    """The default connector cursor operations used by data-fetch services."""
+
+    @property
+    def description(self) -> Sequence[DescriptionType] | None: ...
+
+    @property
+    def rowcount(self) -> int: ...
+
+    def execute(self, operation: str, params: _DatabaseParams = ()) -> None: ...
+
+    def executemany(self, operation: str, seq_params: Sequence[_DatabaseParams]) -> None: ...
+
+    def fetchone(self) -> _DatabaseRow | None: ...
+
+    def fetchall(self) -> list[_DatabaseRow]: ...
+
+    def close(self) -> None: ...
+
+    def __enter__(self) -> MySQLCursorAbstract: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException],
+        exc_value: BaseException,
+        traceback: TracebackType,
+    ) -> None: ...
+
+
+class _DatabaseConnection(Protocol):
+    """Connection operations required by MySQL-backed data-fetch services."""
+
+    def cursor(self) -> _DatabaseCursor: ...
+
+    def is_connected(self) -> bool: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def close(self) -> None: ...
 
 
 class Database:
     def __init__(self, db_config: dict[str, Any], logger: logging.Logger | None = None):
         self.db_config = db_config
         self.logger = logger or logging.getLogger("DBBase")
-        self.connection = None
-        self.cursor = None
+        self.connection: _DatabaseConnection | None = None
+        self.cursor: _DatabaseCursor | None = None
         self.batch_size = 1000
 
     def _setup_logging(self, name: str) -> logging.Logger:
@@ -47,7 +101,7 @@ class Database:
     ) -> None:
         self.disconnect_db()
 
-    def _execute_batch(self, insert_sql: str, batch: list[Any]) -> None:
+    def _execute_batch(self, insert_sql: str, batch: list[Any]) -> bool:
         raise NotImplementedError
 
     def save_data(
@@ -56,10 +110,10 @@ class Database:
         table_name: str,
         on_duplicate_update: bool = False,
         unique_keys: list[str] | None = None,
-    ) -> bool:
+    ) -> int | Literal[False]:
         raise NotImplementedError
 
-    def delete_data(self, table_name: str, conditions: dict[str, Any]) -> None:
+    def delete_data(self, table_name: str, conditions: dict[str, Any]) -> bool:
         raise NotImplementedError
 
     def get_current_datetime(self) -> str:

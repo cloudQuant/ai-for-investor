@@ -1,0 +1,32 @@
+# L-197-42：AkShare B1 路线真实探测重跑（akshare 升级 + 上游恢复确认）
+
+- 日期：2026-09-18
+- 代码候选：`dev@93e7819456587bac9dae651d254c798ee48162f9`（工作树含本日修复：`requirements.txt`/`pyproject.toml` akshare 下限升至 1.18.96；197 迁移 PG 方言修复；PG harness 预期修正）
+- 执行环境：本机 conda base，**akshare 1.18.96**（自 1.18.64 升级，见下）、SQLAlchemy 2.0.51、asyncpg 0.31.0；隔离 subprocess runner（`<conda python> -I -S <abs akshare_market_data_runner.py>`、专用 HOME/WORKDIR 于 `/tmp/iter197-akshare-runner/`、site-packages 指向 conda base），沿用 L-197-40 收据的命令模板。
+- 每路线一次 `--live` 真实网络调用、一次性 SQLite、终态删除；无凭据写入、无原始载荷输出。
+
+## 结论（按路线）
+
+| 路线 | 结果 | 判定 |
+| --- | --- | --- |
+| `fund.nav` / `akshare-fund-nav-primary-v1` | `AKSHARE_LOCAL_FIRST_CHAIN_PASSED`（`--trading-date 2026-09-08`）：1 次 provider 调用 → 1 行响应/归一化 → 1 source snapshot + 1 observation revision 持久化 → coverage complete；独立 `local_only` 重读 coverage complete、0 provider 调用、0 persisted fetch；临时库删除 | **PASS**（真实 AkShare 单路线、非生产临时库） |
+| `fund.liquidity` / `akshare-fund-liquidity-primary-v1` | `AKSHARE_LOCAL_FIRST_CHAIN_PASSED`（`--trading-date 2026-09-08`）：同上完整闭环（1 调用/1 行/1 snapshot+1 revision/独立重读 0 网络） | **PASS**（2026-09-11 的间歇空返回已恢复） |
+| `stock.liquidity` / `akshare-stock-liquidity-primary-v1` | `AKSHARE_FETCH_FAILED`（`--trading-date 2026-09-08` 与 `2026-09-09` 两次）：runner 层连接失败 | **FAIL**（上游东财 push2his 行情端点对本网络持续拒绝连接，见下） |
+| `fx.range` / `akshare-fx-range-primary-v1` | `AKSHARE_FETCH_FAILED`（`--trading-date 2026-09-08`） | **FAIL**（同上，`forex_hist_em` 上游连接拒绝） |
+
+## fund.nav 根因与修复（E-197-04 唯一可修缺陷）
+
+- 根因：akshare ≤1.18.64 的 `fund_etf_fund_info_em` 对东财 `api.fund.eastmoney.com/f10/lsjz` 响应做**位置式列名赋值**（硬编码 13 列）；东财当前每行返回 14 字段（新增 `NAVTYPE`/`DTYPE` 等），稳定抛 `ValueError: Length mismatch`。**上游数据本身可用**（直接探测 `fundCode=510300` 2026-09-01..10 窗口 `TotalCount=8`，字段 FSRQ/DWJZ/LJJZ/JZZZL 等完整）。
+- 修复：akshare 1.18.96 起该函数改为按字段名 `rename`（`FSRQ→净值日期`、`DWJZ→单位净值`、`LJJZ→累计净值`、`JZZZL→日增长率`），输出列与 market_data fund.nav 适配器契约完全一致。本机环境升级至 1.18.96 并将 `requirements.txt`/`pyproject.toml`（`data` extra）下限提升为 `akshare>=1.18.96`（附原因注释），防止旧版本回归。
+- 验证：升级后直调 `fund_etf_fund_info_em(fund='510300', 20260901..20260910)` 返回 8 行、列名与适配器别名（`单位净值/累计净值/日增长率/净值日期`）一致；随后按同命令模板重跑 `--live --family fund-nav` 获得上表 PASS 闭环。
+
+## stock.liquidity / fx.range 失败归因（上游/网络，非本项目代码）
+
+- 直连探测（conda base，不经 runner）：`ak.stock_zh_a_hist(symbol='600000', 20260901..20260910)` 与 `ak.forex_hist_em(symbol='USDCNH')` 均抛 `requests.exceptions.ConnectionError: Remote end closed connection without response`——东财 push2his/外汇行情端点对本机出口持续拒绝；而东财基金子域（`api.fund.eastmoney.com`）正常返回。
+- 判定维持 E-197-04 口径：这两条路线在上游恢复（或更换网络出口）并按同命令模板重跑成功前保持 `FAIL`，不得以 fixture 替代；失败来自上游当前返回形态，不是适配器把错误结果误存为成功。
+- 登记去向：迭代 198（THS 主源）正是针对该不稳定性的结构性对策；stock.liquidity/fx.range 的 AkShare 上游不可用风险登记进 198 的依赖风险（198 IMPLEMENTATION_PLAN「197 未闭合项处置」）。
+
+## 与 E-197-04 / L-197-40 的关系
+
+- L-197-40（2026-09-11）四路线全 FAIL：`fund.liquidity`/`fx.range` 零行、`fund.nav` 列数错配、`stock.liquidity` 零行。
+- 本收据后：`fund.nav`（代码修复后）与 `fund.liquidity`（上游恢复后）各有一次真实完整闭环 PASS；`stock.liquidity`/`fx.range` 保持 FAIL（上游连接拒绝）。E-197-04 整体仍为 `FAIL`（存在未恢复路线），但分路线状态细化如上；上游恢复后按同模板重跑即可升级。

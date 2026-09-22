@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import MappingProxyType
@@ -501,7 +501,7 @@ class LegacyStockDailyEvidenceGateAdapter:
     def _assert_isolated_unverified_targets(
         self,
         *,
-        targets: Sequence[LegacyStockDailyCanonicalTarget],
+        targets: Iterable[LegacyStockDailyCanonicalTarget],
     ) -> None:
         for target in targets:
             _assert_target_source_binding(

@@ -214,7 +214,9 @@
             v-if="filteredConversations.length === 0"
             class="empty-rail"
           >
-            <el-icon aria-hidden="true"><ChatDotRound /></el-icon>
+            <el-icon aria-hidden="true">
+              <ChatDotRound />
+            </el-icon>
             <span>{{ t('aiChat.noConversations') }}</span>
           </div>
 
@@ -244,7 +246,9 @@
                 data-test="ai-chat-delete-conversation"
                 @click="handleDeleteConversation(conversation.id)"
               >
-                <el-icon aria-hidden="true"><Delete /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Delete />
+                </el-icon>
               </button>
             </div>
           </div>
@@ -274,7 +278,9 @@
               size="small"
               @click="copyConversation"
             >
-              <el-icon aria-hidden="true"><CopyDocument /></el-icon>
+              <el-icon aria-hidden="true">
+                <CopyDocument />
+              </el-icon>
               {{ t('aiChat.copyConversation') }}
             </el-button>
             <el-button
@@ -283,7 +289,9 @@
               type="danger"
               @click="handleNewConversation"
             >
-              <el-icon aria-hidden="true"><Delete /></el-icon>
+              <el-icon aria-hidden="true">
+                <Delete />
+              </el-icon>
               {{ t('aiChat.clearConversation') }}
             </el-button>
           </div>
@@ -324,7 +332,9 @@
             class="empty-chat"
           >
             <div class="empty-chat-icon">
-              <el-icon aria-hidden="true"><MagicStick /></el-icon>
+              <el-icon aria-hidden="true">
+                <MagicStick />
+              </el-icon>
             </div>
             <h3>{{ currentModeMeta.emptyTitle }}</h3>
             <p>{{ currentModeMeta.emptyDescription }}</p>
@@ -421,7 +431,9 @@
               data-test="ai-chat-send"
               @click="handleAsk"
             >
-              <el-icon aria-hidden="true"><Promotion /></el-icon>
+              <el-icon aria-hidden="true">
+                <Promotion />
+              </el-icon>
               {{ chatStore.loading ? t('aiChat.sending') : t('aiChat.sendButton') }}
             </el-button>
           </div>
@@ -581,7 +593,9 @@
               class="tool-item"
               @click="applyQuickTool(tool)"
             >
-              <el-icon aria-hidden="true"><Compass /></el-icon>
+              <el-icon aria-hidden="true">
+                <Compass />
+              </el-icon>
               <span>
                 <strong>{{ tool.title }}</strong>
                 <small>{{ tool.description }}</small>

@@ -12,7 +12,8 @@ from sqlalchemy import select
 from app.db.database import async_session_maker
 from app.models.market_data_trust import AssetSpecModel
 from app.schemas.market_data_trust import AssetSpecCreate, AssetSpecResponse
-from app.services.trading_asset_info_service import normalize_asset_spec, query_local_asset_spec
+from app.services.asset_info.gateway_specs import query_local_asset_spec
+from app.services.asset_info.normalization import normalize_asset_spec
 
 _FUTURES_DEFAULTS: dict[str, dict[str, Any]] = {
     "RB": {
@@ -201,7 +202,8 @@ class AssetSpecService:
     ) -> AssetSpecCreate:
         resolved_type = infer_asset_type(symbol, asset_type)
         defaults = _defaults_for(resolved_type, symbol)
-        local = query_local_asset_spec(symbol)
+        local_payload: object = query_local_asset_spec(symbol)
+        local = local_payload if isinstance(local_payload, dict) else {}
         normalized = normalize_asset_spec(
             {**defaults, **local, "symbol": symbol},
             symbol=symbol,

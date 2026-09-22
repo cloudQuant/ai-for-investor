@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -35,6 +35,23 @@ if TYPE_CHECKING:
 
 def _overfitting_ws_channel(task_id: str) -> str:
     return f"overfitting:{task_id}"
+
+
+def _cached_model_timestamp(model: OverfittingResultModel) -> datetime:
+    updated_at: object = getattr(model, "updated_at", None)
+    if isinstance(updated_at, datetime):
+        return _normalize_cached_timestamp(updated_at)
+
+    created_at: object = getattr(model, "created_at", None)
+    if isinstance(created_at, datetime):
+        return _normalize_cached_timestamp(created_at)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _normalize_cached_timestamp(value: datetime) -> datetime:
+    if value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class OverfittingService:
@@ -103,11 +120,12 @@ class OverfittingService:
         models = await self.repo.get_by_fields({"backtest_id": backtest_id}, limit=50)
         if not models:
             return None
-        ordered = sorted(models, key=lambda item: item.updated_at or item.created_at, reverse=True)
+        ordered = sorted(models, key=_cached_model_timestamp, reverse=True)
         for model in ordered:
             if user_id is not None and str(model.user_id) != str(user_id):
                 continue
             return self._to_result(model)
+        return None
 
     async def _load_backtest_request(
         self, backtest_id: str, user_id: str
@@ -301,8 +319,9 @@ class OverfittingService:
         model = await self.repo.get_by_field("task_id", task_id)
         if model is None:
             return
+        model_id = str(model.id)
         await self.repo.update(
-            model.id, {"status": "running", "summary": "过拟合检测执行中。"}, refresh=False
+            model_id, {"status": "running", "summary": "过拟合检测执行中。"}, refresh=False
         )
         await self._emit_progress(task_id, 5, "过拟合检测执行中。")
         try:
@@ -324,7 +343,7 @@ class OverfittingService:
                 "methods": [item.model_dump(mode="json") for item in result.methods],
                 "error_message": None,
             }
-            await self.repo.update(model.id, payload, refresh=False)
+            await self.repo.update(model_id, payload, refresh=False)
             await ws_manager.send_to_task(
                 _overfitting_ws_channel(task_id),
                 {
@@ -337,7 +356,7 @@ class OverfittingService:
             )
         except Exception as exc:
             await self.repo.update(
-                model.id,
+                model_id,
                 {
                     "status": "failed",
                     "summary": "过拟合检测执行失败。",

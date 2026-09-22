@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from app.models.comparison import ComparisonType
+from app.schemas.comparison import ComparisonUpdate
 from app.services.comparison_service import ComparisonService
 
 
@@ -97,6 +98,50 @@ class TestCreateComparison:
             )
 
         assert "not found" in str(exc_info.value)
+
+    async def test_create_comparison_reads_each_result_once(self) -> None:
+        """Use the validated result instead of fetching it a second time."""
+        service = ComparisonService()
+        mock_result = Mock(
+            strategy_id="SMACross",
+            symbol="BTC/USDT",
+            total_return=0.15,
+            annual_return=0.20,
+            sharpe_ratio=1.5,
+            max_drawdown=-0.10,
+            win_rate=0.60,
+            total_trades=50,
+            equity_curve=[100000, 105000, 103000, 110000],
+            equity_dates=["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
+            drawdown_curve=[0, -0.02, -0.05, -0.03],
+            trades=[],
+        )
+        service.backtest_service = AsyncMock()
+        service.backtest_service.get_result = AsyncMock(side_effect=[mock_result, None])
+
+        mock_comparison = Mock()
+        mock_comparison.id = "comp_123"
+        mock_comparison.user_id = "user_123"
+        mock_comparison.name = "Test Comparison"
+        mock_comparison.description = None
+        mock_comparison.type = ComparisonType.METRICS
+        mock_comparison.backtest_task_ids = ["task1"]
+        mock_comparison.comparison_data = {}
+        mock_comparison.is_public = False
+        mock_comparison.is_favorite = False
+        mock_comparison.created_at = datetime.now()
+        mock_comparison.updated_at = datetime.now()
+        service.comparison_repo = AsyncMock()
+        service.comparison_repo.create = AsyncMock(return_value=mock_comparison)
+
+        response = await service.create_comparison(
+            user_id="user_123",
+            name="Test Comparison",
+            backtest_task_ids=["task1"],
+        )
+
+        assert response.id == "comp_123"
+        service.backtest_service.get_result.assert_awaited_once_with("task1")
 
 
 @pytest.mark.asyncio
@@ -432,6 +477,7 @@ class TestUpdateComparison:
         mock_update_data.description = None
         mock_update_data.is_public = False  # Use boolean instead of None
         mock_update_data.backtest_task_ids = None
+        mock_update_data.is_favorite = None
         mock_update_data.exclude_fields = []  # Add exclude_fields attribute
 
         result = await service.update_comparison("comp_123", "user_123", mock_update_data)
@@ -453,6 +499,7 @@ class TestUpdateComparison:
         mock_update_data.description = None
         mock_update_data.is_public = None
         mock_update_data.backtest_task_ids = None
+        mock_update_data.is_favorite = None
 
         result = await service.update_comparison("comp_123", "user_123", mock_update_data)
 
@@ -470,10 +517,45 @@ class TestUpdateComparison:
         mock_update_data.description = None
         mock_update_data.is_public = None
         mock_update_data.backtest_task_ids = None
+        mock_update_data.is_favorite = None
 
         result = await service.update_comparison("comp_123", "user_123", mock_update_data)
 
         assert result is None
+
+    async def test_update_comparison_favorite(self):
+        service = ComparisonService()
+        mock_comparison = Mock()
+        mock_comparison.id = "comp_123"
+        mock_comparison.user_id = "user_123"
+        mock_comparison.name = "Test Comparison"
+        mock_comparison.description = None
+        mock_comparison.is_public = False
+        mock_comparison.is_favorite = False
+        mock_comparison.type = ComparisonType.METRICS
+        mock_comparison.backtest_task_ids = ["task1"]
+        mock_comparison.comparison_data = {}
+        mock_comparison.created_at = datetime.now()
+        mock_comparison.updated_at = datetime.now()
+        updates: list[dict[str, object]] = []
+
+        async def mock_update(comparison_id, update_data):
+            updates.append(update_data)
+            for key, value in update_data.items():
+                setattr(mock_comparison, key, value)
+            return mock_comparison
+
+        service.comparison_repo = AsyncMock()
+        service.comparison_repo.get_by_id = AsyncMock(return_value=mock_comparison)
+        service.comparison_repo.update = mock_update
+
+        result = await service.update_comparison(
+            "comp_123", "user_123", ComparisonUpdate(is_favorite=True)
+        )
+
+        assert result is not None
+        assert result.is_favorite is True
+        assert updates[0]["is_favorite"] is True
 
 
 @pytest.mark.asyncio

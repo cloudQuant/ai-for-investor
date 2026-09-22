@@ -62,7 +62,7 @@ def _sanitize_query_params(query_string: str) -> str | None:
     from urllib.parse import parse_qs
 
     params = parse_qs(query_string, keep_blank_values=True)
-    sanitized = {}
+    sanitized: dict[str, str | list[str]] = {}
     for key, vals in params.items():
         if key.lower() in _SENSITIVE_PARAMS:
             sanitized[key] = "***REDACTED***"

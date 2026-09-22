@@ -8,17 +8,23 @@ from process management and gateway lifecycle concerns.
 import json
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from app.utils.backend_data_paths import get_backend_data_path
 
 _DATA_DIR = get_backend_data_path()
 _INSTANCES_FILE = _DATA_DIR / "live_trading_instances.json"
+_MsvcrtLocking = Callable[[int, int, int], None]
+
+
+def _is_msvcrt_locking(value: object) -> TypeGuard[_MsvcrtLocking]:
+    """Narrow the runtime-only Windows lock API after checking it is callable."""
+    return callable(value)
 
 
 def _json_safe_value(value: Any) -> Any:
@@ -42,17 +48,27 @@ def _interprocess_file_lock(lock_file: Path) -> Iterator[None]:
         if os.name == "nt":
             import msvcrt
 
+            locking = getattr(msvcrt, "locking", None)
+            lock_mode: object = getattr(msvcrt, "LK_LOCK", None)
+            unlock_mode: object = getattr(msvcrt, "LK_UNLCK", None)
+            if (
+                not _is_msvcrt_locking(locking)
+                or type(lock_mode) is not int
+                or type(unlock_mode) is not int
+            ):
+                raise RuntimeError("Windows msvcrt file-lock API is unavailable")
+
             handle.seek(0)
             if not handle.read(1):
                 handle.write(b"\0")
                 handle.flush()
             handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            locking(handle.fileno(), lock_mode, 1)
             try:
                 yield
             finally:
                 handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                locking(handle.fileno(), unlock_mode, 1)
         else:
             import fcntl
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import statistics
 from collections.abc import Iterable
+from math import isfinite
 from typing import Any
 
 from app.models.stock_signal import StockSignalPrediction
@@ -17,6 +18,17 @@ def _excess_for_horizon(record: StockSignalPrediction, horizon: int) -> float | 
     return getattr(record, f"excess_{horizon}d_return", None)
 
 
+def _success_threshold_bps(value: object) -> float:
+    """Return a finite, non-negative JSON threshold or the historical zero default."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return 0.0
+    try:
+        threshold = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return 0.0
+    return threshold if isfinite(threshold) and threshold >= 0.0 else 0.0
+
+
 def _success(record: StockSignalPrediction, horizon: int) -> bool | None:
     value = _return_for_horizon(record, horizon)
     if value is None:
@@ -24,22 +36,16 @@ def _success(record: StockSignalPrediction, horizon: int) -> bool | None:
     if record.signal_action == "BUY":
         if horizon == 20 and record.buy_is_correct_20d is not None:
             return record.buy_is_correct_20d
-        try:
-            threshold = float(
-                (record.policy_snapshot_json or {}).get("buy_success_threshold_bps", 0.0)
-            )
-        except (TypeError, ValueError):
-            threshold = 0.0
+        threshold = _success_threshold_bps(
+            (record.policy_snapshot_json or {}).get("buy_success_threshold_bps", 0.0)
+        )
         return value > threshold / 10000.0
     if record.signal_action == "SELL":
         if horizon == 20 and record.sell_is_correct_20d is not None:
             return record.sell_is_correct_20d
-        try:
-            threshold = float(
-                (record.policy_snapshot_json or {}).get("sell_success_threshold_bps", 0.0)
-            )
-        except (TypeError, ValueError):
-            threshold = 0.0
+        threshold = _success_threshold_bps(
+            (record.policy_snapshot_json or {}).get("sell_success_threshold_bps", 0.0)
+        )
         return value < -threshold / 10000.0
     return None
 

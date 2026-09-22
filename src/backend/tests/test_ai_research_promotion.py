@@ -869,6 +869,58 @@ async def test_is_eligible_revalidates_final_evaluation_authorization_and_artifa
 
 
 @pytest.mark.asyncio
+async def test_is_eligible_fails_closed_when_decisions_reference_missing_evaluation(
+    auth_user,
+) -> None:
+    context = await _authorized_evaluation_context(auth_user, "promotion-missing-evaluation")
+    engine = PromotionGateEngine()
+    result = await engine.evaluate_and_record(
+        candidate_id=context["candidate"].id,
+        evaluation_id=context["evaluation"].id,
+        policy=_POLICY,
+        evidence={},
+    )
+    await _finalize_evaluation(context, result)
+    assert await engine.is_eligible(
+        candidate_id=context["candidate"].id,
+        policy_version=_POLICY.version,
+        input_evidence_hash=result.input_evidence_hash,
+    )
+    missing_evaluation_id = f"missing-{context['evaluation'].id}"
+
+    async with async_session_maker() as session:
+        decisions = tuple(
+            (
+                await session.scalars(
+                    select(ResearchGateDecision).where(
+                        ResearchGateDecision.candidate_id == context["candidate"].id,
+                        ResearchGateDecision.input_evidence_hash == result.input_evidence_hash,
+                    )
+                )
+            ).all()
+        )
+        assert len(decisions) == 13
+        for decision in decisions:
+            decision.evaluation_id = missing_evaluation_id
+        await session.commit()
+
+        with pytest.raises(ValueError, match="^PROMOTION_RESULT_INVALID$"):
+            await engine.read_result_in_session(
+                session,
+                candidate_id=context["candidate"].id,
+                evaluation_id=missing_evaluation_id,
+                policy_version=_POLICY.version,
+                input_evidence_hash=result.input_evidence_hash,
+            )
+
+    assert not await engine.is_eligible(
+        candidate_id=context["candidate"].id,
+        policy_version=_POLICY.version,
+        input_evidence_hash=result.input_evidence_hash,
+    )
+
+
+@pytest.mark.asyncio
 async def test_database_rejects_duplicate_gate_decision_rows(auth_user) -> None:
     context = await _authorized_evaluation_context(auth_user, "promotion-read-duplicate")
     engine = PromotionGateEngine()

@@ -17,7 +17,7 @@ const HIGH_COVERAGE_CORE_THRESHOLDS = {
 }
 
 export default defineConfig({
-  plugins: [vue() as any],
+  plugins: [vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

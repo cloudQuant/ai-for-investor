@@ -7,7 +7,10 @@
         :content="tooltip"
         placement="top"
       >
-        <el-icon class="text-gray-400 cursor-help" aria-hidden="true">
+        <el-icon
+          class="text-gray-400 cursor-help"
+          aria-hidden="true"
+        >
           <QuestionFilled />
         </el-icon>
       </el-tooltip>

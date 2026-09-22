@@ -40,9 +40,16 @@ from app.services.market_data.cffex_settlement_collector import (
 from app.services.market_data.coverage import QueryIdentity
 from app.services.market_data.fetch_lease import MarketDataFetchLeaseError
 from app.services.market_data.identity import ResolvedMarketDataIdentity
-from app.services.market_data.publication import MarketDataPublicationError
+from app.services.market_data.publication import (
+    MarketDataDeferredPublicationIntent,
+    MarketDataPublicationError,
+)
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
-from app.services.market_data.store import MarketDataStore, MarketDataStoreError
+from app.services.market_data.store import (
+    DeferredProviderFetch,
+    MarketDataStore,
+    MarketDataStoreError,
+)
 from scripts.collect_iteration197_cffex_settlement import main as collector_command_main
 
 UTC = timezone.utc
@@ -699,6 +706,52 @@ async def test_maps_one_cffex_batch_once_publishes_then_reads_locally() -> None:
         "market": "CFFEX",
         "trading_date": TRADING_DATE.isoformat(),
     }
+
+
+@pytest.mark.asyncio
+async def test_deferred_store_receipt_is_not_reported_as_published(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The settlement collector accepts only receipts that have become visible."""
+    source = _FakeCffexSource([_row("IF2609")])
+    target = _target("IF2609")
+    deferred = DeferredProviderFetch(
+        series_id="fixture-series",
+        source_snapshot_id="fixture-source-snapshot",
+        publication_id="fixture-publication",
+        observation_revision_ids=("fixture-revision",),
+        passing_observation_count=1,
+        failed_observation_count=0,
+        local_received_at=LOCAL_RECEIVED_AT,
+        intent=MarketDataDeferredPublicationIntent(
+            workflow_kind="legacy_stock_daily_import",
+            intent_sha256=_sha("fixture-deferred-settlement"),
+        ),
+    )
+    persist_calls = 0
+
+    async with async_session_maker() as db:
+        await _seed_control_plane(db)
+        store = MarketDataStore(db, clock=lambda: LOCAL_RECEIVED_AT)
+
+        async def defer_persistence(*args: object, **kwargs: object) -> DeferredProviderFetch:
+            nonlocal persist_calls
+            persist_calls += 1
+            return deferred
+
+        monkeypatch.setattr(store, "persist_provider_result", defer_persistence)
+        with pytest.raises(CffexSettlementCollectorError) as rejected:
+            await _collector(
+                store=store,
+                source=source,
+                clock=lambda: LOCAL_RECEIVED_AT,
+            ).collect(trading_date=TRADING_DATE, targets=(target,))
+        counts = await _counts(db)
+
+    assert rejected.value.code == "CFFEX_SETTLEMENT_DEFERRED_RECEIPT_UNSUPPORTED"
+    assert persist_calls == 1
+    assert source.calls == [TRADING_DATE]
+    assert counts == (0, 0, 0)
 
 
 @pytest.mark.asyncio

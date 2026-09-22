@@ -12,9 +12,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
-from typing import Any
+from typing import Any, TypeGuard
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, Result, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1579,7 +1579,7 @@ async def _fence_observed_recovery(
         )
         .execution_options(synchronize_session=False)
     )
-    if updated.rowcount != 1:
+    if _cursor_rowcount(updated) != 1:
         raise ValueError("HOLDOUT_FINALIZE_EXECUTION_INVALID")
     await session.refresh(command)
 
@@ -2056,7 +2056,7 @@ async def _second_authority_fence(
         .values(updated_at=DatabaseUtcNow())
         .execution_options(synchronize_session=False)
     )
-    if updated.rowcount != 1:
+    if _cursor_rowcount(updated) != 1:
         raise ValueError("HOLDOUT_FINALIZE_LEASE_STALE")
     await session.refresh(command)
 
@@ -2173,7 +2173,7 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _is_sha256(value: object) -> bool:
+def _is_sha256(value: object) -> TypeGuard[str]:
     if not isinstance(value, str) or len(value) != 64 or value != value.lower():
         return False
     try:
@@ -2181,6 +2181,13 @@ def _is_sha256(value: object) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
+    """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
+    if isinstance(result, CursorResult):
+        return result.rowcount or 0
+    return 0
 
 
 def _safe_reason_code(exc: ValueError) -> str:

@@ -42,14 +42,18 @@
         size="small"
         @click="emit('continueStrategyIdea', buildStrategyIdeaPrompt())"
       >
-        <el-icon aria-hidden="true"><MagicStick /></el-icon>
+        <el-icon aria-hidden="true">
+          <MagicStick />
+        </el-icon>
         {{ t('aiChat.stockContinueStrategyIdea') }}
       </el-button>
       <el-button
         size="small"
         @click="emit('continueBacktraderStrategy', buildBacktraderPrompt())"
       >
-        <el-icon aria-hidden="true"><Cpu /></el-icon>
+        <el-icon aria-hidden="true">
+          <Cpu />
+        </el-icon>
         {{ t('aiChat.stockContinueBacktrader') }}
       </el-button>
       <el-button
@@ -59,7 +63,9 @@
         :loading="saving"
         @click="saveToKnowledgeBase"
       >
-        <el-icon aria-hidden="true"><Collection /></el-icon>
+        <el-icon aria-hidden="true">
+          <Collection />
+        </el-icon>
         {{ t('aiChat.stockSaveToKb') }}
       </el-button>
       <el-button
@@ -67,7 +73,9 @@
         :loading="loadingWorkspaces"
         @click="openWorkspaceDialog"
       >
-        <el-icon aria-hidden="true"><FolderOpened /></el-icon>
+        <el-icon aria-hidden="true">
+          <FolderOpened />
+        </el-icon>
         {{ t('aiChat.stockSaveToWorkspace') }}
       </el-button>
       <el-button
@@ -77,7 +85,9 @@
         :loading="exporting === format"
         @click="download(format)"
       >
-        <el-icon aria-hidden="true"><Download /></el-icon>
+        <el-icon aria-hidden="true">
+          <Download />
+        </el-icon>
         {{ format.toUpperCase() }}
       </el-button>
     </div>

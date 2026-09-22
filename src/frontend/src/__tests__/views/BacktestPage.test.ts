@@ -227,7 +227,12 @@ describe('BacktestPage', () => {
       onerror: null,
       onclose: null,
     }
-    const webSocketMock = vi.fn().mockImplementation(() => wsInstance)
+    const webSocketMock = vi.fn(function WebSocketMock(
+      _url: string | URL,
+      _protocols?: string | string[],
+    ) {
+      return wsInstance
+    })
     Object.assign(webSocketMock, { OPEN: 1 })
     vi.stubGlobal('WebSocket', webSocketMock)
 

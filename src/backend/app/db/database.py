@@ -4,9 +4,10 @@ Database connection management.
 
 import logging
 import time
+from collections.abc import AsyncGenerator
 
 import sqlalchemy as sa
-from sqlalchemy import event, insert, select, text
+from sqlalchemy import Table, event, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
@@ -70,7 +71,7 @@ def _get_engine():
         # Use NullPool for MySQL async drivers to prevent connection-pool futures
         # from being reused across different asyncio Tasks, which causes
         # "Future attached to a different loop" errors.
-        extra_kwargs = {}
+        extra_kwargs: dict[str, object] = {}
         if settings.DATABASE_URL.startswith("mysql"):
             extra_kwargs["poolclass"] = NullPool
         else:
@@ -432,7 +433,7 @@ def _ensure_knowledge_base_schema_compatibility_sync(bind) -> None:
         ModelConfig.__table__,
         ModelUsageLog.__table__,
     ):
-        table.create(bind=bind, checkfirst=True)
+        _create_table_if_missing(table, bind)
 
     dialect_name = bind.dialect.name
     json_type = "JSON" if dialect_name != "sqlite" else "JSON"
@@ -526,7 +527,7 @@ def _ensure_ai_budget_schema_compatibility_sync(bind) -> None:
 def _ensure_prompt_template_schema_compatibility_sync(bind) -> None:
     from app.models.prompt_template import PromptTemplate
 
-    PromptTemplate.__table__.create(bind=bind, checkfirst=True)
+    _create_table_if_missing(PromptTemplate.__table__, bind)
     _add_column_if_missing(
         bind,
         "prompt_templates",
@@ -583,7 +584,7 @@ def _ensure_portfolio_ledger_schema_compatibility_sync(bind) -> None:
         PortfolioLedgerTransactionModel.__table__,
         PortfolioLedgerSnapshotModel.__table__,
     ):
-        table.create(bind=bind, checkfirst=True)
+        _create_table_if_missing(table, bind)
 
 
 def _ensure_news_intelligence_schema_compatibility_sync(bind) -> None:
@@ -598,7 +599,7 @@ def _ensure_news_intelligence_schema_compatibility_sync(bind) -> None:
         NewsArticleModel.__table__,
         NewsAnalysisModel.__table__,
     ):
-        table.create(bind=bind, checkfirst=True)
+        _create_table_if_missing(table, bind)
 
     _add_column_if_missing(bind, "news_articles", "content", "content TEXT NULL")
 
@@ -615,7 +616,7 @@ def _ensure_stock_analysis_schema_compatibility_sync(bind) -> None:
         StockAnalysisReportModel.__table__,
         StockAnalysisExportModel.__table__,
     ):
-        table.create(bind=bind, checkfirst=True)
+        _create_table_if_missing(table, bind)
 
 
 def _ensure_scanner_plan_schema_compatibility_sync(bind) -> None:
@@ -625,7 +626,7 @@ def _ensure_scanner_plan_schema_compatibility_sync(bind) -> None:
         ScannerPlanModel.__table__,
         ScannerPlanRunModel.__table__,
     ):
-        table.create(bind=bind, checkfirst=True)
+        _create_table_if_missing(table, bind)
 
     if _has_table(bind, "scanner_plans"):
         _add_column_if_missing(
@@ -900,7 +901,13 @@ async def create_default_admin():
         await session.commit()
 
 
-async def get_db() -> AsyncSession:
+def _create_table_if_missing(from_clause: sa.FromClause, bind) -> None:
+    """Create one declared table when the clause is a concrete Table (always at runtime)."""
+    if isinstance(from_clause, Table):
+        from_clause.create(bind=bind, checkfirst=True)
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session.
 
     Yields:
