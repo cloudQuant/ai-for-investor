@@ -25,7 +25,7 @@
     "@element-plus/icons-vue": "^2.3.1",
     "@monaco-editor/loader": "^1.7.0",
     "axios": "^1.18.0",
-    "dayjs": "^1.11.20",
+    "dayjs": "^1.11.23",
     "dompurify": "^3.4.15",
     "echarts": "^5.4.3",
     "echarts-gl": "^2.1.0",
