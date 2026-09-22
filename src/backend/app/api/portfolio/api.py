@@ -14,11 +14,14 @@ import math
 import os
 import sys
 import typing
+from array import array
+from collections.abc import Mapping
+from ctypes import Array
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol, SupportsFloat, SupportsIndex, TypeGuard
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
@@ -535,15 +538,35 @@ def _has_any(row: dict[str, Any], *keys: str) -> bool:
     return any(row.get(key) not in (None, "") for key in keys)
 
 
+class _SupportsBuffer(Protocol):
+    def __buffer__(self, flags: int, /) -> memoryview: ...
+
+
+def _is_float_input(
+    value: object,
+) -> TypeGuard[
+    str | bytes | bytearray | memoryview | _SupportsBuffer | SupportsFloat | SupportsIndex
+]:
+    """Report whether the built-in float() accepts the value's input protocol."""
+
+    return (
+        isinstance(value, (str, bytes, bytearray, memoryview))
+        or isinstance(value, (array, Array))
+        or hasattr(value, "__float__")
+        or hasattr(value, "__index__")
+        or hasattr(value, "__buffer__")
+    )
+
+
 def _first_number(row: dict[str, Any] | None, *keys: str) -> float | None:
     if not isinstance(row, dict):
         return None
     for key in keys:
-        value = row.get(key)
+        value: object = row.get(key)
         if value in (None, ""):
             continue
         if isinstance(value, dict):
-            nested_value = None
+            nested_value: object | None = None
             for nested_key in ("amount", "value", "balance", "total"):
                 candidate = value.get(nested_key)
                 if candidate not in (None, ""):
@@ -555,6 +578,8 @@ def _first_number(row: dict[str, Any] | None, *keys: str) -> float | None:
         if isinstance(value, str):
             value = value.strip().replace(",", "")
         try:
+            if not _is_float_input(value):
+                continue
             return float(value)
         except (TypeError, ValueError):
             continue
@@ -571,13 +596,13 @@ def _list_user_instances(
     current_user: Any,
     *,
     include_inactive: bool = False,
-) -> list[dict[str, Any]]:
+) -> list[Mapping[str, object]]:
     user_id = _current_user_id(current_user)
     try:
         instances = mgr.list_instances(user_id=user_id) if user_id else mgr.list_instances()
     except TypeError:
         instances = mgr.list_instances()
-    normalized: list[dict[str, Any]] = []
+    normalized: list[Mapping[str, object]] = []
     for inst in instances:
         if not isinstance(inst, dict):
             continue
@@ -587,7 +612,7 @@ def _list_user_instances(
             if include_inactive:
                 normalized.append(inst)
             continue
-        effective = inst
+        effective: Mapping[str, object] = inst
         if status in _ACTIVE_TRADING_STATUSES and hasattr(mgr, "get_instance"):
             try:
                 live_instance = mgr.get_instance(instance_id, user_id=user_id)
@@ -628,7 +653,7 @@ def _as_path(value: Any) -> Path | None:
     return Path(text).expanduser() if text else None
 
 
-def _resolve_instance_log_dir(inst: dict[str, Any]) -> Path | None:
+def _resolve_instance_log_dir(inst: Mapping[str, object]) -> Path | None:
     explicit_log_dir = _as_path(inst.get("log_dir"))
     if explicit_log_dir is not None and explicit_log_dir.is_dir():
         return explicit_log_dir
@@ -640,28 +665,35 @@ def _resolve_instance_log_dir(inst: dict[str, Any]) -> Path | None:
             return Path(latest)
 
     try:
-        strategy_dir = Path(get_strategy_dir(inst["strategy_id"]))
+        strategy_id = inst["strategy_id"]
+        if not isinstance(strategy_id, str):
+            return None
+        strategy_dir = Path(get_strategy_dir(strategy_id))
     except ValueError:
         return None
     latest = find_latest_log_dir(strategy_dir)
     return Path(latest) if latest else None
 
 
-def _runtime_config_for_instance(inst: dict[str, Any]) -> dict[str, Any]:
+def _runtime_config_for_instance(inst: Mapping[str, object]) -> dict[str, Any]:
     runtime_dir = _as_path(inst.get("runtime_dir"))
     if runtime_dir is not None:
         config = load_runtime_config(runtime_dir)
         if config:
             return config
     try:
-        strategy_dir = Path(get_strategy_dir(inst["strategy_id"]))
+        strategy_id = inst["strategy_id"]
+        if not isinstance(strategy_id, str):
+            return {}
+        strategy_dir = Path(get_strategy_dir(strategy_id))
     except ValueError:
         return {}
     return load_runtime_config(strategy_dir)
 
 
-def _source_from_instance(inst: dict[str, Any]) -> _PortfolioSource:
-    params = inst.get("params") if isinstance(inst.get("params"), dict) else {}
+def _source_from_instance(inst: Mapping[str, object]) -> _PortfolioSource:
+    raw_params = inst.get("params")
+    params = raw_params if isinstance(raw_params, dict) else {}
     runtime_config = _runtime_config_for_instance(inst)
     return _PortfolioSource(
         id=str(inst.get("id") or ""),
@@ -704,7 +736,7 @@ def _manager_instances_by_id(
     mgr: LiveTradingManager,
     user_id: str | None,
     instance_ids: list[str],
-) -> dict[str, dict[str, Any]] | None:
+) -> dict[str, Mapping[str, object]] | None:
     """Load one process-validated instance snapshot for a portfolio refresh.
 
     ``LiveTradingManager.get_instance`` validates a process by scanning the OS
@@ -802,7 +834,7 @@ async def _active_workspace_sources(
         db_status = str(unit.run_status or snapshot.get("instance_status") or "idle")
         status = db_status.strip().lower()
         instance_id = str(unit.trading_instance_id or "").strip()
-        instance = None
+        instance: Mapping[str, object] | None = None
         if (
             not include_inactive
             and status in _ACTIVE_TRADING_STATUSES
@@ -1457,11 +1489,8 @@ async def _persist_source_asset_specs(current_user: Any, source: _PortfolioSourc
             # unit's parameters; review reads server-signed handoff evidence.
             return
         params = _safe_dict(unit.params)
-        metadata = (
-            dict(params.get("contract_metadata"))
-            if isinstance(params.get("contract_metadata"), dict)
-            else {}
-        )
+        raw_metadata = params.get("contract_metadata")
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
         changed = False
         for key, value in source.resolved_asset_specs.items():
             if not isinstance(value, dict):
@@ -1553,7 +1582,7 @@ def _position_row_direction(row: dict[str, Any], size: float) -> str:
         if text == "flat":
             return "flat"
         try:
-            code = int(float(value))
+            code = int(_safe_float(value, float("nan")))
         except (TypeError, ValueError):
             code = None
         key_text = key.lower()
@@ -1591,26 +1620,35 @@ def _latest_position_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if abs(size) <= EPSILON:
             if direction in {"long", "short"}:
                 key = f"{symbol}:{direction}"
-                current_flat = latest_flat_by_key.get(key)
-                if current_flat is None or (timestamp, index) >= (
-                    current_flat[1],
-                    current_flat[0],
+                current_flat_by_key = latest_flat_by_key.get(key)
+                if current_flat_by_key is None or (timestamp, index) >= (
+                    current_flat_by_key[1],
+                    current_flat_by_key[0],
                 ):
                     latest_flat_by_key[key] = (index, timestamp, symbol, row)
                 continue
-            current_flat = latest_flat_by_symbol.get(symbol)
-            if current_flat is None or (timestamp, index) >= (current_flat[1], current_flat[0]):
+            current_flat_by_symbol = latest_flat_by_symbol.get(symbol)
+            if current_flat_by_symbol is None or (timestamp, index) >= (
+                current_flat_by_symbol[1],
+                current_flat_by_symbol[0],
+            ):
                 latest_flat_by_symbol[symbol] = (index, timestamp, row)
             continue
         key = f"{symbol}:{direction}"
-        current = latest_by_key.get(key)
-        if current is None or (timestamp, index) >= (current[1], current[0]):
+        current_position_by_key = latest_by_key.get(key)
+        if current_position_by_key is None or (timestamp, index) >= (
+            current_position_by_key[1],
+            current_position_by_key[0],
+        ):
             latest_by_key[key] = (index, timestamp, symbol, row)
 
     latest_nonflat_by_symbol: dict[str, tuple[int, str]] = {}
     for index, timestamp, symbol, _row in latest_by_key.values():
-        current = latest_nonflat_by_symbol.get(symbol)
-        if current is None or (timestamp, index) >= (current[1], current[0]):
+        current_nonflat_by_symbol = latest_nonflat_by_symbol.get(symbol)
+        if current_nonflat_by_symbol is None or (timestamp, index) >= (
+            current_nonflat_by_symbol[1],
+            current_nonflat_by_symbol[0],
+        ):
             latest_nonflat_by_symbol[symbol] = (index, timestamp)
 
     selected: list[tuple[int, dict[str, Any]]] = []
@@ -1628,14 +1666,17 @@ def _latest_position_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         selected.append((index, row))
     for symbol, (index, timestamp, row) in latest_flat_by_symbol.items():
-        latest_nonflat = latest_nonflat_by_symbol.get(symbol)
-        if latest_nonflat is None or (timestamp, index) >= (latest_nonflat[1], latest_nonflat[0]):
+        latest_nonflat_for_symbol = latest_nonflat_by_symbol.get(symbol)
+        if latest_nonflat_for_symbol is None or (timestamp, index) >= (
+            latest_nonflat_for_symbol[1],
+            latest_nonflat_for_symbol[0],
+        ):
             selected.append((index, row))
     for key, (index, timestamp, _symbol, row) in latest_flat_by_key.items():
-        latest_nonflat = latest_by_key.get(key)
-        if latest_nonflat is None or (timestamp, index) >= (
-            latest_nonflat[1],
-            latest_nonflat[0],
+        latest_nonflat_for_key = latest_by_key.get(key)
+        if latest_nonflat_for_key is None or (timestamp, index) >= (
+            latest_nonflat_for_key[1],
+            latest_nonflat_for_key[0],
         ):
             selected.append((index, row))
     return [row for _index, row in sorted(selected, key=lambda item: item[0])]
@@ -3071,8 +3112,8 @@ async def get_portfolio_equity(
     # Aggregate
     total_equity = []
     cumulative_pnl = []
-    strategy_series = {sc["instance_id"]: [] for sc in strategy_curves}
-    strategy_pnl_series = {sc["instance_id"]: [] for sc in strategy_curves}
+    strategy_series: dict[str, list[float]] = {sc["instance_id"]: [] for sc in strategy_curves}
+    strategy_pnl_series: dict[str, list[float]] = {sc["instance_id"]: [] for sc in strategy_curves}
 
     for dt in sorted_dates:
         day_total = 0.0

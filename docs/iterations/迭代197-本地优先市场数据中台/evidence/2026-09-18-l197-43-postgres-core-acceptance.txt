@@ -1,0 +1,44 @@
+# L-197-43：E-197-07 PostgreSQL 侧核心验收（本机 PostgreSQL 17.7）
+
+- 日期：2026-09-18（深夜执行）；完整迁移链日志与终态 JSON 见同目录 [2026-09-18-l197-43-postgres-harness-full-log.txt](2026-09-18-l197-43-postgres-harness-full-log.txt)
+- 代码候选：`dev@93e7819456587bac9dae651d254c798ee48162f9` 工作树 + 本日修复（见下）：
+  - `alembic/versions/20260908_ai_research_evidence_command.py`：PG guard 查询绑定参数显式 `cast(:param as text)`；`tgenabled::text`
+  - `alembic/versions/20260908_ai_research_holdout_executions.py`：`_sql_matches` 归一化补 PG `= ANY (ARRAY[...])`/类型 cast 形态（introducer 正则同步收窄为白名单，防对称吞词）
+  - `alembic/versions/20260908_ai_research_approval_authority.py`：同款参数 cast + `tgenabled::text`；token 归一化新增 `_rewrite_postgresql_trim` 且置于标量括号剥离之前
+  - `scripts/verify_iteration197_postgres_acceptance.py`：`_fault_reached_phases` 修正（取消后 finally 清理仍到达 lease_release 边界）；移除 terminated 场景 finally 对已杀 leader 共享 Event 的 `set()`（macOS 无 robust semaphore，杀进程可致内部 cond 锁永久泄漏 → 父进程死锁；`_stop_two_process_workers` 已覆盖幸存者回收）
+  - `tests/market_data_platform/test_postgres_acceptance_harness.py`：checkpoint 控制器测试对齐真实取消语义
+- 执行环境：本机 Homebrew PostgreSQL 17.7（aarch64）、conda base（SQLAlchemy 2.0.51、asyncpg 0.31.0）；管理 URL 仅命令行传递、未落盘；UUID 临时库前缀 `iter197_pg_acceptance_`，终态全部删除（`"cleanup": "complete"`）。
+- 命令：`conda run --no-capture-output -n base python scripts/verify_iteration197_postgres_acceptance.py --apply --postgres-admin-url postgresql+asyncpg://<user>@localhost:5432/postgres`
+
+## 结果：`PASS`（E-197-07 PostgreSQL 侧核心；`status: ok`, `mode: applied`）
+
+| 证据项 | 结果 |
+| --- | --- |
+| 迁移链 | 空 UUID 临时库一次性升级到唯一 head `20260911_market_data_b2_completeness_evidence` |
+| 会话时区 | 两个独立连接均 `UTC` |
+| 双进程精确缺口 | 2 个 OS 进程竞争同一精确缺口仅 **1** 次确定性 provider 调用；follower 0 调用，独立 session `local_only` 重读 coverage complete、0 fetch、2 条事实 |
+| 取消故障相位 | 5 相位全通过：`runner_started`、`runner_receipt_ready`、`store_before_persist`、`store_after_persist` 的 leader `release_completed_after_cancellation=true`；`lease_release_started` 为 `false`（取消投递于 release 边界本身）——与 `_FaultPhaseSpec` 预期逐项一致 |
+| stale owner 回归 | 被接管后原 owner 恢复，fence 拒绝其持久化：`FETCH_LEASE_FENCE_LOST` + `FETCH_LEASE_RELEASE_LOST`；`provider_attempt_count=2`（leader 1 + takeover 1） |
+| terminated owner 接管 | SIGTERM 审计退出码；租约到期后 follower 接管成功，`provider_attempt_count=2`，持久化增量 1 snapshot + 2 revisions |
+| 独立连接租约 | 双连接并发争用恰 1 个赢家，fence token=1，释放成功 |
+| legacy 约束可移植 | 前驱库（stamped `20260909_market_data_exact_identity_collation`）3 个 PG 截断 CHECK 名迁移为 portable 名；source/calendar sentinel 保留；短 digest 拒绝 |
+| 持久化计数 | 8 source snapshots / 16 observation revisions；`local_only` 重读 fetch=0 |
+| fixture 边界 | provider 为确定性 fixture，无网络；`not_proven: real_akshare_or_openbb_io, http_server_or_deployment_worker_topology` |
+
+## 验收驱动发现并修复的缺陷（TDD：先复现后修复）
+
+1. **迁移 PG 方言缺陷 ×3**（离线测试从未覆盖真实 asyncpg + PG 反射）：
+   - `evidence_command`：`format('%I.%I', ..., :table_name)` 变参上下文中绑定参数类型不可推断 → `AmbiguousParameterError`；`tgenabled`（PG `char`）经 asyncpg 返回 bytes，`str(b'O') != 'O'` 使 guard 匹配恒败 → `EVIDENCE_PACKAGE_GUARD_CONFLICT`。
+   - `holdout_executions`：`_sql_matches` 假设“PostgreSQL keeps the authored shape”，实际 `pg_get_constraintdef` 把 `IN (...)` 重写为 `= ANY (ARRAY[... ::character varying]::text[])` → `HOLDOUT_EXECUTION_ACCESS_SCHEMA_CONFLICT`。
+   - `approval_authority`：同款参数歧义 + `tgenabled` bytes + `trim(x)` 被反射为 `TRIM(BOTH FROM x)` 的 token 序列错位 → `APPROVAL_AUTHORITY_SCHEMA_CONFLICT`。
+2. **harness 预期模型缺陷 ×2**：
+   - `_fault_reached_phases` 假设取消后不再到达任何 checkpoint，与生产 `finally` 清理语义（完成 durable release 后再抛出 CancelledError）矛盾 → `POSTGRES_ACCEPTANCE_FAULT_REPORT_INVALID`；离线测试用同一 helper 构造 fixture 故自洽未暴露。
+   - terminated 场景 finally 对已被 SIGTERM 的 leader 共享 Event 调用 `set()`：leader 死亡瞬时可持有 Event 内部条件信号量（macOS 无 robust semaphore）→ 锁永久泄漏 → 父进程同步 `set()` 死锁（两次运行均复现；`sample` 采样定位主线程阻塞于 `_multiprocessing.SemLock.acquire`）。修复为不触碰该原语（kill 路径已有审计退出码 + `_stop_two_process_workers` 兜底）。
+
+修复后离线回归：`tests/market_data_platform/test_postgres_acceptance_harness.py` 33 passed；全量 `tests/market_data_platform tests/test_config.py` 1176 passed、0 failed（2026-09-18）；目标 Ruff 全绿。
+
+## 边界（不因此升级的项）
+
+- provider 为确定性 fixture：不证明真实 AkShare/OpenBB I/O（E-197-04/E-197-05 独立结算）。
+- 不证明 HTTP/deployment worker 拓扑、真实多 worker 故障接管压测（E-197-08）、备份恢复演练、BLOB drift 真实演练。
+- E-197-07 整体升级为 `PASS(MySQL+PG 核心)`：MySQL 侧核心 L-197-41 已过，PG 侧核心本收据已过；两侧的「多连接恢复扩展/备份恢复」等高级演练仍 `NOT_RUN`。

@@ -59,6 +59,44 @@ class TestIteration129RouterRegistration:
 class TestIteration129KnowledgeBaseAPI:
     """Knowledge base CRUD tests."""
 
+    async def test_missing_service_entities_keep_none_and_empty_results(self):
+        from app.schemas.knowledge_base import (
+            KBDocumentCreate,
+            KBDocumentUpdate,
+            KnowledgeBaseUpdate,
+        )
+        from app.services.knowledge_base_service import KnowledgeBaseService
+
+        service = KnowledgeBaseService()
+        owner_id = "owner-without-knowledge-bases"
+        kb_id = "missing-knowledge-base"
+        doc_id = "missing-document"
+
+        total, items = await service.list_knowledge_bases(owner_id)
+        assert total == 0
+        assert items == []
+        assert await service.get_knowledge_base(kb_id, owner_id) is None
+        assert (
+            await service.update_knowledge_base(
+                kb_id, owner_id, KnowledgeBaseUpdate(name="Updated")
+            )
+            is None
+        )
+        assert await service.list_documents(kb_id, owner_id) is None
+        assert (
+            await service.create_document(
+                kb_id, owner_id, KBDocumentCreate(title="Orphan document")
+            )
+            is None
+        )
+        assert await service.get_document(kb_id, doc_id, owner_id) is None
+        assert (
+            await service.update_document(
+                kb_id, doc_id, owner_id, KBDocumentUpdate(title="Updated")
+            )
+            is None
+        )
+
     async def test_create_and_list_knowledge_bases(self, client: AsyncClient, auth_headers: dict):
         create_resp = await client.post(
             "/api/v1/knowledge-base/",

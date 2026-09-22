@@ -87,7 +87,12 @@ async def test_quant_tools_schema_auth_rate_limit_and_audit(client: AsyncClient)
     assert forbidden.json()["detail"] == "insufficient_auth_level"
     assert admin_allowed.status_code == 200
     assert var_cvar.status_code == 200
-    assert var_cvar.json()["result"]["sample_size"] == 4
+    assert var_cvar.json()["result"] == {
+        "symbol": "RB2510",
+        "sample_size": 4,
+        "var_95": -0.03,
+        "cvar_95": -0.03,
+    }
     assert endpoint_preview.status_code == 200
     assert endpoint_preview.json()["result"]["preview"]["status"] == "ok"
     assert timed_out.status_code == 504

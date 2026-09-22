@@ -13,10 +13,15 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, TypeGuard, cast
 
 from app.db.database import async_session_maker
-from app.models.workspace import StrategyUnit, Workspace
+from app.models.workspace import (
+    StrategyUnit,
+    Workspace,
+    WorkspaceJSONMapping,
+    WorkspaceJSONValue,
+)
 from app.schemas.workspace import ApplyBestParamsRequest, UnitOptimizationRequest
 from app.services.optimization.execution_manager import get_optimization_execution_manager
 from app.services.optimization.task_state import build_results_response
@@ -28,6 +33,48 @@ from app.services.workspace._helpers import build_optimization_artifact_metadata
 from app.services.workspace.units import is_server_owned_ai_research_unit
 
 logger = logging.getLogger(__name__)
+
+
+def _is_workspace_json_value(value: object) -> TypeGuard[WorkspaceJSONValue]:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(_is_workspace_json_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str) and _is_workspace_json_value(item) for key, item in value.items()
+        )
+    return False
+
+
+def _is_workspace_json_mapping(value: object) -> TypeGuard[WorkspaceJSONMapping]:
+    return isinstance(value, dict) and _is_workspace_json_value(value)
+
+
+def _safe_workspace_json_mapping(value: object) -> WorkspaceJSONMapping:
+    if _is_workspace_json_mapping(value):
+        return dict(value)
+    return {}
+
+
+def _merge_optimization_config(
+    current_config: object,
+    *,
+    param_ranges: WorkspaceJSONMapping,
+    n_workers: int,
+    artifact_root: str,
+    submitted_at: str,
+) -> WorkspaceJSONMapping:
+    config = _safe_workspace_json_mapping(current_config)
+    config.update(
+        {
+            "param_ranges": param_ranges,
+            "n_workers": n_workers,
+            "artifact_root": artifact_root,
+            "submitted_at": submitted_at,
+        }
+    )
+    return config
 
 
 def build_optimization_trial_payload(
@@ -272,7 +319,7 @@ async def get_unit_optimization_results(
             return None
 
         task_id = str(unit.last_optimization_task_id)
-        oc: dict[str, Any] = cast("dict[str, Any]", unit.optimization_config) or {}
+        oc = _safe_workspace_json_mapping(unit.optimization_config)
         objective_key = oc.get("objective", "sharpe_max") or "sharpe_max"
         objective_map = {
             "sharpe_max": "sharpe_ratio",
@@ -433,6 +480,7 @@ async def submit_unit_optimization(
             return {"error": "AI_RESEARCH_UNIT_SERVER_OWNED_STATE_FORBIDDEN"}
 
         param_ranges: dict[str, dict[str, Any]] = {}
+        param_ranges_json: WorkspaceJSONMapping = {}
         for name, spec in req.param_ranges.items():
             param_ranges[name] = {
                 "start": spec.start,
@@ -440,6 +488,13 @@ async def submit_unit_optimization(
                 "step": spec.step,
                 "type": spec.type,
             }
+            range_snapshot: WorkspaceJSONMapping = {
+                "start": spec.start,
+                "end": spec.end,
+                "step": spec.step,
+                "type": spec.type,
+            }
+            param_ranges_json[name] = range_snapshot
 
         grid = generate_param_grid(cast("dict[str, dict[str, float]]", param_ranges))
         if not grid:
@@ -486,16 +541,13 @@ async def submit_unit_optimization(
 
         unit_row: Any = unit
         unit_row.last_optimization_task_id = task_id
-        existing_oc = dict(unit.optimization_config or {})
-        existing_oc.update(
-            {
-                "param_ranges": param_ranges,
-                "n_workers": req.n_workers,
-                "artifact_root": str(artifact_root),
-                "submitted_at": datetime.now(timezone.utc).isoformat(),
-            }
+        unit_row.optimization_config = _merge_optimization_config(
+            unit.optimization_config,
+            param_ranges=param_ranges_json,
+            n_workers=req.n_workers,
+            artifact_root=str(artifact_root),
+            submitted_at=datetime.now(timezone.utc).isoformat(),
         )
-        unit_row.optimization_config = existing_oc
         await session.commit()
 
         return {

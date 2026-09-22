@@ -1,6 +1,6 @@
 """Knowledge base service for iteration 129."""
 
-from typing import Any
+from typing import Any, overload
 
 from sqlalchemy import delete, func, or_, select
 
@@ -28,6 +28,14 @@ from app.utils.knowledge_base_settings import (
 
 class KnowledgeBaseService:
     """CRUD service for knowledge bases and documents."""
+
+    @overload
+    @staticmethod
+    def _hydrate_settings(entity: KnowledgeBase) -> KnowledgeBase: ...
+
+    @overload
+    @staticmethod
+    def _hydrate_settings(entity: None) -> None: ...
 
     @staticmethod
     def _hydrate_settings(entity: KnowledgeBase | None) -> KnowledgeBase | None:
@@ -81,7 +89,7 @@ class KnowledgeBaseService:
             )
         ).all()
         parent_by_id = {str(doc_id): str(pid) if pid is not None else None for doc_id, pid in rows}
-        cursor = parent_id
+        cursor: str | None = parent_id
         while cursor is not None:
             if cursor == current_document_id:
                 raise ValueError("Document parent cycle is not allowed")

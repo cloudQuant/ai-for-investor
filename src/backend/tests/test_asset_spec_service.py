@@ -34,3 +34,20 @@ async def test_asset_spec_service_resolves_and_upserts_futures_contract_metadata
     assert resolved.margin_rate is not None and resolved.margin_rate > 0
     assert updated.commission_rate == 0.0002
     assert loaded is not None and loaded.id == resolved.id
+
+
+@pytest.mark.parametrize("local_payload", [None, [], "malformed"])
+async def test_resolve_uses_asset_defaults_when_local_payload_is_not_a_mapping(
+    monkeypatch,
+    local_payload: object,
+):
+    monkeypatch.setattr(
+        "app.services.asset_spec_service.query_local_asset_spec",
+        lambda symbol: local_payload,
+    )
+
+    resolved = AssetSpecService().resolve(symbol="RB0")
+
+    assert resolved.contract_multiplier == 10.0
+    assert resolved.exchange == "SHFE"
+    assert resolved.source == "local_defaults"

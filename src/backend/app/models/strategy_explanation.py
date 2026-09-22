@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Column, DateTime, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -15,7 +16,7 @@ class StrategyExplanationModel(Base):
 
     __tablename__ = "strategy_explanations"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     code_hash = Column(String(64), unique=True, index=True, nullable=False)
     strategy_name = Column(String(100), nullable=False)
     summary = Column(Text, nullable=False)

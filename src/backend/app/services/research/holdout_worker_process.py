@@ -102,9 +102,15 @@ async def _create_worker(factory: WorkerFactory) -> HoldoutEvaluationWorker:
 
 
 def _poll_seconds(value: object) -> float:
-    if type(value) not in {int, float} or not math.isfinite(value) or not 0.1 <= value <= 3600:
-        raise ValueError("HOLDOUT_WORKER_POLL_INTERVAL_INVALID")
-    return float(value)
+    if type(value) is int:
+        if not 0.1 <= value <= 3600:
+            raise ValueError("HOLDOUT_WORKER_POLL_INTERVAL_INVALID")
+        return float(value)
+    if type(value) is float:
+        if not math.isfinite(value) or not 0.1 <= value <= 3600:
+            raise ValueError("HOLDOUT_WORKER_POLL_INTERVAL_INVALID")
+        return value
+    raise ValueError("HOLDOUT_WORKER_POLL_INTERVAL_INVALID")
 
 
 def _valid_reference(module_name: str, attribute_name: str) -> bool:

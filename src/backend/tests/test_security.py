@@ -98,8 +98,9 @@ class TestJWTSecurity:
             "token_type": "access",
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
         }
-        # Sign with a different secret
-        bad_token = jwt.encode(payload, "wrong-secret-key", algorithm="HS256")
+        # Sign with a different, sufficiently long test-only secret.
+        bad_secret = "invalid-hmac-secret-for-jwt-test-only-32-bytes"
+        bad_token = jwt.encode(payload, bad_secret, algorithm="HS256")
 
         resp = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {bad_token}"})
         assert resp.status_code == 401

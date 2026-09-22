@@ -7,19 +7,36 @@
   >
     <header class="run-history-panel__header">
       <div>
-        <h3 id="trusted-research-history-title">{{ t('strategy.aiResearchTrusted.history.title') }}</h3>
+        <h3 id="trusted-research-history-title">
+          {{ t('strategy.aiResearchTrusted.history.title') }}
+        </h3>
         <p>{{ t('strategy.aiResearchTrusted.history.description') }}</p>
       </div>
-      <button type="button" :disabled="loading" data-test="trusted-research-history-refresh" @click="emit('refresh')">
+      <button
+        type="button"
+        :disabled="loading"
+        data-test="trusted-research-history-refresh"
+        @click="emit('refresh')"
+      >
         {{ t('strategy.aiResearchTrusted.history.refresh') }}
       </button>
     </header>
 
-    <p v-if="tasks.length === 0 && !loading" class="run-history-panel__empty">
+    <p
+      v-if="tasks.length === 0 && !loading"
+      class="run-history-panel__empty"
+    >
       {{ t('strategy.aiResearchTrusted.history.empty') }}
     </p>
-    <ol v-else class="run-history-panel__list" :aria-label="t('strategy.aiResearchTrusted.history.title')">
-      <li v-for="task in tasks" :key="task.id">
+    <ol
+      v-else
+      class="run-history-panel__list"
+      :aria-label="t('strategy.aiResearchTrusted.history.title')"
+    >
+      <li
+        v-for="task in tasks"
+        :key="task.id"
+      >
         <button
           type="button"
           class="run-history-panel__item"

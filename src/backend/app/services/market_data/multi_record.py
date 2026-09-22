@@ -544,11 +544,12 @@ def _normalize_observed_record_key_sha256s(
 def _plan_completeness(
     *,
     selector_digest: str,
-    expected_record_key_sha256s: frozenset[str] | None,
+    expected_record_key_sha256s: Iterable[str] | None,
     observed_record_key_sha256s: Iterable[str],
     zero_record_certificate: ZeroRecordCertificate | None,
     event_at: datetime | None,
 ) -> CompletenessResult:
+    expected = _normalize_expected_record_key_sha256s(expected_record_key_sha256s)
     if zero_record_certificate is not None and not isinstance(
         zero_record_certificate,
         ZeroRecordCertificate,
@@ -561,11 +562,11 @@ def _plan_completeness(
     reason_codes: list[str] = []
     zero_record_certificate_used = False
 
-    if expected_record_key_sha256s is None:
+    if expected is None:
         reason_codes.append("EXPECTED_RECORD_SET_UNDECLARED")
     else:
-        missing = expected_record_key_sha256s - observed
-        unexpected = observed - expected_record_key_sha256s
+        missing = expected - observed
+        unexpected = observed - expected
         if duplicates:
             reason_codes.append("DUPLICATE_RECORD_KEY")
         if missing:
@@ -573,7 +574,7 @@ def _plan_completeness(
         if unexpected:
             reason_codes.append("UNEXPECTED_RECORD_KEY")
 
-        if not expected_record_key_sha256s and not observed:
+        if not expected and not observed:
             if zero_record_certificate is None:
                 reason_codes.append("EMPTY_RESULT_UNDECLARED")
             elif zero_record_certificate.selector_digest != selector_digest:
@@ -595,7 +596,7 @@ def _plan_completeness(
         selector_digest=selector_digest,
         status=status,
         reason_codes=tuple(reason_codes),
-        expected_record_key_sha256s=expected_record_key_sha256s,
+        expected_record_key_sha256s=expected,
         observed_record_key_sha256s=observed,
         missing_record_key_sha256s=missing,
         duplicate_record_key_sha256s=duplicates,

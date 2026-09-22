@@ -42,7 +42,9 @@
                 size="small"
                 class="quote-source-status-button"
               >
-                <el-icon aria-hidden="true"><Connection /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Connection />
+                </el-icon>
                 {{ t('quote.sourceStatusButton') }}
               </el-button>
             </template>
@@ -120,7 +122,6 @@
           <strong :class="item.tone">{{ item.value }}</strong>
         </article>
       </div>
-
     </section>
 
     <!-- Initial load: do not show an empty quote state while the query is pending. -->
@@ -234,7 +235,9 @@
                   size="default"
                   :type="store.hasAdvancedFilters ? 'primary' : ''"
                 >
-                  <el-icon aria-hidden="true"><Filter /></el-icon> {{ t('quote.advancedFilter') }}
+                  <el-icon aria-hidden="true">
+                    <Filter />
+                  </el-icon> {{ t('quote.advancedFilter') }}
                   <el-badge
                     v-if="store.hasAdvancedFilters"
                     is-dot
@@ -578,7 +581,9 @@
                       :aria-label="t('quote.btnOpenChart')"
                       @click.stop="store.openChart(row.symbol)"
                     >
-                      <el-icon aria-hidden="true"><DataLine /></el-icon>
+                      <el-icon aria-hidden="true">
+                        <DataLine />
+                      </el-icon>
                     </el-button>
                   </el-tooltip>
                 </template>
@@ -602,7 +607,9 @@
                         :aria-label="t('quote.btnRemoveSubscription')"
                         @click.stop
                       >
-                        <el-icon aria-hidden="true"><Delete /></el-icon>
+                        <el-icon aria-hidden="true">
+                          <Delete />
+                        </el-icon>
                       </el-button>
                     </template>
                   </el-popconfirm>
@@ -801,7 +808,10 @@
           @dragover.prevent
           @drop="onColDrop(idx)"
         >
-          <el-icon class="quote-column-drag" aria-hidden="true">
+          <el-icon
+            class="quote-column-drag"
+            aria-hidden="true"
+          >
             <Rank />
           </el-icon>
           <el-checkbox

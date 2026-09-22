@@ -5,6 +5,7 @@ Backtest comparison models.
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TYPE_CHECKING, TypeAlias
 
 from sqlalchemy import (
     JSON,
@@ -16,9 +17,15 @@ from sqlalchemy import (
     Table,
     Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.models.backtest import BacktestTask
+    from app.models.user import User
+
+JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
 
 
 class ComparisonType(str, Enum):
@@ -49,34 +56,52 @@ class Comparison(Base):
 
     __tablename__ = "backtest_comparisons"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(200), nullable=False)  # Comparison name
-    description = Column(Text, nullable=True)
-    type = Column(String(20), default=ComparisonType.METRICS, nullable=False)  # Comparison type
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)  # Comparison name
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    type: Mapped[str] = mapped_column(
+        String(20), default=ComparisonType.METRICS, nullable=False
+    )  # Comparison type
 
     # Compared backtest task ID list
-    backtest_task_ids = Column(JSON, nullable=False)  # Backtest task ID list
+    backtest_task_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False
+    )  # Backtest task ID list
 
     # Comparison results (JSON stored)
-    comparison_data = Column(JSON, nullable=False)  # Comparison results
+    comparison_data: Mapped[dict[str, JSONValue]] = mapped_column(
+        JSON, nullable=False
+    )  # Comparison results
 
     # Flags
-    is_favorite = Column(Boolean, default=False, nullable=False)  # Whether favorited
-    is_public = Column(Boolean, default=False, nullable=False)  # Whether public
+    is_favorite: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # Whether favorited
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # Whether public
 
     # Timestamps
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships
-    user = relationship("User", back_populates="comparisons")
-    backtest_tasks = relationship("BacktestTask", secondary="comparison_backtest_association")
-    shares = relationship("ComparisonShare", back_populates="comparison")
+    user: Mapped["User"] = relationship("User", back_populates="comparisons")
+    backtest_tasks: Mapped[list["BacktestTask"]] = relationship(
+        "BacktestTask", secondary="comparison_backtest_association"
+    )
+    shares: Mapped[list["ComparisonShare"]] = relationship(
+        "ComparisonShare", back_populates="comparison"
+    )
 
 
 class ComparisonShare(Base):
@@ -92,17 +117,23 @@ class ComparisonShare(Base):
 
     __tablename__ = "comparison_shares"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    comparison_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    comparison_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("backtest_comparisons.id"), nullable=False, index=True
     )
-    shared_with_user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    can_edit = Column(Boolean, default=False, nullable=False)  # Whether edit is allowed
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    shared_with_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    can_edit: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # Whether edit is allowed
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     # Relationships
-    comparison = relationship("Comparison", back_populates="shares")
-    shared_with_user = relationship("User")
+    comparison: Mapped["Comparison"] = relationship("Comparison", back_populates="shares")
+    shared_with_user: Mapped["User"] = relationship("User")
 
 
 # Many-to-many association table (comparison - backtest tasks)

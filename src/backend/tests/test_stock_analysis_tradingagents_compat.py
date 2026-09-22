@@ -9,12 +9,14 @@ from sqlalchemy import select
 
 from app.db.database import async_session_maker
 from app.models.ai_call_log import AICallLog
+from app.models.knowledge_base import ChatMessage
 from app.models.stock_analysis import (
     StockAnalysisExportModel,
     StockAnalysisReportModel,
     StockAnalysisTaskModel,
 )
 from app.models.user import User
+from app.models.workspace import Workspace
 from app.schemas.stock_analysis import StockAnalysisParams
 from app.services.ai_router.router import ChatCompletionResponse
 from app.services.stock_analysis.analysis_engine import StockAnalysisEngine
@@ -749,6 +751,23 @@ async def test_stock_analysis_from_ai_chat_generates_compat_report_and_exports(
     assert scheduled == [(task_card["task_id"], user_id)]
     await run_pending_task(task_id=task_card["task_id"], user_id=user_id)
 
+    async with async_session_maker() as session:
+        stored_task = await session.get(StockAnalysisTaskModel, task_card["task_id"])
+        assert stored_task is not None
+        assert stored_task.assistant_message_id is not None
+        assistant_message = await session.get(ChatMessage, stored_task.assistant_message_id)
+    assert assistant_message is not None
+    stored_metadata = assistant_message.metadata_json
+    assert stored_metadata is not None
+    assert stored_metadata["assistant_mode"] == "stock_analysis"
+    task_metadata = stored_metadata["stock_analysis_task"]
+    assert isinstance(task_metadata, dict)
+    assert task_metadata["task_id"] == task_card["task_id"]
+    assert task_metadata["status"] == "completed"
+    report_metadata = stored_metadata["stock_analysis_report"]
+    assert isinstance(report_metadata, dict)
+    assert report_metadata["report_id"]
+
     task_response = await client.get(
         f"/api/v1/stock-analysis/tasks/{task_card['task_id']}",
         headers=headers,
@@ -892,6 +911,18 @@ async def test_stock_analysis_from_ai_chat_generates_compat_report_and_exports(
     assert saved_doc["content_type"] == "markdown"
     assert saved_doc["index_status"] == "not_indexed"
 
+    async with async_session_maker() as session:
+        workspace_model = await session.get(Workspace, workspace_id)
+        assert workspace_model is not None
+        workspace_model.settings = {
+            "stock_analysis_reports": [
+                {"report_id": "existing-report", "source": "stock_analysis_report"},
+                "invalid-report-entry",
+                {"report_id": report_id, "source": "stale-duplicate"},
+            ]
+        }
+        await session.commit()
+
     saved_workspace = await client.post(
         f"/api/v1/stock-analysis/reports/{report_id}/save-to-workspace",
         headers=headers,
@@ -906,6 +937,8 @@ async def test_stock_analysis_from_ai_chat_generates_compat_report_and_exports(
     workspace_detail = await client.get(f"/api/v1/workspace/{workspace_id}", headers=headers)
     assert workspace_detail.status_code == 200
     workspace_reports = workspace_detail.json()["settings"]["stock_analysis_reports"]
+    assert len(workspace_reports) == 2
+    assert workspace_reports[0]["report_id"] == "existing-report"
     assert workspace_reports[-1]["report_id"] == report_id
     assert workspace_reports[-1]["source"] == "stock_analysis_report"
 

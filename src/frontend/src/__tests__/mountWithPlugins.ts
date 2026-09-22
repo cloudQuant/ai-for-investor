@@ -2,32 +2,38 @@
  * Shared mounting helper for view tests.
  * Provides isolated Pinia and Router instances for each mount.
  */
-import type { Component } from 'vue'
-import { mount, type MountingOptions, type VueWrapper } from '@vue/test-utils'
+import type { Component, Directive } from 'vue'
+import { mount, type ComponentMountingOptions, type MountingOptions } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { vi } from 'vitest'
 
 import { elStubs } from './stubs'
 
+type ComponentStubMap = Record<string, boolean | Component | Directive>
+
 // Mock element-plus locale
 vi.mock('element-plus/dist/locale/zh-cn.mjs', () => ({ default: {} }))
 
-export interface MountOptions extends MountingOptions<Component> {
-  customStubs?: Record<string, any>
+export type MountOptions<T extends Component = Component> = ComponentMountingOptions<T> & {
+  customStubs?: ComponentStubMap
 }
 
-export function mountWithPlugins(
-  component: Component,
-  options: MountOptions = {}
-): VueWrapper<any> {
+export function mountWithPlugins<T extends Component>(
+  component: T,
+  options: MountOptions<T> = {}
+): ReturnType<typeof mount<T, T>> {
   const { customStubs, ...mountOptions } = options
   const pinia = createPinia()
   setActivePinia(pinia)
-  const stubs: Record<string, any> = {
+  const globalStubs = mountOptions.global?.stubs
+  const globalStubMap: ComponentStubMap = Array.isArray(globalStubs)
+    ? Object.fromEntries((globalStubs as string[]).map((name) => [name, true] as const))
+    : globalStubs ?? {}
+  const stubs: ComponentStubMap = {
     ...elStubs,
     ...customStubs,
-    ...mountOptions.global?.stubs,
+    ...globalStubMap,
   }
 
   const plugins: NonNullable<MountingOptions<Component>['global']>['plugins'] = [pinia]

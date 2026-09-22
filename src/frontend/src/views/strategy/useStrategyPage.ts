@@ -2544,7 +2544,8 @@ export function useStrategyPage() {
     // Paper-trading promotion is an operational continuation action, not a
     // newly accepted investment mandate. A continuation may set it after the
     // mandate was confirmed without invalidating the user-owned mandate.
-    const { start_paper_trading: _startPaperTrading, ...controlled } = constraints
+    const controlled = { ...constraints }
+    delete controlled.start_paper_trading
     return controlled
   }
 
@@ -6611,11 +6612,13 @@ export function useStrategyPage() {
     if (!dataConfig || !Object.prototype.hasOwnProperty.call(dataConfig, 'market_data_asset_type')) {
       return request
     }
-    const { market_data_asset_type: _marketDataAssetType, ...remainingDataConfig } = dataConfig
+    const remainingDataConfig = { ...dataConfig }
+    delete remainingDataConfig.market_data_asset_type
     if (Object.keys(remainingDataConfig).length > 0) {
       return { ...request, data_config: remainingDataConfig }
     }
-    const { data_config: _dataConfig, ...requestWithoutDataConfig } = request
+    const requestWithoutDataConfig = { ...request }
+    delete requestWithoutDataConfig.data_config
     return requestWithoutDataConfig
   }
 

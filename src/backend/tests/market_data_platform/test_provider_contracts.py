@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from app.services.market_data import akshare_provider
 from app.services.market_data.akshare_provider import (
     AKSHARE_ROUTE_REGISTRY,
     AkShareMarketDataProvider,
@@ -18,6 +19,9 @@ from app.services.market_data.akshare_provider import (
 from app.services.market_data.dataset_contracts import DEFAULT_DATASET_CONTRACT_REGISTRY
 from app.services.market_data.provider_contracts import (
     AKSHARE_PROVIDER_CONTRACT_REGISTRY,
+    AKSHARE_PROVIDER_CONTRACTS,
+    AKSHARE_RESPONSE_FIELD_ALIASES,
+    ProviderContract,
     ProviderContractError,
     ProviderContractRegistry,
 )
@@ -90,6 +94,34 @@ def test_static_contracts_cover_each_reviewed_akshare_route_and_product_profile(
         assert contract.field_profile.optional_fields == family.field_profile.optional_fields
 
 
+def test_akshare_catalog_preserves_route_order_descriptor_and_aliases() -> None:
+    """The extracted catalog retains its reviewed lookup order and route digest."""
+    assert tuple(contract.route_id for contract in AKSHARE_PROVIDER_CONTRACTS) == (
+        "akshare-stock-primary-v1",
+        "akshare-stock-kline-legacy-v1",
+        "akshare-stock-liquidity-primary-v1",
+        "akshare-futures-primary-v1",
+        "akshare-bond-primary-v1",
+        "akshare-fund-primary-v1",
+        "akshare-fund-liquidity-primary-v1",
+        "akshare-fund-nav-primary-v1",
+        "akshare-cffex-option-primary-v1",
+        "akshare-fx-primary-v1",
+        "akshare-fx-range-primary-v1",
+    )
+
+    contract = AKSHARE_PROVIDER_CONTRACT_REGISTRY.contract_for(
+        provider="akshare",
+        route_id="akshare-stock-primary-v1",
+    )
+    assert contract.descriptor_sha256 == (
+        "401c4894813c3578d00995bece9ae40bbacb22f60e27a0aca2be7a20237c0b96"
+    )
+    assert contract.descriptor["response_field_aliases"]["开盘"] == "open"
+    assert contract.response_field_aliases["最新价"] == "close"
+    assert AKSHARE_RESPONSE_FIELD_ALIASES["close"] == "close"
+
+
 def test_contract_descriptor_and_summary_are_stable_across_registry_rebuilds() -> None:
     """Contract evidence is canonical and cannot be relabeled with another digest."""
     first = AKSHARE_PROVIDER_CONTRACT_REGISTRY.contract_for(
@@ -103,6 +135,8 @@ def test_contract_descriptor_and_summary_are_stable_across_registry_rebuilds() -
 
     assert first.descriptor_sha256 == rebuilt.descriptor_sha256
     assert dict(first.summary) == dict(rebuilt.summary)
+    recomputed = replace(first, descriptor_sha256=None)
+    assert recomputed.descriptor_sha256 == first.descriptor_sha256
     assert json.dumps(dict(first.summary), sort_keys=True, separators=(",", ":")) == json.dumps(
         dict(rebuilt.summary),
         sort_keys=True,
@@ -112,6 +146,80 @@ def test_contract_descriptor_and_summary_are_stable_across_registry_rebuilds() -
 
     with pytest.raises(ProviderContractError) as mismatch:
         replace(first, descriptor_sha256="0" * 64)
+
+    assert mismatch.value.code == "PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH"
+
+
+@pytest.mark.parametrize("consumer", ["descriptor", "summary", "prepare"])
+@pytest.mark.parametrize("descriptor_sha256", [None, "0" * 64])
+def test_contract_digest_consumers_reject_postconstruction_tampering(
+    consumer: str,
+    descriptor_sha256: str | None,
+) -> None:
+    """Descriptor outputs and request receipts reject absent or spoofed digests."""
+    reviewed = AKSHARE_PROVIDER_CONTRACT_REGISTRY.contract_for(
+        provider="akshare",
+        route_id="akshare-stock-primary-v1",
+    )
+    contract = replace(reviewed)
+    object.__setattr__(contract, "descriptor_sha256", descriptor_sha256)
+
+    with pytest.raises(ProviderContractError) as mismatch:
+        if consumer == "descriptor":
+            dict(contract.descriptor)
+        elif consumer == "summary":
+            dict(contract.summary)
+        else:
+            contract.prepare_akshare_request(_request())
+
+    assert mismatch.value.code == "PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH"
+
+
+@pytest.mark.parametrize("consumer", ["descriptor", "summary", "prepare"])
+def test_contract_consumers_return_digest_from_the_verified_snapshot(
+    consumer: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Digest mutation during snapshot construction cannot replace the captured digest."""
+    reviewed = AKSHARE_PROVIDER_CONTRACT_REGISTRY.contract_for(
+        provider="akshare",
+        route_id="akshare-stock-primary-v1",
+    )
+    contract = replace(reviewed)
+    expected_digest = contract.descriptor_sha256
+    original_snapshot = ProviderContract._descriptor_without_digest
+
+    def snapshot_then_spoof_digest(contract: ProviderContract) -> Mapping[str, object]:
+        snapshot = original_snapshot(contract)
+        object.__setattr__(contract, "descriptor_sha256", "0" * 64)
+        return snapshot
+
+    monkeypatch.setattr(ProviderContract, "_descriptor_without_digest", snapshot_then_spoof_digest)
+
+    if consumer == "descriptor":
+        observed_digest = contract.descriptor["descriptor_sha256"]
+    elif consumer == "summary":
+        observed_digest = contract.summary["descriptor_sha256"]
+    else:
+        observed_digest = contract.prepare_akshare_request(_request()).descriptor_sha256
+
+    assert observed_digest == expected_digest
+
+
+@pytest.mark.parametrize("descriptor_sha256", [None, "0" * 64])
+def test_import_time_reviewed_identity_rejects_invalid_descriptor_digest(
+    descriptor_sha256: str | None,
+) -> None:
+    """The import-time identity snapshot requires an intact non-null descriptor."""
+    reviewed = AKSHARE_PROVIDER_CONTRACT_REGISTRY.contract_for(
+        provider="akshare",
+        route_id="akshare-stock-primary-v1",
+    )
+    contract = replace(reviewed)
+    object.__setattr__(contract, "descriptor_sha256", descriptor_sha256)
+
+    with pytest.raises(ProviderContractError) as mismatch:
+        akshare_provider._reviewed_contract_identity(contract)
 
     assert mismatch.value.code == "PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH"
 

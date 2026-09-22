@@ -482,14 +482,32 @@ def _sql_matches(observed: str, expected: str) -> bool:
     def normalize(value: str) -> str:
         # MySQL 9 rewrites the whole check into backquoted identifiers with
         # per-clause parentheses, lowercase tokens, and charset introducers on
-        # every string literal (``_utf8mb4'ACCEPTED'``); PostgreSQL keeps the
-        # authored shape.  Every reviewed check here is a linear boolean over
-        # IN/equality comparisons, so removing introducers and grouping
-        # parentheses from both sides preserves the operand/boolean token
-        # sequence while a different operand still produces a different one.
+        # every string literal (``_utf8mb4'ACCEPTED'``).  PostgreSQL rewrites
+        # ``x IN ('a', 'b')`` into ``x::text = ANY (ARRAY['a'::character
+        # varying, 'b'::character varying]::text[])`` in
+        # ``pg_get_constraintdef``.  Every reviewed check here is a linear
+        # boolean over IN/equality comparisons, so removing introducers,
+        # reviewed type casts, grouping parentheses/brackets, and folding the
+        # ``= ANY (ARRAY[...])`` form back onto ``IN (...)`` preserves the
+        # operand/boolean token sequence while a different operand still
+        # produces a different one.  The cast and introducer patterns are
+        # explicit allow-lists so a following SQL keyword (``...::text OR``)
+        # is never consumed as part of a type name.
         value = value.lower().replace('"', "").replace("`", "")
-        value = re.sub(r"_[a-z0-9]+'", "'", value)
+        value = re.sub(
+            r"_(?:utf8mb4|utf8|utf16|utf16le|utf32|ucs2|latin1|binary|ascii)'",
+            "'",
+            value,
+        )
+        value = re.sub(
+            r"::(?:character\s+varying|double\s+precision|timestamp(?:\s+with(?:out)?\s+time\s+zone)?"
+            r"|time(?:\s+with(?:out)?\s+time\s+zone)?|text|varchar|char|integer|int|bigint|smallint"
+            r"|numeric|decimal|boolean|date|jsonb|json|uuid)(?:\s*\[\])?",
+            "",
+            value,
+        )
         value = re.sub(r"\s+", "", value)
-        return value.replace("(", "").replace(")", "")
+        value = value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
+        return value.replace("=anyarray", "in")
 
     return normalize(observed) == normalize(expected)

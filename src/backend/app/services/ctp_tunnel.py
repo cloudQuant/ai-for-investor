@@ -23,13 +23,27 @@ import socket
 import subprocess
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Literal, Protocol
 from urllib.parse import unquote, urlparse
 from urllib.request import getproxies
 
 logger = logging.getLogger(__name__)
+
+
+class _ScutilRunner(Protocol):
+    """Text-mode subprocess contract used by the injected macOS proxy probe."""
+
+    def __call__(
+        self,
+        args: Sequence[str],
+        *,
+        capture_output: Literal[True],
+        text: Literal[True],
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]: ...
+
 
 _tunnels: dict[str, _CTPTunnel] = {}
 _lock = threading.Lock()
@@ -104,7 +118,7 @@ def _get_http_proxy_endpoint(
     *,
     environ: dict[str, str] | None = None,
     system_getproxies: Callable[[], dict[str, str]] | None = None,
-    run_scutil: Callable[..., Any] | None = subprocess.run,
+    run_scutil: _ScutilRunner | None = subprocess.run,
 ) -> _ProxyEndpoint | None:
     """Resolve the HTTP proxy used for CTP CONNECT tunnels."""
     env = os.environ if environ is None else environ
@@ -128,11 +142,10 @@ def _get_http_proxy_endpoint(
         if endpoint is not None:
             return endpoint
 
-    should_probe_scutil = run_scutil is not None and (
+    if run_scutil is not None and (
         run_scutil is not subprocess.run
         or (sys.platform == "darwin" and shutil.which("scutil") is not None)
-    )
-    if should_probe_scutil:
+    ):
         try:
             result = run_scutil(
                 ["scutil", "--proxy"],
@@ -140,7 +153,7 @@ def _get_http_proxy_endpoint(
                 text=True,
                 timeout=5,
             )
-            endpoint = _proxy_from_scutil_output(result.stdout)
+            endpoint = _proxy_from_scutil_output(result.stdout or "")
             if endpoint is not None:
                 return endpoint
         except Exception:
@@ -270,11 +283,14 @@ class _CTPTunnel:
         sock.settimeout(None)
         return sock, leftover
 
-    def _accept_loop(self):
+    def _accept_loop(self) -> None:
         """Accept incoming connections and create forwarding threads."""
+        server_sock = self._server_sock
+        if server_sock is None:
+            return
         while not self._stop_event.is_set():
             try:
-                client_sock, addr = self._server_sock.accept()
+                client_sock, addr = server_sock.accept()
             except TimeoutError:
                 continue
             except OSError:

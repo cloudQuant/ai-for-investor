@@ -8,7 +8,7 @@ and workspace-level run orchestration (Phase 3).
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +43,9 @@ from app.services.workspace.config import (
     _workspace_to_response,
 )
 from app.services.workspace.run_ops import WorkspaceRunOpsMixin
+
+if TYPE_CHECKING:
+    from app.services.backtest.service import BacktestService
 
 # These names are re-exported here for sibling slices (workspace/units.py,
 # workspace/optimization.py, workspace/lifecycle.py, workspace/_helpers.py)
@@ -86,7 +89,7 @@ class WorkspaceService(WorkspaceRunOpsMixin):
 
     @staticmethod
     async def _resolve_unit_log_dir(
-        backtest_service: "BacktestService",  # noqa: F821
+        backtest_service: "BacktestService",
         task_id: str,
         user_id: str | None,
     ) -> Path | None:
@@ -163,7 +166,7 @@ class WorkspaceService(WorkspaceRunOpsMixin):
 
     @staticmethod
     async def _resolve_unit_bar_count(
-        backtest_service: "BacktestService",  # noqa: F821
+        backtest_service: "BacktestService",
         task_id: str,
         user_id: str | None,
         bt_result: Any | None = None,

@@ -490,16 +490,25 @@ def _verify_attested_snapshot_identity(snapshot: ResearchDatasetSnapshot) -> Non
         raise ValueError("DATASET_SNAPSHOT_LEGACY_UNVERIFIED")
     if snapshot.integrity_status not in {"VERIFIED", "FAILED"}:
         raise ValueError("DATASET_SNAPSHOT_INTEGRITY_STATUS_INVALID")
-    if not all(
-        isinstance(value, str) and value.strip()
-        for value in (
-            snapshot.object_receipt_id,
-            snapshot.object_logical_id,
-            snapshot.object_version,
-            snapshot.object_digest,
-            snapshot.integrity_receipt_hash,
-            snapshot.snapshot_identity_hash,
-        )
+    object_receipt_id = snapshot.object_receipt_id
+    object_logical_id = snapshot.object_logical_id
+    object_version = snapshot.object_version
+    object_digest = snapshot.object_digest
+    integrity_receipt_hash = snapshot.integrity_receipt_hash
+    stored_snapshot_identity_hash = snapshot.snapshot_identity_hash
+    if (
+        not isinstance(object_receipt_id, str)
+        or not object_receipt_id.strip()
+        or not isinstance(object_logical_id, str)
+        or not object_logical_id.strip()
+        or not isinstance(object_version, str)
+        or not object_version.strip()
+        or not isinstance(object_digest, str)
+        or not object_digest.strip()
+        or not isinstance(integrity_receipt_hash, str)
+        or not integrity_receipt_hash.strip()
+        or not isinstance(stored_snapshot_identity_hash, str)
+        or not stored_snapshot_identity_hash.strip()
     ):
         raise ValueError("DATASET_SNAPSHOT_ATTESTATION_REQUIRED")
     if (
@@ -513,14 +522,14 @@ def _verify_attested_snapshot_identity(snapshot: ResearchDatasetSnapshot) -> Non
         user_id=snapshot.user_id,
         metadata_content_hash=snapshot.content_hash,
         storage_reference_hash=snapshot.storage_reference_hash,
-        object_receipt_id=snapshot.object_receipt_id,
-        object_logical_id=snapshot.object_logical_id,
-        object_version=snapshot.object_version,
-        object_digest=snapshot.object_digest,
+        object_receipt_id=object_receipt_id,
+        object_logical_id=object_logical_id,
+        object_version=object_version,
+        object_digest=object_digest,
         object_size_bytes=snapshot.object_size_bytes,
-        integrity_receipt_hash=snapshot.integrity_receipt_hash,
+        integrity_receipt_hash=integrity_receipt_hash,
     )
-    if snapshot.snapshot_identity_hash != expected_identity_hash:
+    if stored_snapshot_identity_hash != expected_identity_hash:
         raise ValueError("DATASET_SNAPSHOT_IDENTITY_HASH_MISMATCH")
 
 

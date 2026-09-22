@@ -4,13 +4,15 @@ Covers: cache hit/miss, TTL expiry, Redis error fallback, write-operation invali
 GET-only caching, and X-Cache header behavior.
 """
 
+import json
 import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 
+from app.schemas.auth import TokenPayload
 from app.utils.response_cache import (
     MemoryCacheBackend,
     _build_cache_key,
@@ -228,3 +230,157 @@ class TestCacheFailOpen:
                 assert resp.status_code == 200
                 assert resp.json() == {"status": "ok"}
                 assert resp.headers.get("x-cache") == "MISS"
+
+
+async def test_user_scoped_cache_isolated_in_asgi_and_bypasses_unknown_principals(monkeypatch):
+    """Authenticated principals are partitioned; unresolved users never use shared keys."""
+    import app.utils.response_cache as rc_module
+
+    backend = MemoryCacheBackend()
+    monkeypatch.setattr(rc_module, "_cache_backend", backend)
+    app_instance = FastAPI()
+    alice_id = "alice-user-id"
+    bob_id = "bob-user-id"
+    principals = {
+        "alice": TokenPayload(sub=alice_id, username="alice"),
+        "bob": TokenPayload(sub=bob_id, username="bob"),
+    }
+    handler_calls = 0
+
+    async def resolve_test_user(request: Request) -> TokenPayload | None:
+        return principals.get(request.headers.get("x-test-principal", ""))
+
+    @app_instance.get("/private")
+    @cache_response(ttl=60, key_prefix="user-isolation", vary_by_current_user=True)
+    async def private_endpoint(
+        request: Request,
+        current_user: TokenPayload | None = Depends(resolve_test_user),
+    ) -> dict[str, str | int | None]:
+        nonlocal handler_calls
+        handler_calls += 1
+        return {
+            "user_id": current_user.sub if current_user is not None else None,
+            "call": handler_calls,
+        }
+
+    # A pre-existing unpartitioned entry must not satisfy the new scoped route.
+    legacy_key = _build_cache_key("user-isolation", "/private", {})
+    legacy_value = json.dumps(
+        {"body": {"user_id": "legacy-shared", "call": 0}, "status_code": 200}
+    ).encode()
+    await backend.set(legacy_key, legacy_value, ttl=60)
+
+    transport = ASGITransport(app=app_instance)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        alice_first = await client.get("/private", headers={"x-test-principal": "alice"})
+        assert alice_first.status_code == 200
+        assert alice_first.headers.get("x-cache") == "MISS"
+        assert alice_first.json() == {"user_id": alice_id, "call": 1}
+
+        alice_second = await client.get("/private", headers={"x-test-principal": "alice"})
+        assert alice_second.headers.get("x-cache") == "HIT"
+        assert alice_second.json() == alice_first.json()
+
+        bob_first = await client.get("/private", headers={"x-test-principal": "bob"})
+        assert bob_first.status_code == 200
+        assert bob_first.headers.get("x-cache") == "MISS"
+        assert bob_first.json() == {"user_id": bob_id, "call": 2}
+
+        bob_second = await client.get("/private", headers={"x-test-principal": "bob"})
+        assert bob_second.headers.get("x-cache") == "HIT"
+        assert bob_second.json() == bob_first.json()
+
+        cache_entries_before_unrecognized = len(backend._cache)
+        unknown_first = await client.get("/private", headers={"x-test-principal": "unknown"})
+        unknown_second = await client.get("/private", headers={"x-test-principal": "unknown"})
+
+    assert "x-cache" not in unknown_first.headers
+    assert "x-cache" not in unknown_second.headers
+    assert unknown_first.json() == {"user_id": None, "call": 3}
+    assert unknown_second.json() == {"user_id": None, "call": 4}
+    assert handler_calls == 4
+    assert len(backend._cache) == cache_entries_before_unrecognized
+
+    cache_keys = set(backend._cache)
+    assert legacy_key in cache_keys
+    scoped_keys = {key for key in cache_keys if ":user:" in key}
+    assert len(scoped_keys) == 2
+    assert all(alice_id not in key and bob_id not in key for key in cache_keys)
+
+
+async def test_backtest_router_cache_isolated_by_authenticated_user(monkeypatch):
+    """Exercise the production backtest route through FastAPI's ASGI lifecycle."""
+    from datetime import datetime, timezone
+
+    import app.utils.response_cache as rc_module
+    from app.api import backtest_enhanced
+    from app.schemas.backtest_enhanced import BacktestResult, TaskStatus
+
+    backend = MemoryCacheBackend()
+    monkeypatch.setattr(rc_module, "_cache_backend", backend)
+    alice = TokenPayload(sub="alice-user-id", username="alice")
+    bob = TokenPayload(sub="bob-user-id", username="bob")
+    users = {"alice": alice, "bob": bob}
+
+    class _BacktestService:
+        def __init__(self) -> None:
+            self.get_result_calls: list[tuple[str, str]] = []
+
+        async def get_result(self, task_id: str, user_id: str) -> BacktestResult | None:
+            self.get_result_calls.append((task_id, user_id))
+            if user_id != alice.sub:
+                return None
+            return BacktestResult(
+                task_id=task_id,
+                strategy_id="strategy-a",
+                symbol="000001.SZ",
+                start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+                end_date=datetime(2023, 2, 1, tzinfo=timezone.utc),
+                status=TaskStatus.COMPLETED,
+                created_at=datetime(2023, 2, 2, tzinfo=timezone.utc),
+            )
+
+    async def resolve_current_user(request: Request) -> TokenPayload:
+        return users[request.headers["x-test-principal"]]
+
+    service = _BacktestService()
+    production_app = FastAPI()
+    production_app.include_router(backtest_enhanced.router, prefix="/backtests")
+    production_app.dependency_overrides[backtest_enhanced.get_current_user] = resolve_current_user
+    production_app.dependency_overrides[backtest_enhanced.get_backtest_service] = lambda: service
+
+    transport = ASGITransport(app=production_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        alice_first = await client.get(
+            "/backtests/tenant-task", headers={"x-test-principal": "alice"}
+        )
+        alice_second = await client.get(
+            "/backtests/tenant-task", headers={"x-test-principal": "alice"}
+        )
+        bob_response = await client.get(
+            "/backtests/tenant-task", headers={"x-test-principal": "bob"}
+        )
+
+    assert alice_first.status_code == 200
+    assert alice_first.headers.get("x-cache") == "MISS"
+    assert alice_first.json()["task_id"] == "tenant-task"
+    assert alice_second.status_code == 200
+    assert alice_second.headers.get("x-cache") == "HIT"
+    assert alice_second.json() == alice_first.json()
+
+    assert bob_response.status_code == 404
+    assert bob_response.json() == {"detail": "Backtest result not found"}
+    assert "x-cache" not in bob_response.headers
+    assert service.get_result_calls == [
+        ("tenant-task", alice.sub),
+        ("tenant-task", bob.sub),
+    ]
+    assert all(alice.sub not in key and bob.sub not in key for key in backend._cache)
+
+
+def test_user_scoped_api_routes_opt_into_cache_partitioning():
+    from app.api.backtest_enhanced import get_backtest_result
+    from app.api.strategy.base import list_strategies
+
+    assert getattr(get_backtest_result, "_cache_response_vary_by_current_user", False) is True
+    assert getattr(list_strategies, "_cache_response_vary_by_current_user", False) is True

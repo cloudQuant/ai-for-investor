@@ -10,7 +10,7 @@ from app.models.akshare_mgmt import DataInterface
 from app.models.data_governance import DgEndpoint, DgIngestJob, DgJobStatus, DgProvider
 from app.services.data_connectors.executor import DataConnectorExecutor
 
-_PROVIDER_SEEDS = [
+_PROVIDER_SEEDS: list[dict[str, str | int]] = [
     {
         "provider_id": "akshare",
         "name": "AkShare",
@@ -121,7 +121,7 @@ class DataGovernanceService:
             select(DgEndpoint, DgProvider).join(DgProvider).where(DgEndpoint.id == endpoint_id)
         )
         row = result.one_or_none()
-        return row
+        return tuple(row) if row is not None else None
 
     async def get_endpoint_by_name(
         self, endpoint_name: str
@@ -135,7 +135,8 @@ class DataGovernanceService:
             )
             .order_by(DgProvider.provider_id, DgEndpoint.endpoint_name)
         )
-        return result.first()
+        row = result.first()
+        return tuple(row) if row is not None else None
 
     async def preview_endpoint(
         self, endpoint_id: str, params: dict[str, Any] | None = None
@@ -207,10 +208,11 @@ class DataGovernanceService:
         existing = (await self.db.execute(select(DgProvider))).scalars().all()
         providers = {provider.provider_id: provider for provider in existing}
         for seed in _PROVIDER_SEEDS:
-            if seed["provider_id"] not in providers:
+            seed_provider_id = seed.get("provider_id")
+            if isinstance(seed_provider_id, str) and seed_provider_id not in providers:
                 provider = DgProvider(**seed)
                 self.db.add(provider)
-                providers[seed["provider_id"]] = provider
+                providers[seed_provider_id] = provider
         await self.db.flush()
         return providers
 

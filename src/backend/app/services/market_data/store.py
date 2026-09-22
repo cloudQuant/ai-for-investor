@@ -701,8 +701,11 @@ class MarketDataStore:
             async with self._db.begin_nested():
                 series = await self.get_or_create_series(context)
                 series = await self._lock_series_for_revision(series, context)
-                shared_source_payload = await self._get_or_create_shared_source_payload(
-                    validated.shared_source_payload
+                validated_payload = validated.shared_source_payload
+                shared_source_payload = (
+                    await self._get_or_create_shared_source_payload(validated_payload)
+                    if validated_payload is not None
+                    else None
                 )
                 source_snapshot = self._make_source_snapshot(
                     context,
@@ -716,12 +719,12 @@ class MarketDataStore:
                 )
                 self._db.add(source_snapshot)
                 await self._db.flush()
-                if shared_source_payload is not None:
+                if shared_source_payload is not None and validated_payload is not None:
                     self._db.add(
                         MdSourceSnapshotPayloadRef(
                             source_snapshot_id=source_snapshot.id,
                             content_sha256=shared_source_payload.content_sha256,
-                            payload_role=validated.shared_source_payload.payload_role,
+                            payload_role=validated_payload.payload_role,
                         )
                     )
                     await self._db.flush()
@@ -1349,12 +1352,15 @@ class MarketDataStore:
                 or evidence.selector.selector_digest != selector.selector_digest
             ):
                 raise B2CompletenessEvidenceError("B2_COMPLETENESS_RECEIPT_INVALID")
+            expected_hashes = evidence.selector.expected_record_key_sha256s
+            if expected_hashes is None:
+                raise B2CompletenessEvidenceError("B2_COMPLETENESS_RECEIPT_INVALID")
             await assert_b2_source_event_manifest_integrity(
                 self._db,
                 series_id=receipt.series_id,
                 source_snapshot_id=receipt.source_snapshot_id,
                 event_at=evidence.event_at,
-                expected_hashes=evidence.selector.expected_record_key_sha256s,
+                expected_hashes=expected_hashes,
             )
         except (B2CompletenessEvidenceError, TypeError, ValueError) as exc:
             raise MarketDataStoreError("B2_COMPLETENESS_EVIDENCE_INTEGRITY") from exc
@@ -1699,7 +1705,7 @@ class MarketDataStore:
                         else "CALENDAR_WINDOW_NOT_COVERED"
                     ),
                 )
-            selected = exact
+            selected: list[tuple[MdCalendarSnapshot, TimeWindow, datetime, int]] | None = exact
         else:
             selected = _compose_calendar_segments(usable, window)
         if selected is None:
@@ -2268,7 +2274,7 @@ class MarketDataStore:
                 "payload_bytes": shared_source_payload.payload_bytes,
                 "payload_role": shared.payload_role,
             }
-        provenance = {
+        provenance: dict[str, object] = {
             "provider_id": provider.provider_id,
             "source_revision": source_revision,
             "provider_retrieved_at": result.retrieved_at.isoformat(),
@@ -2921,8 +2927,11 @@ def _reread_legacy_stock_daily_persisted_evidence(
             field_name="deferred legacy endpoint version",
             maximum=128,
         )
+        raw_source_observed_at = source_snapshot.source_observed_at
+        if raw_source_observed_at is None:
+            raise MarketDataStoreError("LOCAL_OBSERVATION_INTEGRITY")
         source_observed_at = _stored_utc(
-            source_snapshot.source_observed_at,
+            raw_source_observed_at,
             field_name="deferred legacy source observed time",
         )
         fetch_lease_key_sha256 = _require_sha256_digest(
@@ -3138,11 +3147,14 @@ def _promoted_legacy_import_publication_receipt(
     )
     if _stored_utc(hold.promoted_at, field_name="deferred legacy promotion time") != visible_at:
         raise MarketDataStoreError("DEFERRED_LEGACY_IMPORT_PUBLICATION_INTEGRITY")
+    visibility_sequence = publication.visibility_sequence
+    if visibility_sequence is None:
+        raise MarketDataStoreError("DEFERRED_LEGACY_IMPORT_PUBLICATION_INTEGRITY")
     return _PromotedLegacyImportPublicationReceipt(
         publication_id=publication.id,
         source_snapshot_id=staged.source_snapshot_id,
         visible_at=visible_at,
-        visibility_sequence=publication.visibility_sequence,
+        visibility_sequence=visibility_sequence,
     )
 
 
@@ -3239,7 +3251,7 @@ def _normalized_source_authorization_provenance(
     if purpose not in _SOURCE_AUTHORIZATION_ALLOWED_USES:
         raise MarketDataStoreError("SOURCE_AUTHORIZATION_CONTEXT_MISMATCH")
 
-    authorization = {
+    authorization: dict[str, object] = {
         "source_registry_id": source_registry_id,
         "registry_updated_at": _require_utc_authorization_timestamp(
             source_authorization.registry_updated_at,
@@ -3356,10 +3368,16 @@ def _assert_source_authorization_matches_registry(
         raise MarketDataStoreError("SOURCE_AUTHORIZATION_REGISTRY_DENIED")
     if authorization["license_status"] not in _SOURCE_AUTHORIZATION_APPROVED_LICENSES:
         raise MarketDataStoreError("SOURCE_AUTHORIZATION_REGISTRY_DENIED")
-    allowed_uses = frozenset(str(value) for value in authorization["allowed_uses"])
+    raw_allowed_uses = authorization["allowed_uses"]
+    if not isinstance(raw_allowed_uses, (list, tuple)):
+        raise MarketDataStoreError("SOURCE_AUTHORIZATION_INVALID")
+    allowed_uses = frozenset(str(value) for value in raw_allowed_uses)
     if not (_SOURCE_AUTHORIZATION_ALLOWED_USES[purpose] & allowed_uses):
         raise MarketDataStoreError("SOURCE_AUTHORIZATION_REGISTRY_DENIED")
-    jurisdictions = tuple(str(value) for value in authorization["jurisdictions"])
+    raw_jurisdictions = authorization["jurisdictions"]
+    if not isinstance(raw_jurisdictions, (list, tuple)):
+        raise MarketDataStoreError("SOURCE_AUTHORIZATION_INVALID")
+    jurisdictions = tuple(str(value) for value in raw_jurisdictions)
     if not _source_authorization_jurisdiction_allows(jurisdictions, market):
         raise MarketDataStoreError("SOURCE_AUTHORIZATION_REGISTRY_DENIED")
     if authorization["retention_policy"] in _SOURCE_AUTHORIZATION_PROHIBITED_RETENTION_POLICIES:
@@ -3881,10 +3899,13 @@ def _persisted_semantic_record_key(row: MdObservationRevision) -> SemanticRecord
                 dimensions={},
                 is_singleton=True,
             )
+        raw_dimensions = payload.get("dimensions")
+        if not isinstance(raw_dimensions, Mapping):
+            raise ValueError("semantic_record_key dimensions must decode to an object")
         return SemanticRecordKey(
             canonical_json=raw_canonical_json,
             sha256=raw_sha256,
-            dimensions=payload.get("dimensions"),
+            dimensions=raw_dimensions,
             is_singleton=False,
         )
     except (TypeError, ValueError, json.JSONDecodeError) as exc:

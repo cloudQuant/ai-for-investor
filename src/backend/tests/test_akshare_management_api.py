@@ -2,12 +2,16 @@
 Integration tests for akshare data management APIs.
 """
 
+import ast
 import asyncio
 import inspect
 import sys
+import threading
 import time
 from datetime import datetime
-from types import ModuleType
+from functools import cache
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -35,9 +39,85 @@ def skip_akshare_vendor_internal_contract_tests(request):
     upstream releases; the local wrapper tests below cover the application
     failure boundaries instead.
     """
-    source_lines, _ = inspect.getsourcelines(request.function)
-    if any(line.lstrip().startswith(("from akshare", "import akshare")) for line in source_lines):
+    source_path = Path(request.node.path)
+    test_name = request.node.originalname or request.function.__name__
+    if test_name in _akshare_vendor_internal_test_names(source_path):
         pytest.skip("AkShare vendor-internal contract; covered by local wrapper tests")
+
+
+@cache
+def _akshare_vendor_internal_test_names(source_path: Path) -> frozenset[str]:
+    """Return test function names with direct AkShare imports from current source."""
+    module = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    vendor_tests: set[str] = set()
+    function_types = (ast.FunctionDef, ast.AsyncFunctionDef)
+    for function in ast.walk(module):
+        if not isinstance(function, function_types):
+            continue
+        for node in ast.walk(function):
+            if isinstance(node, ast.ImportFrom):
+                if node.module == "akshare" or (
+                    node.module is not None and node.module.startswith("akshare.")
+                ):
+                    vendor_tests.add(function.name)
+                    break
+            elif isinstance(node, ast.Import) and any(
+                alias.name == "akshare" or alias.name.startswith("akshare.") for alias in node.names
+            ):
+                vendor_tests.add(function.name)
+                break
+    return frozenset(vendor_tests)
+
+
+def test_vendor_import_detector_uses_current_node_path_not_stale_code_filename(
+    tmp_path: Path,
+):
+    current_source = tmp_path / "current_tests.py"
+    current_source.write_text(
+        "def test_vendor_contract():\n"
+        "    from akshare.fund import fund_amac\n"
+        "    assert fund_amac\n"
+        "\n"
+        "def test_local_wrapper_contract():\n"
+        "    from app.services.akshare.script import AkshareScriptService\n"
+        "    assert AkshareScriptService\n",
+        encoding="utf-8",
+    )
+
+    stale_filename = tmp_path / "removed_worktree" / "test_akshare_management_api.py"
+    stale_namespace: dict[str, object] = {}
+    exec(
+        compile(
+            "def test_vendor_contract():\n    pass\ndef test_local_wrapper_contract():\n    pass\n",
+            str(stale_filename),
+            "exec",
+        ),
+        stale_namespace,
+    )
+    stale_vendor_function = stale_namespace["test_vendor_contract"]
+    assert stale_vendor_function.__code__.co_filename == str(stale_filename)
+    assert not Path(stale_vendor_function.__code__.co_filename).exists()
+
+    fixture_body = skip_akshare_vendor_internal_contract_tests.__wrapped__
+    vendor_request = SimpleNamespace(
+        node=SimpleNamespace(path=current_source, originalname="test_vendor_contract"),
+        function=stale_vendor_function,
+    )
+    with pytest.raises(pytest.skip.Exception, match="AkShare vendor-internal contract"):
+        fixture_body(vendor_request)
+
+    fallback_request = SimpleNamespace(
+        node=SimpleNamespace(path=current_source, originalname=None),
+        function=stale_vendor_function,
+    )
+    with pytest.raises(pytest.skip.Exception, match="AkShare vendor-internal contract"):
+        fixture_body(fallback_request)
+
+    wrapper_request = SimpleNamespace(
+        node=SimpleNamespace(path=current_source, originalname="test_local_wrapper_contract"),
+        function=stale_namespace["test_local_wrapper_contract"],
+    )
+    assert fixture_body(wrapper_request) is None
 
 
 async def get_admin_headers(client: AsyncClient) -> dict[str, str]:
@@ -4039,13 +4119,20 @@ def test_air_quality_hist_returns_empty_when_endpoint_fails(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_execute_callable_times_out_threaded_function():
+async def test_execute_callable_times_out_threaded_function(monkeypatch):
+    monkeypatch.setattr("app.services.akshare.script.configure_akshare_network_proxy", lambda: None)
+    finished = threading.Event()
+
     def slow_callable():
-        time.sleep(0.2)
-        return "late"
+        try:
+            time.sleep(0.2)
+            return "late"
+        finally:
+            finished.set()
 
     with pytest.raises(asyncio.TimeoutError):
         await AkshareScriptService._execute_callable(slow_callable, {}, timeout_s=0.01)
+    assert await asyncio.to_thread(finished.wait, 1.0)
 
 
 @pytest.mark.asyncio

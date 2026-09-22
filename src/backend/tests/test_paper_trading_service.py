@@ -22,6 +22,7 @@ import pytest
 from app.models.paper_trading import (
     OrderSide,
     OrderStatus,
+    Position,
 )
 from app.services.paper_trading_service import PaperTradingService
 
@@ -36,6 +37,55 @@ class TestPaperTradingServiceInitialization:
         assert service.position_repo is not None
         assert service.order_repo is not None
         assert service.trade_repo is not None
+
+
+class TestPositionSnapshot:
+    """Tests for normalized in-memory position snapshots."""
+
+    def test_position_snapshot_applies_updates_without_mutating_position(self):
+        original_entry_time = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        updated_entry_time = datetime(2026, 9, 2, tzinfo=timezone.utc)
+        position = Position(
+            id="position_123",
+            account_id="account_123",
+            symbol="AAPL",
+            size=2.0,
+            avg_price=10.0,
+            market_value=20.0,
+            margin_value=0.0,
+            multiplier=1.0,
+            margin_rate=1.0,
+            commission_rate=0.001,
+            commission_amount=0.0,
+            unrealized_pnl=1.0,
+            unrealized_pnl_pct=5.0,
+            entry_price=10.0,
+            entry_time=original_entry_time,
+            updated_at=original_entry_time,
+        )
+
+        snapshot = PaperTradingService._position_snapshot(
+            position,
+            {"size": "3", "market_value": "31.5", "entry_time": updated_entry_time},
+        )
+
+        assert snapshot.size == 3.0
+        assert snapshot.avg_price == 10.0
+        assert snapshot.market_value == 31.5
+        assert snapshot.entry_time == updated_entry_time
+        assert position.size == 2.0
+        assert position.entry_time == original_entry_time
+
+    def test_position_snapshot_rejects_non_datetime_updates(self):
+        position = Position(
+            id="position_123",
+            account_id="account_123",
+            symbol="AAPL",
+            size=1.0,
+        )
+
+        with pytest.raises(TypeError, match="entry_time must be a datetime or None"):
+            PaperTradingService._position_snapshot(position, {"entry_time": "2026-09-02"})
 
 
 @pytest.mark.asyncio

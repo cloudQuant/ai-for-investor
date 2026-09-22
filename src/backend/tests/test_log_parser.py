@@ -240,3 +240,31 @@ class TestParseJsonSimulateLogs:
         assert result["dates"] == ["2026-03-13 09:00:00", "2026-03-13 09:15:00"]
         assert result["ohlc"][0] == [1.1, 1.15, 1.0, 1.2]
         assert result["indicators"]["fast_ma"] == [1.11, 1.16]
+
+    def test_parse_data_log_aligns_late_indicator_with_none_prefix(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        (log_dir / "bar.log").write_text(
+            "\n".join(
+                [
+                    '{"datetime":"2026-03-13 09:00:00","open":1.1,"high":1.2,"low":1.0,"close":1.15,"volume":10}',
+                    '{"datetime":"2026-03-13 09:15:00","open":1.15,"high":1.25,"low":1.1,"close":1.2,"volume":12}',
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (log_dir / "indicator.log").write_text(
+            "\n".join(
+                [
+                    '{"datetime":"2026-03-13 09:00:00"}',
+                    '{"datetime":"2026-03-13 09:15:00","fast_ma":1.16}',
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = parse_data_log(log_dir)
+
+        assert result["indicators"]["fast_ma"] == [None, 1.16]

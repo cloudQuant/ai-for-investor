@@ -10,8 +10,9 @@ import os
 import queue
 import threading
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 from urllib.parse import urlparse
 
 import akshare as ak
@@ -25,11 +26,53 @@ from app.config import get_settings
 
 settings = get_settings()
 
-_connection_pool = None
+
+class _MySQLConnectionOptions(TypedDict):
+    host: str
+    port: int
+    user: str
+    password: str
+    database: str
+    charset: str
+    autocommit: bool
+
+
+@runtime_checkable
+class _AkshareCursor(Protocol):
+    def execute(self, query: str, args: object | None = None) -> int: ...
+
+    def executemany(self, query: str, args: Sequence[Sequence[object]]) -> int: ...
+
+    def fetchall(self) -> Sequence[tuple[object, ...]] | None: ...
+
+    def fetchone(self) -> tuple[object, ...] | None: ...
+
+    def close(self) -> None: ...
+
+
+@runtime_checkable
+class _AkshareConnection(Protocol):
+    @property
+    def open(self) -> bool: ...
+
+    def cursor(self) -> object: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def close(self) -> None: ...
+
+
+class _AkshareConnectionPool(Protocol):
+    def connection(self) -> object: ...
+
+
+_connection_pool: _AkshareConnectionPool | None = None
 _pool_lock = threading.Lock()
 
 
-def _get_connection_pool(db_config: dict[str, Any]) -> Any:
+def _get_connection_pool(db_config: _MySQLConnectionOptions) -> _AkshareConnectionPool | None:
     global _connection_pool
     if _connection_pool is not None:
         return _connection_pool
@@ -85,8 +128,9 @@ class AkshareProvider:
     def __init__(self, db_url: str | None = None, logger: logging.Logger | None = None) -> None:
         self.db_url = db_url or settings.AKSHARE_DATA_DATABASE_URL or settings.DATABASE_URL
         self.logger = logger or _default_logger
-        self.connection = None
-        self.cursor = None
+        self.db_config: _MySQLConnectionOptions | None = None
+        self.connection: _AkshareConnection | None = None
+        self.cursor: _AkshareCursor | None = None
         self.batch_size = 1000
         self.max_retries = 3
         self.retry_delay = 5
@@ -112,25 +156,53 @@ class AkshareProvider:
             return False
 
         try:
-            if not self.connection or not self.connection.open:
-                pool = _get_connection_pool(self.db_config)
+            db_config = self.db_config
+            if db_config is None:
+                raise RuntimeError("MySQL connection configuration is not initialized")
+            connection = self.connection
+            if connection is None or not connection.open:
+                pool = _get_connection_pool(db_config)
                 if pool is not None:
-                    self.connection = pool.connection()
+                    raw_connection = pool.connection()
                 else:
-                    self.connection = pymysql.connect(**self.db_config)
-                self.cursor = self.connection.cursor()
+                    raw_connection = pymysql.connect(**db_config)
+                if not isinstance(raw_connection, _AkshareConnection):
+                    raise TypeError("MySQL connector returned an unsupported connection")
+                connection = raw_connection
+                self.connection = connection
+                raw_cursor = connection.cursor()
+                if not isinstance(raw_cursor, _AkshareCursor):
+                    raise TypeError("MySQL connector returned an unsupported cursor")
+                self.cursor = raw_cursor
+            elif self.cursor is None:
+                raw_cursor = connection.cursor()
+                if not isinstance(raw_cursor, _AkshareCursor):
+                    raise TypeError("MySQL connector returned an unsupported cursor")
+                self.cursor = raw_cursor
             return True
         except pymysql.Error as err:
             self.logger.error(f"数据库连接失败: {err}")
             raise
 
     def disconnect_db(self) -> None:
-        if self.cursor:
+        if self.cursor is not None:
             self.cursor.close()
             self.cursor = None
-        if self.connection:
+        if self.connection is not None:
             self.connection.close()
             self.connection = None
+
+    def _require_connection(self) -> _AkshareConnection:
+        connection = self.connection
+        if connection is None:
+            raise RuntimeError("MySQL connection is not established")
+        return connection
+
+    def _require_cursor(self) -> _AkshareCursor:
+        cursor = self.cursor
+        if cursor is None:
+            raise RuntimeError("MySQL cursor is not established")
+        return cursor
 
     def __enter__(self) -> AkshareProvider:
         self.connect_db()
@@ -205,19 +277,19 @@ class AkshareProvider:
         )
 
         try:
-            self.cursor.execute(create_sql)
-            self.connection.commit()
+            self._require_cursor().execute(create_sql)
+            self._require_connection().commit()
             self.logger.info(f"自动建表成功: {table_name}")
         except pymysql.Error as err:
             self.logger.warning(f"自动建表失败 {table_name}: {err}")
 
-    def _execute_batch(self, insert_sql: str, batch: list) -> bool:
+    def _execute_batch(self, insert_sql: str, batch: list[list[object]]) -> bool:
         try:
-            self.cursor.executemany(insert_sql, batch)
-            self.connection.commit()
+            self._require_cursor().executemany(insert_sql, batch)
+            self._require_connection().commit()
             return True
         except pymysql.Error as err:
-            self.connection.rollback()
+            self._require_connection().rollback()
             self.logger.error(f"批量执行失败: {err}")
             raise
 
@@ -234,9 +306,9 @@ class AkshareProvider:
         self, df: pd.DataFrame, table_name: str
     ) -> pd.DataFrame | None:
         raw_cols = list(df.columns)
-        valid_idx = []
-        normalized_cols = []
-        dropped = []
+        valid_idx: list[int] = []
+        normalized_cols: list[str] = []
+        dropped: list[str] = []
 
         for idx, col in enumerate(raw_cols):
             if col is None or (isinstance(col, float) and pd.isna(col)):
@@ -263,9 +335,13 @@ class AkshareProvider:
         self, df: pd.DataFrame, safe_table: str, table_name: str
     ) -> pd.DataFrame | None:
         try:
-            self.cursor.execute(f"SHOW COLUMNS FROM `{safe_table}`")
-            table_rows = self.cursor.fetchall() or []
-            table_cols_ci = {row[0].lower(): row[0] for row in table_rows}
+            cursor = self._require_cursor()
+            cursor.execute(f"SHOW COLUMNS FROM `{safe_table}`")
+            table_rows = cursor.fetchall() or ()
+            table_cols_ci: dict[str, str] = {}
+            for row in table_rows:
+                if row and isinstance(row[0], str):
+                    table_cols_ci[row[0].lower()] = row[0]
         except pymysql.Error as err:
             self.logger.warning(f"无法读取表字段列表: {err}")
             return df
@@ -273,14 +349,15 @@ class AkshareProvider:
         if not table_cols_ci:
             return df
 
-        column_mapping = {}
-        unknown = []
+        column_mapping: dict[str, str] = {}
+        unknown: list[str] = []
         for col in df.columns:
-            col_lower = str(col).lower()
+            column_name = str(col)
+            col_lower = column_name.lower()
             if col_lower in table_cols_ci:
-                column_mapping[col] = table_cols_ci[col_lower]
+                column_mapping[column_name] = table_cols_ci[col_lower]
             else:
-                unknown.append(col)
+                unknown.append(column_name)
 
         if unknown:
             self.logger.warning(f"表 {table_name} 将忽略 {len(unknown)} 个不存在的列")
@@ -323,31 +400,34 @@ class AkshareProvider:
         unique_keys: list[str] | None = None,
         ignore_duplicates: bool = False,
         create_table: bool = True,
-    ) -> int:
+    ) -> int | Literal[False]:
         if df.empty:
             self.logger.warning(f"DataFrame为空，无需保存到 {table_name}")
-            return 0
+            return False
 
-        df = self._normalize_dataframe_columns(df, table_name)
-        if df is None:
-            return 0
+        normalized_df = self._normalize_dataframe_columns(df, table_name)
+        if normalized_df is None:
+            return False
+        df = normalized_df
 
         self.connect_db()
         safe_table = self._validate_identifier(table_name)
 
         if create_table:
             try:
-                self.cursor.execute("SHOW TABLES LIKE %s", (safe_table,))
-                if not self.cursor.fetchone():
+                cursor = self._require_cursor()
+                cursor.execute("SHOW TABLES LIKE %s", (safe_table,))
+                if not cursor.fetchone():
                     self._auto_create_table(safe_table, df)
             except pymysql.Error as err:
                 self.logger.warning(f"检查表是否存在时出错: {err}")
 
-        df = self._align_df_to_table(df, safe_table, table_name)
-        if df is None:
-            return 0
+        aligned_df = self._align_df_to_table(df, safe_table, table_name)
+        if aligned_df is None:
+            return False
+        df = aligned_df
 
-        cols = list(df.columns)
+        cols = [str(col) for col in df.columns]
         insert_sql = self._build_insert_sql(
             safe_table, cols, on_duplicate_update, unique_keys, ignore_duplicates
         )
@@ -387,8 +467,9 @@ class AkshareProvider:
     def table_exists(self, table_name: str) -> bool:
         try:
             self.connect_db()
-            self.cursor.execute("SHOW TABLES LIKE %s", (table_name,))
-            result = self.cursor.fetchone()
+            cursor = self._require_cursor()
+            cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+            result = cursor.fetchone()
             return result is not None
         except pymysql.Error as err:
             self.logger.error(f"检查表是否存在时出错: {err}")
@@ -403,21 +484,32 @@ class AkshareProvider:
         try:
             safe_name = self._validate_identifier(table_name)
             self.connect_db()
-            self.cursor.execute(f"SELECT COUNT(*) FROM `{safe_name}`")
-            return self.cursor.fetchone()[0] or 0
+            cursor = self._require_cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM `{safe_name}`")
+            result = cursor.fetchone()
+            if result is None or not result:
+                return 0
+            count = result[0]
+            if count is None:
+                return 0
+            if not isinstance(count, int):
+                raise TypeError("MySQL COUNT(*) returned a non-integer value")
+            return count
         except pymysql.Error:
             return 0
         finally:
             self.disconnect_db()
 
     def create_table_if_not_exists(
-        self, table_name: str = None, create_table_sql: str = None
+        self, table_name: str | None = None, create_table_sql: str | None = None
     ) -> bool:
+        if table_name is None or create_table_sql is None:
+            return False
         if not self.table_exists(table_name):
             try:
                 self.connect_db()
-                self.cursor.execute(create_table_sql)
-                self.connection.commit()
+                self._require_cursor().execute(create_table_sql)
+                self._require_connection().commit()
                 self.logger.info(f"成功创建表: {table_name}")
                 return True
             except pymysql.Error as err:

@@ -585,7 +585,7 @@ def _reject_untrusted_ai_research_unit_payload(
     """Reserve research evidence/lineage keys for the internal workflow only."""
     if allow_server_owned_ai_research_state:
         return
-    fields_set = getattr(data, "model_fields_set", set())
+    fields_set: set[str] = data.model_fields_set
     for field in _AI_RESEARCH_SERVER_OWNED_JSON_FIELDS:
         if isinstance(data, StrategyUnitUpdate) and field not in fields_set:
             continue
@@ -690,10 +690,11 @@ async def create_unit(
         data,
         allow_server_owned_ai_research_state=allow_server_owned_ai_research_state,
     )
+    strategy_id = str(data.strategy_id or "").strip()
     if (
         not allow_server_owned_ai_research_state
-        and str(data.strategy_id or "").strip()
-        and await has_server_owned_ai_research_strategy_reference(data.strategy_id, user_id)
+        and strategy_id
+        and await has_server_owned_ai_research_strategy_reference(strategy_id, user_id)
     ):
         raise AIStrategyResearchUnitMutationError(
             "AI_RESEARCH_STRATEGY_SNAPSHOT_UNIT_CREATE_FORBIDDEN"
@@ -772,10 +773,11 @@ async def batch_create_units(
             data,
             allow_server_owned_ai_research_state=allow_server_owned_ai_research_state,
         )
+        strategy_id = str(data.strategy_id or "").strip()
         if (
             not allow_server_owned_ai_research_state
-            and str(data.strategy_id or "").strip()
-            and await has_server_owned_ai_research_strategy_reference(data.strategy_id, user_id)
+            and strategy_id
+            and await has_server_owned_ai_research_strategy_reference(strategy_id, user_id)
         ):
             raise AIStrategyResearchUnitMutationError(
                 "AI_RESEARCH_STRATEGY_SNAPSHOT_UNIT_CREATE_FORBIDDEN"

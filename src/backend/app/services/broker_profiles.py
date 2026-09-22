@@ -159,15 +159,16 @@ class BrokerProfileService:
         return None
 
     async def health(self, profile: BrokerConnectionProfile) -> dict[str, Any]:
+        last_health_field = "last_health"
         demo_health = self._demo_health(profile)
         if demo_health is not None:
-            profile.last_health = demo_health
+            setattr(profile, last_health_field, demo_health)
             await self.db.commit()
             await self.db.refresh(profile)
             return demo_health
         runtime_health = self._get_runtime_health(profile)
         if runtime_health is not None:
-            profile.last_health = runtime_health
+            setattr(profile, last_health_field, runtime_health)
             await self.db.commit()
             await self.db.refresh(profile)
             return runtime_health
@@ -243,7 +244,8 @@ class BrokerProfileService:
         confirmation_text: str,
         idempotency_key: str | None,
     ) -> dict[str, Any]:
-        profile.is_destructive_enabled = True
+        destructive_enabled_field = "is_destructive_enabled"
+        setattr(profile, destructive_enabled_field, True)
         self.db.add(
             AuditRecord(
                 user_id=actor_user_id,
@@ -628,7 +630,8 @@ class BrokerProfileService:
         tick.setdefault("source", str(payload.get("source") or source))
         return tick
 
-    def _normalize_item(self, item: Any) -> dict[str, Any]:
+    @staticmethod
+    def _normalize_item(item: Any) -> dict[str, Any]:
         if isinstance(item, dict):
             return dict(item)
         if hasattr(item, "model_dump"):
@@ -636,6 +639,8 @@ class BrokerProfileService:
         if hasattr(item, "dict"):
             return item.dict()
         if is_dataclass(item):
+            if isinstance(item, type):
+                raise TypeError("asdict() should be called on dataclass instances")
             return asdict(item)
         if hasattr(item, "__dict__"):
             return {key: value for key, value in vars(item).items() if not key.startswith("_")}

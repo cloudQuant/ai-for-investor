@@ -30,6 +30,7 @@ from fastapi import (
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user, get_websocket_current_user
+from app.schemas.backtest import BacktestRequest as ServiceBacktestRequest
 from app.schemas.backtest_enhanced import (
     BacktestCancelledEvent,
     BacktestCompletedEvent,
@@ -184,7 +185,8 @@ async def run_backtest(
                 "message": "runtime_dir is managed by WorkspaceService",
             },
         )
-    result = await service.run_backtest(current_user.sub, request)
+    service_request = ServiceBacktestRequest.model_validate(request.model_dump())
+    result = await service.run_backtest(current_user.sub, service_request)
 
     # Notify WebSocket clients (if connected)
     await ws_manager.send_to_task(
@@ -196,7 +198,7 @@ async def run_backtest(
 
 
 @router.get("/{task_id}", response_model=BacktestResult, summary="Get backtest result")
-@cache_response(ttl=60, key_prefix="backtests")
+@cache_response(ttl=60, key_prefix="backtests", vary_by_current_user=True)
 async def get_backtest_result(
     task_id: str,
     request: Request,

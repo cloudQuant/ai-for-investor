@@ -2,26 +2,88 @@
   <section class="risk-control-page">
     <header class="page-header">
       <div><h1>{{ t('riskControl.title') }}</h1><p>{{ t('riskControl.subtitle') }}</p></div>
-      <el-button @click="load">{{ t('riskControl.refresh') }}</el-button>
+      <el-button @click="load">
+        {{ t('riskControl.refresh') }}
+      </el-button>
     </header>
     <el-card>
-      <template #header><strong>{{ t('riskControl.newRule') }}</strong></template>
-      <el-form inline @submit.prevent="createRule">
-        <el-form-item :label="t('riskControl.name')"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item :label="t('riskControl.type')"><el-input v-model="form.ruleType" placeholder="max_drawdown" /></el-form-item>
-        <el-form-item :label="t('riskControl.runtimeInstance')"><el-input v-model="form.instanceId" :placeholder="t('riskControl.optional')" /></el-form-item>
-        <el-form-item><el-button type="primary" :loading="saving" @click="createRule">{{ t('riskControl.saveRule') }}</el-button></el-form-item>
+      <template #header>
+        <strong>{{ t('riskControl.newRule') }}</strong>
+      </template>
+      <el-form
+        inline
+        @submit.prevent="createRule"
+      >
+        <el-form-item :label="t('riskControl.name')">
+          <el-input v-model="form.name" />
+        </el-form-item>
+        <el-form-item :label="t('riskControl.type')">
+          <el-input
+            v-model="form.ruleType"
+            placeholder="max_drawdown"
+          />
+        </el-form-item>
+        <el-form-item :label="t('riskControl.runtimeInstance')">
+          <el-input
+            v-model="form.instanceId"
+            :placeholder="t('riskControl.optional')"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="saving"
+            @click="createRule"
+          >
+            {{ t('riskControl.saveRule') }}
+          </el-button>
+        </el-form-item>
       </el-form>
     </el-card>
     <el-card>
-      <template #header><strong>{{ t('riskControl.ruleList') }}</strong></template>
-      <div v-if="loading" class="page-state">{{ t('riskControl.loading') }}</div>
-      <el-empty v-else-if="!rules.length" :description="t('riskControl.noRules')" />
-      <el-table v-else :data="rules">
-        <el-table-column prop="name" :label="t('riskControl.name')" min-width="150" />
-        <el-table-column prop="rule_type" :label="t('riskControl.type')" min-width="150" />
-        <el-table-column prop="instance_id" :label="t('riskControl.runtimeInstance')" min-width="200" />
-        <el-table-column :label="t('riskControl.status')" width="120"><template #default="{ row }"><el-switch v-model="row.is_active" @change="toggleRule(row)" /></template></el-table-column>
+      <template #header>
+        <strong>{{ t('riskControl.ruleList') }}</strong>
+      </template>
+      <div
+        v-if="loading"
+        class="page-state"
+      >
+        {{ t('riskControl.loading') }}
+      </div>
+      <el-empty
+        v-else-if="!rules.length"
+        :description="t('riskControl.noRules')"
+      />
+      <el-table
+        v-else
+        :data="rules"
+      >
+        <el-table-column
+          prop="name"
+          :label="t('riskControl.name')"
+          min-width="150"
+        />
+        <el-table-column
+          prop="rule_type"
+          :label="t('riskControl.type')"
+          min-width="150"
+        />
+        <el-table-column
+          prop="instance_id"
+          :label="t('riskControl.runtimeInstance')"
+          min-width="200"
+        />
+        <el-table-column
+          :label="t('riskControl.status')"
+          width="120"
+        >
+          <template #default="{ row }">
+            <el-switch
+              v-model="row.is_active"
+              @change="toggleRule(row)"
+            />
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
   </section>

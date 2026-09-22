@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import socket
 import subprocess
@@ -9,7 +10,7 @@ import urllib.request
 from collections.abc import Callable
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any
+from typing import Any, SupportsFloat
 from urllib.parse import urlparse
 
 from app.services.gateway import manual_ctp_proxy, manual_ports, net_probe
@@ -1756,12 +1757,18 @@ def _account_number(row: dict[str, Any], *keys: str) -> float | None:
             if nested_value in (None, ""):
                 continue
             value = nested_value
+        if isinstance(value, bool):
+            continue
         if isinstance(value, str):
             value = value.strip().replace(",", "")
-        try:
-            return float(value)
-        except (TypeError, ValueError):
+        elif not isinstance(value, SupportsFloat):
             continue
+        try:
+            number = float(value)
+        except (OverflowError, TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            return number
     return None
 
 
@@ -1814,23 +1821,23 @@ def _account_payload_candidates(raw: Any, *, depth: int = 0) -> list[dict[str, A
         if message:
             raise RuntimeError(message)
 
-        candidates = [raw]
+        account_candidates = [raw]
         for key in _ACCOUNT_WRAPPER_KEYS:
             if key not in raw:
                 continue
             value = raw.get(key)
             if key == "accounts" and isinstance(value, dict):
                 for item in value.values():
-                    candidates.extend(_account_payload_candidates(item, depth=depth + 1))
+                    account_candidates.extend(_account_payload_candidates(item, depth=depth + 1))
             else:
-                candidates.extend(_account_payload_candidates(value, depth=depth + 1))
-        return candidates
+                account_candidates.extend(_account_payload_candidates(value, depth=depth + 1))
+        return account_candidates
 
     if isinstance(raw, (list, tuple)):
-        candidates: list[dict[str, Any]] = []
+        nested_candidates: list[dict[str, Any]] = []
         for item in raw:
-            candidates.extend(_account_payload_candidates(item, depth=depth + 1))
-        return candidates
+            nested_candidates.extend(_account_payload_candidates(item, depth=depth + 1))
+        return nested_candidates
 
     return []
 
@@ -2220,11 +2227,17 @@ def _order_text(row: dict[str, Any], *keys: str) -> str:
 
 def _is_open_order(row: dict[str, Any]) -> bool:
     remaining = row.get("remaining")
-    if remaining not in (None, ""):
+    if isinstance(remaining, bool):
+        return remaining
+    if isinstance(remaining, (str, SupportsFloat)):
         try:
-            return float(remaining) > 0
+            remaining_number = float(remaining)
+        except OverflowError:
+            return False
         except (TypeError, ValueError):
             pass
+        else:
+            return math.isfinite(remaining_number) and remaining_number > 0
     status = (
         _order_text(row, "status", "order_status", "OrderStatus", "state")
         .lower()
@@ -2356,17 +2369,17 @@ def _order_rows_from_raw(raw: Any, *, depth: int = 0) -> list[dict[str, Any]]:
         ):
             if key in raw:
                 return _order_rows_from_raw(raw.get(key), depth=depth + 1)
-        rows: list[dict[str, Any]] = []
+        mapping_rows: list[dict[str, Any]] = []
         for item in raw.values():
             if isinstance(item, (dict, list, tuple, set)):
-                rows.extend(_order_rows_from_raw(item, depth=depth + 1))
-        return rows
+                mapping_rows.extend(_order_rows_from_raw(item, depth=depth + 1))
+        return mapping_rows
     if isinstance(raw, (list, tuple, set)):
-        rows: list[dict[str, Any]] = []
+        sequence_rows: list[dict[str, Any]] = []
         for item in raw:
             if isinstance(item, (dict, list, tuple, set)):
-                rows.extend(_order_rows_from_raw(item, depth=depth + 1))
-        return rows
+                sequence_rows.extend(_order_rows_from_raw(item, depth=depth + 1))
+        return sequence_rows
     return []
 
 

@@ -163,6 +163,31 @@ class Settings(BaseSettings):
             "they cannot enable a route on their own"
         ),
     )
+    MARKET_DATA_THS_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "叠加 kill-switch for the Iteration 198 THS provider routes. THS routing is "
+            "fail-closed by default and additionally requires a durable capability ledger "
+            "attestation, an active provider registry row, and a source authorization grant; "
+            "this flag only removes THS routes from the assembled policy."
+        ),
+    )
+    MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Enable the Iteration 199 daily THS history collection job (APScheduler). "
+            "Requires THS_API_KEY; disabled by default."
+        ),
+    )
+    MARKET_DATA_THS_SCHEDULER_HOUR: int = Field(
+        default=18, description="Hour (Asia/Shanghai) for the daily THS collection job"
+    )
+    MARKET_DATA_THS_SCHEDULER_MINUTE: int = Field(
+        default=0, description="Minute for the daily THS collection job"
+    )
+    MARKET_DATA_THS_SCHEDULER_TIMEZONE: str = Field(
+        default="Asia/Shanghai", description="Timezone name for the daily THS collection job"
+    )
     LEGACY_SQLITE_DATABASE_URL: str = Field(
         default="", description="Legacy SQLite database connection URL used during migration"
     )

@@ -6,14 +6,33 @@
     data-test="trusted-research-events"
   >
     <header>
-      <h3 id="trusted-research-events-title">{{ t('strategy.aiResearchTrusted.timeline.title') }}</h3>
+      <h3 id="trusted-research-events-title">
+        {{ t('strategy.aiResearchTrusted.timeline.title') }}
+      </h3>
       <p>{{ t('strategy.aiResearchTrusted.timeline.description') }}</p>
     </header>
 
-    <p v-if="!taskId" class="task-event-timeline__empty">{{ t('strategy.aiResearchTrusted.timeline.noTask') }}</p>
-    <p v-else-if="events.length === 0 && !loading" class="task-event-timeline__empty">{{ t('strategy.aiResearchTrusted.timeline.empty') }}</p>
-    <ol v-else class="task-event-timeline__list" :aria-label="t('strategy.aiResearchTrusted.timeline.title')">
-      <li v-for="event in events" :key="event.id">
+    <p
+      v-if="!taskId"
+      class="task-event-timeline__empty"
+    >
+      {{ t('strategy.aiResearchTrusted.timeline.noTask') }}
+    </p>
+    <p
+      v-else-if="events.length === 0 && !loading"
+      class="task-event-timeline__empty"
+    >
+      {{ t('strategy.aiResearchTrusted.timeline.empty') }}
+    </p>
+    <ol
+      v-else
+      class="task-event-timeline__list"
+      :aria-label="t('strategy.aiResearchTrusted.timeline.title')"
+    >
+      <li
+        v-for="event in events"
+        :key="event.id"
+      >
         <div class="task-event-timeline__event">
           <strong>{{ t('strategy.aiResearchTrusted.timeline.sequence', { value: event.sequence_no }) }}</strong>
           <span>{{ event.event_type }}</span>

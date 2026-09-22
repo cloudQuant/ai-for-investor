@@ -1334,9 +1334,20 @@ def _fault_phase_spec(phase: object) -> _FaultPhaseSpec:
 
 
 def _fault_reached_phases(spec: _FaultPhaseSpec) -> tuple[str, ...]:
-    """Return the exact checkpoints the real service must pass before one fault."""
+    """Return the exact checkpoints the real service must pass before one fault.
+
+    A cancellation delivered before the lease-release boundary still reaches
+    ``lease_release_started`` afterwards: the production ``finally`` cleanup
+    completes the durable release before the ``CancelledError`` surfaces to
+    the caller, so that checkpoint is recorded even though the fault already
+    fired.  The release-phase fault itself is the checkpoint where the
+    cancellation is delivered, so it needs no extra entry.
+    """
     phase_index = _FAULT_PHASE_ORDER.index(spec.phase)
-    return _FAULT_PHASE_ORDER[: phase_index + 1]
+    reached = _FAULT_PHASE_ORDER[: phase_index + 1]
+    if spec.phase != _FAULT_PHASE_LEASE_RELEASE_STARTED:
+        reached = (*reached, _FAULT_PHASE_LEASE_RELEASE_STARTED)
+    return reached
 
 
 async def _fault_persistence_counts(
@@ -2767,7 +2778,13 @@ async def _verify_terminated_runner_start_takeover(
             observation_revision_delta=observation_revision_delta,
         )
     finally:
-        cleanup_unblock_event.set()
+        # Never touch ``cleanup_unblock_event`` after the leader was killed:
+        # the leader shares this Event's internal condition semaphore, and a
+        # process terminated while inside that critical section leaks the
+        # semaphore on macOS (no robust semaphores), deadlocking the parent's
+        # ``set()`` forever.  The kill path already proves termination via the
+        # audited exit code, and ``_stop_two_process_workers`` reaps any
+        # survivor, so waking the dead owner is unnecessary.
         await _stop_two_process_workers((leader,))
         _close_process_queue(ready_queue)
 

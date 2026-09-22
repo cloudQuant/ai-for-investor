@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,9 +9,31 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.database import async_session_maker, create_default_admin
 from app.models.audit_record import AuditRecord
+from app.services.broker_profiles import BrokerProfileService
 from tests.conftest import register_and_login
 
 settings = get_settings()
+
+
+def test_broker_profile_normalizes_dataclass_instance() -> None:
+    @dataclass
+    class Quote:
+        symbol: str
+        last_price: float
+
+    assert BrokerProfileService._normalize_item(Quote("AAPL", 212.34)) == {
+        "symbol": "AAPL",
+        "last_price": 212.34,
+    }
+
+
+def test_broker_profile_rejects_dataclass_class_as_non_instance() -> None:
+    @dataclass
+    class Quote:
+        symbol: str
+
+    with pytest.raises(TypeError, match=r"asdict\(\) should be called on dataclass instances"):
+        BrokerProfileService._normalize_item(Quote)
 
 
 async def _get_admin_headers(client) -> dict[str, str]:

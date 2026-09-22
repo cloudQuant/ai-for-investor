@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import CursorResult, Result, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -267,7 +267,7 @@ class MarketDataFetchLeaseManager:
                     )
                     .execution_options(synchronize_session=False)
                 )
-                if claimed.rowcount != 1:
+                if _cursor_rowcount(claimed) != 1:
                     await self._rollback_if_needed()
                     continue
                 expires_at = await self._renew_claimed_lease(
@@ -327,7 +327,7 @@ class MarketDataFetchLeaseManager:
             )
         except OperationalError as exc:
             raise MarketDataFetchLeaseError("FETCH_LEASE_ACQUIRE_CONFLICT") from exc
-        if renewed.rowcount != 1:
+        if _cursor_rowcount(renewed) != 1:
             raise MarketDataFetchLeaseError("FETCH_LEASE_ACQUIRE_CONFLICT")
         return expires_at
 
@@ -362,7 +362,7 @@ class MarketDataFetchLeaseManager:
             )
         except OperationalError as exc:
             raise MarketDataFetchLeaseError("FETCH_LEASE_FENCE_UNAVAILABLE") from exc
-        if locked.rowcount != 1:
+        if _cursor_rowcount(locked) != 1:
             raise MarketDataFetchLeaseError("FETCH_LEASE_FENCE_LOST")
         now = await self._now()
         expires_at = now + self._lease_ttl
@@ -381,7 +381,7 @@ class MarketDataFetchLeaseManager:
             )
         except OperationalError as exc:
             raise MarketDataFetchLeaseError("FETCH_LEASE_FENCE_UNAVAILABLE") from exc
-        if renewed.rowcount != 1:
+        if _cursor_rowcount(renewed) != 1:
             raise MarketDataFetchLeaseError("FETCH_LEASE_FENCE_LOST")
         return replace(handle, expires_at=expires_at)
 
@@ -407,7 +407,7 @@ class MarketDataFetchLeaseManager:
                 )
                 .execution_options(synchronize_session=False)
             )
-            if released.rowcount != 1:
+            if _cursor_rowcount(released) != 1:
                 await self._rollback_if_needed()
                 return False
             await self._db.commit()
@@ -478,6 +478,8 @@ class MarketDataFetchLeaseManager:
         except OperationalError as exc:
             raise MarketDataFetchLeaseError("FETCH_LEASE_CLOCK_UNAVAILABLE") from exc
         try:
+            if value is None:
+                raise MarketDataFetchLeaseError("FETCH_LEASE_CLOCK_INVALID")
             return _stored_utc(value, field_name="database fetch lease clock")
         except ValueError as exc:
             raise MarketDataFetchLeaseError("FETCH_LEASE_CLOCK_INVALID") from exc
@@ -543,6 +545,13 @@ def _stored_utc(value: datetime, *, field_name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
+    """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
+    if isinstance(result, CursorResult):
+        return result.rowcount or 0
+    return 0
 
 
 def _utc_now() -> datetime:

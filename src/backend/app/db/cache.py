@@ -222,10 +222,10 @@ class RedisCache:
 
 
 # Cache singleton
-_cache_instance = None
+_cache_instance: RedisCache | MemoryCache | None = None
 
 
-def get_cache():
+def get_cache() -> RedisCache | MemoryCache:
     """Get cache instance - Uses Redis if available, otherwise memory cache.
 
     Returns:

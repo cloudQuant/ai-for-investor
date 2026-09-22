@@ -481,14 +481,18 @@ class AkshareScriptService:
         script: DataScript | None = None,
         timeout_seconds: int | float | None = None,
     ) -> float:
-        script_id = getattr(script, "script_id", None) if script is not None else None
-        min_timeout = _SCRIPT_MIN_TIMEOUT_SECONDS.get(script_id, 0.0)
+        script_id = script.script_id if script is not None else None
+        min_timeout = (
+            _SCRIPT_MIN_TIMEOUT_SECONDS.get(script_id, 0.0) if script_id is not None else 0.0
+        )
         if timeout_seconds is not None and float(timeout_seconds) > 0:
             return max(float(timeout_seconds), min_timeout)
-        script_timeout = getattr(script, "timeout", None) if script is not None else None
+        script_timeout = script.timeout if script is not None else None
         if script_timeout is not None and float(script_timeout) > 0:
             return max(float(script_timeout), min_timeout)
-        raw_timeout = os.getenv("AKSHARE_SCRIPT_TIMEOUT") or os.getenv("AKSHARE_CALL_TIMEOUT", "60")
+        raw_timeout = (
+            os.getenv("AKSHARE_SCRIPT_TIMEOUT") or os.getenv("AKSHARE_CALL_TIMEOUT") or "60"
+        )
         try:
             return max(float(raw_timeout), min_timeout)
         except ValueError:
@@ -557,7 +561,7 @@ class AkshareScriptService:
             latest_report_quarter = f"{now.year - 1}4"
         notice_lookback_days = 3 if now.weekday() == 0 else 1
         recent_notice_date = (now - timedelta(days=notice_lookback_days)).strftime("%Y%m%d")
-        safe_defaults = {
+        safe_defaults: dict[str, dict[str, str | int | list[str]]] = {
             "bond_buy_back_hist_em": {
                 "symbol": "204001",
                 "_call_timeout": 60,
@@ -1732,9 +1736,8 @@ class AkshareScriptService:
         try:
             callable_obj = await self._resolve_callable(script)
             dataframe_table_name = self.data_service.build_table_name(script, params)
-            legacy_table_name = self._legacy_callable_table_name(
-                callable_obj
-            ) or self._legacy_table_name(script)
+            legacy_callable_name = self._legacy_callable_table_name(callable_obj)
+            legacy_table_name = legacy_callable_name or self._legacy_table_name(script)
             dataframe_rows_before = await self.data_service.get_row_count(dataframe_table_name)
             legacy_rows_before = (
                 await self.data_service.get_row_count(legacy_table_name)
@@ -1747,7 +1750,7 @@ class AkshareScriptService:
                 self._script_timeout_seconds(script, timeout_seconds=timeout_seconds),
             )
 
-            if self._legacy_callable_table_name(callable_obj) is not None:
+            if legacy_callable_name is not None and legacy_table_name is not None:
                 table = await self.data_service.sync_existing_table_metadata(
                     script,
                     legacy_table_name,

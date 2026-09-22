@@ -82,24 +82,25 @@ class MarketDataQueryResolver:
         # raw provider route bypass an explicitly unconfigured family. The
         # sole exception is an explicit internal-only resolver instance used
         # by lower-level persistence/revision workflows, never an API route.
-        has_family_binding = (
-            request.family_id is not None and request.family_contract_version is not None
-        )
+        family_id = request.family_id
+        family_contract_version = request.family_contract_version
+        source_policy_id = request.source_policy_id
+        has_family_binding = family_id is not None and family_contract_version is not None
         if not has_family_binding and (
             not self._allow_unbound_internal_requests
-            or request.family_id is not None
-            or request.family_contract_version is not None
+            or family_id is not None
+            or family_contract_version is not None
         ):
             raise MarketDataQueryResolutionError("DATA_FAMILY_BINDING_REQUIRED")
         if request.dataset_code is None:
             raise MarketDataQueryResolutionError("DATASET_REQUIRED")
-        if request.source_policy_id is None:
+        if source_policy_id is None:
             raise MarketDataQueryResolutionError("SOURCE_POLICY_REQUIRED")
-        if has_family_binding:
+        if family_id is not None and family_contract_version is not None:
             try:
                 self._family_contracts.assert_executable_family_preflight(
-                    family_id=request.family_id,
-                    family_contract_version=request.family_contract_version,
+                    family_id=family_id,
+                    family_contract_version=family_contract_version,
                 )
             except DatasetContractRegistryError as exc:
                 raise MarketDataQueryResolutionError(exc.code) from exc
@@ -123,20 +124,20 @@ class MarketDataQueryResolver:
             raise MarketDataQueryResolutionError("IDENTITY_VERSION_WINDOW_CROSSES")
         if identity.venue is None:
             raise MarketDataQueryResolutionError("IDENTITY_MARKET_UNSUPPORTED")
-        if has_family_binding:
+        if family_id is not None and family_contract_version is not None:
             # Repeat the binding validation after canonical identity resolution
             # so a caller cannot bind a stock-looking request to another
             # resolved asset type or a similar dataset.
             try:
                 self._family_contracts.assert_query_binding(
-                    family_id=request.family_id,
-                    family_contract_version=request.family_contract_version,
+                    family_id=family_id,
+                    family_contract_version=family_contract_version,
                     asset_type=identity.asset_type,
                     dataset_code=request.dataset_code,
                     data_kind=request.data_kind,
                     frequency=request.frequency,
                     required_fields=request.required_fields,
-                    source_policy_id=request.source_policy_id,
+                    source_policy_id=source_policy_id,
                     adjustment=request.adjustment,
                     price_basis=request.price_basis,
                     currency=request.currency,
@@ -157,6 +158,9 @@ class MarketDataQueryResolver:
             dataset_code=storage.dataset_code,
             instrument_metadata_version=identity.metadata_version,
         )
+        coverage_source_policy_id = query.source_policy_id
+        if coverage_source_policy_id is None:
+            raise MarketDataQueryResolutionError("SOURCE_POLICY_REQUIRED")
         coverage_identity = CoverageQueryIdentity(
             dataset_code=query.dataset_code,
             canonical_id=identity.canonical_id,
@@ -165,7 +169,7 @@ class MarketDataQueryResolver:
             data_kind=query.data_kind,
             market=identity.venue,
             frequency=query.frequency or "snapshot",
-            source_policy_id=query.source_policy_id,
+            source_policy_id=coverage_source_policy_id,
             adjustment=query.adjustment,
             price_basis=query.price_basis,
             currency=query.currency,

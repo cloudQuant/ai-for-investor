@@ -61,7 +61,7 @@ def kill_pid(pid: int, *, force_after_seconds: float = 0.0) -> None:
                 ["taskkill", "/PID", str(pid), "/T", "/F"],
                 stdout=_sp.DEVNULL,
                 stderr=_sp.DEVNULL,
-                creationflags=_sp.CREATE_NO_WINDOW,
+                creationflags=_windows_no_window_flag(_sp),
             )
         except Exception as e:
             # Process may have already terminated; safe to ignore
@@ -141,6 +141,14 @@ def _scan_running_strategy_pids_procfs(proc_dir: Path | None = None) -> dict[str
     return result
 
 
+def _windows_no_window_flag(subprocess_module: object) -> int:
+    """Require the Windows no-console flag instead of silently omitting it."""
+    flag: object = getattr(subprocess_module, "CREATE_NO_WINDOW", None)
+    if type(flag) is not int:
+        raise RuntimeError("Windows subprocess CREATE_NO_WINDOW is unavailable")
+    return flag
+
+
 def _scan_running_strategy_pids_wmic() -> dict[str, int]:
     """Scan Windows process command lines for strategy run.py processes."""
     import subprocess as _sp
@@ -159,7 +167,7 @@ def _scan_running_strategy_pids_wmic() -> dict[str, int]:
         text=True,
         timeout=10,
         stderr=_sp.DEVNULL,
-        creationflags=_sp.CREATE_NO_WINDOW,
+        creationflags=_windows_no_window_flag(_sp),
     )
     for line in out.splitlines():
         line = line.strip()

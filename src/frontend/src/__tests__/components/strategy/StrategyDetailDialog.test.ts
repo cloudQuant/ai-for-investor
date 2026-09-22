@@ -1,9 +1,16 @@
+// @vitest-environment jsdom
+// DOMPurify relies on real Node.prototype.nodeName semantics; happy-dom can remove allowed tags.
+// Keep jsdom scoped to Markdown tests; other frontend tests remain in happy-dom.
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import StrategyDetailDialog from '@/views/strategy-components/StrategyDetailDialog.vue'
 import { elStubs } from '@/test/stubs'
 import type { StrategyTemplate } from '@/types'
+
+vi.mock('@/components/common/MonacoEditor.vue', () => ({
+  default: { template: '<div />' },
+}))
 
 const template: StrategyTemplate = {
   id: 'demo',
@@ -26,10 +33,7 @@ function mountDialog(readmeContent: string) {
       stripMeta: (value?: string) => value ?? '',
     },
     global: {
-      stubs: {
-        ...elStubs,
-        MonacoEditor: { template: '<div class="monaco-editor" />' },
-      },
+      stubs: { ...elStubs },
     },
   })
 }

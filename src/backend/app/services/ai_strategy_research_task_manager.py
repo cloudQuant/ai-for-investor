@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import typing
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -637,17 +638,16 @@ class AIStrategyResearchTaskManager:
         background_task: asyncio.Task[None],
     ) -> None:
         try:
-            await asyncio.wait_for(
-                asyncio.shield(background_task),
+            done, _ = await asyncio.wait(
+                {background_task},
                 timeout=_CANCEL_CLEANUP_TIMEOUT_SECONDS,
             )
-        except asyncio.CancelledError:
-            current_task = asyncio.current_task()
-            if current_task is not None and current_task.cancelling():
-                raise
+        except Exception:
             return
-        except (asyncio.TimeoutError, Exception):
-            return
+        if background_task in done and not background_task.cancelled():
+            # Retrieve an exception without re-raising it, matching the previous
+            # shielded await while allowing caller cancellation to propagate.
+            background_task.exception()
 
     async def _prune_terminal_tasks(self, user_id: str) -> None:
         async with self._lock:
@@ -1295,11 +1295,18 @@ def _research_request_runtime_task_updates(
 ) -> dict[str, Any]:
     continuation_updates = _research_request_continuation_task_updates(request)
     try:
-        from app.services.ai_strategy_research_service import (
-            _request_backtest_environment,
-            _resolve_research_asset_specs,
-            _summarize_asset_specs_for_prompt,
-        )
+        if typing.TYPE_CHECKING:
+            from app.services.research.generation import _summarize_asset_specs_for_prompt
+            from app.services.research.run_records import (
+                _request_backtest_environment,
+                _resolve_research_asset_specs,
+            )
+        else:
+            from app.services.ai_strategy_research_service import (
+                _request_backtest_environment,
+                _resolve_research_asset_specs,
+                _summarize_asset_specs_for_prompt,
+            )
 
         asset_specs = _resolve_research_asset_specs(request)
         backtest_environment = _request_backtest_environment(request, asset_specs)
@@ -1968,9 +1975,14 @@ def _freshened_research_run_record(record: Any) -> Any:
     if record is None:
         return None
     try:
-        from app.services.ai_strategy_research_service import (
-            _research_run_record_with_live_readiness_freshness,
-        )
+        if typing.TYPE_CHECKING:
+            from app.services.research.run_records import (
+                _research_run_record_with_live_readiness_freshness,
+            )
+        else:
+            from app.services.ai_strategy_research_service import (
+                _research_run_record_with_live_readiness_freshness,
+            )
 
         return _research_run_record_with_live_readiness_freshness(record)
     except Exception:
@@ -2062,9 +2074,11 @@ def _research_request_snapshot(request: AIStrategyResearchRunRequest) -> dict[st
 
 
 def _research_request_explicit_fields(request: AIStrategyResearchRunRequest) -> list[str]:
-    fields = getattr(request, "model_fields_set", None)
+    fields: object = getattr(request, "model_fields_set", None)
     if fields is None:
         fields = getattr(request, "__fields_set__", set())
+    if not isinstance(fields, (set, frozenset)):
+        return []
     return sorted(str(field).strip() for field in fields if str(field).strip())
 
 
@@ -2122,12 +2136,12 @@ def _omit_sensitive_request_values(value: Any) -> Any:
             result[key] = cleaned
         return result
     if isinstance(value, list):
-        result = []
+        items: list[object] = []
         for item in value:
             cleaned = _omit_sensitive_request_values(item)
             if cleaned is not _SENSITIVE_REQUEST_OMITTED:
-                result.append(cleaned)
-        return result
+                items.append(cleaned)
+        return items
     if value == "***":
         return _SENSITIVE_REQUEST_OMITTED
     return value

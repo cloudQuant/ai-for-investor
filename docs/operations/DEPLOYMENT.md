@@ -14,7 +14,7 @@ This guide covers deploying the ai-for-investor platform to a production server.
 
 ### Software Requirements
 
-- Python 3.8+
+- Python 3.11 (the audited canonical production lock target)
 - PostgreSQL 13+ (production) or SQLite (development)
 - Nginx 1.18+ (for reverse proxy)
 - Certbot (for TLS certificates)
@@ -27,8 +27,8 @@ This guide covers deploying the ai-for-investor platform to a production server.
 # Update system packages
 sudo apt update && sudo apt upgrade -y
 
-# Install Python and development tools
-sudo apt install -y python3 python3-pip python3-venv git nginx
+# Install the Python 3.11 runtime used by the canonical production lock and tools.
+sudo apt install -y python3.11 python3.11-venv python3-pip git nginx
 
 # Install PostgreSQL (optional, for production)
 sudo apt install -y postgresql postgresql-contrib
@@ -57,13 +57,17 @@ sudo git clone https://github.com/cloudQuant/ai-for-investor.git
 sudo chown -R backtrader:backtrader ai-for-investor
 cd ai-for-investor
 
-# Create virtual environment
-python3 -m venv venv
+# Create a Python 3.11 virtual environment matching the canonical lock target.
+python3.11 -m venv venv
 source venv/bin/activate
 
-# Install dependencies
+# Install the audited, reproducible production dependency set.
+# `config/requirements-prod.lock` is generated for Python 3.11 and is the
+# same lock used by the production image and dependency audit.
+python -m pip install --requirement config/requirements-prod.lock
+python -m pip install --no-deps -e "src/backend[prod]"
+
 cd src/backend
-pip install -r requirements.txt
 ```
 
 ### 4. Configure Environment

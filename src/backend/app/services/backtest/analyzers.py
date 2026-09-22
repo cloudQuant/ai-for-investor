@@ -461,6 +461,8 @@ class FincoreAdapter:
         peak = np.maximum.accumulate(equity_array)
         with np.errstate(divide="ignore", invalid="ignore"):
             drawdown = (equity_array - peak) / peak
+        if np.isnan(drawdown).all():
+            return 0.0
         result = float(np.nanmin(drawdown))
         return result if math.isfinite(result) else 0.0
 

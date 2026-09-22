@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import select
 
 from app.db.session_provider import unit_of_work
@@ -78,6 +79,92 @@ async def test_ai_call_log_sink_drops_when_queue_is_full_without_raising() -> No
     accepted = await sink.enqueue(_payload(request_id="dropped"), autostart=False)
 
     assert accepted is False
+
+
+@pytest.mark.parametrize(
+    "configured_value",
+    [None, True, False, 0, -1, "3", 3.5],
+)
+def test_invalid_configured_queue_maxsize_uses_safe_default(
+    monkeypatch, configured_value: object
+) -> None:
+    from types import SimpleNamespace
+
+    from app.services.ai_observability import logger
+
+    monkeypatch.setattr(
+        logger,
+        "get_settings",
+        lambda: SimpleNamespace(AI_CALL_LOG_QUEUE_MAXSIZE=configured_value),
+    )
+    sink = logger.AICallLogSink()
+
+    assert sink._queue.maxsize == 1000
+
+
+def test_positive_configured_queue_maxsize_is_preserved(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.services.ai_observability import logger
+
+    monkeypatch.setattr(
+        logger,
+        "get_settings",
+        lambda: SimpleNamespace(AI_CALL_LOG_QUEUE_MAXSIZE=3),
+    )
+    sink = logger.AICallLogSink()
+
+    assert sink._queue.maxsize == 3
+
+
+def test_valid_explicit_queue_maxsize_overrides_invalid_setting(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.services.ai_observability import logger
+
+    monkeypatch.setattr(
+        logger,
+        "get_settings",
+        lambda: SimpleNamespace(AI_CALL_LOG_QUEUE_MAXSIZE="invalid"),
+    )
+    sink = logger.AICallLogSink(queue_maxsize=7)
+
+    assert sink._queue.maxsize == 7
+
+
+@pytest.mark.parametrize("queue_maxsize", [0, -1, False, True])
+def test_invalid_explicit_queue_maxsize_uses_safe_default(monkeypatch, queue_maxsize: int) -> None:
+    from types import SimpleNamespace
+
+    from app.services.ai_observability import logger
+
+    monkeypatch.setattr(
+        logger,
+        "get_settings",
+        lambda: SimpleNamespace(AI_CALL_LOG_QUEUE_MAXSIZE=3),
+    )
+    sink = logger.AICallLogSink(queue_maxsize=queue_maxsize)
+
+    assert sink._queue.maxsize == 1000
+
+
+async def test_explicit_queue_maxsize_is_preserved_after_shutdown(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from app.services.ai_observability import logger
+
+    monkeypatch.setattr(
+        logger,
+        "get_settings",
+        lambda: SimpleNamespace(AI_CALL_LOG_QUEUE_MAXSIZE=3),
+    )
+    sink = logger.AICallLogSink(queue_maxsize=7)
+
+    assert sink._queue.maxsize == 7
+    await sink.start()
+    await sink.shutdown()
+
+    assert sink._queue.maxsize == 7
 
 
 async def test_log_ai_call_decorator_records_success() -> None:

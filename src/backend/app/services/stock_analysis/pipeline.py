@@ -7,7 +7,18 @@ from typing import Any
 
 from app.services.stock_analysis.signal import StockSignalExtractor
 from app.services.stock_signal.decision_policy import decide_snapshot
-from app.services.stock_signal.types import ACTION_LABELS
+from app.services.stock_signal.types import ACTION_LABELS, SignalAction
+
+
+def _signal_action_for_value(value: str) -> SignalAction | None:
+    """Map only the reviewed signal actions to keys accepted by ACTION_LABELS."""
+    if value == "BUY":
+        return "BUY"
+    if value == "SELL":
+        return "SELL"
+    if value == "WATCH":
+        return "WATCH"
+    return None
 
 
 class StockAnalysisPipeline:
@@ -786,7 +797,8 @@ class StockAnalysisPipeline:
             }
 
         raw_action = str(stored.get("action") or "WATCH")
-        action = ACTION_LABELS.get(raw_action.upper())
+        signal_action = _signal_action_for_value(raw_action.upper())
+        action = ACTION_LABELS[signal_action] if signal_action is not None else None
         if action is None:
             action = (
                 raw_action

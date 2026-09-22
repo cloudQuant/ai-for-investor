@@ -811,10 +811,10 @@ class QuoteService:
                     if instance_id in {str(item) for item in linked_instances}:
                         gateway_key = candidate_key
                         break
-            state = states.get(gateway_key)
-            if state is None:
+            gateway_state = states.get(gateway_key)
+            if gateway_state is None:
                 continue
-            source = str(state.get("exchange_type") or "").strip().upper()
+            source = str(gateway_state.get("exchange_type") or "").strip().upper()
             if not source:
                 continue
 
@@ -822,7 +822,7 @@ class QuoteService:
             gateway = source_context.setdefault(
                 gateway_key,
                 {
-                    "state": state,
+                    "state": gateway_state,
                     "symbols": {},
                     "workspaces": {},
                 },
@@ -867,9 +867,9 @@ class QuoteService:
             ):
                 result[gateway_key] = state
         for gateway_key, gateway in (workspace_context or {}).items():
-            state = gateway.get("state")
-            if isinstance(state, dict):
-                result[gateway_key] = state
+            workspace_state = gateway.get("state")
+            if isinstance(workspace_state, dict):
+                result[gateway_key] = workspace_state
         return result
 
     @staticmethod
@@ -1068,12 +1068,11 @@ class QuoteService:
                 if self._is_gateway_state_ready(state)
             ]
             subscription_key, subscription_state = (ready or list(source_states.items()))[0]
+            subscription_plan = ensure_plan(subscription_key, subscription_state)
         else:
-            subscription_key, subscription_state = self._find_gateway_state_with_key(
-                manager, source
-            )
-            subscription_key = subscription_key or source
-        subscription_plan = ensure_plan(subscription_key, subscription_state)
+            fallback_key, fallback_state = self._find_gateway_state_with_key(manager, source)
+            subscription_key = fallback_key or source
+            subscription_plan = ensure_plan(subscription_key, fallback_state)
         for symbol in subscription_symbols:
             add_symbol(subscription_plan, symbol, origin="subscription")
 

@@ -318,10 +318,12 @@
 
       <div class="executive-summary">
         <h4>{{ t('stockAnalysis.executiveSummary') }}</h4>
+        <!-- eslint-disable vue/no-v-html -- renderReportMarkdown calls renderMarkdown, which returns DOMPurify-sanitized HTML. -->
         <div
           class="report-markdown-content"
           v-html="renderReportMarkdown(report.executive_summary || decision.reasoning || t('stockAnalysis.noSummary'))"
         />
+        <!-- eslint-enable vue/no-v-html -->
       </div>
 
       <el-tabs
@@ -345,10 +347,12 @@
                 {{ t('stockAnalysis.score', { score: Math.round(section.score * 100) }) }}
               </el-tag>
             </div>
+            <!-- eslint-disable vue/no-v-html -- renderReportMarkdown calls renderMarkdown, which returns DOMPurify-sanitized HTML. -->
             <div
               class="report-markdown-content"
               v-html="renderReportMarkdown(section.summary || t('stockAnalysis.noContent'))"
             />
+            <!-- eslint-enable vue/no-v-html -->
             <ul v-if="section.findings.length > 1">
               <li
                 v-for="finding in section.findings"

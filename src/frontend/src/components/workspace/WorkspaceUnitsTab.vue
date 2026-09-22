@@ -20,7 +20,9 @@
                 size="small"
                 @click="handleRunSelected(false)"
               >
-                <el-icon aria-hidden="true"><VideoPlay /></el-icon>
+                <el-icon aria-hidden="true">
+                  <VideoPlay />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -32,7 +34,9 @@
                 size="small"
                 @click="handleRunSelected(true)"
               >
-                <el-icon aria-hidden="true"><VideoPause /></el-icon>
+                <el-icon aria-hidden="true">
+                  <VideoPause />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -46,7 +50,9 @@
                 plain
                 @click="handleStopSelected"
               >
-                <el-icon aria-hidden="true"><SwitchButton /></el-icon>
+                <el-icon aria-hidden="true">
+                  <SwitchButton />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -61,7 +67,9 @@
                 size="small"
                 @click="handleReloadStrategy"
               >
-                <el-icon aria-hidden="true"><RefreshRight /></el-icon>
+                <el-icon aria-hidden="true">
+                  <RefreshRight />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -73,7 +81,9 @@
                 type="primary"
                 @click="showCreateUnit = true"
               >
-                <el-icon aria-hidden="true"><Plus /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Plus />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -85,7 +95,9 @@
                 size="small"
                 @click="handleBulkDelete"
               >
-                <el-icon aria-hidden="true"><Delete /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Delete />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -96,7 +108,9 @@
                 size="small"
                 @click="handleImportUnits"
               >
-                <el-icon aria-hidden="true"><Upload /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Upload />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -108,7 +122,9 @@
                 size="small"
                 @click="handleExportUnits"
               >
-                <el-icon aria-hidden="true"><Download /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Download />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -124,7 +140,9 @@
                 size="small"
                 @click="showDataSource = true"
               >
-                <el-icon aria-hidden="true"><DataLine /></el-icon>
+                <el-icon aria-hidden="true">
+                  <DataLine />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -136,7 +154,9 @@
                 size="small"
                 @click="showUnitSettings = true"
               >
-                <el-icon aria-hidden="true"><Setting /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Setting />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -148,7 +168,9 @@
                 size="small"
                 @click="showStrategyParams = true"
               >
-                <el-icon aria-hidden="true"><Document /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Document />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -160,7 +182,9 @@
                 size="small"
                 @click="showChangeSymbol = true"
               >
-                <el-icon aria-hidden="true"><Switch /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Switch />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -172,7 +196,9 @@
                 size="small"
                 @click="handleOpenKline"
               >
-                <el-icon aria-hidden="true"><TrendCharts /></el-icon>
+                <el-icon aria-hidden="true">
+                  <TrendCharts />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -184,7 +210,9 @@
                 size="small"
                 @click="handleOpenSelectedReport"
               >
-                <el-icon aria-hidden="true"><View /></el-icon>
+                <el-icon aria-hidden="true">
+                  <View />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -200,7 +228,9 @@
                 size="small"
                 @click="showOptConfig = true"
               >
-                <el-icon aria-hidden="true"><Aim /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Aim />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -212,7 +242,9 @@
                 size="small"
                 @click="showOptThread = true"
               >
-                <el-icon aria-hidden="true"><Cpu /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Cpu />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -224,7 +256,9 @@
                 size="small"
                 @click="showBatchOptConfig = true"
               >
-                <el-icon aria-hidden="true"><Operation /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Operation />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -238,7 +272,9 @@
                 type="success"
                 @click="handleBatchSubmitOpt"
               >
-                <el-icon aria-hidden="true"><Promotion /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Promotion />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -250,7 +286,9 @@
                 size="small"
                 @click="handleCopyOptParams"
               >
-                <el-icon aria-hidden="true"><CopyDocument /></el-icon>
+                <el-icon aria-hidden="true">
+                  <CopyDocument />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -262,7 +300,9 @@
                 size="small"
                 @click="emit('switch-tab', 'optimization', store.selectedUnitIds[0])"
               >
-                <el-icon aria-hidden="true"><Odometer /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Odometer />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -274,7 +314,9 @@
                 size="small"
                 @click="emit('switch-tab', 'report', store.selectedUnitIds[0], [...store.selectedUnitIds])"
               >
-                <el-icon aria-hidden="true"><Notebook /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Notebook />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -290,7 +332,9 @@
                 size="small"
                 @click="showGroupRename = true"
               >
-                <el-icon aria-hidden="true"><EditPen /></el-icon>
+                <el-icon aria-hidden="true">
+                  <EditPen />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -302,7 +346,9 @@
                 size="small"
                 @click="showUnitRename = true"
               >
-                <el-icon aria-hidden="true"><Edit /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Edit />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -317,7 +363,9 @@
                 size="small"
                 @click="handleMove('up')"
               >
-                <el-icon aria-hidden="true"><Top /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Top />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -329,7 +377,9 @@
                 size="small"
                 @click="handleMove('down')"
               >
-                <el-icon aria-hidden="true"><Bottom /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Bottom />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -341,7 +391,9 @@
                 size="small"
                 @click="handleMove('top')"
               >
-                <el-icon aria-hidden="true"><Upload /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Upload />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -353,7 +405,9 @@
                 size="small"
                 @click="handleMove('bottom')"
               >
-                <el-icon aria-hidden="true"><Download /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Download />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -526,7 +580,9 @@
               type="primary"
               @click.stop="openBacktestResult(row)"
             >
-              <el-icon aria-hidden="true"><View /></el-icon>
+              <el-icon aria-hidden="true">
+                <View />
+              </el-icon>
               {{ t('units.viewResult') }}
             </el-button>
           </div>

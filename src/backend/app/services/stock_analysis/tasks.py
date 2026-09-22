@@ -6,7 +6,7 @@ import re
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ from app.models.stock_analysis import (
     StockAnalysisReportModel,
     StockAnalysisTaskModel,
 )
-from app.models.workspace import Workspace
+from app.models.workspace import Workspace, WorkspaceJSONMapping, WorkspaceJSONValue
 from app.schemas.ai_observability import AICallStatus
 from app.schemas.stock_analysis import StockAnalysisParams
 from app.services.ai_observability.cost_calculator import calculate_estimated_cost_usd
@@ -44,6 +44,28 @@ class StockAnalysisConcurrencyLimitExceeded(RuntimeError):
         self.active_count = active_count
         self.limit = limit
         super().__init__(f"stock analysis active task limit exceeded: {active_count}/{limit}")
+
+
+def _is_workspace_json_value(value: object) -> TypeGuard[WorkspaceJSONValue]:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(_is_workspace_json_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str) and _is_workspace_json_value(item) for key, item in value.items()
+        )
+    return False
+
+
+def _is_workspace_json_mapping(value: object) -> TypeGuard[WorkspaceJSONMapping]:
+    return isinstance(value, dict) and _is_workspace_json_value(value)
+
+
+def _safe_workspace_json_mapping(value: object) -> WorkspaceJSONMapping:
+    if _is_workspace_json_mapping(value):
+        return dict(value)
+    return {}
 
 
 class StockAnalysisTaskService:
@@ -744,7 +766,7 @@ class StockAnalysisTaskService:
             raise ValueError("workspace_must_be_research")
 
         saved_at = self._now()
-        entry = {
+        entry: WorkspaceJSONMapping = {
             "report_id": report.id,
             "task_id": report.task_id,
             "title": title or report.title,
@@ -758,15 +780,14 @@ class StockAnalysisTaskService:
             "saved_at": saved_at.isoformat(),
             "source": "stock_analysis_report",
         }
-        settings = dict(workspace.settings or {})
+        settings = _safe_workspace_json_mapping(workspace.settings)
         raw_reports = settings.get("stock_analysis_reports", [])
         if not isinstance(raw_reports, list):
             raw_reports = []
-        existing_reports = [
-            item
-            for item in raw_reports
-            if isinstance(item, dict) and item.get("report_id") != report.id
-        ]
+        existing_reports: list[WorkspaceJSONValue] = []
+        for item in raw_reports:
+            if _is_workspace_json_mapping(item) and item.get("report_id") != report.id:
+                existing_reports.append(dict(item))
         existing_reports.append(entry)
         settings["stock_analysis_reports"] = existing_reports[-50:]
         workspace.settings = settings

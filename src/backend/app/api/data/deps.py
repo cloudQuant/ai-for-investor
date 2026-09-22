@@ -15,6 +15,7 @@ from app.models.user import User
 from app.services.market_data.access import (
     MarketDataAccessAuthorizer,
     MarketDataAuthorizationError,
+    MarketDataPrincipal,
     MarketDataQueryAccess,
 )
 from app.utils.security import decode_access_token
@@ -72,7 +73,7 @@ def get_market_data_access_authorizer(
 async def _authorize_market_data_read(
     current_user: User = Depends(get_current_db_user),
     access_authorizer: MarketDataAccessAuthorizer = Depends(get_market_data_access_authorizer),
-) -> tuple[object, MarketDataAccessAuthorizer]:
+) -> tuple[MarketDataPrincipal, MarketDataAccessAuthorizer]:
     """Authorize v2 data reads before resolving controls or services."""
     try:
         principal = await access_authorizer.principal_for_user(current_user)

@@ -5,12 +5,32 @@
         <h1>{{ t('paperTradingDetail.title') }}</h1>
         <p>{{ t('paperTradingDetail.subtitle') }}</p>
       </div>
-      <el-button @click="load">{{ t('paperTradingDetail.refresh') }}</el-button>
+      <el-button @click="load">
+        {{ t('paperTradingDetail.refresh') }}
+      </el-button>
     </header>
 
-    <div v-if="loading" class="page-state" role="status">{{ t('paperTradingDetail.loading') }}</div>
-    <el-result v-else-if="error" icon="error" :title="t('paperTradingDetail.loadFailed')" :sub-title="error">
-      <template #extra><el-button type="primary" @click="load">{{ t('paperTradingDetail.retry') }}</el-button></template>
+    <div
+      v-if="loading"
+      class="page-state"
+      role="status"
+    >
+      {{ t('paperTradingDetail.loading') }}
+    </div>
+    <el-result
+      v-else-if="error"
+      icon="error"
+      :title="t('paperTradingDetail.loadFailed')"
+      :sub-title="error"
+    >
+      <template #extra>
+        <el-button
+          type="primary"
+          @click="load"
+        >
+          {{ t('paperTradingDetail.retry') }}
+        </el-button>
+      </template>
     </el-result>
 
     <template v-else-if="runtime">
@@ -27,109 +47,355 @@
           <div><dt>{{ t('paperTradingDetail.workspace') }}</dt><dd>{{ runtime.workspace_name }}</dd></div>
           <div><dt>{{ t('paperTradingDetail.currentEquity') }}</dt><dd>{{ formatCurrency(runtime.latest_equity?.total_equity) }}</dd></div>
           <div><dt>{{ t('paperTradingDetail.availableCash') }}</dt><dd>{{ formatCurrency(runtime.latest_equity?.cash) }}</dd></div>
-          <div><dt>{{ t('paperTradingDetail.runtimeInstance') }}</dt><dd class="monospace">{{ runtime.instance_id }}</dd></div>
+          <div>
+            <dt>{{ t('paperTradingDetail.runtimeInstance') }}</dt><dd class="monospace">
+              {{ runtime.instance_id }}
+            </dd>
+          </div>
         </dl>
-        <el-button :disabled="runtime.paused" type="warning" @click="pauseRuntime">{{ t('paperTradingDetail.pauseRuntime') }}</el-button>
+        <el-button
+          :disabled="runtime.paused"
+          type="warning"
+          @click="pauseRuntime"
+        >
+          {{ t('paperTradingDetail.pauseRuntime') }}
+        </el-button>
       </el-card>
 
       <el-row :gutter="16">
-        <el-col :xs="24" :lg="14">
+        <el-col
+          :xs="24"
+          :lg="14"
+        >
           <el-card>
-            <template #header><strong>{{ t('paperTradingDetail.equityCurve') }}</strong></template>
-            <div v-if="equityLoading" class="page-state">{{ t('paperTradingDetail.loading') }}</div>
-            <el-empty v-else-if="!equity.length" :description="t('paperTradingDetail.noEquitySnapshots')" />
-            <el-table v-else :data="equity" size="small" max-height="360">
-              <el-table-column prop="observed_at" :label="t('paperTradingDetail.time')" min-width="170" />
-              <el-table-column :label="t('paperTradingDetail.equity')" min-width="120"><template #default="{ row }">{{ formatCurrency(row.total_equity) }}</template></el-table-column>
-              <el-table-column :label="t('paperTradingDetail.cash')" min-width="120"><template #default="{ row }">{{ formatCurrency(row.cash) }}</template></el-table-column>
-              <el-table-column prop="source" :label="t('paperTradingDetail.source')" min-width="120" />
+            <template #header>
+              <strong>{{ t('paperTradingDetail.equityCurve') }}</strong>
+            </template>
+            <div
+              v-if="equityLoading"
+              class="page-state"
+            >
+              {{ t('paperTradingDetail.loading') }}
+            </div>
+            <el-empty
+              v-else-if="!equity.length"
+              :description="t('paperTradingDetail.noEquitySnapshots')"
+            />
+            <el-table
+              v-else
+              :data="equity"
+              size="small"
+              max-height="360"
+            >
+              <el-table-column
+                prop="observed_at"
+                :label="t('paperTradingDetail.time')"
+                min-width="170"
+              />
+              <el-table-column
+                :label="t('paperTradingDetail.equity')"
+                min-width="120"
+              >
+                <template #default="{ row }">
+                  {{ formatCurrency(row.total_equity) }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="t('paperTradingDetail.cash')"
+                min-width="120"
+              >
+                <template #default="{ row }">
+                  {{ formatCurrency(row.cash) }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                prop="source"
+                :label="t('paperTradingDetail.source')"
+                min-width="120"
+              />
             </el-table>
           </el-card>
         </el-col>
-        <el-col :xs="24" :lg="10">
+        <el-col
+          :xs="24"
+          :lg="10"
+        >
           <el-card>
-            <template #header><strong>{{ t('paperTradingDetail.reviewDecision') }}</strong></template>
-            <p class="hint">{{ t('paperTradingDetail.reviewNote') }}</p>
+            <template #header>
+              <strong>{{ t('paperTradingDetail.reviewDecision') }}</strong>
+            </template>
+            <p class="hint">
+              {{ t('paperTradingDetail.reviewNote') }}
+            </p>
             <div class="decision-actions">
-              <el-button type="success" @click="decide('approved')">{{ t('paperTradingDetail.approve') }}</el-button>
-              <el-button type="danger" @click="decide('rejected')">{{ t('paperTradingDetail.reject') }}</el-button>
-              <el-button type="warning" @click="decide('requested_changes')">{{ t('paperTradingDetail.requestChanges') }}</el-button>
+              <el-button
+                type="success"
+                @click="decide('approved')"
+              >
+                {{ t('paperTradingDetail.approve') }}
+              </el-button>
+              <el-button
+                type="danger"
+                @click="decide('rejected')"
+              >
+                {{ t('paperTradingDetail.reject') }}
+              </el-button>
+              <el-button
+                type="warning"
+                @click="decide('requested_changes')"
+              >
+                {{ t('paperTradingDetail.requestChanges') }}
+              </el-button>
             </div>
           </el-card>
           <el-card class="rules-card">
-            <template #header><strong>{{ t('paperTradingDetail.activeRiskRules') }}</strong></template>
-            <div v-if="rulesLoading" class="page-state">{{ t('paperTradingDetail.loading') }}</div>
-            <el-empty v-else-if="!rules.length" :description="t('paperTradingDetail.noRules')" />
-            <ul v-else class="rule-list"><li v-for="rule in rules" :key="rule.id">{{ rule.name }} · {{ rule.rule_type }}</li></ul>
+            <template #header>
+              <strong>{{ t('paperTradingDetail.activeRiskRules') }}</strong>
+            </template>
+            <div
+              v-if="rulesLoading"
+              class="page-state"
+            >
+              {{ t('paperTradingDetail.loading') }}
+            </div>
+            <el-empty
+              v-else-if="!rules.length"
+              :description="t('paperTradingDetail.noRules')"
+            />
+            <ul
+              v-else
+              class="rule-list"
+            >
+              <li
+                v-for="rule in rules"
+                :key="rule.id"
+              >
+                {{ rule.name }} · {{ rule.rule_type }}
+              </li>
+            </ul>
           </el-card>
         </el-col>
       </el-row>
 
       <el-row :gutter="16">
-        <el-col :xs="24" :xl="12">
+        <el-col
+          :xs="24"
+          :xl="12"
+        >
           <el-card>
-            <template #header><strong>{{ t('paperTradingDetail.currentPositions') }}</strong></template>
-            <el-empty v-if="!runtime.positions.length" :description="t('paperTradingDetail.noPositions')" />
-            <el-table v-else :data="runtime.positions" size="small" max-height="280">
-              <el-table-column prop="data_name" :label="t('paperTradingDetail.symbol')" min-width="120" />
-              <el-table-column prop="direction" :label="t('paperTradingDetail.direction')" width="90" />
-              <el-table-column prop="size" :label="t('paperTradingDetail.quantity')" width="100" />
-              <el-table-column prop="market_value" :label="t('paperTradingDetail.marketValue')" min-width="120" />
-              <el-table-column prop="pnl" :label="t('paperTradingDetail.unrealizedPnl')" min-width="120" />
+            <template #header>
+              <strong>{{ t('paperTradingDetail.currentPositions') }}</strong>
+            </template>
+            <el-empty
+              v-if="!runtime.positions.length"
+              :description="t('paperTradingDetail.noPositions')"
+            />
+            <el-table
+              v-else
+              :data="runtime.positions"
+              size="small"
+              max-height="280"
+            >
+              <el-table-column
+                prop="data_name"
+                :label="t('paperTradingDetail.symbol')"
+                min-width="120"
+              />
+              <el-table-column
+                prop="direction"
+                :label="t('paperTradingDetail.direction')"
+                width="90"
+              />
+              <el-table-column
+                prop="size"
+                :label="t('paperTradingDetail.quantity')"
+                width="100"
+              />
+              <el-table-column
+                prop="market_value"
+                :label="t('paperTradingDetail.marketValue')"
+                min-width="120"
+              />
+              <el-table-column
+                prop="pnl"
+                :label="t('paperTradingDetail.unrealizedPnl')"
+                min-width="120"
+              />
             </el-table>
           </el-card>
         </el-col>
-        <el-col :xs="24" :xl="12">
+        <el-col
+          :xs="24"
+          :xl="12"
+        >
           <el-card>
-            <template #header><strong>{{ t('paperTradingDetail.orders') }}</strong></template>
-            <el-empty v-if="!runtime.orders.length" :description="t('paperTradingDetail.noOrders')" />
-            <el-table v-else :data="runtime.orders" size="small" max-height="280">
-              <el-table-column prop="symbol" :label="t('paperTradingDetail.symbol')" min-width="120" />
-              <el-table-column prop="side" :label="t('paperTradingDetail.direction')" width="90" />
-              <el-table-column prop="status" :label="t('paperTradingDetail.status')" width="100" />
-              <el-table-column prop="size" :label="t('paperTradingDetail.quantity')" width="100" />
-              <el-table-column prop="price" :label="t('paperTradingDetail.price')" min-width="100" />
+            <template #header>
+              <strong>{{ t('paperTradingDetail.orders') }}</strong>
+            </template>
+            <el-empty
+              v-if="!runtime.orders.length"
+              :description="t('paperTradingDetail.noOrders')"
+            />
+            <el-table
+              v-else
+              :data="runtime.orders"
+              size="small"
+              max-height="280"
+            >
+              <el-table-column
+                prop="symbol"
+                :label="t('paperTradingDetail.symbol')"
+                min-width="120"
+              />
+              <el-table-column
+                prop="side"
+                :label="t('paperTradingDetail.direction')"
+                width="90"
+              />
+              <el-table-column
+                prop="status"
+                :label="t('paperTradingDetail.status')"
+                width="100"
+              />
+              <el-table-column
+                prop="size"
+                :label="t('paperTradingDetail.quantity')"
+                width="100"
+              />
+              <el-table-column
+                prop="price"
+                :label="t('paperTradingDetail.price')"
+                min-width="100"
+              />
             </el-table>
           </el-card>
         </el-col>
       </el-row>
 
       <el-row :gutter="16">
-        <el-col :xs="24" :xl="12">
+        <el-col
+          :xs="24"
+          :xl="12"
+        >
           <el-card>
-            <template #header><strong>{{ t('paperTradingDetail.trades') }}</strong></template>
-            <el-empty v-if="!runtime.trades.length" :description="t('paperTradingDetail.noTrades')" />
-            <el-table v-else :data="runtime.trades" size="small" max-height="280">
-              <el-table-column prop="dtclose" :label="t('paperTradingDetail.time')" min-width="150" />
-              <el-table-column prop="data_name" :label="t('paperTradingDetail.symbol')" min-width="110" />
-              <el-table-column prop="direction" :label="t('paperTradingDetail.direction')" width="90" />
-              <el-table-column prop="pnlcomm" :label="t('paperTradingDetail.netPnl')" min-width="120" />
+            <template #header>
+              <strong>{{ t('paperTradingDetail.trades') }}</strong>
+            </template>
+            <el-empty
+              v-if="!runtime.trades.length"
+              :description="t('paperTradingDetail.noTrades')"
+            />
+            <el-table
+              v-else
+              :data="runtime.trades"
+              size="small"
+              max-height="280"
+            >
+              <el-table-column
+                prop="dtclose"
+                :label="t('paperTradingDetail.time')"
+                min-width="150"
+              />
+              <el-table-column
+                prop="data_name"
+                :label="t('paperTradingDetail.symbol')"
+                min-width="110"
+              />
+              <el-table-column
+                prop="direction"
+                :label="t('paperTradingDetail.direction')"
+                width="90"
+              />
+              <el-table-column
+                prop="pnlcomm"
+                :label="t('paperTradingDetail.netPnl')"
+                min-width="120"
+              />
             </el-table>
           </el-card>
         </el-col>
-        <el-col :xs="24" :xl="12">
+        <el-col
+          :xs="24"
+          :xl="12"
+        >
           <el-card>
-            <template #header><strong>{{ t('paperTradingDetail.strategySignals') }}</strong></template>
-            <el-empty v-if="!runtime.signals.length" :description="t('paperTradingDetail.noSignals')" />
-            <el-table v-else :data="runtime.signals" size="small" max-height="280">
-              <el-table-column prop="datetime" :label="t('paperTradingDetail.time')" min-width="150" />
-              <el-table-column prop="symbol" :label="t('paperTradingDetail.symbol')" min-width="110" />
-              <el-table-column prop="signal" :label="t('paperTradingDetail.signal')" min-width="120" />
-              <el-table-column prop="price" :label="t('paperTradingDetail.price')" min-width="100" />
+            <template #header>
+              <strong>{{ t('paperTradingDetail.strategySignals') }}</strong>
+            </template>
+            <el-empty
+              v-if="!runtime.signals.length"
+              :description="t('paperTradingDetail.noSignals')"
+            />
+            <el-table
+              v-else
+              :data="runtime.signals"
+              size="small"
+              max-height="280"
+            >
+              <el-table-column
+                prop="datetime"
+                :label="t('paperTradingDetail.time')"
+                min-width="150"
+              />
+              <el-table-column
+                prop="symbol"
+                :label="t('paperTradingDetail.symbol')"
+                min-width="110"
+              />
+              <el-table-column
+                prop="signal"
+                :label="t('paperTradingDetail.signal')"
+                min-width="120"
+              />
+              <el-table-column
+                prop="price"
+                :label="t('paperTradingDetail.price')"
+                min-width="100"
+              />
             </el-table>
           </el-card>
         </el-col>
       </el-row>
 
       <el-card class="alerts-card">
-        <template #header><strong>{{ t('paperTradingDetail.runtimeAlerts') }}</strong></template>
-        <div v-if="alertsLoading" class="page-state">{{ t('paperTradingDetail.loading') }}</div>
-        <el-empty v-else-if="!alerts.length" :description="t('paperTradingDetail.noAlerts')" />
-        <el-table v-else :data="alerts" size="small">
-          <el-table-column prop="created_at" :label="t('paperTradingDetail.time')" min-width="170" />
-          <el-table-column prop="severity" :label="t('paperTradingDetail.severity')" width="100" />
-          <el-table-column prop="title" :label="t('paperTradingDetail.alertTitle')" min-width="150" />
-          <el-table-column prop="message" :label="t('paperTradingDetail.content')" min-width="260" />
+        <template #header>
+          <strong>{{ t('paperTradingDetail.runtimeAlerts') }}</strong>
+        </template>
+        <div
+          v-if="alertsLoading"
+          class="page-state"
+        >
+          {{ t('paperTradingDetail.loading') }}
+        </div>
+        <el-empty
+          v-else-if="!alerts.length"
+          :description="t('paperTradingDetail.noAlerts')"
+        />
+        <el-table
+          v-else
+          :data="alerts"
+          size="small"
+        >
+          <el-table-column
+            prop="created_at"
+            :label="t('paperTradingDetail.time')"
+            min-width="170"
+          />
+          <el-table-column
+            prop="severity"
+            :label="t('paperTradingDetail.severity')"
+            width="100"
+          />
+          <el-table-column
+            prop="title"
+            :label="t('paperTradingDetail.alertTitle')"
+            min-width="150"
+          />
+          <el-table-column
+            prop="message"
+            :label="t('paperTradingDetail.content')"
+            min-width="260"
+          />
         </el-table>
       </el-card>
     </template>

@@ -500,7 +500,13 @@ class MarketDataResearchBindingService:
         )
         supplied = (symbol, timeframe, timeframe_n, start, end)
         if any(value is not None for value in supplied):
-            if any(value is None for value in supplied):
+            if (
+                symbol is None
+                or timeframe is None
+                or timeframe_n is None
+                or start is None
+                or end is None
+            ):
                 raise MarketDataResearchBindingError(
                     "MARKET_DATA_BINDING_RUNTIME_SEMANTICS_REQUIRED"
                 )
@@ -826,6 +832,7 @@ class MarketDataResearchBindingService:
         revoked grant or a permitted substitute source from reusing the CSV.
         """
         semantics = _manifest_query_semantics(manifest)
+        timeframe_n = _required_positive_int(semantics["timeframe_n"], "timeframe_n")
         try:
             user = await self._load_owner(binding.user_id)
             principal = await self._access_authorizer.principal_for_user(user)
@@ -892,7 +899,7 @@ class MarketDataResearchBindingService:
             execution=execution,
             symbol=str(semantics["symbol"]),
             timeframe=str(semantics["timeframe"]),
-            timeframe_n=int(semantics["timeframe_n"]),
+            timeframe_n=timeframe_n,
         )
         if replay_semantics != semantics:
             raise MarketDataResearchBindingError("MARKET_DATA_BINDING_RUNTIME_CONTRACT_MISMATCH")

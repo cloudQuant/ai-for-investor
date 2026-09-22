@@ -113,11 +113,15 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+def _security_headers_middleware_factory(app: ASGIApp, /) -> ASGIApp:
+    return SecurityHeadersMiddleware(app)
+
+
 def add_security_headers(app: FastAPI) -> None:
     """Add security headers middleware to the FastAPI application.
 
     Args:
         app: The FastAPI application instance.
     """
-    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(_security_headers_middleware_factory)
     logger.info("Security headers middleware registered")

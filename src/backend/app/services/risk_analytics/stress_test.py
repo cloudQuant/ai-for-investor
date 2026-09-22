@@ -1,5 +1,6 @@
 """Stress testing service based on backtest equity curves."""
 
+from collections.abc import Sequence
 from datetime import date
 
 from app.schemas.risk_analytics import StressScenario, StressScenarioResult, StressTestResult
@@ -14,7 +15,7 @@ class StressTestService:
         *,
         equity_curve: list[float],
         equity_dates: list[str],
-        scenarios: list[dict | StressScenario] | None = None,
+        scenarios: Sequence[dict | StressScenario] | None = None,
     ) -> StressTestResult:
         """Run selected scenarios against equity values."""
         selected_scenarios = self._normalize_scenarios(scenarios)
@@ -24,7 +25,9 @@ class StressTestService:
         return StressTestResult(status=status, scenario_count=len(results), results=results)
 
     @staticmethod
-    def _normalize_scenarios(scenarios: list[dict | StressScenario] | None) -> list[StressScenario]:
+    def _normalize_scenarios(
+        scenarios: Sequence[dict | StressScenario] | None,
+    ) -> list[StressScenario]:
         if not scenarios:
             return list(BUILT_IN_STRESS_SCENARIOS)
         return [

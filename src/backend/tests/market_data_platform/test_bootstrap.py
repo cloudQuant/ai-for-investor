@@ -22,6 +22,11 @@ from app.services.market_data.bootstrap import (
     CANONICAL_DATASET_CODES,
     CANONICAL_PHYSICAL_TABLE,
     CANONICAL_QUOTE_SNAPSHOT_DATASET_CODE,
+    CANONICAL_REFERENCE_SERIES_DATASET_CODES,
+    CANONICAL_STOCK_ADJUSTMENT_FACTORS_DATASET_CODE,
+    CANONICAL_STOCK_FINANCIALS_BALANCE_DATASET_CODE,
+    CANONICAL_STOCK_FINANCIALS_CASHFLOW_DATASET_CODE,
+    CANONICAL_STOCK_FINANCIALS_INCOME_DATASET_CODE,
     CANONICAL_STOCK_VALUATION_CAPTURED_SNAPSHOT_DATASET_CODE,
     CANONICAL_STORAGE_ID,
     CANONICAL_WRITE_MODE,
@@ -233,6 +238,68 @@ async def test_bootstrap_registers_b1_logical_datasets_without_routes() -> None:
             and schema["supported_asset_types"] == ["stock", "fund"]
         )
         assert required_fields <= set(schema["observation_fields"])
+        assert dataset.primary_key == bars_dataset.primary_key
+    assert CANONICAL_REFERENCE_SERIES_DATASET_CODES[-4:] == (
+        "reference.stock_adjustment_factors",
+        "market.stock_financials_income",
+        "market.stock_financials_balance",
+        "market.stock_financials_cashflow",
+    )
+    expected_ths_schemas = {
+        CANONICAL_STOCK_ADJUSTMENT_FACTORS_DATASET_CODE: (
+            "reference-stock-adjustment-factors-v1",
+            {"dividend_per_share", "per_share_bonus"},
+        ),
+        CANONICAL_STOCK_FINANCIALS_INCOME_DATASET_CODE: (
+            "market-stock-financials-income-v1",
+            {
+                "fiscal_year",
+                "fiscal_period",
+                "operating_income",
+                "operating_costs",
+                "operating_profit",
+                "net_profit",
+                "parent_holder_net_profit",
+                "basic_eps",
+            },
+        ),
+        CANONICAL_STOCK_FINANCIALS_BALANCE_DATASET_CODE: (
+            "market-stock-financials-balance-v1",
+            {
+                "fiscal_year",
+                "fiscal_period",
+                "assets_total",
+                "total_current_assets",
+                "total_debt",
+                "holder_equity_total",
+                "accounts_receivable",
+                "cash",
+            },
+        ),
+        CANONICAL_STOCK_FINANCIALS_CASHFLOW_DATASET_CODE: (
+            "market-stock-financials-cashflow-v1",
+            {
+                "fiscal_year",
+                "fiscal_period",
+                "act_cash_flow_net",
+                "invest_cash_flow_net",
+                "financing_cash_flow_net",
+                "cash_equivalents_net_addition",
+            },
+        ),
+    }
+    for dataset_code, (schema_version, expected_fields) in expected_ths_schemas.items():
+        dataset = datasets[dataset_code]
+        schema = dataset.canonical_schema
+        observation_fields = set(schema["observation_fields"]) - {
+            "event_time",
+            "event_end",
+            "available_at",
+        }
+        assert schema["schema_version"] == schema_version
+        assert schema["data_kind"] == "reference_series"
+        assert schema["supported_asset_types"] == ["stock"]
+        assert observation_fields == expected_fields
         assert dataset.primary_key == bars_dataset.primary_key
     assert {(binding.physical_table, binding.is_primary) for binding, _ in bindings} == {
         (CANONICAL_PHYSICAL_TABLE, True)

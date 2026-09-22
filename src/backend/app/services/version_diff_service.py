@@ -58,7 +58,7 @@ def generate_params_diff(
     """
     all_keys = set(params1.keys()) | set(params2.keys())
 
-    diff = {
+    diff: dict[str, dict[str, Any]] = {
         "added": {},
         "removed": {},
         "modified": {},

@@ -46,14 +46,15 @@ MetricCounter = CounterProtocol | None
 MetricGauge = GaugeProtocol | None
 MetricHistogram = HistogramProtocol | None
 
-_prometheus_client: Any
 try:
-    import prometheus_client as _prometheus_client
+    import prometheus_client as _prometheus_client_module
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
-    _prometheus_client = None
+    _prometheus_client_module = None
     PROMETHEUS_AVAILABLE = False
+
+_prometheus_client: Any = _prometheus_client_module
 
 # Create a custom registry to avoid conflicts
 _registry: Any = _prometheus_client.CollectorRegistry() if PROMETHEUS_AVAILABLE else None

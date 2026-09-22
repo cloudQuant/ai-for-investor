@@ -25,7 +25,7 @@ import stat
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, TypeGuard
 
 from app.services.research.dataset_integrity import DatasetObjectAttestation
 
@@ -753,7 +753,7 @@ class FilesystemDatasetObjectResolver:
         )
 
     @staticmethod
-    def _valid_sha256(value: object) -> bool:
+    def _valid_sha256(value: object) -> TypeGuard[str]:
         """Validate a canonical lower-case SHA-256 digest."""
 
         return (

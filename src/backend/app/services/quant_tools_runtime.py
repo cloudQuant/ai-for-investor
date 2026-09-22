@@ -431,7 +431,12 @@ class QuantToolsService:
             "holdings_count": len((holdings or {}).get("items") or []),
         }
 
-    async def _handle_var_cvar(self, *, user_id: str, payload: dict[str, Any]) -> dict[str, float]:
+    async def _handle_var_cvar(
+        self,
+        *,
+        user_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, str | int | float]:
         del user_id
         symbol = str(payload.get("symbol") or "RB2510")
         raw_returns = payload.get("returns")

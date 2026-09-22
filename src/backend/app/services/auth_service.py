@@ -3,6 +3,7 @@ Authentication service.
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Protocol, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +38,29 @@ settings = get_settings()
 logger = get_logger(__name__)
 
 
+class _UserInstance(Protocol):
+    """Scalar view of a User returned by SQLAlchemy.
+
+    The legacy ORM declarations expose ``Column`` descriptors to Mypy even
+    though repository queries return instances with scalar values.
+    """
+
+    id: str
+    username: str
+    email: str
+    hashed_password: str
+    is_active: bool
+    created_at: datetime
+
+
+class _RefreshTokenInstance(Protocol):
+    """Scalar view of a persisted refresh-token ORM instance."""
+
+    expires_at: datetime
+    is_revoked: bool
+    revoked_at: datetime | None
+
+
 class AuthService:
     """Service for user authentication and authorization."""
 
@@ -50,7 +74,11 @@ class AuthService:
         self.user_repo = SQLRepository(User)
         self.refresh_token_repo = SQLRepository(RefreshToken)
 
-    async def _is_admin_user(self, user: User, session: AsyncSession | None = None) -> bool:
+    async def _is_admin_user(
+        self,
+        user: _UserInstance,
+        session: AsyncSession | None = None,
+    ) -> bool:
         """Return whether the user has admin privileges."""
         if user.username == settings.ADMIN_USERNAME:
             return True
@@ -112,7 +140,7 @@ class AuthService:
     async def _revoke_refresh_token_in_session(
         self,
         session: AsyncSession,
-        token_record: RefreshToken,
+        token_record: _RefreshTokenInstance,
     ) -> bool:
         """Mark one refresh token as revoked without committing the transaction."""
         if token_record.is_revoked:
@@ -138,8 +166,9 @@ class AuthService:
         tokens = result.scalars().all()
         revoked_at = utc_now_naive()
         for token in tokens:
-            token.is_revoked = True
-            token.revoked_at = revoked_at
+            token_instance = cast(_RefreshTokenInstance, token)
+            token_instance.is_revoked = True
+            token_instance.revoked_at = revoked_at
 
         await session.flush()
         return len(tokens)
@@ -199,16 +228,17 @@ class AuthService:
         user = await self.user_repo.get_by_field("username", user_login.username)
         if not user:
             return None
+        user_instance = cast(_UserInstance, user)
 
         # Verify password
-        if not verify_password(user_login.password, user.hashed_password):
+        if not verify_password(user_login.password, user_instance.hashed_password):
             return None
 
         # Generate access token
         access_token = create_access_token(
             data={
-                "sub": user.id,
-                "username": user.username,
+                "sub": user_instance.id,
+                "username": user_instance.username,
             },
             expires_delta=timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
         )
@@ -236,26 +266,27 @@ class AuthService:
             user = await user_repo.get_by_field("username", user_login.username)
             if not user:
                 return None
+            user_instance = cast(_UserInstance, user)
 
             # Verify password
-            if not verify_password(user_login.password, user.hashed_password):
+            if not verify_password(user_login.password, user_instance.hashed_password):
                 return None
 
             # Check if user is active
-            if not user.is_active:
+            if not user_instance.is_active:
                 return None
 
             # Generate access token
             access_token = create_access_token(
                 data={
-                    "sub": user.id,
-                    "username": user.username,
+                    "sub": user_instance.id,
+                    "username": user_instance.username,
                 },
                 expires_delta=timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
             )
             refresh_token = await self._issue_refresh_token(session, user)
 
-        logger.info(f"User logged in with refresh token: {user.username}")
+        logger.info(f"User logged in with refresh token: {user_instance.username}")
 
         return RefreshTokenResponse(
             access_token=access_token,
@@ -292,34 +323,40 @@ class AuthService:
 
             # Verify token exists in database and is not revoked
             token_record = await token_repo.get_by_id(token_id)
-            if not token_record or token_record.is_revoked:
+            if not token_record:
+                return None
+            token_instance = cast(_RefreshTokenInstance, token_record)
+            if token_instance.is_revoked:
                 return None
 
             # Check if token has expired (handle timezone issues with SQLite)
-            expires_at = token_record.expires_at
+            expires_at = token_instance.expires_at
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
             if expires_at < datetime.now(timezone.utc):
-                await self._revoke_refresh_token_in_session(session, token_record)
+                await self._revoke_refresh_token_in_session(session, token_instance)
                 return None
 
             # Verify user still exists and is active
             user = await user_repo.get_by_id(user_id)
-            if not user or not user.is_active:
+            if not user:
+                return None
+            user_instance = cast(_UserInstance, user)
+            if not user_instance.is_active:
                 return None
 
             # Revoke old refresh token and issue a new one atomically.
-            await self._revoke_refresh_token_in_session(session, token_record)
+            await self._revoke_refresh_token_in_session(session, token_instance)
             access_token = create_access_token(
                 data={
-                    "sub": user.id,
-                    "username": user.username,
+                    "sub": user_instance.id,
+                    "username": user_instance.username,
                 },
                 expires_delta=timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
             )
             new_refresh_token = await self._issue_refresh_token(session, user)
 
-        logger.info(f"Tokens refreshed for user: {user.username}")
+        logger.info(f"Tokens refreshed for user: {user_instance.username}")
 
         return RefreshTokenResponse(
             access_token=access_token,
@@ -341,7 +378,8 @@ class AuthService:
             token_record = await self._get_refresh_token_repo(session).get_by_id(token_id)
             if not token_record:
                 return False
-            return await self._revoke_refresh_token_in_session(session, token_record)
+            token_instance = cast(_RefreshTokenInstance, token_record)
+            return await self._revoke_refresh_token_in_session(session, token_instance)
 
     async def revoke_all_user_tokens(self, user_id: str) -> int:
         """Revoke all refresh tokens for a user.
@@ -373,16 +411,17 @@ class AuthService:
             user = await user_repo.get_by_id(user_id)
             if not user:
                 return False
-            if not verify_password(old_password, user.hashed_password):
+            user_instance = cast(_UserInstance, user)
+            if not verify_password(old_password, user_instance.hashed_password):
                 return False
 
-            user.hashed_password = get_password_hash(new_password)
+            user_instance.hashed_password = get_password_hash(new_password)
             await session.flush()
 
             # Revoke all refresh tokens for security in the same transaction.
             await self._revoke_all_user_tokens_in_session(session, user_id)
 
-        logger.info(f"Password changed for user: {user.username}")
+        logger.info(f"Password changed for user: {user_instance.username}")
 
         return True
 
@@ -399,14 +438,15 @@ class AuthService:
             user = await self._get_user_repo(session).get_by_id(user_id)
             if not user:
                 return None
+            user_instance = cast(_UserInstance, user)
 
             return UserResponse(
-                id=user.id,
-                username=user.username,
-                email=user.email,
-                is_active=user.is_active,
-                is_admin=await self._is_admin_user(user, session=session),
-                created_at=user.created_at,
+                id=user_instance.id,
+                username=user_instance.username,
+                email=user_instance.email,
+                is_active=user_instance.is_active,
+                is_admin=await self._is_admin_user(user_instance, session=session),
+                created_at=user_instance.created_at,
             )
 
     async def logout(self, refresh_token: str) -> bool:
@@ -425,4 +465,6 @@ class AuthService:
             return False
 
         token_id = payload.get("jti")
+        if not isinstance(token_id, str) or not token_id:
+            return False
         return await self.revoke_refresh_token(token_id)

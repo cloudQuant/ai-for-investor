@@ -7,11 +7,21 @@ and resolving current metric values from various data sources.
 """
 
 import logging
+import typing
+from collections.abc import Mapping
 from typing import Any
 
 from app.models.alerts import AlertRule, AlertType
 
 logger = logging.getLogger(__name__)
+
+
+class _AlertRuleEvaluationView(typing.Protocol):
+    """Scalar fields exposed by an AlertRule instance during evaluation."""
+
+    trigger_type: str
+    trigger_config: object
+    alert_type: str
 
 
 def compare_values(current_value: float, threshold: float, condition: str) -> bool:
@@ -48,15 +58,19 @@ async def check_trigger(
     Returns:
         True if the rule should trigger, False otherwise.
     """
-    trigger_type = rule.trigger_type
-    trigger_config = rule.trigger_config
+    rule_instance = typing.cast(_AlertRuleEvaluationView, rule)
+    trigger_type = rule_instance.trigger_type
+    trigger_config = rule_instance.trigger_config
+    if not isinstance(trigger_config, Mapping):
+        return False
+    config = {key: value for key, value in trigger_config.items() if isinstance(key, str)}
 
     if trigger_type == "threshold":
-        return await _check_threshold_trigger(rule, trigger_config, get_metric_fn)
+        return await _check_threshold_trigger(rule, config, get_metric_fn)
     elif trigger_type == "rate":
-        return await _check_rate_trigger(rule, trigger_config, trigger_state, get_metric_fn)
+        return await _check_rate_trigger(rule, config, trigger_state, get_metric_fn)
     elif trigger_type == "cross":
-        return await _check_cross_trigger(rule, trigger_config, trigger_state)
+        return await _check_cross_trigger(rule, config, trigger_state)
     elif trigger_type == "manual":
         return False
     else:
@@ -125,6 +139,8 @@ async def _check_cross_trigger(
     """Evaluate a cross-over trigger condition based on two values."""
     v1 = config.get("value1", config.get("current_value"))
     v2 = config.get("value2", config.get("threshold", 0.0))
+    if v1 is None or v2 is None:
+        return False
     try:
         v1_f = float(v1)
         v2_f = float(v2)
@@ -169,16 +185,19 @@ async def get_current_metric_value(
     Returns:
         The current metric value as a float, or None if unavailable.
     """
-    alert_type = getattr(rule, "alert_type", None)
+    rule_instance = typing.cast(_AlertRuleEvaluationView, rule)
     try:
-        alert_type_enum = AlertType(alert_type)
-    except Exception:
-        alert_type_enum = alert_type
+        alert_type_enum = AlertType(rule_instance.alert_type)
+    except (TypeError, ValueError):
+        return None
 
     # Manual/compat fallback.
     if "current_value" in config:
+        current_value = config.get("current_value")
+        if current_value is None:
+            return None
         try:
-            return float(config.get("current_value"))
+            return float(current_value)
         except (TypeError, ValueError):
             return None
 

@@ -12,9 +12,10 @@ import hashlib
 import json
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import pytest
-from sqlalchemy import select, text, update
+from sqlalchemy import create_engine, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.database import async_session_maker
@@ -29,6 +30,7 @@ from app.services.market_data.coverage import EventKey, TimeWindow
 from app.services.market_data.fetch_lease import MarketDataFetchLeaseManager
 from app.services.market_data.legacy_stock_daily_canonical_writer import (
     LegacyStockDailyCanonicalWriterAdapter,
+    _is_legacy_daily_bar_fields,
 )
 from app.services.market_data.legacy_stock_daily_evidence_gate_adapter import (
     LegacyStockDailyCanonicalTarget,
@@ -360,6 +362,60 @@ async def test_file_backed_sqlite_is_rejected_before_a_legacy_table_can_be_opene
         await engine.dispose()
 
     assert rejected.value.code == "LEGACY_STOCK_DAILY_SOURCE_CONNECTION_NOT_ISOLATED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("connection_kind", ("memory", "file"))
+async def test_connection_bound_sqlite_uses_engine_url_for_isolation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    connection_kind: str,
+) -> None:
+    """An injected SQLAlchemy Connection keeps the same in-memory-only boundary."""
+    database_url = (
+        "sqlite:///:memory:"
+        if connection_kind == "memory"
+        else f"sqlite:///{tmp_path / 'connection-bound-source.sqlite'}"
+    )
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            async with async_session_maker() as db:
+                monkeypatch.setattr(db, "get_bind", lambda: connection)
+                if connection_kind == "memory":
+                    repository = LegacyStockDailySourceRepository(
+                        db,
+                        approved_schema_sha256="0" * 64,
+                    )
+                    assert isinstance(repository, LegacyStockDailySourceRepository)
+                else:
+                    with pytest.raises(LegacyStockDailySourceRepositoryError) as rejected:
+                        LegacyStockDailySourceRepository(
+                            db,
+                            approved_schema_sha256="0" * 64,
+                        )
+                    assert (
+                        rejected.value.code == "LEGACY_STOCK_DAILY_SOURCE_CONNECTION_NOT_ISOLATED"
+                    )
+    finally:
+        engine.dispose()
+
+
+def test_persisted_daily_fields_guard_rejects_values_outside_the_bar_contract() -> None:
+    """Persisted JSON objects must retain string keys and bar scalar values."""
+    fields: dict[str, object] = {
+        "open": 10.0,
+        "high": 10.5,
+        "low": 9.8,
+        "close": "10.2",
+        "volume": 98_700,
+        "change_pct": -2.86,
+    }
+
+    assert _is_legacy_daily_bar_fields(fields)
+    assert not _is_legacy_daily_bar_fields({**fields, "volume": True})
+    assert not _is_legacy_daily_bar_fields({**fields, "volume": None})
+    assert not _is_legacy_daily_bar_fields({**fields, 1: "invalid-key"})
 
 
 @pytest.mark.asyncio

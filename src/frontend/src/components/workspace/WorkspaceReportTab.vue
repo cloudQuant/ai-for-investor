@@ -19,7 +19,9 @@
                 size="small"
                 @click="handleOpenReport"
               >
-                <el-icon aria-hidden="true"><FolderOpened /></el-icon>
+                <el-icon aria-hidden="true">
+                  <FolderOpened />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -31,7 +33,9 @@
                 :disabled="!report"
                 @click="handleDeleteReport"
               >
-                <el-icon aria-hidden="true"><Delete /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Delete />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -43,7 +47,9 @@
                 :disabled="!report"
                 @click="handleClearReport"
               >
-                <el-icon aria-hidden="true"><Close /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Close />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -55,7 +61,9 @@
                 :disabled="!report"
                 @click="handleSaveReport"
               >
-                <el-icon aria-hidden="true"><Download /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Download />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -70,7 +78,9 @@
                 size="small"
                 @click="showStatTimeDialog = true"
               >
-                <el-icon aria-hidden="true"><Timer /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Timer />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -81,7 +91,9 @@
                 size="small"
                 @click="showMaxCashDialog = true"
               >
-                <el-icon aria-hidden="true"><Wallet /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Wallet />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -92,7 +104,9 @@
                 size="small"
                 @click="showCalcMethodDialog = true"
               >
-                <el-icon aria-hidden="true"><Operation /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Operation />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -103,7 +117,9 @@
                 size="small"
                 @click="showWeightDialog = true"
               >
-                <el-icon aria-hidden="true"><Histogram /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Histogram />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -114,7 +130,9 @@
                 size="small"
                 @click="showCustomFieldsDialog = true"
               >
-                <el-icon aria-hidden="true"><SetUp /></el-icon>
+                <el-icon aria-hidden="true">
+                  <SetUp />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>
@@ -131,7 +149,9 @@
                 :loading="loading"
                 @click="recalculateReport"
               >
-                <el-icon aria-hidden="true"><Refresh /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Refresh />
+                </el-icon>
               </el-button>
             </el-tooltip>
             <el-tooltip
@@ -142,7 +162,9 @@
                 size="small"
                 @click="handleSetDefault"
               >
-                <el-icon aria-hidden="true"><Star /></el-icon>
+                <el-icon aria-hidden="true">
+                  <Star />
+                </el-icon>
               </el-button>
             </el-tooltip>
           </el-button-group>

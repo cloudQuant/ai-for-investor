@@ -429,7 +429,7 @@ def _validated_record_dimensions(
         payload = json.loads(revision.semantic_record_key)
         if not isinstance(payload, Mapping):
             raise ValueError("semantic record key payload is not an object")
-        dimensions = payload.get("dimensions")
+        dimensions = _require_record_dimensions(payload.get("dimensions"))
         record_key = SemanticRecordKey(
             canonical_json=revision.semantic_record_key,
             sha256=revision.semantic_record_key_sha256,
@@ -444,6 +444,18 @@ def _validated_record_dimensions(
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise MultiRecordLocalQueryServiceError("B2_LOCAL_RECORD_INTEGRITY") from exc
     return record_key.dimensions
+
+
+def _require_record_dimensions(value: object) -> Mapping[str, object]:
+    """Return string-keyed dimensions before they reach completeness planning."""
+    if not isinstance(value, Mapping):
+        raise TypeError("semantic record key dimensions must be a mapping")
+    dimensions: dict[str, object] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise TypeError("semantic record key dimension names must be strings")
+        dimensions[key] = item
+    return dimensions
 
 
 def _dimensions_match_selector(
@@ -499,7 +511,8 @@ def _durable_evidence_missing_completeness(
     selector: B2SliceSelector | B2ReportSelector,
 ) -> CompletenessResult:
     """Return the non-renderable result for a selector without a stored receipt."""
-    expected = selector.expected_record_key_sha256s
+    expected_hashes = selector.expected_record_key_sha256s
+    expected = frozenset(expected_hashes) if expected_hashes is not None else None
     return CompletenessResult(
         selector_digest=selector.selector_digest,
         status=CompletenessStatus.INCOMPLETE,

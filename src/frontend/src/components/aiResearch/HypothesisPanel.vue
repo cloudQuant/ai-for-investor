@@ -1,17 +1,34 @@
 <template>
-  <section class="trusted-panel" aria-labelledby="trusted-hypothesis-title">
+  <section
+    class="trusted-panel"
+    aria-labelledby="trusted-hypothesis-title"
+  >
     <header>
       <span>01</span>
       <div>
-        <h3 id="trusted-hypothesis-title">{{ t('strategy.aiResearchTrusted.hypothesis.title') }}</h3>
+        <h3 id="trusted-hypothesis-title">
+          {{ t('strategy.aiResearchTrusted.hypothesis.title') }}
+        </h3>
         <p>{{ t('strategy.aiResearchTrusted.hypothesis.description') }}</p>
       </div>
     </header>
-    <dl v-if="hypothesis" class="trusted-panel__facts">
+    <dl
+      v-if="hypothesis"
+      class="trusted-panel__facts"
+    >
       <div><dt>{{ t('strategy.aiResearchTrusted.hypothesis.status') }}</dt><dd>{{ hypothesis.status || t('strategy.aiResearchTrusted.unavailable') }}</dd></div>
-      <div><dt>{{ t('strategy.aiResearchTrusted.hypothesis.contentHash') }}</dt><dd class="trusted-panel__hash">{{ hypothesis.content_hash || t('strategy.aiResearchTrusted.unavailable') }}</dd></div>
+      <div>
+        <dt>{{ t('strategy.aiResearchTrusted.hypothesis.contentHash') }}</dt><dd class="trusted-panel__hash">
+          {{ hypothesis.content_hash || t('strategy.aiResearchTrusted.unavailable') }}
+        </dd>
+      </div>
     </dl>
-    <p v-else class="trusted-panel__empty">{{ t('strategy.aiResearchTrusted.hypothesis.empty') }}</p>
+    <p
+      v-else
+      class="trusted-panel__empty"
+    >
+      {{ t('strategy.aiResearchTrusted.hypothesis.empty') }}
+    </p>
   </section>
 </template>
 

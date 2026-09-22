@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import CursorResult, create_engine, func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import database
 from app.models.ai_research_v2 import (
@@ -18,6 +21,7 @@ from app.models.ai_research_v2 import (
     ResearchTrial,
 )
 from app.services.research import discovery_execution_journal as journal_module
+from app.services.research import discovery_search_budget as search_budget_module
 from app.services.research.canonical import content_hash
 from app.services.research.discovery_execution_journal import DiscoveryExecutionJournal
 from tests.test_ai_research_discovery_execution_journal import (
@@ -28,6 +32,43 @@ from tests.test_ai_research_discovery_execution_journal import (
     _user_id,
     independent_journal_database,  # noqa: F401 - shared independent-connection fixture
 )
+
+
+@pytest.mark.asyncio
+async def test_epoch_lock_rejects_non_cursor_dml_result_even_with_rowcount_one() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.return_value = SimpleNamespace(rowcount=1)
+
+    with pytest.raises(ValueError, match="EXPERIMENT_EPOCH_LOCK_DENIED"):
+        await search_budget_module.lock_experiment_epoch(
+            session, user_id="user-1", epoch_id="epoch-1"
+        )
+
+    session.execute.assert_awaited_once()
+    session.get.assert_not_awaited()
+
+
+def test_discovery_budget_rowcount_accepts_successful_sqlite_dml_cursor_result() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("CREATE TABLE rowcount_probe (id INTEGER PRIMARY KEY, value TEXT)")
+            )
+            connection.execute(
+                text("INSERT INTO rowcount_probe (id, value) VALUES (:id, :value)"),
+                {"id": 1, "value": "before"},
+            )
+            result = connection.execute(
+                text("UPDATE rowcount_probe SET value = :value WHERE id = :id"),
+                {"id": 1, "value": "after"},
+            )
+
+            assert isinstance(result, CursorResult)
+            assert result.rowcount == 1
+            assert search_budget_module._cursor_rowcount(result) == 1
+    finally:
+        engine.dispose()
 
 
 async def _budget(context, value) -> None:

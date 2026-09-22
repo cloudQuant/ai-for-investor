@@ -113,7 +113,13 @@ async def test_admin_ai_usage_aggregates_calls_by_service_model_user_and_day(cli
 
 @pytest.mark.asyncio
 async def test_admin_ai_failure_and_slow_call_endpoints_report_diagnostics(client: AsyncClient):
-    await _insert_ai_log(service_name="ai_chat", status="success", latency_ms=100)
+    earlier_failure = datetime(2026, 5, 24, 8, 30, tzinfo=timezone.utc)
+    await _insert_ai_log(
+        service_name="ai_chat",
+        status="success",
+        latency_ms=100,
+        created_at=earlier_failure - timedelta(minutes=1),
+    )
     await _insert_ai_log(
         service_name="ai_chat",
         status="failed",
@@ -121,6 +127,7 @@ async def test_admin_ai_failure_and_slow_call_endpoints_report_diagnostics(clien
         error_message="upstream failed",
         latency_ms=900,
         prompt_hash="b" * 64,
+        created_at=earlier_failure,
     )
     await _insert_ai_log(
         service_name="strategy_explainer",
@@ -130,6 +137,7 @@ async def test_admin_ai_failure_and_slow_call_endpoints_report_diagnostics(clien
         error_message="timeout",
         latency_ms=1500,
         prompt_hash="c" * 64,
+        created_at=earlier_failure + timedelta(minutes=1),
     )
     headers = await _get_admin_headers(client)
 
@@ -140,6 +148,10 @@ async def test_admin_ai_failure_and_slow_call_endpoints_report_diagnostics(clien
     failure_data = failures.json()
     assert failure_data["summary"]["failed_calls"] == 2
     assert failure_data["summary"]["failure_rate"] == pytest.approx(2 / 3)
+    assert [item["error_code"] for item in failure_data["recent_failures"]] == [
+        "TimeoutError",
+        "HTTPError",
+    ]
     assert {item["error_code"]: item["failed_calls"] for item in failure_data["by_error_code"]} == {
         "HTTPError": 1,
         "TimeoutError": 1,

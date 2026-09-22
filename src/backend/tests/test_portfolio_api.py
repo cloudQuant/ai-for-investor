@@ -52,6 +52,47 @@ _EMPTY_POSITION_SUMMARY = {
 }
 
 
+def test_first_number_prefers_and_normalizes_nested_amount() -> None:
+    from app.api import portfolio_api
+
+    assert (
+        portfolio_api._first_number(
+            {"account": {"amount": " 1,234.5 ", "value": "9,999", "balance": "8,888"}},
+            "account",
+        )
+        == 1234.5
+    )
+
+
+def test_first_number_skips_invalid_key_and_accepts_decimal() -> None:
+    from decimal import Decimal
+
+    from app.api import portfolio_api
+
+    assert (
+        portfolio_api._first_number(
+            {"primary": "not-a-number", "secondary": Decimal("12.75")},
+            "primary",
+            "secondary",
+        )
+        == 12.75
+    )
+
+
+def test_first_number_preserves_nan_and_accepts_byte_buffer() -> None:
+    from array import array
+    from ctypes import c_char
+    from math import isnan
+
+    from app.api import portfolio_api
+
+    assert isnan(portfolio_api._first_number({"value": float("nan")}, "value"))
+    assert portfolio_api._first_number({"value": bytearray(b"3.25")}, "value") == 3.25
+    assert portfolio_api._first_number({"value": memoryview(b"4.5")}, "value") == 4.5
+    assert portfolio_api._first_number({"value": array("b", b"3.25")}, "value") == 3.25
+    assert portfolio_api._first_number({"value": (c_char * 3)(*b"1.2")}, "value") == 1.2
+
+
 @pytest.mark.asyncio
 async def test_portfolio_sources_uses_workspace_snapshot_for_paper_units(monkeypatch):
     """Paper workspace units must not fan out broker queries during page refresh."""
@@ -274,6 +315,7 @@ async def test_active_workspace_sources_excludes_stale_running_units(monkeypatch
 async def test_active_workspace_sources_batches_live_instance_lookup(monkeypatch):
     """One workspace refresh must validate active instances with one manager scan."""
     from app.api import portfolio_api
+    from app.types.live_trading import InstanceData
 
     class BatchedManager:
         def __init__(self) -> None:
@@ -281,13 +323,13 @@ async def test_active_workspace_sources_batches_live_instance_lookup(monkeypatch
 
         def get_active_instances(self, instance_ids: list[str], user_id: str | None = None):
             self.active_calls.append((instance_ids, user_id))
+            typed_instance: InstanceData = {
+                "id": "inst-one",
+                "status": "running",
+                "pid": 101,
+            }
             return [
-                {
-                    "id": "inst-one",
-                    "status": "running",
-                    "pid": 101,
-                    "started_at": "2026-07-20 08:00:00",
-                },
+                typed_instance,
                 {
                     "id": "inst-two",
                     "status": "running",
@@ -1059,6 +1101,25 @@ def test_portfolio_position_row_direction_treats_bybit_position_idx_zero_as_one_
         portfolio_api._position_row_direction(
             {"data_name": "BTCUSDT", "positionIdx": "0", "size": -0.1},
             -0.1,
+        )
+        == "short"
+    )
+
+
+def test_portfolio_position_row_direction_converts_numeric_codes_and_falls_back_to_size() -> None:
+    from app.api import portfolio_api
+
+    assert (
+        portfolio_api._position_row_direction(
+            {"data_name": "BTCUSDT", "positionIdx": "2.0", "size": 1},
+            1.0,
+        )
+        == "short"
+    )
+    assert (
+        portfolio_api._position_row_direction(
+            {"data_name": "BTCUSDT", "positionIdx": "invalid", "size": -1},
+            -1.0,
         )
         == "short"
     )

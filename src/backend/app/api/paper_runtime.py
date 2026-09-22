@@ -279,7 +279,9 @@ async def create_paper_runtime_review(
     review = await service.create_review(current_user.sub, instance_id, request.model_dump())
     if review is None:
         raise _not_found()
-    return {"id": review.id, "status": review.status}
+    review_id = str(review.id)
+    review_status = str(review.status)
+    return {"id": review_id, "status": review_status}
 
 
 @router.post("/{instance_id}/handoff-decisions", summary="Record paper-to-live handoff decision")
@@ -293,7 +295,9 @@ async def decide_paper_runtime_handoff(
     review = await service.decide_handoff(current_user.sub, instance_id, request.model_dump())
     if review is None:
         raise _not_found()
-    return {"id": review.id, "decision": review.decision}
+    review_id = str(review.id)
+    decision = str(review.decision)
+    return {"id": review_id, "decision": decision}
 
 
 @router.post("/{instance_id}/pause", summary="Pause paper runtime")

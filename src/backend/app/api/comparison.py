@@ -128,7 +128,7 @@ async def update_comparison(
     comparison = await service.update_comparison(
         comparison_id=comparison_id,
         user_id=current_user.sub,
-        update_data=request.model_dump(exclude_none=True),
+        update_data=request,
     )
 
     if not comparison:
@@ -235,8 +235,13 @@ async def toggle_comparison_favorite(
     updated_comparison = await service.update_comparison(
         comparison_id=comparison_id,
         user_id=current_user.sub,
-        update_data={"is_favorite": comparison.is_favorite},
+        update_data=ComparisonUpdate(is_favorite=comparison.is_favorite),
     )
+    if updated_comparison is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comparison not found or no permission to update",
+        )
 
     return {
         "comparison_id": comparison_id,

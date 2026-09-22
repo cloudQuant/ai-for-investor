@@ -1,13 +1,16 @@
 """Knowledge base ORM models for iteration 129."""
 
 import uuid
-from typing import Any
+from datetime import datetime
+from typing import Any, TypeAlias
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
 from app.utils.datetime_utils import utc_now_naive
+
+JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
 
 
 class KnowledgeBase(Base):
@@ -19,13 +22,13 @@ class KnowledgeBase(Base):
     owner_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id"), nullable=False, index=True
     )
-    name = Column(String(255), nullable=False, index=True)
-    description = Column(Text, nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     document_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    is_public = Column(Boolean, nullable=False, default=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=True)
-    created_at = Column(DateTime, default=utc_now_naive)
-    updated_at = Column(
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=utc_now_naive,
         onupdate=utc_now_naive,
@@ -45,24 +48,24 @@ class KBDocument(Base):
     __tablename__ = "kb_documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    knowledge_base_id = Column(
+    knowledge_base_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    title = Column(String(500), nullable=False)
-    content = Column(Text, nullable=True)
-    content_type = Column(String(50), nullable=False, default="markdown")
-    file_path = Column(String(1000), nullable=True)
-    is_folder = Column(Boolean, nullable=False, default=False)
-    parent_id = Column(
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_type: Mapped[str] = mapped_column(String(50), nullable=False, default="markdown")
+    file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    is_folder: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    parent_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("kb_documents.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    sort_order = Column(Integer, nullable=False, default=0)
-    status = Column(String(20), nullable=False, default="draft")
-    index_status = Column(String(20), nullable=False, default="not_indexed")
-    indexed_at = Column(DateTime, nullable=True)
-    metadata_json = Column("metadata", JSON, nullable=True)
-    created_at = Column(DateTime, default=utc_now_naive)
-    updated_at = Column(
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    index_status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_indexed")
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    metadata_json: Mapped[dict[str, object] | None] = mapped_column("metadata", JSON, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=utc_now_naive,
         onupdate=utc_now_naive,
@@ -77,18 +80,18 @@ class DocumentChunk(Base):
 
     __tablename__ = "document_chunks"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    document_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("kb_documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    knowledge_base_id = Column(
+    knowledge_base_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    chunk_index = Column(Integer, nullable=False)
-    content = Column(Text, nullable=False)
-    token_count = Column(Integer, nullable=True)
-    source_type = Column(String(50), nullable=False, default="document")
-    created_at = Column(DateTime, default=utc_now_naive)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False, default="document")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
 
 
 class ChatConversation(Base):
@@ -96,16 +99,18 @@ class ChatConversation(Base):
 
     __tablename__ = "chat_conversations"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    knowledge_base_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    knowledge_base_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    title = Column(String(255), nullable=False, default="新对话")
-    model_id = Column(String(200), nullable=True)
-    settings = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=utc_now_naive)
-    updated_at = Column(
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="新对话")
+    model_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    settings: Mapped[dict[str, object] | None] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=utc_now_naive,
         onupdate=utc_now_naive,
@@ -124,21 +129,21 @@ class ChatMessage(Base):
 
     __tablename__ = "chat_messages"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    conversation_id = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("chat_conversations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    role = Column(String(20), nullable=False)
-    content = Column(Text, nullable=False)
-    citations = Column(JSON, nullable=True)
-    tokens_used = Column(Integer, nullable=True)
-    model_id = Column(String(200), nullable=True)
-    reasoning = Column(Text, nullable=True)
-    metadata_json = Column("metadata", JSON, nullable=True)
-    created_at = Column(DateTime, default=utc_now_naive)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    citations: Mapped[JSONValue | None] = mapped_column(JSON, nullable=True)
+    tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, object] | None] = mapped_column("metadata", JSON, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
 
     conversation = relationship("ChatConversation", back_populates="messages")
 
@@ -148,21 +153,21 @@ class ModelConfig(Base):
 
     __tablename__ = "model_configs"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(100), nullable=False)
-    api_name = Column(String(200), nullable=False, unique=True)
-    category = Column(String(20), nullable=False, default="chat", index=True)
-    enabled = Column(Boolean, nullable=False, default=True)
-    is_default = Column(Boolean, nullable=False, default=False)
-    description = Column(Text, nullable=True)
-    max_context = Column(Integer, nullable=True)
-    max_output = Column(Integer, nullable=True)
-    input_price = Column(Integer, nullable=True)
-    output_price = Column(Integer, nullable=True)
-    parameters = Column(JSON, default=dict)
-    features = Column(JSON, default=list)
-    created_at = Column(DateTime, default=utc_now_naive)
-    updated_at = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    api_name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="chat", index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_context: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_output: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    parameters: Mapped[dict[str, object] | None] = mapped_column(JSON, default=dict)
+    features: Mapped[list[JSONValue] | None] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         default=utc_now_naive,
         onupdate=utc_now_naive,
@@ -174,11 +179,15 @@ class ModelUsageLog(Base):
 
     __tablename__ = "model_usage_logs"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    model_id = Column(String(36), ForeignKey("model_configs.id"), nullable=False, index=True)
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
-    request_type = Column(String(20), nullable=False)
-    input_tokens = Column(Integer, nullable=False, default=0)
-    output_tokens = Column(Integer, nullable=False, default=0)
-    cost = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=utc_now_naive)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    model_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("model_configs.id"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False, index=True
+    )
+    request_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)

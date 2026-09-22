@@ -111,6 +111,8 @@ class DiscoveryTrialMaterializer:
             }
         ):
             raise ValueError("DISCOVERY_PUBLICATION_EVIDENCE_DENIED")
+        if journal.result_json is None:
+            raise ValueError("DISCOVERY_EXECUTION_RESULT_INVALID")
         result = DiscoveryExecutionResult.from_mapping(journal.result_json, command=command)
         await _require_recorded_dispatch(
             session,
@@ -119,6 +121,8 @@ class DiscoveryTrialMaterializer:
             denied_code="DISCOVERY_PUBLICATION_QUOTA_DENIED",
         )
         quota = await session.get(ResearchQuotaReservation, journal.quota_reservation_id)
+        if quota is None:
+            raise ValueError("DISCOVERY_PUBLICATION_QUOTA_DENIED")
         intent = {
             "schema_version": "discovery-execution-intent-v1",
             "inputs": {
@@ -161,6 +165,8 @@ class DiscoveryTrialMaterializer:
             session, candidate=candidate, snapshot=snapshot, user_id=context.user_id
         )
         dataset = await session.get(ResearchDatasetSnapshot, candidate.dataset_snapshot_id)
+        if dataset is None:
+            raise ValueError("DISCOVERY_PUBLICATION_CANDIDATE_DENIED")
         await self._datasets.revalidate_snapshot_in_session(session, snapshot=dataset)
         for key in ("code", "dependencies"):
             artifact = snapshot[key]
@@ -358,6 +364,8 @@ async def _replay_discovery_publication(
         snapshot=snapshot,
         user_id=task.user_id,
     )
+    if journal.result_json is None:
+        raise ValueError("DISCOVERY_EXECUTION_RESULT_INVALID")
     result = DiscoveryExecutionResult.from_mapping(journal.result_json, command=command)
     evidence = result.snapshot
     observed = evidence["observed_market_performance"]

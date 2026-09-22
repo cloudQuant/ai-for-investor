@@ -41,6 +41,8 @@ async def test_health_check_exception_branch(client: AsyncClient, monkeypatch):
     ) as health_client:
         warm = await health_client.get("/health")
         assert warm.json()["database"] == "connected"
+        assert main_module._health_cache == warm.json()
+        assert main_module._health_cache_ts > 0.0
         monkeypatch.setattr(db_module, "async_session_maker", lambda: BadSessionCtx(), raising=True)
         # The exception branch must perform a fresh DB probe, not return the
         # explicitly warmed healthy result. Global values restore at teardown;

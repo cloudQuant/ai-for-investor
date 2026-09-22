@@ -476,7 +476,7 @@ class QuotaService:
                 reservations = await _locked_complete_bundle_group(
                     session, tuple(item.reservation_id for item in ordered)
                 )
-                if not _dispatch_group_matches(
+                if reservations is None or not _dispatch_group_matches(
                     reservations,
                     ordered,
                     task_id=task_id,
@@ -545,7 +545,7 @@ class QuotaService:
                 reservations = await _locked_complete_bundle_group(
                     session, tuple(item.reservation_id for item in ordered)
                 )
-                if not _settlement_group_matches(
+                if reservations is None or not _settlement_group_matches(
                     reservations,
                     ordered,
                     provider_operation_id=provider_operation_id,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import math
+import typing
+from collections.abc import Hashable, Mapping
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
@@ -12,6 +14,7 @@ from sqlalchemy import text
 from app.db.akshare_data_database import _get_akshare_data_engine
 
 MarketAssetType = Literal["stock", "futures", "bond", "fund", "option", "fx", "crypto"]
+_RowKey = typing.TypeVar("_RowKey", bound=Hashable)
 
 
 class LegacyMarketDataOnlineRefreshDisabledError(RuntimeError):
@@ -79,11 +82,17 @@ def _safe_str(value: Any) -> str | None:
     return text or None
 
 
-def _first_present(row: dict[str, Any], *keys: str) -> Any:
+def _first_present(row: Mapping[_RowKey, object], *keys: str) -> object | None:
     for key in keys:
-        if key in row and row[key] is not None:
-            return row[key]
+        for row_key, value in row.items():
+            if isinstance(row_key, str) and row_key == key and value is not None:
+                return value
     return None
+
+
+def _name_or_fallback(value: object, fallback: str) -> str:
+    """Keep a non-empty string name, but never display a numeric snapshot value as a name."""
+    return value if isinstance(value, str) and value else fallback
 
 
 def _first_value(row: dict[str, Any], *keys: str) -> Any:
@@ -1576,7 +1585,7 @@ class MarketInstrumentService:
         return self._payload(
             asset_type="bond",
             symbol=exchange_symbol,
-            name=snapshot.get("name") or plain_code,
+            name=_name_or_fallback(snapshot.get("name"), plain_code),
             market=market or "CN",
             snapshot=snapshot,
             rows=history_rows,
@@ -1684,7 +1693,7 @@ class MarketInstrumentService:
         return self._payload(
             asset_type="fund",
             symbol=code,
-            name=snapshot.get("name") or code,
+            name=_name_or_fallback(snapshot.get("name"), code),
             market=market or "CN",
             snapshot=snapshot,
             rows=history_rows,
@@ -1763,7 +1772,7 @@ class MarketInstrumentService:
         return self._payload(
             asset_type="option",
             symbol=normalized,
-            name=snapshot.get("name") or normalized,
+            name=_name_or_fallback(snapshot.get("name"), normalized),
             market=market or "CN",
             snapshot=snapshot,
             rows=history_rows,
@@ -1812,7 +1821,7 @@ class MarketInstrumentService:
         return self._payload(
             asset_type="fx",
             symbol=normalized,
-            name=snapshot.get("name") or normalized,
+            name=_name_or_fallback(snapshot.get("name"), normalized),
             market=market or "FX",
             snapshot=snapshot,
             rows=history_rows,
@@ -1860,7 +1869,7 @@ class MarketInstrumentService:
         return self._payload(
             asset_type="crypto",
             symbol=normalized,
-            name=snapshot.get("name") or normalized,
+            name=_name_or_fallback(snapshot.get("name"), normalized),
             market=market or _safe_str(snapshot.get("market")) or "CRYPTO",
             snapshot=snapshot,
             rows=history_rows,
@@ -2472,10 +2481,15 @@ class MarketInstrumentService:
         return rows
 
     def _build_indicators(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
-        closes = [_safe_float(row.get("close")) for row in rows]
-        closes = [value for value in closes if value is not None]
-        volumes = [_safe_float(row.get("volume")) for row in rows]
-        volumes = [value for value in volumes if value is not None]
+        closes: list[float] = []
+        volumes: list[float] = []
+        for row in rows:
+            close = _safe_float(row.get("close"))
+            if close is not None:
+                closes.append(close)
+            volume = _safe_float(row.get("volume"))
+            if volume is not None:
+                volumes.append(volume)
         if not closes:
             return {
                 "latest_close": None,

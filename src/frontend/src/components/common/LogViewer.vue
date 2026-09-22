@@ -33,7 +33,9 @@
         class="w-40"
       >
         <template #prefix>
-          <el-icon aria-hidden="true"><Search /></el-icon>
+          <el-icon aria-hidden="true">
+            <Search />
+          </el-icon>
         </template>
       </el-input>
       <el-select
@@ -100,7 +102,10 @@
         v-if="loading"
         class="p-4 text-center text-gray-400"
       >
-        <el-icon class="is-loading text-2xl" aria-hidden="true">
+        <el-icon
+          class="is-loading text-2xl"
+          aria-hidden="true"
+        >
           <Loading />
         </el-icon>
         <span class="ml-2">{{ t('commonUi.logLoading') }}</span>

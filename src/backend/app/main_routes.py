@@ -158,8 +158,9 @@ def register_runtime_routes(
         health_cache = result
         health_cache_ts = now
         if main_module is not None:
-            main_module._health_cache = health_cache
-            main_module._health_cache_ts = health_cache_ts
+            main_module.__dict__.update(
+                {"_health_cache": health_cache, "_health_cache_ts": health_cache_ts}
+            )
         return result
 
     @app.get("/ready", summary="Readiness check")

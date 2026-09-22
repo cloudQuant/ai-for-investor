@@ -50,7 +50,7 @@ def _get_akshare_data_engine():
         database_url = _resolve_akshare_data_database_url()
         if database_url is None:
             return None
-        extra_kwargs = {}
+        extra_kwargs: dict[str, object] = {}
         if _database_url_drivername(database_url).startswith("mysql"):
             extra_kwargs["poolclass"] = NullPool
         else:

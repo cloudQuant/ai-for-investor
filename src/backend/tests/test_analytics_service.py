@@ -216,6 +216,7 @@ class TestProcessMonthlyReturns:
         assert len(result.returns) == 3
         assert 2024 in result.years
         assert 2024 in result.summary
+        assert result.summary[2024] == round((1 + 0.05) * (1 - 0.02) * (1 + 0.03) - 1, 6)
 
 
 class TestCalculateIndicators:

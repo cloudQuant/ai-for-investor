@@ -72,6 +72,7 @@ from app.services.market_data.source_policy import (
     MarketDataSourcePolicyRegistry,
 )
 from app.services.market_data.store import MarketDataStore, MarketDataStoreError
+from app.services.market_data.ths_provider import ThsProvider
 
 router = APIRouter()
 
@@ -108,11 +109,22 @@ def _shared_openbb_provider() -> OpenBBSubprocessProvider:
     return OpenBBSubprocessProvider.from_environment()
 
 
+@lru_cache(maxsize=1)
+def _shared_ths_provider() -> ThsProvider | None:
+    """Retain one process-owned THS adapter; returns None when Key unconfigured.
+
+    THS is fail-closed: a missing ``THS_API_KEY`` means no THS route is
+    assembled, and the source policy falls back to AkShare.
+    """
+    return ThsProvider.from_environment()
+
+
 @lru_cache(maxsize=32)
 def _default_source_policy_registry(
     openbb_provider: str,
     openbb_markets: tuple[str, ...],
     research_cache_fill_enabled: bool = False,
+    ths_enabled: bool = False,
 ) -> MarketDataSourcePolicyRegistry:
     """Build the reviewed default policy without importing OpenBB in FastAPI.
 
@@ -121,208 +133,258 @@ def _default_source_policy_registry(
     operator market configuration can only narrow those permits. Adding a
     paid/licensed route requires a separate server-owned policy and entitlement
     review.
+
+    THS is the A-share primary source. Its routes are assembled ahead of the
+    corresponding AkShare routes only when ``ths_enabled`` is true (the settings
+    kill-switch) *and* a THS adapter is available (``THS_API_KEY`` configured).
+    Even then, the durable capability ledger attestation, provider registry row,
+    and source authorization grant remain the fail-closed gates that decide
+    whether the route actually performs provider I/O.
     """
-    routes: list[MarketDataProviderRoute] = [
-        MarketDataProviderRoute(
-            route_id="akshare-stock-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"stock"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_BAR_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=_STOCK_FUND_ADJUSTMENTS,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_CNY_OR_UNDECLARED,
-            units=_SHARE_OR_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="stock.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        # The legacy K-line facade is deliberately a separate full-OHLCV
-        # product. It shares the reviewed source function with stock bars but
-        # never falls back to the close-only stock.realtime family.
-        MarketDataProviderRoute(
-            route_id="akshare-stock-kline-legacy-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"stock"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_BAR_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=frozenset({"qfq"}),
-            price_bases=frozenset({"close"}),
-            currencies=frozenset({"CNY"}),
-            units=frozenset({"share"}),
-            adapter=_shared_akshare_provider(),
-            family_id=KLINE_LEGACY_FAMILY_ID,
-            family_contract_version=KLINE_LEGACY_CONTRACT_VERSION,
-        ),
-        # Stock liquidity is a separate product from bars and valuation. The
-        # bound family contract emits these exact semantics, which select the
-        # adapter's separately reviewed liquidity route rather than a broad
-        # reference-series fallback.
-        MarketDataProviderRoute(
-            route_id="akshare-stock-liquidity-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"stock"}),
-            data_kinds=frozenset({"reference_series"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=frozenset({"unadjusted"}),
-            price_bases=frozenset({"close"}),
-            currencies=frozenset({"CNY"}),
-            units=frozenset({"share"}),
-            adapter=_shared_akshare_provider(),
-            family_id="stock.liquidity",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        MarketDataProviderRoute(
-            route_id="akshare-fund-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"fund"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_BAR_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=_STOCK_FUND_ADJUSTMENTS,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_CNY_OR_UNDECLARED,
-            units=_SHARE_OR_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="fund.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        # ETF liquidity has the same narrow contract as stock liquidity, but
-        # it retains a distinct policy route and provider route ID so a future
-        # NAV/reference product cannot select this endpoint by resemblance.
-        MarketDataProviderRoute(
-            route_id="akshare-fund-liquidity-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"fund"}),
-            data_kinds=frozenset({"reference_series"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=frozenset({"unadjusted"}),
-            price_bases=frozenset({"close"}),
-            currencies=frozenset({"CNY"}),
-            units=frozenset({"share"}),
-            adapter=_shared_akshare_provider(),
-            family_id="fund.liquidity",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        # ETF NAV is a separately sourced, source-reported reference series.
-        # Its family binding and semantic axes prevent it from being selected
-        # by either the ETF price-bar or liquidity contract.
-        MarketDataProviderRoute(
-            route_id="akshare-fund-nav-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"fund"}),
-            data_kinds=frozenset({"reference_series"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=frozenset({"source_reported"}),
-            price_bases=frozenset({"nav"}),
-            currencies=frozenset({"CNY"}),
-            units=frozenset({"fund_share"}),
-            adapter=_shared_akshare_provider(),
-            family_id="fund.nav",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-            # The reviewed endpoint is only for a listed CN ETF. Product
-            # type and listing kind are frozen master-data facts, never
-            # inferred from the symbol prefix at request time.
-            product_types=frozenset({"ETF"}),
-            fund_identity_kinds=frozenset({"LISTING"}),
-        ),
-        MarketDataProviderRoute(
-            route_id="akshare-futures-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"futures"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"CFFEX"}),
-            adjustments=_UNADJUSTED_OR_UNDECLARED,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_CNY_OR_UNDECLARED,
-            units=_CONTRACT_OR_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="futures.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        MarketDataProviderRoute(
-            route_id="akshare-bond-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"bond"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"SSE", "SZSE", "CN-SSE", "CN-SZSE"}),
-            adjustments=_UNADJUSTED_OR_UNDECLARED,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_CNY_OR_UNDECLARED,
-            units=_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="bond.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        MarketDataProviderRoute(
-            route_id="akshare-fx-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"fx"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"OTC", "CN-OTC"}),
-            adjustments=_UNADJUSTED_OR_UNDECLARED,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_UNDECLARED,
-            units=_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="fx.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        # FX range is a separately versioned market-page product even though
-        # it uses the same reviewed AkShare endpoint.  A dedicated route ID
-        # lets the adapter revalidate that family/revision pair, so a
-        # family-bound range request cannot select the realtime route by
-        # sharing its asset, cadence, venue, and semantic axes.
-        MarketDataProviderRoute(
-            route_id="akshare-fx-range-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"fx"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"OTC", "CN-OTC"}),
-            adjustments=frozenset({"unadjusted"}),
-            price_bases=frozenset({"close"}),
-            currencies=_UNDECLARED,
-            units=_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="fx.range",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-        MarketDataProviderRoute(
-            route_id="akshare-cffex-option-primary-v1",
-            request_provider="akshare",
-            expected_result_provider_ids=frozenset({"akshare"}),
-            asset_types=frozenset({"option"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"CFFEX"}),
-            adjustments=_UNADJUSTED_OR_UNDECLARED,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_CNY_OR_UNDECLARED,
-            units=_CONTRACT_OR_UNDECLARED,
-            adapter=_shared_akshare_provider(),
-            family_id="option.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        ),
-    ]
+    ths_provider = _shared_ths_provider() if ths_enabled else None
+    routes: list[MarketDataProviderRoute] = []
+    if ths_provider is not None:
+        # THS 为 A 股主源：THS stock 路由排在 AkShare 之前。频率仅 1d，
+        # 分钟频 THS 不 supports，自动落到 AkShare/OpenBB 或 UNSUPPORTED。
+        routes.append(
+            MarketDataProviderRoute(
+                route_id="ths-stock-primary-v1",
+                request_provider="ths",
+                expected_result_provider_ids=frozenset({"ths"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=_STOCK_FUND_ADJUSTMENTS,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_SHARE_OR_UNDECLARED,
+                adapter=ths_provider,
+                family_id="stock.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            )
+        )
+        routes.append(
+            MarketDataProviderRoute(
+                route_id="ths-stock-liquidity-v1",
+                request_provider="ths",
+                expected_result_provider_ids=frozenset({"ths"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"reference_series"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=frozenset({"unadjusted"}),
+                price_bases=frozenset({"close"}),
+                currencies=frozenset({"CNY"}),
+                units=frozenset({"share"}),
+                adapter=ths_provider,
+                family_id="stock.liquidity",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            )
+        )
+    routes.extend(
+        [
+            MarketDataProviderRoute(
+                route_id="akshare-stock-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_BAR_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=_STOCK_FUND_ADJUSTMENTS,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_SHARE_OR_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="stock.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            # The legacy K-line facade is deliberately a separate full-OHLCV
+            # product. It shares the reviewed source function with stock bars but
+            # never falls back to the close-only stock.realtime family.
+            MarketDataProviderRoute(
+                route_id="akshare-stock-kline-legacy-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_BAR_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=frozenset({"qfq"}),
+                price_bases=frozenset({"close"}),
+                currencies=frozenset({"CNY"}),
+                units=frozenset({"share"}),
+                adapter=_shared_akshare_provider(),
+                family_id=KLINE_LEGACY_FAMILY_ID,
+                family_contract_version=KLINE_LEGACY_CONTRACT_VERSION,
+            ),
+            # Stock liquidity is a separate product from bars and valuation. The
+            # bound family contract emits these exact semantics, which select the
+            # adapter's separately reviewed liquidity route rather than a broad
+            # reference-series fallback.
+            MarketDataProviderRoute(
+                route_id="akshare-stock-liquidity-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"reference_series"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=frozenset({"unadjusted"}),
+                price_bases=frozenset({"close"}),
+                currencies=frozenset({"CNY"}),
+                units=frozenset({"share"}),
+                adapter=_shared_akshare_provider(),
+                family_id="stock.liquidity",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            MarketDataProviderRoute(
+                route_id="akshare-fund-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"fund"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_BAR_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=_STOCK_FUND_ADJUSTMENTS,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_SHARE_OR_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="fund.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            # ETF liquidity has the same narrow contract as stock liquidity, but
+            # it retains a distinct policy route and provider route ID so a future
+            # NAV/reference product cannot select this endpoint by resemblance.
+            MarketDataProviderRoute(
+                route_id="akshare-fund-liquidity-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"fund"}),
+                data_kinds=frozenset({"reference_series"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=frozenset({"unadjusted"}),
+                price_bases=frozenset({"close"}),
+                currencies=frozenset({"CNY"}),
+                units=frozenset({"share"}),
+                adapter=_shared_akshare_provider(),
+                family_id="fund.liquidity",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            # ETF NAV is a separately sourced, source-reported reference series.
+            # Its family binding and semantic axes prevent it from being selected
+            # by either the ETF price-bar or liquidity contract.
+            MarketDataProviderRoute(
+                route_id="akshare-fund-nav-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"fund"}),
+                data_kinds=frozenset({"reference_series"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=frozenset({"source_reported"}),
+                price_bases=frozenset({"nav"}),
+                currencies=frozenset({"CNY"}),
+                units=frozenset({"fund_share"}),
+                adapter=_shared_akshare_provider(),
+                family_id="fund.nav",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+                # The reviewed endpoint is only for a listed CN ETF. Product
+                # type and listing kind are frozen master-data facts, never
+                # inferred from the symbol prefix at request time.
+                product_types=frozenset({"ETF"}),
+                fund_identity_kinds=frozenset({"LISTING"}),
+            ),
+            MarketDataProviderRoute(
+                route_id="akshare-futures-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"futures"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CFFEX"}),
+                adjustments=_UNADJUSTED_OR_UNDECLARED,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_CONTRACT_OR_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="futures.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            MarketDataProviderRoute(
+                route_id="akshare-bond-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"bond"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"SSE", "SZSE", "CN-SSE", "CN-SZSE"}),
+                adjustments=_UNADJUSTED_OR_UNDECLARED,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="bond.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            MarketDataProviderRoute(
+                route_id="akshare-fx-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"fx"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"OTC", "CN-OTC"}),
+                adjustments=_UNADJUSTED_OR_UNDECLARED,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_UNDECLARED,
+                units=_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="fx.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            # FX range is a separately versioned market-page product even though
+            # it uses the same reviewed AkShare endpoint.  A dedicated route ID
+            # lets the adapter revalidate that family/revision pair, so a
+            # family-bound range request cannot select the realtime route by
+            # sharing its asset, cadence, venue, and semantic axes.
+            MarketDataProviderRoute(
+                route_id="akshare-fx-range-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"fx"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"OTC", "CN-OTC"}),
+                adjustments=frozenset({"unadjusted"}),
+                price_bases=frozenset({"close"}),
+                currencies=_UNDECLARED,
+                units=_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="fx.range",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+            MarketDataProviderRoute(
+                route_id="akshare-cffex-option-primary-v1",
+                request_provider="akshare",
+                expected_result_provider_ids=frozenset({"akshare"}),
+                asset_types=frozenset({"option"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CFFEX"}),
+                adjustments=_UNADJUSTED_OR_UNDECLARED,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_CONTRACT_OR_UNDECLARED,
+                adapter=_shared_akshare_provider(),
+                family_id="option.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            ),
+        ]
+    )
     for permit in approved_openbb_runtime_route_permits(openbb_provider, openbb_markets):
         routes.append(
             MarketDataProviderRoute(
@@ -383,6 +445,9 @@ def _source_policies_from_settings(settings: object) -> MarketDataSourcePolicyRe
         # intersected by ``MarketDataCapabilityLedger``; omitting it here
         # would turn a setting into an implicit policy rewrite.
         research_cache_fill_enabled=True,
+        # THS kill-switch is a stacked gate; durable attestation/provder/source
+        # gates still decide actual provider I/O.
+        ths_enabled=bool(getattr(settings, "MARKET_DATA_THS_ENABLED", False)),
     )
 
 

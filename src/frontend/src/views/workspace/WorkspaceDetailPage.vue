@@ -221,19 +221,12 @@
               @switch-tab="handleSwitchTab"
             />
           </el-tab-pane>
-          <el-tab-pane
+          <WorkspaceOptimizationPane
             v-if="showOptTab"
-            :label="t('workspaceDetail.tabOptimization')"
-            name="optimization"
-            closable
-          >
-            <WorkspaceOptimizationTab
-              :workspace-id="workspaceId"
-              :active="activeTab === 'optimization'"
-              :toolbar-in-header="false"
-              :initial-unit-id="initialOptUnitId"
-            />
-          </el-tab-pane>
+            :workspace-id="workspaceId"
+            :active="activeTab === 'optimization'"
+            :initial-unit-id="initialOptUnitId"
+          />
           <el-tab-pane
             v-if="showReportTab"
             :label="t('workspaceDetail.tabReport')"
@@ -262,7 +255,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
@@ -276,17 +270,17 @@ import {
 } from '@element-plus/icons-vue'
 import TradingWorkspaceUnitsTab from '@/components/workspace/TradingWorkspaceUnitsTab.vue'
 import WorkspaceDataSourceDialog from '@/components/workspace/WorkspaceDataSourceDialog.vue'
-import WorkspaceOptimizationTab from '@/components/workspace/WorkspaceOptimizationTab.vue'
 import WorkspaceReportTab from '@/components/workspace/WorkspaceReportTab.vue'
 import WorkspaceUnitsTab from '@/components/workspace/WorkspaceUnitsTab.vue'
+import WorkspaceOptimizationPane from '@/components/workspace/optimization/WorkspaceOptimizationPane.vue'
 import type { TagType } from '@/constants/strategy'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { UnitRunStatus, WorkspaceStatus, WorkspaceType } from '@/types/workspace'
 
 const { t } = useI18n()
+
 const route = useRoute()
 const store = useWorkspaceStore()
-
 const workspaceId = computed(() => route.params.id as string)
 const activeTab = ref('units')
 const showDataSourceDialog = ref(false)

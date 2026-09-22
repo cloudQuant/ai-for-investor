@@ -9,12 +9,26 @@ inventing an AI-generated candidate.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
-from app.services.research.artifact_broker import ArtifactBroker
+from app.services.research.artifact_broker import ArtifactBroker, StageOutputContext
 from app.services.research.workflow_worker import StageExecutionContext, StageExecutionOutcome
 
 _PRODUCER_IDENTITY = "protocol-v2-deterministic-template"
 _SCHEMA_VERSION = "deterministic-stage-receipt-v1"
+
+
+@dataclass(slots=True)
+class _StageOutputContextAdapter:
+    """Mutable adapter for the artifact broker's writable context protocol."""
+
+    user_id: str
+    run_id: str
+    task_id: str
+    stage_attempt_id: str
+    lease_token: str
+    stage: str
+    request_hash: str
 
 
 class DeterministicClarifyExecutor:
@@ -71,8 +85,17 @@ async def _register_receipt(context: StageExecutionContext):
         "evaluation_id": None,
         "notice": "No model, sandbox, backtest, evaluator, or market trial was executed.",
     }
+    output_context: StageOutputContext = _StageOutputContextAdapter(
+        user_id=context.user_id,
+        run_id=context.run_id,
+        task_id=context.task_id,
+        stage_attempt_id=context.stage_attempt_id,
+        lease_token=context.lease_token,
+        stage=context.stage,
+        request_hash=context.request_hash,
+    )
     return await ArtifactBroker().register_stage_output(
-        context=context,
+        context=output_context,
         kind=f"deterministic_{context.stage.lower()}_receipt",
         content=json.dumps(receipt, ensure_ascii=True, separators=(",", ":"), sort_keys=True),
         media_type="application/json",

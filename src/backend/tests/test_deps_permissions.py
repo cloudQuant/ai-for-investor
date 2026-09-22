@@ -24,8 +24,10 @@ from app.api._dependencies import (
     require_any_permission,
     require_permission,
 )
-from app.models.permission import Permission, Role
+from app.db.database import async_session_maker
+from app.models.permission import Permission, Role, user_roles
 from app.models.user import User
+from app.schemas.auth import TokenPayload
 
 
 class TestHasPermission:
@@ -107,6 +109,43 @@ class TestRequirePermission:
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
             assert exc_info.value.detail == "Insufficient permissions"
+
+    async def test_permission_checker_reads_role_from_association_table(self):
+        async with async_session_maker() as db:
+            user = User(
+                username="permission-admin",
+                email="permission-admin@test.example.com",
+                hashed_password="test-hash",
+                is_active=True,
+            )
+            db.add(user)
+            await db.flush()
+            await db.execute(user_roles.insert().values(user_id=user.id, role=Role.ADMIN.value))
+            current_user = TokenPayload(sub=user.id, username=user.username)
+
+            checker = require_permission(Permission.MANAGE_USERS)
+            resolved_user = await checker(current_user, db)
+
+        assert resolved_user is current_user
+
+    async def test_permission_checker_denies_when_association_table_has_no_grant(self):
+        async with async_session_maker() as db:
+            user = User(
+                username="permission-guest",
+                email="permission-guest@test.example.com",
+                hashed_password="test-hash",
+                is_active=True,
+            )
+            db.add(user)
+            await db.flush()
+            await db.execute(user_roles.insert().values(user_id=user.id, role=Role.GUEST.value))
+            current_user = TokenPayload(sub=user.id, username=user.username)
+
+            checker = require_permission(Permission.MANAGE_USERS)
+            with pytest.raises(HTTPException) as exc_info:
+                await checker(current_user, db)
+
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio

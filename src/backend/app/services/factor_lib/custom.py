@@ -70,7 +70,12 @@ def _eval_node(node: ast.AST, record: dict[str, Any]) -> float:
             _eval_node(node.left, record), _eval_node(node.right, record)
         )
     if isinstance(node, ast.UnaryOp):
-        return _ALLOWED_UNARYOPS[type(node.op)](_eval_node(node.operand, record))
+        operand = _eval_node(node.operand, record)
+        if isinstance(node.op, ast.UAdd):
+            return operator.pos(operand)
+        if isinstance(node.op, ast.USub):
+            return operator.neg(operand)
+        raise ValueError("unsupported unary operator")
     if isinstance(node, ast.Name):
         value = record[node.id]
         if value is None:

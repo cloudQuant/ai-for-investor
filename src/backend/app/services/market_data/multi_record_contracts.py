@@ -162,15 +162,20 @@ def issue_b2_selector(
         seen.add(semantic_key.sha256)
         expected_keys.append(semantic_key.sha256)
 
-    selector_kwargs = {
-        "family_id": contract.family_id,
-        "family_contract_version": contract.family_contract_version,
-        "selector_dimensions": selector,
-        "expected_record_key_sha256s": tuple(expected_keys),
-    }
+    expected_key_manifest = tuple(expected_keys)
     if contract.selector_kind == "slice":
-        return B2SliceSelector(**selector_kwargs)
-    return B2ReportSelector(**selector_kwargs)
+        return B2SliceSelector(
+            family_id=contract.family_id,
+            family_contract_version=contract.family_contract_version,
+            selector_dimensions=selector,
+            expected_record_key_sha256s=expected_key_manifest,
+        )
+    return B2ReportSelector(
+        family_id=contract.family_id,
+        family_contract_version=contract.family_contract_version,
+        selector_dimensions=selector,
+        expected_record_key_sha256s=expected_key_manifest,
+    )
 
 
 def _normalize_mapping(value: Mapping[str, object], *, code: str) -> Mapping[str, object]:

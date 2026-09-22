@@ -105,7 +105,7 @@
 | A5 | scripts 64 个分层 | `scripts/` 平铺 64 项 → `scripts/{ops,diagnostics,migrate,ci,dev}/` 五个子目录；`scripts/README.md` 索引；`diag_err.txt / diag_out.txt` 加入 `.gitignore` 并清理；同名文件以脚本调用方为准（如 CI yaml） | `ls scripts/ -d */` 输出 5 项；CI green | M |
 | A6 | src 多包澄清 | `src/clientportal.gw/` → `vendor/clientportal.gw/`（明确 vendored）；`src/dags/` vs 根 `dags/` 二选一并删另一份；`src/bt_api_py/` 与 `src/backend/` 关系在 `src/README.md` 中显式说明（package / sub-package / vendored 哪种） | `src/README.md` 存在；CI 与文档 build 不破 | M |
 | A7 | 缓存目录治理 | 删除 `.ruff_cache/{0.8.6,0.12.5,0.14.6,0.15.11}` 旧版本目录；`.gitignore` 补齐 `.ruff_cache`、`.mypy_cache`、`.pytest_cache`、`.benchmarks`、`htmlcov`、`coverage`、`.hypothesis` | `git ls-files \| grep -E '(ruff_cache\|mypy_cache\|pytest_cache)/' \| wc -l` = 0 | S |
-| A8 | 锁文件治理 | 根目录 `requirements-{dev,prod}.lock` 角色与 `src/backend/pyproject.toml` 关系在 `CONTRIBUTING.md` "依赖管理" 节中明确：哪个是 SSOT、何时生成、谁可改 | `CONTRIBUTING.md` 含 1 节 "依赖管理"；`scripts/generate_lockfiles.sh` 文档化 | S |
+| A8 | 锁文件治理 | 根目录 `requirements-{dev,prod}.lock` 角色与 `src/backend/pyproject.toml` 关系在 `CONTRIBUTING.md` "依赖管理" 节中明确：哪个是 SSOT、何时生成、谁可改 | `CONTRIBUTING.md` 含 1 节 "依赖管理"；`scripts/ops/generate_lockfiles.sh` 文档化 | S |
 
 ### 2.2 验收 DoD
 
@@ -372,7 +372,7 @@ docs/
 | 前端 .vue 拆分破坏组件 prop 协议 | 中 | 高 | 每个 C16-C25 任务先补 e2e smoke（核心交互流），再拆分；commit-by-commit 等量替换 |
 | 工作量估算偏乐观，6 周做不完 | 中 | 中 | 第 4 周末做 mid-iteration checkpoint；优先牺牲顺序：C13/C14（临界点）→ D8/D9（设计系统 v0.2 细化）→ C21-C25 部分 → E3（Docker Hub）。E2 / E5 / D1 不可降级 |
 | 多人同时改大文件冲突 | 高 | 中 | 按 A→B→C→D→E 主线串行 + 同主线内按 ID 顺序 serialize；同一文件同一天最多 1 个开发者，PR 不超过 24h merge 窗 |
-| 锁文件治理改动 CI 依赖 | 低 | 高 | A8 仅做文档化，不动 `generate_lockfiles.sh` 行为；如需改 lock，单独 RFC |
+| 锁文件治理改动 CI 依赖 | 低 | 高 | A8 仅做文档化，不动 `scripts/ops/generate_lockfiles.sh` 行为；如需改 lock，单独 RFC |
 | 173 主线未完全收口就开始 174 | 高 | 高 | 174 第 0 周（启动前）由 PM 检查 173 §6 全局验收门是否全绿；任何一项不绿则 174 启动延后或抽出冲突项 |
 
 ---

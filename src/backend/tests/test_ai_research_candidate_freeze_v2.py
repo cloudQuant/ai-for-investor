@@ -11,6 +11,7 @@ from app.api.strategy import research as research_api
 from app.config import get_settings
 from app.db import database
 from app.models.ai_research_v2 import (
+    ResearchArtifact,
     ResearchCandidate,
     ResearchCandidateFreezeReceipt,
     ResearchDiscoveryExecution,
@@ -25,6 +26,7 @@ from app.models.ai_research_v2 import (
 )
 from app.services.research.candidate_registry import (
     CandidateRegistry,
+    _require_generation_provenance,
     require_strict_freeze_receipt,
 )
 from app.services.research.task_runner import DurableResearchTaskRunner
@@ -237,6 +239,43 @@ async def test_discovery_freeze_requires_complete_generation_and_task_provenance
             frozen_by=context["task"].user_id,
             expected_candidate_hash=await _candidate_hash(context["candidate_id"]),
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing", ["code", "dependency"])
+async def test_generation_provenance_rejects_missing_candidate_artifact(
+    auth_user,
+    monkeypatch: pytest.MonkeyPatch,
+    missing: str,
+) -> None:
+    context, _dispatch, _attempt = await _published_candidate(
+        auth_user, "freeze-missing-candidate-artifact"
+    )
+    async with database.async_session_maker() as session:
+        candidate = await session.get(ResearchCandidate, context["candidate_id"])
+        assert candidate is not None
+        missing_artifact_id = (
+            candidate.code_artifact_id if missing == "code" else candidate.dependency_artifact_id
+        )
+        run = await session.get(ResearchRun, candidate.run_id)
+        assert run is not None
+        existing_get = session.get
+
+        async def get_without_candidate_artifact(
+            entity: object,
+            ident: object,
+        ) -> object | None:
+            if entity is ResearchArtifact and ident == missing_artifact_id:
+                return None
+            return await existing_get(entity, ident)
+
+        monkeypatch.setattr(session, "get", get_without_candidate_artifact)
+
+        with pytest.raises(
+            ValueError,
+            match="^CANDIDATE_FREEZE_GENERATION_PROVENANCE_INVALID$",
+        ):
+            await _require_generation_provenance(session, candidate=candidate, run=run)
 
 
 @pytest.mark.asyncio

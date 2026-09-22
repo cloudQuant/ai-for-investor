@@ -2777,8 +2777,9 @@ def _trigger_definitions(
                 "SELECT trigger.tgname, trigger.tgtype::text || ' ' || procedure.proname || "
                 "' ' || procedure.prosrc, relation_namespace.nspname, current_schema(), "
                 "relation.oid, "
-                "to_regclass(format('%I.%I', current_schema(), :table_name))::oid, "
-                "procedure_namespace.nspname, trigger.tgenabled, trigger.tgqual, "
+                "to_regclass(format('%I.%I', current_schema(), "
+                "cast(:table_name as text)))::oid, "
+                "procedure_namespace.nspname, trigger.tgenabled::text, trigger.tgqual, "
                 "trigger.tgattr::text, pg_get_triggerdef(trigger.oid, true), "
                 "pg_get_functiondef(procedure.oid) FROM pg_trigger AS trigger "
                 "JOIN pg_class AS relation ON relation.oid = trigger.tgrelid "
@@ -2788,9 +2789,10 @@ def _trigger_definitions(
                 "JOIN pg_namespace AS procedure_namespace "
                 "ON procedure_namespace.oid = procedure.pronamespace "
                 "WHERE relation_namespace.nspname = current_schema() "
-                "AND relation.relname = :table_name "
+                "AND relation.relname = cast(:table_name as text) "
                 "AND relation.oid = "
-                "to_regclass(format('%I.%I', current_schema(), :table_name))::oid "
+                "to_regclass(format('%I.%I', current_schema(), "
+                "cast(:table_name as text)))::oid "
                 "AND NOT trigger.tgisinternal"
             ),
             {"table_name": table_name},
@@ -2843,7 +2845,8 @@ def _postgresql_function_definition(
         bind.execute(
             sa.text(
                 "SELECT procedure_namespace.nspname, current_schema(), procedure.oid, "
-                "to_regprocedure(format('%I.%I()', current_schema(), :function_name))::oid, "
+                "to_regprocedure(format('%I.%I()', current_schema(), "
+                "cast(:function_name as text)))::oid, "
                 "pg_get_functiondef(procedure.oid), "
                 "(SELECT COUNT(*) FROM pg_trigger AS referencing_trigger "
                 "WHERE referencing_trigger.tgfoid = procedure.oid), "
@@ -2853,18 +2856,21 @@ def _postgresql_function_definition(
                 "ON target_namespace.oid = target_relation.relnamespace "
                 "WHERE target_trigger.tgfoid = procedure.oid "
                 "AND NOT target_trigger.tgisinternal "
-                "AND target_trigger.tgname = :trigger_name "
+                "AND target_trigger.tgname = cast(:trigger_name as text) "
                 "AND target_namespace.nspname = current_schema() "
-                "AND target_relation.relname = :table_name "
+                "AND target_relation.relname = cast(:table_name as text) "
                 "AND target_relation.oid = "
-                "to_regclass(format('%I.%I', current_schema(), :table_name))::oid) "
+                "to_regclass(format('%I.%I', current_schema(), "
+                "cast(:table_name as text)))::oid) "
                 "FROM pg_proc AS procedure "
                 "JOIN pg_namespace AS procedure_namespace "
                 "ON procedure_namespace.oid = procedure.pronamespace "
                 "WHERE procedure_namespace.nspname = current_schema() "
-                "AND procedure.proname = :function_name AND procedure.pronargs = 0 "
+                "AND procedure.proname = cast(:function_name as text) "
+                "AND procedure.pronargs = 0 "
                 "AND procedure.oid = "
-                "to_regprocedure(format('%I.%I()', current_schema(), :function_name))::oid"
+                "to_regprocedure(format('%I.%I()', current_schema(), "
+                "cast(:function_name as text)))::oid"
             ),
             {
                 "function_name": function_name,
@@ -3517,6 +3523,11 @@ def _normalize_sql(value: str) -> tuple[Any, ...]:
     if tokens is None:
         return ("__INVALID_SQL__", source)
     tokens = _strip_known_postgresql_casts(tokens)
+    # The trim rewrite must run before scalar-parenthesis removal: PostgreSQL
+    # emits ``TRIM(BOTH FROM x)`` (three argument tokens), which scalar
+    # removal would leave parenthesized while the authored shorthand
+    # ``trim(x)`` loses its single-token parentheses.
+    tokens = _rewrite_postgresql_trim(tokens)
     tokens = _remove_scalar_parentheses(tokens)
     tokens = _rewrite_postgresql_any(tokens)
     try:
@@ -3714,6 +3725,27 @@ def _rewrite_postgresql_any(tokens: list[str]) -> list[str]:
             continue
         normalized[position : close + 1] = ["IDENT:IN", "(", *contents[2:-1], ")"]
         position += 1
+    return normalized
+
+
+def _rewrite_postgresql_trim(tokens: list[str]) -> list[str]:
+    # PostgreSQL reflects the ``trim(x)`` shorthand as the standard explicit
+    # form ``TRIM(BOTH FROM x)`` in ``pg_get_constraintdef``.  Both sides of
+    # the comparison pass through this rewrite, so dropping the reviewed
+    # ``BOTH FROM`` qualifier aligns the token sequence for either spelling.
+    normalized = list(tokens)
+    position = 0
+    while position + 3 < len(normalized):
+        if (
+            _sql_word(normalized[position]) != "TRIM"
+            or normalized[position + 1] != "("
+            or _sql_word(normalized[position + 2]) != "BOTH"
+            or _sql_word(normalized[position + 3]) != "FROM"
+        ):
+            position += 1
+            continue
+        del normalized[position + 2 : position + 4]
+        position += 2
     return normalized
 
 

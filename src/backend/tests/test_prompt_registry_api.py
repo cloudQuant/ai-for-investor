@@ -44,6 +44,7 @@ async def test_admin_prompt_templates_create_list_activate_and_test_render(clien
 
     assert first.status_code == 201
     assert second.status_code == 201
+    assert isinstance(first.json()["created_by"], str)
     first_id = first.json()["id"]
     second_id = second.json()["id"]
 

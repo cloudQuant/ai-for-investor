@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -48,7 +50,10 @@ from app.services.market_data.providers import (
     ProviderFetchResult,
     ProviderMarketObservation,
 )
-from app.services.market_data.publication import MarketDataVisibilityAnchor
+from app.services.market_data.publication import (
+    MarketDataDeferredPublicationIntent,
+    MarketDataVisibilityAnchor,
+)
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.query_service import (
     MarketDataQueryService,
@@ -60,6 +65,7 @@ from app.services.market_data.snapshot_freshness import (
 )
 from app.services.market_data.source_policy import MarketDataLocalReadSource
 from app.services.market_data.store import (
+    DeferredProviderFetch,
     LocalObservationRevision,
     MarketDataStoreError,
     PersistedProviderFetch,
@@ -152,6 +158,19 @@ def _cursor_with_payload(token: str, payload: dict[str, object]) -> str:
         .rstrip("=")
     )
     return f"{encoded}.{signature}"
+
+
+def _cursor_with_signed_payload(payload: dict[str, object]) -> str:
+    """Build a valid-HMAC cursor so decoder field validation is tested directly."""
+    encoded_payload = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    signature = hmac.new(
+        _CURSOR_SIGNING_KEY.encode("utf-8"),
+        encoded_payload,
+        hashlib.sha256,
+    ).digest()
+    encoded = base64.urlsafe_b64encode(encoded_payload).decode("ascii").rstrip("=")
+    encoded_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"{encoded}.{encoded_signature}"
 
 
 def _request(
@@ -645,6 +664,52 @@ class _Store:
             passing_observation_count=len(result.observations),
             failed_observation_count=0,
             received_at=received_at,
+        )
+
+
+class _DeferredReceiptStore(_Store):
+    """Return a durable but unpublished receipt and record subsequent reads."""
+
+    def __init__(self, *, calendar: CalendarSnapshot) -> None:
+        super().__init__(calendar=calendar, revisions=[])
+        self.visibility_anchor_reads = 0
+        self.visibility_anchor_reads_at_persist = 0
+        self.read_cutoffs_at_persist = 0
+
+    async def resolve_visibility_anchor(
+        self,
+        *,
+        knowledge_cutoff: datetime,
+    ) -> MarketDataVisibilityAnchor:
+        self.visibility_anchor_reads += 1
+        return await super().resolve_visibility_anchor(knowledge_cutoff=knowledge_cutoff)
+
+    async def persist_provider_result(
+        self,
+        context: ResolvedMarketDataQueryContext,
+        result: ProviderFetchResult,
+        *,
+        received_at: datetime,
+        source_authorization: MarketDataSourceAuthorization | None = None,
+        fetch_lease: MarketDataFetchLeaseHandle | None = None,
+    ) -> DeferredProviderFetch:
+        self.persisted.append((context, result))
+        self.persisted_source_authorizations.append(source_authorization)
+        self.persisted_fetch_leases.append(fetch_lease)
+        self.visibility_anchor_reads_at_persist = self.visibility_anchor_reads
+        self.read_cutoffs_at_persist = len(self.read_cutoffs)
+        return DeferredProviderFetch(
+            series_id="series-deferred",
+            source_snapshot_id="snapshot-deferred",
+            publication_id="publication-deferred",
+            observation_revision_ids=("revision-hidden",),
+            passing_observation_count=1,
+            failed_observation_count=0,
+            local_received_at=received_at,
+            intent=MarketDataDeferredPublicationIntent(
+                workflow_kind="legacy_stock_daily_import",
+                intent_sha256="a" * 64,
+            ),
         )
 
 
@@ -2720,6 +2785,45 @@ async def test_mismatched_receipt_request_is_rejected_before_persistence_and_fal
 
 
 @pytest.mark.asyncio
+async def test_deferred_provider_receipt_fails_closed_before_visible_reread() -> None:
+    """A deferred write cannot become a fetch result or advance the local snapshot."""
+    context = _context()
+    store = _DeferredReceiptStore(calendar=_calendar())
+    provider = _Provider(_provider_result())
+    fetch_lease = MarketDataFetchLeaseHandle(
+        lease_key_sha256="e" * 64,
+        owner_token="test-deferred-receipt-owner",
+        fence_token=23,
+        expires_at=_at(12) + timedelta(minutes=5),
+    )
+    leases = _FetchLeases(handle=fetch_lease)
+    service = _service(
+        context=context,
+        store=store,
+        provider_routes=(_route(provider),),
+        fetch_leases=leases,
+    )
+
+    with pytest.raises(MarketDataQueryServiceError) as deferred:
+        await service.execute(_request())
+
+    assert deferred.value.code == "PROVIDER_RECEIPT_NOT_VISIBLE"
+    assert len(provider.requests) == 1
+    assert len(store.persisted) == 1
+    assert leases.released_handles == [fetch_lease]
+    assert leases.released_handles[0] is fetch_lease
+    # The four observation reads are the initial and post-lease coverage / response
+    # reads. No receipt re-read or response construction follows the deferred write.
+    assert store.read_cutoffs_at_persist == 4
+    assert len(store.read_cutoffs) == store.read_cutoffs_at_persist
+    assert store.read_modes == [True, False, True, False]
+    # The initial and post-lease anchors exist; the deferred receipt never creates a
+    # third anchor which could imply the staged facts are visible.
+    assert store.visibility_anchor_reads_at_persist == 2
+    assert store.visibility_anchor_reads == store.visibility_anchor_reads_at_persist
+
+
+@pytest.mark.asyncio
 async def test_invalid_cursor_is_rejected_before_a_provider_or_store_write() -> None:
     """Malformed pagination input cannot create a hidden online cache side effect."""
     from app.services.market_data.query_service import MarketDataQueryServiceError
@@ -2738,6 +2842,66 @@ async def test_invalid_cursor_is_rejected_before_a_provider_or_store_write() -> 
     assert invalid.value.code == "CURSOR_INVALID"
     assert provider.requests == []
     assert store.persisted == []
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement"),
+    [
+        ("principal_scope_sha256", None),
+        ("tenant_scope_sha256", []),
+        ("entitlement_revision_sha256", 7),
+        ("policy_descriptor_hash", False),
+        ("access_grant_descriptor_hash", 42),
+        ("visibility_anchor.max_visibility_sequence", True),
+        ("visibility_anchor.max_visibility_sequence", -1),
+        ("identity_visibility_anchor.max_visibility_sequence", 1.5),
+    ],
+    ids=(
+        "principal-hash-not-string",
+        "tenant-hash-not-string",
+        "entitlement-hash-not-string",
+        "policy-hash-not-string",
+        "optional-grant-hash-not-string",
+        "visibility-sequence-bool",
+        "visibility-sequence-negative",
+        "identity-sequence-not-int",
+    ),
+)
+@pytest.mark.asyncio
+async def test_signed_cursor_with_invalid_field_types_fails_before_local_reads(
+    field_name: str,
+    replacement: object,
+) -> None:
+    """A valid HMAC does not bypass runtime validation of signed JSON fields."""
+    context = _context(_request(page_size=1))
+    store = _Store(
+        calendar=_calendar(),
+        revisions=[_revision(_at(hour)) for hour in (9, 10, 11)],
+    )
+    provider = _Provider(_provider_result())
+    service = _service(context=context, store=store, provider_routes=(_route(provider),))
+
+    first = await service.execute(_request(page_size=1))
+    assert first.next_cursor is not None
+    payload = _cursor_payload(first.next_cursor)
+    if "." in field_name:
+        anchor_name, sequence_name = field_name.split(".", maxsplit=1)
+        anchor = payload[anchor_name]
+        assert isinstance(anchor, dict)
+        anchor[sequence_name] = replacement
+    else:
+        payload[field_name] = replacement
+    malformed_signed_cursor = _cursor_with_signed_payload(payload)
+    reads_before = len(store.read_cutoffs)
+    resolver_requests_before = len(service._resolver.requests)
+
+    with pytest.raises(MarketDataQueryServiceError) as invalid:
+        await service.execute(_request(page_size=1, cursor=malformed_signed_cursor))
+
+    assert invalid.value.code == "CURSOR_INVALID"
+    assert len(store.read_cutoffs) == reads_before
+    assert len(service._resolver.requests) == resolver_requests_before
+    assert provider.requests == []
 
 
 @pytest.mark.asyncio

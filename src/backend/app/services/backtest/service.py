@@ -12,11 +12,11 @@ import shutil
 import subprocess
 import sys
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeGuard, cast
 
 from sqlalchemy import update
 
@@ -86,6 +86,11 @@ from app.utils.response_cache import invalidate_cache
 from app.websocket_manager import manager as ws_manager
 
 logger = logging.getLogger(__name__)
+
+
+def _is_string_keyed_mapping(value: object) -> TypeGuard[Mapping[str, object]]:
+    return isinstance(value, Mapping) and all(isinstance(key, str) for key in value)
+
 
 _RUNTIME_DIR_CLIENT_FORBIDDEN = "BACKTEST_RUNTIME_DIR_CLIENT_FORBIDDEN"
 _WORKSPACE_RUNTIME_PATH_INVALID = "BACKTEST_WORKSPACE_RUNTIME_PATH_INVALID"
@@ -158,6 +163,14 @@ class BacktestService:
         return {}
 
     @staticmethod
+    def _copy_data_precheck(value: object) -> dict[str, object]:
+        if not value:
+            return {}
+        if not _is_string_keyed_mapping(value):
+            raise TypeError("data_precheck must be a string-keyed mapping")
+        return dict(value)
+
+    @staticmethod
     def _get_request_date(task: BacktestTask, key: str) -> datetime | str:
         request_data = BacktestService._get_request_data(task)
         value = request_data.get(key)
@@ -228,7 +241,9 @@ class BacktestService:
                 symbol=cast(str, task.symbol),
                 status=str(task.status),
                 metrics=standard_metrics,
-                data_precheck=dict(request_data.get("data_precheck") or {}),
+                data_precheck=BacktestService._copy_data_precheck(
+                    request_data.get("data_precheck")
+                ),
             )
         return BacktestResult(
             task_id=cast(str, task.id),
@@ -276,7 +291,7 @@ class BacktestService:
             ),
             standard_metrics=standard_metrics,
             result_summary=result_summary,
-            data_precheck=dict(request_data.get("data_precheck") or {}),
+            data_precheck=BacktestService._copy_data_precheck(request_data.get("data_precheck")),
             robustness=None,
             total_trades=BacktestService._coerce_int(
                 result_model.total_trades if result_model else None,
@@ -1021,9 +1036,13 @@ class BacktestService:
                             symbol=cast(str, task.symbol),
                             status=TaskStatus(task.status).value,
                             metrics=metrics,
-                            data_precheck=dict(request_data.get("data_precheck") or {}),
+                            data_precheck=BacktestService._copy_data_precheck(
+                                request_data.get("data_precheck")
+                            ),
                         ),
-                        data_precheck=dict(request_data.get("data_precheck") or {}),
+                        data_precheck=BacktestService._copy_data_precheck(
+                            request_data.get("data_precheck")
+                        ),
                         robustness=None,
                         total_trades=BacktestService._coerce_int(metrics.get("total_trades"), 0),
                         profitable_trades=BacktestService._coerce_int(
@@ -1121,7 +1140,7 @@ class BacktestService:
             symbol=str(task.symbol),
             status=TaskStatus(task.status),
             metrics=CanonicalMetrics.model_validate(standard_metrics),
-            data_precheck=dict(request_data.get("data_precheck") or {}),
+            data_precheck=BacktestService._copy_data_precheck(request_data.get("data_precheck")),
             robustness=robustness,
         )
 

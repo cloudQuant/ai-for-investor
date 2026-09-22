@@ -1,16 +1,34 @@
 <template>
-  <section class="signal-panel" aria-labelledby="signal-history-title">
+  <section
+    class="signal-panel"
+    aria-labelledby="signal-history-title"
+  >
     <div class="panel-head">
       <div>
         <span class="panel-kicker">{{ t('stockAnalysis.signalHistoryKicker') }}</span>
-        <h3 id="signal-history-title">{{ t('stockAnalysis.signalHistoryTitle') }}</h3>
+        <h3 id="signal-history-title">
+          {{ t('stockAnalysis.signalHistoryTitle') }}
+        </h3>
       </div>
       <span class="signal-note">{{ t('stockAnalysis.signalHistoryNote') }}</span>
     </div>
 
-    <p v-if="loading" class="signal-empty">{{ t('common.loading') }}</p>
-    <p v-else-if="!items.length" class="signal-empty">{{ t('stockAnalysis.signalHistoryEmpty') }}</p>
-    <div v-else class="signal-table-wrap">
+    <p
+      v-if="loading"
+      class="signal-empty"
+    >
+      {{ t('common.loading') }}
+    </p>
+    <p
+      v-else-if="!items.length"
+      class="signal-empty"
+    >
+      {{ t('stockAnalysis.signalHistoryEmpty') }}
+    </p>
+    <div
+      v-else
+      class="signal-table-wrap"
+    >
       <table class="signal-table">
         <thead>
           <tr>
@@ -23,7 +41,10 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in items" :key="item.id">
+          <tr
+            v-for="item in items"
+            :key="item.id"
+          >
             <td>{{ item.as_of_date }}</td>
             <td>{{ sourceLabel(item.source) }}</td>
             <td>

@@ -7,8 +7,11 @@ import typing
 
 from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.permission import ROLE_PERMISSIONS, Permission
+from app.db.database import get_db
+from app.models.permission import ROLE_PERMISSIONS, Permission, Role, user_roles
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 from app.utils.security import decode_access_token
@@ -100,6 +103,55 @@ async def get_current_user_optional(
     return current_user
 
 
+def _compatibility_role_values(user: object) -> list[object] | None:
+    """Read legacy in-memory role assignments when a caller supplies them."""
+    attached_roles: object = getattr(user, "roles", None)
+    if not isinstance(attached_roles, (list, tuple)):
+        return None
+
+    role_values: list[object] = []
+    for assignment in attached_roles:
+        role_value: object = getattr(assignment, "role", assignment)
+        role_values.append(role_value)
+    return role_values
+
+
+def _roles_grant_permission(role_values: list[object], permission: Permission) -> bool:
+    user_permissions: list[Permission] = []
+    for role_value in role_values:
+        try:
+            role = Role(role_value)
+        except (TypeError, ValueError):
+            continue
+        user_permissions.extend(ROLE_PERMISSIONS.get(role, []))
+    return permission in user_permissions
+
+
+async def _database_role_values(db: AsyncSession, user_id: str) -> list[object]:
+    result = await db.execute(select(user_roles.c.role).where(user_roles.c.user_id == user_id))
+    role_values: list[object] = []
+    for role_value in result.scalars().all():
+        if isinstance(role_value, (str, Role)):
+            role_values.append(role_value)
+    return role_values
+
+
+async def _effective_role_values(user: TokenPayload, db: AsyncSession) -> list[object]:
+    role_values = _compatibility_role_values(user)
+    if role_values is None:
+        role_values = await _database_role_values(db, user.sub)
+    return role_values
+
+
+async def _user_has_permission(
+    user: TokenPayload,
+    permission: Permission,
+    db: AsyncSession,
+) -> bool:
+    role_values = await _effective_role_values(user, db)
+    return _roles_grant_permission(role_values, permission)
+
+
 def has_permission(user: User, permission: Permission) -> bool:
     """Check whether a user has a specific permission.
 
@@ -110,12 +162,12 @@ def has_permission(user: User, permission: Permission) -> bool:
     Returns:
         True if the user has the permission, False otherwise.
     """
-    # Aggregate permissions from all user roles.
-    user_permissions = []
-    for role in user.roles:
-        user_permissions.extend(ROLE_PERMISSIONS.get(role.role, []))
-
-    return permission in user_permissions
+    # User.roles was part of the legacy ORM contract, while current role
+    # assignments are persisted in the user_roles association table. Keep this
+    # helper compatible with explicitly attached role assignments, and fail
+    # closed when a plain User has no such compatibility data.
+    role_values = _compatibility_role_values(user)
+    return role_values is not None and _roles_grant_permission(role_values, permission)
 
 
 def require_permission(permission: Permission) -> typing.Any:
@@ -128,8 +180,11 @@ def require_permission(permission: Permission) -> typing.Any:
         A dependency function that checks for the permission.
     """
 
-    async def permission_checker(user: User = Depends(get_current_user)) -> User:
-        if not has_permission(user, permission):
+    async def permission_checker(
+        user: TokenPayload = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> TokenPayload:
+        if not await _user_has_permission(user, permission, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
             )
@@ -158,12 +213,14 @@ def require_any_permission(*permissions: Permission) -> typing.Any:
         A dependency function that checks for any of the specified permissions.
     """
 
-    async def permission_checker(user: User = Depends(get_current_user)) -> User:
-        user_permissions = []
-        for role in user.roles:
-            user_permissions.extend(ROLE_PERMISSIONS.get(role.role, []))
-
-        has_any = any(p in user_permissions for p in permissions)
+    async def permission_checker(
+        user: TokenPayload = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> TokenPayload:
+        role_values = await _effective_role_values(user, db)
+        has_any = any(
+            _roles_grant_permission(role_values, permission) for permission in permissions
+        )
         if not has_any:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

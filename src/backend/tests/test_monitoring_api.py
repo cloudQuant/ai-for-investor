@@ -72,6 +72,49 @@ class TestAlertRules:
             )
             assert response.status_code == 200
 
+    async def test_create_alert_rule_without_description(self, client: AsyncClient, auth_headers):
+        """Test omitted descriptions remain None through service and response."""
+        with patch("app.api.monitoring.MonitoringService") as mock_service_class:
+            from datetime import datetime
+
+            from app.schemas.monitoring import AlertSeverity, AlertType, TriggerType
+
+            mock_service = AsyncMock()
+            mock_service_class.return_value = mock_service
+            mock_service.create_alert_rule = AsyncMock(
+                return_value={
+                    "id": "rule_123",
+                    "user_id": "user_123",
+                    "name": "Test Rule",
+                    "description": None,
+                    "alert_type": AlertType.ACCOUNT,
+                    "severity": AlertSeverity.WARNING,
+                    "trigger_type": TriggerType.THRESHOLD,
+                    "trigger_config": {"threshold": 0.1},
+                    "notification_enabled": True,
+                    "notification_channels": ["email"],
+                    "is_active": True,
+                    "triggered_count": 0,
+                    "last_triggered_at": None,
+                    "created_at": datetime.now(),
+                    "updated_at": datetime.now(),
+                }
+            )
+            request_without_description = VALID_ALERT_RULE_REQUEST.copy()
+            request_without_description.pop("description")
+
+            response = await client.post(
+                "/api/v1/monitoring/rules",
+                headers=auth_headers,
+                json=request_without_description,
+            )
+
+            assert response.status_code == 200
+            assert response.json()["description"] is None
+            mock_service.create_alert_rule.assert_awaited_once()
+            assert mock_service.create_alert_rule.await_args is not None
+            assert mock_service.create_alert_rule.await_args.kwargs["description"] is None
+
     async def test_create_alert_rule_invalid_data(self, client: AsyncClient, auth_headers):
         """Test alert rule creation with invalid data."""
         response = await client.post(

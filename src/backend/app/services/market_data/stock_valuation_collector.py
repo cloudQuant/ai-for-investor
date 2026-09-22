@@ -293,9 +293,10 @@ class StockValuationCollector:
                 # the critical section so cancellation cannot erase knowledge
                 # of a receipt that became durable just before the interrupt.
                 persistence_task = asyncio.create_task(
-                    self._store.persist_provider_result(
-                        target.context,
-                        result,
+                    _persist_visible_provider_result(
+                        store=self._store,
+                        context=target.context,
+                        result=result,
                         received_at=local_received_at,
                         source_authorization=target.source_authorization,
                     )
@@ -1083,6 +1084,26 @@ def _json_safe(value: object, *, depth: int = 0) -> object:
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+async def _persist_visible_provider_result(
+    *,
+    store: MarketDataStore,
+    context: ResolvedMarketDataQueryContext,
+    result: ProviderFetchResult,
+    received_at: datetime,
+    source_authorization: MarketDataSourceAuthorization,
+) -> PersistedProviderFetch:
+    """Persist one target and reject receipts that are not yet query-visible."""
+    receipt = await store.persist_provider_result(
+        context,
+        result,
+        received_at=received_at,
+        source_authorization=source_authorization,
+    )
+    if not isinstance(receipt, PersistedProviderFetch):
+        raise StockValuationCollectorError("STOCK_VALUATION_PERSISTENCE_DEFERRED")
+    return receipt
 
 
 async def _await_persistence_after_cancellation(

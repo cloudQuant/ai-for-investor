@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -20,6 +23,7 @@ from app.services.market_data.multi_record_query_service import (
     MultiRecordLocalQueryServiceError,
     MultiRecordLocalReadRequest,
     _dimensions_match_selector,
+    _validated_record_dimensions,
 )
 from app.services.market_data.publication import MarketDataVisibilityAnchor
 from app.services.market_data.store import LocalObservationRevision
@@ -320,6 +324,52 @@ async def test_empty_expected_manifest_without_durable_zero_receipt_stays_incomp
     assert execution.completeness.reason_codes == ("DURABLE_SELECTOR_EVIDENCE_MISSING",)
     assert execution.observations == ()
     assert store.read_calls == []
+
+
+@pytest.mark.asyncio
+async def test_missing_durable_receipt_preserves_nonempty_expected_manifest() -> None:
+    """A missing receipt remains incomplete with the exact declared key set."""
+    expected = _revision("IF2610C100")
+    selector = _selector(expected)
+    store = _LocalOnlyStore(
+        revisions=(),
+        anchor=MarketDataVisibilityAnchor(visible_at=_at(14), max_visibility_sequence=7),
+        evidence=None,
+    )
+
+    execution = await _service(store).execute(_request(context=_local_context(), selector=selector))
+
+    assert execution.completeness.status is CompletenessStatus.INCOMPLETE
+    assert execution.completeness.expected_record_key_sha256s == frozenset(
+        {expected.semantic_record_key_sha256}
+    )
+    assert execution.completeness.missing_record_key_sha256s == frozenset(
+        {expected.semantic_record_key_sha256}
+    )
+    assert execution.observations == ()
+    assert store.read_calls == []
+
+
+def test_store_record_with_malformed_dimensions_keeps_fail_closed_error() -> None:
+    """A Store row with non-object dimensions is rejected as an integrity error."""
+    valid = _revision("IF2610C100")
+    payload = json.loads(valid.semantic_record_key)
+    payload["dimensions"] = None
+    canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    malformed = replace(
+        valid,
+        semantic_record_key=canonical,
+        semantic_record_key_sha256=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    )
+
+    with pytest.raises(MultiRecordLocalQueryServiceError) as rejected:
+        _validated_record_dimensions(
+            malformed,
+            family_id="option.derivative",
+            family_contract_version="market-data-family-v1",
+        )
+
+    assert rejected.value.code == "B2_LOCAL_RECORD_INTEGRITY"
 
 
 @pytest.mark.asyncio

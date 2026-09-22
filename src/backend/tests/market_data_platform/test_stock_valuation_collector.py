@@ -9,6 +9,7 @@ import socket
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import func, select
@@ -30,6 +31,7 @@ from app.services.market_data.access import MarketDataSourceAuthorization
 from app.services.market_data.catalog import DatasetStorageResolution
 from app.services.market_data.coverage import QueryIdentity
 from app.services.market_data.identity import ResolvedMarketDataIdentity
+from app.services.market_data.publication import MarketDataDeferredPublicationIntent
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.snapshot_importer import FrozenSnapshotIdentity
 from app.services.market_data.stock_valuation_collector import (
@@ -51,7 +53,12 @@ from app.services.market_data.stock_valuation_collector import (
     StockValuationCollectorPartialPublishCancelledError,
     StockValuationCollectorPartialPublishError,
 )
-from app.services.market_data.store import MarketDataStore, MarketDataStoreError
+from app.services.market_data.store import (
+    DeferredProviderFetch,
+    MarketDataStore,
+    MarketDataStoreError,
+    PersistedProviderFetch,
+)
 
 UTC = timezone.utc
 CAPTURED_AT = datetime(2026, 9, 8, 7, 15, tzinfo=UTC)
@@ -59,6 +66,33 @@ LOCAL_RECEIVED_AT = datetime(2026, 9, 8, 8, 0, tzinfo=UTC)
 DATASET_ID = "dataset-stock-valuation"
 PROVIDER_ID = "akshare"
 SOURCE_REVISION = STOCK_VALUATION_CAPTURE_SOURCE_REVISION
+
+
+def _persisted_fetch() -> PersistedProviderFetch:
+    return PersistedProviderFetch(
+        series_id="series-stock-valuation",
+        source_snapshot_id="snapshot-stock-valuation",
+        observation_revision_ids=("revision-stock-valuation",),
+        passing_observation_count=1,
+        failed_observation_count=0,
+        received_at=LOCAL_RECEIVED_AT,
+    )
+
+
+def _deferred_fetch() -> DeferredProviderFetch:
+    return DeferredProviderFetch(
+        series_id="series-stock-valuation",
+        source_snapshot_id="snapshot-stock-valuation",
+        publication_id="publication-stock-valuation",
+        observation_revision_ids=("revision-stock-valuation-hidden",),
+        passing_observation_count=1,
+        failed_observation_count=0,
+        local_received_at=LOCAL_RECEIVED_AT,
+        intent=MarketDataDeferredPublicationIntent(
+            workflow_kind="legacy_stock_daily_import",
+            intent_sha256=_sha("stock-valuation-deferred-test"),
+        ),
+    )
 
 
 def _sha(value: str) -> str:
@@ -912,6 +946,50 @@ async def test_later_store_failure_exposes_only_the_durable_prefix(
     assert len(partial.value.persisted_fetches) == 1
     assert len(prefix_rows) == 1
     assert counts == (1, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_deferred_store_receipt_fails_closed_before_any_visible_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = _target("600000", venue="CN-SSE")
+
+    async with async_session_maker() as db:
+        await _seed_control_plane(db)
+        store = MarketDataStore(db, clock=lambda: LOCAL_RECEIVED_AT)
+        persist = AsyncMock(return_value=_deferred_fetch())
+        monkeypatch.setattr(store, "persist_provider_result", persist)
+        with pytest.raises(StockValuationCollectorError) as rejected:
+            await _collector(store=store).publish_captured_batch(
+                batch=_batch([_row("600000")]),
+                targets=(target,),
+            )
+
+    assert rejected.value.code == "STOCK_VALUATION_PERSISTENCE_DEFERRED"
+    persist.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deferred_store_receipt_keeps_only_the_persisted_partial_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    targets = (_target("000001", venue="CN-SZSE"), _target("600000", venue="CN-SSE"))
+    first_receipt = _persisted_fetch()
+
+    async with async_session_maker() as db:
+        await _seed_control_plane(db)
+        store = MarketDataStore(db, clock=lambda: LOCAL_RECEIVED_AT)
+        persist = AsyncMock(side_effect=[first_receipt, _deferred_fetch()])
+        monkeypatch.setattr(store, "persist_provider_result", persist)
+        with pytest.raises(StockValuationCollectorPartialPublishError) as partial:
+            await _collector(store=store).publish_captured_batch(
+                batch=_batch([_row("000001"), _row("600000")]),
+                targets=targets,
+            )
+
+    assert partial.value.code == "STOCK_VALUATION_BATCH_PARTIALLY_PUBLISHED"
+    assert partial.value.persisted_fetches == (first_receipt,)
+    assert persist.await_count == 2
 
 
 @pytest.mark.asyncio

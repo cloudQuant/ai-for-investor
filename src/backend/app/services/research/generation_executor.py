@@ -163,7 +163,7 @@ class ResearchGenerationExecutor:
             reservation_context = None
             token_amount = self._policy.reserved_tokens
             request_hash = inputs.request_hash
-            additional_requests = ()
+            additional_requests: tuple[QuotaReservationRequest, ...] = ()
             if self._gateway.requires_budget_bundle:
                 quote = await self._gateway.prepare_budget(
                     run_id=inputs.run_id,
@@ -634,7 +634,10 @@ def _deep_freeze(value: Any) -> Any:
 
 def _json_mapping_copy(value: object) -> dict[str, Any]:
     try:
-        normalized = normalize_payload(dict(value or {}))
+        source = value or {}
+        if not isinstance(source, Mapping):
+            raise TypeError
+        normalized = normalize_payload(dict(source))
     except (TypeError, ValueError):
         raise ValueError("RESEARCH_GENERATION_INPUT_INVALID") from None
     if not isinstance(normalized, dict):

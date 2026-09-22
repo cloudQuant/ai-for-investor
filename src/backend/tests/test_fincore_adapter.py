@@ -6,6 +6,7 @@ for financial metric calculations with fallback to manual calculations.
 """
 
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -134,6 +135,20 @@ class TestCalculateMaxDrawdown:
         # Empty list
         result = adapter.calculate_max_drawdown([])
         assert result == 0.0
+
+    def test_calculate_max_drawdown_all_zero_curve_has_no_runtime_warning(self):
+        """An all-zero curve has no valid peak and should return cleanly."""
+        adapter = FincoreAdapter()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            assert adapter.calculate_max_drawdown([0.0, 0.0, 0.0]) == 0.0
+
+    def test_calculate_max_drawdown_manual_mixed_zero_preserves_fallback(self):
+        """Mixed zero peaks retain the legacy non-finite-result fallback."""
+        adapter = FincoreAdapter(use_fincore=False)
+
+        assert adapter.calculate_max_drawdown([0.0, -10.0, 20.0, 10.0]) == 0.0
 
 
 class TestCalculateTotalReturns:

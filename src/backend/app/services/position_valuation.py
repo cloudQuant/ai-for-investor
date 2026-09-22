@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, overload
 
 from app.services.trading_asset_info_service import (
     LONG_POSITION_FIELD_KEYS,
@@ -156,6 +156,14 @@ _MT5_METAL_CONTRACT_SIZES = {
 _MT5_FOREX_CONTRACT_SIZE = 100000.0
 
 
+@overload
+def safe_float(value: object, default: None) -> float | None: ...
+
+
+@overload
+def safe_float(value: object, default: float = 0.0) -> float: ...
+
+
 def safe_float(value: Any, default: float | None = 0.0) -> float | None:
     if value in (None, ""):
         return default
@@ -163,6 +171,8 @@ def safe_float(value: Any, default: float | None = 0.0) -> float | None:
         for key in ("cost", "amount", "value", "balance", "total", "commission", "fee"):
             item = value.get(key)
             if item not in (None, ""):
+                if default is None:
+                    return safe_float(item, None)
                 return safe_float(item, default)
         return default
     if isinstance(value, (list, tuple)):

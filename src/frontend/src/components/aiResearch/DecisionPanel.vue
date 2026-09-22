@@ -1,9 +1,40 @@
 <template>
-  <section class="trusted-panel" aria-labelledby="trusted-decision-title">
-    <header><span>05</span><div><h3 id="trusted-decision-title">{{ t('strategy.aiResearchTrusted.decision.title') }}</h3><p>{{ t('strategy.aiResearchTrusted.decision.description') }}</p></div></header>
-    <ul v-if="decisions.length" class="trusted-panel__list"><li v-for="decision in decisions" :key="String(decision.id)"><strong>{{ decision.decision }}</strong><span>{{ decision.approval_mode }}</span><small>{{ t('strategy.aiResearchTrusted.decision.evidence', { value: decision.evidence_package_hash }) }}</small></li></ul>
-    <p v-else class="trusted-panel__empty">{{ t('strategy.aiResearchTrusted.decision.empty') }}</p>
-    <button v-if="canCancel" type="button" class="trusted-panel__cancel" @click="emit('cancel')">{{ t('strategy.aiResearchTrusted.decision.cancel') }}</button>
+  <section
+    class="trusted-panel"
+    aria-labelledby="trusted-decision-title"
+  >
+    <header>
+      <span>05</span><div>
+        <h3 id="trusted-decision-title">
+          {{ t('strategy.aiResearchTrusted.decision.title') }}
+        </h3><p>{{ t('strategy.aiResearchTrusted.decision.description') }}</p>
+      </div>
+    </header>
+    <ul
+      v-if="decisions.length"
+      class="trusted-panel__list"
+    >
+      <li
+        v-for="decision in decisions"
+        :key="String(decision.id)"
+      >
+        <strong>{{ decision.decision }}</strong><span>{{ decision.approval_mode }}</span><small>{{ t('strategy.aiResearchTrusted.decision.evidence', { value: decision.evidence_package_hash }) }}</small>
+      </li>
+    </ul>
+    <p
+      v-else
+      class="trusted-panel__empty"
+    >
+      {{ t('strategy.aiResearchTrusted.decision.empty') }}
+    </p>
+    <button
+      v-if="canCancel"
+      type="button"
+      class="trusted-panel__cancel"
+      @click="emit('cancel')"
+    >
+      {{ t('strategy.aiResearchTrusted.decision.cancel') }}
+    </button>
   </section>
 </template>
 

@@ -50,14 +50,17 @@ class PromptTemplateTestResponse(BaseModel):
 
 
 def _serialize_template(template: PromptTemplate) -> PromptTemplateRead:
-    variables = template.variables if isinstance(template.variables, list) else []
+    raw_variables: object = template.variables
+    variables: list[str] = []
+    if isinstance(raw_variables, list):
+        variables = [str(item) for item in raw_variables]
     return PromptTemplateRead(
         id=str(template.id),
         name=str(template.name),
         version=str(template.version),
         content=str(template.content),
         status=str(template.status),
-        variables=[str(item) for item in variables],
+        variables=variables,
         rollout_percentage=int(template.rollout_percentage or 0),
         created_at=template.created_at,
         created_by=str(template.created_by) if template.created_by else None,
@@ -87,7 +90,7 @@ async def create_prompt_template(
             variables=payload.variables,
             status=payload.status,
             rollout_percentage=payload.rollout_percentage,
-            created_by=current_user.id,
+            created_by=str(current_user.id),
         )
     except PromptTemplateConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

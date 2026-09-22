@@ -39,6 +39,23 @@ from app.websocket_manager import manager as ws_manager
 logger = logging.getLogger(__name__)
 
 
+def _enum_wire_text(value: Any) -> str:
+    """Return alert enum values in their wire format without changing strings."""
+    if isinstance(value, (AlertType, AlertSeverity, AlertStatus)):
+        return value.value
+    if type(value) is str:
+        return value
+    return str(value)
+
+
+def _alert_created_at_isoformat(alert: Any) -> str | None:
+    """Return an alert timestamp when the object exposes one."""
+    created_at = getattr(alert, "created_at", None)
+    if created_at is None:
+        return None
+    return created_at.isoformat()
+
+
 class MonitoringService:
     """
     Monitoring and alerting service.
@@ -71,7 +88,7 @@ class MonitoringService:
         self,
         user_id: str,
         name: str,
-        description: str,
+        description: str | None,
         alert_type: str,
         severity: str,
         trigger_type: str,
@@ -151,7 +168,7 @@ class MonitoringService:
         rule = await self.alert_rule_repo.update(rule_id, update_data)
 
         # If the rule was inactive and becomes active, start monitoring.
-        if bool(getattr(rule, "is_active", False)) and not was_active:
+        if rule is not None and rule.is_active and not was_active:
             await self._start_monitoring(rule.id)
 
         return rule
@@ -202,7 +219,7 @@ class MonitoringService:
                 - List of AlertRule objects matching the filters.
                 - Total count of matching rules.
         """
-        filters = {"user_id": user_id}
+        filters: dict[str, str | bool] = {"user_id": user_id}
         if alert_type:
             filters["alert_type"] = alert_type
         if severity:
@@ -266,7 +283,7 @@ class MonitoringService:
                 - List of Alert objects matching the filters.
                 - Total count of matching alerts.
         """
-        filters = {"user_id": user_id}
+        filters: dict[str, str | bool] = {"user_id": user_id}
         if alert_type:
             filters["alert_type"] = alert_type
         if severity:
@@ -530,10 +547,16 @@ class MonitoringService:
             This is a fire-and-forget implementation. Failures are recorded
             in the notification log but do not affect alert processing.
         """
-        webhook = None
-        if isinstance(rule.trigger_config, dict):
-            webhook = rule.trigger_config.get("webhook") or {}
-        url = webhook.get("url") if isinstance(webhook, dict) else None
+        webhook = (
+            rule.trigger_config.get("webhook") or {}
+            if isinstance(rule.trigger_config, dict)
+            else {}
+        )
+        url: str | None = None
+        if isinstance(webhook, dict):
+            raw_url = webhook.get("url")
+            if isinstance(raw_url, str):
+                url = raw_url
         if not url:
             await self._record_notification(
                 alert.id,
@@ -546,20 +569,19 @@ class MonitoringService:
         payload = {
             "alert_id": alert.id,
             "user_id": alert.user_id,
-            "alert_type": str(alert.alert_type),
-            "severity": str(alert.severity),
+            "alert_type": _enum_wire_text(alert.alert_type),
+            "severity": _enum_wire_text(alert.severity),
             "title": alert.title,
             "message": alert.message,
             "details": alert.details,
-            "created_at": alert.created_at.isoformat()
-            if getattr(alert, "created_at", None)
-            else None,
+            "created_at": _alert_created_at_isoformat(alert),
         }
 
         data = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
-        if isinstance(webhook, dict) and isinstance(webhook.get("headers"), dict):
-            headers.update({str(k): str(v) for k, v in webhook["headers"].items()})
+        raw_headers = webhook.get("headers") if isinstance(webhook, dict) else None
+        if isinstance(raw_headers, dict):
+            headers.update({str(k): str(v) for k, v in raw_headers.items()})
         method = str(webhook.get("method", "POST")).upper() if isinstance(webhook, dict) else "POST"
 
         req = urllib.request.Request(url=url, data=data, headers=headers, method=method)
@@ -611,12 +633,12 @@ class MonitoringService:
             "alert_id": alert.id,
             "rule_id": rule.id,
             "data": {
-                "alert_type": alert.alert_type.value,
-                "severity": alert.severity.value,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
                 "title": alert.title,
                 "message": alert.message,
                 "details": alert.details,
-                "created_at": alert.created_at.isoformat(),
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
             },
         }
 
@@ -716,22 +738,22 @@ class MonitoringService:
         by_severity: dict[str, int] = {}
         by_status: dict[str, int] = {}
         for a in alerts:
-            at = getattr(a, "alert_type", None)
-            sev = getattr(a, "severity", None)
-            st = getattr(a, "status", None)
-            by_type[str(at)] = by_type.get(str(at), 0) + 1
-            by_severity[str(sev)] = by_severity.get(str(sev), 0) + 1
-            by_status[str(st)] = by_status.get(str(st), 0) + 1
+            at = _enum_wire_text(getattr(a, "alert_type", None))
+            sev = _enum_wire_text(getattr(a, "severity", None))
+            st = _enum_wire_text(getattr(a, "status", None))
+            by_type[at] = by_type.get(at, 0) + 1
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+            by_status[st] = by_status.get(st, 0) + 1
 
         recent = [
             {
                 "id": a.id,
-                "alert_type": str(getattr(a, "alert_type", "")),
-                "severity": str(getattr(a, "severity", "")),
-                "status": str(getattr(a, "status", "")),
+                "alert_type": _enum_wire_text(getattr(a, "alert_type", "")),
+                "severity": _enum_wire_text(getattr(a, "severity", "")),
+                "status": _enum_wire_text(getattr(a, "status", "")),
                 "title": a.title,
                 "message": a.message,
-                "created_at": a.created_at.isoformat() if getattr(a, "created_at", None) else None,
+                "created_at": _alert_created_at_isoformat(a),
             }
             for a in alerts[:recent_limit]
         ]
@@ -768,7 +790,7 @@ class MonitoringService:
                 continue
             if created_at < start_dt or created_at > end_dt:
                 continue
-            at = str(getattr(a, "alert_type", ""))
+            at = _enum_wire_text(getattr(a, "alert_type", ""))
             by_type[at] = by_type.get(at, 0) + 1
         return {"by_type": by_type}
 

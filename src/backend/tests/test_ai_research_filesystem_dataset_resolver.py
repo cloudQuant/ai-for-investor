@@ -187,6 +187,36 @@ async def test_filesystem_resolver_rejects_tampered_persistent_receipt_schema(
 
 
 @pytest.mark.asyncio
+async def test_filesystem_resolver_rejects_non_string_receipt_hash(tmp_path: Path) -> None:
+    """A non-string receipt hash is rejected through the public resolve contract."""
+
+    object_root, receipt_store, source = _controlled_file(tmp_path, b"controlled bytes")
+    resolver = FilesystemDatasetObjectResolver(
+        object_root=object_root,
+        receipt_store=receipt_store,
+        max_object_bytes=1024,
+    )
+    registered = resolver.import_file(
+        user_id="dataset-owner",
+        source_path=source,
+        partition_kind="DISCOVERY",
+    )
+    receipt_path = receipt_store / f"{registered.receipt_id}.json"
+    record = json.loads(receipt_path.read_text(encoding="utf-8"))
+    original_fields = set(record)
+    record["receipt_hash"] = None
+    assert set(record) == original_fields
+    receipt_path.write_text(json.dumps(record), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="DATASET_OBJECT_RECEIPT_INVALID"):
+        await FilesystemDatasetObjectResolver(
+            object_root=object_root,
+            receipt_store=receipt_store,
+            max_object_bytes=1024,
+        ).resolve_receipt(user_id="dataset-owner", receipt_id=registered.receipt_id)
+
+
+@pytest.mark.asyncio
 async def test_filesystem_resolver_rejects_fifo_receipt_without_blocking(tmp_path: Path) -> None:
     """A named pipe at a known receipt filename is rejected before any blocking read."""
 

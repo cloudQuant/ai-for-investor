@@ -1,15 +1,30 @@
 <template>
-  <section class="quality-panel" aria-labelledby="signal-quality-title">
+  <section
+    class="quality-panel"
+    aria-labelledby="signal-quality-title"
+  >
     <div class="panel-head">
       <div>
         <span class="panel-kicker">{{ t('stockAnalysis.signalQualityKicker') }}</span>
-        <h3 id="signal-quality-title">{{ t('stockAnalysis.signalQualityTitle') }}</h3>
+        <h3 id="signal-quality-title">
+          {{ t('stockAnalysis.signalQualityTitle') }}
+        </h3>
       </div>
       <span class="quality-note">{{ t('stockAnalysis.signalQualityNote') }}</span>
     </div>
 
-    <p v-if="loading" class="quality-empty">{{ t('common.loading') }}</p>
-    <p v-else-if="!summary" class="quality-empty">{{ t('stockAnalysis.signalQualityEmpty') }}</p>
+    <p
+      v-if="loading"
+      class="quality-empty"
+    >
+      {{ t('common.loading') }}
+    </p>
+    <p
+      v-else-if="!summary"
+      class="quality-empty"
+    >
+      {{ t('stockAnalysis.signalQualityEmpty') }}
+    </p>
     <template v-else>
       <div class="quality-metrics">
         <div><span>{{ t('stockAnalysis.signalActionedWinRate') }}</span><strong>{{ percent(summary.actioned_success_rate) }}</strong></div>
@@ -21,7 +36,10 @@
         {{ t('stockAnalysis.signalDenominator', { success: summary.actioned_success_count, total: summary.actioned_scorable_count }) }}
       </p>
       <div class="action-grid">
-        <article v-for="item in summary.actions" :key="item.action">
+        <article
+          v-for="item in summary.actions"
+          :key="item.action"
+        >
           <strong>{{ actionLabel(item.action) }}</strong>
           <span>{{ t('stockAnalysis.signalActionSamples', { scored: item.scorable_count, generated: item.generated_count }) }}</span>
           <b v-if="item.action !== 'WATCH'">{{ percent(item.success_rate) }}</b>

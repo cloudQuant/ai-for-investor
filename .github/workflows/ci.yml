@@ -63,8 +63,17 @@ jobs:
             src/backend/pyproject.toml
             config/requirements-dev.lock
 
+      - name: Install deps sync checker test dependencies
+        working-directory: ${{ github.workspace }}
+        run: python -m pip install packaging pytest
+
       - name: Validate deps sync
+        working-directory: ${{ github.workspace }}
         run: python scripts/ci/check_deps_sync.py
+
+      - name: Test deps sync checker
+        working-directory: ${{ github.workspace }}
+        run: python -m pytest -q scripts/ci/tests/test_check_deps_sync.py
 
   check-migrations:
     name: Check - Alembic Migrations
@@ -437,7 +446,8 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --requirement ../../config/requirements-dev.lock
+          python -m pip install --no-deps -e .
 
       - name: Run mypy ratchet scopes
         run: |
@@ -467,7 +477,8 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --requirement ../../config/requirements-dev.lock
+          python -m pip install --no-deps -e .
 
       - name: Run mypy quote ratchet scope
         run: |
@@ -497,7 +508,8 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --requirement ../../config/requirements-dev.lock
+          python -m pip install --no-deps -e .
 
       - name: Run mypy api subset ratchet scope
         run: |
@@ -527,7 +539,8 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --requirement ../../config/requirements-dev.lock
+          python -m pip install --no-deps -e .
 
       # Iteration 175 §1 — strict-mode mypy expanded to services subpackages.
       # Wave 1 (175): optimization / log_parser / ai_trading (all currently green).
@@ -824,7 +837,7 @@ jobs:
         run: npx eslint --version
 
       - name: Run ESLint
-        run: npx eslint .
+        run: npm run lint
 
       - name: Enforce Element Plus icon accessibility annotations
         working-directory: ${{ github.workspace }}
@@ -915,6 +928,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify Node engine compatibility
+        run: npm run verify:node-engines
+
       - name: Build for production
         run: npm run build
         env:
@@ -922,6 +938,14 @@ jobs:
 
       - name: Check bundle size
         run: bash ../../scripts/ci/check_bundle_size.sh dist
+
+      - name: Test frontend CI guard helpers
+        working-directory: ${{ github.workspace }}
+        run: |
+          node --test \
+            scripts/ci/tests/list_route_assets.test.mjs \
+            scripts/ci/tests/check_bundle_size.test.mjs \
+            scripts/ci/tests/check_node_engine_compat.test.mjs
 
       - name: Compare bundle size with target branch
         if: github.event_name == 'pull_request'

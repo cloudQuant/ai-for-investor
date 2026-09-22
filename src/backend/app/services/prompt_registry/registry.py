@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_attribute
 
 from app.db.database import async_session_maker
 from app.models.prompt_template import PromptTemplate
@@ -83,7 +84,7 @@ class PromptRegistryService:
         if template is None:
             return None
         await self._archive_other_active_versions(template)
-        template.status = "active"
+        set_attribute(template, "status", "active")
         await self.db.commit()
         await self.db.refresh(template)
         return template
@@ -132,8 +133,15 @@ class PromptRegistryService:
                 return ""
             return str(value)
 
-        rendered = _VARIABLE_PATTERN.sub(replace, template.content)
-        declared_variables = template.variables if isinstance(template.variables, list) else []
+        content: object = template.content
+        if not isinstance(content, str):
+            raise TypeError("Prompt template content must be a string")
+        rendered = _VARIABLE_PATTERN.sub(replace, content)
+
+        raw_declared_variables: object = template.variables
+        declared_variables: list[object] = (
+            raw_declared_variables if isinstance(raw_declared_variables, list) else []
+        )
         for key in declared_variables:
             if key not in variables and key not in missing:
                 missing.append(str(key))

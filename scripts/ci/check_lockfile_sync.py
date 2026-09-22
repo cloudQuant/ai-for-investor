@@ -2,14 +2,13 @@
 """Check that installed packages match the lockfile versions.
 
 Usage:
-    python scripts/check_lockfile_sync.py <lockfile_path>
+    python scripts/ci/check_lockfile_sync.py config/requirements-dev.lock
 
 This script compares the output of `pip freeze` against the specified lockfile.
 It exits with code 0 if all versions match, or code 1 if there are mismatches.
 
 Typical CI usage:
-    pip install -e ".[dev,backtrader]"
-    python scripts/check_lockfile_sync.py requirements-dev.lock
+    python scripts/ci/check_lockfile_sync.py config/requirements-dev.lock
 """
 
 from __future__ import annotations
@@ -51,7 +50,7 @@ def main() -> int:
     if not lockfile_path.exists():
         print(f"Error: Lockfile not found: {lockfile_path}", file=sys.stderr)
         print(
-            "Run ./scripts/generate_lockfiles.sh to generate lockfiles.",
+            "Run ./scripts/ops/generate_lockfiles.sh to generate lockfiles.",
             file=sys.stderr,
         )
         return 2
@@ -75,7 +74,7 @@ def main() -> int:
             file=sys.stderr,
         )
         print(
-            "  Run ./scripts/generate_lockfiles.sh to populate the lockfile.",
+            "  Run ./scripts/ops/generate_lockfiles.sh to populate the lockfile.",
             file=sys.stderr,
         )
         return 1
@@ -113,7 +112,7 @@ def main() -> int:
         print("", file=sys.stderr)
 
     print(
-        "  Fix: run ./scripts/generate_lockfiles.sh and commit the updated lockfiles.",
+        "  Fix: run ./scripts/ops/generate_lockfiles.sh and commit the updated lockfiles.",
         file=sys.stderr,
     )
     return 1

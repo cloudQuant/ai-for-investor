@@ -32,7 +32,8 @@ from app.services.market_data.publication import (
     MarketDataPublicationError,
 )
 
-MASTER_DATA_MANIFEST_VERSION = "market-data-master-v1"
+ManifestVersion = Literal["market-data-master-v1"]
+MASTER_DATA_MANIFEST_VERSION: ManifestVersion = "market-data-master-v1"
 MAX_MANIFEST_BYTES = 5 * 1024 * 1024
 MAX_MANIFEST_IDENTITIES = 10_000
 
@@ -50,7 +51,7 @@ class MarketDataMasterDataManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    manifest_version: Literal[MASTER_DATA_MANIFEST_VERSION]
+    manifest_version: ManifestVersion
     identities: list[InstrumentIdentity] = Field(min_length=1, max_length=MAX_MANIFEST_IDENTITIES)
 
 
@@ -146,7 +147,8 @@ class MarketDataMasterDataImporter:
                 else:
                     canonical_only_count += 1
 
-        counts = Counter(entry.identity.asset_type for entry in prepared)
+        counts: Counter[str] = Counter()
+        counts.update(entry.identity.asset_type for entry in prepared)
         reused_count = sum(entry.already_persisted for entry in prepared)
         return MarketDataMasterDataImportResult(
             manifest_sha256=manifest_sha256,

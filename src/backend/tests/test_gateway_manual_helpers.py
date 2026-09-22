@@ -1,7 +1,13 @@
+from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
+import pymysql
+import pytest
+
+from app.data_fetch.configs import db_config
 from app.services import ctp_tunnel
+from app.services.asset_info import gateway_specs
 from app.services.gateway import manual as manual_gateway_service
 from app.services.gateway import manual_ctp_proxy, manual_ports
 
@@ -252,6 +258,68 @@ class TestCtpTunnel:
 
 
 class TestManualGatewayAccount:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("1,250.5", 1250.5),
+            (1250.5, 1250.5),
+            (Decimal("1250.5"), 1250.5),
+            ("not-a-number", None),
+            (object(), None),
+            (True, None),
+        ],
+    )
+    def test_account_number_accepts_only_supported_numeric_values(self, value, expected):
+        assert manual_gateway_service._account_number({"balance": value}, "balance") == expected
+
+    @pytest.mark.parametrize("field", ["host", "user", "password", "database", "port"])
+    def test_local_futures_query_rejects_malformed_database_config(self, monkeypatch, field):
+        config = {
+            "host": "localhost",
+            "user": "fixture",
+            "password": "",
+            "database": "fixture",
+            "port": 3306,
+        }
+        config[field] = "not-a-port" if field == "port" else 123
+        monkeypatch.setattr(db_config, "DB_CONFIG", config)
+        monkeypatch.setattr(gateway_specs, "_product_code", lambda _symbol: "IF")
+        connect = Mock()
+        monkeypatch.setattr(pymysql, "connect", connect)
+
+        assert gateway_specs._query_local_futures_spec("IF2609") == {}
+        connect.assert_not_called()
+
+    def test_local_futures_query_connects_with_valid_database_config(self, monkeypatch):
+        config = {
+            "host": "localhost",
+            "user": "fixture",
+            "password": "",
+            "database": "fixture",
+            "port": 3306,
+        }
+        monkeypatch.setattr(db_config, "DB_CONFIG", config)
+        monkeypatch.setattr(gateway_specs, "_product_code", lambda _symbol: "IF")
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+        connection = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        connect = Mock(return_value=connection)
+        monkeypatch.setattr(pymysql, "connect", connect)
+
+        assert gateway_specs._query_local_futures_spec("IF2609") == {}
+        connect.assert_called_once_with(
+            host="localhost",
+            user="fixture",
+            password="",
+            database="fixture",
+            port=3306,
+            connect_timeout=1,
+            read_timeout=1,
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        connection.close.assert_called_once()
+
     def test_query_gateway_account_unwraps_bybit_v5_wallet_balance(self):
         adapter = _FakeBalanceAdapter(
             {
@@ -508,6 +576,21 @@ class TestManualGatewayTrades:
 
 
 class TestManualGatewayOrderCancellation:
+    def test_non_numeric_remaining_still_respects_terminal_order_status(self):
+        assert (
+            manual_gateway_service._is_open_order(
+                {"remaining": "not-a-number", "status": "cancelled"}
+            )
+            is False
+        )
+        assert manual_gateway_service._is_open_order({"remaining": Decimal("0")}) is False
+        assert manual_gateway_service._is_open_order({"remaining": Decimal("1")}) is True
+        assert manual_gateway_service._is_open_order({"remaining": float("nan")}) is False
+        assert manual_gateway_service._is_open_order({"remaining": float("inf")}) is False
+        assert manual_gateway_service._is_open_order({"remaining": 10**500}) is False
+        assert manual_gateway_service._is_open_order({"remaining": False}) is False
+        assert manual_gateway_service._is_open_order({"remaining": True}) is True
+
     def test_cancel_gateway_open_orders_cancels_unowned_when_exclusive(self):
         adapter = _FakeOrderAdapter([{"order_ref": "ref-1", "data_name": "IF2609", "remaining": 1}])
         gateways = {"gw-1": {"runtime": SimpleNamespace(adapter=adapter)}}

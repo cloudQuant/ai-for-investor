@@ -1,9 +1,10 @@
 <template>
-  <!-- eslint-disable vue/no-v-html -->
   <div class="asset-analysis-page">
     <section class="hero-panel">
       <div>
-        <p class="eyebrow">{{ t('assetResearch.page.eyebrow') }}</p>
+        <p class="eyebrow">
+          {{ t('assetResearch.page.eyebrow') }}
+        </p>
         <h2>{{ assetConfig.title }}</h2>
         <p class="subtitle">
           {{ assetConfig.description }}
@@ -20,7 +21,9 @@
         <section class="panel command-panel">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.targetConfirmKicker') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.targetConfirmKicker') }}
+              </p>
               <h3>{{ t('assetResearch.page.targetConfirmTitle') }}</h3>
             </div>
             <el-tag effect="plain">
@@ -145,7 +148,9 @@
         <section class="panel asset-policy-panel">
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.assetGateKicker') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.assetGateKicker') }}
+              </p>
               <h3>{{ assetConfig.requirement }}</h3>
             </div>
           </div>
@@ -171,7 +176,9 @@
         >
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.taskStatus') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.taskStatus') }}
+              </p>
               <h3>{{ statusLabel(task.status) }}</h3>
               <p>{{ task.message || task.error_code || t('assetResearch.page.waitingForLatestStatus') }}</p>
             </div>
@@ -206,7 +213,9 @@
         >
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.publishedDecision') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.publishedDecision') }}
+              </p>
               <h3>{{ recommendationLabel(publishedDecision.recommendation) }}</h3>
             </div>
             <el-tag
@@ -297,7 +306,9 @@
         >
           <div class="panel-heading">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.reportKicker') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.reportKicker') }}
+              </p>
               <h3>{{ resolvedInstrument?.name || assetConfig.shortTitle }}</h3>
             </div>
             <div
@@ -331,11 +342,12 @@
               class="report-section"
             >
               <h4>{{ section.title }}</h4>
-              <!-- renderReportMarkdown sanitizes all provider/LLM-derived markup with DOMPurify. -->
+              <!-- eslint-disable vue/no-v-html -- renderReportMarkdown calls renderMarkdown, which returns DOMPurify-sanitized HTML. -->
               <div
                 class="report-markdown"
                 v-html="renderReportMarkdown(section.markdown)"
               />
+              <!-- eslint-enable vue/no-v-html -->
               <div
                 v-if="section.evidence_ids?.length"
                 class="report-evidence-ids"
@@ -374,7 +386,9 @@
         >
           <div class="panel-heading compact">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.publicEvidenceKicker') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.publicEvidenceKicker') }}
+              </p>
               <h3>{{ t('assetResearch.page.evidenceTitle') }}</h3>
             </div>
           </div>
@@ -437,7 +451,9 @@
         <section class="panel scorecard-panel">
           <div class="panel-heading compact">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.scorecardKicker') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.scorecardKicker') }}
+              </p>
               <h3>{{ t('assetResearch.page.scorecardTitle') }}</h3>
             </div>
           </div>
@@ -502,7 +518,9 @@
         <section class="panel history-panel">
           <div class="panel-heading compact">
             <div>
-              <p class="panel-kicker">{{ t('assetResearch.page.historyKicker') }}</p>
+              <p class="panel-kicker">
+                {{ t('assetResearch.page.historyKicker') }}
+              </p>
               <h3>{{ t('assetResearch.page.historyTitle') }}</h3>
             </div>
           </div>

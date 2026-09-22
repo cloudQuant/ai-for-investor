@@ -12,11 +12,17 @@ and ``delete_workspace_report`` as thin async methods that delegate here.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
-from typing import Any, cast
+import math
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any, TypeGuard
 
 from app.db.database import async_session_maker
-from app.models.workspace import StrategyUnit, Workspace
+from app.models.workspace import (
+    StrategyUnit,
+    Workspace,
+    WorkspaceJSONMapping,
+    WorkspaceJSONValue,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +74,63 @@ _EXT_METRIC_KEYS: tuple[str, ...] = (
 WorkspaceLoader = Callable[..., Awaitable[Workspace | None]]
 
 
+def _is_workspace_json_value(value: object) -> TypeGuard[WorkspaceJSONValue]:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(_is_workspace_json_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str) and _is_workspace_json_value(item) for key, item in value.items()
+        )
+    return False
+
+
+def _is_workspace_json_mapping(value: object) -> TypeGuard[WorkspaceJSONMapping]:
+    return isinstance(value, dict) and _is_workspace_json_value(value)
+
+
+def _safe_workspace_json_mapping(value: object) -> WorkspaceJSONMapping:
+    if _is_workspace_json_mapping(value):
+        return dict(value)
+    return {}
+
+
+def _numeric_metric(value: object) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    return None
+
+
+def _numeric_metric_float(value: object) -> float | None:
+    metric = _numeric_metric(value)
+    if metric is None:
+        return None
+    try:
+        return float(metric)
+    except OverflowError:
+        return None
+
+
+def _metric_float_or_default(value: object, default: float) -> float:
+    metric = _numeric_metric_float(value)
+    return default if metric is None else metric
+
+
+def _date_metric(metrics: Mapping[str, object], key: str) -> str | None:
+    value = metrics.get(key)
+    return value if isinstance(value, str) else None
+
+
 def _unit_in_range(unit: StrategyUnit, start_date: str | None, end_date: str | None) -> bool:
     """Return ``True`` if a unit's data window overlaps the requested range."""
-    dc: dict[str, Any] = cast("dict[str, Any]", unit.data_config) or {}
-    u_start = dc.get("start_date", "")
-    u_end = dc.get("end_date", "")
+    dc = _safe_workspace_json_mapping(unit.data_config)
+    u_start = _date_metric(dc, "start_date")
+    u_end = _date_metric(dc, "end_date")
     if start_date and u_end and u_end < start_date:
         return False
     if end_date and u_start and u_start > end_date:
@@ -80,23 +138,27 @@ def _unit_in_range(unit: StrategyUnit, start_date: str | None, end_date: str | N
     return True
 
 
-def _recalc_annual(metrics: dict[str, Any], *, calc_method: str, annual_days: int) -> float | None:
+def _recalc_annual(
+    metrics: Mapping[str, object], *, calc_method: str, annual_days: int
+) -> int | float | None:
     """Recompute ``annual_return`` from ``total_return`` + ``trading_days``."""
-    tr = metrics.get("total_return")
-    td = metrics.get("trading_days")
-    if tr is None or not td or td <= 0:
-        return metrics.get("annual_return")
+    total_return = _numeric_metric_float(metrics.get("total_return"))
+    trading_days = _numeric_metric_float(metrics.get("trading_days"))
+    if total_return is None or trading_days is None or trading_days <= 0:
+        return _numeric_metric(metrics.get("annual_return"))
 
     if calc_method == "compound":
         try:
-            return round(((1 + tr) ** (annual_days / td) - 1), 6)
+            return round(((1 + total_return) ** (annual_days / trading_days) - 1), 6)
         except (OverflowError, ValueError):
-            return metrics.get("annual_return")
-    return round(tr * (annual_days / td), 6)
+            return _numeric_metric(metrics.get("annual_return"))
+    return round(total_return * (annual_days / trading_days), 6)
 
 
 def _serialize_unit_reference(unit: StrategyUnit, value_metric_key: str) -> dict[str, Any]:
     """Render a compact unit reference suitable for the summary block."""
+    data_config = _safe_workspace_json_mapping(unit.data_config)
+    metrics = _safe_workspace_json_mapping(unit.metrics_snapshot)
     return {
         "id": unit.id,
         "strategy_name": unit.strategy_name or unit.strategy_id or "",
@@ -109,9 +171,9 @@ def _serialize_unit_reference(unit: StrategyUnit, value_metric_key: str) -> dict
         "run_count": unit.run_count or 0,
         "last_run_time": unit.last_run_time,
         "last_task_id": unit.last_task_id,
-        "start_date": (cast("dict[str, Any]", unit.data_config) or {}).get("start_date"),
+        "start_date": _date_metric(data_config, "start_date"),
         "data_source": f"{unit.symbol or ''}_{unit.timeframe or ''}",
-        "value": (cast("dict[str, Any]", unit.metrics_snapshot) or {}).get(value_metric_key),
+        "value": _numeric_metric(metrics.get(value_metric_key)),
     }
 
 
@@ -157,25 +219,38 @@ async def get_workspace_report(
 
         units = ws.strategy_units or []
         filtered_units = [u for u in units if _unit_in_range(u, start_date, end_date)]
-        completed_units = [u for u in filtered_units if u.metrics_snapshot]
+        metrics_by_unit_id = {
+            unit.id: _safe_workspace_json_mapping(unit.metrics_snapshot) for unit in filtered_units
+        }
+        data_config_by_unit_id = {
+            unit.id: _safe_workspace_json_mapping(unit.data_config) for unit in filtered_units
+        }
+        completed_units = [u for u in filtered_units if metrics_by_unit_id[u.id]]
 
         # Build weight map. Custom mode without explicit weights auto-derives
         # from each completed unit's initial_cash proportion.
         resolved_weights = weights or {}
         if weight_mode == "custom" and not resolved_weights and completed_units:
             total_cash = sum(
-                (u.metrics_snapshot or {}).get("initial_cash", 0) for u in completed_units
+                (
+                    _numeric_metric_float(metrics_by_unit_id[u.id].get("initial_cash")) or 0.0
+                    for u in completed_units
+                ),
+                start=0.0,
             )
             if total_cash > 0:
                 resolved_weights = {
-                    u.id: (u.metrics_snapshot or {}).get("initial_cash", 0) / total_cash
+                    u.id: (
+                        _numeric_metric_float(metrics_by_unit_id[u.id].get("initial_cash")) or 0.0
+                    )
+                    / total_cash
                     for u in completed_units
                 }
 
         rows: list[dict[str, Any]] = []
         for u in filtered_units:
-            m = u.metrics_snapshot or {}
-            dc = u.data_config or {}
+            m = metrics_by_unit_id[u.id]
+            dc = data_config_by_unit_id[u.id]
             row: dict[str, Any] = {
                 "id": u.id,
                 "strategy_name": u.strategy_name or u.strategy_id or "",
@@ -188,18 +263,18 @@ async def get_workspace_report(
                 "run_count": u.run_count or 0,
                 "last_run_time": u.last_run_time,
                 "last_task_id": u.last_task_id,
-                "start_date": dc.get("start_date"),
+                "start_date": _date_metric(dc, "start_date"),
                 "data_source": f"{u.symbol or ''}_{u.timeframe or ''}",
             }
 
             row["initial_cash"] = (
-                max_cash if (max_cash is not None and m) else m.get("initial_cash")
+                max_cash if (max_cash is not None and m) else _numeric_metric(m.get("initial_cash"))
             )
 
             for key in _EXT_METRIC_KEYS:
                 if key == "initial_cash":
                     continue
-                row[key] = m.get(key)
+                row[key] = _numeric_metric(m.get(key))
 
             if m:
                 row["annual_return"] = _recalc_annual(
@@ -211,20 +286,21 @@ async def get_workspace_report(
         def _weighted_avg(metric_key: str) -> float | None:
             vals: list[tuple[float, float]] = []
             for u in completed_units:
-                m = u.metrics_snapshot or {}
-                v = (
+                m = metrics_by_unit_id[u.id]
+                raw_metric = (
                     _recalc_annual(m, calc_method=calc_method, annual_days=annual_days)
                     if metric_key == "annual_return"
                     else m.get(metric_key)
                 )
-                if v is None:
+                metric_value = _numeric_metric_float(raw_metric)
+                if metric_value is None:
                     continue
                 w = (
                     resolved_weights.get(u.id, 1.0)
                     if weight_mode == "custom" and resolved_weights
                     else 1.0
                 )
-                vals.append((v, w))
+                vals.append((metric_value, w))
             if not vals:
                 return None
             total_w = sum(w for _, w in vals)
@@ -232,13 +308,13 @@ async def get_workspace_report(
                 return None
             return round(sum(v * w for v, w in vals) / total_w, 4)
 
-        def _safe_sum(metric_key: str) -> int | None:
+        def _safe_sum(metric_key: str) -> int | float | None:
             vals = [
-                m.get(metric_key)
+                value
                 for u in completed_units
-                if (m := u.metrics_snapshot) and m.get(metric_key) is not None
+                if (value := _numeric_metric(metrics_by_unit_id[u.id].get(metric_key))) is not None
             ]
-            return sum(vals) if vals else None
+            return sum(vals, start=0) if vals else None
 
         summary: dict[str, Any] = {
             "total_units": len(units),
@@ -251,12 +327,16 @@ async def get_workspace_report(
             "total_trades": _safe_sum("total_trades"),
             "best_return_unit": max(
                 completed_units,
-                key=lambda u: (u.metrics_snapshot or {}).get("total_return", float("-inf")),
+                key=lambda u: _metric_float_or_default(
+                    metrics_by_unit_id[u.id].get("total_return"), float("-inf")
+                ),
                 default=None,
             ),
             "worst_drawdown_unit": max(
                 completed_units,
-                key=lambda u: abs((u.metrics_snapshot or {}).get("max_drawdown", 0)),
+                key=lambda u: abs(
+                    _metric_float_or_default(metrics_by_unit_id[u.id].get("max_drawdown"), 0.0)
+                ),
                 default=None,
             ),
             "config": {
@@ -304,11 +384,10 @@ async def delete_workspace_report(
         ws = await load_workspace(session, workspace_id, user_id, load_units=False)
         if ws is None:
             return None
-        settings = dict(ws.settings or {})
+        settings = _safe_workspace_json_mapping(ws.settings)
         had_config = "report_config" in settings
         settings.pop("report_config", None)
-        ws_row: Any = ws
-        ws_row.settings = settings
+        ws.settings = settings
         await session.commit()
         return {
             "workspace_id": workspace_id,

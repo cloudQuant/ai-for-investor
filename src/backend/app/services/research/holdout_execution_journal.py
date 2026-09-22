@@ -64,6 +64,9 @@ class HoldoutExecutionJournal:
                     lease_owner=lease_owner,
                     command=verified,
                 )
+                lease_expires_at = binding.lease_expires_at
+                if lease_expires_at is None:
+                    raise ValueError("HOLDOUT_EXECUTION_PREPARE_DENIED")
                 now = await database_utc_now(session)
                 model = ResearchHoldoutExecution(
                     operation_id=str(snapshot["operation_id"]),
@@ -73,7 +76,7 @@ class HoldoutExecutionJournal:
                     command_hash=verified.command_hash,
                     lease_owner=lease_owner,
                     lease_generation=int(snapshot["lease_generation"]),
-                    lease_expires_at=_as_utc(binding.lease_expires_at),
+                    lease_expires_at=_as_utc(lease_expires_at),
                     state="PREPARED",
                     command_json=snapshot,
                     prepared_at=now,

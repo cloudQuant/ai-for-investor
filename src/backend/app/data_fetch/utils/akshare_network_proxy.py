@@ -14,7 +14,7 @@ import socket
 import subprocess
 import threading
 import urllib.request
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -350,10 +350,17 @@ def _resolve_probe_timeout(timeout: float | None) -> float:
         return 1.5
 
 
-def _default_request_get(url: str, **kwargs: object):
+def _default_request_get(
+    url: str,
+    *,
+    params: Mapping[str, str],
+    headers: Mapping[str, str],
+    timeout: float,
+    proxies: dict[str, str] | None = None,
+) -> requests.Response:
     session = requests.Session()
     session.trust_env = False
-    return session.get(url, **kwargs)
+    return session.get(url, params=params, headers=headers, timeout=timeout, proxies=proxies)
 
 
 def _eastmoney_response_ok(response: object) -> bool:

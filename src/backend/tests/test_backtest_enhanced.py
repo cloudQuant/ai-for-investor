@@ -10,7 +10,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.api import backtest_enhanced
-from app.schemas.backtest_enhanced import BacktestResult, TaskStatus
+from app.schemas.backtest_enhanced import BacktestResponse, BacktestResult, TaskStatus
 
 # Valid backtest request configuration
 VALID_BACKTEST_REQUEST = {
@@ -140,6 +140,40 @@ class TestEnhancedBacktestRun:
                 )
                 assert resp.status_code == 200
 
+    async def test_run_backtest_converts_request_for_service(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        from app.main import app as fastapi_app
+        from app.schemas.backtest import BacktestRequest as ServiceBacktestRequest
+
+        mock_service = MagicMock()
+        mock_service.run_backtest = AsyncMock(
+            return_value=BacktestResponse(task_id="task123", status=TaskStatus.PENDING)
+        )
+        monkeypatch.setitem(
+            fastapi_app.dependency_overrides,
+            backtest_enhanced.get_backtest_service,
+            lambda: mock_service,
+        )
+        send_to_task = AsyncMock()
+        monkeypatch.setattr(backtest_enhanced.ws_manager, "send_to_task", send_to_task)
+
+        resp = await client.post(
+            "/api/v1/backtests/run", headers=auth_headers, json=VALID_BACKTEST_REQUEST
+        )
+
+        assert resp.status_code == 200
+        mock_service.run_backtest.assert_awaited_once()
+        service_request = mock_service.run_backtest.await_args.args[1]
+        assert isinstance(service_request, ServiceBacktestRequest)
+        assert service_request.strategy_id == VALID_BACKTEST_REQUEST["strategy_id"]
+        assert service_request.symbol == VALID_BACKTEST_REQUEST["symbol"]
+        assert service_request.initial_cash == VALID_BACKTEST_REQUEST["initial_cash"]
+        assert service_request.commission == VALID_BACKTEST_REQUEST["commission"]
+        assert service_request.params == VALID_BACKTEST_REQUEST["params"]
+        send_to_task.assert_awaited_once()
+        assert send_to_task.await_args.args[0] == "task123"
+
     async def test_run_backtest_invalid_data(self, client: AsyncClient, auth_headers: dict):
         """Test invalid data."""
         resp = await client.post(
@@ -152,14 +186,24 @@ class TestEnhancedBacktestRun:
         assert resp.status_code == 422
 
     async def test_run_backtest_rejects_client_runtime_dir(
-        self, client: AsyncClient, auth_headers: dict
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
+        from app.main import app as fastapi_app
+
+        mock_service = MagicMock()
+        mock_service.run_backtest = AsyncMock()
+        monkeypatch.setitem(
+            fastapi_app.dependency_overrides,
+            backtest_enhanced.get_backtest_service,
+            lambda: mock_service,
+        )
         payload = {**VALID_BACKTEST_REQUEST, "runtime_dir": "/tmp/client-selected-runtime"}
 
         resp = await client.post("/api/v1/backtests/run", headers=auth_headers, json=payload)
 
         assert resp.status_code == 422
         assert resp.json()["details"]["code"] == "BACKTEST_RUNTIME_DIR_CLIENT_FORBIDDEN"
+        mock_service.run_backtest.assert_not_awaited()
 
 
 @pytest.mark.asyncio

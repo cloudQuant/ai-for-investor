@@ -8,8 +8,10 @@ import asyncio
 import logging
 import math
 import os
+from array import array
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone, tzinfo
-from types import SimpleNamespace
+from typing import Literal, SupportsFloat, SupportsIndex
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.db.sql_repository import SQLRepository
@@ -21,6 +23,19 @@ from app.models.paper_trading import (
     OrderType,
     PaperTrade,
     Position,
+)
+from app.services.paper_trading_positions import (
+    PositionEvent,
+    PositionSnapshot,
+    PositionT,
+    PositionView,
+    build_position_snapshot,
+    first_open_position,
+    is_open_position,
+    merge_position_snapshot,
+    position_aliases_for_symbol,
+    position_equity_component,
+    symbols_match,
 )
 from app.services.position_valuation import PositionSpec, contract_spec_for
 from app.services.trading_asset_info_service import query_local_asset_spec, symbol_aliases
@@ -99,6 +114,31 @@ _PRICE_TICK_KEYS = (
 
 _DEFAULT_TRADING_TIMEZONE = "Asia/Shanghai"
 _DEFAULT_TRADING_DAY_ROLLOVER_HOUR = 21
+
+
+def _float_from_supported_value(value: object) -> float:
+    """Convert finite values accepted by ``float``, including contiguous buffers."""
+    if isinstance(value, bool):
+        raise TypeError("boolean values are not accepted as numeric inputs")
+
+    if isinstance(value, (str, bytes, bytearray)):
+        number = float(value)
+    elif isinstance(value, SupportsFloat):
+        number = float(value)
+    elif isinstance(value, SupportsIndex):
+        number = float(value.__index__())
+    elif isinstance(value, (memoryview, array)):
+        if isinstance(value, memoryview) and not value.contiguous:
+            raise TypeError("float() cannot convert a non-contiguous buffer")
+        number = float(value.tobytes())
+    else:
+        raise TypeError(
+            f"float() argument must be a string or a real number, not '{type(value).__name__}'"
+        )
+
+    if not math.isfinite(number):
+        raise ValueError("numeric input must be finite")
+    return number
 
 
 class PaperTradingService:
@@ -203,8 +243,8 @@ class PaperTradingService:
     @staticmethod
     def _safe_float(value: object, default: float = 0.0) -> float:
         try:
-            return float(value)
-        except (TypeError, ValueError):
+            return _float_from_supported_value(value)
+        except (TypeError, ValueError, OverflowError):
             return default
 
     @classmethod
@@ -332,7 +372,7 @@ class PaperTradingService:
             ("stop_price", stop_price),
             ("limit_price", limit_price),
         ):
-            if value in (None, "", 0):
+            if value is None or value == "" or value == 0:
                 continue
             scaled = float(value) / tick
             if abs(round(scaled) - scaled) > 1e-9:
@@ -710,118 +750,67 @@ class PaperTradingService:
         return max(opening_short_notional + commission - closing_long_proceeds, 0.0)
 
     @classmethod
-    def _position_equity_component(cls, position: object) -> float:
-        market_value = cls._safe_float(getattr(position, "market_value", 0.0), 0.0)
-        margin_value = cls._safe_float(getattr(position, "margin_value", 0.0), 0.0)
-        unrealized_pnl = cls._safe_float(getattr(position, "unrealized_pnl", 0.0), 0.0)
-        multiplier = cls._safe_float(getattr(position, "multiplier", 1.0), 1.0)
-        margin_rate = cls._safe_float(getattr(position, "margin_rate", 1.0), 1.0)
-        uses_margin_accounting = margin_value > 0 and (
-            abs(multiplier - 1.0) > 1e-12
-            or margin_rate < 1.0
-            or abs(margin_value - abs(market_value)) > 1e-9
-        )
-        if uses_margin_accounting:
-            return margin_value + unrealized_pnl
-        return market_value
+    def _position_equity_component(cls, position: PositionView) -> float:
+        return position_equity_component(position, cls._safe_float)
 
     @classmethod
-    def _is_open_position(cls, position: object) -> bool:
-        return abs(cls._safe_float(getattr(position, "size", 0.0), 0.0)) > 1e-12
+    def _is_open_position(cls, position: PositionView) -> bool:
+        return is_open_position(position, cls._safe_float)
 
     @classmethod
-    def _first_open_position(cls, positions: list[object]) -> object | None:
-        for position in positions:
-            if cls._is_open_position(position):
-                return position
-        return None
+    def _first_open_position(cls, positions: Sequence[PositionT]) -> PositionT | None:
+        return first_open_position(positions, cls._is_open_position)
 
     @staticmethod
     def _position_symbol_aliases(symbol: object) -> set[str]:
-        return {str(item).upper() for item in symbol_aliases(str(symbol or "")) if item}
+        return position_aliases_for_symbol(symbol, symbol_aliases)
 
     @classmethod
     def _symbol_matches(cls, left: object, right: object) -> bool:
-        left_aliases = cls._position_symbol_aliases(left)
-        right_aliases = cls._position_symbol_aliases(right)
-        return bool(left_aliases and right_aliases and left_aliases & right_aliases)
+        return symbols_match(left, right, cls._position_symbol_aliases)
 
     @classmethod
     def _merge_position_snapshot(
         cls,
-        positions: list[object],
-        snapshot: object | None,
-    ) -> list[object]:
-        if snapshot is None:
-            return positions
-
-        snapshot_id = getattr(snapshot, "id", None)
-        snapshot_account_id = getattr(snapshot, "account_id", None)
-        snapshot_symbol = getattr(snapshot, "symbol", None)
-        merged: list[object] = []
-        replaced = False
-        for position in positions:
-            same_id = (
-                snapshot_id is not None
-                and getattr(position, "id", None) is not None
-                and str(position.id) == str(snapshot_id)
-            )
-            same_symbol = (
-                snapshot_account_id is not None
-                and snapshot_symbol is not None
-                and getattr(position, "account_id", None) is not None
-                and getattr(position, "symbol", None) is not None
-                and str(position.account_id) == str(snapshot_account_id)
-                and str(position.symbol) == str(snapshot_symbol)
-            )
-            if same_id or same_symbol:
-                merged.append(snapshot)
-                replaced = True
-            else:
-                merged.append(position)
-
-        if not replaced and cls._is_open_position(snapshot):
-            merged.append(snapshot)
-        return merged
+        positions: Sequence[PositionView],
+        snapshot: PositionView | None,
+    ) -> Sequence[PositionView]:
+        return merge_position_snapshot(positions, snapshot, cls._is_open_position)
 
     @staticmethod
     def _position_snapshot(
         position: Position,
-        updates: dict[str, object],
-    ) -> object:
-        data = {
-            "id": getattr(position, "id", None),
-            "account_id": getattr(position, "account_id", None),
-            "symbol": getattr(position, "symbol", None),
-            "size": getattr(position, "size", 0.0),
-            "avg_price": getattr(position, "avg_price", 0.0),
-            "market_value": getattr(position, "market_value", 0.0),
-            "margin_value": getattr(position, "margin_value", 0.0),
-            "multiplier": getattr(position, "multiplier", 1.0),
-            "margin_rate": getattr(position, "margin_rate", 1.0),
-            "unrealized_pnl": getattr(position, "unrealized_pnl", 0.0),
-        }
-        data.update(updates)
-        return SimpleNamespace(**data)
+        updates: Mapping[str, object],
+    ) -> PositionSnapshot:
+        return build_position_snapshot(position, updates, PaperTradingService._safe_float)
 
     @classmethod
     def _positive_finite(cls, value: object, field_name: str) -> float:
         try:
-            number = float(value)
-        except (TypeError, ValueError) as exc:
+            number = _float_from_supported_value(value)
+        except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError(f"{field_name} must be a positive finite number") from exc
         if not math.isfinite(number) or number <= 0:
             raise ValueError(f"{field_name} must be a positive finite number")
         return number
 
     @classmethod
-    def _optional_order_number(cls, order: Order, field_name: str) -> float | None:
-        value = getattr(order, field_name, None)
+    def _optional_order_number(
+        cls,
+        order: Order,
+        field_name: Literal["price", "stop_price", "limit_price"],
+    ) -> float | None:
+        if field_name == "price":
+            value = order.price
+        elif field_name == "stop_price":
+            value = order.stop_price
+        else:
+            value = order.limit_price
         if value in (None, ""):
             return None
         try:
-            number = float(value)
-        except (TypeError, ValueError):
+            number = _float_from_supported_value(value)
+        except (TypeError, ValueError, OverflowError):
             return None
         return number if math.isfinite(number) else None
 
@@ -1215,7 +1204,7 @@ class PaperTradingService:
         fill_time: datetime | None = None,
         position_repo: SQLRepository[Position] | None = None,
         trade_repo: SQLRepository[PaperTrade] | None = None,
-    ) -> dict[str, object]:
+    ) -> PositionEvent:
         """Update position after order fill.
 
         Args:
@@ -1273,6 +1262,7 @@ class PaperTradingService:
         )
         opening_margin = self._margin_value(opening_signed_size, price, spec)
 
+        position_snapshot: PositionView
         if not position:
             position_size = signed_fill_size
             final_margin_value = self._margin_value(position_size, price, spec)
@@ -1332,7 +1322,7 @@ class PaperTradingService:
             )
 
             now = fill_time or datetime.now(timezone.utc)
-            position_update = {
+            position_update: dict[str, float | datetime | None] = {
                 "size": new_size,
                 "avg_price": new_avg_price,
                 "market_value": new_market_value,
@@ -1407,7 +1397,7 @@ class PaperTradingService:
         commission: float,
         *,
         spec: PositionSpec | None = None,
-        position_event: dict[str, object] | None = None,
+        position_event: PositionEvent | None = None,
         account_repo: SQLRepository[Account] | None = None,
         position_repo: SQLRepository[Position] | None = None,
     ) -> None:
@@ -1421,7 +1411,9 @@ class PaperTradingService:
         """
         account_repo = account_repo or self.account_repo
         position_repo = position_repo or self.position_repo
-        positions = await position_repo.list(filters={"account_id": account.id})
+        positions: Sequence[PositionView] = await position_repo.list(
+            filters={"account_id": account.id}
+        )
         if position_event is not None:
             positions = self._merge_position_snapshot(
                 positions,
@@ -1922,7 +1914,7 @@ class PaperTradingService:
             },
         )
 
-    async def _notify_position_update(self, position: Position) -> None:
+    async def _notify_position_update(self, position: PositionView) -> None:
         """Send position update notification via WebSocket.
 
         Args:

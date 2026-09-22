@@ -65,6 +65,12 @@ _PERIOD_BY_FREQUENCY = {
     "1mo": "monthly",
 }
 
+
+def _reviewed_contract_identity(contract: ProviderContract) -> tuple[str, str]:
+    """Capture only a descriptor digest that passed its integrity check."""
+    return contract.contract_id, contract._verified_descriptor_sha256()
+
+
 # Snapshot reviewed objects and their original descriptor identities at import
 # time. The adapter selects only from this table; a later registry replacement
 # cannot widen a response profile before provider I/O.
@@ -76,10 +82,7 @@ _AKSHARE_REVIEWED_CONTRACTS: Mapping[tuple[str, str], ProviderContract] = Mappin
 )
 _AKSHARE_REVIEWED_CONTRACT_IDENTITIES: Mapping[tuple[str, str], tuple[str, str]] = MappingProxyType(
     {
-        key: (
-            contract.contract_id,
-            contract.descriptor_sha256,
-        )
+        key: _reviewed_contract_identity(contract)
         for key, contract in _AKSHARE_REVIEWED_CONTRACTS.items()
     }
 )
@@ -91,12 +94,10 @@ def _assert_reviewed_contract_integrity(contract: ProviderContract) -> None:
         key = (contract.provider, contract.route_id)
         expected_contract = _AKSHARE_REVIEWED_CONTRACTS.get(key)
         expected_identity = _AKSHARE_REVIEWED_CONTRACT_IDENTITIES.get(key)
-        if contract is not expected_contract or expected_identity != (
-            contract.contract_id,
-            contract.descriptor_sha256,
+        if contract is not expected_contract or expected_identity != _reviewed_contract_identity(
+            contract
         ):
             raise ProviderContractError("PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH")
-        contract.assert_descriptor_integrity()
     except ProviderContractError:
         raise
     except Exception as exc:
@@ -2410,6 +2411,6 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-def _error_detail(exc: Exception) -> str:
+def _error_detail(exc: BaseException) -> str:
     """Keep provider diagnostics bounded before exposing them to orchestration logs."""
     return str(exc)[:512]

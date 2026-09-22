@@ -16,6 +16,10 @@ from app.services.broker_profiles import BrokerProfileService, get_broker_profil
 router = APIRouter(prefix="/brokers", tags=["Brokers"])
 
 
+def _current_user_id(current_user: User) -> str:
+    return str(current_user.id)
+
+
 async def _get_service(db: AsyncSession = Depends(get_db)) -> BrokerProfileService:
     return await get_broker_profile_service(db)
 
@@ -34,7 +38,7 @@ async def _load_profile_for_user(
 ) -> typing.Any:
     profile = await service.get_profile(
         profile_id,
-        user_id=current_user.id,
+        user_id=_current_user_id(current_user),
         allow_admin=await user_has_admin_access(db, current_user),
     )
     if profile is None:
@@ -51,7 +55,7 @@ async def create_broker_profile(
     service: BrokerProfileService = Depends(_get_service),
 ) -> typing.Any:
     return await service.create_profile(
-        user_id=current_user.id,
+        user_id=_current_user_id(current_user),
         broker_id=str(payload.get("broker_id") or "gateway_bridge"),
         account_alias=str(payload.get("account_alias") or "gateway"),
         capabilities=[str(item) for item in list(payload.get("capabilities") or [])],
@@ -71,7 +75,7 @@ async def list_broker_profiles(
     current_user: User = Depends(get_current_db_user),
     service: BrokerProfileService = Depends(_get_service),
 ) -> typing.Any:
-    return await service.list_profiles(user_id=current_user.id)
+    return await service.list_profiles(user_id=_current_user_id(current_user))
 
 
 @router.get("/profiles/{profile_id}/health", response_model=None)
@@ -130,7 +134,7 @@ async def get_broker_profile_quote(
     service: BrokerProfileService = Depends(_get_service),
 ) -> typing.Any:
     profile = await _load_profile_for_user(profile_id, current_user, db, service)
-    return await service.get_quote(profile, symbol, user_id=current_user.id)
+    return await service.get_quote(profile, symbol, user_id=_current_user_id(current_user))
 
 
 @router.post("/profiles/{profile_id}/enable-write", response_model=None)
@@ -141,7 +145,9 @@ async def enable_broker_profile_live_write(
     db: AsyncSession = Depends(get_db),
     service: BrokerProfileService = Depends(_get_service),
 ) -> typing.Any:
-    profile = await service.get_profile(profile_id, user_id=current_user.id, allow_admin=True)
+    profile = await service.get_profile(
+        profile_id, user_id=_current_user_id(current_user), allow_admin=True
+    )
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="broker_profile_not_found"
@@ -156,7 +162,7 @@ async def enable_broker_profile_live_write(
 
     return await service.enable_live_write(
         profile,
-        actor_user_id=current_user.id,
+        actor_user_id=_current_user_id(current_user),
         confirmation_text=confirmation_text,
         idempotency_key=str(payload.get("idempotency_key") or "").strip() or None,
     )

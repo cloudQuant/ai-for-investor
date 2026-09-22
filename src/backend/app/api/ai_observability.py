@@ -147,10 +147,11 @@ async def get_my_ai_usage(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_db_user),
 ) -> dict[str, Any]:
+    current_user_id: str = str(current_user.id)
     return await AICallStatsService(db).get_usage(
         start_at=start_at,
         end_at=end_at,
-        user_id=current_user.id,
+        user_id=current_user_id,
         service_name=service_name,
         model_name=model_name,
         include_user_breakdown=False,
@@ -176,8 +177,10 @@ async def update_my_ai_preferences(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Selected AI model is not available",
         )
-    current_user.ai_preferred_provider = payload.provider
-    current_user.ai_preferred_model = payload.model
+    preferred_provider: str | None = payload.provider
+    preferred_model: str | None = payload.model
+    object.__setattr__(current_user, "ai_preferred_provider", preferred_provider)
+    object.__setattr__(current_user, "ai_preferred_model", preferred_model)
     await db.commit()
     await db.refresh(current_user)
     return {"preferences": service.get_preferences(current_user)}

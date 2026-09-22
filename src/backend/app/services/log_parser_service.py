@@ -680,7 +680,7 @@ def parse_data_log(log_dir: Path) -> dict[str, Any]:
         dates = []
         ohlc = []
         volumes = []
-        indicators: dict[str, list[float]] = {}
+        bar_indicators: dict[str, list[float | None]] = {}
         for index, row in enumerate(bar_rows):
             dt = _normalize_dt_text(row.get("datetime") or row.get("dt"))
             if not dt and index < len(fallback_dates):
@@ -696,16 +696,16 @@ def parse_data_log(log_dir: Path) -> dict[str, Any]:
             volumes.append(_safe_float(row.get("volume", row.get("vol", row.get("Volume", 0.0)))))
             row_indicators = indicator_map.get(dt) or indicator_by_index.get(index, {})
             for key, value in row_indicators.items():
-                indicators.setdefault(key, [None] * (len(dates) - 1))
-                indicators[key].append(value)
-            for _key, values in indicators.items():
-                if len(values) < len(dates):
-                    values.append(None)
+                bar_indicators.setdefault(key, [None] * (len(dates) - 1))
+                bar_indicators[key].append(value)
+            for _key, bar_values in bar_indicators.items():
+                if len(bar_values) < len(dates):
+                    bar_values.append(None)
         return {
             "dates": dates,
             "ohlc": ohlc,
             "volumes": volumes,
-            "indicators": indicators,
+            "indicators": bar_indicators,
         }
 
     # Find indicator columns (non-standard columns)

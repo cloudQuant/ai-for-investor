@@ -24,7 +24,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import CursorResult, Result, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -937,7 +937,7 @@ class MarketDataPublicationManager:
                     visibility_sequence=first_sequence + offset,
                 )
             )
-            if result.rowcount != 1:
+            if _cursor_rowcount(result) != 1:
                 raise MarketDataPublicationError("PUBLICATION_WRITE_CONFLICT")
         return max((*existing_times, published_at))
 
@@ -1020,15 +1020,15 @@ class MarketDataPublicationManager:
         for entity_type, receipts in by_type.items():
             model, digest_column = entity_specs[entity_type]
             entity_ids = tuple(receipt.entity_id for receipt in receipts)
-            found = dict(
-                (
-                    await self._db.execute(
-                        select(model.id, digest_column)
-                        .where(model.id.in_(entity_ids))
-                        .with_for_update()
-                    )
-                ).all()
-            )
+            model_id = model.__dict__["id"]
+            found_rows = (
+                await self._db.execute(
+                    select(model_id, digest_column)
+                    .where(model_id.in_(entity_ids))
+                    .with_for_update()
+                )
+            ).all()
+            found: dict[str, str] = {row[0]: row[1] for row in found_rows}
             if len(found) != len(entity_ids) or any(
                 found.get(receipt.entity_id) != receipt.entity_sha256 for receipt in receipts
             ):
@@ -1080,12 +1080,15 @@ class MarketDataPublicationManager:
                     receipt,
                     entries_by_receipt[receipt.id],
                 )
+                expected_hashes = selector.expected_record_key_sha256s
+                if expected_hashes is None:
+                    raise B2CompletenessEvidenceError("B2_COMPLETENESS_RECEIPT_INVALID")
                 await assert_b2_source_event_manifest_integrity(
                     self._db,
                     series_id=receipt.series_id,
                     source_snapshot_id=receipt.source_snapshot_id,
                     event_at=_stored_utc(receipt.event_at),
-                    expected_hashes=selector.expected_record_key_sha256s,
+                    expected_hashes=expected_hashes,
                 )
         except (B2CompletenessEvidenceError, TypeError, ValueError) as exc:
             raise MarketDataPublicationError("PUBLICATION_ENTITY_INTEGRITY") from exc
@@ -1115,6 +1118,13 @@ def _is_fetch_lease_handle(value: object) -> bool:
 
 def _is_visibility_sequence(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+
+def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
+    """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
+    if isinstance(result, CursorResult):
+        return result.rowcount or 0
+    return 0
 
 
 def _stored_utc(value: datetime) -> datetime:

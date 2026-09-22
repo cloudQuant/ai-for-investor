@@ -61,6 +61,23 @@ async def test_clarify_executor_writes_a_bound_no_model_receipt(auth_user) -> No
 
 
 @pytest.mark.asyncio
+async def test_clarify_executor_rejects_incomplete_output_context() -> None:
+    context = StageExecutionContext(
+        task_id="task-incomplete-output-context",
+        run_id="run-incomplete-output-context",
+        user_id="",
+        stage_attempt_id="attempt-incomplete-output-context",
+        lease_token="lease-incomplete-output-context",
+        stage="CLARIFY",
+        request_hash="a" * 64,
+        trace_id=None,
+    )
+
+    with pytest.raises(ValueError, match="ARTIFACT_STAGE_OUTPUT_CONTEXT_REQUIRED"):
+        await DeterministicClarifyExecutor().execute(context)
+
+
+@pytest.mark.asyncio
 async def test_opt_in_factory_retains_no_model_receipt_but_fails_unmaterialized_generation(
     auth_user,
 ) -> None:

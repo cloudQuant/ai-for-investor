@@ -25,7 +25,7 @@ _SUBPROCESS_STDOUT_LOG = "subprocess.stdout.log"
 _SUBPROCESS_STDERR_LOG = "subprocess.stderr.log"
 
 
-def _optional_lock(lock: Any | None) -> contextlib.AbstractContextManager[Any]:
+def _optional_lock(lock: Any | None) -> contextlib.AbstractAsyncContextManager[Any]:
     return lock if lock is not None else contextlib.nullcontext()
 
 
@@ -67,7 +67,8 @@ def _merge_runtime_contract_metadata(
     target: dict[str, Any],
     source: dict[str, Any],
 ) -> None:
-    source_params = source.get("params") if isinstance(source.get("params"), dict) else {}
+    raw_source_params = source.get("params")
+    source_params = raw_source_params if isinstance(raw_source_params, dict) else {}
     contract_metadata = source_params.get("contract_metadata")
     if not isinstance(contract_metadata, dict) or not contract_metadata:
         return
@@ -205,9 +206,10 @@ async def start_instance(
             env=env,
             **sub_kwargs,
         )
-        proc._bt_stdout_handle = stdout_handle
-        proc._bt_stderr_handle = stderr_handle
-        proc._bt_stderr_path = str(stderr_path)
+        # Handles are cleaned up dynamically via __dict__ in _close_subprocess_log_handles.
+        proc.__dict__["_bt_stdout_handle"] = stdout_handle
+        proc.__dict__["_bt_stderr_handle"] = stderr_handle
+        proc.__dict__["_bt_stderr_path"] = str(stderr_path)
     except (OSError, subprocess.SubprocessError) as exc:
         for handle in (stdout_handle, stderr_handle):
             if handle is not None:

@@ -28,6 +28,10 @@ from app.services.market_data.dataset_contracts import (
     KLINE_LEGACY_CONTRACT_VERSION,
     KLINE_LEGACY_FAMILY_ID,
 )
+from app.services.market_data.provider_contract_catalog import (
+    AKSHARE_RESPONSE_FIELD_ALIASES,
+    build_akshare_contract_catalog,
+)
 from app.services.market_data.providers import MarketDataProviderRequest
 
 _UTC = timezone.utc
@@ -37,6 +41,13 @@ AKSHARE_PROVIDER_CONTRACT_VERSION = "akshare-provider-contract-v1"
 AKSHARE_ROW_NORMALIZER_ID = "akshare-row-normalizer-v1"
 AKSHARE_UTC_DATE_NORMALIZER_ID = "akshare-utc-date-normalizer-v1"
 AKSHARE_HALF_OPEN_WINDOW_SEMANTICS = "utc-half-open-window-v1"
+
+# THS (同花顺) 契约标识，与 AkShare 并列。THS 使用毫秒时间戳归一化、
+# 闭区间窗口语义与独立的请求变换 / 静态端点解析标识。
+THS_PROVIDER_CONTRACT_VERSION = "ths-provider-contract-v1"
+THS_MILLIS_TIMESTAMP_NORMALIZER_ID = "ths.millis-timestamp-normalizer-v1"
+THS_CLOSED_WINDOW_SEMANTICS = "ths-closed-window-v1"
+THS_STATIC_ENDPOINT_RESOLVER_ID = "ths.static-endpoint-v1"
 
 
 class ProviderContractError(RuntimeError):
@@ -308,22 +319,37 @@ class ProviderContract:
             and len(self.endpoints) != 3
         ):
             raise ValueError("CFFEX option contracts require all three reviewed endpoints")
+        if (
+            self.endpoint_resolver_id == THS_STATIC_ENDPOINT_RESOLVER_ID
+            and len(self.endpoints) != 1
+        ):
+            raise ValueError("THS static endpoint contracts require exactly one endpoint")
         if self.endpoint_resolver_id not in {
             "akshare.static-endpoint-v1",
             "akshare.cffex-option-prefix-v1",
+            THS_STATIC_ENDPOINT_RESOLVER_ID,
         }:
             raise ValueError("endpoint_resolver_id is unsupported")
         if self.request_transform_id not in {
             "akshare.historical-kline-request-v1",
             "akshare.fund-nav-request-v1",
             "akshare.symbol-only-request-v1",
+            "ths.historical-kline-request-v1",
+            "ths.financials-request-v1",
+            "ths.symbol-only-request-v1",
         }:
             raise ValueError("request_transform_id is unsupported")
-        if self.normalizer_id != AKSHARE_ROW_NORMALIZER_ID:
+        if self.normalizer_id not in {AKSHARE_ROW_NORMALIZER_ID}:
             raise ValueError("normalizer_id is unsupported")
-        if self.timestamp_normalizer_id != AKSHARE_UTC_DATE_NORMALIZER_ID:
+        if self.timestamp_normalizer_id not in {
+            AKSHARE_UTC_DATE_NORMALIZER_ID,
+            THS_MILLIS_TIMESTAMP_NORMALIZER_ID,
+        }:
             raise ValueError("timestamp_normalizer_id is unsupported")
-        if self.window_semantics != AKSHARE_HALF_OPEN_WINDOW_SEMANTICS:
+        if self.window_semantics not in {
+            AKSHARE_HALF_OPEN_WINDOW_SEMANTICS,
+            THS_CLOSED_WINDOW_SEMANTICS,
+        }:
             raise ValueError("window_semantics is unsupported")
         if self.request_validator_id is not None:
             object.__setattr__(
@@ -410,23 +436,42 @@ class ProviderContract:
 
     @property
     def descriptor(self) -> Mapping[str, Any]:
-        """Return a copy-safe static descriptor including its recomputed digest."""
-        payload = dict(self._descriptor_without_digest())
-        payload["descriptor_sha256"] = self.descriptor_sha256
-        return MappingProxyType(payload)
+        """Return a copy-safe static descriptor after verifying its digest."""
+        descriptor, _ = self._verified_descriptor_snapshot()
+        return descriptor
 
     def assert_descriptor_integrity(self) -> None:
         """Fail closed when a supposedly immutable contract changed after construction."""
+        self._verified_descriptor_snapshot()
+
+    def _verified_descriptor_snapshot(self) -> tuple[Mapping[str, object], str]:
+        """Return one descriptor snapshot only when its captured digest verifies."""
+        digest_snapshot = self.descriptor_sha256
+        if (
+            not isinstance(digest_snapshot, str)
+            or len(digest_snapshot) != 64
+            or any(character not in "0123456789abcdef" for character in digest_snapshot)
+        ):
+            raise ProviderContractError("PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH")
         try:
-            expected_digest = _descriptor_sha256(self._descriptor_without_digest())
+            descriptor_snapshot: dict[str, object] = dict(self._descriptor_without_digest())
+            expected_digest = _descriptor_sha256(descriptor_snapshot)
         except Exception as exc:
             raise ProviderContractError("PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH") from exc
-        if self.descriptor_sha256 != expected_digest:
+        if digest_snapshot != expected_digest:
             raise ProviderContractError("PROVIDER_CONTRACT_DESCRIPTOR_MISMATCH")
+        descriptor_snapshot["descriptor_sha256"] = digest_snapshot
+        return MappingProxyType(descriptor_snapshot), digest_snapshot
+
+    def _verified_descriptor_sha256(self) -> str:
+        """Return a non-null digest only while the complete descriptor remains intact."""
+        _, digest_snapshot = self._verified_descriptor_snapshot()
+        return digest_snapshot
 
     @property
     def summary(self) -> Mapping[str, str]:
         """Return the compact, stable receipt summary for one selected contract."""
+        _, descriptor_sha256 = self._verified_descriptor_snapshot()
         return MappingProxyType(
             {
                 "contract_id": self.contract_id,
@@ -439,7 +484,7 @@ class ProviderContract:
                 "normalizer_id": self.normalizer_id,
                 "timestamp_normalizer_id": self.timestamp_normalizer_id,
                 "window_semantics": self.window_semantics,
-                "descriptor_sha256": self.descriptor_sha256,
+                "descriptor_sha256": descriptor_sha256,
             }
         )
 
@@ -513,6 +558,7 @@ class ProviderContract:
         self, request: MarketDataProviderRequest
     ) -> PreparedProviderRequest:
         """Perform the reviewed Query Transform for a selected AkShare contract."""
+        _, descriptor_sha256 = self._verified_descriptor_snapshot()
         self.assert_request_matches(request)
         endpoint = self._resolve_akshare_endpoint(request)
         if request.provider_endpoint is not None and request.provider_endpoint != endpoint:
@@ -527,7 +573,7 @@ class ProviderContract:
             raise ProviderContractError("PROVIDER_CONTRACT_TRANSFORM_UNSUPPORTED")
         return PreparedProviderRequest(
             contract_id=self.contract_id,
-            descriptor_sha256=self.descriptor_sha256,
+            descriptor_sha256=descriptor_sha256,
             endpoint=endpoint,
             call_kwargs=call_kwargs,
         )
@@ -647,437 +693,10 @@ def _cffex_option_endpoint(provider_symbol: str) -> str:
     raise ProviderContractError("PROVIDER_CONTRACT_ENDPOINT_UNSUPPORTED")
 
 
-AKSHARE_RESPONSE_FIELD_ALIASES: Mapping[str, str] = MappingProxyType(
-    {
-        "开盘": "open",
-        "今开": "open",
-        "open": "open",
-        "收盘": "close",
-        "最新价": "close",
-        "close": "close",
-        "最高": "high",
-        "high": "high",
-        "最低": "low",
-        "low": "low",
-        "成交量": "volume",
-        "volume": "volume",
-        "成交额": "turnover",
-        "turnover": "turnover",
-        "振幅": "amplitude",
-        "涨跌幅": "change_pct",
-        "涨跌额": "change",
-        "换手率": "turnover_rate",
-        "持仓量": "open_interest",
-        "hold": "open_interest",
-        "结算价": "settle",
-        "settle": "settle",
-        "单位净值": "nav",
-        "累计净值": "cumulative_nav",
-        "日增长率": "daily_growth_rate",
-    }
-)
-
-
-def _aliases_for(mapped_fields: frozenset[str]) -> Mapping[str, str]:
-    return MappingProxyType(
-        {
-            source_name: normalized_name
-            for source_name, normalized_name in AKSHARE_RESPONSE_FIELD_ALIASES.items()
-            if normalized_name in mapped_fields
-        }
-    )
-
-
-def _profile(
-    profile_id: str,
-    required_fields: tuple[str, ...],
-    *,
-    optional_fields: tuple[str, ...] = (),
-    mapped_fields: frozenset[str],
-) -> ProviderResponseFieldProfile:
-    return ProviderResponseFieldProfile(
-        profile_id=profile_id,
-        required_fields=required_fields,
-        optional_fields=optional_fields,
-        mapped_fields=mapped_fields,
-    )
-
-
-_STOCK_MAPPED_FIELDS = frozenset(
-    {
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "turnover",
-        "amplitude",
-        "change_pct",
-        "change",
-        "turnover_rate",
-        "settle",
-    }
-)
-_FUTURES_MAPPED_FIELDS = frozenset(
-    {"open", "high", "low", "close", "volume", "open_interest", "settle", "change"}
-)
-_BOND_MAPPED_FIELDS = frozenset(
-    {"open", "high", "low", "close", "volume", "turnover", "change_pct"}
-)
-_FUND_NAV_MAPPED_FIELDS = frozenset({"nav", "cumulative_nav", "daily_growth_rate"})
-_OPTION_MAPPED_FIELDS = frozenset(
-    {"open", "high", "low", "close", "volume", "turnover", "open_interest", "change", "change_pct"}
-)
-_FX_MAPPED_FIELDS = frozenset({"open", "high", "low", "close", "change_pct"})
-
-
-def _akshare_contract(
-    *,
-    contract_id: str,
-    route_id: str,
-    family_id: str,
-    family_contract_version: str,
-    asset_type: str,
-    data_kind: str,
-    frequencies: frozenset[str],
-    markets: frozenset[str],
-    supported_adjustments: frozenset[str],
-    supported_price_bases: frozenset[str],
-    supported_currencies: frozenset[str] | None,
-    supported_units: frozenset[str] | None,
-    field_profile: ProviderResponseFieldProfile,
-    timestamp_columns: tuple[str, ...],
-    endpoints: frozenset[str],
-    request_transform_id: str,
-    endpoint_resolver_id: str = "akshare.static-endpoint-v1",
-    symbol_columns: tuple[str, ...] = (),
-    identity_proof: Literal["source_request_bound", "response_symbol"] = "source_request_bound",
-    source_policy_required: bool = False,
-    request_validator_id: str | None = None,
-    supported_product_types: frozenset[str] | None = None,
-    supported_fund_identity_kinds: frozenset[str] | None = None,
-) -> ProviderContract:
-    return ProviderContract(
-        contract_id=contract_id,
-        contract_version=AKSHARE_PROVIDER_CONTRACT_VERSION,
-        provider="akshare",
-        route_id=route_id,
-        family_id=family_id,
-        family_contract_version=family_contract_version,
-        asset_type=asset_type,
-        data_kind=data_kind,
-        frequencies=frequencies,
-        markets=markets,
-        supported_adjustments=supported_adjustments,
-        supported_price_bases=supported_price_bases,
-        supported_currencies=supported_currencies,
-        supported_units=supported_units,
-        field_profile=field_profile,
-        response_field_aliases=_aliases_for(field_profile.mapped_fields),
-        timestamp_columns=timestamp_columns,
-        symbol_columns=symbol_columns,
-        identity_proof=identity_proof,
-        source_policy_required=source_policy_required,
-        client_filters_window=True,
-        request_transform_id=request_transform_id,
-        endpoint_resolver_id=endpoint_resolver_id,
-        endpoints=endpoints,
-        request_validator_id=request_validator_id,
-        supported_product_types=supported_product_types,
-        supported_fund_identity_kinds=supported_fund_identity_kinds,
-    )
-
-
-AKSHARE_PROVIDER_CONTRACTS: tuple[ProviderContract, ...] = (
-    _akshare_contract(
-        contract_id="akshare.stock.primary.contract-v1",
-        route_id="akshare-stock-primary-v1",
-        family_id="stock.realtime",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="stock",
-        data_kind="bars",
-        frequencies=frozenset({"1d", "1w", "1mo"}),
-        markets=frozenset({"CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"unadjusted", "qfq", "hfq"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"share"}),
-        field_profile=_profile(
-            "stock-bars-compatibility-v1",
-            ("close",),
-            optional_fields=(
-                "open",
-                "high",
-                "low",
-                "volume",
-                "turnover",
-                "change_pct",
-                "turnover_rate",
-            ),
-            mapped_fields=_STOCK_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        symbol_columns=("股票代码", "symbol", "code"),
-        identity_proof="response_symbol",
-        endpoints=frozenset({"stock_zh_a_hist"}),
-        request_transform_id="akshare.historical-kline-request-v1",
-        request_validator_id="akshare.cn-stock-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.stock.kline-legacy.contract-v1",
-        route_id="akshare-stock-kline-legacy-v1",
-        family_id=KLINE_LEGACY_FAMILY_ID,
-        family_contract_version=KLINE_LEGACY_CONTRACT_VERSION,
-        asset_type="stock",
-        data_kind="bars",
-        frequencies=frozenset({"1d", "1w", "1mo"}),
-        markets=frozenset({"CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"qfq"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"share"}),
-        field_profile=_profile(
-            "stock-kline-legacy-v1",
-            ("open", "high", "low", "close", "volume", "change_pct"),
-            mapped_fields=_STOCK_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        symbol_columns=("股票代码", "symbol", "code"),
-        identity_proof="response_symbol",
-        endpoints=frozenset({"stock_zh_a_hist"}),
-        request_transform_id="akshare.historical-kline-request-v1",
-        request_validator_id="akshare.cn-stock-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.stock.liquidity.contract-v1",
-        route_id="akshare-stock-liquidity-primary-v1",
-        family_id="stock.liquidity",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="stock",
-        data_kind="reference_series",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"share"}),
-        field_profile=_profile(
-            "stock-liquidity-v1",
-            ("volume", "turnover", "turnover_rate"),
-            mapped_fields=_STOCK_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        symbol_columns=("股票代码", "symbol", "code"),
-        identity_proof="response_symbol",
-        endpoints=frozenset({"stock_zh_a_hist"}),
-        request_transform_id="akshare.historical-kline-request-v1",
-        request_validator_id="akshare.cn-stock-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.futures.primary.contract-v1",
-        route_id="akshare-futures-primary-v1",
-        family_id="futures.realtime",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="futures",
-        data_kind="bars",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"CFFEX"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"contract"}),
-        field_profile=_profile(
-            "futures-bars-compatibility-v1",
-            ("close",),
-            optional_fields=("open", "high", "low", "volume", "open_interest", "settle", "change"),
-            mapped_fields=_FUTURES_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("date", "日期"),
-        endpoints=frozenset({"futures_zh_daily_sina"}),
-        request_transform_id="akshare.symbol-only-request-v1",
-        source_policy_required=True,
-        request_validator_id="akshare.cffex-futures-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.bond.primary.contract-v1",
-        route_id="akshare-bond-primary-v1",
-        family_id="bond.realtime",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="bond",
-        data_kind="bars",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"SSE", "SZSE", "CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=None,
-        field_profile=_profile(
-            "bond-bars-compatibility-v1",
-            ("close",),
-            optional_fields=("open", "high", "low", "volume", "turnover", "change_pct"),
-            mapped_fields=_BOND_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("date", "日期"),
-        endpoints=frozenset({"bond_zh_hs_daily"}),
-        request_transform_id="akshare.symbol-only-request-v1",
-        source_policy_required=True,
-        request_validator_id="akshare.cn-bond-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.fund.primary.contract-v1",
-        route_id="akshare-fund-primary-v1",
-        family_id="fund.realtime",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="fund",
-        data_kind="bars",
-        frequencies=frozenset({"1d", "1w", "1mo"}),
-        markets=frozenset({"CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"unadjusted", "qfq", "hfq"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"share"}),
-        field_profile=_profile(
-            "fund-bars-compatibility-v1",
-            ("close",),
-            optional_fields=("open", "high", "low", "volume", "turnover", "change_pct"),
-            mapped_fields=_STOCK_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        endpoints=frozenset({"fund_etf_hist_em"}),
-        request_transform_id="akshare.historical-kline-request-v1",
-        source_policy_required=True,
-        request_validator_id="akshare.cn-etf-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.fund.liquidity.contract-v1",
-        route_id="akshare-fund-liquidity-primary-v1",
-        family_id="fund.liquidity",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="fund",
-        data_kind="reference_series",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"share"}),
-        field_profile=_profile(
-            "fund-liquidity-v1",
-            ("volume", "turnover"),
-            mapped_fields=_STOCK_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        endpoints=frozenset({"fund_etf_hist_em"}),
-        request_transform_id="akshare.historical-kline-request-v1",
-        source_policy_required=True,
-        request_validator_id="akshare.cn-etf-symbol-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.fund.nav.contract-v1",
-        route_id="akshare-fund-nav-primary-v1",
-        family_id="fund.nav",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="fund",
-        data_kind="reference_series",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"CN-SSE", "CN-SZSE"}),
-        supported_adjustments=frozenset({"source_reported"}),
-        supported_price_bases=frozenset({"nav"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"fund_share"}),
-        field_profile=_profile(
-            "fund-nav-v1",
-            ("nav", "cumulative_nav", "daily_growth_rate"),
-            mapped_fields=_FUND_NAV_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("净值日期", "date"),
-        endpoints=frozenset({"fund_etf_fund_info_em"}),
-        request_transform_id="akshare.fund-nav-request-v1",
-        source_policy_required=True,
-        request_validator_id="akshare.cn-etf-symbol-v1",
-        supported_product_types=frozenset({"ETF"}),
-        supported_fund_identity_kinds=frozenset({"LISTING"}),
-    ),
-    _akshare_contract(
-        contract_id="akshare.option.cffex.primary.contract-v1",
-        route_id="akshare-cffex-option-primary-v1",
-        family_id="option.realtime",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="option",
-        data_kind="bars",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"CFFEX"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=frozenset({"CNY"}),
-        supported_units=frozenset({"contract"}),
-        field_profile=_profile(
-            "option-bars-compatibility-v1",
-            ("close",),
-            optional_fields=("volume", "turnover", "open_interest", "change", "change_pct"),
-            mapped_fields=_OPTION_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("date", "日期"),
-        endpoints=frozenset(
-            {
-                "option_cffex_hs300_daily_sina",
-                "option_cffex_sz50_daily_sina",
-                "option_cffex_zz1000_daily_sina",
-            }
-        ),
-        request_transform_id="akshare.symbol-only-request-v1",
-        endpoint_resolver_id="akshare.cffex-option-prefix-v1",
-        source_policy_required=True,
-    ),
-    _akshare_contract(
-        contract_id="akshare.fx.primary.contract-v1",
-        route_id="akshare-fx-primary-v1",
-        family_id="fx.realtime",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="fx",
-        data_kind="bars",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"OTC", "CN-OTC"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=None,
-        supported_units=None,
-        field_profile=_profile(
-            "fx-bars-compatibility-v1",
-            ("close",),
-            optional_fields=("open", "high", "low", "change_pct"),
-            mapped_fields=_FX_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        symbol_columns=("代码", "code", "symbol"),
-        identity_proof="response_symbol",
-        endpoints=frozenset({"forex_hist_em"}),
-        request_transform_id="akshare.symbol-only-request-v1",
-    ),
-    _akshare_contract(
-        contract_id="akshare.fx.range.contract-v1",
-        route_id="akshare-fx-range-primary-v1",
-        family_id="fx.range",
-        family_contract_version=FAMILY_CONTRACT_VERSION,
-        asset_type="fx",
-        data_kind="bars",
-        frequencies=frozenset({"1d"}),
-        markets=frozenset({"OTC", "CN-OTC"}),
-        supported_adjustments=frozenset({"unadjusted"}),
-        supported_price_bases=frozenset({"close"}),
-        supported_currencies=None,
-        supported_units=None,
-        field_profile=_profile(
-            "fx-range-v1",
-            ("open", "high", "low", "close"),
-            mapped_fields=_FX_MAPPED_FIELDS,
-        ),
-        timestamp_columns=("日期", "date"),
-        symbol_columns=("代码", "code", "symbol"),
-        identity_proof="response_symbol",
-        endpoints=frozenset({"forex_hist_em"}),
-        request_transform_id="akshare.symbol-only-request-v1",
-    ),
+AKSHARE_PROVIDER_CONTRACTS: tuple[ProviderContract, ...] = build_akshare_contract_catalog(
+    contract_factory=ProviderContract,
+    profile_factory=ProviderResponseFieldProfile,
+    contract_version=AKSHARE_PROVIDER_CONTRACT_VERSION,
 )
 
 AKSHARE_PROVIDER_CONTRACT_REGISTRY = ProviderContractRegistry(AKSHARE_PROVIDER_CONTRACTS)
@@ -1097,4 +716,11 @@ __all__ = [
     "ProviderContractError",
     "ProviderContractRegistry",
     "ProviderResponseFieldProfile",
+    "FAMILY_CONTRACT_VERSION",
+    "KLINE_LEGACY_CONTRACT_VERSION",
+    "KLINE_LEGACY_FAMILY_ID",
+    "THS_CLOSED_WINDOW_SEMANTICS",
+    "THS_MILLIS_TIMESTAMP_NORMALIZER_ID",
+    "THS_PROVIDER_CONTRACT_VERSION",
+    "THS_STATIC_ENDPOINT_RESOLVER_ID",
 ]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('vue-i18n', () => ({
@@ -16,6 +16,7 @@ const route = {
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
+  useRouter: () => ({ push: vi.fn() }),
 }))
 
 const fetchWorkspace = vi.fn().mockResolvedValue(undefined)
@@ -25,6 +26,18 @@ let storeState: any
 
 vi.mock('@/stores/workspace', () => ({
   useWorkspaceStore: () => storeState,
+}))
+
+vi.mock('@/api/workspace', () => ({
+  workspaceApi: {
+    getOptimizationProgress: vi.fn().mockResolvedValue({
+      status: 'idle',
+      total: 0,
+      completed: 0,
+      failed: 0,
+    }),
+    getOptimizationResults: vi.fn().mockResolvedValue({ rows: [] }),
+  },
 }))
 
 import WorkspaceDetailPage from '@/views/workspace/WorkspaceDetailPage.vue'
@@ -90,7 +103,6 @@ function doMount() {
       stubs: {
         ...elStubs,
         WorkspaceDataSourceDialog: true,
-        WorkspaceOptimizationTab: { template: '<div data-test="optimization-tab">optimization</div>' },
         WorkspaceReportTab: { template: '<div data-test="report-tab">report</div>' },
         TradingWorkspaceUnitsTab: { template: '<div data-test="trading-units-tab">trading units</div>' },
         WorkspaceUnitsTab: {
@@ -191,9 +203,13 @@ describe('WorkspaceDetailPage', () => {
   it('opens the optimization tab when a unit tab requests it', async () => {
     const wrapper = doMount()
     await wrapper.get('[data-test="units-tab"]').trigger('click')
+    await flushPromises()
+    await vi.dynamicImportSettled()
+    await flushPromises()
     expect((wrapper.vm as any).activeTab).toBe('optimization')
     expect((wrapper.vm as any).showOptTab).toBe(true)
-    expect(wrapper.find('[data-test="optimization-tab"]').exists()).toBe(true)
+    expect(wrapper.find('.workspace-optimization-tab').exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('shows the not-found empty state', () => {

@@ -5,12 +5,16 @@ Includes API routing, logging, rate limiting, security headers, and WebSocket
 streaming for backtest progress updates.
 """
 
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from typing import Concatenate, ParamSpec
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from app.api.router import api_router, optional_router_status
 from app.config import get_settings
@@ -32,6 +36,28 @@ from app.utils.logger import setup_logger
 
 settings = get_settings()
 logger = setup_logger(__name__)
+
+_MiddlewareArgs = ParamSpec("_MiddlewareArgs")
+
+
+def _adapt_middleware_factory(
+    constructor: Callable[Concatenate[ASGIApp, _MiddlewareArgs], ASGIApp],
+) -> Callable[Concatenate[ASGIApp, _MiddlewareArgs], ASGIApp]:
+    def create_middleware(
+        app: ASGIApp,
+        /,
+        *args: _MiddlewareArgs.args,
+        **kwargs: _MiddlewareArgs.kwargs,
+    ) -> ASGIApp:
+        return constructor(app, *args, **kwargs)
+
+    return create_middleware
+
+
+_rate_limit_headers_middleware_factory = _adapt_middleware_factory(RateLimitHeadersMiddleware)
+_logging_middleware_factory = _adapt_middleware_factory(LoggingMiddleware)
+_audit_logging_middleware_factory = _adapt_middleware_factory(AuditLoggingMiddleware)
+_performance_logging_middleware_factory = _adapt_middleware_factory(PerformanceLoggingMiddleware)
 
 APP_DESCRIPTION = """
 # ai-for-investor API
@@ -112,8 +138,17 @@ app.state.limiter = limiter
 setup_telemetry(app)
 register_exception_handlers(app)
 add_security_headers(app)
-app.add_middleware(RateLimitHeadersMiddleware)
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(_rate_limit_headers_middleware_factory)
+
+
+def _handle_rate_limit_exceeded(request: Request, exc: Exception) -> Response:
+    """Adapt SlowAPI's specific handler to Starlette's broad handler type."""
+    if not isinstance(exc, RateLimitExceeded):
+        raise exc
+    return _rate_limit_exceeded_handler(request, exc)
+
+
+app.add_exception_handler(RateLimitExceeded, _handle_rate_limit_exceeded)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
@@ -121,9 +156,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(AuditLoggingMiddleware)
-app.add_middleware(PerformanceLoggingMiddleware, slow_request_threshold=0.5)
+app.add_middleware(_logging_middleware_factory)
+app.add_middleware(_audit_logging_middleware_factory)
+app.add_middleware(_performance_logging_middleware_factory, slow_request_threshold=0.5)
 app.include_router(api_router, prefix="/api/v1")
 
 _route_handlers = register_runtime_routes(app, settings, logger, optional_router_status)

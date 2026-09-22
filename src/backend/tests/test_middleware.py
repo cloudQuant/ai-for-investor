@@ -365,6 +365,68 @@ class TestExceptionHandling:
         # (FastAPI stores exception handlers internally)
         assert app is not None
 
+    @pytest.mark.asyncio
+    async def test_registered_exception_handlers_preserve_response_contracts(self):
+        """Registered adapters preserve custom, validation, and HTTP error responses."""
+        from fastapi import HTTPException
+        from httpx import ASGITransport
+        from pydantic import BaseModel
+
+        app = FastAPI()
+        register_exception_handlers(app)
+
+        class Payload(BaseModel):
+            count: int
+
+        @app.get("/custom-error")
+        async def custom_error():
+            raise UserNotFoundError(user_id="123")
+
+        @app.get("/request-validation")
+        async def request_validation(count: int):
+            return {"count": count}
+
+        @app.get("/pydantic-validation")
+        async def pydantic_validation():
+            Payload.model_validate({"count": "invalid"})
+            return {"ok": True}
+
+        @app.get("/http-error")
+        async def http_error():
+            raise HTTPException(
+                status_code=403,
+                detail={"message": "Access denied", "reason": "policy"},
+            )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            custom_response = await client.get("/custom-error")
+            request_validation_response = await client.get(
+                "/request-validation",
+                params={"count": "invalid"},
+            )
+            pydantic_validation_response = await client.get("/pydantic-validation")
+            http_response = await client.get("/http-error")
+
+        assert custom_response.status_code == 404
+        assert custom_response.json()["error"] == "UserNotFoundError"
+        assert custom_response.json()["message"] == "User not found (ID: 123)"
+
+        assert request_validation_response.status_code == 422
+        assert request_validation_response.json()["error"] == "VALIDATION_ERROR"
+        assert request_validation_response.json()["details"]["fields"][0]["field"] == "query.count"
+
+        assert pydantic_validation_response.status_code == 422
+        assert pydantic_validation_response.json()["error"] == "VALIDATION_ERROR"
+        assert pydantic_validation_response.json()["details"]["fields"][0]["field"] == "count"
+
+        assert http_response.status_code == 403
+        assert http_response.json()["error"] == "HTTP_403"
+        assert http_response.json()["message"] == "Access denied"
+        assert http_response.json()["details"]["reason"] == "policy"
+
 
 class TestSecurityHeadersMiddleware:
     """Test suite for security headers middleware."""

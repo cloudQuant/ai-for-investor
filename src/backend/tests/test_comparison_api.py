@@ -194,3 +194,54 @@ class TestComparisonSchemas:
         assert ComparisonCreate is not None
         assert ComparisonResponse is not None
         assert ComparisonUpdate is not None
+
+
+@pytest.mark.asyncio
+async def test_toggle_comparison_favorite_uses_update_schema():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from app.api.comparison import toggle_comparison_favorite
+    from app.schemas.comparison import ComparisonUpdate
+
+    current_user = SimpleNamespace(sub="owner-123")
+    comparison = SimpleNamespace(user_id="owner-123", is_favorite=False)
+    service = SimpleNamespace(
+        get_comparison=AsyncMock(return_value=comparison),
+        update_comparison=AsyncMock(return_value=SimpleNamespace(is_favorite=True)),
+    )
+
+    result = await toggle_comparison_favorite(
+        comparison_id="comparison-123", current_user=current_user, service=service
+    )
+
+    assert result == {"comparison_id": "comparison-123", "is_favorite": True}
+    service.update_comparison.assert_awaited_once_with(
+        comparison_id="comparison-123",
+        user_id="owner-123",
+        update_data=ComparisonUpdate(is_favorite=True),
+    )
+
+
+@pytest.mark.asyncio
+async def test_toggle_comparison_favorite_returns_not_found_when_update_races():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from fastapi import HTTPException
+
+    from app.api.comparison import toggle_comparison_favorite
+
+    current_user = SimpleNamespace(sub="owner-123")
+    comparison = SimpleNamespace(user_id="owner-123", is_favorite=False)
+    service = SimpleNamespace(
+        get_comparison=AsyncMock(return_value=comparison),
+        update_comparison=AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await toggle_comparison_favorite(
+            comparison_id="comparison-123", current_user=current_user, service=service
+        )
+
+    assert exc_info.value.status_code == 404

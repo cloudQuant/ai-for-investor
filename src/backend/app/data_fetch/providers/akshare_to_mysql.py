@@ -7,13 +7,15 @@ import os
 import queue
 import time
 import uuid
+from datetime import date, datetime
 from threading import Thread
-from typing import Any
+from typing import Any, Literal
 
 import akshare as ak
 import pandas as pd
 import requests
 
+from app.data_fetch.core.database import _DatabaseCursor
 from app.data_fetch.core.mysql_base import MysqlBase
 from app.data_fetch.utils.akshare_network_proxy import configure_akshare_network_proxy
 from app.data_fetch.utils.common_utils import retry_on_exception
@@ -27,7 +29,7 @@ class FuncThread(Thread):
         self.func = func
         self.args = args
         self.kwargs = kwargs
-        self.result = queue.Queue()
+        self.result: queue.Queue[tuple[str, object | None]] = queue.Queue()
         self.exc = None
 
     def run(self):
@@ -142,7 +144,7 @@ class AkshareToMySql(MysqlBase):
         table_name: str,
         on_duplicate_update: bool = False,
         unique_keys: "list[str] | None" = None,
-    ) -> bool:
+    ) -> int | Literal[False]:
         """save_data 的别名，供自动生成脚本调用。若表不存在则先用 create_table_sql 建表。"""
         import uuid as _uuid
 
@@ -150,8 +152,8 @@ class AkshareToMySql(MysqlBase):
         if create_sql:
             try:
                 self.connect_db()
-                self.cursor.execute(create_sql)
-                self.connection.commit()
+                self._require_cursor().execute(create_sql)
+                self._require_connection().commit()
             except Exception as e:
                 self.logger.warning(f"建表失败（可能已存在）: {e}")
 
@@ -159,8 +161,9 @@ class AkshareToMySql(MysqlBase):
         if "R_ID" not in df.columns:
             try:
                 self.connect_db()
-                self.cursor.execute(f"SHOW COLUMNS FROM `{table_name}` LIKE 'R_ID'")
-                if self.cursor.fetchone():
+                cursor = self._require_cursor()
+                cursor.execute(f"SHOW COLUMNS FROM `{table_name}` LIKE 'R_ID'")
+                if cursor.fetchone():
                     df = df.copy()
                     df.insert(0, "R_ID", [_uuid.uuid4().hex.upper() for _ in range(len(df))])
             except Exception as e:
@@ -190,14 +193,20 @@ class AkshareToMySql(MysqlBase):
                 WHERE exchange = %s AND trading_day BETWEEN %s AND %s
                 ORDER BY trading_day
                 """
-                self.cursor.execute(query, (exchange, start_date, end_date))
-                results = self.cursor.fetchall()
+                cursor = self._require_cursor()
+                cursor.execute(query, (exchange, start_date, end_date))
+                results = cursor.fetchall()
 
                 if results:
-                    trading_days = [
-                        (row[0].strftime("%Y-%m-%d") if hasattr(row[0], "strftime") else row[0])
-                        for row in results
-                    ]
+                    trading_days: list[str] = []
+                    for row in results:
+                        value = MysqlBase._first_row_value(row)
+                        if value is None:
+                            continue
+                        if isinstance(value, (date, datetime)):
+                            trading_days.append(value.strftime("%Y-%m-%d"))
+                        else:
+                            trading_days.append(str(value))
                     self.logger.info(f"从数据库获取到{len(trading_days)}个交易日")
                     return trading_days
         except Exception as e:
@@ -237,10 +246,11 @@ class AkshareToMySql(MysqlBase):
             query = """
                     SELECT DISTINCT(PRODUCT_CODE) FROM FUTURES_TRADING_FEES
                     """
-            self.cursor.execute(query)
-            results = self.cursor.fetchall()
+            cursor = self._require_cursor()
+            cursor.execute(query)
+            results = cursor.fetchall()
             if results:
-                symbol_list = [row[0] for row in results]
+                symbol_list = [MysqlBase._first_row_value(row) for row in results]
                 self.logger.info("从数据库成功获取交易品种")
                 return symbol_list
         except Exception as e:
@@ -260,20 +270,20 @@ class AkshareToMySql(MysqlBase):
         return big_df["symbol"].tolist()
 
     def get_data_by_columns(
-        self, table_name: str, column_list: list, where_condition: str = None
+        self, table_name: str, column_list: list[str], where_condition: str | None = None
     ) -> pd.DataFrame:
         """从指定表中获取指定列的数据"""
         if not column_list:
             self.logger.warning("列名列表不能为空")
             return pd.DataFrame()
 
-        cursor = None
+        cursor: _DatabaseCursor | None = None
         try:
             self.connect_db()
-            cursor = self.connection.cursor()
+            cursor = self._require_connection().cursor()
 
-            columns = ", ".join(column_list)
-            query = f"SELECT {columns} FROM {table_name}"  # nosec B608
+            selected_columns = ", ".join(column_list)
+            query = f"SELECT {selected_columns} FROM {table_name}"  # nosec B608
 
             if where_condition:
                 query += f" WHERE {where_condition}"
@@ -282,14 +292,17 @@ class AkshareToMySql(MysqlBase):
 
             cursor.execute(query)
 
-            columns = [desc[0] for desc in cursor.description]
+            description = cursor.description
+            if description is None:
+                return pd.DataFrame()
+            column_names = [str(desc[0]) for desc in description]
             rows = cursor.fetchall()
 
             if rows:
-                df = pd.DataFrame(rows, columns=columns)
+                df = pd.DataFrame(rows, columns=column_names)
                 self.logger.info(f"成功从 {table_name} 获取 {len(df)} 行数据")
             else:
-                df = pd.DataFrame(columns=columns)
+                df = pd.DataFrame(columns=column_names)
                 self.logger.warning(f"表 {table_name} 中没有找到匹配的数据")
 
             return df

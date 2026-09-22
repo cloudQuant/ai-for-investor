@@ -231,6 +231,62 @@ class TestCORSConfig:
         cors_middlewares = [m for m in app.user_middleware if m.cls == CORSMiddleware]
         assert len(cors_middlewares) > 0
 
+    async def test_main_middleware_factories_preserve_order_and_response_headers(
+        self, client: AsyncClient
+    ):
+        """Typed factories keep middleware registration order and behavior intact."""
+        from starlette.middleware.cors import CORSMiddleware
+
+        from app.main import (
+            _audit_logging_middleware_factory,
+            _logging_middleware_factory,
+            _performance_logging_middleware_factory,
+            _rate_limit_headers_middleware_factory,
+            app,
+        )
+        from app.middleware.logging import (
+            AuditLoggingMiddleware,
+            LoggingMiddleware,
+            PerformanceLoggingMiddleware,
+        )
+        from app.middleware.rate_limit_headers import RateLimitHeadersMiddleware
+        from app.middleware.security_headers import (
+            SecurityHeadersMiddleware,
+            _security_headers_middleware_factory,
+        )
+
+        assert [middleware.cls for middleware in app.user_middleware] == [
+            _performance_logging_middleware_factory,
+            _audit_logging_middleware_factory,
+            _logging_middleware_factory,
+            CORSMiddleware,
+            _rate_limit_headers_middleware_factory,
+            _security_headers_middleware_factory,
+        ]
+        assert app.user_middleware[0].kwargs == {"slow_request_threshold": 0.5}
+
+        response = await client.get("/")
+
+        assert response.status_code == 200
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["X-Request-ID"]
+        assert response.headers["X-Process-Time"]
+
+        middleware_stack = app.middleware_stack
+        assert middleware_stack is not None
+        runtime_middleware_types = []
+        while hasattr(middleware_stack, "app"):
+            middleware_stack = middleware_stack.app
+            runtime_middleware_types.append(type(middleware_stack))
+        assert runtime_middleware_types[:6] == [
+            PerformanceLoggingMiddleware,
+            AuditLoggingMiddleware,
+            LoggingMiddleware,
+            CORSMiddleware,
+            RateLimitHeadersMiddleware,
+            SecurityHeadersMiddleware,
+        ]
+
     async def test_cors_headers(self, client: AsyncClient):
         """Test CORS response headers."""
         resp = await client.options(
@@ -256,13 +312,55 @@ class TestRateLimiting:
 
     async def test_rate_limit_exception_handler(self):
         """Test the rate limit exception handler."""
-        from slowapi.errors import RateLimitExceeded
+        import json
+        from types import SimpleNamespace
 
-        from app.main import app
+        from fastapi import FastAPI
+        from slowapi.errors import RateLimitExceeded
+        from starlette.requests import Request
+
+        from app.main import _handle_rate_limit_exceeded, app
 
         # Check that exception handler is registered
         exception_handlers = app.exception_handlers
         assert RateLimitExceeded in exception_handlers
+        handler = exception_handlers[RateLimitExceeded]
+        assert handler is _handle_rate_limit_exceeded
+
+        request_app = FastAPI()
+
+        class FakeLimiter:
+            def _inject_headers(self, response, view_rate_limit):
+                self.view_rate_limit = view_rate_limit
+                return response
+
+        limiter = FakeLimiter()
+        request_app.state.limiter = limiter
+        request_scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/limited",
+            "raw_path": b"/limited",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("testclient", 1),
+            "app": request_app,
+        }
+        request = Request(request_scope)
+        request.state.view_rate_limit = "test-limit-state"
+        rate_limit_error = RateLimitExceeded(
+            SimpleNamespace(error_message="request limit reached", limit="5/minute")
+        )
+
+        response = handler(request, rate_limit_error)
+
+        assert response.status_code == 429
+        assert json.loads(response.body) == {"error": "Rate limit exceeded: request limit reached"}
+        assert limiter.view_rate_limit == "test-limit-state"
 
 
 @pytest.mark.asyncio

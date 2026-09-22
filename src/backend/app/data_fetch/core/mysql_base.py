@@ -6,12 +6,52 @@ import json
 import logging
 import math
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import mysql.connector
 import pandas as pd
+from mysql.connector.abstracts import MySQLConnectionAbstract, MySQLCursorAbstract
+from mysql.connector.pooling import PooledMySQLConnection
 
-from app.data_fetch.core.database import Database
+from app.data_fetch.core.database import (
+    Database,
+    _DatabaseConnection,
+    _DatabaseCursor,
+    _DatabaseRow,
+)
+
+
+class _PooledConnectionAdapter:
+    """Expose the mysql-connector pool wrapper through the narrow DB protocol."""
+
+    def __init__(self, connection: PooledMySQLConnection) -> None:
+        self._connection = connection
+
+    def cursor(self) -> _DatabaseCursor:
+        cursor = self._connection.cursor()
+        if not isinstance(cursor, MySQLCursorAbstract):
+            raise RuntimeError("mysql-connector pool returned an unsupported cursor")
+        return cursor
+
+    def is_connected(self) -> bool:
+        return bool(self._connection.is_connected())
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+    def close(self) -> None:
+        self._connection.close()
+
+
+def _adapt_connector_connection(
+    connection: PooledMySQLConnection | MySQLConnectionAbstract,
+) -> _DatabaseConnection:
+    if isinstance(connection, PooledMySQLConnection):
+        return _PooledConnectionAdapter(connection)
+    return connection
 
 
 class MysqlBase(Database):
@@ -23,29 +63,64 @@ class MysqlBase(Database):
         self.logger = logger or self._setup_logging("MysqlBase")
         # In-process cache for table column introspection to avoid repeated
         # SHOW COLUMNS queries during batch data-import runs.
-        self._columns_cache: dict[str, list[tuple[str, ...]]] = {}
+        self._columns_cache: dict[str, list[_DatabaseRow]] = {}
         self._table_exists_cache: dict[str, bool] = {}
 
-    def connect_db(self):
+    def connect_db(self) -> None:
         """建立数据库连接"""
         try:
-            if not self.connection or not self.connection.is_connected():
-                self.connection = mysql.connector.connect(**self.db_config)
-                self.cursor = self.connection.cursor()
+            connection = self.connection
+            if connection is None or not connection.is_connected():
+                connection = _adapt_connector_connection(mysql.connector.connect(**self.db_config))
+                cursor = connection.cursor()
+                if not connection.is_connected():
+                    raise RuntimeError("mysql-connector returned a disconnected connection")
+                if cursor is None:
+                    raise RuntimeError("mysql-connector returned no cursor")
+                self.connection = connection
+                self.cursor = cursor
                 self.logger.info("数据库连接成功")
+            elif self.cursor is None:
+                cursor = connection.cursor()
+                if cursor is None:
+                    raise RuntimeError("mysql-connector returned no cursor")
+                self.cursor = cursor
         except mysql.connector.Error as err:
             self.logger.error(f"数据库连接失败: {err}")
             raise
 
-    def disconnect_db(self):
+    def disconnect_db(self) -> None:
         """关闭数据库连接"""
-        if self.cursor:
-            self.cursor.close()
+        cursor = self.cursor
+        if cursor is not None:
+            cursor.close()
             self.cursor = None
-        if self.connection and self.connection.is_connected():
-            self.connection.close()
+        connection = self.connection
+        if connection is not None and connection.is_connected():
+            connection.close()
             self.connection = None
             self.logger.info("数据库连接已关闭")
+
+    def _require_connection(self) -> _DatabaseConnection:
+        """Return a connection only when connect_db has established one."""
+        connection = self.connection
+        if connection is None:
+            raise RuntimeError("MySQL connection is not established")
+        return connection
+
+    def _require_cursor(self) -> _DatabaseCursor:
+        """Return the cursor created for the established connection."""
+        cursor = self.cursor
+        if cursor is None:
+            raise RuntimeError("MySQL cursor is not established")
+        return cursor
+
+    @staticmethod
+    def _first_row_value(row: _DatabaseRow) -> object | None:
+        """Return the first value from a connector row, handling empty rows."""
+        if isinstance(row, dict):
+            return next(iter(row.values()), None)
+        return row[0] if row else None
 
     @staticmethod
     def _coerce_mysql_value(value: Any) -> Any:
@@ -87,20 +162,20 @@ class MysqlBase(Database):
         cols_sql = ",\n".join(col_defs)
         create_sql = f"CREATE TABLE IF NOT EXISTS `{table_name}` (\n{cols_sql}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         try:
-            self.cursor.execute(create_sql)
-            self.connection.commit()
+            self._require_cursor().execute(create_sql)
+            self._require_connection().commit()
             self.logger.info(f"自动建表成功: {table_name}")
         except mysql.connector.Error as err:
             self.logger.warning(f"自动建表失败 {table_name}: {err}")
 
-    def _execute_batch(self, insert_sql, batch):
+    def _execute_batch(self, insert_sql: str, batch: list[list[Any]]) -> bool:
         """执行批量插入或更新操作"""
         try:
-            self.cursor.executemany(insert_sql, batch)
-            self.connection.commit()
+            self._require_cursor().executemany(insert_sql, batch)
+            self._require_connection().commit()
             return True
         except mysql.connector.Error as err:
-            self.connection.rollback()
+            self._require_connection().rollback()
             self.logger.error(f"批量执行失败: {err}")
             raise
 
@@ -109,9 +184,9 @@ class MysqlBase(Database):
         df: pd.DataFrame,
         table_name: str,
         on_duplicate_update: bool = False,
-        unique_keys: list[str] = None,
+        unique_keys: list[str] | None = None,
         ignore_duplicates: bool = False,
-    ) -> bool:
+    ) -> int | Literal[False]:
         """将DataFrame保存到数据库表"""
         if df.empty:
             self.logger.warning(f"DataFrame为空，无需保存到 {table_name}")
@@ -149,6 +224,8 @@ class MysqlBase(Database):
         df.columns = normalized_cols
 
         self.connect_db()
+        cursor = self._require_cursor()
+        connection = self._require_connection()
 
         safe_table = str(table_name).replace("`", "``")
 
@@ -157,8 +234,8 @@ class MysqlBase(Database):
             if safe_table in self._table_exists_cache:
                 table_exists = self._table_exists_cache[safe_table]
             else:
-                self.cursor.execute(f"SHOW TABLES LIKE '{safe_table}'")
-                table_exists = bool(self.cursor.fetchone())
+                cursor.execute(f"SHOW TABLES LIKE '{safe_table}'")
+                table_exists = bool(cursor.fetchone())
                 self._table_exists_cache[safe_table] = table_exists
             if not table_exists:
                 self._auto_create_table(safe_table, df)
@@ -175,11 +252,15 @@ class MysqlBase(Database):
             if safe_table in self._columns_cache:
                 table_rows = self._columns_cache[safe_table]
             else:
-                self.cursor.execute(f"SHOW COLUMNS FROM `{safe_table}`")
-                table_rows = self.cursor.fetchall() or []
+                cursor.execute(f"SHOW COLUMNS FROM `{safe_table}`")
+                table_rows = cursor.fetchall() or []
                 self._columns_cache[safe_table] = table_rows
             # Build case-insensitive mapping: lowercase table column -> actual table column name
-            table_cols_ci = {row[0].lower(): row[0] for row in table_rows}
+            table_cols_ci = {}
+            for row in table_rows:
+                first_column = self._first_row_value(row)
+                if isinstance(first_column, str):
+                    table_cols_ci[first_column.lower()] = first_column
             if table_cols_ci:
                 # Build mapping from df column name -> actual table column name (case-insensitive match)
                 column_mapping = {}
@@ -209,10 +290,10 @@ class MysqlBase(Database):
                             else:
                                 sql_type = "TEXT"
                             escaped_col = col_name.replace("`", "``")
-                            self.cursor.execute(
+                            cursor.execute(
                                 f"ALTER TABLE `{safe_table}` ADD COLUMN `{escaped_col}` {sql_type} NULL"
                             )
-                            self.connection.commit()
+                            connection.commit()
                             table_cols_ci[col_name.lower()] = col_name
                             column_mapping[c] = col_name
                             added_columns.append(col_name)
@@ -336,24 +417,27 @@ class MysqlBase(Database):
         delete_sql = f"DELETE FROM {table_name} WHERE {where_str}"  # nosec B608
 
         try:
-            self.cursor.execute(delete_sql, values)
-            deleted_rows = self.cursor.rowcount
-            self.connection.commit()
+            cursor = self._require_cursor()
+            connection = self._require_connection()
+            cursor.execute(delete_sql, values)
+            deleted_rows = cursor.rowcount
+            connection.commit()
             self.logger.info(f"从表 {table_name} 删除了 {deleted_rows} 行记录")
             return True
         except mysql.connector.Error as err:
-            self.connection.rollback()
+            self._require_connection().rollback()
             self.logger.error(f"从表 {table_name} 删除数据失败: {err}")
             raise
 
-    def get_one_column_from_table(self, column_name: str, table_name: str):
+    def get_one_column_from_table(self, column_name: str, table_name: str) -> list[object | None]:
         """从表中获取单个列的所有值"""
         self.connect_db()
         try:
             query = f"SELECT DISTINCT {column_name} FROM {table_name}"  # nosec B608
-            self.cursor.execute(query)
-            results = self.cursor.fetchall()
-            return [row[0] for row in results]
+            cursor = self._require_cursor()
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return [self._first_row_value(row) for row in results]
         except mysql.connector.Error as err:
             self.logger.error(f"获取 {table_name}.{column_name} 失败: {err}")
             return []
@@ -362,8 +446,8 @@ class MysqlBase(Database):
         self,
         table_name: str,
         date_column: str = "BASEDATE",
-        conditions: dict[str, Any] = None,
-    ):
+        conditions: dict[str, Any] | None = None,
+    ) -> str | None:
         """获取表中指定日期列的最新日期"""
         self.connect_db()
         try:
@@ -379,8 +463,10 @@ class MysqlBase(Database):
                 where_clause = " AND ".join(where_conditions)
                 query = f"SELECT MAX({date_column}) FROM {table_name} WHERE {where_clause}"  # nosec B608
 
-            self.cursor.execute(query, params)
-            result = self.cursor.fetchone()[0]
+            cursor = self._require_cursor()
+            cursor.execute(query, params or ())
+            row = cursor.fetchone()
+            result = self._first_row_value(row) if row is not None else None
 
             if result:
                 if isinstance(result, datetime):
@@ -404,8 +490,9 @@ class MysqlBase(Database):
         """检查数据库中是否存在指定的表"""
         try:
             self.connect_db()
-            self.cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
-            result = self.cursor.fetchone()
+            cursor = self._require_cursor()
+            cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+            result = cursor.fetchone()
             return result is not None
         except mysql.connector.Error as err:
             self.logger.error(f"检查表 {table_name} 是否存在时出错: {err}")
@@ -417,20 +504,23 @@ class MysqlBase(Database):
         """创建表"""
         try:
             self.connect_db()
-            self.cursor.execute(create_table_sql)
-            self.connection.commit()
+            cursor = self._require_cursor()
+            connection = self._require_connection()
+            cursor.execute(create_table_sql)
+            connection.commit()
             self.logger.info("成功创建表")
             return True
         except mysql.connector.Error as err:
             self.logger.error(f"创建表失败: {err}")
-            if self.connection:
-                self.connection.rollback()
+            maybe_connection = self.connection
+            if maybe_connection is not None:
+                maybe_connection.rollback()
             return False
         finally:
             self.disconnect_db()
 
     def create_table_if_not_exists(
-        self, table_name: str = None, create_table_sql: str = None
+        self, table_name: str | None = None, create_table_sql: str | None = None
     ) -> bool:
         """Compatibility helper used by many scripts."""
         tname = table_name or getattr(self, "table_name", None)
@@ -508,29 +598,34 @@ class MysqlBase(Database):
 
         try:
             self.connect_db()
-            self.cursor.execute(ddl)
-            self.connection.commit()
+            cursor = self._require_cursor()
+            connection = self._require_connection()
+            cursor.execute(ddl)
+            connection.commit()
             return True
         except Exception as e:
             self.logger.error("Failed to create table from df: %s, error=%s", table_name, e)
-            if self.connection:
-                self.connection.rollback()
+            maybe_connection = self.connection
+            if maybe_connection is not None:
+                maybe_connection.rollback()
             raise
         finally:
             self.disconnect_db()
 
     def get_data_by_columns(
-        self, table_name: str, column_list: list, where_condition: str = None
+        self, table_name: str, column_list: list[str], where_condition: str | None = None
     ) -> pd.DataFrame:
         """从指定表中获取指定列的数据"""
         if not column_list:
             self.logger.warning("列名列表不能为空")
             return pd.DataFrame()
 
-        cursor = None
+        cursor: _DatabaseCursor | None = None
         try:
             self.connect_db()
-            cursor = self.connection.cursor()
+            cursor = self._require_connection().cursor()
+            if cursor is None:
+                raise RuntimeError("mysql-connector returned no cursor")
 
             columns = ", ".join(column_list)
             query = f"SELECT {columns} FROM {table_name}"  # nosec B608
@@ -542,14 +637,18 @@ class MysqlBase(Database):
 
             cursor.execute(query)
 
-            columns = [desc[0] for desc in cursor.description]
+            description = cursor.description
+            if not description:
+                self.logger.warning("查询表 %s 未返回列描述", table_name)
+                return pd.DataFrame()
+            column_names = [description_row[0] for description_row in description]
             rows = cursor.fetchall()
 
             if rows:
-                df = pd.DataFrame(rows, columns=columns)
+                df = pd.DataFrame(rows, columns=column_names)
                 self.logger.info(f"成功从 {table_name} 获取 {len(df)} 行数据")
             else:
-                df = pd.DataFrame(columns=columns)
+                df = pd.DataFrame(columns=column_names)
                 self.logger.warning(f"表 {table_name} 中没有找到匹配的数据")
 
             return df
@@ -585,8 +684,9 @@ class MysqlBase(Database):
         """
         try:
             self.connect_db()
-            self.cursor.execute(query, params or ())
-            return self.cursor.fetchall()
+            cursor = self._require_cursor()
+            cursor.execute(query, params or ())
+            return cursor.fetchall()
         except mysql.connector.Error as err:
             self.logger.error(f"Query failed: {err}")
             return None
@@ -629,13 +729,15 @@ class MysqlBase(Database):
             ]
 
             self.connect_db()
-            self.cursor.executemany(insert_sql, data)
-            self.connection.commit()
+            cursor = self._require_cursor()
+            connection = self._require_connection()
+            cursor.executemany(insert_sql, data)
+            connection.commit()
             self.logger.info(f"Inserted {len(data)} rows into {table_name}")
             return True
 
         except mysql.connector.Error as err:
-            self.connection.rollback()
+            self._require_connection().rollback()
             self.logger.error(f"Insert failed: {err}")
             return False
         finally:
@@ -665,21 +767,23 @@ class MysqlBase(Database):
         """
         try:
             self.connect_db()
-            self.cursor.execute(sql, params or ())
+            cursor = self._require_cursor()
+            connection = self._require_connection()
+            cursor.execute(sql, params or ())
 
             if fetch_one:
-                result = self.cursor.fetchone()
+                result = cursor.fetchone()
                 return result
             elif fetch_all:
-                result = self.cursor.fetchall()
-                return result
+                rows = cursor.fetchall()
+                return rows
             else:
-                self.connection.commit()
+                connection.commit()
                 return True
 
         except mysql.connector.Error as err:
             if not (fetch_one or fetch_all):
-                self.connection.rollback()
+                self._require_connection().rollback()
             self.logger.error(f"Execute SQL failed: {err}")
             return None
         finally:

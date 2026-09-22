@@ -378,6 +378,15 @@ def _as_utc_now(value: object) -> datetime:
 
 
 def _timeout_delta(value: object) -> timedelta:
-    if type(value) not in {int, float} or not math.isfinite(value) or not 0 < value <= 86_400:
+    seconds: int | float
+    if type(value) is int:
+        if not 0 < value <= 86_400:
+            raise ValueError
+        seconds = value
+    elif type(value) is float:
+        if not math.isfinite(value) or not 0 < value <= 86_400:
+            raise ValueError
+        seconds = value
+    else:
         raise ValueError
-    return timedelta(seconds=value)
+    return timedelta(seconds=seconds)

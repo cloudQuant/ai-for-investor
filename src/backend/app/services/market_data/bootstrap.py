@@ -45,6 +45,11 @@ from app.services.market_data.openbb_runtime import (
     approved_openbb_runtime_route_permits,
     openbb_runtime_registration_status,
 )
+from app.services.market_data.ths_datasets import (
+    CANONICAL_THS_REFERENCE_DATASET_CODES,
+    _canonical_reference_series_schema,
+    canonical_ths_reference_dataset_specs,
+)
 
 CANONICAL_STORAGE_ID = "canonical_market_data"
 CANONICAL_STORAGE_URL_ENV = "DATABASE_URL"
@@ -61,6 +66,12 @@ CANONICAL_SETTLEMENT_DATASET_CODE = "market.settlement"
 CANONICAL_BOND_REFERENCE_DATASET_CODE = "market.bond_reference"
 CANONICAL_FUND_NAV_DATASET_CODE = "market.fund_nav"
 CANONICAL_FX_REFERENCE_DATASET_CODE = "market.fx_reference"
+(
+    CANONICAL_STOCK_ADJUSTMENT_FACTORS_DATASET_CODE,
+    CANONICAL_STOCK_FINANCIALS_INCOME_DATASET_CODE,
+    CANONICAL_STOCK_FINANCIALS_BALANCE_DATASET_CODE,
+    CANONICAL_STOCK_FINANCIALS_CASHFLOW_DATASET_CODE,
+) = CANONICAL_THS_REFERENCE_DATASET_CODES
 CANONICAL_REFERENCE_SERIES_DATASET_CODES = (
     CANONICAL_VALUATION_DATASET_CODE,
     CANONICAL_LIQUIDITY_DATASET_CODE,
@@ -68,6 +79,7 @@ CANONICAL_REFERENCE_SERIES_DATASET_CODES = (
     CANONICAL_BOND_REFERENCE_DATASET_CODE,
     CANONICAL_FUND_NAV_DATASET_CODE,
     CANONICAL_FX_REFERENCE_DATASET_CODE,
+    *CANONICAL_THS_REFERENCE_DATASET_CODES,
 )
 CANONICAL_DATASET_CODES = (
     CANONICAL_DATASET_CODE,
@@ -588,7 +600,7 @@ class MarketDataPlatformBootstrapper:
                 DgDatasetStorage.physical_table == CANONICAL_PHYSICAL_TABLE,
             )
         )
-        return list(rows.all())
+        return [(row[0], row[1]) for row in rows.all()]
 
     async def _ensure_provider(
         self,
@@ -735,6 +747,7 @@ def _canonical_dataset_specs() -> tuple[tuple[str, str, dict[str, object], list[
             _canonical_fx_reference_schema(),
             _canonical_reference_series_primary_key(),
         ),
+        *canonical_ths_reference_dataset_specs(_canonical_reference_series_primary_key),
     )
 
 
@@ -965,46 +978,6 @@ def _canonical_fx_reference_schema() -> dict[str, object]:
             "quote_currency": "string|null",
         },
     )
-
-
-def _canonical_reference_series_schema(
-    *,
-    schema_version: str,
-    supported_asset_types: tuple[str, ...],
-    observation_fields: Mapping[str, str],
-) -> dict[str, object]:
-    """Return an inert logical reference-series contract over the revision fact table."""
-    return {
-        "schema_version": schema_version,
-        "data_kind": "reference_series",
-        "supported_asset_types": list(supported_asset_types),
-        "identity_fields": [
-            "canonical_id",
-            "asset_type",
-            "market",
-            "instrument_metadata_version",
-        ],
-        "series_dimensions": [
-            "frequency",
-            "adjustment",
-            "price_basis",
-            "currency",
-            "unit",
-            "source_policy_id",
-        ],
-        "observation_fields": {
-            "event_time": "timestamp",
-            "event_end": "timestamp|null",
-            "available_at": "timestamp",
-            **dict(observation_fields),
-        },
-        "provenance_fields": [
-            "source_snapshot_id",
-            "revision_number",
-            "quality_status",
-            "normalization_version",
-        ],
-    }
 
 
 def _canonical_reference_series_primary_key() -> list[str]:

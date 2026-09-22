@@ -250,30 +250,33 @@ class ReqDocsMigrationService:
                 .scalars()
                 .all()
             )
-            kb_by_reqdocs_id = {
-                int((kb.settings or {}).get("reqdocs_project_id")): kb
-                for kb in existing_kbs
-                if isinstance(kb.settings, dict)
-                and (kb.settings or {}).get("reqdocs_project_id") is not None
-            }
+            kb_by_reqdocs_id: dict[int, KnowledgeBase] = {}
+            for kb in existing_kbs:
+                if not isinstance(kb.settings, dict):
+                    continue
+                reqdocs_project_id = kb.settings.get("reqdocs_project_id")
+                if reqdocs_project_id is not None:
+                    kb_by_reqdocs_id[int(reqdocs_project_id)] = kb
 
             existing_docs = (await session.execute(select(KBDocument))).scalars().all()
-            doc_by_reqdocs_id = {
-                int((doc.metadata_json or {}).get("reqdocs_document_id")): doc
-                for doc in existing_docs
-                if isinstance(doc.metadata_json, dict)
-                and (doc.metadata_json or {}).get("reqdocs_document_id") is not None
-            }
+            doc_by_reqdocs_id: dict[int, KBDocument] = {}
+            for doc in existing_docs:
+                if not isinstance(doc.metadata_json, dict):
+                    continue
+                reqdocs_document_id = doc.metadata_json.get("reqdocs_document_id")
+                if reqdocs_document_id is not None:
+                    doc_by_reqdocs_id[int(reqdocs_document_id)] = doc
 
             existing_conversations = (
                 (await session.execute(select(ChatConversation))).scalars().all()
             )
-            conv_by_reqdocs_id = {
-                int((conv.settings or {}).get("reqdocs_conversation_id")): conv
-                for conv in existing_conversations
-                if isinstance(conv.settings, dict)
-                and (conv.settings or {}).get("reqdocs_conversation_id") is not None
-            }
+            conv_by_reqdocs_id: dict[int, ChatConversation] = {}
+            for conv in existing_conversations:
+                if not isinstance(conv.settings, dict):
+                    continue
+                reqdocs_conversation_id = conv.settings.get("reqdocs_conversation_id")
+                if reqdocs_conversation_id is not None:
+                    conv_by_reqdocs_id[int(reqdocs_conversation_id)] = conv
 
             existing_messages = (await session.execute(select(ChatMessage))).scalars().all()
             existing_message_keys = {
@@ -437,7 +440,7 @@ class ReqDocsMigrationService:
                 )
                 if key in existing_message_keys:
                     continue
-                entity = ChatMessage(
+                message_entity = ChatMessage(
                     conversation_id=conv_id,
                     role=message["role"],
                     content=message["content"],
@@ -447,8 +450,8 @@ class ReqDocsMigrationService:
                     reasoning=None,
                 )
                 if message.get("created_at"):
-                    entity.created_at = message["created_at"]
-                session.add(entity)
+                    message_entity.created_at = message["created_at"]
+                session.add(message_entity)
                 existing_message_keys.update(
                     self._message_keys(
                         conv_id, message["role"], message["content"], message.get("created_at")
@@ -587,31 +590,35 @@ class ReqDocsMigrationService:
                     )
                 )
             ).all()
-            kb_by_reqdocs_id = {
-                int((settings or {}).get("reqdocs_project_id")): str(kb_id)
-                for kb_id, settings in existing_kbs
-                if isinstance(settings, dict) and settings.get("reqdocs_project_id") is not None
-            }
+            kb_by_reqdocs_id: dict[int, str] = {}
+            for kb_id, settings in existing_kbs:
+                if not isinstance(settings, dict):
+                    continue
+                reqdocs_project_id = settings.get("reqdocs_project_id")
+                if reqdocs_project_id is not None:
+                    kb_by_reqdocs_id[int(reqdocs_project_id)] = str(kb_id)
 
             existing_docs = (
                 await session.execute(select(KBDocument.id, KBDocument.metadata_json))
             ).all()
-            doc_by_reqdocs_id = {
-                int((metadata_json or {}).get("reqdocs_document_id")): str(doc_id)
-                for doc_id, metadata_json in existing_docs
-                if isinstance(metadata_json, dict)
-                and metadata_json.get("reqdocs_document_id") is not None
-            }
+            doc_by_reqdocs_id: dict[int, str] = {}
+            for doc_id, metadata_json in existing_docs:
+                if not isinstance(metadata_json, dict):
+                    continue
+                reqdocs_document_id = metadata_json.get("reqdocs_document_id")
+                if reqdocs_document_id is not None:
+                    doc_by_reqdocs_id[int(reqdocs_document_id)] = str(doc_id)
 
             existing_conversations = (
                 await session.execute(select(ChatConversation.id, ChatConversation.settings))
             ).all()
-            conv_by_reqdocs_id = {
-                int((settings or {}).get("reqdocs_conversation_id")): str(conv_id)
-                for conv_id, settings in existing_conversations
-                if isinstance(settings, dict)
-                and settings.get("reqdocs_conversation_id") is not None
-            }
+            conv_by_reqdocs_id: dict[int, str] = {}
+            for conv_id, settings in existing_conversations:
+                if not isinstance(settings, dict):
+                    continue
+                reqdocs_conversation_id = settings.get("reqdocs_conversation_id")
+                if reqdocs_conversation_id is not None:
+                    conv_by_reqdocs_id[int(reqdocs_conversation_id)] = str(conv_id)
 
             existing_messages = (
                 await session.execute(

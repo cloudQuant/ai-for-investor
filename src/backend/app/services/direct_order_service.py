@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from math import isfinite
 from typing import Any
 
 from app.schemas.ai_trading import OrderType, TradeAction, TradingIntent
@@ -355,9 +356,11 @@ class DirectOrderService:
             if value in (None, ""):
                 continue
             try:
-                return float(value)
-            except (TypeError, ValueError):
+                number = float(value)
+            except (OverflowError, TypeError, ValueError):
                 continue
+            if isfinite(number):
+                return number
         return default
 
     @classmethod
@@ -497,7 +500,10 @@ class DirectOrderService:
             value = payload.get(field)
             if value in (None, "", 0):
                 continue
-            scaled = float(value) / tick
+            price = cls._first_number(value)
+            if price is None:
+                raise ValueError(f"{field} must be a valid number")
+            scaled = price / tick
             if abs(round(scaled) - scaled) > 1e-9:
                 raise ValueError(f"{field} {value} does not align with tick size {tick}")
 
@@ -505,9 +511,9 @@ class DirectOrderService:
     def _normalise_order_price(value: Any, message: str) -> float:
         try:
             price = float(value)
-        except (TypeError, ValueError) as exc:
+        except (OverflowError, TypeError, ValueError) as exc:
             raise ValueError(message) from exc
-        if price <= 0:
+        if not isfinite(price) or price <= 0:
             raise ValueError(message)
         return price
 
@@ -600,10 +606,9 @@ class DirectOrderService:
         value: Any, *, default: float | None = 1.0, integer_required: bool = False
     ) -> int | float:
         raw = default if value in (None, "") else value
-        try:
-            size = float(raw)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("quantity must be a positive number") from exc
+        size = DirectOrderService._first_number(raw)
+        if size is None:
+            raise ValueError("quantity must be a positive number")
         if size <= 0:
             raise ValueError("quantity must be positive")
         if integer_required:
@@ -974,10 +979,9 @@ class DirectOrderService:
             value = row.get(key)
             if value in (None, ""):
                 continue
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                continue
+            size = DirectOrderService._first_number(value)
+            if size is not None:
+                return size
         return 0.0
 
     @classmethod
@@ -1015,10 +1019,8 @@ class DirectOrderService:
             return "long"
 
         key_text = str(key or "").strip().lower()
-        try:
-            code = int(float(text))
-        except (TypeError, ValueError):
-            code = None
+        number = DirectOrderService._first_number(text)
+        code = int(number) if number is not None else None
         if key_text in {"trade_action", "position_type", "type"}:
             if code == 0:
                 return "long"
@@ -1158,10 +1160,9 @@ class DirectOrderService:
             value = row.get(key)
             if value in (None, ""):
                 continue
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                continue
+            number = DirectOrderService._first_number(value)
+            if number is not None:
+                return number
         return None
 
     @classmethod
@@ -1218,10 +1219,8 @@ class DirectOrderService:
             text = str(value).strip().lower()
             if text in {"long", "short"}:
                 return text
-            try:
-                code = int(float(text))
-            except (TypeError, ValueError):
-                code = None
+            number = DirectOrderService._first_number(text)
+            code = int(number) if number is not None else None
             key_text = str(key or "").strip().lower()
             if key_text in {"positionidx", "position_idx"}:
                 if code == 1:
@@ -1435,7 +1434,7 @@ class DirectOrderService:
     def _find_available_gateway(self, intent: TradingIntent) -> str | None:
         """Find an available gateway connection matching the intent's exchange."""
         try:
-            from app.services.manual_gateway_service import list_connected_gateways
+            from app.services.gateway.manual import list_connected_gateways
 
             gateways = self._get_gateways_dict()
             connected = list_connected_gateways(gateways)

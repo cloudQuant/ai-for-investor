@@ -8,12 +8,27 @@ import pytest
 
 from app.schemas.workspace import StrategyUnitCreate, StrategyUnitUpdate
 from app.services import workspace_unit_runtime
+from app.services.workspace.run_ops import _unit_run_progress
 from app.services.workspace.units import (
     MarketDataBindingUnitMutationError,
     _merged_bound_unit_data_config,
     _validate_bound_unit_identity_update,
 )
 from app.services.workspace_service import WorkspaceService
+
+
+def test_unit_run_progress_clamps_runtime_progress() -> None:
+    task = SimpleNamespace(request_data={"_runtime": {"progress": 125, "message": "working"}})
+
+    assert _unit_run_progress(task, "running") == (100.0, "working")
+
+
+def test_unit_run_progress_uses_fallback_for_malformed_runtime_data() -> None:
+    malformed_request = SimpleNamespace(request_data="not-a-dict")
+    malformed_runtime = SimpleNamespace(request_data={"_runtime": ["not-a-dict"]})
+
+    assert _unit_run_progress(malformed_request, "queued") == (0.0, None)
+    assert _unit_run_progress(malformed_runtime, "queued") == (0.0, None)
 
 
 @pytest.mark.asyncio
@@ -45,6 +60,10 @@ async def test_resolve_unit_bar_count_uses_resolved_log_dir_parent_fallback():
                 )
 
     assert result == 3
+    backtest_service.task_manager.get_task.assert_awaited_once_with(
+        "task-123",
+        user_id="user-1",
+    )
     mock_resolve.assert_awaited_once_with("task-123", "demo_strategy")
     mock_parse_log_dir.assert_called_once_with(Path("/tmp/test_logs"))
 

@@ -62,7 +62,7 @@ class ErrorResponse:
         Returns:
             Dictionary representation of the error.
         """
-        result = {
+        result: dict[str, object] = {
             "error": self.error,
             "message": self.message,
         }
@@ -148,7 +148,7 @@ def _build_validation_error_response(
     request_id = getattr(request.state, "request_id", str(uuid.uuid4())[:8])
     errors = []
     for err in exc.errors():
-        loc = err.get("loc", [])
+        loc: object = err.get("loc", [])
         field = ".".join(str(part) for part in (loc if isinstance(loc, (list, tuple)) else [loc]))
         errors.append(
             {
@@ -296,6 +296,46 @@ async def handle_generic_exception(request: Request, exc: Exception) -> JSONResp
     )
 
 
+async def _handle_base_app_error_registered(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Adapt the custom exception handler to Starlette's broad handler type."""
+    if isinstance(exc, BaseAppError):
+        return await handle_base_app_error(request, exc)
+    return await handle_generic_exception(request, exc)
+
+
+async def _handle_request_validation_error_registered(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Adapt the request validation handler to Starlette's broad handler type."""
+    if isinstance(exc, RequestValidationError):
+        return await handle_request_validation_error(request, exc)
+    return await handle_generic_exception(request, exc)
+
+
+async def _handle_validation_error_registered(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Adapt the Pydantic validation handler to Starlette's broad handler type."""
+    if isinstance(exc, ValidationError):
+        return await handle_validation_error(request, exc)
+    return await handle_generic_exception(request, exc)
+
+
+async def _handle_http_exception_registered(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    """Adapt the HTTP exception handler to Starlette's broad handler type."""
+    if isinstance(exc, StarletteHTTPException):
+        return await handle_http_exception(request, exc)
+    return await handle_generic_exception(request, exc)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register all exception handlers with the FastAPI application.
 
@@ -303,16 +343,16 @@ def register_exception_handlers(app: FastAPI) -> None:
         app: The FastAPI application instance.
     """
     # Custom application exceptions
-    app.add_exception_handler(BaseAppError, handle_base_app_error)
+    app.add_exception_handler(BaseAppError, _handle_base_app_error_registered)
 
     # FastAPI request validation errors (422)
-    app.add_exception_handler(RequestValidationError, handle_request_validation_error)
+    app.add_exception_handler(RequestValidationError, _handle_request_validation_error_registered)
 
     # Pydantic validation errors (usually internal model_validate failures)
-    app.add_exception_handler(ValidationError, handle_validation_error)
+    app.add_exception_handler(ValidationError, _handle_validation_error_registered)
 
     # HTTP exceptions (e.g. raise HTTPException(...))
-    app.add_exception_handler(StarletteHTTPException, handle_http_exception)
+    app.add_exception_handler(StarletteHTTPException, _handle_http_exception_registered)
 
     # Generic exception handler (must be last)
     app.add_exception_handler(Exception, handle_generic_exception)

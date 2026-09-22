@@ -456,6 +456,119 @@ class SnapshotCoveragePlanner:
         )
 
 
+class SparseReferenceCoveragePlanner:
+    """Evaluate a sparse reference/event series without forcing a calendar grid.
+
+    Financial report periods, corporate-action events, and trading calendars are
+    not a daily bar grid: an instrument legitimately has no event on most days.
+    Forcing them through ``CoveragePlanner`` would mark every non-event day as a
+    missing calendar event.  Instead, a sparse reference series is complete when
+    the requested window contains at least one eligible observation; a window
+    with no usable observation triggers a single full-window fetch so the query
+    service can make one bounded, current-only provider request.
+
+    This planner deliberately has no freshness SLA (unlike a quote snapshot) and
+    returns every eligible observation in the window (unlike the snapshot
+    planner, which selects only the newest).
+    """
+
+    def plan(
+        self,
+        *,
+        query: QueryIdentity,
+        window: TimeWindow,
+        observations: Iterable[Observation],
+        required_fields: frozenset[str],
+        as_of: datetime,
+        eligible_qualities: frozenset[ObservationQuality] = frozenset({ObservationQuality.PASS}),
+    ) -> CoveragePlan:
+        """Return exact sparse-event coverage for one request window."""
+        if not isinstance(query, QueryIdentity):
+            raise TypeError("query must be a QueryIdentity")
+        if not isinstance(window, TimeWindow):
+            raise TypeError("window must be a TimeWindow")
+        cutoff = _as_utc(as_of, field_name="as_of")
+        normalized_required_fields = _normalize_required_fields(required_fields)
+        normalized_qualities = frozenset(ObservationQuality(item) for item in eligible_qualities)
+        if not normalized_qualities:
+            raise ValueError("eligible_qualities cannot be empty")
+
+        accepted_keys: list[EventKey] = []
+        rejection_counts: Counter[str] = Counter()
+        for observation in observations:
+            if not isinstance(observation, Observation):
+                raise TypeError("observations must contain Observation values")
+            rejection_reasons = _sparse_observation_rejection_reasons(
+                observation=observation,
+                query=query,
+                window=window,
+                required_fields=normalized_required_fields,
+                eligible_qualities=normalized_qualities,
+                cutoff=cutoff,
+            )
+            if rejection_reasons:
+                rejection_counts.update(reason.value for reason in rejection_reasons)
+                continue
+            accepted_keys.append(observation.event_key)
+
+        if accepted_keys:
+            ordered = tuple(sorted(accepted_keys))
+            return CoveragePlan(
+                status=CoverageStatus.COMPLETE,
+                expected_event_keys=ordered,
+                accepted_event_keys=ordered,
+                missing_event_keys=(),
+                gaps=(),
+                rejection_counts=MappingProxyType(dict(sorted(rejection_counts.items()))),
+            )
+
+        # No usable observation: a single full-window fetch token, never persisted
+        # as a source row. This mirrors the snapshot planner's bounded miss.
+        missing_key = EventKey(window.end_at - timedelta(microseconds=1))
+        return CoveragePlan(
+            status=CoverageStatus.INCOMPLETE,
+            expected_event_keys=(missing_key,),
+            accepted_event_keys=(),
+            missing_event_keys=(missing_key,),
+            gaps=(
+                CoverageGap(
+                    position=GapPosition.FULL,
+                    event_keys=(missing_key,),
+                    fetch_window=window,
+                ),
+            ),
+            rejection_counts=MappingProxyType(dict(sorted(rejection_counts.items()))),
+            calendar_reason="SPARSE_REFERENCE_INCOMPLETE",
+        )
+
+
+def _sparse_observation_rejection_reasons(
+    *,
+    observation: Observation,
+    query: QueryIdentity,
+    window: TimeWindow,
+    required_fields: frozenset[str],
+    eligible_qualities: frozenset[ObservationQuality],
+    cutoff: datetime,
+) -> tuple[ObservationRejectionReason, ...]:
+    """Reject a sparse-reference observation for identity, window, quality, or PIT."""
+    reasons: list[ObservationRejectionReason] = []
+    if observation.identity != query:
+        reasons.append(ObservationRejectionReason.IDENTITY_MISMATCH)
+    if not window.contains(observation.event_key):
+        reasons.append(ObservationRejectionReason.OUTSIDE_EXPECTED_CALENDAR)
+    if any(
+        not is_usable_field_value(field_name, observation.fields.get(field_name))
+        for field_name in required_fields
+    ):
+        reasons.append(ObservationRejectionReason.MISSING_REQUIRED_FIELDS)
+    if observation.quality not in eligible_qualities:
+        reasons.append(ObservationRejectionReason.QUALITY_INELIGIBLE)
+    if observation.available_at is None or observation.available_at > cutoff:
+        reasons.append(ObservationRejectionReason.NOT_AVAILABLE_AT_CUTOFF)
+    return tuple(reasons)
+
+
 def _observation_rejection_reasons(
     *,
     observation: Observation,

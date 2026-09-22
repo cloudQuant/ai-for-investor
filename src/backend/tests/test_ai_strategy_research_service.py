@@ -5,8 +5,10 @@ import inspect
 import json
 import threading
 import uuid
+from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -86,6 +88,8 @@ from app.services.ai_strategy_research_task_manager import (
     AIStrategyResearchTaskManager,
     AIStrategyResearchWorkspaceTaskSnapshotStore,
     _continuation_request_from_task,
+    _omit_sensitive_request_values,
+    _research_request_runtime_task_updates,
 )
 from app.services.investment_mandate_service import InvestmentMandateService
 from app.services.market_data.research_binding import MarketDataResearchBindingError
@@ -13712,6 +13716,85 @@ async def test_ai_strategy_research_task_manager_cancels_running_task():
     assert final is not None
     assert final.status == "cancelled"
     assert final.completed_at
+
+
+@pytest.mark.asyncio
+async def test_ai_strategy_research_task_manager_cleanup_wait_preserves_cancellation_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import app.services.ai_strategy_research_task_manager as task_manager_module
+
+    manager = AIStrategyResearchTaskManager()
+
+    cancelled_child = asyncio.create_task(asyncio.Event().wait())
+    cancelled_child.cancel()
+    await manager._wait_for_cancel_cleanup(cancelled_child)
+
+    monkeypatch.setattr(task_manager_module, "_CANCEL_CLEANUP_TIMEOUT_SECONDS", 0.01)
+    cleanup_child = asyncio.create_task(asyncio.Event().wait())
+    await manager._wait_for_cancel_cleanup(cleanup_child)
+    assert not cleanup_child.done()
+
+    caller_wait = asyncio.create_task(manager._wait_for_cancel_cleanup(cleanup_child))
+    await asyncio.sleep(0)
+    caller_wait.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller_wait
+    assert not cleanup_child.done()
+
+    cleanup_child.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cleanup_child
+
+
+def test_ai_strategy_research_task_manager_runtime_updates_use_facade_asset_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import app.services.ai_strategy_research_service as research_service_module
+
+    resolver_calls: list[list[str]] = []
+
+    def fake_resolve_asset_specs(
+        _instance: dict[str, object],
+        _strategy_dir: Path,
+        gateway: dict[str, object] | None = None,
+        symbols: Iterable[str] | None = None,
+    ) -> dict[str, dict[str, object]]:
+        del gateway
+        resolver_calls.append(list(symbols or []))
+        return {
+            "000001.SZ": {
+                "symbol": "000001.SZ",
+                "exchange": "SZSE",
+                "commission": 0.0003,
+                "source": "test_override",
+            }
+        }
+
+    monkeypatch.setattr(research_service_module, "resolve_asset_specs", fake_resolve_asset_specs)
+    updates = _research_request_runtime_task_updates(
+        AIStrategyResearchRunRequest(prompt="检查资产规格", symbol="000001.SZ")
+    )
+
+    assert resolver_calls == [["000001.SZ"]]
+    assert updates["asset_specs"]["000001.SZ"]["exchange"] == "SZSE"
+    assert updates["backtest_environment"]["commission"] == pytest.approx(0.0003)
+
+
+def test_ai_research_task_request_omission_filters_sensitive_values_inside_lists():
+    sanitized = _omit_sensitive_request_values(
+        {
+            "references": [
+                {"api_key": "secret", "symbol": "000001.SZ"},
+                "***",
+                ["public", "***"],
+            ]
+        }
+    )
+
+    assert sanitized == {
+        "references": [{"symbol": "000001.SZ"}, ["public"]],
+    }
 
 
 @pytest.mark.asyncio

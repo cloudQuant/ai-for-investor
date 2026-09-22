@@ -5,9 +5,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import func, select, text, update
+from sqlalchemy import CursorResult, Result, create_engine, func, select, text, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,6 +75,36 @@ async def test_production_finalizer_rejects_inline_sealed_measurements() -> None
             lease_generation=1,
             measurements={"returns": [0.01]},
         )
+
+
+def test_holdout_rowcount_is_zero_when_result_has_no_cursor_rowcount() -> None:
+    result = MagicMock(spec=Result)
+
+    assert not hasattr(result, "rowcount")
+    assert holdout_finalize_module._cursor_rowcount(result) == 0
+
+
+def test_holdout_rowcount_accepts_successful_sqlite_dml_cursor_result() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("CREATE TABLE rowcount_probe (id INTEGER PRIMARY KEY, value TEXT)")
+            )
+            connection.execute(
+                text("INSERT INTO rowcount_probe (id, value) VALUES (:id, :value)"),
+                {"id": 1, "value": "before"},
+            )
+            result = connection.execute(
+                text("UPDATE rowcount_probe SET value = :value WHERE id = :id"),
+                {"id": 1, "value": "after"},
+            )
+
+            assert isinstance(result, CursorResult)
+            assert result.rowcount == 1
+            assert holdout_finalize_module._cursor_rowcount(result) == 1
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -1043,10 +1074,12 @@ async def test_heartbeat_after_checkpoint_keeps_binding_valid_for_finalize(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tamper", ["input_evidence_hash", "freeze_receipt_fingerprint"])
 async def test_tampered_promotion_receipt_rolls_back_gate_and_terminal_writes(
     client,
     auth_user,
     monkeypatch: pytest.MonkeyPatch,
+    tamper: str,
 ) -> None:
     context, claimed, runtime = await _claimed_context(
         client,
@@ -1065,6 +1098,8 @@ async def test_tampered_promotion_receipt_rolls_back_gate_and_terminal_writes(
 
     async def tampered_receipt(*args: Any, **kwargs: Any) -> PromotionResult:
         result = await original_evaluate(*args, **kwargs)
+        if tamper == "input_evidence_hash":
+            return replace(result, input_evidence_hash="not-a-sha256")
         return replace(result, strict_freeze_receipt_fingerprint="0" * 64)
 
     monkeypatch.setattr(
