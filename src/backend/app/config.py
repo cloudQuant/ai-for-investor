@@ -172,6 +172,15 @@ class Settings(BaseSettings):
             "this flag only removes THS routes from the assembled policy."
         ),
     )
+    MARKET_DATA_OPENDATA_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "叠加 kill-switch for the opendata (self-hosted data platform) provider route. "
+            "opendata routing is fail-closed by default and additionally requires a durable "
+            "capability ledger attestation, an active provider registry row, and a source "
+            "authorization grant; this flag only removes the route from the assembled policy."
+        ),
+    )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
         default=False,
         description=(

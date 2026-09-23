@@ -54,6 +54,7 @@ from app.services.market_data.identity import (
     MarketDataIdentityResolver,
 )
 from app.services.market_data.openbb_runtime import approved_openbb_runtime_route_permits
+from app.services.market_data.opendata_provider import OpendataProvider
 from app.services.market_data.providers import OpenBBSubprocessProvider
 from app.services.market_data.query_resolution import (
     MarketDataQueryResolutionError,
@@ -110,6 +111,16 @@ def _shared_openbb_provider() -> OpenBBSubprocessProvider:
 
 
 @lru_cache(maxsize=1)
+def _shared_opendata_provider() -> OpendataProvider | None:
+    """Retain one process-owned opendata adapter; None when Key unconfigured.
+
+    opendata is fail-closed: a missing ``OPENDATA_API_KEY`` means no opendata
+    route is assembled, and the source policy falls back to AkShare.
+    """
+    return OpendataProvider.from_environment()
+
+
+@lru_cache(maxsize=1)
 def _shared_ths_provider() -> ThsProvider | None:
     """Retain one process-owned THS adapter; returns None when Key unconfigured.
 
@@ -125,6 +136,7 @@ def _default_source_policy_registry(
     openbb_markets: tuple[str, ...],
     research_cache_fill_enabled: bool = False,
     ths_enabled: bool = False,
+    opendata_enabled: bool = False,
 ) -> MarketDataSourcePolicyRegistry:
     """Build the reviewed default policy without importing OpenBB in FastAPI.
 
@@ -142,7 +154,29 @@ def _default_source_policy_registry(
     whether the route actually performs provider I/O.
     """
     ths_provider = _shared_ths_provider() if ths_enabled else None
+    opendata_provider = _shared_opendata_provider() if opendata_enabled else None
     routes: list[MarketDataProviderRoute] = []
+    if opendata_provider is not None:
+        # 自建数据中台的 dwd 合并层：THS 之后的 A 股日线候选源。仅日线，
+        # 复权因子缺表时中台返回 501（adapter 如实映射为 HTTP 错误）。
+        routes.append(
+            MarketDataProviderRoute(
+                route_id="opendata-stock-daily-v1",
+                request_provider="opendata",
+                expected_result_provider_ids=frozenset({"opendata"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=_STOCK_FUND_ADJUSTMENTS,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_SHARE_OR_UNDECLARED,
+                adapter=opendata_provider,
+                family_id="stock.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            )
+        )
     if ths_provider is not None:
         # THS 为 A 股主源：THS stock 路由排在 AkShare 之前。频率仅 1d，
         # 分钟频 THS 不 supports，自动落到 AkShare/OpenBB 或 UNSUPPORTED。
@@ -448,6 +482,8 @@ def _source_policies_from_settings(settings: object) -> MarketDataSourcePolicyRe
         # THS kill-switch is a stacked gate; durable attestation/provder/source
         # gates still decide actual provider I/O.
         ths_enabled=bool(getattr(settings, "MARKET_DATA_THS_ENABLED", False)),
+        # opendata kill-switch：同样只是叠加门，台账/授权门仍决定是否真正取数。
+        opendata_enabled=bool(getattr(settings, "MARKET_DATA_OPENDATA_ENABLED", False)),
     )
 
 
