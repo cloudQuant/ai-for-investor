@@ -18,3 +18,5 @@
 - `LOCAL_RAW_ONLY` / `LOCAL_SYMLINK_ONLY`：trace、截图、原始大 JSONL 压缩包、含凭据形态字符串的调试文本，仓库原本忽略的运行日志、冗余历史收据，以及临时构建依赖留在当前工作区，不上传 Git；不跟随 node_modules 符号链接。
 
 原收据中的本地制品路径不表示原件已随 Git 发布；远端审阅时先用 manifest 解析原路径到压缩件/公开摘录，或查看逐例复验映射与小型收据。若需要原始制品，按哈希索引另行脱敏交付。原始失败、跳过、截图均未删除或改写；未放宽大小或秘密检查。THS D04/D05 继续随 OpenData 接入处理。生产发布、真实交易、最低版本浏览器和远端 CI 不因 Git 推送被标为通过。
+
+历史 AkShare 诊断文档的本机链接已转换为仓库相对链接；修改前原件以 `akshare-runner-timeout-diagnosis.original.md.gz` 无损保存并登记哈希。

@@ -49,9 +49,21 @@
     },
     {
       "path": "akshare-runner-timeout-diagnosis.md",
+      "bytes": 9291,
+      "sha256": "a7f1d67abb05bb1108b3c17e020b1978eafe3ab11692f92ad8aca6e42b6ab6c2",
+      "storage": "GIT_ORIGINAL",
+      "derived_from": "akshare-runner-timeout-diagnosis.original.md",
+      "change_note": "Only Markdown links and publication provenance note changed; diagnostic conclusions preserved"
+    },
+    {
+      "path": "akshare-runner-timeout-diagnosis.original.md",
       "bytes": 10400,
       "sha256": "1d9a8d1a358509eed68a96d4745874aeb1775d2e0c85890a3c60902e72bf7077",
-      "storage": "GIT_ORIGINAL"
+      "storage": "GIT_GZIP_EXACT",
+      "published_path": "akshare-runner-timeout-diagnosis.original.md.gz",
+      "published_bytes": 3911,
+      "published_sha256": "dc440978a81a5664a328b27e6531eb395737cbd9b58aab9807636425b8072bde",
+      "reason": "Original diagnosis before portable link-only documentation revision"
     },
     {
       "path": "akshare-timeout-ready-v5-parent-copy.txt",
