@@ -33,6 +33,12 @@ from app.services.optimization.execution_manager import (
     get_optimization_execution_manager,
 )
 from app.services.optimization.submission import (
+    BEST_RESULT_TIE_BREAK,
+    MAX_GRID_COMBINATIONS,
+    count_value_grid_combinations,
+    validate_param_bounds,
+)
+from app.services.optimization.submission import (
     generate_param_grid as _submission_generate_param_grid,
 )
 from app.services.optimization.submission import (
@@ -57,6 +63,7 @@ from app.services.optimization.task_state import (
     build_runtime_task_from_db_task,
     get_runtime_task,
     set_runtime_task,
+    transition_runtime_task,
     update_runtime_task,
 )
 from app.services.optimization.thread_runner import (
@@ -123,6 +130,19 @@ def _load_task_state(
     )
 
 
+def _load_authoritative_optimization_task(task_id: str) -> dict[str, Any] | None:
+    """Read the persisted task snapshot after a terminal database CAS loses."""
+    try:
+        manager = get_optimization_execution_manager()
+        db_task = _run_async(manager.get_task(task_id))
+    except Exception as exc:
+        logger.warning("Could not read authoritative optimization task %s: %s", task_id, exc)
+        return None
+    if db_task is None:
+        return None
+    return build_runtime_task_from_db_task(db_task)
+
+
 def _query_task_response(
     task_id: str,
     response_builder,
@@ -176,6 +196,7 @@ def _run_single_trial(
     trial_index: int,
     tmp_base: str,
     artifact_root: str | None = None,
+    cancellation_marker: str | None = None,
 ) -> dict[str, Any]:
     """Run a single backtest trial in an isolated process.
 
@@ -205,6 +226,7 @@ def _run_single_trial(
         artifact_root,
         parse_trial_logs_fn=_parse_trial_logs,
         subprocess_module=subprocess,
+        cancellation_marker=cancellation_marker,
     )
 
 
@@ -245,7 +267,7 @@ def _parse_trial_logs(trial_dir: Path) -> dict[str, float] | None:
 
 
 def generate_param_grid(
-    param_ranges: dict[str, dict[str, float]],
+    param_ranges: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Generate a Cartesian product parameter grid from range specifications.
 
@@ -262,12 +284,14 @@ def generate_param_grid(
 
 def submit_optimization(
     strategy_id: str,
-    param_ranges: dict[str, dict[str, float]],
+    param_ranges: dict[str, dict[str, Any]],
     n_workers: int = 4,
     task_id: str | None = None,
     persist_to_db: bool = True,
     strategy_dir: str | None = None,
     artifact_root: str | None = None,
+    objective: str | None = None,
+    direction: str | None = None,
 ) -> str:
     """Submit an optimization task to run asynchronously.
 
@@ -295,6 +319,8 @@ def submit_optimization(
         task_id=task_id,
         persist_to_db=persist_to_db,
         artifact_root=artifact_root,
+        objective=objective,
+        direction=direction,
         get_strategy_dir=get_strategy_dir,
         generate_param_grid_fn=generate_param_grid,
         set_task_fn=_set_task,
@@ -337,6 +363,7 @@ def _run_optimization_thread(
         persist_runtime_task_fn=_persist_runtime_task,
         get_task_fn=_get_task,
         update_task_fn=_update_task,
+        load_authoritative_task_fn=_load_authoritative_optimization_task,
         process_pool_executor_cls=ProcessPoolExecutor,
         as_completed_fn=as_completed,
         mkdtemp_fn=tempfile.mkdtemp,
@@ -422,6 +449,7 @@ def _build_backtest_optimization_runtime_task(
     total: int,
 ) -> dict[str, Any]:
     param_spec = request.param_grid if request.method == "grid" else request.param_bounds
+    direction = "minimize" if request.metric == "max_drawdown" else "maximize"
     return {
         "status": TaskStatus.RUNNING.value,
         "strategy_id": request.strategy_id,
@@ -434,10 +462,14 @@ def _build_backtest_optimization_runtime_task(
         "n_workers": 1 if request.method == "bayesian" else 4,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "error": None,
+        "objective": request.metric,
+        "direction": direction,
+        "tie_break": BEST_RESULT_TIE_BREAK,
     }
 
 
 def _generate_backtest_param_combinations(param_grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    count_value_grid_combinations(param_grid, max_combinations=MAX_GRID_COMBINATIONS)
     keys = list(param_grid.keys())
     values = list(param_grid.values())
     combinations = list(itertools.product(*values))
@@ -446,7 +478,10 @@ def _generate_backtest_param_combinations(param_grid: dict[str, list[Any]]) -> l
 
 def estimate_backtest_optimization_total(request: OptimizationRequest) -> int:
     if request.method == "grid":
-        return len(_generate_backtest_param_combinations(request.param_grid or {}))
+        return count_value_grid_combinations(
+            request.param_grid or {}, max_combinations=MAX_GRID_COMBINATIONS
+        )
+    validate_param_bounds(request.param_bounds or {})
     return request.n_trials
 
 
@@ -482,25 +517,69 @@ def _failure_objective_value(metric: str) -> float:
     return float("inf")
 
 
-def _finalize_backtest_optimization_task(task_id: str, persist_to_db: bool) -> None:
+def _finalize_backtest_optimization_task(
+    task_id: str,
+    persist_to_db: bool,
+    *,
+    requested_status: str | None = None,
+    error_message: str | None = None,
+) -> str:
     task = _get_task(task_id)
+    current_status = str((task or {}).get("status") or "")
+    terminal_statuses = {
+        TaskStatus.COMPLETED.value,
+        TaskStatus.FAILED.value,
+        TaskStatus.CANCELLED.value,
+    }
     final_status = (
-        TaskStatus.CANCELLED.value
-        if (task and task.get("status") == TaskStatus.CANCELLED.value)
-        else TaskStatus.COMPLETED.value
+        current_status
+        if current_status in terminal_statuses
+        else requested_status or TaskStatus.COMPLETED.value
     )
-    if task and task.get("status") != TaskStatus.CANCELLED.value:
-        _update_task(task_id, status=TaskStatus.COMPLETED.value)
-        final_status = TaskStatus.COMPLETED.value
-
+    completed = task.get("completed", 0) if task else 0
+    failed = task.get("failed", 0) if task else 0
+    results = task.get("results", []) if task else []
     if persist_to_db:
-        _persist_runtime_task(
+        persisted = _persist_runtime_task(
             task_id,
-            completed=task.get("completed", 0) if task else 0,
-            failed=task.get("failed", 0) if task else 0,
-            results=task.get("results", []) if task else [],
+            completed=completed,
+            failed=failed,
+            results=results,
             status=final_status,
+            error_message=error_message,
         )
+        if persisted:
+            runtime_task = transition_runtime_task(
+                task_id,
+                final_status,
+                error=error_message,
+            )
+            return str((runtime_task or {}).get("status") or final_status)
+
+        # A failed terminal CAS may mean another worker already selected a
+        # terminal state. Read that state before deciding what to expose.
+        if _is_optimization_cancelled(task_id, persist_to_db):
+            return TaskStatus.CANCELLED.value
+        authoritative = _load_task_state(task_id, use_db=True) or {}
+        authoritative_status = str(authoritative.get("status") or "")
+        if authoritative_status in terminal_statuses:
+            return authoritative_status
+
+        failure = "Could not persist optimization terminal status"
+        runtime_task = transition_runtime_task(
+            task_id,
+            TaskStatus.FAILED.value,
+            error=failure,
+        )
+        logger.error("%s for backtest optimization task %s", failure, task_id)
+        return str((runtime_task or {}).get("status") or TaskStatus.FAILED.value)
+
+    runtime_task = transition_runtime_task(
+        task_id,
+        final_status,
+        error=error_message,
+    )
+    return str((runtime_task or {}).get("status") or final_status)
 
 
 async def _backtest_failure_message(backtest_service: BacktestService, task_id: str) -> str:
@@ -559,7 +638,14 @@ def _run_backtest_grid_optimization(
     backtest_service = BacktestService()
     results: list[dict[str, Any]] = []
 
-    for params in _generate_backtest_param_combinations(request.param_grid or {}):
+    metadata = {
+        "objective": request.metric,
+        "direction": "minimize" if request.metric == "max_drawdown" else "maximize",
+        "tie_break": BEST_RESULT_TIE_BREAK,
+    }
+    for trial_index, params in enumerate(
+        _generate_backtest_param_combinations(request.param_grid or {})
+    ):
         if _is_optimization_cancelled(task_id, persist_to_db):
             break
 
@@ -575,7 +661,14 @@ def _run_backtest_grid_optimization(
                 )
             )
             if getattr(result, "status", None) == TaskStatus.COMPLETED:
-                results.append({"params": params, "metrics": _extract_backtest_metrics(result)})
+                results.append(
+                    {
+                        "params": params,
+                        "trial_index": trial_index,
+                        "metrics": _extract_backtest_metrics(result),
+                        "optimization": metadata,
+                    }
+                )
                 _update_task(task_id, completed=len(results), results=list(results))
             else:
                 task = _get_task(task_id)
@@ -602,6 +695,11 @@ def _run_backtest_bayesian_optimization(
 
     backtest_service = BacktestService()
     results: list[dict[str, Any]] = []
+    metadata = {
+        "objective": request.metric,
+        "direction": "minimize" if request.metric == "max_drawdown" else "maximize",
+        "tie_break": BEST_RESULT_TIE_BREAK,
+    }
     study = optuna.create_study(direction="minimize")
 
     def objective(trial: Any) -> float:
@@ -628,7 +726,14 @@ def _run_backtest_bayesian_optimization(
             )
             if getattr(result, "status", None) == TaskStatus.COMPLETED:
                 metrics = _extract_backtest_metrics(result)
-                results.append({"params": params, "metrics": metrics})
+                results.append(
+                    {
+                        "params": params,
+                        "trial_index": trial.number,
+                        "metrics": metrics,
+                        "optimization": metadata,
+                    }
+                )
                 _update_task(task_id, completed=len(results), results=list(results))
                 return _objective_value_from_metrics(metrics, request.metric)
 
@@ -663,16 +768,12 @@ def _run_backtest_optimization_thread(
         _finalize_backtest_optimization_task(task_id, persist_to_db)
     except Exception as e:
         logger.error("Backtest optimization task failed %s: %s", task_id, e)
-        _update_task(task_id, status=TaskStatus.FAILED.value, error=str(e))
-        if persist_to_db:
-            _persist_runtime_task(
-                task_id,
-                completed=0,
-                failed=0,
-                results=[],
-                status=TaskStatus.FAILED.value,
-                error_message=str(e),
-            )
+        _finalize_backtest_optimization_task(
+            task_id,
+            persist_to_db,
+            requested_status=TaskStatus.FAILED.value,
+            error_message=str(e),
+        )
 
 
 def submit_backtest_optimization(

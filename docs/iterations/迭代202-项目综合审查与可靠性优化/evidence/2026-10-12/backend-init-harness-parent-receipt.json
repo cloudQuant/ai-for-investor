@@ -1,0 +1,49 @@
+[
+  {
+    "command": [
+      "docker",
+      "cp",
+      "iter202-parent-regression:/tmp/akshare-runner-failures-v3-parent.xml",
+      "/tmp/ai-investor-iter200-202-20261012.afLb99/akshare-runner-failures-v3-parent.xml"
+    ],
+    "started_at": "2026-10-12T11:21:10.991Z",
+    "finished_at": "2026-10-12T11:21:11.171Z",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "commit",
+      "iter202-parent-regression",
+      "iter202-parent-regression-snapshot:20261012-v3"
+    ],
+    "started_at": "2026-10-12T11:21:11.178Z",
+    "finished_at": "2026-10-12T11:22:55.499Z",
+    "exit_code": 0,
+    "stdout": "sha256:52470c079926ff74c31525cb35e099fe61fa50415eb1189f116291a91972050c\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "run",
+      "-d",
+      "--init",
+      "--network",
+      "none",
+      "--name",
+      "iter202-parent-regression-init",
+      "--entrypoint",
+      "sleep",
+      "iter202-parent-regression-snapshot:20261012-v3",
+      "infinity"
+    ],
+    "started_at": "2026-10-12T11:22:55.515Z",
+    "finished_at": "2026-10-12T11:22:58.368Z",
+    "exit_code": 0,
+    "stdout": "40f4b05981c8f545b25ea37f12a10eb7c2d1a15d59b74ab315772a8c9e52ca8a\n",
+    "stderr": ""
+  }
+]

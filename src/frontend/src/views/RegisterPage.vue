@@ -19,7 +19,7 @@
           data-testid="register-username"
           :placeholder="t('auth.username')"
           :aria-label="t('auth.username')"
-          prefix-icon="User"
+          :prefix-icon="User"
           size="large"
           autocomplete="username"
         />
@@ -31,7 +31,7 @@
           data-testid="register-email"
           :placeholder="t('auth.email')"
           :aria-label="t('auth.email')"
-          prefix-icon="Message"
+          :prefix-icon="Message"
           size="large"
           autocomplete="email"
         />
@@ -44,7 +44,7 @@
           type="password"
           :placeholder="t('auth.password')"
           :aria-label="t('auth.password')"
-          prefix-icon="Lock"
+          :prefix-icon="Lock"
           size="large"
           show-password
           autocomplete="new-password"
@@ -58,7 +58,7 @@
           type="password"
           :placeholder="t('auth.confirmPassword')"
           :aria-label="t('auth.confirmPassword')"
-          prefix-icon="Lock"
+          :prefix-icon="Lock"
           size="large"
           show-password
           autocomplete="new-password"
@@ -96,6 +96,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { Lock, Message, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'

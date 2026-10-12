@@ -1,0 +1,7 @@
+subject=
+issuer=CN=Pebble Intermediate CA 05481c
+serial=01D49B60D367864D
+notBefore=Oct 12 07:31:38 2026 GMT
+notAfter=Oct 19 07:31:37 2026 GMT
+X509v3 Subject Alternative Name: critical
+    DNS:investor.iter202.test

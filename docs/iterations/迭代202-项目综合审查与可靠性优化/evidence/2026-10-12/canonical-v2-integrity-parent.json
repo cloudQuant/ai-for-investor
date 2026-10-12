@@ -1,0 +1,10 @@
+{
+  "checked_record_entries": 17939,
+  "issues": [
+    {
+      "file": "numpy/distutils/__pycache__/conv_template.cpython-311.pyc",
+      "issue": "hash mismatch"
+    }
+  ],
+  "seconds": 14.65
+}

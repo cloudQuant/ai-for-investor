@@ -1,0 +1,22 @@
+{
+  "started_at": "2026-10-12T12:11:15.484Z",
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "command": [
+    "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--maxWorkers=1",
+    "--no-file-parallelism",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-vitest-v8-parent-results.json"
+  ],
+  "environment": {
+    "node": "v20.20.2",
+    "workers": 1,
+    "file_parallelism": false,
+    "test_timeout": "unchanged 10000 ms"
+  },
+  "source_manifest_sha256": "0d19fa7feb836db7308325fa6353c99c1e95e50c764876744492fbb7e1b5288e",
+  "state": "RUNNING"
+}

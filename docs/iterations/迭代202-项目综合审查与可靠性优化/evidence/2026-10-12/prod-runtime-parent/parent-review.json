@@ -1,0 +1,127 @@
+{
+  "reviewed_at": "2026-10-12T12:43:51.929Z",
+  "verdict": "PASS_COMPOSITE_RUNTIME_AND_READBACK",
+  "image": "sha256:c26c5cc1791a8e27ce9612dc3e093fade4a402425fab525686c000e710ea3ba9",
+  "container": "47de4a2697b80cd4f979ddfb0516ef560ca841c233b37a1c907ac3ec6ee7d4d4",
+  "environment": {
+    "platform": "linux/arm64",
+    "python": "3.12.15",
+    "gunicorn": "26.0.0",
+    "uvicorn": "0.47.0",
+    "internal_network": true,
+    "external_ports": false,
+    "bind_mounts": false,
+    "init": true,
+    "uid": 1000
+  },
+  "observed": {
+    "master_pid": 7,
+    "worker_pids": [
+      8,
+      9
+    ],
+    "revision_and_ready_file_logs": true,
+    "uvicorn_started_and_startup_complete": true,
+    "independent_http": 200,
+    "database_healthy": true,
+    "ddl_privilege": false,
+    "graceful_shutdown": true,
+    "container_exit_code": 0,
+    "oom_killed": false,
+    "forced_kill_or_timeout_marker": false,
+    "schema_hash_before_and_after": "e03443bccdb970ffb4594960829a889aa6e33f53aeb5cfa896060cf34fb97f3a"
+  },
+  "historical_harness_results": {
+    "v1": "FAIL: missing random ADMIN_PASSWORD in test fixture",
+    "v2": "FAIL: expected application INFO events in WARNING-level production console; same real app reached healthy",
+    "v3": "FAIL: expected optional Worker exiting marker despite two shutdown-complete/finished events and clean exit",
+    "v4": "PASS: independent readback of same stopped container and baseline schema"
+  },
+  "interpretation": "v2 launched the approved image; v3 independently verified current live worker tree, role permissions, startup events and HTTP before stopping it; v4 read back exact PID lifecycle/exit and schema fingerprint. Earlier failures remain unchanged and are not relabelled as whole-run passes.",
+  "redaction": "Known random fixture credential values loaded privately and replaced where present; no env files or DB table data retained.",
+  "limitations": [
+    "Local PostgreSQL runtime fixture; no production deployment",
+    "Optional ChromaDB is absent and announces lexical fallback; import/health acceptance does not validate external knowledge/vector providers",
+    "No production DNS or CA acceptance"
+  ],
+  "files": [
+    {
+      "path": "prod-init-runtime-parent.cjs",
+      "raw_sha256": "55dc760eb123d74584a9d96d88384b3fcb623c6e0c7285c4e2bfc3afd076114b",
+      "retained_sha256": "55dc760eb123d74584a9d96d88384b3fcb623c6e0c7285c4e2bfc3afd076114b",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-parent.receipt.md",
+      "raw_sha256": "abf270a883ef070988d94a5f8cdfaddf80223c63fdd9706c81dffbe1e68a86b2",
+      "retained_sha256": "abf270a883ef070988d94a5f8cdfaddf80223c63fdd9706c81dffbe1e68a86b2",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-parent.logs.txt",
+      "raw_sha256": "303f58294f7f2dfc0759640650843297e2765228b6d7790b0da8599f9e0af8f7",
+      "retained_sha256": "303f58294f7f2dfc0759640650843297e2765228b6d7790b0da8599f9e0af8f7",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v2-parent.cjs",
+      "raw_sha256": "1f635e6ebc6cbec1bc5ca1f601e6e05de03dcfb84b1f56ce07da45b3df51cf97",
+      "retained_sha256": "1f635e6ebc6cbec1bc5ca1f601e6e05de03dcfb84b1f56ce07da45b3df51cf97",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v2-parent.receipt.md",
+      "raw_sha256": "446ed3cf6cd20733f436727b375cc75e613292a5e919d474f5df09a9bc832325",
+      "retained_sha256": "446ed3cf6cd20733f436727b375cc75e613292a5e919d474f5df09a9bc832325",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v2-parent.logs.txt",
+      "raw_sha256": "ea41388f4edfb76c90eb4f8fbcc7b061be063cf5e152cdd04e185a79f9527869",
+      "retained_sha256": "ea41388f4edfb76c90eb4f8fbcc7b061be063cf5e152cdd04e185a79f9527869",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v3-parent.cjs",
+      "raw_sha256": "573a7085322f71458d46f73b5fcf0b96ee94974a7e671e66a64860cce76334c7",
+      "retained_sha256": "573a7085322f71458d46f73b5fcf0b96ee94974a7e671e66a64860cce76334c7",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v3-parent.receipt.md",
+      "raw_sha256": "d98b8003b15d9330e987fdf36e7665efae762b81725d5cae0aa60bcd505a4e88",
+      "retained_sha256": "d98b8003b15d9330e987fdf36e7665efae762b81725d5cae0aa60bcd505a4e88",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v3-parent.logs.txt",
+      "raw_sha256": "55135039b85adbfc3fc56a49f55a78f8dc8eaf1d641a3d3df3bef3cd64fde8f0",
+      "retained_sha256": "55135039b85adbfc3fc56a49f55a78f8dc8eaf1d641a3d3df3bef3cd64fde8f0",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v4-readback-parent.cjs",
+      "raw_sha256": "b05c8677a4e052923f9add93e51eaed08ce33de726a39d232a99f03a30e63dcf",
+      "retained_sha256": "b05c8677a4e052923f9add93e51eaed08ce33de726a39d232a99f03a30e63dcf",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v4-readback-parent.receipt.md",
+      "raw_sha256": "f36b83d26a089a45bfba8e1d0a042a1daad5d3a07979e8ccbd7155975e8bca44",
+      "retained_sha256": "f36b83d26a089a45bfba8e1d0a042a1daad5d3a07979e8ccbd7155975e8bca44",
+      "redacted": false
+    },
+    {
+      "path": "prod-init-runtime-v4-readback-parent.logs.txt",
+      "raw_sha256": "d12c7900076bda817bde5eb922c8cbdf4e086b7490a97e21bd82e9d43206bc8e",
+      "retained_sha256": "d12c7900076bda817bde5eb922c8cbdf4e086b7490a97e21bd82e9d43206bc8e",
+      "redacted": false
+    },
+    {
+      "path": "prod-shutdown-source-parent.json",
+      "raw_sha256": "0357b64c9c8ca97221fc46af574b06c7b024665d5f79243140190270cd758a9f",
+      "retained_sha256": "0357b64c9c8ca97221fc46af574b06c7b024665d5f79243140190270cd758a9f",
+      "redacted": false
+    }
+  ]
+}

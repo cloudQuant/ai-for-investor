@@ -22,28 +22,46 @@
       size="default"
     >
       <el-row :gutter="20">
-        <el-col :span="8">
-          <el-form-item :label="t('workspaceDialogs.optTarget')">
+        <el-col :span="6">
+          <el-form-item :label="t('optimization.objectiveLabel')">
             <el-select
               v-model="form.objective"
               style="width: 100%"
+              @change="form.direction = defaultOptimizationDirection(form.objective)"
             >
               <el-option
-                :label="t('workspaceDialogs.goalMaxSharpe')"
-                value="sharpe_max"
+                :label="t('optimization.sharpe')"
+                value="sharpe_ratio"
               />
               <el-option
-                :label="t('workspaceDialogs.goalMaxReturn')"
-                value="max_return"
+                :label="t('optimization.totalReturn')"
+                value="total_return"
               />
               <el-option
-                :label="t('workspaceDialogs.goalMinDrawdown')"
-                value="min_drawdown"
+                :label="t('optimization.maxDrawdown')"
+                value="max_drawdown"
               />
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="8">
+        <el-col :span="6">
+          <el-form-item :label="t('optimization.directionLabel')">
+            <el-select
+              v-model="form.direction"
+              style="width: 100%"
+            >
+              <el-option
+                :label="t('optimization.maximize')"
+                value="maximize"
+              />
+              <el-option
+                :label="t('optimization.minimize')"
+                value="minimize"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
           <el-form-item :label="t('workspaceDialogs.parallelThreads')">
             <el-input-number
               v-model="form.n_workers"
@@ -53,7 +71,7 @@
             />
           </el-form-item>
         </el-col>
-        <el-col :span="8">
+        <el-col :span="6">
           <el-form-item :label="t('workspaceDialogs.goalDisplay')">
             <el-input-number
               v-model="form.max_display"
@@ -88,6 +106,7 @@
             />
           </template>
         </el-table-column>
+        <!-- @vue-generic {ParamLayer} -->
         <el-table-column
           :label="t('workspaceDialogs.optSettings')"
           min-width="300"
@@ -193,6 +212,7 @@ import { Delete } from '@element-plus/icons-vue'
 import { workspaceApi } from '@/api/workspace'
 import { getErrorMessage } from '@/api/index'
 import type { StrategyUnit } from '@/types/workspace'
+import { defaultOptimizationDirection, resolveOptimizationTarget } from './optimization/optimizationObjective'
 
 const { t } = useI18n()
 
@@ -219,7 +239,8 @@ const emit = defineEmits<{
 const saving = ref(false)
 
 const form = ref({
-  objective: 'sharpe_max',
+  objective: 'sharpe_ratio' as 'sharpe_ratio' | 'total_return' | 'max_drawdown',
+  direction: 'maximize' as 'maximize' | 'minimize',
   n_workers: 4,
   max_display: 5000,
   param_layers: [] as ParamLayer[],
@@ -237,11 +258,15 @@ const totalCombinations = computed(() => {
 })
 
 function initForm() {
+  form.value.objective = 'sharpe_ratio'
+  form.value.direction = 'maximize'
   // Try to pre-fill from the first selected unit that has optimization_config
   const firstUnit = props.units.find(u => props.unitIds.includes(u.id) && u.optimization_config)
   if (firstUnit?.optimization_config) {
     const oc = firstUnit.optimization_config as Record<string, unknown>
-    form.value.objective = (oc.objective as string) || 'sharpe_max'
+    const target = resolveOptimizationTarget(oc.objective, oc.direction)
+    form.value.objective = target.objective
+    form.value.direction = target.direction
     form.value.n_workers = (oc.n_workers as number) || 4
     form.value.max_display = (oc.max_display as number) || 5000
     const layers = (oc.param_layers as ParamLayer[]) || []
@@ -283,6 +308,7 @@ async function handleSave() {
   try {
     const config = {
       objective: form.value.objective,
+      direction: form.value.direction,
       n_workers: form.value.n_workers,
       max_display: form.value.max_display,
       param_layers: form.value.param_layers,

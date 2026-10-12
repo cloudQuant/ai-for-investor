@@ -15,6 +15,7 @@ import {
   clearAccessToken,
   getAccessToken,
 } from '@/utils/session'
+import { setToken } from '@/utils/tokenRef'
 import { authApi } from '@/api/auth'
 
 import { useAuthStore } from '../auth'
@@ -37,6 +38,7 @@ describe('useAuthStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    setToken(null)
   })
 
   describe('initial state', () => {
@@ -184,8 +186,8 @@ describe('useAuthStore', () => {
       })
     })
 
-    it('should logout on fetchUser failure', async () => {
-      vi.mocked(authApi.getMe).mockRejectedValue(new Error('Unauthorized'))
+    it('should logout on fetchUser 401', async () => {
+      vi.mocked(authApi.getMe).mockRejectedValue({ response: { status: 401 } })
 
       const store = useAuthStore()
       // Set token directly (simulating persistence plugin hydration)

@@ -995,9 +995,7 @@ def test_openbb_runner_directories_reject_checkout_ancestors_and_descendants(
     environment_key: str,
 ) -> None:
     """A nested application directory cannot masquerade as a dedicated runner root."""
-    checkout_root = next(
-        parent for parent in Path(__file__).resolve().parents if (parent / ".git").exists()
-    )
+    checkout_root = _actual_checkout_root()
     nested_checkout_directory = checkout_root / "src" / "backend" / "app"
     expected_code = (
         "OPENBB_RUNNER_HOME_INVALID"
@@ -1019,9 +1017,7 @@ def test_openbb_runner_directories_reject_checkout_ancestors_and_descendants(
 
 def test_openbb_subprocess_provider_rejects_a_runner_script_inside_the_checkout() -> None:
     """A command cannot execute a script selected from the web application checkout."""
-    checkout_root = next(
-        parent for parent in Path(__file__).resolve().parents if (parent / ".git").exists()
-    )
+    checkout_root = _actual_checkout_root()
     runner_script = checkout_root / "src" / "backend" / "scripts" / "openbb_market_data_runner.py"
 
     with pytest.raises(ValueError, match="absolute python"):
@@ -2028,6 +2024,41 @@ def _actual_openbb_runner() -> Path:
     return Path(__file__).parents[2] / "scripts" / "openbb_market_data_runner.py"
 
 
+def _actual_checkout_root() -> Path:
+    """Resolve the checkout from its ``src/backend/scripts`` runner layout."""
+    runner_path = _actual_openbb_runner().resolve()
+    scripts_directory = runner_path.parent
+    backend_directory = scripts_directory.parent
+    source_directory = backend_directory.parent
+    if (
+        runner_path.name != "openbb_market_data_runner.py"
+        or scripts_directory.name != "scripts"
+        or backend_directory.name != "backend"
+        or source_directory.name != "src"
+    ):
+        raise AssertionError(f"Unexpected OpenBB runner source layout: {runner_path}")
+
+    checkout_root = source_directory.parent
+    expected_runner = checkout_root / "src" / "backend" / "scripts" / runner_path.name
+    expected_provider = (
+        checkout_root
+        / "src"
+        / "backend"
+        / "app"
+        / "services"
+        / "market_data"
+        / "openbb_subprocess_provider.py"
+    ).resolve()
+    provider_path = Path(openbb_subprocess_provider.__file__).resolve()
+    if runner_path != expected_runner.resolve() or not runner_path.is_file():
+        raise AssertionError(f"OpenBB runner source is missing from expected layout: {runner_path}")
+    if provider_path != expected_provider or not provider_path.is_file():
+        raise AssertionError(
+            f"OpenBB provider source is missing from expected layout: {provider_path}"
+        )
+    return checkout_root
+
+
 def _copied_openbb_runner_bundle(tmp_path: Path) -> Path:
     """Copy the standalone runner and its pure-data manifests outside the checkout."""
     bundle_root = tmp_path / "isolated-openbb-runner-bundle"
@@ -2833,9 +2864,7 @@ async def test_openbb_subprocess_provider_copied_runner_blocks_unattested_artifa
     """
     runner = _copied_openbb_runner_bundle(tmp_path)
     command = _isolated_runner_command(runner)
-    checkout_root = next(
-        parent for parent in Path(__file__).resolve().parents if (parent / ".git").exists()
-    )
+    checkout_root = _actual_checkout_root()
     assert runner.read_bytes() == _actual_openbb_runner().read_bytes()
     assert not runner.resolve().is_relative_to(checkout_root)
 

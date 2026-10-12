@@ -42,7 +42,8 @@ CAPABILITY_LEDGER_REVISION = "20260910_market_data_capability_ledger"
 DEFERRED_PUBLICATIONS_REVISION = "20260911_market_data_deferred_publications"
 SEMANTIC_RECORD_KEYS_REVISION = "20260911_market_data_semantic_record_keys"
 B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
-INTEGRATED_HEAD_REVISION = B2_COMPLETENESS_EVIDENCE_REVISION
+OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION = "20261012_optimization_objective_direction"
+INTEGRATED_HEAD_REVISION = OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION
 OBSERVATION_STORAGE_TABLES = {
     "md_instrument_lookup_keys",
     "md_data_series",
@@ -1575,6 +1576,7 @@ def test_deferred_publications_revision_extends_the_integrated_storage_graph() -
     capability_ledger_revision = script.get_revision(CAPABILITY_LEDGER_REVISION)
     deferred_publications_revision = script.get_revision(DEFERRED_PUBLICATIONS_REVISION)
     semantic_record_keys_revision = script.get_revision(SEMANTIC_RECORD_KEYS_REVISION)
+    b2_evidence_revision = script.get_revision(B2_COMPLETENESS_EVIDENCE_REVISION)
     integrated_head_revision = script.get_revision(INTEGRATED_HEAD_REVISION)
     assert shared_revision is not None
     assert shared_revision.down_revision == OBSERVATIONS_REVISION
@@ -1607,8 +1609,10 @@ def test_deferred_publications_revision_extends_the_integrated_storage_graph() -
     assert deferred_publications_revision.down_revision == CAPABILITY_LEDGER_REVISION
     assert semantic_record_keys_revision is not None
     assert semantic_record_keys_revision.down_revision == DEFERRED_PUBLICATIONS_REVISION
+    assert b2_evidence_revision is not None
+    assert b2_evidence_revision.down_revision == SEMANTIC_RECORD_KEYS_REVISION
     assert integrated_head_revision is not None
-    assert integrated_head_revision.down_revision == SEMANTIC_RECORD_KEYS_REVISION
+    assert integrated_head_revision.down_revision == B2_COMPLETENESS_EVIDENCE_REVISION
     assert script.get_heads() == [INTEGRATED_HEAD_REVISION]
 
 
@@ -2034,7 +2038,7 @@ def test_capability_ledger_migration_blocks_nonempty_sqlite_downgrade(
     observed_at = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
     expires_at = datetime(2026, 9, 11, 12, tzinfo=timezone.utc)
     try:
-        command.upgrade(config, INTEGRATED_HEAD_REVISION)
+        command.upgrade(config, B2_COMPLETENESS_EVIDENCE_REVISION)
         with engine.begin() as connection:
             connection.execute(
                 text(

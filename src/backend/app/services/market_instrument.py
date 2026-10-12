@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import math
 import typing
 from collections.abc import Hashable, Mapping
@@ -491,19 +490,11 @@ class MarketInstrumentService:
         request. Require the latest bar to be inside the requested interval and
         within the source-specific publication-lag tolerance.
         """
-        requested_start = _coerce_date(start_date)
-        requested_end = _coerce_date(end_date)
-        dates = [parsed for row in rows if (parsed := _coerce_date(row.get("date"))) is not None]
-        if not dates or requested_start is None or requested_end is None:
-            return True
+        from app.services.market_instrument_dynamic_data import (
+            _history_requires_refresh as _delegate,
+        )
 
-        earliest = min(dates)
-        latest = max(dates)
-        if earliest > requested_end or latest < requested_start or latest > requested_end:
-            return True
-
-        tolerance = timedelta(days=_HISTORY_FRESHNESS_DAYS[asset_type])
-        return latest < requested_end - tolerance
+        return _delegate(asset_type=asset_type, rows=rows, start_date=start_date, end_date=end_date)
 
     async def _fill_history_gap(
         self,
@@ -517,75 +508,20 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        cached_rows = await self._lookup_history_cache(
-            asset_type=asset_type,
-            symbol=warehouse_payload.get("symbol") or symbol,
-            start_date=start_date,
-            end_date=end_date,
-            period=period,
+        from app.services.market_instrument_dynamic_data import (
+            _fill_history_gap as _delegate,
         )
-        if cached_rows and not self._history_requires_refresh(
-            asset_type=asset_type,
-            rows=cached_rows,
-            start_date=start_date,
-            end_date=end_date,
-        ):
-            warnings.append("akshare_data 缺少该资产本地历史数据，已使用补齐缓存")
-            return self._merge_history_gap(
-                warehouse_payload=warehouse_payload,
-                rows=cached_rows,
-                period=period,
-                provider_suffix="cache",
-            )
-        if cached_rows:
-            warnings.append("MARKET_INSTRUMENT_HISTORY_CACHE 已过期或未覆盖所选区间，跳过缓存")
 
-        online_warnings: list[str] = []
-        online_rows = await asyncio.to_thread(
-            self._lookup_history_online,
+        return await _delegate(
+            self,
             asset_type=asset_type,
-            symbol=warehouse_payload.get("symbol") or symbol,
+            warehouse_payload=warehouse_payload,
+            symbol=symbol,
             start_date=start_date,
             end_date=end_date,
             period=period,
             market=market,
-            warnings=online_warnings,
-        )
-        if not online_rows:
-            if not online_warnings:
-                online_warnings.append("该资产暂无本地历史数据，在线历史接口也未返回可用记录")
-            warnings.extend(online_warnings)
-            return warehouse_payload
-
-        if self._history_requires_refresh(
-            asset_type=asset_type,
-            rows=online_rows,
-            start_date=start_date,
-            end_date=end_date,
-        ):
-            warnings.extend(online_warnings)
-            warnings.append("在线历史数据未覆盖所选区间，未替换现有仓库记录")
-            return warehouse_payload
-
-        cache_error = await self._store_history_cache(
-            asset_type=asset_type,
-            symbol=warehouse_payload.get("symbol") or symbol,
-            name=warehouse_payload.get("name") or symbol,
-            market=warehouse_payload.get("market") or market or self._default_market(asset_type),
-            period=period,
-            rows=online_rows,
-        )
-        warnings.append("akshare_data 缺少该资产本地历史数据，已使用 AkShare 在线历史行情补齐")
-        if cache_error:
-            warnings.append(f"在线历史已返回，但写入补齐缓存失败: {cache_error}")
-        else:
-            warnings.append("在线历史已写入 MARKET_INSTRUMENT_HISTORY_CACHE 补齐缓存")
-
-        return self._merge_history_gap(
-            warehouse_payload=warehouse_payload,
-            rows=online_rows,
-            period=period,
-            provider_suffix=_ONLINE_PROVIDER,
+            warnings=warnings,
         )
 
     def _merge_history_gap(
@@ -596,25 +532,17 @@ class MarketInstrumentService:
         period: str,
         provider_suffix: str,
     ) -> dict[str, Any]:
-        merged = {**warehouse_payload}
-        merged["history"] = {
-            "period": period,
-            "rows": rows,
-            "total": len(rows),
-        }
-        merged["provider"] = (
-            f"{warehouse_payload.get('provider') or _WAREHOUSE_PROVIDER}+{provider_suffix}"
+        from app.services.market_instrument_dynamic_data import (
+            _merge_history_gap as _delegate,
         )
-        snapshot_values = {
-            key: value
-            for key, value in (merged.get("snapshot") or {}).items()
-            if key != "data_source_table"
-        }
-        if not any(value is not None for value in snapshot_values.values()):
-            merged["snapshot"] = self._snapshot_from_latest_history(
-                merged.get("symbol") or "", rows
-            )
-        return merged
+
+        return _delegate(
+            self,
+            warehouse_payload=warehouse_payload,
+            rows=rows,
+            period=period,
+            provider_suffix=provider_suffix,
+        )
 
     def _lookup_history_online(
         self,
@@ -627,27 +555,13 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> list[dict[str, Any]]:
-        if asset_type == "stock":
-            return self._lookup_stock_history_online(
-                symbol=symbol,
-                start_date=start_date,
-                end_date=end_date,
-                period=period,
-                warnings=warnings,
-            )
+        from app.services.market_instrument_dynamic_data import (
+            _lookup_history_online as _delegate,
+        )
 
-        lookup_map = {
-            "futures": self._lookup_futures,
-            "bond": self._lookup_bond,
-            "fund": self._lookup_fund,
-            "option": self._lookup_option,
-            "fx": self._lookup_fx,
-            "crypto": self._lookup_crypto,
-        }
-        lookup = lookup_map.get(asset_type)
-        if lookup is None:
-            return []
-        payload = lookup(
+        return _delegate(
+            self,
+            asset_type=asset_type,
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,
@@ -655,7 +569,6 @@ class MarketInstrumentService:
             market=market,
             warnings=warnings,
         )
-        return (payload.get("history") or {}).get("rows") or []
 
     def _lookup_stock_history_online(
         self,
@@ -666,332 +579,75 @@ class MarketInstrumentService:
         period: str,
         warnings: list[str],
     ) -> list[dict[str, Any]]:
-        import akshare as ak
+        from app.services.market_instrument_dynamic_data import (
+            _lookup_stock_history_online as _delegate,
+        )
 
-        code = _normalize_plain_code(symbol)
-        try:
-            history_df = ak.stock_zh_a_hist(
-                symbol=code,
-                period=period,
-                start_date=_date_text(start_date, date.today() - timedelta(days=90)),
-                end_date=_date_text(end_date, date.today()),
-                adjust="qfq",
-                timeout=10,
-            )
-            return self._normalize_cn_ohlcv_history(history_df)
-        except Exception as exc:
-            warnings.append(f"A 股历史行情不可用: {exc}")
-            return []
+        return _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            period=period,
+            warnings=warnings,
+        )
 
     async def _list_stock_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                symbol,
-                name,
-                'CN' AS market,
-                'STOCK_ZH_A_SPOT_EM' AS source_table,
-                MAX(latest_date) AS latest_date,
-                1 AS has_snapshot,
-                0 AS has_history,
-                0 AS history_rows,
-                MAX(sort_value) AS sort_value
-            FROM (
-                SELECT
-                    COALESCE(NULLIF(symbol, ''), `代码`) AS symbol,
-                    COALESCE(NULLIF(name, ''), `名称`, `代码`) AS name,
-                    data_date AS latest_date,
-                    `成交额` AS sort_value
-                FROM STOCK_ZH_A_SPOT_EM
-                WHERE (:search = ''
-                    OR COALESCE(symbol, '') LIKE :pattern
-                    OR COALESCE(name, '') LIKE :pattern
-                    OR `代码` LIKE :pattern
-                    OR `名称` LIKE :pattern)
-            ) AS candidates
-            WHERE symbol IS NOT NULL AND symbol <> ''
-            GROUP BY symbol, name
-            ORDER BY latest_date DESC, sort_value DESC, symbol ASC
-            LIMIT :limit
-            """,
-            self._instrument_query_params(search, limit),
+        from app.services.market_instrument_asset_catalog import (
+            _list_stock_instruments as _delegate,
         )
-        return self._normalize_instrument_options(rows, "stock", limit)
+
+        return await _delegate(self, search=search, limit=limit)
 
     async def _list_futures_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        params = self._instrument_query_params(search, limit)
-        if not search:
-            latest = await self._fetch_one(
-                "SELECT MAX(TRADE_DATE) AS latest_date FROM FUTURES_DAILY_MARKET"
-            )
-            latest_date = latest.get("latest_date") if latest else None
-            if latest_date:
-                rows = await self._fetch_rows(
-                    """
-                    SELECT
-                        SYMBOL AS symbol,
-                        CONCAT(
-                            SYMBOL,
-                            ' / ',
-                            COALESCE(NULLIF(VARIETY, ''), COALESCE(MARKET, 'CN'))
-                        ) AS name,
-                        COALESCE(MARKET, 'CN') AS market,
-                        'FUTURES_DAILY_MARKET' AS source_table,
-                        MAX(TRADE_DATE) AS latest_date,
-                        0 AS has_snapshot,
-                        1 AS has_history,
-                        COUNT(*) AS history_rows
-                    FROM FUTURES_DAILY_MARKET
-                    WHERE TRADE_DATE = :latest_date
-                    GROUP BY SYMBOL, VARIETY, MARKET
-                    ORDER BY history_rows DESC, SYMBOL ASC
-                    LIMIT :limit
-                    """,
-                    {**params, "latest_date": latest_date},
-                )
-                return self._normalize_instrument_options(rows, "futures", limit)
-
-        exact_rows = await self._fetch_rows(
-            """
-            SELECT
-                SYMBOL AS symbol,
-                CONCAT(
-                    SYMBOL,
-                    ' / ',
-                    COALESCE(NULLIF(MAX(VARIETY), ''), COALESCE(MAX(MARKET), 'CN'))
-                ) AS name,
-                COALESCE(MAX(MARKET), 'CN') AS market,
-                'FUTURES_DAILY_MARKET' AS source_table,
-                MAX(TRADE_DATE) AS latest_date,
-                0 AS has_snapshot,
-                1 AS has_history,
-                COUNT(*) AS history_rows
-            FROM FUTURES_DAILY_MARKET
-            WHERE SYMBOL IN (:search, :upper_search)
-            GROUP BY SYMBOL
-            ORDER BY latest_date DESC, history_rows DESC, SYMBOL ASC
-            LIMIT :limit
-            """,
-            {**params, "upper_search": search.upper()},
+        from app.services.market_instrument_asset_catalog import (
+            _list_futures_instruments as _delegate,
         )
-        if exact_rows:
-            return self._normalize_instrument_options(exact_rows, "futures", limit)
 
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                SYMBOL AS symbol,
-                CONCAT(SYMBOL, ' / ', COALESCE(NULLIF(VARIETY, ''), COALESCE(MARKET, 'CN'))) AS name,
-                COALESCE(MARKET, 'CN') AS market,
-                'FUTURES_DAILY_MARKET' AS source_table,
-                MAX(TRADE_DATE) AS latest_date,
-                0 AS has_snapshot,
-                1 AS has_history,
-                COUNT(*) AS history_rows
-            FROM FUTURES_DAILY_MARKET
-            WHERE (SYMBOL LIKE :prefix_pattern
-                OR COALESCE(VARIETY, '') LIKE :pattern
-                OR COALESCE(MARKET, '') LIKE :pattern)
-            GROUP BY SYMBOL, VARIETY, MARKET
-            ORDER BY latest_date DESC, history_rows DESC, SYMBOL ASC
-            LIMIT :limit
-            """,
-            {**params, "prefix_pattern": f"{search}%"},
-        )
-        return self._normalize_instrument_options(rows, "futures", limit)
+        return await _delegate(self, search=search, limit=limit)
 
     async def _list_bond_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        params = self._instrument_query_params(search, limit)
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                symbol,
-                COALESCE(NULLIF(name, ''), code, symbol) AS name,
-                'CN' AS market,
-                'BOND_ZH_HS_COV_SPOT' AS source_table,
-                MAX(data_date) AS latest_date,
-                1 AS has_snapshot,
-                0 AS has_history,
-                0 AS history_rows
-            FROM BOND_ZH_HS_COV_SPOT
-            WHERE (:search = ''
-                OR LOWER(symbol) LIKE LOWER(:pattern)
-                OR code LIKE :pattern
-                OR COALESCE(name, '') LIKE :pattern)
-            GROUP BY symbol, name, code
-            ORDER BY latest_date DESC, symbol ASC
-            LIMIT :limit
-            """,
-            params,
+        from app.services.market_instrument_asset_catalog import (
+            _list_bond_instruments as _delegate,
         )
-        rows.extend(
-            await self._fetch_rows(
-                """
-                SELECT
-                    symbol,
-                    COALESCE(NULLIF(MAX(name), ''), symbol) AS name,
-                    'CN' AS market,
-                    'BOND_ZH_HS_COV_MIN' AS source_table,
-                    MAX(data_date) AS latest_date,
-                    0 AS has_snapshot,
-                    1 AS has_history,
-                    COUNT(*) AS history_rows
-                FROM BOND_ZH_HS_COV_MIN
-                WHERE (:search = ''
-                    OR LOWER(symbol) LIKE LOWER(:pattern)
-                    OR COALESCE(name, '') LIKE :pattern)
-                GROUP BY symbol
-                ORDER BY latest_date DESC, history_rows DESC, symbol ASC
-                LIMIT :limit
-                """,
-                params,
-            )
-        )
-        return self._normalize_instrument_options(rows, "bond", limit)
+
+        return await _delegate(self, search=search, limit=limit)
 
     async def _list_fund_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        params = self._instrument_query_params(search, limit)
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                ETF_CODE AS symbol,
-                COALESCE(NULLIF(ETF_NAME, ''), ETF_CODE) AS name,
-                'CN' AS market,
-                'ETF_REALTIME_QUOTE_EM' AS source_table,
-                MAX(QUOTE_DATE) AS latest_date,
-                1 AS has_snapshot,
-                0 AS has_history,
-                0 AS history_rows
-            FROM ETF_REALTIME_QUOTE_EM
-            WHERE (:search = ''
-                OR ETF_CODE LIKE :pattern
-                OR COALESCE(ETF_NAME, '') LIKE :pattern)
-            GROUP BY ETF_CODE, ETF_NAME
-            ORDER BY latest_date DESC, symbol ASC
-            LIMIT :limit
-            """,
-            params,
+        from app.services.market_instrument_asset_catalog import (
+            _list_fund_instruments as _delegate,
         )
-        rows.extend(
-            await self._fetch_rows(
-                """
-                SELECT
-                    FUND_CODE AS symbol,
-                    FUND_CODE AS name,
-                    'CN' AS market,
-                    'ETF_FUND_HIST_EM' AS source_table,
-                    MAX(VALUE_DATE) AS latest_date,
-                    0 AS has_snapshot,
-                    1 AS has_history,
-                    COUNT(*) AS history_rows
-                FROM ETF_FUND_HIST_EM
-                WHERE (:search = '' OR FUND_CODE LIKE :pattern)
-                GROUP BY FUND_CODE
-                ORDER BY latest_date DESC, history_rows DESC, FUND_CODE ASC
-                LIMIT :limit
-                """,
-                params,
-            )
-        )
-        return self._normalize_instrument_options(rows, "fund", limit)
+
+        return await _delegate(self, search=search, limit=limit)
 
     async def _list_option_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                symbol,
-                name,
-                'CN' AS market,
-                'OPTION_CURRENT_EM' AS source_table,
-                MAX(latest_date) AS latest_date,
-                1 AS has_snapshot,
-                1 AS has_history,
-                COUNT(*) AS history_rows
-            FROM (
-                SELECT
-                    COALESCE(NULLIF(symbol, ''), `代码`) AS symbol,
-                    COALESCE(NULLIF(name, ''), `名称`, `代码`) AS name,
-                    data_date AS latest_date
-                FROM OPTION_CURRENT_EM
-                WHERE (:search = ''
-                    OR COALESCE(symbol, '') LIKE :pattern
-                    OR COALESCE(name, '') LIKE :pattern
-                    OR `代码` LIKE :pattern
-                    OR `名称` LIKE :pattern)
-            ) AS candidates
-            WHERE symbol IS NOT NULL AND symbol <> ''
-            GROUP BY symbol, name
-            ORDER BY latest_date DESC, history_rows DESC, symbol ASC
-            LIMIT :limit
-            """,
-            self._instrument_query_params(search, limit),
+        from app.services.market_instrument_asset_catalog import (
+            _list_option_instruments as _delegate,
         )
-        return self._normalize_instrument_options(rows, "option", limit)
+
+        return await _delegate(self, search=search, limit=limit)
 
     async def _list_fx_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                symbol,
-                name,
-                'FX' AS market,
-                'FOREX_SPOT_EM' AS source_table,
-                MAX(latest_date) AS latest_date,
-                1 AS has_snapshot,
-                1 AS has_history,
-                COUNT(*) AS history_rows
-            FROM (
-                SELECT
-                    COALESCE(NULLIF(symbol, ''), `代码`) AS symbol,
-                    COALESCE(NULLIF(name, ''), `名称`, `代码`) AS name,
-                    data_date AS latest_date
-                FROM FOREX_SPOT_EM
-                WHERE (:search = ''
-                    OR COALESCE(symbol, '') LIKE :pattern
-                    OR COALESCE(name, '') LIKE :pattern
-                    OR `代码` LIKE :pattern
-                    OR `名称` LIKE :pattern)
-            ) AS candidates
-            WHERE symbol IS NOT NULL AND symbol <> ''
-            GROUP BY symbol, name
-            ORDER BY latest_date DESC, symbol ASC
-            LIMIT :limit
-            """,
-            self._instrument_query_params(search, limit),
+        from app.services.market_instrument_asset_catalog import (
+            _list_fx_instruments as _delegate,
         )
-        return self._normalize_instrument_options(rows, "fx", limit)
+
+        return await _delegate(self, search=search, limit=limit)
 
     async def _list_crypto_instruments(self, *, search: str, limit: int) -> list[dict[str, Any]]:
-        rows = await self._fetch_rows(
-            """
-            SELECT
-                `交易品种` AS symbol,
-                CONCAT(`交易品种`, ' / ', COALESCE(`市场`, 'CRYPTO')) AS name,
-                COALESCE(`市场`, 'CRYPTO') AS market,
-                'CRYPTO_JS_SPOT' AS source_table,
-                MAX(data_date) AS latest_date,
-                1 AS has_snapshot,
-                1 AS has_history,
-                COUNT(*) AS history_rows
-            FROM CRYPTO_JS_SPOT
-            WHERE (:search = ''
-                OR `交易品种` LIKE :pattern
-                OR COALESCE(`市场`, '') LIKE :pattern)
-            GROUP BY `交易品种`, `市场`
-            ORDER BY latest_date DESC, symbol ASC
-            LIMIT :limit
-            """,
-            self._instrument_query_params(search, limit),
+        from app.services.market_instrument_asset_catalog import (
+            _list_crypto_instruments as _delegate,
         )
-        return self._normalize_instrument_options(rows, "crypto", limit)
+
+        return await _delegate(self, search=search, limit=limit)
 
     @staticmethod
     def _instrument_query_params(search: str, limit: int) -> dict[str, Any]:
-        return {
-            "search": search,
-            "pattern": f"%{search}%",
-            "limit": limit,
-        }
+        from app.services.market_instrument_asset_catalog import (
+            _instrument_query_params as _delegate,
+        )
+
+        return _delegate(search=search, limit=limit)
 
     def _normalize_instrument_options(
         self,
@@ -999,60 +655,11 @@ class MarketInstrumentService:
         asset_type: MarketAssetType,
         limit: int,
     ) -> list[dict[str, Any]]:
-        merged: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            symbol = _safe_str(_first_value(row, "symbol"))
-            if not symbol:
-                continue
-            key = symbol.upper()
-            if key not in merged:
-                merged[key] = {
-                    "asset_type": asset_type,
-                    "symbol": symbol,
-                    "name": _safe_str(_first_value(row, "name")) or symbol,
-                    "market": _safe_str(_first_value(row, "market"))
-                    or self._default_market(asset_type),
-                    "source_table": _safe_str(_first_value(row, "source_table")),
-                    "latest_date": _safe_str(_first_value(row, "latest_date")),
-                    "has_snapshot": bool(_safe_int(_first_value(row, "has_snapshot"))),
-                    "has_history": bool(_safe_int(_first_value(row, "has_history"))),
-                    "history_rows": _safe_int(_first_value(row, "history_rows")) or 0,
-                }
-                continue
+        from app.services.market_instrument_asset_catalog import (
+            _normalize_instrument_options as _delegate,
+        )
 
-            option = merged[key]
-            option["has_snapshot"] = bool(
-                option["has_snapshot"] or _safe_int(_first_value(row, "has_snapshot"))
-            )
-            option["has_history"] = bool(
-                option["has_history"] or _safe_int(_first_value(row, "has_history"))
-            )
-            option["history_rows"] = int(option["history_rows"]) + (
-                _safe_int(_first_value(row, "history_rows")) or 0
-            )
-            latest_date = _safe_str(_first_value(row, "latest_date"))
-            if latest_date and (not option["latest_date"] or latest_date > option["latest_date"]):
-                option["latest_date"] = latest_date
-            source_table = _safe_str(_first_value(row, "source_table"))
-            if source_table and source_table not in str(option["source_table"] or ""):
-                option["source_table"] = (
-                    f"{option['source_table']}/{source_table}"
-                    if option["source_table"]
-                    else source_table
-                )
-            name = _safe_str(_first_value(row, "name"))
-            if name and option["name"] == option["symbol"]:
-                option["name"] = name
-
-        return sorted(
-            merged.values(),
-            key=lambda item: (
-                item.get("latest_date") or "",
-                bool(item.get("has_snapshot")),
-                int(item.get("history_rows") or 0),
-            ),
-            reverse=True,
-        )[:limit]
+        return _delegate(self, rows=rows, asset_type=asset_type, limit=limit)
 
     @staticmethod
     def _fallback_instruments(
@@ -1062,26 +669,11 @@ class MarketInstrumentService:
         limit: int,
     ) -> list[dict[str, Any]]:
         """Return safe starter symbols when the optional warehouse is unavailable."""
-        normalized_search = search.casefold()
-        options: list[dict[str, Any]] = []
-        for symbol, name, market in _BUILTIN_INSTRUMENTS[asset_type]:
-            searchable = " ".join((symbol, name, market)).casefold()
-            if normalized_search and normalized_search not in searchable:
-                continue
-            options.append(
-                {
-                    "asset_type": asset_type,
-                    "symbol": symbol,
-                    "name": name,
-                    "market": market,
-                    "source_table": "builtin_fallback",
-                    "latest_date": None,
-                    "has_snapshot": False,
-                    "has_history": False,
-                    "history_rows": 0,
-                }
-            )
-        return options[:limit]
+        from app.services.market_instrument_asset_catalog import (
+            _fallback_instruments as _delegate,
+        )
+
+        return _delegate(asset_type=asset_type, search=search, limit=limit)
 
     async def _list_cached_instruments(
         self,
@@ -1090,37 +682,11 @@ class MarketInstrumentService:
         search: str,
         limit: int,
     ) -> list[dict[str, Any]]:
-        try:
-            rows = await self._fetch_rows(
-                """
-                SELECT
-                    symbol,
-                    COALESCE(NULLIF(MAX(name), ''), symbol) AS name,
-                    COALESCE(NULLIF(MAX(market), ''), :market) AS market,
-                    'MARKET_INSTRUMENT_HISTORY_CACHE' AS source_table,
-                    MAX(`date`) AS latest_date,
-                    0 AS has_snapshot,
-                    1 AS has_history,
-                    COUNT(*) AS history_rows
-                FROM MARKET_INSTRUMENT_HISTORY_CACHE
-                WHERE asset_type = :asset_type
-                  AND (:search = ''
-                    OR symbol LIKE :pattern
-                    OR COALESCE(name, '') LIKE :pattern
-                    OR COALESCE(market, '') LIKE :pattern)
-                GROUP BY symbol
-                ORDER BY latest_date DESC, history_rows DESC, symbol ASC
-                LIMIT :limit
-                """,
-                {
-                    **self._instrument_query_params(search, limit),
-                    "asset_type": asset_type,
-                    "market": self._default_market(asset_type),
-                },
-            )
-        except Exception:
-            return []
-        return rows
+        from app.services.market_instrument_asset_catalog import (
+            _list_cached_instruments as _delegate,
+        )
+
+        return await _delegate(self, asset_type=asset_type, search=search, limit=limit)
 
     async def _lookup_history_cache(
         self,
@@ -1131,66 +697,18 @@ class MarketInstrumentService:
         end_date: date | str,
         period: str,
     ) -> list[dict[str, Any]]:
-        try:
-            rows = await self._fetch_rows(
-                """
-                SELECT
-                    `date`,
-                    name,
-                    open,
-                    high,
-                    low,
-                    close,
-                    price,
-                    volume,
-                    turnover,
-                    change_value,
-                    change_pct,
-                    turnover_rate,
-                    open_interest,
-                    settle,
-                    strike,
-                    days_to_expiry
-                FROM MARKET_INSTRUMENT_HISTORY_CACHE
-                WHERE asset_type = :asset_type
-                  AND UPPER(symbol) = :symbol
-                  AND period = :period
-                  AND STR_TO_DATE(`date`, '%Y-%m-%d') BETWEEN :start AND :end
-                ORDER BY STR_TO_DATE(`date`, '%Y-%m-%d') ASC
-                LIMIT 260
-                """,
-                {
-                    "asset_type": asset_type,
-                    "symbol": symbol.upper(),
-                    "period": period,
-                    "start": _sql_date_text(start_date, date.today()),
-                    "end": _sql_date_text(end_date, date.today()),
-                },
-            )
-        except Exception:
-            return []
+        from app.services.market_instrument_dynamic_data import (
+            _lookup_history_cache as _delegate,
+        )
 
-        return [
-            {
-                "date": _iso_date(_first_value(row, "date")),
-                "name": _safe_str(_first_value(row, "name")),
-                "open": _safe_float(_first_value(row, "open")),
-                "high": _safe_float(_first_value(row, "high")),
-                "low": _safe_float(_first_value(row, "low")),
-                "close": _safe_float(_first_value(row, "close")),
-                "price": _safe_float(_first_value(row, "price")),
-                "volume": _safe_int(_first_value(row, "volume")),
-                "turnover": _safe_float(_first_value(row, "turnover")),
-                "change": _safe_float(_first_value(row, "change_value")),
-                "change_pct": _safe_float(_first_value(row, "change_pct")),
-                "turnover_rate": _safe_float(_first_value(row, "turnover_rate")),
-                "open_interest": _safe_int(_first_value(row, "open_interest")),
-                "settle": _safe_float(_first_value(row, "settle")),
-                "strike": _safe_float(_first_value(row, "strike")),
-                "days_to_expiry": _safe_int(_first_value(row, "days_to_expiry")),
-            }
-            for row in rows
-        ]
+        return await _delegate(
+            self,
+            asset_type=asset_type,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            period=period,
+        )
 
     async def _store_history_cache(
         self,
@@ -1202,160 +720,19 @@ class MarketInstrumentService:
         period: str,
         rows: list[dict[str, Any]],
     ) -> str | None:
-        payloads = []
-        normalized_symbol = symbol.upper()
-        for row in rows:
-            row_date = _safe_str(_first_value(row, "date"))
-            if not row_date:
-                continue
-            payloads.append(
-                {
-                    "r_id": f"{asset_type}|{normalized_symbol}|{period}|{row_date}"[:191],
-                    "asset_type": asset_type,
-                    "symbol": normalized_symbol,
-                    "name": _safe_str(_first_value(row, "name")) or name,
-                    "market": market,
-                    "period": period,
-                    "date": row_date,
-                    "open": _safe_float(_first_value(row, "open")),
-                    "high": _safe_float(_first_value(row, "high")),
-                    "low": _safe_float(_first_value(row, "low")),
-                    "close": _safe_float(_first_value(row, "close")),
-                    "price": _safe_float(_first_value(row, "price")),
-                    "volume": _safe_int(_first_value(row, "volume")),
-                    "turnover": _safe_float(_first_value(row, "turnover")),
-                    "change_value": _safe_float(_first_value(row, "change")),
-                    "change_pct": _safe_float(_first_value(row, "change_pct")),
-                    "turnover_rate": _safe_float(_first_value(row, "turnover_rate")),
-                    "open_interest": _safe_int(_first_value(row, "open_interest")),
-                    "settle": _safe_float(_first_value(row, "settle")),
-                    "strike": _safe_float(_first_value(row, "strike")),
-                    "days_to_expiry": _safe_int(_first_value(row, "days_to_expiry")),
-                    "provider": _ONLINE_PROVIDER,
-                }
-            )
-        if not payloads:
-            return None
+        from app.services.market_instrument_dynamic_data import (
+            _store_history_cache as _delegate,
+        )
 
-        engine = _get_akshare_data_engine()
-        if engine is None:
-            return "AKSHARE_DATA_DATABASE_URL is not configured"
-
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS MARKET_INSTRUMENT_HISTORY_CACHE (
-                            R_ID VARCHAR(191) PRIMARY KEY,
-                            asset_type VARCHAR(32) NOT NULL,
-                            symbol VARCHAR(64) NOT NULL,
-                            name VARCHAR(128) NULL,
-                            market VARCHAR(32) NULL,
-                            period VARCHAR(16) NOT NULL,
-                            `date` VARCHAR(32) NOT NULL,
-                            open DOUBLE NULL,
-                            high DOUBLE NULL,
-                            low DOUBLE NULL,
-                            close DOUBLE NULL,
-                            price DOUBLE NULL,
-                            volume BIGINT NULL,
-                            turnover DOUBLE NULL,
-                            change_value DOUBLE NULL,
-                            change_pct DOUBLE NULL,
-                            turnover_rate DOUBLE NULL,
-                            open_interest BIGINT NULL,
-                            settle DOUBLE NULL,
-                            strike DOUBLE NULL,
-                            days_to_expiry INT NULL,
-                            provider VARCHAR(64) NULL,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                            KEY idx_market_instrument_history_cache_lookup (
-                                asset_type,
-                                symbol,
-                                period,
-                                `date`
-                            )
-                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                        """
-                    )
-                )
-                await conn.execute(
-                    text(
-                        """
-                        INSERT INTO MARKET_INSTRUMENT_HISTORY_CACHE (
-                            R_ID,
-                            asset_type,
-                            symbol,
-                            name,
-                            market,
-                            period,
-                            `date`,
-                            open,
-                            high,
-                            low,
-                            close,
-                            price,
-                            volume,
-                            turnover,
-                            change_value,
-                            change_pct,
-                            turnover_rate,
-                            open_interest,
-                            settle,
-                            strike,
-                            days_to_expiry,
-                            provider
-                        ) VALUES (
-                            :r_id,
-                            :asset_type,
-                            :symbol,
-                            :name,
-                            :market,
-                            :period,
-                            :date,
-                            :open,
-                            :high,
-                            :low,
-                            :close,
-                            :price,
-                            :volume,
-                            :turnover,
-                            :change_value,
-                            :change_pct,
-                            :turnover_rate,
-                            :open_interest,
-                            :settle,
-                            :strike,
-                            :days_to_expiry,
-                            :provider
-                        )
-                        ON DUPLICATE KEY UPDATE
-                            name = VALUES(name),
-                            market = VALUES(market),
-                            open = VALUES(open),
-                            high = VALUES(high),
-                            low = VALUES(low),
-                            close = VALUES(close),
-                            price = VALUES(price),
-                            volume = VALUES(volume),
-                            turnover = VALUES(turnover),
-                            change_value = VALUES(change_value),
-                            change_pct = VALUES(change_pct),
-                            turnover_rate = VALUES(turnover_rate),
-                            open_interest = VALUES(open_interest),
-                            settle = VALUES(settle),
-                            strike = VALUES(strike),
-                            days_to_expiry = VALUES(days_to_expiry),
-                            provider = VALUES(provider)
-                        """
-                    ),
-                    payloads,
-                )
-        except Exception as exc:
-            return str(exc)
-        return None
+        return await _delegate(
+            self,
+            asset_type=asset_type,
+            symbol=symbol,
+            name=name,
+            market=market,
+            period=period,
+            rows=rows,
+        )
 
     @staticmethod
     def _default_market(asset_type: MarketAssetType) -> str:
@@ -1399,62 +776,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        code = _normalize_plain_code(symbol)
-        spot = await self._fetch_one(
-            """
-            SELECT *
-            FROM STOCK_ZH_A_SPOT_EM
-            WHERE symbol = :code OR `代码` = :code
-            ORDER BY data_date DESC
-            LIMIT 1
-            """,
-            {"code": code},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_stock_warehouse as _delegate,
         )
 
-        rows = await self._fetch_rows(
-            """
-            SELECT *
-            FROM STOCK_ZH_A_HIST
-            WHERE (symbol = :code OR `股票代码` = :code)
-              AND STR_TO_DATE(`日期`, '%Y-%m-%d') BETWEEN :start AND :end
-            ORDER BY STR_TO_DATE(`日期`, '%Y-%m-%d') ASC
-            LIMIT 260
-            """,
-            {
-                "code": code,
-                "start": _sql_date_text(start_date, date.today()),
-                "end": _sql_date_text(end_date, date.today()),
-            },
-        )
-        history_rows = self._normalize_warehouse_history(
-            rows,
-            date_key="日期",
-            open_key="开盘",
-            high_key="最高",
-            low_key="最低",
-            close_key="收盘",
-            volume_key="成交量",
-            turnover_key="成交额",
-            change_key="涨跌额",
-            change_pct_key="涨跌幅",
-            turnover_rate_key="换手率",
-        )
-        history_table = "STOCK_ZH_A_HIST" if history_rows else None
-
-        snapshot = self._snapshot_from_cn_quote(spot or {}, symbol=code) if spot else {}
-        snapshot = snapshot or self._snapshot_from_latest_history(code, history_rows)
-        snapshot["data_source_table"] = (
-            f"STOCK_ZH_A_SPOT_EM/{history_table}" if history_table else "STOCK_ZH_A_SPOT_EM"
-        )
-        return self._payload(
-            asset_type="stock",
-            symbol=code,
-            name=snapshot.get("name") or code,
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     async def _lookup_futures_warehouse(
@@ -1467,51 +800,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        requested = symbol.upper()
-        rows = await self._fetch_rows(
-            """
-            SELECT *
-            FROM FUTURES_DAILY_MARKET
-            WHERE SYMBOL = :symbol
-              AND TRADE_DATE BETWEEN :start AND :end
-            ORDER BY TRADE_DATE ASC
-            LIMIT 260
-            """,
-            {"symbol": requested, "start": start_date, "end": end_date},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_futures_warehouse as _delegate,
         )
-        history_rows = self._normalize_warehouse_history(
-            rows,
-            date_key="TRADE_DATE",
-            open_key="OPEN_PRICE",
-            high_key="HIGH_PRICE",
-            low_key="LOW_PRICE",
-            close_key="CLOSE_PRICE",
-            volume_key="VOLUME",
-            turnover_key="TURNOVER",
-            settle_key="SETTLE_PRICE",
-            open_interest_key="OPEN_INTEREST",
-        )
-        snapshot = self._snapshot_from_latest_history(requested, history_rows)
-        latest_raw = rows[-1] if rows else {}
-        snapshot.update(
-            {
-                "name": requested,
-                "settle": _safe_float(_first_value(latest_raw, "SETTLE_PRICE")),
-                "previous_settle": _safe_float(_first_value(latest_raw, "PREV_SETTLE")),
-                "open_interest": _safe_int(_first_value(latest_raw, "OPEN_INTEREST")),
-                "turnover": _safe_float(_first_value(latest_raw, "TURNOVER")),
-                "data_source_table": "FUTURES_DAILY_MARKET",
-            }
-        )
-        return self._payload(
-            asset_type="futures",
-            symbol=requested,
-            name=requested,
-            market=market or _safe_str(_first_value(latest_raw, "MARKET")) or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     async def _lookup_bond_warehouse(
@@ -1524,73 +824,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        exchange_symbol = _normalize_exchange_symbol(symbol, default_prefix="sh")
-        plain_code = exchange_symbol[2:]
-        spot = await self._fetch_one(
-            """
-            SELECT *
-            FROM BOND_ZH_HS_COV_SPOT
-            WHERE LOWER(symbol) = :symbol OR code = :code
-            ORDER BY data_date DESC
-            LIMIT 1
-            """,
-            {"symbol": exchange_symbol.lower(), "code": plain_code},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_bond_warehouse as _delegate,
         )
-        rows = await self._fetch_rows(
-            """
-            SELECT *
-            FROM BOND_ZH_HS_COV_MIN
-            WHERE LOWER(symbol) = :symbol
-              AND data_date BETWEEN :start AND :end
-            ORDER BY `时间` ASC
-            LIMIT 260
-            """,
-            {
-                "symbol": exchange_symbol.lower(),
-                "start": _sql_date_text(start_date, date.today()),
-                "end": _sql_date_text(end_date, date.today()),
-            },
-        )
-        history_rows = self._normalize_warehouse_history(
-            rows,
-            date_key="时间",
-            open_key="开盘",
-            high_key="最高",
-            low_key="最低",
-            close_key="收盘",
-            volume_key="成交量",
-            turnover_key="成交额",
-        )
-        if spot:
-            snapshot = {
-                "symbol": exchange_symbol,
-                "name": _safe_str(_first_value(spot, "name", "code")) or exchange_symbol,
-                "price": _safe_float(_first_value(spot, "trade")),
-                "change": _safe_float(_first_value(spot, "pricechange")),
-                "change_pct": _safe_float(_first_value(spot, "changepercent")),
-                "open": _safe_float(_first_value(spot, "open")),
-                "high": _safe_float(_first_value(spot, "high")),
-                "low": _safe_float(_first_value(spot, "low")),
-                "previous_close": _safe_float(_first_value(spot, "settlement")),
-                "bid": _safe_float(_first_value(spot, "buy")),
-                "ask": _safe_float(_first_value(spot, "sell")),
-                "volume": _safe_int(_first_value(spot, "volume")),
-                "turnover": _safe_float(_first_value(spot, "amount")),
-                "update_time": _safe_str(_first_value(spot, "ticktime", "data_date")),
-                "data_source_table": "BOND_ZH_HS_COV_SPOT",
-            }
-        else:
-            snapshot = self._snapshot_from_latest_history(exchange_symbol, history_rows)
-            snapshot["data_source_table"] = "BOND_ZH_HS_COV_MIN"
-        return self._payload(
-            asset_type="bond",
-            symbol=exchange_symbol,
-            name=_name_or_fallback(snapshot.get("name"), plain_code),
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     async def _lookup_fund_warehouse(
@@ -1603,102 +848,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        code = _normalize_plain_code(symbol)
-        spot = await self._fetch_one(
-            """
-            SELECT *
-            FROM ETF_REALTIME_QUOTE_EM
-            WHERE ETF_CODE = :code
-            ORDER BY QUOTE_DATE DESC
-            LIMIT 1
-            """,
-            {"code": code},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_fund_warehouse as _delegate,
         )
-        rows: list[dict[str, Any]] = []
-        if code == "510300":
-            rows = await self._fetch_rows(
-                """
-                SELECT *
-                FROM FUND_ETF_HIST_SINA
-                WHERE STR_TO_DATE(`date`, '%Y-%m-%d') BETWEEN :start AND :end
-                ORDER BY STR_TO_DATE(`date`, '%Y-%m-%d') ASC
-                LIMIT 260
-                """,
-                {
-                    "start": _sql_date_text(start_date, date.today()),
-                    "end": _sql_date_text(end_date, date.today()),
-                },
-            )
-        else:
-            nav_rows = await self._fetch_rows(
-                """
-                SELECT *
-                FROM ETF_FUND_HIST_EM
-                WHERE FUND_CODE = :code
-                  AND VALUE_DATE BETWEEN :start AND :end
-                ORDER BY VALUE_DATE ASC
-                LIMIT 260
-                """,
-                {
-                    "code": code,
-                    "start": _sql_date_text(start_date, date.today()),
-                    "end": _sql_date_text(end_date, date.today()),
-                },
-            )
-            rows = [
-                {
-                    "date": row.get("VALUE_DATE"),
-                    "open": row.get("UNIT_NET_VALUE"),
-                    "high": row.get("UNIT_NET_VALUE"),
-                    "low": row.get("UNIT_NET_VALUE"),
-                    "close": row.get("UNIT_NET_VALUE"),
-                    "change_pct": row.get("DAILY_GROWTH_RATE"),
-                }
-                for row in nav_rows
-            ]
 
-        history_rows = self._normalize_warehouse_history(
-            rows,
-            date_key="date",
-            open_key="open",
-            high_key="high",
-            low_key="low",
-            close_key="close",
-            volume_key="volume",
-            turnover_key="amount",
-        )
-        if spot:
-            snapshot = {
-                "symbol": code,
-                "name": _safe_str(_first_value(spot, "ETF_NAME")) or code,
-                "price": _safe_float(_first_value(spot, "LATEST_PRICE")),
-                "change": _safe_float(_first_value(spot, "CHANGE_AMOUNT")),
-                "change_pct": _safe_float(_first_value(spot, "CHANGE_PERCENT")),
-                "open": _safe_float(_first_value(spot, "OPEN_PRICE")),
-                "high": _safe_float(_first_value(spot, "HIGH_PRICE")),
-                "low": _safe_float(_first_value(spot, "LOW_PRICE")),
-                "previous_close": _safe_float(_first_value(spot, "PREV_CLOSE")),
-                "volume": _safe_int(_first_value(spot, "VOLUME")),
-                "turnover": _safe_float(_first_value(spot, "TURNOVER")),
-                "turnover_rate": _safe_float(_first_value(spot, "TURNOVER_RATE")),
-                "market_cap": _safe_float(_first_value(spot, "TOTAL_MARKET_CAP")),
-                "float_market_cap": _safe_float(_first_value(spot, "CIRC_MARKET_CAP")),
-                "bid": _safe_float(_first_value(spot, "BID_PRICE")),
-                "ask": _safe_float(_first_value(spot, "ASK_PRICE")),
-                "update_time": _safe_str(_first_value(spot, "UPDATE_TIME", "QUOTE_DATE")),
-                "data_source_table": "ETF_REALTIME_QUOTE_EM",
-            }
-        else:
-            snapshot = self._snapshot_from_latest_history(code, history_rows)
-        return self._payload(
-            asset_type="fund",
-            symbol=code,
-            name=_name_or_fallback(snapshot.get("name"), code),
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     async def _lookup_option_warehouse(
@@ -1711,73 +872,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        normalized = symbol.upper()
-        current = await self._fetch_one(
-            """
-            SELECT *
-            FROM OPTION_CURRENT_EM
-            WHERE UPPER(symbol) = :symbol OR UPPER(`代码`) = :symbol
-            ORDER BY data_date DESC
-            LIMIT 1
-            """,
-            {"symbol": normalized},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_option_warehouse as _delegate,
         )
-        rows = await self._fetch_rows(
-            """
-            SELECT *
-            FROM OPTION_CURRENT_EM
-            WHERE (UPPER(symbol) = :symbol OR UPPER(`代码`) = :symbol)
-              AND data_date BETWEEN :start AND :end
-            ORDER BY data_date ASC
-            LIMIT 260
-            """,
-            {
-                "symbol": normalized,
-                "start": _sql_date_text(start_date, date.today()),
-                "end": _sql_date_text(end_date, date.today()),
-            },
-        )
-        history_rows = [
-            {
-                "date": _iso_date(_first_value(row, "data_date")),
-                "name": _safe_str(_first_value(row, "名称", "name", "代码", "symbol")),
-                "price": _safe_float(_first_value(row, "最新价")),
-                "volume": _safe_int(_first_value(row, "成交量")),
-                "turnover": _safe_float(_first_value(row, "成交额")),
-                "open_interest": _safe_int(_first_value(row, "持仓量")),
-                "change": _safe_float(_first_value(row, "涨跌额", "日增")),
-                "change_pct": _safe_float(_first_value(row, "涨跌幅")),
-                "strike": _safe_float(_first_value(row, "行权价")),
-                "days_to_expiry": _safe_int(_first_value(row, "剩余日")),
-            }
-            for row in rows
-        ]
-        snapshot = {
-            "symbol": normalized,
-            "name": _safe_str(_first_value(current or {}, "名称", "name", "代码", "symbol"))
-            or normalized,
-            "price": _safe_float(_first_value(current or {}, "最新价")),
-            "change": _safe_float(_first_value(current or {}, "涨跌额")),
-            "change_pct": _safe_float(_first_value(current or {}, "涨跌幅")),
-            "open": _safe_float(_first_value(current or {}, "今开")),
-            "previous_settle": _safe_float(_first_value(current or {}, "昨结")),
-            "volume": _safe_int(_first_value(current or {}, "成交量")),
-            "turnover": _safe_float(_first_value(current or {}, "成交额")),
-            "open_interest": _safe_int(_first_value(current or {}, "持仓量")),
-            "strike": _safe_float(_first_value(current or {}, "行权价")),
-            "days_to_expiry": _safe_int(_first_value(current or {}, "剩余日")),
-            "update_time": _safe_str(_first_value(current or {}, "data_date")),
-            "data_source_table": "OPTION_CURRENT_EM",
-        }
-        return self._payload(
-            asset_type="option",
-            symbol=normalized,
-            name=_name_or_fallback(snapshot.get("name"), normalized),
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     async def _lookup_fx_warehouse(
@@ -1790,43 +896,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        normalized = symbol.upper()
-        spot = await self._fetch_one(
-            """
-            SELECT *
-            FROM FOREX_SPOT_EM
-            WHERE UPPER(`代码`) = :symbol OR UPPER(symbol) = :symbol
-            ORDER BY data_date DESC
-            LIMIT 1
-            """,
-            {"symbol": normalized},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_fx_warehouse as _delegate,
         )
-        # CURRENCY_BOC_SAFE is a currency reference series, not a history of an
-        # exact FX pair. It must not be presented as a requested pair's bars.
-        history_rows: list[dict[str, Any]] = []
-        snapshot = {
-            "symbol": normalized,
-            "name": _safe_str(_first_value(spot or {}, "名称", "name", "代码")) or normalized,
-            "price": _safe_float(_first_value(spot or {}, "最新价")),
-            "change": _safe_float(_first_value(spot or {}, "涨跌额")),
-            "change_pct": _safe_float(_first_value(spot or {}, "涨跌幅")),
-            "open": _safe_float(_first_value(spot or {}, "今开")),
-            "high": _safe_float(_first_value(spot or {}, "最高")),
-            "low": _safe_float(_first_value(spot or {}, "最低")),
-            "previous_close": _safe_float(_first_value(spot or {}, "昨收")),
-            "update_time": _safe_str(_first_value(spot or {}, "data_date")),
-            "data_source_table": "FOREX_SPOT_EM",
-        }
-        snapshot = snapshot or self._snapshot_from_latest_history(normalized, history_rows)
-        return self._payload(
-            asset_type="fx",
-            symbol=normalized,
-            name=_name_or_fallback(snapshot.get("name"), normalized),
-            market=market or "FX",
-            snapshot=snapshot,
-            rows=history_rows,
+
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     async def _lookup_crypto_warehouse(
@@ -1839,42 +920,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        normalized = symbol.upper()
-        spot = await self._fetch_one(
-            """
-            SELECT *
-            FROM CRYPTO_JS_SPOT
-            WHERE UPPER(`交易品种`) = :symbol
-            ORDER BY data_date DESC
-            LIMIT 1
-            """,
-            {"symbol": normalized},
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_crypto_warehouse as _delegate,
         )
-        # CRYPTO_BITCOIN_CME is a Bitcoin positioning report, not price bars
-        # for a requested crypto pair such as BTCJPY.
-        history_rows: list[dict[str, Any]] = []
-        snapshot = {
-            "symbol": normalized,
-            "name": _safe_str(_first_value(spot or {}, "交易品种")) or normalized,
-            "price": _safe_float(_first_value(spot or {}, "最近报价")),
-            "change": _safe_float(_first_value(spot or {}, "涨跌额")),
-            "change_pct": _safe_float(_first_value(spot or {}, "涨跌幅")),
-            "high": _safe_float(_first_value(spot or {}, "24小时最高")),
-            "low": _safe_float(_first_value(spot or {}, "24小时最低")),
-            "volume": _safe_float(_first_value(spot or {}, "24小时成交量")),
-            "market": _safe_str(_first_value(spot or {}, "市场")),
-            "update_time": _safe_str(_first_value(spot or {}, "更新时间", "data_date")),
-            "data_source_table": "CRYPTO_JS_SPOT",
-        }
-        return self._payload(
-            asset_type="crypto",
-            symbol=normalized,
-            name=_name_or_fallback(snapshot.get("name"), normalized),
-            market=market or _safe_str(snapshot.get("market")) or "CRYPTO",
-            snapshot=snapshot,
-            rows=history_rows,
+
+        return await _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
-            provider=_WAREHOUSE_PROVIDER,
+            market=market,
+            warnings=warnings,
         )
 
     @staticmethod
@@ -1894,81 +951,41 @@ class MarketInstrumentService:
         open_interest_key: str | None = None,
         settle_key: str | None = None,
     ) -> list[dict[str, Any]]:
-        normalized_rows: list[dict[str, Any]] = []
-        previous_close: float | None = None
-        for row in rows:
-            close_value = _safe_float(_first_value(row, close_key)) if close_key else None
-            change_pct = _safe_float(_first_value(row, change_pct_key)) if change_pct_key else None
-            if change_pct is None and previous_close and close_value is not None:
-                change_pct = ((close_value / previous_close) - 1) * 100
-            normalized_rows.append(
-                {
-                    "date": _iso_date(_first_value(row, date_key)),
-                    "open": _safe_float(_first_value(row, open_key)) if open_key else close_value,
-                    "high": _safe_float(_first_value(row, high_key)) if high_key else close_value,
-                    "low": _safe_float(_first_value(row, low_key)) if low_key else close_value,
-                    "close": close_value,
-                    "volume": _safe_int(_first_value(row, volume_key)) if volume_key else None,
-                    "turnover": _safe_float(_first_value(row, turnover_key))
-                    if turnover_key
-                    else None,
-                    "change": _safe_float(_first_value(row, change_key)) if change_key else None,
-                    "change_pct": change_pct,
-                    "turnover_rate": _safe_float(_first_value(row, turnover_rate_key))
-                    if turnover_rate_key
-                    else None,
-                    "open_interest": _safe_int(_first_value(row, open_interest_key))
-                    if open_interest_key
-                    else None,
-                    "settle": _safe_float(_first_value(row, settle_key)) if settle_key else None,
-                }
-            )
-            if close_value is not None:
-                previous_close = close_value
-        return normalized_rows
+        from app.services.market_instrument_projection import (
+            _normalize_warehouse_history as _delegate,
+        )
+
+        return _delegate(
+            rows=rows,
+            date_key=date_key,
+            open_key=open_key,
+            high_key=high_key,
+            low_key=low_key,
+            close_key=close_key,
+            volume_key=volume_key,
+            turnover_key=turnover_key,
+            change_key=change_key,
+            change_pct_key=change_pct_key,
+            turnover_rate_key=turnover_rate_key,
+            open_interest_key=open_interest_key,
+            settle_key=settle_key,
+        )
 
     @staticmethod
     def _normalize_fx_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        normalized_rows: list[dict[str, Any]] = []
-        previous_close: float | None = None
-        for row in rows:
-            close_value = _safe_float(_first_value(row, "close"))
-            change_pct = None
-            if previous_close and close_value is not None:
-                change_pct = ((close_value / previous_close) - 1) * 100
-            normalized_rows.append(
-                {
-                    "date": _iso_date(_first_value(row, "date")),
-                    "open": previous_close or close_value,
-                    "high": close_value,
-                    "low": close_value,
-                    "close": close_value,
-                    "change_pct": change_pct,
-                }
-            )
-            if close_value is not None:
-                previous_close = close_value
-        return normalized_rows
+        from app.services.market_instrument_projection import (
+            _normalize_fx_history as _delegate,
+        )
+
+        return _delegate(rows=rows)
 
     @staticmethod
     def _fx_history_column(symbol: str) -> str:
-        upper_symbol = symbol.upper()
-        column_by_currency = {
-            "USD": "美元",
-            "EUR": "欧元",
-            "JPY": "日元",
-            "HKD": "港元",
-            "GBP": "英镑",
-            "AUD": "澳元",
-            "NZD": "新西兰元",
-            "SGD": "新加坡元",
-            "CHF": "瑞士法郎",
-            "CAD": "加元",
-        }
-        for currency, column in column_by_currency.items():
-            if upper_symbol.startswith(currency) or upper_symbol.endswith(currency):
-                return column
-        return "美元"
+        from app.services.market_instrument_projection import (
+            _fx_history_column as _delegate,
+        )
+
+        return _delegate(symbol=symbol)
 
     def _lookup_stock(
         self,
@@ -1980,58 +997,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_stock as _delegate,
+        )
 
-        code = _normalize_plain_code(symbol)
-        history_rows: list[dict[str, Any]] = []
-
-        try:
-            history_df = ak.stock_zh_a_hist(
-                symbol=code,
-                period=period,
-                start_date=_date_text(start_date, date.today() - timedelta(days=90)),
-                end_date=_date_text(end_date, date.today()),
-                adjust="qfq",
-                timeout=10,
-            )
-            history_rows = self._normalize_cn_ohlcv_history(history_df)
-        except Exception as exc:
-            warnings.append(f"A 股历史行情不可用: {exc}")
-
-        # Eastmoney's daily endpoint can return an empty frame without raising.
-        # The explicit query button must still retrieve current data, so use
-        # AkShare's Tencent-backed endpoint as a daily-history fallback.
-        if not history_rows and period == "daily":
-            try:
-                tencent_history_df = ak.stock_zh_a_hist_tx(
-                    symbol=_normalize_tencent_stock_symbol(code),
-                    start_date=_date_text(start_date, date.today() - timedelta(days=90)),
-                    end_date=_date_text(end_date, date.today()),
-                    adjust="qfq",
-                    timeout=10,
-                )
-                history_rows = self._normalize_generic_ohlcv_history(
-                    tencent_history_df.rename(columns={"amount": "volume"}),
-                    start_date,
-                    end_date,
-                )
-                if history_rows:
-                    warnings.append("A 股东方财富日线未返回数据，已切换腾讯行情源。")
-            except Exception as exc:
-                warnings.append(f"A 股腾讯历史行情不可用: {exc}")
-
-        # stock_zh_a_spot_em fetches the entire market in many paginated requests.
-        # A single-symbol history query is much faster and already contains the
-        # most recent close needed to render the data page.
-        snapshot = self._snapshot_from_latest_history(symbol, history_rows)
-        return self._payload(
-            asset_type="stock",
+        return _delegate(
+            self,
             symbol=symbol,
-            name=snapshot.get("name") or symbol,
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _lookup_futures(
@@ -2044,53 +1021,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_futures as _delegate,
+        )
 
-        normalized_market = (market or "CF").strip().upper()
-        snapshot: dict[str, Any] = {}
-        history_rows: list[dict[str, Any]] = []
-
-        try:
-            spot_df = ak.futures_zh_spot(symbol=symbol, market=normalized_market, adjust="0")
-            matched = self._match_any(spot_df, symbol, ["symbol", "代码", "合约"])
-            if not matched.empty:
-                row = matched.iloc[0].to_dict()
-                snapshot = {
-                    "symbol": symbol,
-                    "name": _safe_str(row.get("symbol")) or symbol,
-                    "price": _safe_float(row.get("current_price")),
-                    "open": _safe_float(row.get("open")),
-                    "high": _safe_float(row.get("high")),
-                    "low": _safe_float(row.get("low")),
-                    "previous_close": _safe_float(row.get("last_close")),
-                    "settle": _safe_float(row.get("avg_price")),
-                    "previous_settle": _safe_float(row.get("last_settle_price")),
-                    "bid": _safe_float(row.get("bid_price")),
-                    "ask": _safe_float(row.get("ask_price")),
-                    "volume": _safe_int(row.get("volume")),
-                    "open_interest": _safe_int(row.get("hold")),
-                    "update_time": _safe_str(row.get("time")),
-                }
-            elif not spot_df.empty:
-                warnings.append(f"未在期货实时快照中找到 {symbol}")
-        except Exception as exc:
-            warnings.append(f"期货实时快照不可用: {exc}")
-
-        try:
-            history_df = ak.futures_zh_daily_sina(symbol=symbol)
-            history_rows = self._normalize_generic_ohlcv_history(history_df, start_date, end_date)
-        except Exception as exc:
-            warnings.append(f"期货历史行情不可用: {exc}")
-
-        snapshot = snapshot or self._snapshot_from_latest_history(symbol, history_rows)
-        return self._payload(
-            asset_type="futures",
+        return _delegate(
+            self,
             symbol=symbol,
-            name=snapshot.get("name") or symbol,
-            market=normalized_market,
-            snapshot=snapshot,
-            rows=history_rows,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _lookup_bond(
@@ -2103,26 +1045,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_bond as _delegate,
+        )
 
-        exchange_symbol = _normalize_exchange_symbol(symbol)
-        history_rows: list[dict[str, Any]] = []
-
-        try:
-            history_df = ak.bond_zh_hs_cov_daily(symbol=exchange_symbol)
-            history_rows = self._normalize_generic_ohlcv_history(history_df, start_date, end_date)
-        except Exception as exc:
-            warnings.append(f"债券历史行情不可用: {exc}")
-
-        snapshot = self._snapshot_from_latest_history(exchange_symbol, history_rows)
-        return self._payload(
-            asset_type="bond",
-            symbol=exchange_symbol,
-            name=snapshot.get("name") or exchange_symbol,
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+        return _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _lookup_fund(
@@ -2135,32 +1069,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_fund as _delegate,
+        )
 
-        code = _normalize_plain_code(symbol)
-        history_rows: list[dict[str, Any]] = []
-
-        try:
-            history_df = ak.fund_etf_hist_em(
-                symbol=code,
-                period=period,
-                start_date=_date_text(start_date, date.today() - timedelta(days=90)),
-                end_date=_date_text(end_date, date.today()),
-                adjust="qfq",
-            )
-            history_rows = self._normalize_cn_ohlcv_history(history_df)
-        except Exception as exc:
-            warnings.append(f"基金历史行情不可用: {exc}")
-
-        snapshot = self._snapshot_from_latest_history(code, history_rows)
-        return self._payload(
-            asset_type="fund",
-            symbol=code,
-            name=snapshot.get("name") or code,
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+        return _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _lookup_option(
@@ -2173,35 +1093,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_option as _delegate,
+        )
 
-        resolved_symbol = symbol.strip()
-        normalized_symbol = resolved_symbol.lower()
-        history_rows: list[dict[str, Any]] = []
-        try:
-            if normalized_symbol.startswith("io"):
-                history_df = ak.option_cffex_hs300_daily_sina(symbol=resolved_symbol)
-            elif normalized_symbol.startswith("ho"):
-                history_df = ak.option_cffex_sz50_daily_sina(symbol=resolved_symbol)
-            elif normalized_symbol.startswith("mo"):
-                history_df = ak.option_cffex_zz1000_daily_sina(symbol=resolved_symbol)
-            elif "." in resolved_symbol:
-                history_df = ak.option_commodity_hist_sina(symbol=resolved_symbol.split(".", 1)[1])
-            else:
-                history_df = ak.option_sse_daily_sina(symbol=resolved_symbol)
-            history_rows = self._normalize_generic_ohlcv_history(history_df, start_date, end_date)
-        except Exception as exc:
-            warnings.append(f"期权历史行情不可用: {exc}")
-
-        snapshot = self._snapshot_from_latest_history(resolved_symbol, history_rows)
-        return self._payload(
-            asset_type="option",
-            symbol=resolved_symbol,
-            name=resolved_symbol,
-            market=market or "CN",
-            snapshot=snapshot,
-            rows=history_rows,
+        return _delegate(
+            self,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _lookup_fx(
@@ -2214,48 +1117,18 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_fx as _delegate,
+        )
 
-        snapshot: dict[str, Any] = {}
-        history_rows: list[dict[str, Any]] = []
-
-        try:
-            spot_df = ak.forex_spot_em()
-            matched = self._match_any(spot_df, symbol, ["代码", "名称", "货币对", "symbol"])
-            if not matched.empty:
-                row = matched.iloc[0].to_dict()
-                snapshot = {
-                    "symbol": _safe_str(_first_present(row, "代码", "货币对", "symbol")) or symbol,
-                    "name": _safe_str(_first_present(row, "名称", "货币对", "代码")) or symbol,
-                    "price": _safe_float(_first_present(row, "最新价", "最新", "price", "close")),
-                    "change": _safe_float(_first_present(row, "涨跌额", "change")),
-                    "change_pct": _safe_float(_first_present(row, "涨跌幅", "change_pct")),
-                    "open": _safe_float(_first_present(row, "今开", "开盘", "open")),
-                    "high": _safe_float(_first_present(row, "最高", "high")),
-                    "low": _safe_float(_first_present(row, "最低", "low")),
-                    "previous_close": _safe_float(_first_present(row, "昨收", "previous_close")),
-                    "update_time": _safe_str(
-                        _first_present(row, "更新时间", "时间", "update_time")
-                    ),
-                }
-        except Exception as exc:
-            warnings.append(f"外汇实时快照不可用: {exc}")
-
-        try:
-            history_df = ak.forex_hist_em(symbol=symbol)
-            history_rows = self._normalize_generic_ohlcv_history(history_df, start_date, end_date)
-        except Exception as exc:
-            warnings.append(f"外汇历史行情不可用: {exc}")
-
-        snapshot = snapshot or self._snapshot_from_latest_history(symbol, history_rows)
-        return self._payload(
-            asset_type="fx",
+        return _delegate(
+            self,
             symbol=symbol,
-            name=snapshot.get("name") or symbol,
-            market=market or "FX",
-            snapshot=snapshot,
-            rows=history_rows,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _lookup_crypto(
@@ -2268,86 +1141,37 @@ class MarketInstrumentService:
         market: str | None,
         warnings: list[str],
     ) -> dict[str, Any]:
-        import akshare as ak
+        from app.services.market_instrument_asset_adapter import (
+            _lookup_crypto as _delegate,
+        )
 
-        snapshot: dict[str, Any] = {}
-        history_rows: list[dict[str, Any]] = []
-
-        try:
-            spot_df = ak.crypto_js_spot()
-            matched = self._match_any(spot_df, symbol, ["交易品种"])
-            if not matched.empty:
-                row = matched.iloc[0].to_dict()
-                snapshot = {
-                    "symbol": _safe_str(row.get("交易品种")) or symbol,
-                    "name": _safe_str(row.get("交易品种")) or symbol,
-                    "price": _safe_float(row.get("最近报价")),
-                    "change": _safe_float(row.get("涨跌额")),
-                    "change_pct": _safe_float(row.get("涨跌幅")),
-                    "high": _safe_float(row.get("24小时最高")),
-                    "low": _safe_float(row.get("24小时最低")),
-                    "volume": _safe_float(row.get("24小时成交量")),
-                    "market": _safe_str(row.get("市场")),
-                    "update_time": _safe_str(row.get("更新时间")),
-                }
-            else:
-                warnings.append(f"未在数字货币实时快照中找到 {symbol}")
-        except Exception as exc:
-            warnings.append(f"数字货币实时快照不可用: {exc}")
-
-        return self._payload(
-            asset_type="crypto",
+        return _delegate(
+            self,
             symbol=symbol,
-            name=snapshot.get("name") or symbol,
-            market=market or _safe_str(snapshot.get("market")) or "CRYPTO",
-            snapshot=snapshot,
-            rows=history_rows,
+            start_date=start_date,
+            end_date=end_date,
             period=period,
+            market=market,
+            warnings=warnings,
         )
 
     def _snapshot_from_cn_quote(self, row: dict[str, Any], *, symbol: str) -> dict[str, Any]:
-        return {
-            "symbol": symbol,
-            "name": _safe_str(_first_present(row, "名称", "name")) or symbol,
-            "price": _safe_float(_first_present(row, "最新价", "收盘", "price")),
-            "change": _safe_float(_first_present(row, "涨跌额", "change")),
-            "change_pct": _safe_float(_first_present(row, "涨跌幅", "change_pct")),
-            "open": _safe_float(_first_present(row, "今开", "开盘价", "开盘", "open")),
-            "high": _safe_float(_first_present(row, "最高价", "最高", "high")),
-            "low": _safe_float(_first_present(row, "最低价", "最低", "low")),
-            "previous_close": _safe_float(_first_present(row, "昨收", "previous_close")),
-            "volume": _safe_int(_first_present(row, "成交量", "volume")),
-            "turnover": _safe_float(_first_present(row, "成交额", "turnover")),
-            "market_cap": _safe_float(_first_present(row, "总市值")),
-            "float_market_cap": _safe_float(_first_present(row, "流通市值")),
-            "pe": _safe_float(_first_present(row, "市盈率-动态", "市盈率")),
-            "pb": _safe_float(_first_present(row, "市净率")),
-            "update_time": _safe_str(_first_present(row, "更新时间", "数据日期"))
-            or datetime.now().isoformat(),
-        }
+        from app.services.market_instrument_projection import (
+            _snapshot_from_cn_quote as _delegate,
+        )
+
+        return _delegate(self, row=row, symbol=symbol)
 
     def _snapshot_from_latest_history(
         self,
         symbol: str,
         rows: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        if not rows:
-            return {"symbol": symbol, "name": symbol}
-        latest = rows[-1]
-        return {
-            "symbol": symbol,
-            "name": symbol,
-            "price": latest.get("close"),
-            "change_pct": latest.get("change_pct"),
-            "open": latest.get("open"),
-            "high": latest.get("high"),
-            "low": latest.get("low"),
-            "volume": latest.get("volume"),
-            "turnover": latest.get("turnover"),
-            "open_interest": latest.get("open_interest"),
-            "settle": latest.get("settle"),
-            "update_time": latest.get("date"),
-        }
+        from app.services.market_instrument_projection import (
+            _snapshot_from_latest_history as _delegate,
+        )
+
+        return _delegate(self, symbol=symbol, rows=rows)
 
     def _payload(
         self,
@@ -2361,50 +1185,35 @@ class MarketInstrumentService:
         period: str,
         provider: str = _ONLINE_PROVIDER,
     ) -> dict[str, Any]:
-        return {
-            "asset_type": asset_type,
-            "symbol": symbol,
-            "name": name,
-            "market": market,
-            "provider": provider,
-            "snapshot": snapshot,
-            "history": {
-                "period": period,
-                "rows": rows,
-                "total": len(rows),
-            },
-        }
+        from app.services.market_instrument_projection import (
+            _payload as _delegate,
+        )
+
+        return _delegate(
+            self,
+            asset_type=asset_type,
+            symbol=symbol,
+            name=name,
+            market=market,
+            snapshot=snapshot,
+            rows=rows,
+            period=period,
+            provider=provider,
+        )
 
     def _match_any(self, df: pd.DataFrame, symbol: str, columns: list[str]) -> pd.DataFrame:
-        if df.empty:
-            return df
-        normalized = symbol.upper()
-        mask = pd.Series(False, index=df.index)
-        for column in columns:
-            if column in df.columns:
-                mask = mask | (df[column].astype(str).str.upper() == normalized)
-        return df[mask]
+        from app.services.market_instrument_projection import (
+            _match_any as _delegate,
+        )
+
+        return _delegate(self, df=df, symbol=symbol, columns=columns)
 
     def _normalize_cn_ohlcv_history(self, df: pd.DataFrame) -> list[dict[str, Any]]:
-        return self._normalize_generic_ohlcv_history(
-            df.rename(
-                columns={
-                    "日期": "date",
-                    "开盘": "open",
-                    "最高": "high",
-                    "最低": "low",
-                    "收盘": "close",
-                    "成交量": "volume",
-                    "成交额": "turnover",
-                    "振幅": "amplitude",
-                    "涨跌幅": "change_pct",
-                    "涨跌额": "change",
-                    "换手率": "turnover_rate",
-                }
-            ),
-            start_date=None,
-            end_date=None,
+        from app.services.market_instrument_projection import (
+            _normalize_cn_ohlcv_history as _delegate,
         )
+
+        return _delegate(self, df=df)
 
     def _normalize_generic_ohlcv_history(
         self,
@@ -2412,103 +1221,26 @@ class MarketInstrumentService:
         start_date: date | str | None,
         end_date: date | str | None,
     ) -> list[dict[str, Any]]:
-        if df.empty:
-            return []
-        normalized = df.rename(
-            columns={
-                "日期": "date",
-                "开盘": "open",
-                "最高": "high",
-                "最低": "low",
-                "收盘": "close",
-                "成交量": "volume",
-                "成交额": "turnover",
-                "涨跌幅": "change_pct",
-                "涨跌额": "change",
-                "持仓": "open_interest",
-                "hold": "open_interest",
-                "settle": "settle",
-            }
-        ).copy()
-        if "date" not in normalized.columns:
-            return []
-        normalized["date"] = pd.to_datetime(normalized["date"], errors="coerce")
-        if start_date is not None:
-            start = pd.to_datetime(_date_text(start_date, date.today() - timedelta(days=90)))
-            normalized = normalized[normalized["date"] >= start]
-        if end_date is not None:
-            end = pd.to_datetime(_date_text(end_date, date.today()))
-            normalized = normalized[normalized["date"] <= end]
-        rows: list[dict[str, Any]] = []
-        for _, row in normalized.iterrows():
-            rows.append(
-                {
-                    "date": _iso_date(row.get("date")),
-                    "open": _safe_float(row.get("open")),
-                    "high": _safe_float(row.get("high")),
-                    "low": _safe_float(row.get("low")),
-                    "close": _safe_float(row.get("close")),
-                    "volume": _safe_int(row.get("volume")),
-                    "turnover": _safe_float(row.get("turnover")),
-                    "change": _safe_float(row.get("change")),
-                    "change_pct": _safe_float(row.get("change_pct")),
-                    "turnover_rate": _safe_float(row.get("turnover_rate")),
-                    "open_interest": _safe_int(row.get("open_interest")),
-                    "settle": _safe_float(row.get("settle")),
-                }
-            )
-        return rows
+        from app.services.market_instrument_projection import (
+            _normalize_generic_ohlcv_history as _delegate,
+        )
+
+        return _delegate(self, df=df, start_date=start_date, end_date=end_date)
 
     def _normalize_crypto_cme_rows(
         self,
         df: pd.DataFrame,
         value_date: date | str,
     ) -> list[dict[str, Any]]:
-        if df.empty:
-            return []
-        rows: list[dict[str, Any]] = []
-        day = _iso_date(value_date)
-        for _, row in df.iterrows():
-            rows.append(
-                {
-                    "date": day,
-                    "name": _safe_str(row.get("类型")) or _safe_str(row.get("商品")),
-                    "volume": _safe_int(row.get("成交量")),
-                    "open_interest": _safe_int(row.get("未平仓合约")),
-                    "change": _safe_float(row.get("持仓变化")),
-                }
-            )
-        return rows
+        from app.services.market_instrument_projection import (
+            _normalize_crypto_cme_rows as _delegate,
+        )
+
+        return _delegate(self, df=df, value_date=value_date)
 
     def _build_indicators(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
-        closes: list[float] = []
-        volumes: list[float] = []
-        for row in rows:
-            close = _safe_float(row.get("close"))
-            if close is not None:
-                closes.append(close)
-            volume = _safe_float(row.get("volume"))
-            if volume is not None:
-                volumes.append(volume)
-        if not closes:
-            return {
-                "latest_close": None,
-                "return_pct": None,
-                "highest_close": None,
-                "lowest_close": None,
-                "avg_volume": sum(volumes) / len(volumes) if volumes else None,
-                "observation_count": len(rows),
-            }
+        from app.services.market_instrument_projection import (
+            _build_indicators as _delegate,
+        )
 
-        first_close = closes[0]
-        latest_close = closes[-1]
-        return_pct = ((latest_close / first_close) - 1) * 100 if first_close else None
-        avg_volume = sum(volumes) / len(volumes) if volumes else None
-        return {
-            "latest_close": latest_close,
-            "return_pct": return_pct,
-            "highest_close": max(closes),
-            "lowest_close": min(closes),
-            "avg_volume": avg_volume,
-            "observation_count": len(closes),
-        }
+        return _delegate(self, rows=rows)

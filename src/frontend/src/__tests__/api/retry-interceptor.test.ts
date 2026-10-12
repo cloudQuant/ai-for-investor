@@ -12,7 +12,7 @@ import {
 } from '@/api/index'
 
 // Mock Element Plus
-vi.mock('element-plus', () => ({
+vi.mock('element-plus/es/components/message/index.mjs', () => ({
   ElMessage: {
     error: vi.fn(),
     success: vi.fn(),

@@ -1,0 +1,76 @@
+[
+  {
+    "command": [
+      "docker",
+      "network",
+      "connect",
+      "bridge",
+      "iter202-parent-regression"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-10-12T09:11:48.695364+00:00",
+    "finished_at": "2026-10-12T09:11:51.479846+00:00",
+    "log": "test-container-network-connect-v2.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "command": [
+      "docker",
+      "exec",
+      "-u",
+      "0",
+      "iter202-parent-regression",
+      "sh",
+      "-ec",
+      "apt-get update -qq && apt-get install -y --no-install-recommends procps"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-10-12T09:11:51.488499+00:00",
+    "finished_at": "2026-10-12T09:12:48.871935+00:00",
+    "log": "test-container-procps-install-v2.txt",
+    "sha256": "3c8cbb5739999f7336849eb1f92ed8e12c715cb8e972a481557d16d2456edc97"
+  },
+  {
+    "command": [
+      "docker",
+      "exec",
+      "iter202-parent-regression",
+      "sh",
+      "-ec",
+      "command -v true; command -v false; command -v ps; ps --version"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-10-12T09:12:48.940143+00:00",
+    "finished_at": "2026-10-12T09:12:50.357886+00:00",
+    "log": "test-container-posix-probe-v2.txt",
+    "sha256": "ebdef2e050005e0a21486abac24df8c0077a26b104a92525722996d7c78a045d"
+  },
+  {
+    "command": [
+      "docker",
+      "network",
+      "disconnect",
+      "bridge",
+      "iter202-parent-regression"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-10-12T09:12:50.359731+00:00",
+    "finished_at": "2026-10-12T09:12:51.162271+00:00",
+    "log": "test-container-network-disconnect-v2.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "command": [
+      "docker",
+      "network",
+      "connect",
+      "none",
+      "iter202-parent-regression"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-10-12T09:12:51.171561+00:00",
+    "finished_at": "2026-10-12T09:12:51.961604+00:00",
+    "log": "test-container-network-none-v2.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

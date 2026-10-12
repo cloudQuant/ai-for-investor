@@ -20,9 +20,9 @@ async def register(app: FastAPI, settings: Any) -> None:
         await ensure_ready()
         startup_logger.info("Database tables created/verified successfully")
     else:
-        startup_logger.info("DB_AUTO_CREATE_SCHEMA=false: Verifying database connection...")
+        startup_logger.info("DB_AUTO_CREATE_SCHEMA=false: Verifying database migration revision...")
         await ensure_ready()
-        startup_logger.info("Database connection verified (schema auto-creation skipped)")
+        startup_logger.info("Database migration revision verified (startup performed no DDL)")
 
     cache_type = "Redis" if settings.REDIS_URL else "Memory"
     startup_logger.info(f"Cache backend: {cache_type}")

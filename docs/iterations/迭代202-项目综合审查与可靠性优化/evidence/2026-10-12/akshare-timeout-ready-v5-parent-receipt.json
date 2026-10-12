@@ -1,0 +1,86 @@
+{
+  "started_at": "2026-10-12T12:11:49.368Z",
+  "test_source": "src/backend/tests/market_data_platform/test_akshare_runner_provider.py",
+  "test_sha256": "63f1a954ebabc8f47a69659f8c61f06900eb0f680dffde3ae621f06a9a82bb30",
+  "container": "iter202-akshare-timeout-v5-parent",
+  "steps": [
+    {
+      "label": "start owned isolated snapshot",
+      "command": [
+        "docker",
+        "run",
+        "--detach",
+        "--name",
+        "iter202-akshare-timeout-v5-parent",
+        "--init",
+        "--network",
+        "none",
+        "iter202-parent-regression-snapshot:20261012-v3",
+        "sleep",
+        "infinity"
+      ],
+      "started_at": "2026-10-12T12:11:49.376Z",
+      "finished_at": "2026-10-12T12:11:55.648Z",
+      "elapsed_seconds": 6.272,
+      "exit_code": 0,
+      "signal": null,
+      "log": "akshare-timeout-ready-v5-parent-start.txt"
+    },
+    {
+      "label": "copy reviewed test fixture",
+      "command": [
+        "docker",
+        "cp",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/market_data_platform/test_akshare_runner_provider.py",
+        "iter202-akshare-timeout-v5-parent:/work/src/backend/tests/market_data_platform/test_akshare_runner_provider.py"
+      ],
+      "started_at": "2026-10-12T12:11:55.650Z",
+      "finished_at": "2026-10-12T12:11:57.844Z",
+      "elapsed_seconds": 2.194,
+      "exit_code": 0,
+      "signal": null,
+      "log": "akshare-timeout-ready-v5-parent-copy.txt"
+    },
+    {
+      "label": "complete runner test file",
+      "command": [
+        "docker",
+        "exec",
+        "-w",
+        "/work/src/backend",
+        "-e",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
+        "-e",
+        "OPENBLAS_NUM_THREADS=1",
+        "-e",
+        "OMP_NUM_THREADS=1",
+        "iter202-akshare-timeout-v5-parent",
+        "python",
+        "-m",
+        "pytest",
+        "-p",
+        "pytest_asyncio.plugin",
+        "-p",
+        "pytest_timeout",
+        "-o",
+        "timeout=180",
+        "-o",
+        "timeout_method=signal",
+        "-vv",
+        "--maxfail=0",
+        "tests/market_data_platform/test_akshare_runner_provider.py",
+        "--junitxml=/tmp/akshare-timeout-ready-v5-parent.xml"
+      ],
+      "started_at": "2026-10-12T12:11:57.846Z",
+      "finished_at": "2026-10-12T12:11:58.368Z",
+      "elapsed_seconds": 0.522,
+      "exit_code": 1,
+      "signal": null,
+      "log": "akshare-timeout-ready-v5-parent.txt"
+    }
+  ],
+  "scope": "real OS runner protocol and lifecycle with isolated PID 1 init; no product changes",
+  "verdict": "FAIL",
+  "error": "complete runner test file failed",
+  "finished_at": "2026-10-12T12:11:58.369Z"
+}

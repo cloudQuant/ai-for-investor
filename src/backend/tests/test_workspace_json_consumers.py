@@ -16,7 +16,8 @@ class _AsyncSessionContext:
 
 def test_optimization_config_merge_preserves_valid_nested_json_and_replaces_run_fields():
     current: WorkspaceJSONMapping = {
-        "objective": "sharpe_max",
+        "objective": "sharpe_ratio",
+        "direction": "minimize",
         "saved_options": {"enabled": True, "thresholds": [0.2, 0.8]},
         "param_ranges": {"old": {"start": 1.0, "end": 2.0, "step": 1.0}},
     }
@@ -30,27 +31,47 @@ def test_optimization_config_merge_preserves_valid_nested_json_and_replaces_run_
         n_workers=4,
         artifact_root="/tmp/workspace/optimization",
         submitted_at="2026-09-20T12:00:00+00:00",
+        objective="total_return",
+        direction="maximize",
     )
 
-    assert merged["objective"] == "sharpe_max"
+    assert merged["objective"] == "total_return"
+    assert merged["direction"] == "maximize"
     assert merged["saved_options"] == {"enabled": True, "thresholds": [0.2, 0.8]}
     assert merged["param_ranges"] == param_ranges
     assert merged["n_workers"] == 4
     assert merged["artifact_root"] == "/tmp/workspace/optimization"
     assert merged["submitted_at"] == "2026-09-20T12:00:00+00:00"
+    assert current == {
+        "objective": "sharpe_ratio",
+        "direction": "minimize",
+        "saved_options": {"enabled": True, "thresholds": [0.2, 0.8]},
+        "param_ranges": {"old": {"start": 1.0, "end": 2.0, "step": 1.0}},
+    }
+    assert param_ranges == {"fast": {"start": 3.0, "end": 7.0, "step": 2.0, "type": "float"}}
 
 
 def test_optimization_config_merge_discards_non_mapping_or_non_json_state():
+    malformed: list[str] = ["malformed"]
     merged = optimization._merge_optimization_config(
-        ["malformed"],
+        malformed,
         param_ranges={"fast": {"start": 1.0, "end": 3.0, "step": 1.0}},
         n_workers=2,
         artifact_root="/tmp/workspace/optimization",
         submitted_at="2026-09-20T12:00:00+00:00",
+        objective="max_drawdown",
+        direction="minimize",
     )
 
-    assert "objective" not in merged
-    assert merged["param_ranges"] == {"fast": {"start": 1.0, "end": 3.0, "step": 1.0}}
+    assert merged == {
+        "param_ranges": {"fast": {"start": 1.0, "end": 3.0, "step": 1.0}},
+        "n_workers": 2,
+        "artifact_root": "/tmp/workspace/optimization",
+        "submitted_at": "2026-09-20T12:00:00+00:00",
+        "objective": "max_drawdown",
+        "direction": "minimize",
+    }
+    assert malformed == ["malformed"]
 
 
 @pytest.mark.asyncio

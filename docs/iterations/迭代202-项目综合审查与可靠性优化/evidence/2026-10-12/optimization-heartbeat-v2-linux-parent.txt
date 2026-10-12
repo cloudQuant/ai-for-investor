@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 1 item
+
+tests/test_iteration202_optimization_acceptance.py .                     [100%]
+
+----- generated xml file: /tmp/optimization-heartbeat-v2-linux-parent.xml ------
+============================== 1 passed in 4.29s ===============================

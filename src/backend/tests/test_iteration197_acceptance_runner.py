@@ -32,6 +32,32 @@ def valid_scope_manifest(tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture
+def sealed_b2_backend(tmp_path: Path) -> Path:
+    """Copy B2 and its real merge ancestry into an isolated historical migration graph."""
+    source_backend = PROJECT_ROOT / "src/backend"
+    source_alembic = source_backend / "alembic"
+    config = runner.Config(str(source_backend / "alembic.ini"))
+    config.set_main_option("script_location", str(source_alembic))
+    source_script = runner.ScriptDirectory.from_config(config)
+    revisions = tuple(source_script.iterate_revisions(runner.EXPECTED_ALEMBIC_HEAD, "base"))
+    revision_ids = {revision.revision for revision in revisions}
+    assert runner.EXPECTED_ALEMBIC_HEAD in revision_ids
+    assert runner.REQUIRED_ALEMBIC_REVISIONS <= revision_ids
+
+    sealed_backend = tmp_path
+    sealed_alembic = sealed_backend / "alembic"
+    sealed_versions = sealed_alembic / "versions"
+    sealed_versions.mkdir(parents=True)
+    (sealed_backend / "alembic.ini").write_bytes((source_backend / "alembic.ini").read_bytes())
+    for revision in revisions:
+        source_path = Path(revision.path)
+        destination_path = sealed_alembic / source_path.relative_to(source_alembic)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_bytes(source_path.read_bytes())
+    return sealed_backend
+
+
 def _args(
     tmp_path: Path,
     *,
@@ -110,6 +136,19 @@ def _allow_clean_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "_collect_candidate_evidence", lambda **_: evidence)
     baseline = _iter196_baseline_evidence(valid=True, code="ITER196_BASELINE_PROVENANCE_VALID")
     monkeypatch.setattr(runner, "_collect_iter196_baseline_evidence", lambda _: baseline)
+
+
+def _use_sealed_b2_migration_graph(
+    monkeypatch: pytest.MonkeyPatch,
+    sealed_backend: Path,
+) -> None:
+    """Route runner calls through the real checker using the copied B2 history."""
+    collect_evidence = runner._collect_alembic_evidence
+
+    def collect_from_sealed_graph(_: Path) -> runner.AlembicEvidence:
+        return collect_evidence(sealed_backend)
+
+    monkeypatch.setattr(runner, "_collect_alembic_evidence", collect_from_sealed_graph)
 
 
 def _junit_path(command: Sequence[object]) -> Path:
@@ -209,9 +248,11 @@ def test_each_executable_mode_maps_only_to_a_formal_required_gate() -> None:
         assert {runner.GATE_BY_MODE[mode] for mode in case.modes} == case.required_gates
 
 
-def test_alembic_evidence_uses_the_sealed_iteration197_checkout_tip() -> None:
-    """The candidate runner accepts only its reviewed migration tip."""
-    evidence = runner._collect_alembic_evidence(PROJECT_ROOT / "src/backend")
+def test_alembic_evidence_uses_the_sealed_iteration197_checkout_tip(
+    sealed_b2_backend: Path,
+) -> None:
+    """The real checker accepts only the copied B2 tip and its complete source ancestry."""
+    evidence = runner._collect_alembic_evidence(sealed_b2_backend)
 
     assert evidence.valid is True
     assert evidence.code == "ALEMBIC_HEAD_AND_ANCESTRY_VALID"
@@ -237,6 +278,71 @@ def test_alembic_evidence_rejects_an_unreviewed_successor_tip(
     assert evidence.valid is False
     assert evidence.code == "ALEMBIC_HEAD_UNEXPECTED"
     assert evidence.heads == (successor_head,)
+    assert evidence.expected_head == runner.EXPECTED_ALEMBIC_HEAD
+
+
+def test_alembic_evidence_rejects_multiple_heads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multiple tips remain invalid even when one is the sealed B2 revision."""
+    heads = (runner.EXPECTED_ALEMBIC_HEAD, "20260999_unreviewed_successor")
+
+    class _MultiHeadGraph:
+        def get_heads(self) -> tuple[str, ...]:
+            return heads
+
+    monkeypatch.setattr(runner.ScriptDirectory, "from_config", lambda _: _MultiHeadGraph())
+
+    evidence = runner._collect_alembic_evidence(PROJECT_ROOT / "src/backend")
+
+    assert evidence.valid is False
+    assert evidence.code == "ALEMBIC_HEAD_UNEXPECTED"
+    assert evidence.heads == tuple(sorted(heads))
+
+
+def test_alembic_evidence_rejects_missing_required_ancestor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exact B2 head is insufficient when required ancestry is absent."""
+    missing_revision = sorted(runner.REQUIRED_ALEMBIC_REVISIONS)[0]
+
+    class _Revision:
+        def __init__(self, revision: str) -> None:
+            self.revision = revision
+
+    class _IncompleteGraph:
+        def get_heads(self) -> tuple[str, ...]:
+            return (runner.EXPECTED_ALEMBIC_HEAD,)
+
+        def iterate_revisions(self, upper: str, lower: str) -> tuple[_Revision, ...]:
+            assert upper == runner.EXPECTED_ALEMBIC_HEAD
+            assert lower == "base"
+            return tuple(
+                _Revision(revision)
+                for revision in runner.REQUIRED_ALEMBIC_REVISIONS
+                if revision != missing_revision
+            )
+
+    monkeypatch.setattr(runner.ScriptDirectory, "from_config", lambda _: _IncompleteGraph())
+
+    evidence = runner._collect_alembic_evidence(PROJECT_ROOT / "src/backend")
+
+    assert evidence.valid is False
+    assert evidence.code == "ALEMBIC_REQUIRED_ANCESTRY_MISSING"
+    assert evidence.missing_revisions == (missing_revision,)
+
+
+def test_current_iteration202_checkout_is_not_iteration197_sealed_evidence() -> None:
+    """The real 202 successor tree is rejected by the production B2 exact-head checker."""
+    backend_root = PROJECT_ROOT / "src/backend"
+    config = runner.Config(str(backend_root / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_root / "alembic"))
+    script = runner.ScriptDirectory.from_config(config)
+    iteration202_revision = script.get_revision("20261012_optimization_objective_direction")
+    evidence = runner._collect_alembic_evidence(backend_root)
+
+    assert iteration202_revision.down_revision == runner.EXPECTED_ALEMBIC_HEAD
+    assert evidence.valid is False
+    assert evidence.code == "ALEMBIC_HEAD_UNEXPECTED"
+    assert evidence.heads != (runner.EXPECTED_ALEMBIC_HEAD,)
     assert evidence.expected_head == runner.EXPECTED_ALEMBIC_HEAD
 
 
@@ -553,10 +659,12 @@ def test_offline_dry_run_emits_not_run_slices_and_never_invokes_a_case_command(
 def test_offline_case_uses_child_socket_audit_and_required_junit_evidence(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A G1 PASS needs deterministic pytest, JUnit facts, and zero audited network attempts."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     captured: dict[str, object] = {}
 
     def command_runner(command, *, cwd, environment):
@@ -631,10 +739,12 @@ def test_offline_case_uses_child_socket_audit_and_required_junit_evidence(
 def test_ac17_offline_driver_binds_each_asset_to_runner_and_exact_source_boundary(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """AC-17 records G1 policy/runner proof without treating it as G3 source success."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     commands_by_asset: dict[str, tuple[object, ...]] = {}
 
     def command_runner(command, *, cwd, environment):
@@ -686,10 +796,12 @@ def test_ac17_offline_driver_binds_each_asset_to_runner_and_exact_source_boundar
 def test_ac36_offline_is_not_run_without_research_or_b2_fixture_evidence(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The formal sealed-URI case cannot mint G1 evidence from local fixture tests."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     command_calls: list[object] = []
     result = runner.run_acceptance(
         _args(
@@ -751,10 +863,12 @@ raise SystemExit(1)
 def test_offline_zero_exit_without_junit_is_fail_closed(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A subprocess return code alone is not valid acceptance evidence."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     result = runner.run_acceptance(
         _args(
             tmp_path,
@@ -774,10 +888,12 @@ def test_offline_zero_exit_without_junit_is_fail_closed(
 def test_offline_network_audit_attempt_is_fail_even_with_passing_junit(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A forbidden socket attempt must override a green child return code and JUnit file."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
 
     def command_runner(command, *, cwd, environment):
         del cwd
@@ -808,10 +924,12 @@ def test_offline_network_audit_attempt_is_fail_even_with_passing_junit(
 def test_offline_command_failure_is_fail_after_valid_junit(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A deterministic test failure preserves the required FAIL exit code."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
 
     def command_runner(command, *, cwd, environment):
         del cwd, environment
@@ -1010,10 +1128,12 @@ def test_external_configuration_requires_an_isolated_timezone_aware_approval_env
 def test_live_approved_environment_still_requires_a_bound_source_manifest(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A generic approval envelope cannot authorize live provider access by itself."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     config_path = tmp_path / "live-config.json"
     _approved_config(config_path, "live")
     result = runner.run_acceptance(
@@ -1042,10 +1162,12 @@ def test_live_approved_environment_still_requires_a_bound_source_manifest(
 def test_live_source_manifest_must_cover_the_exact_case_asset_slice(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A stock route approved for a different AC cannot silently cover AC-02 stock."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     config_path = tmp_path / "live-config.json"
     source_path = tmp_path / "approved-sources.json"
     _approved_config(config_path, "live")
@@ -1078,10 +1200,12 @@ def test_live_source_manifest_must_cover_the_exact_case_asset_slice(
 def test_live_valid_approval_never_becomes_pass_without_a_reviewed_case_driver(
     tmp_path: Path,
     valid_scope_manifest: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A valid source approval is a prerequisite, not live execution evidence."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     config_path = tmp_path / "live-config.json"
     source_path = tmp_path / "approved-sources.json"
     _approved_config(config_path, "live")
@@ -1115,10 +1239,12 @@ def test_live_valid_approval_never_becomes_pass_without_a_reviewed_case_driver(
 
 def test_scope_drift_is_a_fail_not_a_provider_fallback(
     tmp_path: Path,
+    sealed_b2_backend: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Tampered/stale scope evidence fails local acceptance before any test target runs."""
     _allow_clean_candidate(monkeypatch)
+    _use_sealed_b2_migration_graph(monkeypatch, sealed_b2_backend)
     bad_scope = tmp_path / "bad-scope.json"
     bad_scope.write_text("{}", encoding="utf-8")
     result = runner.run_acceptance(

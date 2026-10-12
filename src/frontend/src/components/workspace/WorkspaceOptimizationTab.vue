@@ -58,11 +58,11 @@
           <!-- Group 2: Apply best params -->
           <el-button-group>
             <el-tooltip
-              :content="t('optimization.applyBestParams')"
+              :content="t(hasBoundObjective ? 'optimization.applyBestParams' : 'optimization.applySelectedResult')"
               placement="top"
             >
               <el-button
-                :disabled="!hasResults"
+                :disabled="!canApplyFeaturedResult"
                 size="small"
                 type="primary"
                 @click="handleApplyBest"
@@ -73,11 +73,11 @@
               </el-button>
             </el-tooltip>
             <el-tooltip
-              :content="t('optimization.applyBestToUnit')"
+              :content="t(hasBoundObjective ? 'optimization.applyBestToUnit' : 'optimization.applySelectedToUnit')"
               placement="top"
             >
               <el-button
-                :disabled="!hasResults"
+                :disabled="!canApplyFeaturedResult"
                 size="small"
                 type="success"
                 @click="handleApplyBestAndOpen"
@@ -92,7 +92,7 @@
               placement="top"
             >
               <el-button
-                :disabled="!hasResults"
+                :disabled="!canReportFeaturedResult"
                 size="small"
                 @click="handleTestReport"
               >
@@ -480,7 +480,7 @@
           class="text-center"
         >
           <div class="text-sm text-gray-400">
-            {{ t('optimization.paramAtBestParam') }}
+            {{ featuredParamsLabel }}
           </div>
           <div class="text-lg font-medium">
             {{ bestParamsStr }}
@@ -491,10 +491,16 @@
           class="text-center"
         >
           <div class="text-sm text-gray-400">
-            {{ t('optimization.bestSharpe') }}
+            {{ featuredMetricLabel }}
           </div>
           <div class="text-xl font-bold text-blue-600">
-            {{ bestSharpe }}
+            {{ featuredMetricValue }}
+          </div>
+          <div
+            v-if="hasBoundObjective"
+            class="text-xs text-gray-400"
+          >
+            {{ optimizationTargetLabel }} · {{ optimizationDirectionLabel }} · {{ optimizationTieBreak || '-' }}
           </div>
         </el-card>
       </div>
@@ -507,7 +513,10 @@
         stripe
         size="small"
         max-height="500"
+        :highlight-current-row="!hasBoundObjective"
+        :row-key="getResultRowKey"
         style="width: 100%"
+        @current-change="handleSelectResult"
       >
         <el-table-column
           label="#"
@@ -668,10 +677,20 @@ const {
   progressPct,
   emptyStateDescription,
   displayRows,
+  hasBoundObjective,
+  optimizationTieBreak,
+  optimizationTargetLabel,
+  optimizationDirectionLabel,
+  featuredParamsLabel,
+  featuredMetricLabel,
+  featuredMetricValue,
+  canApplyFeaturedResult,
+  canReportFeaturedResult,
   bestParamsStr,
-  bestSharpe,
   loadResults,
   applySort,
+  handleSelectResult,
+  getResultRowKey,
   handleOpenFile,
   handleSaveResults,
   handleApplyBestAndOpen,

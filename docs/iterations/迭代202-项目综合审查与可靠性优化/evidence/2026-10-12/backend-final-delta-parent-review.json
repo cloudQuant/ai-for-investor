@@ -1,0 +1,62 @@
+{
+  "reviewed_at": "2026-10-12T14:31:33.904Z",
+  "verdict": "PASS",
+  "counts_by_file": {
+    "test_portfolio_api.py": {
+      "passed": 129
+    },
+    "test_portfolio_ledger.py": {
+      "passed": 2
+    },
+    "test_portfolio_ledger_analytics.py": {
+      "passed": 2
+    },
+    "test_portfolio_boundaries.py": {
+      "passed": 3
+    },
+    "test_portfolio_calculation_boundaries.py": {
+      "passed": 2
+    },
+    "test_trading_workspace_service.py": {
+      "passed": 164
+    },
+    "test_paper_runtime_service.py": {
+      "passed": 14
+    },
+    "test_position_valuation.py": {
+      "passed": 9
+    },
+    "market_data_platform/test_akshare_runner_provider.py": {
+      "passed": 32
+    },
+    "market_data_platform/test_openbb_provider.py": {
+      "passed": 94
+    }
+  },
+  "session_finish": {
+    "event": "session_finish",
+    "run_id": "42ae6ae96b824159a6bd4c9eed0b32ef",
+    "timestamp_utc": "2026-10-12T14:30:28.343173+00:00",
+    "exitstatus": 0,
+    "counts": {
+      "collected": 451,
+      "passed": 451,
+      "failed": 0,
+      "skipped": 0,
+      "xfailed": 0,
+      "xpassed": 0,
+      "not_run": 0,
+      "pytest_testscollected": 451,
+      "pytest_testsfailed": 0
+    }
+  },
+  "command_exit": 0,
+  "elapsed": 294.68,
+  "source_delta": "backend-final-delta-manifest.json",
+  "scope": "All ten complete affected test files on final backend source delta, including both revised runner fixtures",
+  "supports": [
+    "Iteration201 WP02/WP03/WP05 behavior after completion extraction",
+    "All five old full-v3 fixture failures resolved on revised tests with product runner logic unchanged"
+  ],
+  "boundary": "Full-v3 original record is retained and still running; this result does not claim the original full-v3 exit passed."
+}

@@ -1,0 +1,67 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 2 items
+
+tests/test_iteration202_optimization_artifact_download.py FF             [100%]
+
+=================================== FAILURES ===================================
+_ test_downloaded_zip_summary_best_matches_objective_api_result[maximize-trial-1-finishes-first] _
+tests/test_iteration202_optimization_artifact_download.py:155: in _update_task
+    (temp_root / "release_later_trial").touch(exist_ok=True)
+/usr/local/lib/python3.11/pathlib.py:1108: in touch
+    fd = os.open(self, flags, mode)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be0/worker-temp/release_later_trial'
+
+During handling of the above exception, another exception occurred:
+tests/test_iteration202_optimization_artifact_download.py:158: in test_downloaded_zip_summary_best_matches_objective_api_result
+    run_optimization_thread(
+app/services/optimization/thread_runner.py:492: in run_optimization_thread
+    terminal_state = _finalize_terminal_status(
+app/services/optimization/thread_runner.py:216: in _finalize_terminal_status
+    updated = update_task_fn(
+tests/test_iteration202_optimization_artifact_download.py:155: in _update_task
+    (temp_root / "release_later_trial").touch(exist_ok=True)
+/usr/local/lib/python3.11/pathlib.py:1108: in touch
+    fd = os.open(self, flags, mode)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be0/worker-temp/release_later_trial'
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-10-12T09:40:36.817+00:00", "level": "ERROR", "message": "Optimization task failed artifact-download-4306f10e610146b5965e433085834002: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be0/worker-temp/release_later_trial'", "module": "thread_runner", "request_id": "N/A"}
+------------------------------ Captured log call -------------------------------
+ERROR    app.services.optimization.thread_runner:thread_runner.py:489 Optimization task failed artifact-download-4306f10e610146b5965e433085834002: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be0/worker-temp/release_later_trial'
+_ test_downloaded_zip_summary_best_matches_objective_api_result[minimize-trial-0-finishes-first] _
+tests/test_iteration202_optimization_artifact_download.py:155: in _update_task
+    (temp_root / "release_later_trial").touch(exist_ok=True)
+/usr/local/lib/python3.11/pathlib.py:1108: in touch
+    fd = os.open(self, flags, mode)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be1/worker-temp/release_later_trial'
+
+During handling of the above exception, another exception occurred:
+tests/test_iteration202_optimization_artifact_download.py:158: in test_downloaded_zip_summary_best_matches_objective_api_result
+    run_optimization_thread(
+app/services/optimization/thread_runner.py:492: in run_optimization_thread
+    terminal_state = _finalize_terminal_status(
+app/services/optimization/thread_runner.py:216: in _finalize_terminal_status
+    updated = update_task_fn(
+tests/test_iteration202_optimization_artifact_download.py:155: in _update_task
+    (temp_root / "release_later_trial").touch(exist_ok=True)
+/usr/local/lib/python3.11/pathlib.py:1108: in touch
+    fd = os.open(self, flags, mode)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be1/worker-temp/release_later_trial'
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-10-12T09:40:49.722+00:00", "level": "ERROR", "message": "Optimization task failed artifact-download-b6bf9457dec84f6d997d90445559a10d: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be1/worker-temp/release_later_trial'", "module": "thread_runner", "request_id": "N/A"}
+------------------------------ Captured log call -------------------------------
+ERROR    app.services.optimization.thread_runner:thread_runner.py:489 Optimization task failed artifact-download-b6bf9457dec84f6d997d90445559a10d: [Errno 2] No such file or directory: '/tmp/pytest-of-root/pytest-4/test_downloaded_zip_summary_be1/worker-temp/release_later_trial'
+=========================== short test summary info ============================
+FAILED tests/test_iteration202_optimization_artifact_download.py::test_downloaded_zip_summary_best_matches_objective_api_result[maximize-trial-1-finishes-first]
+FAILED tests/test_iteration202_optimization_artifact_download.py::test_downloaded_zip_summary_best_matches_objective_api_result[minimize-trial-0-finishes-first]
+============================== 2 failed in 18.03s ==============================

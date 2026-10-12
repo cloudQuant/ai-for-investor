@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { isSupersededSessionRequestError } from '@/api/index'
 import { workspaceApi } from '@/api/workspace'
 import type {
   Workspace,
@@ -20,6 +21,13 @@ function isOptimizationActiveStatus(status: string | null | undefined): boolean 
 
 function isOptimizationTerminalStatus(status: string | null | undefined): boolean {
   return status === 'completed' || status === 'failed' || status === 'cancelled'
+}
+
+function isSessionExpiredError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return false
+  }
+  return (error as { response?: { status?: number } }).response?.status === 401
 }
 
 function mergeOptimizationRuntimeState(incoming: StrategyUnit, existing?: StrategyUnit): StrategyUnit {
@@ -72,31 +80,112 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const currentWorkspace = ref<Workspace | null>(null)
   const units = ref<StrategyUnit[]>([])
   const selectedUnitIds = ref<string[]>([])
-  const loading = ref(false)
+  const activeWorkspaceId = ref<string | null>(null)
+  const listLoading = ref(false)
+  const detailLoading = ref(false)
+  const unitsLoading = ref(false)
+  const loading = computed(() => listLoading.value || detailLoading.value || unitsLoading.value)
   const total = ref(0)
+  let workspaceGeneration = 0
+  let workspaceRequestGeneration = 0
+  let unitsRequestGeneration = 0
+  let workspacesRequestGeneration = 0
+
+  function resetForSession() {
+    workspaceGeneration += 1
+    workspaceRequestGeneration += 1
+    unitsRequestGeneration += 1
+    workspacesRequestGeneration += 1
+    workspaces.value = []
+    currentWorkspace.value = null
+    units.value = []
+    selectedUnitIds.value = []
+    activeWorkspaceId.value = null
+    listLoading.value = false
+    detailLoading.value = false
+    unitsLoading.value = false
+    total.value = 0
+    running.value = false
+    stopPolling()
+  }
+
+  function activateWorkspace(workspaceId: string) {
+    if (activeWorkspaceId.value === workspaceId) {
+      return
+    }
+
+    activeWorkspaceId.value = workspaceId
+    workspaceGeneration += 1
+    workspaceRequestGeneration += 1
+    unitsRequestGeneration += 1
+    currentWorkspace.value = null
+    units.value = []
+    selectedUnitIds.value = []
+    detailLoading.value = false
+    unitsLoading.value = false
+    running.value = false
+    stopPolling()
+  }
+
+  function ensureWorkspaceActive(workspaceId: string): boolean {
+    if (activeWorkspaceId.value === null) {
+      activateWorkspace(workspaceId)
+    }
+    return activeWorkspaceId.value === workspaceId
+  }
+
+  function isCurrentWorkspace(workspaceId: string, generation: number): boolean {
+    return activeWorkspaceId.value === workspaceId && workspaceGeneration === generation
+  }
 
   // ------------------------------------------------------------------
   // Workspace CRUD
   // ------------------------------------------------------------------
 
   async function fetchWorkspaces(skip = 0, limit = 50, workspaceType?: WorkspaceType) {
-    loading.value = true
+    const requestGeneration = ++workspacesRequestGeneration
+    listLoading.value = true
     try {
       const res = await workspaceApi.list(skip, limit, workspaceType)
-      workspaces.value = res.items
-      total.value = res.total
+      if (requestGeneration === workspacesRequestGeneration) {
+        workspaces.value = res.items
+        total.value = res.total
+      }
+    } catch (error) {
+      if (!isSupersededSessionRequestError(error) && !isSessionExpiredError(error)) {
+        throw error
+      }
     } finally {
-      loading.value = false
+      if (requestGeneration === workspacesRequestGeneration) {
+        listLoading.value = false
+      }
     }
   }
 
   async function fetchWorkspace(id: string) {
-    loading.value = true
+    if (!ensureWorkspaceActive(id)) {
+      return null
+    }
+
+    const requestGeneration = ++workspaceRequestGeneration
+    const resourceGeneration = workspaceGeneration
+    detailLoading.value = true
     try {
-      currentWorkspace.value = await workspaceApi.get(id)
-      return currentWorkspace.value
+      const workspace = await workspaceApi.get(id)
+      if (requestGeneration === workspaceRequestGeneration && isCurrentWorkspace(id, resourceGeneration)) {
+        currentWorkspace.value = workspace
+        return workspace
+      }
+      return null
+    } catch (error) {
+      if (!isSupersededSessionRequestError(error) && !isSessionExpiredError(error)) {
+        throw error
+      }
+      return null
     } finally {
-      loading.value = false
+      if (requestGeneration === workspaceRequestGeneration && isCurrentWorkspace(id, resourceGeneration)) {
+        detailLoading.value = false
+      }
     }
   }
 
@@ -127,69 +216,138 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // ------------------------------------------------------------------
 
   async function fetchUnits(workspaceId: string) {
-    loading.value = true
+    if (!ensureWorkspaceActive(workspaceId)) {
+      return
+    }
+
+    const requestGeneration = ++unitsRequestGeneration
+    const resourceGeneration = workspaceGeneration
+    unitsLoading.value = true
     try {
       const res = await workspaceApi.listUnits(workspaceId)
+      if (requestGeneration !== unitsRequestGeneration || !isCurrentWorkspace(workspaceId, resourceGeneration)) {
+        return
+      }
       const existingMap = new Map(units.value.map(unit => [unit.id, unit]))
       units.value = res.items.map(unit => mergeOptimizationRuntimeState(unit, existingMap.get(unit.id)))
+    } catch (error) {
+      if (!isSupersededSessionRequestError(error) && !isSessionExpiredError(error)) {
+        throw error
+      }
     } finally {
-      loading.value = false
+      if (requestGeneration === unitsRequestGeneration && isCurrentWorkspace(workspaceId, resourceGeneration)) {
+        unitsLoading.value = false
+      }
     }
   }
 
   async function createUnit(workspaceId: string, data: StrategyUnitCreate) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     const unit = await workspaceApi.createUnit(workspaceId, data)
-    units.value.push(unit)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      units.value.push(unit)
+    }
     return unit
   }
 
   async function batchCreateUnits(workspaceId: string, data: StrategyUnitCreate[]) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     const created = await workspaceApi.batchCreateUnits(workspaceId, data)
-    units.value.push(...created)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      units.value.push(...created)
+    }
     return created
   }
 
   async function updateUnit(workspaceId: string, unitId: string, data: StrategyUnitUpdate) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     const unit = await workspaceApi.updateUnit(workspaceId, unitId, data)
-    const idx = units.value.findIndex(u => u.id === unitId)
-    if (idx >= 0) units.value[idx] = unit
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      const idx = units.value.findIndex(u => u.id === unitId)
+      if (idx >= 0) units.value[idx] = unit
+    }
     return unit
   }
 
   async function patchUnits(workspaceId: string, unitIds: string[], data: StrategyUnitUpdate) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     const results = await Promise.all(unitIds.map(unitId => workspaceApi.updateUnit(workspaceId, unitId, data)))
-    const resultMap = new Map(results.map(unit => [unit.id, unit]))
-    units.value = units.value.map(unit => resultMap.get(unit.id) ?? unit)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      const resultMap = new Map(results.map(unit => [unit.id, unit]))
+      units.value = units.value.map(unit => resultMap.get(unit.id) ?? unit)
+    }
     return results
   }
 
   async function deleteUnit(workspaceId: string, unitId: string) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     await workspaceApi.deleteUnit(workspaceId, unitId)
-    units.value = units.value.filter(u => u.id !== unitId)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      units.value = units.value.filter(u => u.id !== unitId)
+    }
   }
 
   async function bulkDeleteUnits(workspaceId: string, ids: string[]) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     const res = await workspaceApi.bulkDeleteUnits(workspaceId, { ids })
-    units.value = units.value.filter(u => !ids.includes(u.id))
-    selectedUnitIds.value = selectedUnitIds.value.filter(id => !ids.includes(id))
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      units.value = units.value.filter(u => !ids.includes(u.id))
+      selectedUnitIds.value = selectedUnitIds.value.filter(id => !ids.includes(id))
+    }
     return res.deleted
   }
 
   async function reorderUnits(workspaceId: string, unitIds: string[]) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     await workspaceApi.reorderUnits(workspaceId, { unit_ids: unitIds })
-    // Re-sort local array to match new order
-    const orderMap = new Map(unitIds.map((id, i) => [id, i]))
-    units.value.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0))
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      // Re-sort local array to match new order
+      const orderMap = new Map(unitIds.map((id, i) => [id, i]))
+      units.value.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0))
+    }
   }
 
   async function renameGroup(workspaceId: string, data: GroupRenameRequest) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     await workspaceApi.renameGroup(workspaceId, data)
-    await fetchUnits(workspaceId)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      await fetchUnits(workspaceId)
+    }
   }
 
   async function renameUnit(workspaceId: string, data: UnitRenameRequest) {
+    if (!ensureWorkspaceActive(workspaceId)) {
+      throw new Error('Cannot update units for an inactive workspace.')
+    }
+    const resourceGeneration = workspaceGeneration
     await workspaceApi.renameUnit(workspaceId, data)
-    await fetchUnits(workspaceId)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      await fetchUnits(workspaceId)
+    }
   }
 
   // ------------------------------------------------------------------
@@ -197,7 +355,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // ------------------------------------------------------------------
 
   function setSelectedUnitIds(ids: string[]) {
-    selectedUnitIds.value = ids
+    const currentIds = new Set(units.value.map(unit => unit.id))
+    selectedUnitIds.value = [...new Set(ids)].filter(id => currentIds.has(id))
   }
 
   function clearSelection() {
@@ -213,24 +372,32 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const MAX_POLL_BACKOFF_MS = 30_000
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let pollInFlight = false
+  let pollInFlightGeneration: number | null = null
   let pollGeneration = 0
   let pollingWorkspaceId: string | null = null
   let pollingIntervalMs = 3000
   let consecutivePollFailures = 0
 
   async function runSelectedUnits(workspaceId: string, parallel = false) {
-    if (!selectedUnitIds.value.length) return
+    if (!ensureWorkspaceActive(workspaceId)) return
+    const resourceGeneration = workspaceGeneration
+    const currentUnitIds = new Set(units.value.map(unit => unit.id))
+    const selectedIds = selectedUnitIds.value.filter(id => currentUnitIds.has(id))
+    if (!selectedIds.length) return
     running.value = true
     try {
       // Optimistically mark selected as queued
       for (const u of units.value) {
-        if (selectedUnitIds.value.includes(u.id)) {
+        if (selectedIds.includes(u.id)) {
           u.run_status = 'queued'
           u.run_progress = 0
           u.run_message = '回测任务排队中'
         }
       }
-      const res = await workspaceApi.runUnits(workspaceId, [...selectedUnitIds.value], parallel)
+      const res = await workspaceApi.runUnits(workspaceId, selectedIds, parallel)
+      if (!isCurrentWorkspace(workspaceId, resourceGeneration)) {
+        return res.results
+      }
       // Update local state from results
       for (const r of res.results) {
         const idx = units.value.findIndex(u => u.id === r.unit_id)
@@ -243,19 +410,25 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       return res.results
     } finally {
-      running.value = false
-      // The request may have timed out after the backend accepted a large batch.
-      // Resume a single status stream so the final state is reconciled without
-      // overlapping the previous polling cycle.
-      startPolling(workspaceId)
+      if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+        running.value = false
+        // A timed-out submission may already have been accepted by the backend.
+        // Resume this workspace status stream to reconcile its final state.
+        startPolling(workspaceId)
+      }
     }
   }
 
   async function stopSelectedUnits(workspaceId: string) {
-    if (!selectedUnitIds.value.length) return
-    await workspaceApi.stopUnits(workspaceId, [...selectedUnitIds.value])
-    // Refresh
-    await fetchUnits(workspaceId)
+    if (!ensureWorkspaceActive(workspaceId)) return
+    const resourceGeneration = workspaceGeneration
+    const currentUnitIds = new Set(units.value.map(unit => unit.id))
+    const selectedIds = selectedUnitIds.value.filter(id => currentUnitIds.has(id))
+    if (!selectedIds.length) return
+    await workspaceApi.stopUnits(workspaceId, selectedIds)
+    if (isCurrentWorkspace(workspaceId, resourceGeneration)) {
+      await fetchUnits(workspaceId)
+    }
   }
 
   function hasActiveUnitRuns(): boolean {
@@ -267,10 +440,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function pollStatus(workspaceId: string): Promise<boolean> {
-    if (pollInFlight) return false
+    if (!ensureWorkspaceActive(workspaceId)) return false
+    const resourceGeneration = workspaceGeneration
+    if (pollInFlight && pollInFlightGeneration === resourceGeneration) return false
     pollInFlight = true
+    pollInFlightGeneration = resourceGeneration
     try {
       const statuses: UnitStatusResponse[] = await workspaceApi.getUnitsStatus(workspaceId)
+      if (!isCurrentWorkspace(workspaceId, resourceGeneration)) {
+        return false
+      }
       const now = Date.now()
       for (const s of statuses) {
         const idx = units.value.findIndex(u => u.id === s.id)
@@ -369,11 +548,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       // Silently ignore poll failures
       return false
     } finally {
-      pollInFlight = false
+      if (pollInFlightGeneration === resourceGeneration) {
+        pollInFlight = false
+        pollInFlightGeneration = null
+      }
     }
   }
 
   function startPolling(workspaceId: string, intervalMs = 3000) {
+    if (!ensureWorkspaceActive(workspaceId)) return
     stopPolling()
     pollingWorkspaceId = workspaceId
     pollingIntervalMs = intervalMs
@@ -388,7 +571,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     const pollOnce = async () => {
       const succeeded = await pollStatus(workspaceId)
-      if (generation !== pollGeneration || pollingWorkspaceId !== workspaceId) return
+      if (
+        generation !== pollGeneration
+        || pollingWorkspaceId !== workspaceId
+        || activeWorkspaceId.value !== workspaceId
+      ) return
 
       if (!succeeded) {
         consecutivePollFailures += 1
@@ -433,6 +620,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentWorkspace,
     units,
     selectedUnitIds,
+    activeWorkspaceId,
+    resetForSession,
+    activateWorkspace,
     loading,
     total,
     running,

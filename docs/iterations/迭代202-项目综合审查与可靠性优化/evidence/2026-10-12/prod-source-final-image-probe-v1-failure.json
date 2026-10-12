@@ -1,0 +1,6 @@
+{
+  "state": "FAIL_HARNESS",
+  "exit_code": 1,
+  "cause": "docker run omitted -i, so stdin JSON was empty and Python json.load raised JSONDecodeError before source or dependency assertions. No product code was invoked or changed.",
+  "correction": "Use docker run -i with the same explicit JSON input."
+}

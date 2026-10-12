@@ -29,12 +29,12 @@
 #   - Nginx + Vue 3 Frontend (Web 界面)
 #
 # 部署后管理:
-#   查看状态:  cd /opt/ai-for-investor && docker compose -f docker-compose.yml -f docker/compose/prod.yml ps
-#   查看日志:  cd /opt/ai-for-investor && docker compose -f docker-compose.yml -f docker/compose/prod.yml logs -f
-#   重启应用:  cd /opt/ai-for-investor && docker compose -f docker-compose.yml -f docker/compose/prod.yml restart backend frontend
-#   停止应用:  cd /opt/ai-for-investor && docker compose -f docker-compose.yml -f docker/compose/prod.yml stop backend frontend
-#   停止服务:  cd /opt/ai-for-investor && docker compose -f docker-compose.yml -f docker/compose/prod.yml down
-#   更新部署:  cd /opt/ai-for-investor && git pull && docker compose -f docker-compose.yml -f docker/compose/prod.yml build backend frontend && docker compose -f docker-compose.yml -f docker/compose/prod.yml up -d backend frontend
+#   查看状态:  cd /opt/ai-for-investor && docker compose --project-directory . -f docker/docker-compose.yml -f docker/compose/prod.yml ps
+#   查看日志:  cd /opt/ai-for-investor && docker compose --project-directory . -f docker/docker-compose.yml -f docker/compose/prod.yml logs -f
+#   重启应用:  cd /opt/ai-for-investor && docker compose --project-directory . -f docker/docker-compose.yml -f docker/compose/prod.yml restart backend frontend
+#   停止应用:  cd /opt/ai-for-investor && docker compose --project-directory . -f docker/docker-compose.yml -f docker/compose/prod.yml stop backend frontend
+#   停止服务:  cd /opt/ai-for-investor && docker compose --project-directory . -f docker/docker-compose.yml -f docker/compose/prod.yml down
+#   更新部署:  cd /opt/ai-for-investor && git pull && ./scripts/ops/docker_deploy.sh
 ###############################################################################
 set -euo pipefail
 
@@ -67,12 +67,18 @@ MYSQL_DATA_DIR="${MYSQL_DATA_DIR:-./runtime/mysql}"
 REDIS_DATA_DIR="${REDIS_DATA_DIR:-./runtime/redis}"
 BACKEND_LOGS_DIR="${BACKEND_LOGS_DIR:-./runtime/backend/logs}"
 BACKEND_APP_DATA_DIR="${BACKEND_APP_DATA_DIR:-./runtime/backend/data}"
-COMPOSE_BASE_FILE="${COMPOSE_BASE_FILE:-docker-compose.yml}"
+COMPOSE_BASE_FILE="${COMPOSE_BASE_FILE:-docker/docker-compose.yml}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker/compose/prod.yml}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-ai-for-investor}"
 NO_CACHE_BUILD="${NO_CACHE_BUILD:-false}"
+HTTPS_PORT="${HTTPS_PORT:-443}"
 
 # 域名 (用于 CORS, 默认自动检测服务器 IP)
 SERVER_DOMAIN="${SERVER_DOMAIN:-}"
+TLS_ENABLED="${TLS_ENABLED:-}"
+CERT_NAME="${CERT_NAME:-}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+ACME_DIRECTORY_URL="${ACME_DIRECTORY_URL:-}"
 
 # ========================= 以下无需修改 =========================
 
@@ -130,6 +136,20 @@ else
     log_warn "无法检测操作系统, 继续尝试..."
 fi
 
+# Preserve deployment endpoint and TLS policy across reruns before detecting a
+# new IP. The server domain remains the single source for Nginx and Certbot.
+EXISTING_SERVER_DOMAIN=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "SERVER_DOMAIN")
+EXISTING_TLS_ENABLED=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "TLS_ENABLED")
+EXISTING_CERT_NAME=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "CERT_NAME")
+EXISTING_CERTBOT_EMAIL=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "CERTBOT_EMAIL")
+EXISTING_ACME_DIRECTORY_URL=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "ACME_DIRECTORY_URL")
+EXISTING_SEMANTIC_FENCE=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE")
+EXISTING_B2_FENCE=$(read_env_value "${INSTALL_DIR}/${ENV_FILE_RELATIVE_PATH}" "MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE")
+
+if [[ -z "$SERVER_DOMAIN" ]]; then
+    SERVER_DOMAIN="$EXISTING_SERVER_DOMAIN"
+fi
+
 # 自动检测服务器 IP
 if [[ -z "$SERVER_DOMAIN" ]]; then
     SERVER_DOMAIN=$(curl -s --max-time 5 ifconfig.me 2>/dev/null \
@@ -181,6 +201,55 @@ if is_default_admin_password "${ADMIN_PASSWORD}"; then
     ADMIN_PASSWORD=$(gen_password)
     log_warn "自动生成管理员密码"
 fi
+
+if [[ -z "$TLS_ENABLED" ]]; then
+    TLS_ENABLED="${EXISTING_TLS_ENABLED:-false}"
+fi
+if [[ "$TLS_ENABLED" != "true" && "$TLS_ENABLED" != "false" ]]; then
+    log_error "TLS_ENABLED 必须为 true 或 false"
+    exit 1
+fi
+if [[ -z "$CERT_NAME" ]]; then
+    CERT_NAME="${EXISTING_CERT_NAME:-$SERVER_DOMAIN}"
+fi
+if [[ ! "$CERT_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    log_error "CERT_NAME 只能包含字母、数字、点、下划线和连字符"
+    exit 1
+fi
+if [[ -z "$CERTBOT_EMAIL" ]]; then
+    CERTBOT_EMAIL="${EXISTING_CERTBOT_EMAIL:-admin@${SERVER_DOMAIN}}"
+fi
+if [[ -z "$ACME_DIRECTORY_URL" ]]; then
+    ACME_DIRECTORY_URL="$EXISTING_ACME_DIRECTORY_URL"
+fi
+if [[ -z "${MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE:-}" ]]; then
+    MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE="$EXISTING_SEMANTIC_FENCE"
+fi
+if [[ -z "${MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE:-}" ]]; then
+    MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE="$EXISTING_B2_FENCE"
+fi
+
+IS_IPV4=false
+if [[ "$SERVER_DOMAIN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    IFS=. read -r -a ip_octets <<< "$SERVER_DOMAIN"
+    IS_IPV4=true
+    for octet in "${ip_octets[@]}"; do
+        if ((10#$octet > 255)); then
+            IS_IPV4=false
+            break
+        fi
+    done
+fi
+IS_IP_ONLY="$IS_IPV4"
+if [[ "$SERVER_DOMAIN" == *:* ]]; then
+    IS_IP_ONLY=true
+fi
+if [[ "$TLS_ENABLED" == "true" && ( "$IS_IP_ONLY" == "true" || "$SERVER_DOMAIN" == "localhost" ) ]]; then
+    log_error "IP/localhost 部署仅提供 HTTP；TLS_ENABLED=true 需要可验证的 DNS 域名"
+    exit 1
+fi
+
+CORS_ORIGINS="${CORS_ORIGINS:-http://${SERVER_DOMAIN},https://${SERVER_DOMAIN},http://localhost,http://127.0.0.1}"
 
 ###############################################################################
 # 1. 安装 Docker
@@ -302,12 +371,20 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD}
 ADMIN_EMAIL=${ADMIN_EMAIL}
 
 # CORS (逗号分隔)
-CORS_ORIGINS=http://localhost,http://127.0.0.1,http://${SERVER_DOMAIN}
+CORS_ORIGINS=${CORS_ORIGINS}
 
 # 对外端口
 HTTP_PORT=${HTTP_PORT}
-DB_AUTO_CREATE_SCHEMA=true
-DB_AUTO_CREATE_DEFAULT_ADMIN=true
+HTTPS_PORT=${HTTPS_PORT}
+SERVER_DOMAIN=${SERVER_DOMAIN}
+CERT_NAME=${CERT_NAME}
+CERTBOT_EMAIL=${CERTBOT_EMAIL}
+TLS_ENABLED=${TLS_ENABLED}
+ACME_DIRECTORY_URL=${ACME_DIRECTORY_URL}
+MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE=${MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE:-}
+MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE=${MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE:-}
+DB_AUTO_CREATE_SCHEMA=false
+DB_AUTO_CREATE_DEFAULT_ADMIN=false
 EOF
 
 chmod 600 "${ENV_FILE}"
@@ -326,7 +403,7 @@ case "${COMPOSE_FILE}" in
     docker-compose.airflow.yml) COMPOSE_FILE="docker/compose/airflow.yml" ;;
     docker-compose.local.yml) COMPOSE_FILE="docker/compose/local.yml" ;;
 esac
-COMPOSE_ARGS=(--env-file "${ENV_FILE_RELATIVE_PATH}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_FILE}")
+COMPOSE_ARGS=(--project-directory "${INSTALL_DIR}" --project-name "${COMPOSE_PROJECT_NAME}" --env-file "${ENV_FILE_RELATIVE_PATH}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_FILE}")
 
 log_info "启动基础服务 (MySQL/Redis)..."
 docker compose "${COMPOSE_ARGS[@]}" up -d mysql redis
@@ -338,8 +415,15 @@ else
     docker compose "${COMPOSE_ARGS[@]}" build backend frontend
 fi
 
+log_info "停止旧应用服务并保存迁移前数据库备份..."
+docker compose "${COMPOSE_ARGS[@]}" stop backend frontend
+BACKUP_PATH="runtime/backups/mysql_${DB_NAME}_pre_migration_$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+scripts/ops/docker_mysql_backup.sh "$BACKUP_PATH"
+log_info "执行一次性 Alembic migration job..."
+docker compose "${COMPOSE_ARGS[@]}" run --rm migrate
+
 log_info "启动应用服务..."
-docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans backend frontend
+docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --no-deps backend frontend
 
 log_info "服务已启动"
 
@@ -351,7 +435,9 @@ log_step "5/5 验证服务状态"
 log_info "等待后端启动..."
 MAX_WAIT=120
 for i in $(seq 1 $MAX_WAIT); do
-    if curl -sf "http://127.0.0.1:${HTTP_PORT}/health" >/dev/null 2>&1; then
+    if docker compose "${COMPOSE_ARGS[@]}" exec -T backend python -c \
+        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" \
+        >/dev/null 2>&1; then
         log_info "服务已就绪! (等待 ${i} 秒)"
         break
     fi
@@ -365,6 +451,21 @@ done
 # 显示容器状态
 echo ""
 docker compose "${COMPOSE_ARGS[@]}" ps
+
+ACCESS_SCHEME="http"
+if [[ "$TLS_ENABLED" == "true" ]] \
+    && frontend_config="$(docker compose "${COMPOSE_ARGS[@]}" exec -T frontend nginx -T 2>/dev/null)" \
+    && [[ "$frontend_config" == *"listen 443 ssl;"* ]]; then
+    ACCESS_SCHEME="https"
+elif [[ "$TLS_ENABLED" == "true" ]]; then
+    log_warn "TLS is configured but Nginx has no active TLS server; frontend remains on HTTP bootstrap."
+fi
+ACCESS_PORT=""
+if [[ "$ACCESS_SCHEME" == "https" && "$HTTPS_PORT" != "443" ]]; then
+    ACCESS_PORT=":${HTTPS_PORT}"
+elif [[ "$ACCESS_SCHEME" == "http" && "$HTTP_PORT" != "80" ]]; then
+    ACCESS_PORT=":${HTTP_PORT}"
+fi
 
 ###############################################################################
 # 保存凭据
@@ -384,6 +485,7 @@ MySQL Root 密码:     ${MYSQL_ROOT_PASSWORD}
 管理员用户名:        ${ADMIN_USERNAME}
 管理员密码:          ${ADMIN_PASSWORD}
 管理员邮箱:          ${ADMIN_EMAIL}
+管理员初始化:        尚未创建; 迁移后运行 scripts/ops/docker_bootstrap_admin.sh
 EOF
 chmod 600 "${CREDENTIALS_FILE}"
 
@@ -395,11 +497,17 @@ echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}  ai-for-investor Docker 部署完成!${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""
-echo -e "  访问地址:     ${BLUE}http://${SERVER_DOMAIN}${NC}"
-echo -e "  API 文档:     ${BLUE}http://${SERVER_DOMAIN}/docs${NC}"
+echo -e "  访问地址:     ${BLUE}${ACCESS_SCHEME}://${SERVER_DOMAIN}${ACCESS_PORT}${NC}"
+echo -e "  API 文档:     ${BLUE}${ACCESS_SCHEME}://${SERVER_DOMAIN}${ACCESS_PORT}/docs${NC}"
+if [[ "$IS_IP_ONLY" == "true" ]]; then
+    echo -e "  IP-only 模式: HTTP，TLS 证书只接受可验证的 DNS 域名。"
+elif [[ "$ACCESS_SCHEME" == "http" ]]; then
+    echo -e "  首次签发证书: ${INSTALL_DIR}/scripts/ops/certbot-init.sh"
+fi
 echo ""
-echo -e "  管理员账号:   ${ADMIN_USERNAME}"
+echo -e "  管理员账号:   ${ADMIN_USERNAME} (需显式初始化)"
 echo -e "  管理员密码:   ${ADMIN_PASSWORD}"
+echo -e "  初始化账号:   cd ${INSTALL_DIR} && scripts/ops/docker_bootstrap_admin.sh"
 echo ""
 echo -e "  ${YELLOW}所有凭据已保存到: ${CREDENTIALS_FILE}${NC}"
 echo ""

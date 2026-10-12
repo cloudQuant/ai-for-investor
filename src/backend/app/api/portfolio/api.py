@@ -11,29 +11,122 @@ Aggregates data across live trading strategy instances:
 import json
 import logging
 import math
-import os
-import sys
 import typing
-from array import array
 from collections.abc import Mapping
-from ctypes import Array
-from dataclasses import dataclass, field
-from datetime import date, datetime
-from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any, Protocol, SupportsFloat, SupportsIndex, TypeGuard
-from zoneinfo import ZoneInfo
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 
 from app.api.deps import get_current_user
+from app.api.portfolio.asset_spec_adapter import (
+    _append_symbol_candidate as _append_symbol_candidate,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _asset_spec_for_symbol,
+    _merge_asset_spec_update,
+    _merge_source_contract_metadata,
+    _position_symbol_matches,
+    _source_symbol_aliases,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _asset_spec_has_any as _asset_spec_has_any,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _can_merge_asset_spec_value as _can_merge_asset_spec_value,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _combined_asset_spec_source as _combined_asset_spec_source,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _is_asset_spec_core_key as _is_asset_spec_core_key,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _is_asset_spec_primary_source_key as _is_asset_spec_primary_source_key,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _merge_asset_spec_aliases as _merge_asset_spec_aliases,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _metadata_from_config as _metadata_from_config,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _position_spec_has_asset_metadata as _position_spec_has_asset_metadata,
+)
+from app.api.portfolio.asset_spec_adapter import (
+    _row_can_use_local_asset_spec as _row_can_use_local_asset_spec,
+)
+from app.api.portfolio.instance_resolution import (
+    _as_path,
+    _coerce_int,
+    _coerce_started_day,
+    _current_user_id,
+    _filter_rows_after_source_start,
+    _infer_started_day_from_pid,
+    _list_user_instances,
+    _manager_instances_by_id,
+    _trading_day,
+    _trim_curve_by_source_start,
+)
+from app.api.portfolio.instance_resolution import (
+    _row_date as _row_date,
+)
+from app.api.portfolio.portfolio_common import (
+    _ACTIVE_TRADING_STATUSES,
+    _append_unique,
+    _first_number,
+    _has_any,
+    _PortfolioSource,
+    _safe_dict,
+    _safe_float,
+    _safe_round,
+    _unique_text,
+)
+from app.api.portfolio.portfolio_common import (
+    _EXPLICIT_NET_PNL_FIELD_KEYS as _EXPLICIT_NET_PNL_FIELD_KEYS,
+)
+from app.api.portfolio.portfolio_common import (
+    _GROSS_PNL_FIELD_KEYS as _GROSS_PNL_FIELD_KEYS,
+)
+from app.api.portfolio.portfolio_common import (
+    _PORTFOLIO_TIMEZONE as _PORTFOLIO_TIMEZONE,
+)
+from app.api.portfolio.portfolio_common import (
+    _is_float_input as _is_float_input,
+)
+from app.api.portfolio.portfolio_common import (
+    _json_safe_value as _json_safe_value,
+)
+from app.api.portfolio.position_aggregation import (
+    _allocation_asset_key,
+    _build_position_summary,
+    _latest_position_rows,
+    _parse_query_ids,
+    _position_data_time,
+    _position_updated_at,
+    _signed_market_value,
+    _source_account_cash,
+    _source_account_key,
+    _source_account_time,
+    _source_account_value,
+    _source_has_confirmed_flat_positions,
+    _source_snapshot_positions,
+)
+from app.api.portfolio.position_aggregation import (
+    _empty_position_summary as _empty_position_summary,
+)
+from app.api.portfolio.position_aggregation import (
+    _position_row_direction as _position_row_direction,
+)
+from app.api.portfolio.position_aggregation import (
+    _snapshot_positions_for_portfolio as _snapshot_positions_for_portfolio,
+)
 from app.db.database import async_session_maker
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.workspace import StrategyUnit, Workspace
 from app.services import workspace_unit_runtime
 from app.services.live_trading_manager import LiveTradingManager, get_live_trading_manager
-from app.services.log_parser.normalize import normalize_dt_text
 from app.services.log_parser_service import (
     find_latest_log_dir,
     parse_current_position,
@@ -55,202 +148,69 @@ from app.services.trading_asset_info_service import (
 )
 from app.services.workspace.units import is_server_owned_ai_research_unit
 
+from . import asset_spec_adapter as _asset_spec_adapter
+from . import instance_resolution as _instance_resolution
+from . import portfolio_calculations as _portfolio_calculations
+
+_COMMISSION_FIELD_KEYS = _portfolio_calculations._COMMISSION_FIELD_KEYS
+
+
+def _infer_started_day_from_log_dir(
+    log_dir: Path,
+    *,
+    allow_mtime_fallback: bool = True,
+) -> str | None:
+    return _instance_resolution._infer_started_day_from_log_dir(
+        log_dir,
+        allow_mtime_fallback=allow_mtime_fallback,
+        parse_run_info_fn=parse_run_info,
+        parse_value_log_fn=parse_value_log,
+    )
+
+
+def _source_started_day(source: _PortfolioSource) -> str | None:
+    return _instance_resolution._source_started_day(
+        source,
+        infer_started_day_from_pid_fn=_infer_started_day_from_pid,
+        infer_started_day_from_log_dir_fn=_infer_started_day_from_log_dir,
+    )
+
+
+def _resolve_instance_log_dir(inst: Mapping[str, object]) -> Path | None:
+    return _instance_resolution._resolve_instance_log_dir(
+        inst,
+        find_latest_log_dir_fn=find_latest_log_dir,
+        get_strategy_dir_fn=get_strategy_dir,
+    )
+
+
+def _contract_spec_for_position(
+    symbol: str,
+    row: dict[str, Any],
+    source: _PortfolioSource,
+) -> Any:
+    return _asset_spec_adapter._contract_spec_for_position(
+        symbol,
+        row,
+        source,
+        contract_spec_for_fn=contract_spec_for,
+        query_local_asset_spec_fn=query_local_asset_spec,
+    )
+
+
+def _complete_asset_specs_from_local(
+    specs: dict[str, dict[str, Any]],
+    symbols: list[str],
+) -> dict[str, dict[str, Any]]:
+    return _asset_spec_adapter._complete_asset_specs_from_local(
+        specs,
+        symbols,
+        query_local_asset_spec_fn=query_local_asset_spec,
+    )
+
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
-_ACTIVE_TRADING_STATUSES = {"queued", "running"}
-_PORTFOLIO_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_COMMISSION_FIELD_KEYS = (
-    "commission",
-    "comm",
-    "commissionAmount",
-    "fee",
-    "fees",
-    "feeAmount",
-    "execFee",
-    "exec_fee",
-    "execFeeV2",
-    "exec_fee_v2",
-    "execCommission",
-    "exec_commission",
-    "open_fee",
-    "openFee",
-    "open_commission",
-    "openCommission",
-    "positionCommission",
-    "position_fee",
-    "position_commission",
-    "tradeFee",
-    "trade_fee",
-    "trade_commission",
-    "broker_commission",
-    "brokerCommission",
-    "commission_amount",
-    "Commission",
-)
-_GROSS_PNL_FIELD_KEYS = (
-    "gross_pnl",
-    "position_unrealized_pnl",
-    "position_unrealised_pnl",
-    "position_profit",
-    "PositionProfit",
-    "unrealized_profit",
-    "unrealised_profit",
-    "unrealizedProfit",
-    "unrealisedProfit",
-    "unRealizedProfit",
-    "UnrealizedPnL",
-    "unrealizedPnl",
-    "unrealisedPnl",
-    "unrealized_pnl",
-    "unrealised_pnl",
-    "unrealizedPNL",
-    "unrealisedPNL",
-    "unrealizedpnl",
-    "unrealisedpnl",
-    "floating_pnl",
-    "position_pnl",
-    "profit",
-    "upl",
-    "up",
-)
-_EXPLICIT_NET_PNL_FIELD_KEYS = (
-    "pnlcomm",
-    "net_pnl",
-    "netPnl",
-    "netPNL",
-    "net_position_pnl",
-    "netPositionPnl",
-    "netPositionPNL",
-    "net_unrealized_pnl",
-    "netUnrealizedPnl",
-    "netUnrealizedPNL",
-    "unrealized_pnl_after_fee",
-    "unrealizedPnlAfterFee",
-    "position_pnl_after_fee",
-    "positionPnlAfterFee",
-)
-_ASSET_SPEC_CONTRACT_KEYS = frozenset(
-    {
-        "multiplier",
-        "mult",
-        "contract_size",
-        "trade_contract_size",
-        "contract_multiplier",
-        "ctVal",
-        "VolumeMultiple",
-        "CONTRACT_MULTIPLIER",
-    }
-)
-_ASSET_SPEC_MARGIN_KEYS = frozenset(
-    {
-        "margin",
-        "margin_rate",
-        "margin_ratio",
-        "leverage",
-        "margin_amount",
-        "initial_margin_per_lot",
-        "margin_initial",
-        "long_margin_rate",
-        "short_margin_rate",
-        "LongMarginRatio",
-        "ShortMarginRatio",
-        "LongMarginRatioByMoney",
-        "ShortMarginRatioByMoney",
-        "MARGIN_BUY",
-        "MARGIN_SELL",
-        "long_margin_amount",
-        "short_margin_amount",
-        "LongMarginRatioByVolume",
-        "ShortMarginRatioByVolume",
-        "MARGIN_PER_LOT",
-        "LONG_MARGIN_AMOUNT",
-        "SHORT_MARGIN_AMOUNT",
-    }
-)
-_ASSET_SPEC_FEE_KEYS = frozenset(
-    {
-        "commission",
-        "commission_rate",
-        "open_commission_rate",
-        "close_commission_rate",
-        "close_today_commission_rate",
-        "maker_commission_rate",
-        "taker_commission_rate",
-        "commission_amount",
-        "open_commission_amount",
-        "close_commission_amount",
-        "close_today_commission_amount",
-        "OpenRatioByMoney",
-        "CloseRatioByMoney",
-        "CloseTodayRatioByMoney",
-        "OpenRatioByVolume",
-        "CloseRatioByVolume",
-        "CloseTodayRatioByVolume",
-    }
-)
-_ASSET_SPEC_AUX_KEYS = frozenset(
-    {
-        "symbol",
-        "data_name",
-        "instrument",
-        "InstrumentID",
-        "exchange",
-        "exchange_id",
-        "asset_type",
-        "instType",
-        "contract_type",
-        "ctType",
-        "base_asset",
-        "baseCcy",
-        "quote_asset",
-        "quoteCcy",
-        "settle_currency",
-        "settleCcy",
-        "fee_currency",
-        "feeCcy",
-        "current_price",
-        "latest_price",
-        "last_price",
-        "mark_price",
-        "price_tick",
-        "tick_size",
-        "tickSz",
-        "min_order_size",
-        "min_qty",
-        "minSz",
-        "max_order_size",
-        "max_qty",
-        "maxLmtSz",
-        "order_size_step",
-        "lotSz",
-    }
-)
-
-
-@dataclass
-class _PortfolioSource:
-    id: str
-    strategy_id: str
-    strategy_name: str
-    status: str
-    symbol: str = ""
-    unit_id: str | None = None
-    workspace_id: str | None = None
-    trading_mode: str = "paper"
-    log_dir: Path | None = None
-    snapshot: dict[str, Any] | None = None
-    live_positions: list[dict[str, Any]] | None = None
-    live_account: dict[str, Any] | None = None
-    resolved_asset_specs: dict[str, dict[str, Any]] = field(default_factory=dict)
-    valuation_configs: tuple[dict[str, Any], ...] = ()
-    position_source: str | None = None
-    account_source: str | None = None
-    asset_spec_source: str | None = None
-    valuation_status: str = "empty"
-    valuation_warnings: list[str] = field(default_factory=list)
-    pid: int | None = None
-    started_at: str | None = None
-    updated_at: str | None = None
 
 
 def _get_manager() -> LiveTradingManager:
@@ -262,417 +222,12 @@ def _get_manager() -> LiveTradingManager:
     return get_live_trading_manager()
 
 
-def _safe_round(v: float, n: int = 2) -> float:
-    """Safely round a float value, handling NaN and Infinity.
-
-    Args:
-        v: The value to round.
-        n: Number of decimal places.
-
-    Returns:
-        The rounded value, or 0.0 if the value is NaN or Infinity.
-    """
-    if math.isnan(v) or math.isinf(v):
-        return 0.0
-    return round(v, n)
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _coerce_int(value: Any) -> int | None:
-    try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_started_day(value: Any) -> str | None:
-    text = normalize_dt_text(value).strip()
-    if not text:
-        return None
-    return text[:10]
-
-
-def _infer_started_day_from_pid(pid: int) -> str | None:
-    if pid <= 0:
-        return None
-    if sys.platform == "win32":
-        return None
-
-    stat_path = Path(f"/proc/{pid}/stat")
-    if not stat_path.is_file():
-        return None
-
-    try:
-        stat_text = stat_path.read_text(encoding="utf-8")
-        close_paren = stat_text.rfind(")")
-        if close_paren < 0:
-            return None
-        parts = stat_text[close_paren + 2 :].split()
-        if len(parts) < 20:
-            return None
-        start_ticks = int(parts[19])
-    except (OSError, ValueError):
-        return None
-
-    try:
-        with Path("/proc/stat").open(encoding="utf-8") as handle:
-            boot_time: float | None = None
-            for line in handle:
-                if not line.startswith("btime"):
-                    continue
-                boot_time = float(line.split()[1])
-                break
-    except OSError:
-        return None
-    if boot_time is None:
-        return None
-
-    try:
-        clock_ticks = os.sysconf("SC_CLK_TCK")
-        epoch_seconds = boot_time + start_ticks / clock_ticks
-        return datetime.fromtimestamp(epoch_seconds).strftime("%Y-%m-%d")
-    except (AttributeError, OSError, ValueError):
-        return None
-
-
-def _infer_started_day_from_log_dir(
-    log_dir: Path,
-    *,
-    allow_mtime_fallback: bool = True,
-) -> str | None:
-    if not log_dir.is_dir():
-        return None
-
-    # Prefer an explicit run-level timestamp if strategy runtime persisted it.
-    run_info = parse_run_info(log_dir)
-    started_day = _coerce_started_day(
-        run_info.get("started_at")
-        or run_info.get("start_time")
-        or run_info.get("startedAt")
-        or run_info.get("startTime")
-    )
-    value_log = log_dir / "value.log"
-    if not value_log.is_file():
-        return None
-    value_data = parse_value_log(log_dir, prefer_log_time=True)
-    dates = list(value_data.get("dates", []))
-    try:
-        mtime_day = _coerce_started_day(
-            datetime.fromtimestamp(value_log.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        )
-        if not mtime_day:
-            return None
-    except OSError:
-        return None
-    if not dates:
-        return None
-    sorted_dates = sorted(dates)
-    latest_date = sorted_dates[-1]
-    if started_day and mtime_day <= started_day:
-        return started_day
-    if mtime_day <= latest_date:
-        for dt in sorted_dates:
-            if dt >= mtime_day:
-                return dt
-        return latest_date
-    if mtime_day > latest_date:
-        if allow_mtime_fallback:
-            return mtime_day
-        return latest_date
-    return latest_date
-
-
-def _trading_day(value: Any) -> str:
-    """Return a timestamp's calendar day in the portfolio's local timezone."""
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return text[:10]
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(_PORTFOLIO_TIMEZONE)
-    return parsed.date().isoformat()
-
-
-def _source_started_day(source: _PortfolioSource) -> str | None:
-    """Return the source start day when available."""
-    snapshot = _safe_dict(source.snapshot)
-    explicit_started_day = (
-        _coerce_started_day(source.started_at)
-        or _coerce_started_day(snapshot.get("started_at"))
-        or _coerce_started_day(snapshot.get("instance_started_at"))
-        or _coerce_started_day(snapshot.get("start_time"))
-        or _coerce_started_day(snapshot.get("startedAt"))
-    )
-
-    if str(source.status or "").strip().lower() not in _ACTIVE_TRADING_STATUSES:
-        return explicit_started_day
-
-    inferred_started_days: list[str] = []
-    updated_started_day = _coerce_started_day(source.updated_at)
-    if updated_started_day:
-        inferred_started_days.append(updated_started_day)
-    if source.pid:
-        pid_started = _infer_started_day_from_pid(source.pid)
-        if pid_started:
-            inferred_started_days.append(pid_started)
-
-    if source.log_dir:
-        inferred_started = _infer_started_day_from_log_dir(
-            source.log_dir,
-            allow_mtime_fallback=source.pid is not None,
-        )
-        if inferred_started:
-            inferred_started_days.append(inferred_started)
-
-    if inferred_started_days:
-        return max(inferred_started_days)
-    return explicit_started_day
-
-
-def _row_date(row: dict[str, Any], keys: tuple[str, ...]) -> str:
-    for key in keys:
-        value = row.get(key)
-        text = _trading_day(value)
-        if text:
-            return text
-    return ""
-
-
-def _filter_rows_after_source_start(
-    rows: list[dict[str, Any]],
-    source_started_day: str | None,
-    keys: tuple[str, ...],
-) -> list[dict[str, Any]]:
-    """Drop log rows that start before the active process start."""
-    if not source_started_day:
-        return rows
-
-    started_day = _trading_day(source_started_day)
-    if not started_day:
-        return rows
-
-    filtered: list[dict[str, Any]] = []
-    for row in rows:
-        dt = _row_date(row, keys)
-        if not dt or dt >= started_day:
-            filtered.append(row)
-    return filtered
-
-
-def _trim_curve_by_source_start(
-    dates: list[str],
-    equity: list[float],
-    cash: list[float],
-    source_started_day: str | None,
-) -> tuple[list[str], list[float], list[float]]:
-    if not source_started_day:
-        return dates, equity, cash
-
-    filtered_dates: list[str] = []
-    filtered_equity: list[float] = []
-    filtered_cash: list[float] = []
-    for dt, value, cash_value in zip(dates, equity, cash, strict=False):
-        if dt >= source_started_day:
-            filtered_dates.append(dt)
-            filtered_equity.append(value)
-            filtered_cash.append(cash_value)
-    return filtered_dates, filtered_equity, filtered_cash
-
-
-def _json_safe_value(value: Any) -> Any:
-    if isinstance(value, Decimal):
-        return float(value)
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    if isinstance(value, dict):
-        return {str(key): _json_safe_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe_value(item) for item in value]
-    return value
-
-
 def _leverage_from_margin_rate(value: Any) -> float | None:
-    margin_rate = _safe_float(value)
-    if margin_rate <= EPSILON:
-        return None
-    return round(1.0 / margin_rate, 8)
-
-
-def _safe_dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _unique_text(values: list[Any]) -> str | None:
-    texts = [str(value or "").strip() for value in values]
-    unique = sorted({text for text in texts if text})
-    if not unique:
-        return None
-    if len(unique) == 1:
-        return unique[0]
-    return "mixed"
-
-
-def _append_unique(target: list[str], *values: Any) -> None:
-    seen = set(target)
-    for value in values:
-        if isinstance(value, (list, tuple, set)):
-            _append_unique(target, *value)
-            seen = set(target)
-            continue
-        text = str(value or "").strip()
-        if text and text not in seen:
-            target.append(text)
-            seen.add(text)
-
-
-def _has_any(row: dict[str, Any], *keys: str) -> bool:
-    return any(row.get(key) not in (None, "") for key in keys)
-
-
-class _SupportsBuffer(Protocol):
-    def __buffer__(self, flags: int, /) -> memoryview: ...
-
-
-def _is_float_input(
-    value: object,
-) -> TypeGuard[
-    str | bytes | bytearray | memoryview | _SupportsBuffer | SupportsFloat | SupportsIndex
-]:
-    """Report whether the built-in float() accepts the value's input protocol."""
-
-    return (
-        isinstance(value, (str, bytes, bytearray, memoryview))
-        or isinstance(value, (array, Array))
-        or hasattr(value, "__float__")
-        or hasattr(value, "__index__")
-        or hasattr(value, "__buffer__")
+    return _portfolio_calculations.leverage_from_margin_rate(
+        value,
+        safe_float_fn=_safe_float,
+        epsilon=EPSILON,
     )
-
-
-def _first_number(row: dict[str, Any] | None, *keys: str) -> float | None:
-    if not isinstance(row, dict):
-        return None
-    for key in keys:
-        value: object = row.get(key)
-        if value in (None, ""):
-            continue
-        if isinstance(value, dict):
-            nested_value: object | None = None
-            for nested_key in ("amount", "value", "balance", "total"):
-                candidate = value.get(nested_key)
-                if candidate not in (None, ""):
-                    nested_value = candidate
-                    break
-            if nested_value in (None, ""):
-                continue
-            value = nested_value
-        if isinstance(value, str):
-            value = value.strip().replace(",", "")
-        try:
-            if not _is_float_input(value):
-                continue
-            return float(value)
-        except (TypeError, ValueError):
-            continue
-    return None
-
-
-def _current_user_id(current_user: Any) -> str | None:
-    user_id = str(getattr(current_user, "sub", None) or getattr(current_user, "id", "") or "")
-    return user_id.strip() or None
-
-
-def _list_user_instances(
-    mgr: LiveTradingManager,
-    current_user: Any,
-    *,
-    include_inactive: bool = False,
-) -> list[Mapping[str, object]]:
-    user_id = _current_user_id(current_user)
-    try:
-        instances = mgr.list_instances(user_id=user_id) if user_id else mgr.list_instances()
-    except TypeError:
-        instances = mgr.list_instances()
-    normalized: list[Mapping[str, object]] = []
-    for inst in instances:
-        if not isinstance(inst, dict):
-            continue
-        status = str(inst.get("status") or "").strip().lower()
-        instance_id = str(inst.get("id") or "").strip()
-        if not instance_id or not status:
-            if include_inactive:
-                normalized.append(inst)
-            continue
-        effective: Mapping[str, object] = inst
-        if status in _ACTIVE_TRADING_STATUSES and hasattr(mgr, "get_instance"):
-            try:
-                live_instance = mgr.get_instance(instance_id, user_id=user_id)
-            except Exception:
-                live_instance = None
-            if isinstance(live_instance, dict):
-                merged = dict(inst)
-                merged_status = str(live_instance.get("status") or "").strip().lower()
-                if merged_status:
-                    status = merged_status
-                    merged["status"] = merged_status
-                merged_started = str(live_instance.get("started_at") or "").strip()
-                if merged_started:
-                    merged["started_at"] = merged_started
-                merged_updated = str(live_instance.get("updated_at") or "").strip()
-                if merged_updated:
-                    merged["updated_at"] = merged_updated
-                live_pid = _coerce_int(live_instance.get("pid"))
-                if live_pid is not None:
-                    merged["pid"] = live_pid
-                effective = merged
-                if include_inactive is False and merged_status not in _ACTIVE_TRADING_STATUSES:
-                    continue
-        elif not include_inactive and status not in _ACTIVE_TRADING_STATUSES:
-            continue
-        normalized.append(effective)
-    if include_inactive:
-        return normalized
-    return [
-        inst
-        for inst in normalized
-        if str(inst.get("status") or "").strip().lower() in _ACTIVE_TRADING_STATUSES
-    ]
-
-
-def _as_path(value: Any) -> Path | None:
-    text = str(value or "").strip()
-    return Path(text).expanduser() if text else None
-
-
-def _resolve_instance_log_dir(inst: Mapping[str, object]) -> Path | None:
-    explicit_log_dir = _as_path(inst.get("log_dir"))
-    if explicit_log_dir is not None and explicit_log_dir.is_dir():
-        return explicit_log_dir
-
-    runtime_dir = _as_path(inst.get("runtime_dir"))
-    if runtime_dir is not None:
-        latest = find_latest_log_dir(runtime_dir)
-        if latest:
-            return Path(latest)
-
-    try:
-        strategy_id = inst["strategy_id"]
-        if not isinstance(strategy_id, str):
-            return None
-        strategy_dir = Path(get_strategy_dir(strategy_id))
-    except ValueError:
-        return None
-    latest = find_latest_log_dir(strategy_dir)
-    return Path(latest) if latest else None
 
 
 def _runtime_config_for_instance(inst: Mapping[str, object]) -> dict[str, Any]:
@@ -730,60 +285,6 @@ def _workspace_unit_log_dir(unit: StrategyUnit) -> Path | None:
 def _workspace_unit_runtime_config(unit: StrategyUnit) -> dict[str, Any]:
     runtime_dir = workspace_unit_runtime.unit_dir(str(unit.workspace_id), str(unit.id))
     return load_runtime_config(runtime_dir)
-
-
-def _manager_instances_by_id(
-    mgr: LiveTradingManager,
-    user_id: str | None,
-    instance_ids: list[str],
-) -> dict[str, Mapping[str, object]] | None:
-    """Load one process-validated instance snapshot for a portfolio refresh.
-
-    ``LiveTradingManager.get_instance`` validates a process by scanning the OS
-    process list. Calling it once per workspace unit turns a first-screen
-    portfolio refresh into hundreds of identical process scans. Its selected
-    instance API scans processes once without walking every persisted strategy
-    directory, then returns only the workspace instances requested here.
-
-    ``None`` intentionally preserves the per-instance compatibility path for
-    lightweight manager fakes and unexpected manager failures.
-    """
-    get_active_instances = getattr(mgr, "get_active_instances", None)
-    if callable(get_active_instances):
-        try:
-            instances = get_active_instances(instance_ids, user_id=user_id)
-        except TypeError:
-            try:
-                instances = get_active_instances(instance_ids)
-            except Exception:
-                instances = None
-        except Exception:
-            instances = None
-        if instances is not None:
-            return {
-                str(instance.get("id") or "").strip(): instance
-                for instance in instances
-                if isinstance(instance, dict) and str(instance.get("id") or "").strip()
-            }
-
-    list_instances = getattr(mgr, "list_instances", None)
-    if not callable(list_instances):
-        return None
-    try:
-        instances = list_instances(user_id=user_id) if user_id else list_instances()
-    except TypeError:
-        try:
-            instances = list_instances()
-        except Exception:
-            return None
-    except Exception:
-        return None
-
-    return {
-        str(instance.get("id") or "").strip(): instance
-        for instance in instances
-        if isinstance(instance, dict) and str(instance.get("id") or "").strip()
-    }
 
 
 async def _active_workspace_sources(
@@ -960,343 +461,6 @@ async def _persisted_running_workspace_sources(current_user: Any) -> list[_Portf
             )
         )
     return sources
-
-
-def _asset_spec_for_symbol(specs: dict[str, dict[str, Any]], symbol: str) -> dict[str, Any]:
-    for key in symbol_aliases(symbol):
-        item = specs.get(key)
-        if isinstance(item, dict):
-            return dict(item)
-    return {}
-
-
-def _metadata_from_config(config: dict[str, Any], symbol: str) -> dict[str, Any]:
-    for container_key in ("contract_metadata", "contracts", "contract_specs", "instrument_specs"):
-        container = config.get(container_key)
-        if not isinstance(container, dict):
-            continue
-        item = _asset_spec_for_symbol(
-            {str(key): value for key, value in container.items() if isinstance(value, dict)},
-            symbol,
-        )
-        if item:
-            return item
-    return {}
-
-
-def _merge_source_contract_metadata(
-    specs: dict[str, dict[str, Any]],
-    source: _PortfolioSource,
-    symbols: list[str],
-) -> dict[str, dict[str, Any]]:
-    completed = {str(key): dict(value) for key, value in specs.items() if isinstance(value, dict)}
-    for symbol in symbols:
-        for config in source.valuation_configs:
-            metadata = _metadata_from_config(config, symbol)
-            if metadata:
-                _merge_asset_spec_aliases(completed, symbol, metadata)
-    return completed
-
-
-def _merge_asset_spec_aliases(
-    specs: dict[str, dict[str, Any]],
-    symbol: str,
-    spec: dict[str, Any],
-) -> None:
-    if not spec:
-        return
-    spec = _json_safe_value(spec)
-    existing = _asset_spec_for_symbol(specs, symbol)
-    merged = dict(existing)
-    core_contributed = False
-    primary_source_contributed = False
-    for key, value in spec.items():
-        if _can_merge_asset_spec_value(existing, key, value):
-            merged[key] = value
-            if _is_asset_spec_core_key(key):
-                core_contributed = True
-            if _is_asset_spec_primary_source_key(existing, key):
-                primary_source_contributed = True
-    existing_source = str(existing.get("source") or existing.get("asset_spec_source") or "").strip()
-    next_source = str(spec.get("source") or spec.get("asset_spec_source") or "").strip()
-    if existing_source and next_source and existing_source != next_source and core_contributed:
-        merged["source"] = _combined_asset_spec_source(existing_source, next_source)
-        merged["asset_spec_source"] = merged["source"]
-    elif next_source and not existing_source and primary_source_contributed:
-        merged["source"] = next_source
-        merged["asset_spec_source"] = next_source
-    for key in symbol_aliases(symbol):
-        specs[str(key)] = dict(merged)
-
-
-def _combined_asset_spec_source(*sources: str) -> str:
-    parts: list[str] = []
-    seen: set[str] = set()
-    for source in sources:
-        for part in str(source or "").split("+"):
-            text = part.strip()
-            if text and text not in seen:
-                parts.append(text)
-                seen.add(text)
-    return "+".join(parts)
-
-
-def _can_merge_asset_spec_value(existing: dict[str, Any], key: str, value: Any) -> bool:
-    if key in {"source", "asset_spec_source"} or value in (None, ""):
-        return False
-    if existing.get(key) not in (None, ""):
-        return False
-    if key in _ASSET_SPEC_CONTRACT_KEYS:
-        return not _asset_spec_has_any(existing, _ASSET_SPEC_CONTRACT_KEYS)
-    if key in _ASSET_SPEC_MARGIN_KEYS:
-        return not _asset_spec_has_any(existing, _ASSET_SPEC_MARGIN_KEYS)
-    if key in _ASSET_SPEC_FEE_KEYS:
-        return not _asset_spec_has_any(existing, _ASSET_SPEC_FEE_KEYS)
-    return key in _ASSET_SPEC_AUX_KEYS
-
-
-def _is_asset_spec_core_key(key: str) -> bool:
-    return (
-        key in _ASSET_SPEC_CONTRACT_KEYS
-        or key in _ASSET_SPEC_MARGIN_KEYS
-        or key in _ASSET_SPEC_FEE_KEYS
-    )
-
-
-def _is_asset_spec_primary_source_key(existing: dict[str, Any], key: str) -> bool:
-    if key in _ASSET_SPEC_CONTRACT_KEYS or key in _ASSET_SPEC_MARGIN_KEYS:
-        return True
-    if key in _ASSET_SPEC_FEE_KEYS:
-        return not (
-            _asset_spec_has_any(existing, _ASSET_SPEC_CONTRACT_KEYS)
-            or _asset_spec_has_any(existing, _ASSET_SPEC_MARGIN_KEYS)
-        )
-    return key in _ASSET_SPEC_AUX_KEYS and not existing
-
-
-def _asset_spec_has_any(spec: dict[str, Any], keys: frozenset[str]) -> bool:
-    return any(spec.get(key) not in (None, "") for key in keys)
-
-
-def _merge_asset_spec_update(
-    existing: dict[str, Any],
-    update: dict[str, Any],
-) -> dict[str, Any]:
-    update = _json_safe_value(update)
-    merged = dict(existing)
-    core_changed = False
-    primary_source_changed = False
-    for group in (_ASSET_SPEC_CONTRACT_KEYS, _ASSET_SPEC_MARGIN_KEYS, _ASSET_SPEC_FEE_KEYS):
-        group_items = {key: update.get(key) for key in group if update.get(key) not in (None, "")}
-        if not group_items:
-            continue
-        for key in group:
-            if key in merged:
-                merged.pop(key, None)
-                core_changed = True
-                if _is_asset_spec_primary_source_key(existing, key):
-                    primary_source_changed = True
-        for key, value in group_items.items():
-            if merged.get(key) != value:
-                merged[key] = value
-                core_changed = True
-                if _is_asset_spec_primary_source_key(existing, key):
-                    primary_source_changed = True
-
-    for key, value in update.items():
-        if key in {"source", "asset_spec_source"} or value in (None, ""):
-            continue
-        if (
-            key in _ASSET_SPEC_CONTRACT_KEYS
-            or key in _ASSET_SPEC_MARGIN_KEYS
-            or key in _ASSET_SPEC_FEE_KEYS
-        ):
-            continue
-        if key in _ASSET_SPEC_AUX_KEYS and merged.get(key) != value:
-            merged[key] = value
-
-    existing_source = str(existing.get("source") or existing.get("asset_spec_source") or "").strip()
-    next_source = str(update.get("source") or update.get("asset_spec_source") or "").strip()
-    if existing_source and next_source and existing_source != next_source and core_changed:
-        merged["source"] = _combined_asset_spec_source(existing_source, next_source)
-        merged["asset_spec_source"] = merged["source"]
-    elif next_source and not existing_source and primary_source_changed:
-        merged["source"] = next_source
-        merged["asset_spec_source"] = next_source
-    return merged
-
-
-def _position_spec_has_asset_metadata(spec: Any) -> bool:
-    return bool(
-        getattr(spec, "has_multiplier", False)
-        or getattr(spec, "has_margin_rate", False)
-        or getattr(spec, "has_margin_amount", False)
-        or getattr(spec, "has_commission", False)
-    )
-
-
-def _row_can_use_local_asset_spec(row: dict[str, Any]) -> bool:
-    if _has_any(row, *_EXPLICIT_NET_PNL_FIELD_KEYS, *_GROSS_PNL_FIELD_KEYS, "pnl"):
-        return True
-    return _has_any(
-        row,
-        "price",
-        "avg_price",
-        "average_price",
-        "price_open",
-        "entry_price",
-        "avgCost",
-        "avgPrice",
-        "avgPx",
-        "avg_entry_price",
-        "avgEntryPrice",
-        "entryPrice",
-        "open_avg_price",
-        "openAvgPrice",
-        "Price",
-        "AveragePrice",
-    ) and _has_any(
-        row,
-        "current_price",
-        "latest_price",
-        "last_price",
-        "mark_price",
-        "markPrice",
-        "markPx",
-        "market_price",
-        "lastPrice",
-        "LastPrice",
-        "price_current",
-        "marketPrice",
-        "mktPrice",
-        "mp",
-        "PriceCurrent",
-        "CurrentPrice",
-        "SettlementPrice",
-        "settlement_price",
-    )
-
-
-def _contract_spec_for_position(
-    symbol: str,
-    row: dict[str, Any],
-    source: _PortfolioSource,
-) -> Any:
-    spec = contract_spec_for(symbol, row, source.snapshot or {}, *source.valuation_configs)
-    if _position_spec_has_asset_metadata(spec):
-        return spec
-    if not _row_can_use_local_asset_spec(row):
-        return spec
-    try:
-        local_spec = query_local_asset_spec(symbol)
-    except Exception:
-        local_spec = {}
-    if isinstance(local_spec, dict) and local_spec:
-        return contract_spec_for(
-            symbol,
-            row,
-            local_spec,
-            source.snapshot or {},
-            *source.valuation_configs,
-        )
-    return spec
-
-
-def _complete_asset_specs_from_local(
-    specs: dict[str, dict[str, Any]],
-    symbols: list[str],
-) -> dict[str, dict[str, Any]]:
-    completed = {str(key): dict(value) for key, value in specs.items() if isinstance(value, dict)}
-    for symbol in symbols:
-        try:
-            local_spec = query_local_asset_spec(symbol)
-        except Exception:
-            local_spec = {}
-        if isinstance(local_spec, dict) and local_spec:
-            _merge_asset_spec_aliases(completed, symbol, local_spec)
-    return completed
-
-
-def _append_symbol_candidate(target: list[str], value: Any) -> None:
-    if isinstance(value, (list, tuple, set)):
-        for item in value:
-            _append_symbol_candidate(target, item)
-        return
-    text = str(value or "").strip()
-    if text:
-        target.append(text)
-
-
-def _source_symbol_aliases(source: _PortfolioSource) -> set[str]:
-    candidates: list[str] = []
-    _append_symbol_candidate(candidates, source.symbol)
-    for config in source.valuation_configs:
-        if not isinstance(config, dict):
-            continue
-        for key in (
-            "symbol",
-            "data_name",
-            "instrument",
-            "InstrumentID",
-            "trade_symbol",
-            "contract_symbol",
-            "localSymbol",
-            "local_symbol",
-            "contractDesc",
-            "contract_desc",
-            "description",
-            "ticker",
-            "symbols",
-            "symbol_list",
-        ):
-            _append_symbol_candidate(candidates, config.get(key))
-        data_config = config.get("data_config")
-        if isinstance(data_config, dict):
-            for key in ("symbol", "symbols", "symbol_list", "instrument", "InstrumentID"):
-                _append_symbol_candidate(candidates, data_config.get(key))
-        for container_key in (
-            "contract_metadata",
-            "contracts",
-            "contract_specs",
-            "instrument_specs",
-        ):
-            container = config.get(container_key)
-            if not isinstance(container, dict):
-                continue
-            for item_key in container.keys():
-                _append_symbol_candidate(candidates, item_key)
-            for item in container.values():
-                if not isinstance(item, dict):
-                    continue
-                for key in (
-                    "symbol",
-                    "data_name",
-                    "instrument",
-                    "InstrumentID",
-                    "REFERENCE_CODE",
-                    "localSymbol",
-                    "local_symbol",
-                    "contractDesc",
-                    "contract_desc",
-                    "description",
-                ):
-                    _append_symbol_candidate(candidates, item.get(key))
-
-    aliases: set[str] = set()
-    for candidate in candidates:
-        for alias in symbol_aliases(candidate):
-            aliases.add(alias)
-            aliases.add(alias.upper())
-    return aliases
-
-
-def _position_symbol_matches(symbol: str, allowed_aliases: set[str]) -> bool:
-    if not allowed_aliases:
-        return True
-    return any(
-        alias in allowed_aliases or alias.upper() in allowed_aliases
-        for alias in symbol_aliases(symbol)
-    )
 
 
 def _live_positions_for_source(
@@ -1550,138 +714,6 @@ async def _portfolio_sources(
     return sources
 
 
-def _source_snapshot_positions(source: _PortfolioSource) -> list[dict[str, Any]]:
-    return _snapshot_positions_for_portfolio(source.snapshot)
-
-
-def _position_row_direction(row: dict[str, Any], size: float) -> str:
-    for key in (
-        "direction",
-        "side",
-        "position_side",
-        "positionSide",
-        "PositionSide",
-        "positionIdx",
-        "position_idx",
-        "posSide",
-        "trade_action",
-        "position_type",
-        "type",
-        "PosiDirection",
-        "posi_direction",
-        "position_direction",
-    ):
-        value = row.get(key)
-        if value in (None, ""):
-            continue
-        text = str(value).strip().lower()
-        if text in {"long", "buy", "bought", "position_type_buy", "deal_type_buy"}:
-            return "long"
-        if text in {"short", "sell", "sold", "position_type_sell", "deal_type_sell"}:
-            return "short"
-        if text == "flat":
-            return "flat"
-        try:
-            code = int(_safe_float(value, float("nan")))
-        except (TypeError, ValueError):
-            code = None
-        key_text = key.lower()
-        if key_text in {"trade_action", "position_type", "type"}:
-            if code == 0:
-                return "long"
-            if code == 1:
-                return "short"
-        if key_text in {"posidirection", "posi_direction", "position_direction"}:
-            if code == 2:
-                return "long"
-            if code == 3:
-                return "short"
-        if key_text in {"positionidx", "position_idx"}:
-            if code == 1:
-                return "long"
-            if code == 2:
-                return "short"
-    if abs(size) <= EPSILON:
-        return "flat"
-    return "short" if size < 0 else "long"
-
-
-def _latest_position_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    latest_by_key: dict[str, tuple[int, str, str, dict[str, Any]]] = {}
-    latest_flat_by_key: dict[str, tuple[int, str, str, dict[str, Any]]] = {}
-    latest_flat_by_symbol: dict[str, tuple[int, str, dict[str, Any]]] = {}
-    for index, row in enumerate(rows):
-        symbol = str(row.get("data_name") or row.get("symbol") or "").strip()
-        if not symbol:
-            continue
-        size = _safe_float(row.get("size"), 0.0)
-        direction = _position_row_direction(row, size)
-        timestamp = str(row.get("datetime") or row.get("dt") or "")
-        if abs(size) <= EPSILON:
-            if direction in {"long", "short"}:
-                key = f"{symbol}:{direction}"
-                current_flat_by_key = latest_flat_by_key.get(key)
-                if current_flat_by_key is None or (timestamp, index) >= (
-                    current_flat_by_key[1],
-                    current_flat_by_key[0],
-                ):
-                    latest_flat_by_key[key] = (index, timestamp, symbol, row)
-                continue
-            current_flat_by_symbol = latest_flat_by_symbol.get(symbol)
-            if current_flat_by_symbol is None or (timestamp, index) >= (
-                current_flat_by_symbol[1],
-                current_flat_by_symbol[0],
-            ):
-                latest_flat_by_symbol[symbol] = (index, timestamp, row)
-            continue
-        key = f"{symbol}:{direction}"
-        current_position_by_key = latest_by_key.get(key)
-        if current_position_by_key is None or (timestamp, index) >= (
-            current_position_by_key[1],
-            current_position_by_key[0],
-        ):
-            latest_by_key[key] = (index, timestamp, symbol, row)
-
-    latest_nonflat_by_symbol: dict[str, tuple[int, str]] = {}
-    for index, timestamp, symbol, _row in latest_by_key.values():
-        current_nonflat_by_symbol = latest_nonflat_by_symbol.get(symbol)
-        if current_nonflat_by_symbol is None or (timestamp, index) >= (
-            current_nonflat_by_symbol[1],
-            current_nonflat_by_symbol[0],
-        ):
-            latest_nonflat_by_symbol[symbol] = (index, timestamp)
-
-    selected: list[tuple[int, dict[str, Any]]] = []
-    for index, timestamp, symbol, row in latest_by_key.values():
-        direction = _position_row_direction(row, _safe_float(row.get("size"), 0.0))
-        key = f"{symbol}:{direction}"
-        flat = latest_flat_by_symbol.get(symbol)
-        if flat is not None and (flat[1], flat[0]) >= (timestamp, index):
-            continue
-        directional_flat = latest_flat_by_key.get(key)
-        if directional_flat is not None and (directional_flat[1], directional_flat[0]) >= (
-            timestamp,
-            index,
-        ):
-            continue
-        selected.append((index, row))
-    for symbol, (index, timestamp, row) in latest_flat_by_symbol.items():
-        latest_nonflat_for_symbol = latest_nonflat_by_symbol.get(symbol)
-        if latest_nonflat_for_symbol is None or (timestamp, index) >= (
-            latest_nonflat_for_symbol[1],
-            latest_nonflat_for_symbol[0],
-        ):
-            selected.append((index, row))
-    for key, (index, timestamp, _symbol, row) in latest_flat_by_key.items():
-        latest_nonflat_for_key = latest_by_key.get(key)
-        if latest_nonflat_for_key is None or (timestamp, index) >= (
-            latest_nonflat_for_key[1],
-            latest_nonflat_for_key[0],
-        ):
-            selected.append((index, row))
-    return [row for _index, row in sorted(selected, key=lambda item: item[0])]
-
-
 def _parse_positions_for_portfolio(log_dir: Path) -> list[dict[str, Any]]:
     position_log_rows = parse_position_log(log_dir)
     if position_log_rows:
@@ -1695,100 +727,6 @@ def _parse_positions_for_portfolio(log_dir: Path) -> list[dict[str, Any]]:
         for row in parse_current_position(log_dir)
         if abs(_safe_float(row.get("size"), 0.0)) > EPSILON
     ]
-
-
-def _snapshot_positions_for_portfolio(snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
-    rows = list((snapshot or {}).get("positions") or [])
-    positions: list[dict[str, Any]] = []
-    for raw_row in rows:
-        if not isinstance(raw_row, dict):
-            continue
-        for row in split_bidirectional_position_row(raw_row):
-            size = signed_gateway_size(row)
-            if abs(size) <= EPSILON:
-                continue
-            price = (
-                _first_number(
-                    row,
-                    "price",
-                    "avg_price",
-                    "average_price",
-                    "price_open",
-                    "avgCost",
-                    "avgPrice",
-                    "entryPrice",
-                    "ep",
-                    "averageCost",
-                    "Price",
-                    "AveragePrice",
-                )
-                or 0.0
-            )
-            current_price = _first_number(
-                row,
-                "current_price",
-                "latest_price",
-                "last_price",
-                "mark_price",
-                "markPrice",
-                "markPx",
-                "market_price",
-                "lastPrice",
-                "LastPrice",
-                "price_current",
-                "marketPrice",
-                "mktPrice",
-                "mp",
-                "PriceCurrent",
-                "CurrentPrice",
-                "SettlementPrice",
-                "settlement_price",
-            )
-            explicit_market_value = _first_number(
-                row,
-                "market_value",
-                "marketValue",
-                "mktValue",
-                "positionValue",
-                "position_value",
-                "value",
-            )
-            market_value = (
-                explicit_market_value if explicit_market_value is not None else abs(size) * price
-            )
-            position = {
-                **row,
-                "data_name": gateway_position_symbol(row),
-                "size": size,
-                "price": price,
-                "current_price": current_price,
-                "market_value": market_value,
-                "value": market_value,
-                "position_pnl": row.get("position_pnl"),
-                "pnl": row.get("pnl"),
-                "pnlcomm": row.get("pnlcomm"),
-                "gross_pnl": row.get("gross_pnl"),
-                "commission": row.get("commission"),
-                "commission_signed": row.get("commission_signed"),
-                "multiplier": row.get("multiplier"),
-                "margin_rate": row.get("margin_rate"),
-                "margin": row.get("margin"),
-                "margin_value": row.get("margin_value"),
-                "use_margin": row.get("use_margin"),
-                "initial_margin": row.get("initial_margin"),
-                "maintain_margin": row.get("maintain_margin"),
-                "updated_at": _position_updated_at(row),
-                "data_time": _position_data_time(row),
-                "source": row.get("source"),
-                "position_source": row.get("position_source"),
-                "asset_spec_source": row.get("asset_spec_source"),
-                "valuation_status": row.get("valuation_status"),
-                "valuation_warnings": list(row.get("valuation_warnings") or []),
-            }
-            if explicit_market_value is None:
-                position["market_value_estimated"] = True
-            positions.append(position)
-    return positions
 
 
 def _source_positions(source: _PortfolioSource) -> list[dict[str, Any]]:
@@ -1813,56 +751,13 @@ def _position_valuation_warnings(
     *,
     position_source: str,
 ) -> list[str]:
-    warnings: list[str] = []
-    if (
-        str(source.trading_mode or "").strip().lower() == "live"
-        and str(source.status or "").strip().lower() == "running"
-        and position_source != "gateway"
-    ):
-        warnings.append("未能从交易所网关确认当前持仓，当前数据来自本地日志/快照")
-    if not getattr(spec, "has_multiplier", False) and not _has_any(
-        row, "multiplier", "mult", "contract_multiplier", "contract_size"
-    ):
-        warnings.append("合约乘数未从交易所或本地资产信息确认，按 1 估算")
-    if (
-        not getattr(spec, "has_margin_rate", False)
-        and not getattr(spec, "has_margin_amount", False)
-        and not _has_any(
-            row,
-            "margin",
-            "margin_rate",
-            "margin_ratio",
-            "leverage",
-            "lever",
-            "margin_value",
-            "use_margin",
-            "initial_margin",
-            "imr",
-            "margin_amount",
-            "initial_margin_per_lot",
-            "margin_initial",
-            "maintain_margin",
-            "mmr",
-            "long_margin_amount",
-            "short_margin_amount",
-            "MARGIN_PER_LOT",
-            "LONG_MARGIN_AMOUNT",
-            "SHORT_MARGIN_AMOUNT",
-        )
-    ):
-        warnings.append("保证金率未确认，按全额保证金估算")
-    has_real_commission = _has_any(row, *_COMMISSION_FIELD_KEYS)
-    if row.get("commission_currency_mismatch"):
-        warnings.append("成交手续费币种与盈亏计价币种不一致，当前按资产费率估算手续费")
-    if not getattr(spec, "has_commission", False) and not has_real_commission:
-        warnings.append("手续费未确认，持仓盈亏未扣除真实手续费")
-    elif (
-        getattr(spec, "has_commission", False)
-        and not has_real_commission
-        and (row.get("generic_pnl_recalculated") or _has_any(row, *_GROSS_PNL_FIELD_KEYS))
-    ):
-        warnings.append("持仓手续费未从交易所成交/持仓回报确认，当前按资产费率估算")
-    return warnings
+    return _portfolio_calculations.position_valuation_warnings(
+        source,
+        row,
+        spec,
+        position_source=position_source,
+        has_any_fn=_has_any,
+    )
 
 
 def _position_row_should_recalculate_local_pnl(
@@ -1872,53 +767,13 @@ def _position_row_should_recalculate_local_pnl(
     position_source: str,
     force: bool = False,
 ) -> bool:
-    if not force and str(position_source or "").strip().lower() == "gateway":
-        return False
-    if not (
-        getattr(spec, "has_multiplier", False)
-        or getattr(spec, "has_commission", False)
-        or getattr(spec, "has_margin_rate", False)
-        or getattr(spec, "has_margin_amount", False)
-    ):
-        return False
-    if not _has_any(
+    return _portfolio_calculations.position_row_should_recalculate_local_pnl(
         row,
-        "price",
-        "avg_price",
-        "average_price",
-        "price_open",
-        "entry_price",
-        "avgCost",
-        "avgPrice",
-        "avgPx",
-        "avg_entry_price",
-        "avgEntryPrice",
-        "entryPrice",
-        "open_avg_price",
-        "openAvgPrice",
-        "Price",
-        "AveragePrice",
-    ):
-        return False
-    if not _has_any(
-        row,
-        "current_price",
-        "latest_price",
-        "last_price",
-        "mark_price",
-        "markPrice",
-        "markPx",
-        "market_price",
-        "lastPrice",
-        "LastPrice",
-        "market_value",
-        "marketValue",
-        "positionValue",
-        "position_value",
-        "value",
-    ):
-        return False
-    return _has_any(row, *_EXPLICIT_NET_PNL_FIELD_KEYS, *_GROSS_PNL_FIELD_KEYS, "pnl")
+        spec,
+        position_source=position_source,
+        force=force,
+        has_any_fn=_has_any,
+    )
 
 
 def _position_row_for_valuation(
@@ -1927,96 +782,30 @@ def _position_row_for_valuation(
     *,
     position_source: str,
 ) -> dict[str, Any]:
-    item = dict(row)
-    force_recalculate = bool(item.pop("force_recalculate_position_pnl", False))
-    if not _position_row_should_recalculate_local_pnl(
-        item,
+    return _portfolio_calculations.position_row_for_valuation(
+        row,
         spec,
         position_source=position_source,
-        force=force_recalculate,
-    ):
-        return item
-    for key in (*_EXPLICIT_NET_PNL_FIELD_KEYS, *_GROSS_PNL_FIELD_KEYS, "pnl"):
-        item.pop(key, None)
-    if force_recalculate:
-        item["market_value_estimated"] = True
-    item["recalculated_position_pnl"] = True
-    return item
+        should_recalculate_fn=_position_row_should_recalculate_local_pnl,
+    )
 
 
 def _valued_source_positions(source: _PortfolioSource) -> list[dict[str, Any]]:
-    positions: list[dict[str, Any]] = []
-    for raw_row in _source_positions(source):
-        for row in split_bidirectional_position_row(raw_row):
-            symbol = str(row.get("data_name") or row.get("symbol") or "")
-            spec = _contract_spec_for_position(symbol, row, source)
-            position_source = str(
-                row.get("position_source") or row.get("source") or source.position_source or "local"
-            ).strip()
-            if (
-                source.live_positions is None
-                and str(source.position_source or "").strip().lower() in {"log", "snapshot"}
-                and position_source.lower() == "gateway"
-            ):
-                position_source = str(source.position_source)
-                row = dict(row)
-                row["force_recalculate_position_pnl"] = True
-            valuation_row = _position_row_for_valuation(
-                row,
-                spec,
-                position_source=position_source,
-            )
-            valued = value_position(valuation_row, spec=spec)
-            if valued is None:
-                continue
-            asset_spec_source = str(
-                row.get("asset_spec_source") or getattr(spec, "source", "") or ""
-            ).strip()
-            row_warnings = _position_valuation_warnings(
-                source,
-                valuation_row,
-                spec,
-                position_source=position_source,
-            )
-            if valuation_row.get("recalculated_position_pnl"):
-                row_warnings.append("本地/快照持仓盈亏已按最新资产乘数、保证金和手续费设置重新计算")
-            _append_unique(source.valuation_warnings, row_warnings)
-            if asset_spec_source:
-                source.asset_spec_source = _unique_text(
-                    [source.asset_spec_source, asset_spec_source]
-                )
-            source.valuation_status = "estimated" if source.valuation_warnings else "confirmed"
-            positions.append(
-                {
-                    "data_name": valued.data_name or symbol,
-                    "size": valued.size,
-                    "price": valued.entry_price,
-                    "latest_price": valued.current_price,
-                    "market_value": valued.market_value,
-                    "signed_market_value": _signed_market_value(valued.size, valued.market_value),
-                    "position_pnl": valued.pnl,
-                    "gross_pnl": valued.gross_pnl,
-                    "commission": valued.commission,
-                    "commission_source": valuation_row.get("commission_source")
-                    or row.get("commission_source"),
-                    "multiplier": valued.multiplier,
-                    "margin_rate": valued.margin_rate,
-                    "leverage": _leverage_from_margin_rate(valued.margin_rate),
-                    "margin_value": valued.margin_value,
-                    "updated_at": _position_updated_at(row),
-                    "data_time": _position_data_time(row),
-                    "direction": valued.direction,
-                    "position_source": position_source,
-                    "asset_spec_source": asset_spec_source or None,
-                    "valuation_status": "estimated" if row_warnings else "confirmed",
-                    "valuation_warnings": row_warnings,
-                }
-            )
-    if not positions and source.position_source == "gateway":
-        source.valuation_status = "confirmed"
-    elif not positions and source.valuation_warnings:
-        source.valuation_status = "stale_fallback"
-    return positions
+    return _portfolio_calculations.valued_source_positions(
+        source,
+        source_positions_fn=_source_positions,
+        split_bidirectional_position_row_fn=split_bidirectional_position_row,
+        contract_spec_for_position_fn=_contract_spec_for_position,
+        position_row_for_valuation_fn=_position_row_for_valuation,
+        value_position_fn=value_position,
+        position_valuation_warnings_fn=_position_valuation_warnings,
+        append_unique_fn=_append_unique,
+        unique_text_fn=_unique_text,
+        signed_market_value_fn=_signed_market_value,
+        leverage_from_margin_rate_fn=_leverage_from_margin_rate,
+        position_updated_at_fn=_position_updated_at,
+        position_data_time_fn=_position_data_time,
+    )
 
 
 def _source_trades(
@@ -2037,214 +826,6 @@ def _source_trades(
         source_started_day=started_day,
         keys=("log_time", "event_time", "time", "dtclose", "datetime", "dtopen"),
     )
-
-
-def _parse_query_ids(values: list[str] | None) -> set[str]:
-    ids: set[str] = set()
-    for value in values or []:
-        ids.update(part.strip() for part in value.split(",") if part.strip())
-    return ids
-
-
-def _position_updated_at(row: dict[str, Any]) -> Any:
-    return row.get("updated_at") or row.get("log_time") or row.get("datetime") or row.get("dt")
-
-
-def _position_data_time(row: dict[str, Any]) -> Any:
-    return row.get("data_time") or row.get("datetime") or row.get("dt")
-
-
-def _empty_position_summary() -> dict[str, float | int]:
-    return {
-        "total_long_value": 0.0,
-        "total_short_value": 0.0,
-        "gross_market_value": 0.0,
-        "net_market_value": 0.0,
-        "total_pnl": 0.0,
-        "long_count": 0,
-        "short_count": 0,
-        "flat_count": 0,
-    }
-
-
-def _build_position_summary(positions: list[dict[str, Any]]) -> dict[str, float | int]:
-    summary = _empty_position_summary()
-
-    for item in positions:
-        size = float(item.get("size") or 0.0)
-        if abs(size) <= EPSILON:
-            continue
-        market_value = abs(float(item.get("market_value") or 0.0))
-        pnl = float(item.get("position_pnl") or item.get("pnl") or 0.0)
-
-        if size > 0:
-            summary["total_long_value"] += market_value
-            summary["long_count"] += 1
-        elif size < 0:
-            summary["total_short_value"] += market_value
-            summary["short_count"] += 1
-        else:
-            summary["flat_count"] += 1
-
-        summary["total_pnl"] += pnl
-
-    total_long = float(summary["total_long_value"])
-    total_short = float(summary["total_short_value"])
-    summary["total_long_value"] = _safe_round(total_long)
-    summary["total_short_value"] = _safe_round(total_short)
-    summary["gross_market_value"] = _safe_round(total_long + total_short)
-    summary["net_market_value"] = _safe_round(total_long - total_short)
-    summary["total_pnl"] = _safe_round(float(summary["total_pnl"]))
-    return summary
-
-
-def _source_has_confirmed_flat_positions(source: _PortfolioSource) -> bool:
-    if source.live_positions is not None:
-        return True
-    snapshot = source.snapshot if isinstance(source.snapshot, dict) else {}
-    return isinstance(snapshot.get("positions"), list)
-
-
-def _source_account_key(source: _PortfolioSource) -> str:
-    account = source.live_account or {}
-    for value in (
-        account.get("gateway_key"),
-        account.get("account_id"),
-        account.get("account"),
-        account.get("login"),
-        source.id,
-    ):
-        text = str(value or "").strip()
-        if text:
-            return text
-    return source.id
-
-
-def _source_account_value(source: _PortfolioSource) -> float | None:
-    return _first_number(
-        source.live_account,
-        "value",
-        "equity",
-        "Equity",
-        "eq",
-        "total_eq",
-        "totalEq",
-        "total_equity",
-        "totalEquity",
-        "account_value",
-        "accountValue",
-        "net_liquidation",
-        "NetLiquidation",
-        "netliquidation",
-        "NetLiquidationValue",
-        "total_margin",
-        "totalMargin",
-        "total_margin_balance",
-        "totalMarginBalance",
-        "margin_balance",
-        "marginBalance",
-        "total_wallet_balance",
-        "totalWalletBalance",
-        "wallet_balance",
-        "walletBalance",
-        "balance",
-        "Balance",
-    )
-
-
-def _source_account_cash(source: _PortfolioSource) -> float | None:
-    account = source.live_account
-    cash = _first_number(
-        account,
-        "cash",
-        "available_cash",
-        "available",
-        "Available",
-        "available_funds",
-        "AvailableFunds",
-        "availablefunds",
-        "available_balance",
-        "availableBalance",
-        "available_bal",
-        "availableBal",
-        "available_equity",
-        "availableEquity",
-        "avail_eq",
-        "availEq",
-        "avail_bal",
-        "availBal",
-        "total_available_balance",
-        "totalAvailableBalance",
-        "total_available_margin",
-        "totalAvailableMargin",
-        "free_collateral",
-        "freeCollateral",
-        "free_margin",
-        "freeMargin",
-        "marginFree",
-        "margin_free",
-        "withdraw_available",
-        "withdrawAvailable",
-        "available_to_withdraw",
-        "availableToWithdraw",
-    )
-    if cash is not None:
-        return cash
-
-    margin = _first_number(
-        account,
-        "margin",
-        "used_margin",
-        "usedMargin",
-        "margin_used",
-        "marginUsed",
-        "curr_margin",
-        "CurrMargin",
-        "initial_margin",
-        "initialMargin",
-        "initial_margin_requirement",
-        "initialMarginRequirement",
-        "total_initial_margin",
-        "totalInitialMargin",
-        "total_used_margin",
-        "totalUsedMargin",
-        "total_position_initial_margin",
-        "totalPositionInitialMargin",
-        "total_open_order_initial_margin",
-        "totalOpenOrderInitialMargin",
-        "imr",
-        "maintain_margin",
-        "maintenance_margin",
-        "maintMargin",
-    )
-    value = _source_account_value(source)
-    if value is not None and margin is not None:
-        return value - margin
-
-    return _first_number(
-        source.live_account,
-        "balance",
-        "Balance",
-    )
-
-
-def _source_account_time(source: _PortfolioSource) -> str:
-    account = source.live_account or {}
-    for key in ("updated_at", "data_time", "datetime", "dt", "time", "timestamp"):
-        value = account.get(key)
-        text = str(value or "").strip()
-        if text:
-            return text
-    return "live"
-
-
-def _signed_market_value(size: float, market_value: float) -> float:
-    gross_value = abs(market_value)
-    if size > 0:
-        return gross_value
-    if size < 0:
-        return -gross_value
-    return 0.0
 
 
 # ---------- Portfolio Overview ----------
@@ -2401,70 +982,21 @@ def _compact_workspace_overview(rows: list[_PortfolioSource]) -> dict[str, Any]:
     workspace snapshot is refreshed by the trading service, so it is the right
     source for the page's initial metric cards.
     """
-    total_assets = 0.0
-    total_cash = 0.0
-    total_initial = 0.0
-    total_position_gross = 0.0
-    total_position_net = 0.0
-    running_count = 0
-    has_position_data = False
 
-    # Sources from the live-manager path have already passed process validation,
-    # while the fast landing-page path contains only persisted running units.
-    # Requiring a process PID here would make the snapshot-only path discard all
-    # valid first-screen data after an API-server restart.
-    running_sources = [
-        source for source in rows if str(source.status or "").strip().lower() == "running"
-    ]
+    def safe_round(value: float, digits: int | None = None) -> float:
+        if digits is None:
+            return _safe_round(value)
+        return _safe_round(value, digits)
 
-    for source in running_sources:
-        snapshot = _safe_dict(source.snapshot)
-        started_day = _source_started_day(source)
-        long_value = max(
-            _first_number(snapshot, "long_market_value", "long_value", "longMarketValue") or 0.0,
-            0.0,
-        )
-        short_value = max(
-            _first_number(snapshot, "short_market_value", "short_value", "shortMarketValue") or 0.0,
-            0.0,
-        )
-        net_position_value = long_value - short_value
-        value_summary = _compact_value_log_summary(source.log_dir, started_day=started_day)
-        initial, assets, cash = value_summary if value_summary is not None else (0.0, 0.0, 0.0)
-
-        total_initial += initial
-        total_assets += assets
-        total_cash += cash
-        total_position_gross += long_value + short_value
-        total_position_net += net_position_value
-        if (
-            isinstance(snapshot.get("positions"), list)
-            or long_value > EPSILON
-            or short_value > EPSILON
-        ):
-            has_position_data = True
-        running_count += 1
-
-    total_pnl = total_assets - total_initial
-    total_pnl_pct = total_pnl / total_initial * 100 if total_initial > 0 else 0.0
-    if not has_position_data:
-        total_position_net = total_assets - total_cash
-        total_position_gross = abs(total_position_net)
-    return {
-        "total_assets": _safe_round(total_assets),
-        "total_cash": _safe_round(total_cash),
-        "total_position_value": _safe_round(total_position_gross),
-        "net_position_value": _safe_round(total_position_net),
-        "total_initial_capital": _safe_round(total_initial),
-        "total_pnl": _safe_round(total_pnl),
-        "total_pnl_pct": _safe_round(total_pnl_pct, 2),
-        "strategy_count": len(running_sources),
-        "running_count": running_count,
-        # Per-strategy metrics require scanning every value and trade log. They
-        # are not rendered in the first screen and are intentionally omitted in
-        # compact mode to keep the route DB-only.
-        "strategies": [],
-    }
+    return _portfolio_calculations.compact_workspace_overview(
+        rows,
+        safe_dict_fn=_safe_dict,
+        source_started_day_fn=_source_started_day,
+        compact_value_log_summary_fn=_compact_value_log_summary,
+        first_number_fn=_first_number,
+        safe_round_fn=safe_round,
+        epsilon=EPSILON,
+    )
 
 
 async def _compact_portfolio_overview(
@@ -3199,19 +1731,6 @@ async def get_portfolio_equity(
 
 
 # ---------- Asset Allocation ----------
-
-
-def _allocation_asset_key(symbol: Any) -> str:
-    """Return a stable display key that groups equivalent broker symbol aliases."""
-    raw_symbol = str(symbol or "").strip()
-    if not raw_symbol:
-        return ""
-    candidates = [
-        "".join(character for character in str(alias).upper() if character.isalnum())
-        for alias in symbol_aliases(raw_symbol)
-    ]
-    candidates = [candidate for candidate in candidates if candidate]
-    return min(candidates, key=len) if candidates else raw_symbol.upper()
 
 
 @router.get(

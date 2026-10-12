@@ -1,0 +1,62 @@
+[
+  {
+    "check": "d12-clean-down-v2-parent",
+    "command": [
+      "docker",
+      "compose",
+      "--project-directory",
+      "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "--project-name",
+      "iter202-d12",
+      "--env-file",
+      "/tmp/iter202-d12-compose.env",
+      "-f",
+      "docker/docker-compose.yml",
+      "-f",
+      "docker/compose/dev.yml",
+      "-f",
+      "/tmp/ai-investor-iter200-202-20261012.afLb99/d12-acceptance-v2.override.yml",
+      "down",
+      "--volumes",
+      "--remove-orphans"
+    ],
+    "started_at": "2026-10-12T10:53:46.550852+00:00",
+    "finished_at": "2026-10-12T10:54:01.974623+00:00",
+    "elapsed_seconds": 15.42,
+    "exit_code": 0,
+    "log": "d12-clean-down-v2-parent.txt",
+    "sha256": "37c371b753ae0cea15f6c0f655f52f18c2f6848d2deb3cc8d9e5cee0a6b6cbae"
+  },
+  {
+    "check": "d12-clean-up-v2-parent",
+    "command": [
+      "docker",
+      "compose",
+      "--project-directory",
+      "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "--project-name",
+      "iter202-d12",
+      "--env-file",
+      "/tmp/iter202-d12-compose.env",
+      "-f",
+      "docker/docker-compose.yml",
+      "-f",
+      "docker/compose/dev.yml",
+      "-f",
+      "/tmp/ai-investor-iter200-202-20261012.afLb99/d12-acceptance-v2.override.yml",
+      "up",
+      "-d",
+      "--no-build",
+      "--wait",
+      "--wait-timeout",
+      "360",
+      "backend"
+    ],
+    "started_at": "2026-10-12T10:54:01.985783+00:00",
+    "finished_at": "2026-10-12T11:03:25.377681+00:00",
+    "elapsed_seconds": 563.39,
+    "exit_code": 1,
+    "log": "d12-clean-up-v2-parent.txt",
+    "sha256": "b61fa2a899d65343738be9d6368fde63773a1bcbe3f014dcd9b97f13a98de9a0"
+  }
+]

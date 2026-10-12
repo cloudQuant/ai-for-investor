@@ -1,0 +1,32 @@
+==========================================
+Frontend Bundle Size Check (manifest based)
+==========================================
+
+--- Hard Budgets ---
+  entry chunk gzip bytes                     | target=<= 307200    | actual=782              | PASS
+  entry static initial JS chunks (all)       | target=<= 4         | actual=2                | PASS
+  /login initial JS chunks (all)             | target=<= 4         | actual=4                | PASS
+  entry static closure gzip-9 bytes          | target=<= 655360    | actual=471714           | PASS
+  /login initial closure gzip-9 bytes        | target=<= 655360    | actual=492689           | PASS
+  largest initial JS gzip-9 bytes            | target=<= 552960    | actual=411500 (assets/application-vendor-C-uW_6-k.js) | PASS
+
+--- Manifest Closures (gzip-9, raw bytes) ---
+  entry static closure: 3 total assets (2 JS), 1721320 raw bytes, 471714 gzip bytes
+  /login initial closure: 6 total assets (4 JS), 1792511 raw bytes, 492689 gzip bytes
+  /login delayed closure: 164 total assets (95 JS), 8519190 raw bytes, 2278476 gzip bytes
+  entry initial JS files (all)
+    assets/application-vendor-C-uW_6-k.js
+    assets/index-BADt6SSP.js
+  /login initial JS files (all)
+    assets/LoginPage-BzlS-z9R.js
+    assets/application-vendor-C-uW_6-k.js
+    assets/auth-B_rwbs8d.js
+    assets/index-BADt6SSP.js
+
+--- Advisory Totals ---
+  total JS+CSS: 18934 KB (advisory <= 20000)
+  largest JS/CSS chunk: 6877 KB (advisory <= 8000)
+
+==========================================
+✅ Bundle size check PASSED
+  entry assets/index-BADt6SSP.js: raw 1410 bytes / gzip 782 bytes

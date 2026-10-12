@@ -1,0 +1,119 @@
+{
+  "state": "PASS",
+  "checked_at": "2026-10-12T15:37:12.929Z",
+  "source_checks": [
+    {
+      "manifest": "backend-final-source-manifest-parent.json",
+      "sha256": "940b9ba55ee06df4c4c13dcc8dbb564358e0b93323da28049555f470dd281359",
+      "files": 2303,
+      "mismatch": []
+    },
+    {
+      "manifest": "frontend-final-v15-matrix-parent-source-manifest.json",
+      "sha256": "71d3ba3986311601512cb534d92b0da64b30287852abb5cca66dec4efc3c60f0",
+      "files": 487,
+      "mismatch": []
+    }
+  ],
+  "protected_files": [
+    {
+      "path": "README.md",
+      "sha256": "567e395a4cab245e1f4bd537e031a30eea09b6d73f23c19bdd622cba18b3261f",
+      "unchanged": true
+    },
+    {
+      "path": "README.en.md",
+      "sha256": "4ed5d90ae00539f96f51372861afbb175b47065d3d0542027e26aad36d3f77fa",
+      "unchanged": true
+    },
+    {
+      "path": "DISCLAIMER.md",
+      "sha256": "fd420a6dffaf498f7c6dae6a3c22a8b1cb87e5e5dc950bf8d53c517298083f49",
+      "unchanged": true
+    },
+    {
+      "path": "LICENSE-REVIEW.md",
+      "sha256": "e71620f9c4910a7587f524649f759248ea7f0e29d2d58eb44a0c340e277e8919",
+      "unchanged": true
+    },
+    {
+      "path": "LICENSE-SCOPE-DRAFT.md",
+      "sha256": "2d8c1bd505bc92f90b0bc67eecd15d568298295a939e76f316311b0152f2d4c1",
+      "unchanged": true
+    },
+    {
+      "path": "LICENSE-SOURCE-AVAILABLE-DRAFT.md",
+      "sha256": "dd02817f393232f5cbeb833e417ddaa89142e1ee3a10360b0c690ccdbcc41f44",
+      "unchanged": true
+    }
+  ],
+  "locks": [
+    {
+      "file": "config/requirements-dev.lock",
+      "expected": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+      "observed": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+      "matches": true
+    },
+    {
+      "file": "config/requirements-prod.lock",
+      "expected": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b",
+      "observed": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b",
+      "matches": true
+    },
+    {
+      "file": "src/frontend/package-lock.json",
+      "expected": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e",
+      "observed": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e",
+      "matches": true
+    }
+  ],
+  "diff_check_exit": 0,
+  "evidence": [
+    {
+      "file": "backend-final-composite-parent-review.json",
+      "sha256": "b7933911643a36a38ba598c160cb8396f8bdceb44bd4e0fe309084595dbee2aa",
+      "state": "PASS_COMPOSITE_WITH_EXPLICIT_SKIPS"
+    },
+    {
+      "file": "iteration201-final-workpackages-parent-review.json",
+      "sha256": "1cfde980226abcc5667926eb931fa8268051137cf03a2e557542d99f2e80514a",
+      "state": "PASS"
+    },
+    {
+      "file": "frontend-final-v15-matrix-parent-review.json",
+      "sha256": "07a7b28e3ef0dcd94387b97dd7f341c3562c5693fd7c858f7d1cdecfe4a846e1",
+      "state": "PASS"
+    },
+    {
+      "file": "frontend-final-v15-browser-parent-review.json",
+      "sha256": "915304bc7e180cc443f3dd5bb6f32f107362f848179d45c8099637a715cc42f9",
+      "state": "PASS"
+    },
+    {
+      "file": "docx-final-dev-parent-review.json",
+      "sha256": "0fed27f3f2f2c158e12271a47c7533c771258c0827a40a29aabb48ffcdfcbe0d",
+      "state": "PASS"
+    },
+    {
+      "file": "prod-source-final-build-parent-receipt.json",
+      "sha256": "c8b230e212ed880c0fbe3ae886af9d544cb5a705872d93088489bc45229076a4",
+      "state": "PASS"
+    },
+    {
+      "file": "prod-source-final-image-parent-review.json",
+      "sha256": "b84fcb391b90ea6357b3e144b502bd3aed3847b7927278b9e18545bb3423a3a9",
+      "state": "PASS"
+    },
+    {
+      "file": "prod-source-final-runtime-parent-review.json",
+      "sha256": "3a9be3554ffc0528e1b4ccf2f91561a00f79506c352e084a4c05e4fdc66326f9",
+      "state": "PASS"
+    },
+    {
+      "file": "completed-fixtures-stop-parent-receipt.json",
+      "sha256": "4283ab82899dcfd4451a249a82531cb555b559122b6f8de233ba2cbbe15a355d",
+      "state": "PASS"
+    }
+  ],
+  "scope": "Iteration200-202 local development and acceptance. Original backend full run FAIL is preserved and all 25 failures are mapped to complete-file reruns. THS D04/D05 deferred; minimum-version browsers, remote CI and production release not run. Six owned completed fixtures stopped; other projects untouched."
+}

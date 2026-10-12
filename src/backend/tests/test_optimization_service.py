@@ -15,6 +15,7 @@ Tests:
 
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -488,9 +489,9 @@ class TestGetOptimizationProgress:
 
         assert progress is None
 
-    def test_get_progress_falls_back_to_runtime_when_db_lookup_errors(self):
-        """Test progress query falls back to runtime cache when DB lookup raises."""
-        task_id = "db_progress_exception_fallback"
+    def test_get_progress_fails_closed_when_user_scoped_db_lookup_errors(self):
+        """Test user-scoped progress query does not expose cache data on DB errors."""
+        task_id = "db_progress_exception_fail_closed"
         _set_task(
             task_id,
             {
@@ -517,9 +518,7 @@ class TestGetOptimizationProgress:
             ):
                 progress = get_optimization_progress(task_id, user_id="user-1")
 
-        assert progress is not None
-        assert progress["strategy_id"] == "runtime_strategy"
-        assert progress["progress"] == 70.0
+        assert progress is None
 
 
 class TestGetOptimizationResults:
@@ -533,6 +532,8 @@ class TestGetOptimizationResults:
             {
                 "status": "completed",
                 "strategy_id": "test_strategy",
+                "objective": "annual_return",
+                "direction": "maximize",
                 "param_names": ["fast", "slow"],
                 "total": 2,
                 "completed": 2,
@@ -573,6 +574,7 @@ class TestGetOptimizationResults:
         assert results["status"] == "completed"
         assert len(results["rows"]) == 2
         assert results["best"]["annual_return"] == 12.3  # Best annual return
+        assert results["best"]["fast"] == 5
 
     def test_get_results_sorts_by_annual_return(self):
         """Test results sorted by annual return."""
@@ -610,6 +612,9 @@ class TestGetOptimizationResults:
         assert results["rows"][0]["period"] == 20
         assert results["rows"][1]["period"] == 30
         assert results["rows"][2]["period"] == 10
+        assert results["best"] is None
+        assert results["objective"] is None
+        assert results["direction"] is None
 
     def test_get_results_empty(self):
         """Test getting empty results."""
@@ -657,6 +662,8 @@ class TestGetOptimizationResults:
         db_task = Mock()
         db_task.status = "completed"
         db_task.strategy_id = "db_strategy"
+        db_task.objective = "annual_return"
+        db_task.direction = "maximize"
         db_task.param_ranges = {
             "fast": {"start": 5, "end": 10, "step": 5},
             "slow": {"start": 20, "end": 30, "step": 10},
@@ -693,6 +700,7 @@ class TestGetOptimizationResults:
         assert results["param_names"] == ["fast", "slow"]
         assert results["rows"][0]["fast"] == 10
         assert results["best"]["annual_return"] == 15.0
+        assert results["best"]["fast"] == 10
 
     def test_get_results_with_user_id_does_not_fallback_when_db_returns_none(self):
         """Test ownership-aware result query does not fall back to runtime cache."""
@@ -768,9 +776,9 @@ class TestCancelOptimization:
         task = _get_task(task_id)
         assert task["status"] == "running"
 
-    def test_cancel_falls_back_to_runtime_when_db_errors(self):
-        """Test cancel falls back to runtime task when DB call errors."""
-        task_id = "cancel_db_exception_fallback"
+    def test_cancel_fails_closed_when_user_scoped_db_call_errors(self):
+        """Test user-scoped cancel leaves cache unchanged when DB call errors."""
+        task_id = "cancel_db_exception_fail_closed"
         _set_task(task_id, {"status": "running"})
 
         mock_mgr = Mock()
@@ -786,9 +794,9 @@ class TestCancelOptimization:
             ):
                 result = cancel_optimization(task_id, user_id="user-1", use_db=True)
 
-        assert result is True
+        assert result is False
         task = _get_task(task_id)
-        assert task["status"] == "cancelled"
+        assert task["status"] == "running"
 
 
 class TestRunSingleTrial:
@@ -817,9 +825,10 @@ class TestRunSingleTrial:
         config_path = self.strategy_dir / "config.yaml"
         config_path.write_text("strategy:\n  name: Test\n")
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0, stderr="", stdout="success")
-
+        subprocess_double = SimpleNamespace(
+            run=Mock(return_value=Mock(returncode=0, stderr="", stdout="success"))
+        )
+        with patch("app.services.param_optimization_service.subprocess", subprocess_double):
             with patch("app.services.param_optimization_service._parse_trial_logs") as mock_parse:
                 mock_parse.return_value = {"total_return": 10.0}
 
@@ -829,22 +838,25 @@ class TestRunSingleTrial:
 
                 assert result["success"] is True
                 assert "metrics" in result
+        subprocess_double.run.assert_called_once()
 
     def test_run_trial_subprocess_fails(self):
         """Test subprocess failure."""
         run_py = self.strategy_dir / "run.py"
         run_py.write_text("print('error')")
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=1, stderr="Test error message", stdout="")
-
+        subprocess_double = SimpleNamespace(
+            run=Mock(return_value=Mock(returncode=1, stderr="Test error message", stdout=""))
+        )
+        with patch("app.services.param_optimization_service.subprocess", subprocess_double):
             result = _run_single_trial(
                 str(self.strategy_dir), {"period": 20}, 0, str(self.tmp_dir / "tmp_base")
             )
 
-            assert result["success"] is False
-            assert "error" in result
-            assert "Test error message" in result["error"]
+        assert result["success"] is False
+        assert "error" in result
+        assert "Test error message" in result["error"]
+        subprocess_double.run.assert_called_once()
 
     def test_run_trial_removes_asserts(self):
         """Test assert statement removal."""
@@ -919,12 +931,15 @@ class TestIntegration:
                         },
                     )
                     results = get_optimization_results(task_id, use_db=False)
-                    assert results["best"]["period"] == 15
+                    assert results["best"] is None
+                    assert results["objective"] is None
+                    assert results["direction"] is None
 
                     # Cancel test
-                    cancel_optimization(task_id, use_db=False)
+                    assert cancel_optimization(task_id, use_db=False) is False
                     task = _get_task(task_id)
-                    assert task["status"] == "cancelled"
+                    # Completion already selected the terminal state, so cancel cannot replace it.
+                    assert task["status"] == "completed"
 
     def test_concurrent_task_management(self):
         """Test concurrent task management."""

@@ -1,0 +1,80 @@
+{
+  "recorded_at": "2026-10-12T06:25:30.650840+00:00",
+  "head": "50b6a54baa6a7d9424bc3b3664c399c297908852",
+  "scope": "dependency registry audit and partial diagnostic receipts; not full iteration acceptance",
+  "locks": {
+    "config/requirements-dev.lock": "e7a8a5dc5c5e7adf6b58a1237fffb05dd69613277c4c46bdc378f6860970eba5",
+    "config/requirements-prod.lock": "35db099c180072c93e7d09b9fbd99c0f1c336c649f8ba4cb5eae3bdf8454e15a"
+  },
+  "audit": {
+    "dev": {
+      "requirements": "config/requirements-dev.lock",
+      "vulnerabilities": 0,
+      "reported_dependencies": 172,
+      "skipped": [
+        {
+          "name": "backtrader",
+          "reason": "URL requirements cannot be pinned to a specific package version"
+        }
+      ]
+    },
+    "prod": {
+      "requirements": "config/requirements-prod.lock",
+      "vulnerabilities": 0,
+      "reported_dependencies": 118,
+      "skipped": [
+        {
+          "name": "backtrader",
+          "reason": "URL requirements cannot be pinned to a specific package version"
+        }
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "pip-audit-prod-initial.json",
+      "sha256": "7fe063d91e94fee5c894507e71b111c9c7458307f07735ca8a8e28004347b734",
+      "source_modified_at": "2026-10-12T06:00:34.258553+00:00"
+    },
+    {
+      "path": "pip-audit-prod-initial.txt",
+      "sha256": "bb1c68d298d54be373f798e4ac318053dda61503537ba145801b02e1b9ffd705",
+      "source_modified_at": "2026-10-12T06:00:35.841469+00:00"
+    },
+    {
+      "path": "pip-audit-prod-final.json",
+      "sha256": "e8bca51f5a17bf029c9a83cdfbcc994906164151730a9168b1c92e877a7889f6",
+      "source_modified_at": "2026-10-12T06:23:58.502293+00:00"
+    },
+    {
+      "path": "pip-audit-prod-final.txt",
+      "sha256": "79d30422388543b2563e1dde76bb7e7857d7ef0c6fdf05c8c71598633ca07e1e",
+      "source_modified_at": "2026-10-12T06:23:58.489841+00:00"
+    },
+    {
+      "path": "pip-audit-dev-final.json",
+      "sha256": "92146a294a894c2c9145a5960efdb1d5d11032b2bf702db626ab7f81e0c9a4b0",
+      "source_modified_at": "2026-10-12T06:24:00.346814+00:00"
+    },
+    {
+      "path": "pip-audit-dev-final.txt",
+      "sha256": "79d30422388543b2563e1dde76bb7e7857d7ef0c6fdf05c8c71598633ca07e1e",
+      "source_modified_at": "2026-10-12T06:24:00.343430+00:00"
+    },
+    {
+      "path": "canonical-dev-sync-parent.txt",
+      "sha256": "59406d85e694e8722e7950511bf800aa6e23fb52539a6e2612a37efe256025db",
+      "source_modified_at": "2026-10-12T06:24:09.912305+00:00"
+    },
+    {
+      "path": "core-crash-diagnostic.txt",
+      "sha256": "2b68f28b8ad9dd4ba36637ee3f12ac593163d15d49ccee7809091f6cb6888403",
+      "source_modified_at": "2026-10-12T06:15:44.007046+00:00"
+    },
+    {
+      "path": "iter201-core-parent.txt",
+      "sha256": "7640df8a1d1eab7e67e4ea8a8b1759d0d270d34a03224c3e359c7079e5d498d9",
+      "source_modified_at": "2026-10-12T06:11:12.730388+00:00"
+    }
+  ]
+}

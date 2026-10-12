@@ -2,10 +2,14 @@
 Configuration module tests.
 """
 
+import json
+from collections.abc import Callable
+
 import pytest
 from pydantic import ValidationError
 
 from app.config import Settings, get_settings
+from app.config_parsing import parse_ai_providers, parse_strategy_score_weights
 
 
 class TestConfig:
@@ -17,6 +21,8 @@ class TestConfig:
 
     def test_default_values(self, monkeypatch):
         """Defaults do not inherit a developer's dotenv schema flags."""
+        monkeypatch.delenv("AI_PROVIDERS", raising=False)
+        monkeypatch.delenv("STRATEGY_SCORE_WEIGHTS", raising=False)
         monkeypatch.delenv("DB_AUTO_CREATE_SCHEMA", raising=False)
         monkeypatch.delenv("DB_AUTO_CREATE_DEFAULT_ADMIN", raising=False)
         monkeypatch.delenv("AI_RESEARCH_PROTOCOL_V2_WORKFLOW_VERSION", raising=False)
@@ -44,6 +50,14 @@ class TestConfig:
         assert "ollama" in settings.AI_PROVIDERS
         assert "volcengine_ark" in settings.AI_PROVIDERS
         assert "siliconflow" in settings.AI_PROVIDERS
+        assert settings.STRATEGY_SCORE_WEIGHTS == {
+            "profitability": 0.2,
+            "risk_control": 0.2,
+            "stability": 0.2,
+            "overfitting_risk": 0.15,
+            "executability": 0.15,
+            "benchmark_comparison": 0.1,
+        }
 
     def test_settings_singleton(self):
         s1 = get_settings()
@@ -156,3 +170,68 @@ class TestConfig:
 
         assert settings.AI_PROVIDERS["local"]["base_url"] == "http://localhost:11434"
         assert settings.AI_PROVIDERS["local"]["models"] == ["ollama/qwen2.5-coder:7b"]
+
+
+def test_json_settings_parsers_preserve_dict_and_json_inputs() -> None:
+    providers = {7: {"base_url": "http://localhost"}, "ignored": ["not-a-provider"]}
+
+    parsed_providers = parse_ai_providers(providers)
+    assert parsed_providers == {"7": {"base_url": "http://localhost"}}
+    assert parsed_providers["7"] is not providers[7]
+    assert parse_ai_providers('{"local": {"models": ["model-a"]}}') == {
+        "local": {"models": ["model-a"]}
+    }
+
+    assert parse_strategy_score_weights({"profitability": "0.75"}) == {"profitability": 0.75}
+    assert parse_strategy_score_weights('{"risk_control": 0.25}') == {"risk_control": 0.25}
+
+
+@pytest.mark.parametrize(
+    ("parse_value", "value", "message"),
+    [
+        (parse_ai_providers, "", "AI_PROVIDERS cannot be empty"),
+        (parse_ai_providers, "{", "AI_PROVIDERS must be valid JSON"),
+        (parse_ai_providers, "[]", "AI_PROVIDERS must decode to an object"),
+        (parse_ai_providers, None, "AI_PROVIDERS cannot be null"),
+        (parse_ai_providers, 1, "AI_PROVIDERS must be a dict or JSON string"),
+        (parse_strategy_score_weights, "", "STRATEGY_SCORE_WEIGHTS cannot be empty"),
+        (parse_strategy_score_weights, "{", "STRATEGY_SCORE_WEIGHTS must be valid JSON"),
+        (
+            parse_strategy_score_weights,
+            "[]",
+            "STRATEGY_SCORE_WEIGHTS must decode to an object",
+        ),
+        (parse_strategy_score_weights, None, "STRATEGY_SCORE_WEIGHTS cannot be null"),
+        (
+            parse_strategy_score_weights,
+            1,
+            "STRATEGY_SCORE_WEIGHTS must be a dict or JSON string",
+        ),
+        (
+            parse_strategy_score_weights,
+            {"profitability": "not-a-number"},
+            "could not convert string to float: 'not-a-number'",
+        ),
+    ],
+)
+def test_json_settings_parsers_preserve_failure_messages(
+    parse_value: Callable[[object], object],
+    value: object,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        parse_value(value)
+
+    assert str(exc_info.value) == message
+
+
+def test_json_settings_validators_keep_environment_value_handling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDERS", json.dumps({"environment": {"models": ["model-b"]}}))
+    monkeypatch.setenv("STRATEGY_SCORE_WEIGHTS", json.dumps({"profitability": 0.6}))
+
+    settings = Settings(_env_file=None)
+
+    assert settings.AI_PROVIDERS == {"environment": {"models": ["model-b"]}}
+    assert settings.STRATEGY_SCORE_WEIGHTS == {"profitability": 0.6}

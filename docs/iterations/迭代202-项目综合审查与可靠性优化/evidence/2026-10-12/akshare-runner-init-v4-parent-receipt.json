@@ -1,0 +1,57 @@
+{
+  "command": [
+    "docker",
+    "exec",
+    "-w",
+    "/work/src/backend",
+    "-e",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
+    "-e",
+    "PYTHONPATH=/tmp:/work/src/backend",
+    "-e",
+    "ITER202_PYTEST_RECEIPT=/tmp/akshare-runner-init-v4-parent.jsonl",
+    "-e",
+    "OPENBLAS_NUM_THREADS=1",
+    "-e",
+    "OMP_NUM_THREADS=1",
+    "-e",
+    "MKL_NUM_THREADS=1",
+    "iter202-parent-regression-init",
+    "python",
+    "-m",
+    "pytest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-p",
+    "pytest_timeout",
+    "-p",
+    "iter202_live_receipt",
+    "-o",
+    "timeout=180",
+    "-o",
+    "timeout_method=signal",
+    "-vv",
+    "--maxfail=0",
+    "tests/market_data_platform/test_akshare_runner_provider.py",
+    "--junitxml=/tmp/akshare-runner-init-v4-parent.xml"
+  ],
+  "started_at": "2026-10-12T11:24:29.710Z",
+  "finished_at": "2026-10-12T11:25:15.912Z",
+  "elapsed_seconds": 46.202,
+  "exit_code": 0,
+  "log": "akshare-runner-init-v4-parent.txt",
+  "log_sha256": "ccc324a79af66582bb33e6cb414b58fec7cf452c43d94256c1d308c7f3293b96",
+  "artifacts": [
+    {
+      "path": "akshare-runner-init-v4-parent.xml",
+      "copy_exit_code": 0
+    },
+    {
+      "path": "akshare-runner-init-v4-parent.jsonl",
+      "copy_exit_code": 0
+    }
+  ],
+  "init": true,
+  "network": "none",
+  "product_timeouts_modified": false
+}

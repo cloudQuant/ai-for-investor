@@ -1,0 +1,208 @@
+
+> ai-for-investor-frontend@0.1.0 typecheck
+> vue-tsc --noEmit
+
+src/__tests__/stores/auth.test.ts(102,20): error TS2339: Property 'listLoading' does not exist on type 'Store<"workspace", Pick<{ workspaces: Ref<{ id: string; user_id: string; name: string; description: string | null; workspace_type: WorkspaceType; settings: { [x: string]: unknown; data_source?: { ...; } | undefined; report_config?: { ...; } | undefined; optimization_config?: { ...; } | undefined; }; ... 5 more ...; ...'.
+src/api/index.ts(44,11): error TS2430: Interface 'ApiClient' incorrectly extends interface 'AxiosInstance'.
+  Types of property 'request' are incompatible.
+    Type '<T = unknown, D = unknown>(config: ApiRequestConfig<D>) => Promise<T>' is not assignable to type '<T = any, R = unique symbol, D = any, P = any>(config: AxiosRequestConfig<D, P>) => Promise<AxiosResponseResult<T, R, D, P>>'.
+      Types of parameters 'config' and 'config' are incompatible.
+        Type 'AxiosRequestConfig<D, P>' is not assignable to type 'ApiRequestConfig<D>'.
+          Types of property 'paramsSerializer' are incompatible.
+            Type 'ParamsSerializerOptions<unknown extends P ? Record<string, any> : P> | CustomParamsSerializer<unknown extends P ? Record<string, any> : P> | undefined' is not assignable to type 'ParamsSerializerOptions<Record<string, any>> | CustomParamsSerializer<Record<string, any>> | undefined'.
+              Type 'ParamsSerializerOptions<unknown extends P ? Record<string, any> : P>' is not assignable to type 'ParamsSerializerOptions<Record<string, any>> | CustomParamsSerializer<Record<string, any>> | undefined'.
+                Type 'ParamsSerializerOptions<unknown extends P ? Record<string, any> : P>' is not assignable to type 'ParamsSerializerOptions<Record<string, any>>'.
+                  Types of property 'serialize' are incompatible.
+                    Type 'CustomParamsSerializer<unknown extends P ? Record<string, any> : P> | undefined' is not assignable to type 'CustomParamsSerializer<Record<string, any>> | undefined'.
+                      Type 'CustomParamsSerializer<unknown extends P ? Record<string, any> : P>' is not assignable to type 'CustomParamsSerializer<Record<string, any>>'.
+                        Types of parameters 'params' and 'params' are incompatible.
+                          Type 'Record<string, any>' is not assignable to type 'unknown extends P ? Record<string, any> : P'.
+src/components/backtest/BacktestHistoryTable.vue(88,21): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(event: "delete", taskId: string): void', gave the following error.
+    Argument of type '"view"' is not assignable to parameter of type '"delete"'.
+  Overload 2 of 2, '(event: "view", result: BacktestResult): void', gave the following error.
+    Argument of type 'DefaultRow' is not assignable to parameter of type 'BacktestResult'.
+      Type 'DefaultRow' is missing the following properties from type 'BacktestResult': task_id, strategy_id, symbol, start_date, and 15 more.
+src/components/workspace/BatchOptimizationConfigDialog.vue(154,33): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ParamLayer'.
+  Type 'DefaultRow' is missing the following properties from type 'ParamLayer': param_name, opt_type, start, end, step
+src/components/workspace/PositionManagerDialog.vue(204,42): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'TradingPositionManagerItem'.
+  Type 'DefaultRow' is missing the following properties from type 'TradingPositionManagerItem': unit_id, unit_name, symbol, symbol_name, and 7 more.
+src/components/workspace/PositionManagerDialog.vue(208,43): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'TradingPositionManagerItem'.
+  Type 'DefaultRow' is missing the following properties from type 'TradingPositionManagerItem': unit_id, unit_name, symbol, symbol_name, and 7 more.
+src/components/workspace/PositionManagerDialog.vue(211,41): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'TradingPositionManagerItem'.
+  Type 'DefaultRow' is missing the following properties from type 'TradingPositionManagerItem': unit_id, unit_name, symbol, symbol_name, and 7 more.
+src/components/workspace/TradingUnitDetailDialog.vue(187,50): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'TradingTrade'.
+  Type 'DefaultRow' is missing the following properties from type 'TradingTrade': id, data_name, direction, size, and 9 more.
+src/components/workspace/TradingUnitDetailDialog.vue(188,48): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'TradingTrade'.
+  Type 'DefaultRow' is missing the following properties from type 'TradingTrade': id, data_name, direction, size, and 9 more.
+src/components/workspace/UnitTable.vue(14,10): error TS2322: Type '(row: StrategyUnit, column: { type?: string | undefined; }, event: Event) => void' is not assignable to type '(row: StrategyUnit, column: TableColumnCtx<StrategyUnit> | null, event: MouseEvent) => void'.
+  Types of parameters 'column' and 'column' are incompatible.
+    Type 'TableColumnCtx<StrategyUnit> | null' is not assignable to type '{ type?: string | undefined; }'.
+      Type 'null' is not assignable to type '{ type?: string | undefined; }'.
+src/components/workspace/UnitTable.vue(35,34): error TS2740: Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/UnitTable.vue(236,23): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(evt: "selection-change", rows: StrategyUnit[]): void', gave the following error.
+    Argument of type '"open-detail"' is not assignable to parameter of type '"selection-change"'.
+  Overload 2 of 3, '(evt: "row-dblclick", row: StrategyUnit, column?: { type?: string | undefined; } | undefined, event?: Event | undefined): void', gave the following error.
+    Argument of type '"open-detail"' is not assignable to parameter of type '"row-dblclick"'.
+  Overload 3 of 3, '(evt: "open-detail", unit: StrategyUnit): void', gave the following error.
+    Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+      Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(428,8): error TS2322: Type '(row: StrategyUnit, column?: { type?: string | undefined; } | undefined, event?: Event | undefined) => void' is not assignable to type '(row: { id: string; workspace_id: string; group_name: string; strategy_id: string | null; strategy_name: string; symbol: string; symbol_name: string; timeframe: string; timeframe_n: number; category: string; ... 30 more ...; updated_at: string; }, column: TableColumnCtx<...> | null, event: MouseEvent) => void'.
+  Types of parameters 'column' and 'column' are incompatible.
+    Type 'TableColumnCtx<{ id: string; workspace_id: string; group_name: string; strategy_id: string | null; strategy_name: string; symbol: string; symbol_name: string; timeframe: string; timeframe_n: number; category: string; ... 30 more ...; updated_at: string; }> | null' is not assignable to type '{ type?: string | undefined; } | undefined'.
+      Type 'null' is not assignable to type '{ type?: string | undefined; } | undefined'.
+src/components/workspace/WorkspaceUnitsTab.vue(519,60): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(520,74): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(523,58): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(528,65): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(543,53): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(544,69): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(547,51): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(548,46): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(573,36): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(576,35): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(581,47): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(603,32): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/components/workspace/WorkspaceUnitsTab.vue(612,34): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'StrategyUnit'.
+  Type 'DefaultRow' is missing the following properties from type 'StrategyUnit': id, workspace_id, group_name, strategy_id, and 26 more.
+src/views/BacktestPage.vue(127,19): error TS2322: Type 'string | number' is not assignable to type 'number | null | undefined'.
+  Type 'string' is not assignable to type 'number'.
+src/views/config/AIProviderConfigPage.vue(201,48): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(209,36): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(209,56): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(212,72): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(212,92): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(252,90): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(259,42): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/config/AIProviderConfigPage.vue(267,44): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ProviderDraft'.
+  Type 'DefaultRow' is missing the following properties from type 'ProviderDraft': provider, display_name, provider_type, base_url, and 6 more.
+src/views/data/AirflowDagsPage.vue(198,44): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AirflowDAG'.
+  Type 'DefaultRow' is missing the following properties from type 'AirflowDAG': dag_id, is_paused, is_active
+src/views/data/AirflowDagsPage.vue(199,35): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AirflowDAG'.
+  Type 'DefaultRow' is missing the following properties from type 'AirflowDAG': dag_id, is_paused, is_active
+src/views/data/AirflowDagsPage.vue(234,34): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AirflowDAG'.
+  Type 'DefaultRow' is missing the following properties from type 'AirflowDAG': dag_id, is_paused, is_active
+src/views/data/components/DataSyncDatabaseTables.vue(52,34): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'DatabaseSyncInfo'.
+  Type 'DefaultRow' is missing the following properties from type 'DatabaseSyncInfo': name, local, remote
+src/views/data/components/DataSyncDatabaseTables.vue(136,33): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'DatabaseSyncInfo'.
+  Type 'DefaultRow' is missing the following properties from type 'DatabaseSyncInfo': name, local, remote
+src/views/data/DataExecutionsPage.vue(197,34): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Pick<TaskExecution, "rows_before" | "rows_after">'.
+  Type 'DefaultRow' is missing the following properties from type 'Pick<TaskExecution, "rows_before" | "rows_after">': rows_before, rows_after
+src/views/data/DataGovernancePage.vue(255,40): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'DataGovernanceEndpoint'.
+  Type 'DefaultRow' is missing the following properties from type 'DataGovernanceEndpoint': id, provider_id, endpoint_name, display_name, and 10 more.
+src/views/data/DataInterfacesPage.vue(205,33): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Pick<DataInterface, "parameters" | "params">'.
+  Type 'DefaultRow' is missing the following properties from type 'Pick<DataInterface, "parameters" | "params">': parameters, params
+src/views/data/DataInterfacesPage.vue(243,40): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'DataInterface'.
+  Type 'DefaultRow' is missing the following properties from type 'DataInterface': id, name, display_name, description, and 11 more.
+src/views/data/DataScriptsPage.vue(263,68): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'DataScript'.
+  Type 'DefaultRow' is missing the following properties from type 'DataScript': id, script_id, script_name, category, and 16 more.
+src/views/data/DataTablesPage.vue(95,34): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'DataTable'.
+  Type 'DefaultRow' is missing the following properties from type 'DataTable': id, table_name, table_comment, category, and 13 more.
+src/views/data/DataTasksPage.vue(225,42): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'ScheduledTask'.
+  Type 'DefaultRow' is missing the following properties from type 'ScheduledTask': id, name, description, user_id, and 12 more.
+src/views/DataPage.vue(366,40): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'MarketDataCoverageResponse'.
+  Type 'DefaultRow' is missing the following properties from type 'MarketDataCoverageResponse': id, asset_type, symbol, timeframe, and 5 more.
+src/views/DataPage.vue(690,34): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'MarketHistoryRow'.
+  Property 'date' is missing in type 'DefaultRow' but required in type 'MarketHistoryRow'.
+src/views/DataPage.vue(740,45): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'MarketDataQueryObservation'.
+  Type 'DefaultRow' is missing the following properties from type 'MarketDataQueryObservation': revision_id, source_snapshot_id, event_at, available_at, and 4 more.
+src/views/DataPage.vue(785,36): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'MarketHistoryRow'.
+  Property 'date' is missing in type 'DefaultRow' but required in type 'MarketHistoryRow'.
+src/views/GatewayStatusPage.vue(404,60): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'GatewayHealthInfo'.
+  Type 'DefaultRow' is missing the following properties from type 'GatewayHealthInfo': gateway_key, state, is_healthy, market_connection, and 13 more.
+src/views/GatewayStatusPage.vue(405,39): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'GatewayHealthInfo'.
+  Type 'DefaultRow' is missing the following properties from type 'GatewayHealthInfo': gateway_key, state, is_healthy, market_connection, and 13 more.
+src/views/NewsIntelligencePage.vue(137,38): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'NewsArticleItem'.
+  Property 'headline' is missing in type 'DefaultRow' but required in type 'NewsArticleItem'.
+src/views/NewsIntelligencePage.vue(184,44): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'NewsArticleItem'.
+  Property 'headline' is missing in type 'DefaultRow' but required in type 'NewsArticleItem'.
+src/views/NewsIntelligencePage.vue(195,37): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'NewsArticleItem'.
+  Property 'headline' is missing in type 'DefaultRow' but required in type 'NewsArticleItem'.
+src/views/PortfolioPage.vue(220,55): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'PositionItem'.
+  Type 'DefaultRow' is missing the following properties from type 'PositionItem': strategy_id, strategy_name, instance_id, data_name, and 4 more.
+src/views/PortfolioPage.vue(326,54): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'PositionItem'.
+  Type 'DefaultRow' is missing the following properties from type 'PositionItem': strategy_id, strategy_name, instance_id, data_name, and 4 more.
+src/views/PortfolioPage.vue(330,55): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'PositionItem'.
+  Type 'DefaultRow' is missing the following properties from type 'PositionItem': strategy_id, strategy_name, instance_id, data_name, and 4 more.
+src/views/PortfolioPage.vue(333,53): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'PositionItem'.
+  Type 'DefaultRow' is missing the following properties from type 'PositionItem': strategy_id, strategy_name, instance_id, data_name, and 4 more.
+src/views/PromptTemplatesPage.vue(282,44): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'PromptTemplate'.
+  Type 'DefaultRow' is missing the following properties from type 'PromptTemplate': id, name, version, content, and 4 more.
+src/views/QuotePage.vue(451,16): error TS2322: Type '({ prop, order }: { prop: string; order: string | null; }) => void' is not assignable to type '(data: { column: TableColumnCtx<{ source: string; source_label: string; symbol: string; name: string; exchange: string; category: string; last_price: number | null; change: number | null; change_pct: number | null; ... 16 more ...; workspace_names: string[]; }>; prop: string | null; order: TableSortOrder | null; }) ...'.
+  Types of parameters '__0' and 'data' are incompatible.
+    Type '{ column: TableColumnCtx<{ source: string; source_label: string; symbol: string; name: string; exchange: string; category: string; last_price: number | null; change: number | null; change_pct: number | null; ... 16 more ...; workspace_names: string[]; }>; prop: string | null; order: TableSortOrder | null; }' is not assignable to type '{ prop: string; order: string | null; }'.
+      Types of property 'prop' are incompatible.
+        Type 'string | null' is not assignable to type 'string'.
+          Type 'null' is not assignable to type 'string'.
+src/views/QuotePage.vue(477,52): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/QuotePage.vue(477,77): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/QuotePage.vue(505,46): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type '{ change_pct: number | null; }'.
+  Property 'change_pct' is missing in type 'DefaultRow' but required in type '{ change_pct: number | null; }'.
+src/views/QuotePage.vue(505,80): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/QuotePage.vue(517,85): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/QuotePage.vue(565,48): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/QuotePage.vue(599,54): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/QuotePage.vue(600,55): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'QuoteTick'.
+  Type 'DefaultRow' is missing the following properties from type 'QuoteTick': source, source_label, symbol, name, and 22 more.
+src/views/RiskControlPage.vue(83,35): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'RiskRule'.
+  Type 'DefaultRow' is missing the following properties from type 'RiskRule': id, user_id, name, rule_type, and 5 more.
+src/views/StrategyPage.vue(216,20): error TS2322: Type '(profile: AIStrategyResearchConfigProfile, options?: { notify?: boolean | undefined; syncResult?: boolean | undefined; }) => void' is not assignable to type '(row: { id: string; name: string; description: string; config: Record<string, unknown>; created_at?: string | null | undefined; updated_at?: string | null | undefined; }, column: TableColumnCtx<{ id: string; ... 4 more ...; updated_at?: string | ... 1 more ... | undefined; }> | null, event: PointerEvent) => void'.
+  Types of parameters 'options' and 'column' are incompatible.
+    Type 'TableColumnCtx<{ id: string; name: string; description: string; config: Record<string, unknown>; created_at?: string | null | undefined; updated_at?: string | null | undefined; }> | null' is not assignable to type '{ notify?: boolean | undefined; syncResult?: boolean | undefined; } | undefined'.
+      Type 'null' is not assignable to type '{ notify?: boolean | undefined; syncResult?: boolean | undefined; } | undefined'.
+src/views/StrategyPage.vue(234,55): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(242,55): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(250,56): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(258,56): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(266,53): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(279,67): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(297,68): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchConfigProfile'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchConfigProfile': id, name, description, config
+src/views/StrategyPage.vue(1859,54): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchVersion'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchVersion': id, run_id, version_no, version_name, and 8 more.
+src/views/StrategyPage.vue(1873,59): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'AIStrategyResearchVersion'.
+  Type 'DefaultRow' is missing the following properties from type 'AIStrategyResearchVersion': id, run_id, version_no, version_name, and 8 more.
+src/views/StrategyPage.vue(2826,40): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Strategy'.
+  Type 'DefaultRow' is missing the following properties from type 'Strategy': id, user_id, name, code, and 4 more.
+src/views/StrategyPage.vue(2834,40): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Strategy'.
+  Type 'DefaultRow' is missing the following properties from type 'Strategy': id, user_id, name, code, and 4 more.
+src/views/workspace/WorkspaceListPage.vue(308,49): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Workspace'.
+  Type 'DefaultRow' is missing the following properties from type 'Workspace': id, user_id, name, description, and 8 more.
+src/views/workspace/WorkspaceListPage.vue(310,44): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Workspace'.
+  Type 'DefaultRow' is missing the following properties from type 'Workspace': id, user_id, name, description, and 8 more.
+src/views/workspace/WorkspaceListPage.vue(340,41): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Workspace'.
+  Type 'DefaultRow' is missing the following properties from type 'Workspace': id, user_id, name, description, and 8 more.
+src/views/workspace/WorkspaceListPage.vue(348,43): error TS2345: Argument of type 'DefaultRow' is not assignable to parameter of type 'Workspace'.
+  Type 'DefaultRow' is missing the following properties from type 'Workspace': id, user_id, name, description, and 8 more.

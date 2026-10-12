@@ -1,0 +1,119 @@
+{
+  "started_at": "2026-10-12T14:24:03.359Z",
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend",
+  "pid": 833,
+  "source_manifest": "backend-final-static-v4-parent-source-manifest.json",
+  "source_manifest_sha256": "a5e166904a491ac215a29e6c162797bf91d20946b1acd383445ce1d073a5a3fe",
+  "canonical_dev_lock_sha256": "6b364dec1106a567294881e16dc626ba52c01e5678a5d2913bb7078258e6a2cb",
+  "steps": [
+    {
+      "label": "mypy",
+      "command": [
+        "/Users/yunjinqi/opt/anaconda3/bin/conda",
+        "run",
+        "--no-capture-output",
+        "-n",
+        "base",
+        "python",
+        "-m",
+        "mypy",
+        "app",
+        "--show-error-codes"
+      ],
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend",
+      "started_at": "2026-10-12T14:24:03.366Z",
+      "state": "PASS",
+      "log": "backend-final-static-v4-parent-mypy.txt",
+      "pid": 837,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:24:49.091Z",
+      "elapsed_seconds": 45.725,
+      "log_sha256": "577cb52cda9c0343009fdde802dab5eefbf10c24e1a7773de192a7f8d94c9871"
+    },
+    {
+      "label": "mypy-ratchet",
+      "command": [
+        "/Users/yunjinqi/opt/anaconda3/bin/conda",
+        "run",
+        "--no-capture-output",
+        "-n",
+        "base",
+        "python",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor/scripts/ci/mypy_ratchet.py"
+      ],
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend",
+      "started_at": "2026-10-12T14:24:49.092Z",
+      "state": "PASS",
+      "log": "backend-final-static-v4-parent-mypy-ratchet.txt",
+      "pid": 1223,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:24:52.421Z",
+      "elapsed_seconds": 3.329,
+      "log_sha256": "50501ef26bdf09f04f9f63d6601ef33e014663ca7b5a9d761989180a2e3d0470"
+    },
+    {
+      "label": "ruff",
+      "command": [
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/toolchain/bin/ruff",
+        "check",
+        "src/backend"
+      ],
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "started_at": "2026-10-12T14:24:52.422Z",
+      "state": "PASS",
+      "log": "backend-final-static-v4-parent-ruff.txt",
+      "pid": 1260,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:24:52.482Z",
+      "elapsed_seconds": 0.06,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "label": "format",
+      "command": [
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/toolchain/bin/ruff",
+        "format",
+        "--check",
+        "src/backend"
+      ],
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "started_at": "2026-10-12T14:24:52.482Z",
+      "state": "PASS",
+      "log": "backend-final-static-v4-parent-format.txt",
+      "pid": 1261,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:24:52.500Z",
+      "elapsed_seconds": 0.018,
+      "log_sha256": "bd2b9755254b19f6f5c1d537c81953ea1fb1d09d522fe2c90c24b1b20724ff61"
+    },
+    {
+      "label": "size-ratchet",
+      "command": [
+        "/Users/yunjinqi/opt/anaconda3/bin/conda",
+        "run",
+        "--no-capture-output",
+        "-n",
+        "base",
+        "python",
+        "scripts/ci/large_file_ratchet.py"
+      ],
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "started_at": "2026-10-12T14:24:52.500Z",
+      "state": "PASS",
+      "log": "backend-final-static-v4-parent-size-ratchet.txt",
+      "pid": 1262,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:24:54.004Z",
+      "elapsed_seconds": 1.504,
+      "log_sha256": "3cb45fff138a17bdca640b3dc9bace99dcaceb79cd9739e57e68c0c12fa1333b"
+    }
+  ],
+  "state": "PASS",
+  "source_unchanged": true,
+  "finished_at": "2026-10-12T14:24:54.062Z"
+}

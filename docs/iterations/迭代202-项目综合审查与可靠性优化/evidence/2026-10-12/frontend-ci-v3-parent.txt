@@ -1,0 +1,6 @@
+npm warn deprecated vue-i18n@9.14.5: v9 and v10 no longer supported. please migrate to v11. about maintenance status, see https://vue-i18n.intlify.dev/guide/maintenance.html
+
+added 425 packages in 5m
+
+110 packages are looking for funding
+  run `npm fund` for details

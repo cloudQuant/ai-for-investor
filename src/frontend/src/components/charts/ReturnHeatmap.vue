@@ -21,8 +21,8 @@ import { RETURN_HEATMAP_COLORS } from '@/constants/chartColors'
 const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
-  returns: MonthlyReturn[]
-  years: number[]
+  returns?: MonthlyReturn[]
+  years?: number[]
   height?: number
 }>(), {
   returns: () => [],

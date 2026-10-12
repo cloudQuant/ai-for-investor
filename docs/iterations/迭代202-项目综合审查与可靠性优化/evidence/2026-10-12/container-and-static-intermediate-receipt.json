@@ -1,0 +1,50 @@
+{
+  "recorded_at": "2026-10-12T08:14:31.579661+00:00",
+  "status": "IN_PROGRESS",
+  "protected_files": {
+    "README.md": "567e395a4cab245e1f4bd537e031a30eea09b6d73f23c19bdd622cba18b3261f",
+    "README.en.md": "4ed5d90ae00539f96f51372861afbb175b47065d3d0542027e26aad36d3f77fa",
+    "DISCLAIMER.md": "fd420a6dffaf498f7c6dae6a3c22a8b1cb87e5e5dc950bf8d53c517298083f49",
+    "LICENSE-REVIEW.md": "e71620f9c4910a7587f524649f759248ea7f0e29d2d58eb44a0c340e277e8919",
+    "LICENSE-SCOPE-DRAFT.md": "2d8c1bd505bc92f90b0bc67eecd15d568298295a939e76f316311b0152f2d4c1",
+    "LICENSE-SOURCE-AVAILABLE-DRAFT.md": "dd02817f393232f5cbeb833e417ddaa89142e1ee3a10360b0c690ccdbcc41f44"
+  },
+  "checks": {
+    "ruff_check_v2": 0,
+    "ruff_format_v2": 0,
+    "postgres_migration_container": {
+      "exit_code": 0,
+      "pytest_seconds": 66.6,
+      "python": "3.11.17",
+      "image": "sha256:510d20faa560f7ae83132e43eb497192d2245b1bd70f48f6eaea82636d362919"
+    },
+    "mysql_migration_container_first_attempt": "FAIL: optional aiomysql extra absent from dev lock; subsequent explicit production-pinned extra run pending",
+    "frontend_ci_first_attempt": "INTERRUPTED -9: a worker sent TERM/KILL to PID164 without verifying cwd; possible misidentification; clean retry pending"
+  },
+  "artifacts": [
+    {
+      "path": "ruff-check-v2-parent.txt",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "ruff-format-v2-parent.txt",
+      "sha256": "fe70886cab97caa04be80ff1eb5f1f476d658308b0f63c2f368d0a6d5d70ab09"
+    },
+    {
+      "path": "postgres-migration-container-parent.txt",
+      "sha256": "b598e9a31e2a56f1a32e7d755b1e7bded1658880988009b8f28e45b82e51a5d9"
+    },
+    {
+      "path": "mysql-migration-container-parent.txt",
+      "sha256": "342436f1695cfd04cacba3398eb9f7d34c89cf9e12af6b0ee57a1f28052a8844"
+    },
+    {
+      "path": "supported-migration-container-parent-receipt.json",
+      "sha256": "c4dbefbb5129b187bcb2cb98fd88439512ffac7780951b91cefd19addd657390"
+    },
+    {
+      "path": "frontend-v2-parent-receipt.json",
+      "sha256": "834c5e0601f807108fba27a0854c45288953f8f96c0458d314a09bd2167344c0"
+    }
+  ]
+}

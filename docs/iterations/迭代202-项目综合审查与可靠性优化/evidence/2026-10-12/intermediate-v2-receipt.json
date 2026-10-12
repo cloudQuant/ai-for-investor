@@ -1,0 +1,77 @@
+{
+  "recorded_at": "2026-10-12T15:28:24.032594+08:00",
+  "status": "IN_PROGRESS",
+  "canonical_target": "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2",
+  "dev_lock_sha256": "6b364dec1106a567294881e16dc626ba52c01e5678a5d2913bb7078258e6a2cb",
+  "prod_lock_sha256": "c5e630c2ecf3166730203ecd9a648295ce6d22b7a0753e19cb6c043fadb78702",
+  "passed": [
+    "canonical-v2 lock sync 171 packages",
+    "dev/prod registry pip-audit v2, Git dependency excluded by auditor",
+    "real MySQL D06 lease with pre-ping",
+    "real PostgreSQL D06 lease",
+    "full app Mypy on prior SQLAlchemy patch: 666 files, ratchet 0/0"
+  ],
+  "failed_or_superseded": [
+    "old-lock backend full run interrupted: 577 passed, 81 skipped, 7 failed, 1 collection error; not full acceptance",
+    "frontend first global typecheck/lint failed; fixes underway",
+    "frontend first full Vitest: 1720 passed, 1 stale auth assertion failed; revised assertion awaiting rerun"
+  ],
+  "artifacts": [
+    {
+      "file": "backend-full-final-parent.txt",
+      "sha256": "072684c7c58802888d62fd0812f888ee06098bfa9c7d86788ca5e031b0cc8ab3"
+    },
+    {
+      "file": "frontend-typecheck-node20-parent.txt",
+      "sha256": "0a1de9592e1366e86e9f4dee62b41b4862976fbfd36c3e92e8d50ea4d3d0a277"
+    },
+    {
+      "file": "frontend-lint-node20-parent.txt",
+      "sha256": "ce2f9ccf1220a49bc015892497f0049b51c847dbae25a10341ce605ec0fbefa6"
+    },
+    {
+      "file": "frontend-vitest-node20-parent.txt",
+      "sha256": "9d73fbf5a4205d341385272bfa903a3447ea08bb9dbc9c1e9858289950d92a63"
+    },
+    {
+      "file": "canonical-v2-sync-parent.txt",
+      "sha256": "59406d85e694e8722e7950511bf800aa6e23fb52539a6e2612a37efe256025db"
+    },
+    {
+      "file": "pip-audit-dev-v2-parent.json",
+      "sha256": "b94f913edbb36651af4b22ee1c3bc71f94019953fffa9afa19f0271f622c262c"
+    },
+    {
+      "file": "pip-audit-dev-v2-parent.txt",
+      "sha256": "79d30422388543b2563e1dde76bb7e7857d7ef0c6fdf05c8c71598633ca07e1e"
+    },
+    {
+      "file": "pip-audit-prod-v2-parent.json",
+      "sha256": "c3a1681faaa532dcb08c71235c7c6c12615f2d080c74573a4af2881a30f9fec8"
+    },
+    {
+      "file": "pip-audit-prod-v2-parent.txt",
+      "sha256": "79d30422388543b2563e1dde76bb7e7857d7ef0c6fdf05c8c71598633ca07e1e"
+    },
+    {
+      "file": "mysql-lease-v2-parent.txt",
+      "sha256": "3f2efabea94549ed9d8a0415e41fec2261f4b41ebe0e93ae57f1e3c0cf85086f"
+    },
+    {
+      "file": "postgres-lease-v2-parent.txt",
+      "sha256": "d926008c99750e5af67936b1ae160ab06cdcd7b03ff36ed840ecca86baabe8da"
+    },
+    {
+      "file": "supported-lease-v2-parent-receipt.json",
+      "sha256": "2b26265de89af33ee0cccb6739f3e6ca940095089c1b135bee043f84e77510d3"
+    },
+    {
+      "file": "mypy-app-final-parent.txt",
+      "sha256": "fced8361a31d037637a7a451731a0cd22c18e1b30534c7dd1df2119175b1625e"
+    },
+    {
+      "file": "mypy-ratchet-final-parent.txt",
+      "sha256": "50501ef26bdf09f04f9f63d6601ef33e014663ca7b5a9d761989180a2e3d0470"
+    }
+  ]
+}

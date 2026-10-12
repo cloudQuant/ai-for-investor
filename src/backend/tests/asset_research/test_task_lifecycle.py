@@ -14,6 +14,7 @@ from app.schemas.asset_research import (
     InstrumentIdentity,
     RawAssetSnapshot,
 )
+from app.services.asset_research import orchestrator as orchestrator_module
 from app.services.asset_research.data import DEFAULT_ASSET_RESEARCH_SOURCE_ID
 from app.services.asset_research.orchestrator import (
     AssetResearchOrchestrationError,
@@ -276,6 +277,138 @@ async def test_cancelling_an_unfinished_task_is_idempotent() -> None:
     assert second.task_id == task.id
     assert second.status == "CANCELLED"
     assert second.completed_at == first_completed_at
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lease_state", ["old_token", "expired", "cancelled"])
+async def test_claimed_task_rejects_stale_leases_before_provider_io(lease_state: str) -> None:
+    """Old tokens, expired claims, and cancelled tasks never reach collection."""
+
+    class _CountingData(_Data):
+        def __init__(self) -> None:
+            self.collect_calls = 0
+
+        async def collect(
+            self, identity: InstrumentIdentity, *, cutoff_at: datetime
+        ) -> RawAssetSnapshot:
+            self.collect_calls += 1
+            return await super().collect(identity, cutoff_at=cutoff_at)
+
+    now = datetime.now(timezone.utc)
+    token = "current-lease-token"
+    data = _CountingData()
+    async with async_session_maker() as db:
+        user = User(
+            username="asset_task_lease_dispatch",
+            email="asset-task-lease-dispatch@example.test",
+            hashed_password="hash",
+        )
+        db.add_all([user, _approved_futures_source()])
+        await db.flush()
+        service = AssetResearchOrchestrator(db, data_adapter=data)
+        await service.persist_identity(_identity())
+        task = await service.create_pending(
+            user_id=user.id,
+            request=AssetAnalysisCreateRequest(
+                asset_type="futures", canonical_id="futures:CFFEX:IF2609:CNY"
+            ),
+        )
+        task.status = "RUNNING"
+        task.lease_token = token
+        task.lease_expires_at = (
+            now - timedelta(seconds=1) if lease_state == "expired" else now + timedelta(minutes=1)
+        )
+        task.lease_heartbeat_at = now
+        task_id = task.id
+        user_id = user.id
+        await db.commit()
+
+        if lease_state == "cancelled":
+            async with async_session_maker() as cancel_db:
+                response = await AssetResearchOrchestrator(cancel_db).cancel_task(
+                    user_id=user_id,
+                    task_id=task_id,
+                )
+                assert response is not None
+                await cancel_db.commit()
+
+        supplied_token = "stale-lease-token" if lease_state == "old_token" else token
+        result = await service.run_claimed_task(
+            task_id=task_id,
+            lease_token=supplied_token,
+        )
+
+        assert data.collect_calls == 0
+        if lease_state == "expired":
+            assert result is task
+            assert result.status == "FAILED"
+            assert result.error_code == "TASK_LEASE_EXPIRED"
+        else:
+            assert result is None
+
+
+@pytest.mark.asyncio
+async def test_claimed_task_rechecks_expiry_immediately_before_provider_dispatch(
+    monkeypatch,
+) -> None:
+    """A lease that expires during preparation is rejected before collection."""
+
+    class _CountingData(_Data):
+        def __init__(self) -> None:
+            self.collect_calls = 0
+
+        async def collect(
+            self, identity: InstrumentIdentity, *, cutoff_at: datetime
+        ) -> RawAssetSnapshot:
+            self.collect_calls += 1
+            return await super().collect(identity, cutoff_at=cutoff_at)
+
+    initial_time = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
+    expiry = initial_time + timedelta(seconds=5)
+    clock = [initial_time]
+    monkeypatch.setattr(orchestrator_module, "_now", lambda: clock[0])
+    data = _CountingData()
+
+    async with async_session_maker() as db:
+        user = User(
+            username="asset_task_lease_dispatch_expiry",
+            email="asset-task-lease-dispatch-expiry@example.test",
+            hashed_password="hash",
+        )
+        db.add_all([user, _approved_futures_source()])
+        await db.flush()
+        service = AssetResearchOrchestrator(db, data_adapter=data)
+        await service.persist_identity(_identity())
+        task = await service.create_pending(
+            user_id=user.id,
+            request=AssetAnalysisCreateRequest(
+                asset_type="futures", canonical_id="futures:CFFEX:IF2609:CNY"
+            ),
+        )
+        task.status = "RUNNING"
+        task.lease_token = "current-lease-token"
+        task.lease_expires_at = expiry
+        task.lease_heartbeat_at = initial_time
+        await db.commit()
+
+        async def expire_during_preparation(**_: object) -> bool:
+            clock[0] = expiry + timedelta(microseconds=1)
+            return False
+
+        monkeypatch.setattr(
+            service,
+            "_normalize_task_position_context_for_cutoff",
+            expire_during_preparation,
+        )
+        result = await service.run_claimed_task(
+            task_id=task.id,
+            lease_token="current-lease-token",
+        )
+
+    assert result is not None
+    assert result.status == "FAILED"
+    assert result.error_code == "TASK_LEASE_EXPIRED"
+    assert data.collect_calls == 0
 
 
 @pytest.mark.asyncio

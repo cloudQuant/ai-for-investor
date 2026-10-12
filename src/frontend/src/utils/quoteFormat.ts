@@ -1,3 +1,5 @@
+import type { QuoteTick } from '@/api/quote'
+
 export interface QuoteFormatContext {
   source?: string
   symbol?: string
@@ -37,4 +39,26 @@ export function formatQuoteChange(value: number | null | undefined, context?: Qu
   if (value == null || !Number.isFinite(value)) return '--'
   const sign = value >= 0 ? '+' : ''
   return sign + value.toFixed(getQuotePricePrecision(Math.abs(value), context))
+}
+
+export function getQuoteNumericValue(row: QuoteTick, property: string): number | null {
+  const numericValues: Record<string, number | null> = {
+    last_price: row.last_price,
+    change: row.change,
+    change_pct: row.change_pct,
+    bid_price: row.bid_price,
+    ask_price: row.ask_price,
+    high_price: row.high_price,
+    low_price: row.low_price,
+    open_price: row.open_price,
+    prev_close: row.prev_close,
+    volume: row.volume,
+    turnover: row.turnover,
+    open_interest: row.open_interest,
+  }
+  return numericValues[property] ?? null
+}
+
+export function formatQuoteTickPrice(value: number | null, row?: QuoteTick): string {
+  return formatQuotePrice(value, { source: row?.source, symbol: row?.symbol })
 }

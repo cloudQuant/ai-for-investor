@@ -1,0 +1,1950 @@
+[
+  {
+    "path": "Dockerfile",
+    "sha256": "ecb9f0b78b877229138442169e7077286ab895f2c4937acda644b9dd0b2b050f"
+  },
+  {
+    "path": "auto-imports.d.ts",
+    "sha256": "9ff922b8d79138e9a85de3eff6e73f0d705858101129595ac85bba552ecca17d"
+  },
+  {
+    "path": "components.d.ts",
+    "sha256": "e9b95170e8a471f4ac68b3c23e615dc3bb808e58d04e47b4e7ca40330e1226b9"
+  },
+  {
+    "path": "e2e/README.md",
+    "sha256": "b43e450d51c0560d462e97479d0876ca95cb6f28ec756d24175b95c21576b225"
+  },
+  {
+    "path": "e2e/a11y/asset_analysis.spec.ts",
+    "sha256": "26c1b6eb65ef3784a3435481a1ad35a14d36be2880f67731e3dda4208b7cf776"
+  },
+  {
+    "path": "e2e/a11y/critical_pages.spec.ts",
+    "sha256": "c421d0514c7b96a9d1e6fd94f6d759ebbf84137a170e68c0cfb2ac1baa5e75b9"
+  },
+  {
+    "path": "e2e/a11y/login.spec.ts",
+    "sha256": "c8365294b5c2ede34adb15b73c4676f982f09d6317e83f30e4ce277111cdb64d"
+  },
+  {
+    "path": "e2e/a11y/market_data_local_first.spec.ts",
+    "sha256": "f15f2f44b2a50b159cba708eeb8aa6b332b20488eebca7304188b2adf7d413f5"
+  },
+  {
+    "path": "e2e/a11y/mobile_workspace_panels.spec.ts",
+    "sha256": "909ab7f816af044528ffeed1d75ae891655c018611e7b8e7df1d6f48b7a47ff9"
+  },
+  {
+    "path": "e2e/a11y/template.ts",
+    "sha256": "4ec6f56a9a0f677e52a5a6b33e0e3fca3202aa289e40e86a428e793919b66467"
+  },
+  {
+    "path": "e2e/a11y/trusted_ai_research.real.spec.ts",
+    "sha256": "c0946b68fa3c48ece5ca4dbb8c02a9b4d35c7dfecb4121ad5e8263ba0028b519"
+  },
+  {
+    "path": "e2e/a11y/trusted_ai_research.spec.ts",
+    "sha256": "3685bd2cdf7ad255967845f54867738de8d49f8804e87ea26444c58405ceb3ba"
+  },
+  {
+    "path": "e2e/fixtures/storage-state.json",
+    "sha256": "4ee89bbf1a160c9df977d5de59c3aa28b8c1ea4f51b8393c99b8c49f7fee0bfa"
+  },
+  {
+    "path": "e2e/fixtures/test-data.fixture.ts",
+    "sha256": "38fdfc6b5a7e7230475f25ef675523aa98d0a58cd4e1ed04d8498ff9006498cd"
+  },
+  {
+    "path": "e2e/global.setup.ts",
+    "sha256": "579c41d78b3be6410f8f7226a10e4465bfdd194d3461584e6c480ed89c1092b1"
+  },
+  {
+    "path": "e2e/i18n/en-us-no-chinese.spec.ts",
+    "sha256": "d609653fc7990ce566f9438f95c8c8e4285243ddf685fe71879e3ae4525899d0"
+  },
+  {
+    "path": "e2e/index.ts",
+    "sha256": "dcc458aad93f78d84af6d1bdbc0a61d3a3a95b9efba8623c754aaa5775f4b87e"
+  },
+  {
+    "path": "e2e/iteration202.config.ts",
+    "sha256": "93f5cfb20313780431c525baee52f0b25d011dc3548433efdbc207257f521ac4"
+  },
+  {
+    "path": "e2e/pages/AuthPage.ts",
+    "sha256": "8a9adb18f1ce658380e35e298fb307736985fbdd58c34b5c80ff3489c7dabb7a"
+  },
+  {
+    "path": "e2e/pages/BacktestPage.ts",
+    "sha256": "5574754d16280975c60aa58e66bd118f2dafc1bebf8a8514765f7eb9bf715adf"
+  },
+  {
+    "path": "e2e/pages/BasePage.ts",
+    "sha256": "2a70d14d70ea41c1b853db910ded0d439297e4c142dc21d37ba72ebefbe8d129"
+  },
+  {
+    "path": "e2e/pages/DashboardPage.ts",
+    "sha256": "b9551fe14da95caead04f6e1979b713bac04e1a502d87f5be9467feed4f2972b"
+  },
+  {
+    "path": "e2e/pages/LiveTradingPage.ts",
+    "sha256": "dc400aab2dda1885c1ffadba06d0c3603a51a7f5a8b194f7d762f1cbbefda5fe"
+  },
+  {
+    "path": "e2e/pages/PortfolioPage.ts",
+    "sha256": "0f28e567bf0dc0ef962cceea822fa42aa370b377032f572d87e2087bfef09e6d"
+  },
+  {
+    "path": "e2e/pages/StrategyPage.ts",
+    "sha256": "77d7fede77c6d7d12d6445ecbb8048d91df80ee87f42de41d45781bae2207500"
+  },
+  {
+    "path": "e2e/smoke-175/journeys.spec.ts",
+    "sha256": "346cb54bcbb9d3f37f4c220628b66c9b3656de6f11278d614d54df984ece33ec"
+  },
+  {
+    "path": "e2e/support/auth.ts",
+    "sha256": "ef03822bb60ac5f69d47678f0e1f89a4d5abba2dd0caf7cbad70ceb161182754"
+  },
+  {
+    "path": "e2e/support/static-preview.ts",
+    "sha256": "d06615cfd4a1fb3664b05f2fd0cafb6966baf10581b63f95842ce52893cb2bce"
+  },
+  {
+    "path": "e2e/tailwind4.config.ts",
+    "sha256": "09d29f1dec8f06bd32a14bbb20f5705284ec5b336c477f729752540e15b3128b"
+  },
+  {
+    "path": "e2e/tailwind4/style-regression.spec.ts",
+    "sha256": "ff964e9f0db09dad3bb6b503dddb55ddef2fcdb2232fa228fa49c78a63138f47"
+  },
+  {
+    "path": "e2e/tests/auth.spec.ts",
+    "sha256": "acf55f6972d4a2c246ef4f9b411bf3d8317c04102c96a3ed95f01fe343b7dfb6"
+  },
+  {
+    "path": "e2e/tests/backtest.spec.ts",
+    "sha256": "345e085cc91afb1fea6a3c9c07788663000a7175eab81c76dcb4e02468291971"
+  },
+  {
+    "path": "e2e/tests/basic.spec.ts",
+    "sha256": "1d8f84926b0b5f9f73621163e5c9747d60573eee0d029f47c96b5b856847f541"
+  },
+  {
+    "path": "e2e/tests/iteration202-session-workspace.spec.ts",
+    "sha256": "0d119f3324d62903928452bc716d07197230bf58c35a3f488ad184eac160a01f"
+  },
+  {
+    "path": "e2e/tests/live-trading.spec.ts",
+    "sha256": "4d3c2f2a73db0b1cea4d24ed0a2a768b40715c4f210f5172be6a069cba5cc3b5"
+  },
+  {
+    "path": "e2e/tests/portfolio.spec.ts",
+    "sha256": "0d8b726c632e0781455e2c01b08ebe39138c5385d4e5bfcc513a32a8851820a8"
+  },
+  {
+    "path": "e2e/tests/product-domain-pages.spec.ts",
+    "sha256": "f1c6b53fc1c8face1e90766bbf566fb9c96665d3b3be99883d6913f4235268e6"
+  },
+  {
+    "path": "e2e/tests/smoke.spec.ts",
+    "sha256": "6110d434b288731bdc1610a9520be0d092b1f1b8af008e6c97b2301fd83e14fe"
+  },
+  {
+    "path": "e2e/tests/strategy-code-editor.spec.ts",
+    "sha256": "852e69d7969a0b9bd544c5d10f74bcf93cfc43fdcde400eb31045625f5e2ae60"
+  },
+  {
+    "path": "e2e/tests/strategy.spec.ts",
+    "sha256": "14852e3359edcc93532024765bca35f4f107d0487cb36949fbff3a163681aaca"
+  },
+  {
+    "path": "eslint.config.js",
+    "sha256": "d09bb80c3203a137df9b5e0a1e39b74b9c612a28a09d08418d5e843ae2ca5bc5"
+  },
+  {
+    "path": "index.html",
+    "sha256": "ef3740d4ce08a4fd00c2d8c364c59d7b3fd085564ef38e6d6e65b07e8c0683ba"
+  },
+  {
+    "path": "lhci-preview.config.mjs",
+    "sha256": "a50baa6f13556fd0c031e0c82794c0659fb0a6b432b3e2aacf6e9bbe19e3596b"
+  },
+  {
+    "path": "package-lock.json",
+    "sha256": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e"
+  },
+  {
+    "path": "package.json",
+    "sha256": "ca90257d5665487b99c9d526f453a6e35b0cbdc51e73b93ef8d109ac27757857"
+  },
+  {
+    "path": "playwright.a11y.config.ts",
+    "sha256": "a94d2429d7a7917e9a659c7dcb83245915d0e8ed45ddf8ce15614ed3e33d7fa9"
+  },
+  {
+    "path": "playwright.config.standalone.ts",
+    "sha256": "6ce174735e76e184d31fd81ab2315ade83c295b604da898282e1d0c98793a293"
+  },
+  {
+    "path": "playwright.config.ts",
+    "sha256": "e7ca7efe9d7eeacfb9645f7aa2b9f70c4332477d95fadffd60786d80f860b936"
+  },
+  {
+    "path": "playwright.i18n.config.ts",
+    "sha256": "73002bd6baadb43a99efa0a38ae019818a349eae098c4c73e4ab6d0b846e12de"
+  },
+  {
+    "path": "playwright.smoke.config.ts",
+    "sha256": "c3f91cb517dae68297173f33f658ecbb3381f8bb0788f29cf62dcd10e3e73f02"
+  },
+  {
+    "path": "postcss.config.js",
+    "sha256": "3fc8d1c13ad963bbf7da04d59024d38cc2ad14563b36afd71bc8b43c7148dd25"
+  },
+  {
+    "path": "scripts/check-node-engine-compat.mjs",
+    "sha256": "63e690d5c6a824472529e997446b3ffc3e75def66f84fa77410ec42c81331875"
+  },
+  {
+    "path": "scripts/verify-ai-research-approval-errors.mjs",
+    "sha256": "19a7769dd8c9e081b5d828ede5e56404ac9ba630361c0381ba9cc27ab8bad87a"
+  },
+  {
+    "path": "src/App.vue",
+    "sha256": "29f14291f1111062ec1918d653c046d6aef161d71bd1923ff260a123a08de7cc"
+  },
+  {
+    "path": "src/__tests__/App.test.ts",
+    "sha256": "2486542b47ec8a6ffb4bf713a48c077d63f5fc52c646e308c62fa142adf06783"
+  },
+  {
+    "path": "src/__tests__/api/aiObservability.test.ts",
+    "sha256": "83b4d2fff8bef59492fb1af119828b99c695bbd732148948af9c469dc27d1c71"
+  },
+  {
+    "path": "src/__tests__/api/aiTrading.test.ts",
+    "sha256": "2ea8d3be3767c7c6d00a282555e03bfc4564f9116145c142b0b27fc6b249891f"
+  },
+  {
+    "path": "src/__tests__/api/airflow.test.ts",
+    "sha256": "5008d6f31de2e73f3d39218128365502248dde30c0f5bc0873e86b3d7b84e89f"
+  },
+  {
+    "path": "src/__tests__/api/akshare.test.ts",
+    "sha256": "acd22a793b25928fdcc1bfd4373fa1a9d99642870a9fd2c33511a8c433c40d08"
+  },
+  {
+    "path": "src/__tests__/api/analytics.test.ts",
+    "sha256": "0f5c6ad9594297a1ef28db524f5bcb51c8e8571ae60917f85c062774bfae6dee"
+  },
+  {
+    "path": "src/__tests__/api/assetResearch.test.ts",
+    "sha256": "8379ddb33fac3b5a658b25037f7ef08637c99397b2e2ae0c0dfbd06b66b62ab6"
+  },
+  {
+    "path": "src/__tests__/api/auth.test.ts",
+    "sha256": "e956188a829a4451fb7442343d883dcac0f1d39c9fdee0c8deb99455e36961d6"
+  },
+  {
+    "path": "src/__tests__/api/backtest.test.ts",
+    "sha256": "ae432e21f4e51fc57b1a6f3ed46ce8f90cbb2b5635d1cd943e5857a434e1b997"
+  },
+  {
+    "path": "src/__tests__/api/index.test.ts",
+    "sha256": "7a6c7d2eff6f0b26937f512fb3f1c4ac869938212ec4a80e437b63f2f2f63000"
+  },
+  {
+    "path": "src/__tests__/api/iteration170.test.ts",
+    "sha256": "5ae99cccce7006ed1bb821797329a5192087bc496edc537a46c2dcbd9b0783bb"
+  },
+  {
+    "path": "src/__tests__/api/kbChat.test.ts",
+    "sha256": "86ea9a5b677372138e6b70ea40d4c7763e2ec507d34d5238b473ba543a21073c"
+  },
+  {
+    "path": "src/__tests__/api/knowledgeBase.test.ts",
+    "sha256": "f4f7f6bc7e2ad6afb461d5cdb02a3bda8f06712eea10d8fc9ec6d57190e89927"
+  },
+  {
+    "path": "src/__tests__/api/liveTrading.test.ts",
+    "sha256": "474f2bf8d731b0149961f71bc589b1d3a1c7b0ca321d0c6d4f16ff394b2d887f"
+  },
+  {
+    "path": "src/__tests__/api/marketData.test.ts",
+    "sha256": "8dfcc6e021ebed60b6cffd684624101d434af23cf23673c17f519bcf5dbbc678"
+  },
+  {
+    "path": "src/__tests__/api/portfolio.test.ts",
+    "sha256": "7d9de6ca385ef61492e9f2cd25a4c4608877799496001b02b9049416df12942c"
+  },
+  {
+    "path": "src/__tests__/api/promptTemplates.test.ts",
+    "sha256": "0d03605d22ad9b79ba3efebf971b7711ad2b247d0e61af39e903e88e49feed98"
+  },
+  {
+    "path": "src/__tests__/api/quantResearch.test.ts",
+    "sha256": "757c7e6439f9b110af72292498cce996d2acb877d1109a9cf58b3aeb5f542d96"
+  },
+  {
+    "path": "src/__tests__/api/quote.test.ts",
+    "sha256": "6c72a299b8db5aac952c5c7c6ed44483798f5a4caf1ee2603ad714a82d676911"
+  },
+  {
+    "path": "src/__tests__/api/retry-interceptor.test.ts",
+    "sha256": "374ebed94c80cfac7af55d4004e7fde7fd31b092934d937ed72ed00234dbe7aa"
+  },
+  {
+    "path": "src/__tests__/api/simulation.test.ts",
+    "sha256": "cf34d8c35437b2219cc8050b4a4888aac010eaed04db62ff0e3bf878ed429171"
+  },
+  {
+    "path": "src/__tests__/api/small-clients.test.ts",
+    "sha256": "eba77c947bba7e072d1cf79d913f6db55e66bf67fde1269a42ff6f0f4d31693d"
+  },
+  {
+    "path": "src/__tests__/api/stockAnalysis.test.ts",
+    "sha256": "02ca3e5d707ee39eecbddf99c4d52f91a6a40e1806f301fd822943f5eceb6756"
+  },
+  {
+    "path": "src/__tests__/api/strategy.test.ts",
+    "sha256": "4354229dc01e886b890d1d47b63cc701e54b9b605245120f40f93af79a60dce1"
+  },
+  {
+    "path": "src/__tests__/api/strategyApproval.test.ts",
+    "sha256": "f83722abfc27a7053da158d117dee1977961b99c44959213037cc4c1ead2692f"
+  },
+  {
+    "path": "src/__tests__/api/workspace.test.ts",
+    "sha256": "ee7e20fea983671f1aa3590f2596851efd3dbeb9e1a641bc953ac95e273bcb71"
+  },
+  {
+    "path": "src/__tests__/components/ErrorBoundary.test.ts",
+    "sha256": "dd2dbe97108ecf8dfe03b0fdbc56fe00f810180f7f58e48e6b7e6204aa0df167"
+  },
+  {
+    "path": "src/__tests__/components/OverfittingPanel.test.ts",
+    "sha256": "a7be99cefa55fadbe3a577e2d390138b2f9437d0ddb3f022a7553ff6b2f15e2f"
+  },
+  {
+    "path": "src/__tests__/components/StrategyExplanationCard.test.ts",
+    "sha256": "d1f01defda4ed976e45bd7c02535bb900a59e7d1838fa638f21ccdacaf64cde0"
+  },
+  {
+    "path": "src/__tests__/components/StrategyScoreCard.test.ts",
+    "sha256": "2081e1c2114adab20db37a9b2c1acbb123c6b2463aff79d42eaea21135a9aa49"
+  },
+  {
+    "path": "src/__tests__/components/aiResearch/ApprovalPanel.test.ts",
+    "sha256": "abb9e09866d60ce998d33421cce4ec6069f899008c056462405fcd7b15fa4beb"
+  },
+  {
+    "path": "src/__tests__/components/aiResearch/EvidencePanel.test.ts",
+    "sha256": "44433d19dc8fe7499fd5a7963b778235d256a93106c2dc76a2db2262d708bd8a"
+  },
+  {
+    "path": "src/__tests__/components/aiResearch/TaskObservabilityPanels.test.ts",
+    "sha256": "68d99628ca1dae5463ee0cdeff375e8c86cd567d0d597eec5c9e3731c8c65987"
+  },
+  {
+    "path": "src/__tests__/components/aiResearch/TrustedResearchWorkbench.test.ts",
+    "sha256": "048fd3fb545f7f00e0239420ef14ebde6e37a026b7a072343cbc01afcda5b1c9"
+  },
+  {
+    "path": "src/__tests__/components/aichat/ChatMessageBubble.test.ts",
+    "sha256": "f6d7d5c7627ac512eb0c29479f05fda00aa07ea201834aa1744f12371817bdfb"
+  },
+  {
+    "path": "src/__tests__/components/aichat/StockAnalysisReportCard.test.ts",
+    "sha256": "463fb6d04bb1474d73dac8657c4066cf7929a2e33a05af7e87a863e9558f4ab7"
+  },
+  {
+    "path": "src/__tests__/components/aichat/StockAnalysisTaskCard.test.ts",
+    "sha256": "59edb4084541c5f52bf925451fef18b8827d1651d72f2284d2310142f6a4effd"
+  },
+  {
+    "path": "src/__tests__/components/asset-research/AssetResearchPanels.test.ts",
+    "sha256": "5028aef46b21e524481cd082cc86915c7c349ea0a1209c656f9cceba9372e176"
+  },
+  {
+    "path": "src/__tests__/components/charts/DrawdownChart.test.ts",
+    "sha256": "529a2390d04385625a3317c623e71bf3aed1273749e79a40872a647cc04c0016"
+  },
+  {
+    "path": "src/__tests__/components/charts/EquityCurve.test.ts",
+    "sha256": "281f62902d0d956735f0476d8667a4ef18a6b6b76e3135d261ad22a876c748a1"
+  },
+  {
+    "path": "src/__tests__/components/charts/KlineChart.test.ts",
+    "sha256": "1f0238dd8e5c1c5349a6062d28dab5244071b72e9381fc25674e685fb979a7b2"
+  },
+  {
+    "path": "src/__tests__/components/charts/MetricCard.test.ts",
+    "sha256": "4a2d04b0b0bd7485cfac9e524ff619e1ea4ad791467254f364517f0f828d5efd"
+  },
+  {
+    "path": "src/__tests__/components/charts/PerformancePanel.test.ts",
+    "sha256": "4d18ee4935272e9cdee618bffedf7a1833688da51b6a8d58a3297ee89f23f68a"
+  },
+  {
+    "path": "src/__tests__/components/charts/ReturnHeatmap.test.ts",
+    "sha256": "53d9136894ed9fc8876c0db7c8bd38af2602e85d5bd5f8d7bfcf70d7b82c43ba"
+  },
+  {
+    "path": "src/__tests__/components/charts/TradeRecordsTable.test.ts",
+    "sha256": "982ac603bcfea7a9070b823975d120a17e2d7771041ae912006550eebe0465af"
+  },
+  {
+    "path": "src/__tests__/components/charts/TradeSignalChart.test.ts",
+    "sha256": "a2759006bc7b79a962eb0128781155967edd1274b179c9c1a8601da92382e55e"
+  },
+  {
+    "path": "src/__tests__/components/common/AppLayout.test.ts",
+    "sha256": "fe05e096b53292d048b9cab7c0ab3da230cd44cb79ced5a6b3abfa3580eebbac"
+  },
+  {
+    "path": "src/__tests__/components/common/DataTableSkeleton.test.ts",
+    "sha256": "ec718907d4ab3b3bdf5524b311be6af9f46d01f42eabb3b2b48d8af2d114393a"
+  },
+  {
+    "path": "src/__tests__/components/common/LogViewer.test.ts",
+    "sha256": "0dbf379598100944775467bbd1d9bba0e38eee6c7f44e5f3cd9c2b9b7aa75161"
+  },
+  {
+    "path": "src/__tests__/components/common/MonacoEditor.test.ts",
+    "sha256": "b413b029d7b39e82a35eadd77f63bbfcaaedb9b7220716768a9a0782f76c83cd"
+  },
+  {
+    "path": "src/__tests__/components/common/ResponsiveDataGrid.test.ts",
+    "sha256": "715eac3d1917e0d3f804b5e2a5ff01bc7b0963004ec45dfaf54a5951a5a76be4"
+  },
+  {
+    "path": "src/__tests__/components/common/ThemeSwitcher.test.ts",
+    "sha256": "deb2587408eb6f28b4a781cfbd75995e4dbd13ea1901d2b98efb1164eaf60630"
+  },
+  {
+    "path": "src/__tests__/components/common/ThemeToggle.test.ts",
+    "sha256": "1d41c4e0c00acf269739e06f652f37bfe240e889c47e6aa2940e0cef48f2110a"
+  },
+  {
+    "path": "src/__tests__/components/common/logViewerHelpers.test.ts",
+    "sha256": "fc77e15a85fc3c6d577479fe6507b54d402b3c53138b08be1fe17d12ade0655b"
+  },
+  {
+    "path": "src/__tests__/components/research/ResearchWorkflowGuide.test.ts",
+    "sha256": "3fa6a812d44b3f20781ed69397cf966b3b83aaa25fcda056d9921e41a30d7fc7"
+  },
+  {
+    "path": "src/__tests__/components/strategy/StrategyDetailDialog.test.ts",
+    "sha256": "12ae63ca03f75b0408d884c12cb80a15945ff64363479119fc76908ebe421972"
+  },
+  {
+    "path": "src/__tests__/components/strategy/StrategyEditDialog.test.ts",
+    "sha256": "bae029a595a821cdef4eabf0404d29ec41b38edfb883e309e7c2b1bf2c41b32a"
+  },
+  {
+    "path": "src/__tests__/components/strategy/StrategyTemplateCard.test.ts",
+    "sha256": "500fc1bb4ab0f15c1faf6012f4bf1e89bee2adb4380b7ee7102268ec211beb62"
+  },
+  {
+    "path": "src/__tests__/components/workspace/AutoTradingConfigDialog.test.ts",
+    "sha256": "36bd774f82714389414c28db7ed64ae59cffd42d62069f2ca6c62a72ec718c43"
+  },
+  {
+    "path": "src/__tests__/components/workspace/BatchOptimizationConfigDialog.test.ts",
+    "sha256": "07bd8ed6b554f304b51fba98eb3fc152e6927f0fa03c150cef06a59c8f843af7"
+  },
+  {
+    "path": "src/__tests__/components/workspace/CreateUnitDialog.test.ts",
+    "sha256": "fd7503ba5e5a8d8aae83c0f62261f0a32d1afdba72ff4f053603a820533c74b0"
+  },
+  {
+    "path": "src/__tests__/components/workspace/DataSourceDialog.test.ts",
+    "sha256": "d20764fe75a1e766687ea7855f9d2d720a78687afa1d3d560ca3129fbcf067e3"
+  },
+  {
+    "path": "src/__tests__/components/workspace/OptimizationConfigDialog.test.ts",
+    "sha256": "32558f1a60a961585a3202138a495d8d5d308c97ec6df351eb427e399f6add23"
+  },
+  {
+    "path": "src/__tests__/components/workspace/PositionManagerDialog.test.ts",
+    "sha256": "93a6b0667833b11edf2d8a5f6c639a51df36b8f25ffb6d1f28c951a21b0c5050"
+  },
+  {
+    "path": "src/__tests__/components/workspace/TradingPositionDialog.test.ts",
+    "sha256": "cb50baf1d67b4afb5ebdb42dc6f9dea0bb33f1e3898178d36f09981d3e493b49"
+  },
+  {
+    "path": "src/__tests__/components/workspace/UnitSettingsDialog.test.ts",
+    "sha256": "5ccd91c986d32375e8142e816a3d7909770b2295555f4d8f6237455158bf2ff0"
+  },
+  {
+    "path": "src/__tests__/components/workspace/UnitTable.test.ts",
+    "sha256": "3c5ab9ea0b93298bb8feb9ea205b1b04c00e92a1f0a9be0e01a8174365a4b12a"
+  },
+  {
+    "path": "src/__tests__/components/workspace/WorkspaceOptimizationTab.test.ts",
+    "sha256": "daa4634edd6054af32666273bd12f7e7fee0d1352f8f15cbbe76d043a558ddf0"
+  },
+  {
+    "path": "src/__tests__/components/workspace/WorkspaceReportTab.test.ts",
+    "sha256": "8791434571bdb7823e3ac6b7f5ec9fb960181c1099c3e4ac224fff31608c09af"
+  },
+  {
+    "path": "src/__tests__/components/workspace/WorkspaceUnitsTab.test.ts",
+    "sha256": "414d02b340247ef508ebdf576c854ac3fb54a3ce6f9942c11dd3cba6b28f7e17"
+  },
+  {
+    "path": "src/__tests__/components/workspace/createTimedAsyncComponent.test.ts",
+    "sha256": "ff2d35e914b424394c787bd34435e02fb8b6cadee842a403f143aeea3d3a0cfe"
+  },
+  {
+    "path": "src/__tests__/components/workspace/tradingUnitTransfer.test.ts",
+    "sha256": "c720d2dfe164666d0274722342a594c6fde5812287b11fd3a8137adf7656931d"
+  },
+  {
+    "path": "src/__tests__/composables/aiResearchApprovalHash.test.ts",
+    "sha256": "d52b99b099ad74824377f80912362284f2a0bf487cbb07694881900ead65dade"
+  },
+  {
+    "path": "src/__tests__/composables/useAIChatRendering.test.ts",
+    "sha256": "619ba48a835a300b9bdef2e1114b54aa174ba88a798859a67e0bb09908006b95"
+  },
+  {
+    "path": "src/__tests__/composables/useAiResearchApproval.test.ts",
+    "sha256": "8b67e720f08f779f930f92d8c300d43b8be1f1f021ea8e13194277c911a31ed8"
+  },
+  {
+    "path": "src/__tests__/composables/useAiResearchV2.test.ts",
+    "sha256": "f6a4829be9d4f0b0aaeeb39ac6222ca3333de8357ec0c691c726b523cee7a330"
+  },
+  {
+    "path": "src/__tests__/composables/useAssetAnalysisTask.test.ts",
+    "sha256": "585a9ae963221e2efdeb3929884e37561524b94d31cb2812d3f7e80a3ed43ad5"
+  },
+  {
+    "path": "src/__tests__/composables/useAsyncModule.test.ts",
+    "sha256": "dffe72d0c1ae1d9269630dd523bb6f73530d1fc7f2288ba2e378e92a4aca6289"
+  },
+  {
+    "path": "src/__tests__/composables/useAutoTradingControls.test.ts",
+    "sha256": "e7790d0172da7322de90ddbd055c7e05876c1bbd2bffde0317ff7598cb49160d"
+  },
+  {
+    "path": "src/__tests__/composables/useBacktestRuntime.test.ts",
+    "sha256": "8d8c76e7294a9bb5b7d33dd378879f6f3c88f99ff45ab43bb40404efa54c5942"
+  },
+  {
+    "path": "src/__tests__/composables/useChartResize.test.ts",
+    "sha256": "6cf038b21623ab67018ae8e6e79fd5fa37292ba11bdbcfa0a232151693371d47"
+  },
+  {
+    "path": "src/__tests__/composables/useInstanceActions.test.ts",
+    "sha256": "351df4ee17419e69773c1860a6060c6b409810a172a8dd36440a30563be05651"
+  },
+  {
+    "path": "src/__tests__/composables/useOverfittingRuntime.test.ts",
+    "sha256": "542f349232f02230c96d3a250f1ebd933ad6bd1e15b118f0e58801629792f3c4"
+  },
+  {
+    "path": "src/__tests__/composables/useStrategyDraftWorkspaceExecution.test.ts",
+    "sha256": "17d2e2f454684dad28706c1ef9469a4019c1e55dbcda2cf29378cdbcd40aa052"
+  },
+  {
+    "path": "src/__tests__/composables/useUnitTableRendering.test.ts",
+    "sha256": "fbb86627de4c2b794cbf2db2c0e59cc5f4416ef7ba700f7faf6e56c7df2560b9"
+  },
+  {
+    "path": "src/__tests__/contracts/aiResearchApprovalErrorCatalog.test.ts",
+    "sha256": "18c24e62789bd84b43ac17de4766896fd70bd3029c72af2360eb264819c10814"
+  },
+  {
+    "path": "src/__tests__/coverage_core.md",
+    "sha256": "39ad60f4dca1615a4b6b24303956b762a64931d22bbc949f9d8e66be7f8be555"
+  },
+  {
+    "path": "src/__tests__/fixtures/aiResearchApproval.ts",
+    "sha256": "2c203081940afbe00dfb1331d63c20d6ea1a25da286b1c2fa24e11d915921f62"
+  },
+  {
+    "path": "src/__tests__/mountWithPlugins.ts",
+    "sha256": "d145e65415a71a6dcf2b1f19f2027ba056c8f0b34720f6c7a6ee7970f5c096d0"
+  },
+  {
+    "path": "src/__tests__/navigation/capabilities.test.ts",
+    "sha256": "3ce189a5a5c66057b25274e2af45d0a8a96de9cf0afb65d129b0e1006db283a3"
+  },
+  {
+    "path": "src/__tests__/navigation/routes.test.ts",
+    "sha256": "a7e560f6ad752e03e2f6405b588b568996104765fc28feebef3135b895ad4052"
+  },
+  {
+    "path": "src/__tests__/router.test.ts",
+    "sha256": "3f2a8eecb8afad6badc3891e9614478d3a2b8a73d1277f57bf27101dbbe1e8e4"
+  },
+  {
+    "path": "src/__tests__/router/index.test.ts",
+    "sha256": "d1bae8f193c5c247409e385dd9d4090823d951780a14aba206dde99f031bd144"
+  },
+  {
+    "path": "src/__tests__/setup.ts",
+    "sha256": "fab7607f28a9d75acbd169f5807eaaba86f6e7c2fae3201e7dffb5cf66030b75"
+  },
+  {
+    "path": "src/__tests__/stores/auth.test.ts",
+    "sha256": "fc1cd466b44e560db1aecc62f4d653ac56ff19c2d4ebed7d10ec69296983aa1a"
+  },
+  {
+    "path": "src/__tests__/stores/backtest.test.ts",
+    "sha256": "2771fc242d3578c682d4270144cb167c5bdc9745fdfe9fa9bf76814951472704"
+  },
+  {
+    "path": "src/__tests__/stores/kbChat.test.ts",
+    "sha256": "d51493084a183c03447d856cef960000fd3e3adfc79ca282f65be8f8f002ba61"
+  },
+  {
+    "path": "src/__tests__/stores/knowledgeBase.test.ts",
+    "sha256": "e155e02355eb0dc9ae950d9f6dbdeb9510ecbec28dcb1910cdd4bbf39aea8772"
+  },
+  {
+    "path": "src/__tests__/stores/persistence.test.ts",
+    "sha256": "df63652cedde8c5cf1161275ed544e4f499a0977f1e3dd715081ca1aa9ee6b0a"
+  },
+  {
+    "path": "src/__tests__/stores/simulation.test.ts",
+    "sha256": "e9bd4cd451d5ae0883ff8ca49b05b7a462241d69cbb120d1b8ac59af171ec974"
+  },
+  {
+    "path": "src/__tests__/stores/strategy.test.ts",
+    "sha256": "ac3fd7cb3f14f818ab462a21706b95849875021d23cee0136757a8ccb661910a"
+  },
+  {
+    "path": "src/__tests__/stores/theme.test.ts",
+    "sha256": "9bfa2e3d0ef0eb8a7dc6b21ccaff1b5c9c02ba1083644412759fdf0c02fa9dc0"
+  },
+  {
+    "path": "src/__tests__/stores/workspace.test.ts",
+    "sha256": "371e5f1e137d4ab6ee7a64ef7ffd6e060e7aea23c20460b90b17c8aad21e5e1a"
+  },
+  {
+    "path": "src/__tests__/stubs.ts",
+    "sha256": "5f58aea5ac469e72ebe196b07f8643ab3258bc9246d4ddabc1b03f20ba85af90"
+  },
+  {
+    "path": "src/__tests__/styles/designSystem.test.ts",
+    "sha256": "db71edabcc0b5e74819c6d59834d053cdb05e07a2b1700ab9c9a435bcec3bcc0"
+  },
+  {
+    "path": "src/__tests__/types/aiResearchApproval.test.ts",
+    "sha256": "b9fed99675e02294f610474c879cf98c48a1e3c72b9cc5d3f2ae851d23e8bbb0"
+  },
+  {
+    "path": "src/__tests__/types/aiResearchV2.test.ts",
+    "sha256": "92ae32ac919156a81d1903977441b699d39067ef8b91a3501bd1cc7e221e4afc"
+  },
+  {
+    "path": "src/__tests__/utils.test.ts",
+    "sha256": "db74715304e3e5c0de4b75169220da1931bb4d16223906d34cd527c0bcd30d85"
+  },
+  {
+    "path": "src/__tests__/utils/auditTracker.test.ts",
+    "sha256": "0580b43eeb4280101fad95de6556d78d5c9c11db901c8452f0169c3e4cf9bbce"
+  },
+  {
+    "path": "src/__tests__/utils/chartTheme.test.ts",
+    "sha256": "0ba202fce990f917028308d6fe02a8f9dc3dfd91f3f312e841655dd3cf2524f2"
+  },
+  {
+    "path": "src/__tests__/utils/exportUtils.test.ts",
+    "sha256": "2993dfd4f50309308bad9ec68c6067d4c54346703e26efb062cba5d430b829b7"
+  },
+  {
+    "path": "src/__tests__/utils/markdown-sanitizer.test.ts",
+    "sha256": "3c9b08e35fe15006ec208d370edac37a1941ee04e76118d490b511f4fab03755"
+  },
+  {
+    "path": "src/__tests__/utils/quoteFormat.test.ts",
+    "sha256": "5d29ca438fa70402ab0bb0dab14fd2368c8f8d4f2eac15eee596deae84899d34"
+  },
+  {
+    "path": "src/__tests__/utils/session.test.ts",
+    "sha256": "d8c73ec81e116e5aad1c76952cfbaa1dc0800d6349148feaeafbaaefec39c551"
+  },
+  {
+    "path": "src/__tests__/views/AIChatPage.test.ts",
+    "sha256": "94468775bf0cc6430177f2e821740b4946def2cf440fd5078bedc0d28503e58b"
+  },
+  {
+    "path": "src/__tests__/views/AIObservabilityPage.test.ts",
+    "sha256": "223194039cbdbcfcb027c9b747ea7d2fac022c29a4584e74803c1fd524b956e2"
+  },
+  {
+    "path": "src/__tests__/views/AIProviderConfigPage.test.ts",
+    "sha256": "e45351caf6713ca44bf6644e8c14981a8abc88a4c95f171f02eebd5f7c7cfd6c"
+  },
+  {
+    "path": "src/__tests__/views/AITradingPage.test.ts",
+    "sha256": "98f53d5a59c758c080408a392f1316fe4101685863a08a5f9d6c6b5fae2575cf"
+  },
+  {
+    "path": "src/__tests__/views/AssetAnalysisPage.test.ts",
+    "sha256": "3557df1ad3c6b6f322f5c2a99a6604f21d9956921c631546a86274fbee62f821"
+  },
+  {
+    "path": "src/__tests__/views/BacktestPage.test.ts",
+    "sha256": "b351aa8b980c3b61f58939799948f6e8fbe50b48e0f7b4f71aeb54815eb624ae"
+  },
+  {
+    "path": "src/__tests__/views/BacktestResultPage.test.ts",
+    "sha256": "7cfebb105d07cdffaf871cabb908554b7f44eca8aa2af6119623a63e30f6a5aa"
+  },
+  {
+    "path": "src/__tests__/views/BrokerProfilesPage.test.ts",
+    "sha256": "da8ecb9294f394d3ab98c59344fcdb06b0bc4b63f68a242e46cf6b2bcdc56eda"
+  },
+  {
+    "path": "src/__tests__/views/Dashboard.test.ts",
+    "sha256": "6f9afafbaca652b36ae02bbdbc52afe3ce5b8f866c262e65dd5c7b9f60767185"
+  },
+  {
+    "path": "src/__tests__/views/DataPage.test.ts",
+    "sha256": "1e1c29c94bfc39e1ae1e63a59076a1f74dd6abbdc87b50110e18d00f674d3bb7"
+  },
+  {
+    "path": "src/__tests__/views/DataTopicsPage.test.ts",
+    "sha256": "b5ce7485a92d4d14fde755902bcd29611f68c33cf2d40ef39c027c5def0d073c"
+  },
+  {
+    "path": "src/__tests__/views/GatewayStatusPage.test.ts",
+    "sha256": "0634a2160a8caf849bafd1a6e14084e3e2256f377ccea520946384d8dcb90b7e"
+  },
+  {
+    "path": "src/__tests__/views/KnowledgeBaseDocumentPage.test.ts",
+    "sha256": "9565a9b676b16521e46701abfd991ff1123d28a0f0b050bd404cced61524ae81"
+  },
+  {
+    "path": "src/__tests__/views/KnowledgeBasePage.test.ts",
+    "sha256": "a607e03fb8bd1876a0dd9a810044fcfd5921b633ee9b3c05573e0ee0aadb0e72"
+  },
+  {
+    "path": "src/__tests__/views/LoginPage.test.ts",
+    "sha256": "966cd38da55c1ce9fef0a7176ac3a898b080621476bc928904a67dc7b3c91105"
+  },
+  {
+    "path": "src/__tests__/views/NewsIntelligencePage.test.ts",
+    "sha256": "3a94e00d71b896926d8bb740249979e49008e2056325abac26fcfca2b74db0f1"
+  },
+  {
+    "path": "src/__tests__/views/OptionsChainPage.test.ts",
+    "sha256": "aedbe698529db64ed9a4139113d86107116b69a5be37be596dbdd85aefa44f70"
+  },
+  {
+    "path": "src/__tests__/views/PaperTradingDetailPage.test.ts",
+    "sha256": "077ebc5d951be6a45c6fedd787d54fd84701ada10239c84c62e5a8fe6494408e"
+  },
+  {
+    "path": "src/__tests__/views/PortfolioLedgerPage.test.ts",
+    "sha256": "5d6ac18bbd0765c93990c5191d671cdc95c1fbd95283b97198eee2a0cacceacb"
+  },
+  {
+    "path": "src/__tests__/views/PortfolioPage.test.ts",
+    "sha256": "8e48aadc911f8a769f59db12498ae65034d2242a113df0d69fbc2e86897803f7"
+  },
+  {
+    "path": "src/__tests__/views/PromptTemplatesPage.test.ts",
+    "sha256": "9e68d54e245708bc1142ff52a39028181fd24e5188951dd43295b75c3a47b79e"
+  },
+  {
+    "path": "src/__tests__/views/QuantToolsPage.test.ts",
+    "sha256": "d1e81a973cc8898fd700e29a50bfe8759c8f3c89905caad506cd7c3c1b7899ad"
+  },
+  {
+    "path": "src/__tests__/views/QuotePage.test.ts",
+    "sha256": "45f2f8b5a0877805cb10a1b950103cdbe93d33b1380aea9a249ced6c287d31c4"
+  },
+  {
+    "path": "src/__tests__/views/RegisterPage.test.ts",
+    "sha256": "d43a3c6191a923886af0cdbfb237af585e03ffb08c0d59cd50187bb56a4e43ac"
+  },
+  {
+    "path": "src/__tests__/views/RiskControlPage.test.ts",
+    "sha256": "9042094cb5c4d07468e6d1b4aed6d3bf737c433cea454074c4a2fac9ef1691e1"
+  },
+  {
+    "path": "src/__tests__/views/ScannerPage.test.ts",
+    "sha256": "8aa1c2459d15779e3ff90fe9956f4fe0532589eb3437763ee59f06e524ee3810"
+  },
+  {
+    "path": "src/__tests__/views/SettingsPage.test.ts",
+    "sha256": "bbebfea175a0856700e2a9fe08c2a3f45a3f7f7a39e8c852efdb304a572bcdc7"
+  },
+  {
+    "path": "src/__tests__/views/StockAnalysisPage.test.ts",
+    "sha256": "5cbbca4c2938fd7717153687871cc7184a43856091a65fecd071ed36425dca76"
+  },
+  {
+    "path": "src/__tests__/views/StrategyPage.test.ts",
+    "sha256": "bc510b589b41028945f155a3f3204c40b7f8cd06241b98c880de24d322705adc"
+  },
+  {
+    "path": "src/__tests__/views/data/AirflowDagsPage.test.ts",
+    "sha256": "f89bfdbda3f822a360a6797f39362afab6d64a6f793fd04ae724811f1d3537a3"
+  },
+  {
+    "path": "src/__tests__/views/data/DataExecutionsPage.test.ts",
+    "sha256": "f48163b480189c5482bc85d56c7461c3456e9feb98d9967c7503eea1c150df84"
+  },
+  {
+    "path": "src/__tests__/views/data/DataGovernancePage.test.ts",
+    "sha256": "e9642df919408f3e385b1c5f3accb6c898669bbee537a9d62ee487649d17eee2"
+  },
+  {
+    "path": "src/__tests__/views/data/DataInterfacesPage.test.ts",
+    "sha256": "a02cff352e90ddbbdd22974503b8f313bf653d2d102f584ecaa79e9d9b2ef13c"
+  },
+  {
+    "path": "src/__tests__/views/data/DataLayout.test.ts",
+    "sha256": "cde4b07684f3fde409d9605ae1e69b4e7ba3b2015d4153c11851d538f1d7a734"
+  },
+  {
+    "path": "src/__tests__/views/data/DataScriptDetailPage.test.ts",
+    "sha256": "59c1a5749edf472b9a34f031675ad1cba5209253030ca409bd9d4e5534b24de4"
+  },
+  {
+    "path": "src/__tests__/views/data/DataScriptsPage.test.ts",
+    "sha256": "8526089a427dd8ca32657265791707ad7efeac9d8ab4adb928a4171af2ace553"
+  },
+  {
+    "path": "src/__tests__/views/data/DataSyncPage.test.ts",
+    "sha256": "428e1f14db90b26713912056f3c9b3dd94a7e85a87aa515e0a6e485a63573d3c"
+  },
+  {
+    "path": "src/__tests__/views/data/DataTasksPage.test.ts",
+    "sha256": "9b6e54be4e68609328f711cb6a607f69b9e51c777b468fe3bc1670608424c8c2"
+  },
+  {
+    "path": "src/__tests__/views/strategy/AIResearchTaskLifecycle.test.ts",
+    "sha256": "9b9a344e09b63a67b74e781ac273f316e9050c33caec70a58bb5c4f5151bdbc2"
+  },
+  {
+    "path": "src/__tests__/views/strategy/StrategyCollaborators.test.ts",
+    "sha256": "2578f0b1eaa0a749f00b208d612d88bec6e3cb5805c487d41d57cc3e25ce49fe"
+  },
+  {
+    "path": "src/__tests__/views/workspace/WorkspaceDetailPage.test.ts",
+    "sha256": "1a7eb137d057272b5e7146af5bfc98b1cf491477f8c63fae0847b594d0d08737"
+  },
+  {
+    "path": "src/__tests__/views/workspace/WorkspaceListPage.test.ts",
+    "sha256": "0cfff0ec2883b1da51abd76d5dbe0bf31fa51d8de9bc90dac6305bb83fd430c2"
+  },
+  {
+    "path": "src/api/aiObservability.ts",
+    "sha256": "9f306cf8aa2bff8b7d3cc33f8fc26d6c6b8edc7ce15336fe96a621b914b5f8d2"
+  },
+  {
+    "path": "src/api/aiTrading.ts",
+    "sha256": "c97788083001381b529fcf75496eef0f8266fb1e8aed4888b655094de727b265"
+  },
+  {
+    "path": "src/api/airflow.ts",
+    "sha256": "6d7c124a15f4b03849d9a8e16871221d722a92054ad3907638df8c1dd7b3cb71"
+  },
+  {
+    "path": "src/api/akshare.ts",
+    "sha256": "e462de731ad26473f3d2c88ff173a6502b60a33def30ed4091c525efc12e905a"
+  },
+  {
+    "path": "src/api/analytics.ts",
+    "sha256": "627115c042251a3e67d25d72946f20b90eadf0b50b6d7ce3bd8dbc7930fabbf1"
+  },
+  {
+    "path": "src/api/assetResearch.ts",
+    "sha256": "af5a80d9b3d41e330eabee5f77a5c0b6723d7be8f7bf2a9a19eb7ba674875650"
+  },
+  {
+    "path": "src/api/audit.ts",
+    "sha256": "fb086e9be607c367ec14fbc7e135e40067f2dcd84ad040c691b62d0b6904ed63"
+  },
+  {
+    "path": "src/api/auth.ts",
+    "sha256": "a49da6f0640775944203e811af555651577f76124237e208a07049346e6519b1"
+  },
+  {
+    "path": "src/api/autoTrading.ts",
+    "sha256": "cfb227a30878b51418d24310490a0c45a2893e76dda45655f476b5f09b69a5c5"
+  },
+  {
+    "path": "src/api/backtest.ts",
+    "sha256": "e6661f8140bbf9ee837653e7e388d85b3e809e7b740fac63da00de223e8d4b65"
+  },
+  {
+    "path": "src/api/brokerProfiles.ts",
+    "sha256": "777a849cf6fead72c3db746b63b061500883a2bfa0a0dd0670195a180be8d395"
+  },
+  {
+    "path": "src/api/dataGovernance.ts",
+    "sha256": "703eb0761d103ef48d2ad091495d5a9c9d3710580b29d0869fae8fc7c6cba0a7"
+  },
+  {
+    "path": "src/api/dataTopics.ts",
+    "sha256": "416adaddf2ca39a336f289a2ec6eb1d42f71be27ff13253026e3dcc9a07dc21e"
+  },
+  {
+    "path": "src/api/index.ts",
+    "sha256": "0effe0637c5b85ba16889db87fd76caf42b4c4a344e1139a7a2bcf86079da9ca"
+  },
+  {
+    "path": "src/api/kbChat.ts",
+    "sha256": "75c51e90dae67db023f4acf2d5ff151995e98f73ff432b83c321986f5532c65b"
+  },
+  {
+    "path": "src/api/knowledgeBase.ts",
+    "sha256": "590ce266634053caf6eb46ed0224152ce60d428fa06b79ddc2c1624a6c10c62d"
+  },
+  {
+    "path": "src/api/liveTrading.ts",
+    "sha256": "f1ece8c8678be76932478fd19254be5e562635008675f3bdf7d5824b2efbcf20"
+  },
+  {
+    "path": "src/api/marketData.ts",
+    "sha256": "91644c23ffe243167e2da9d87d6b239702dfe4c24b6a118f7d9b075e8dfae550"
+  },
+  {
+    "path": "src/api/marketIntel.ts",
+    "sha256": "162df737837a2a58c18d95efdaa82c3dc2caa251335ce328f8b8e314782f4359"
+  },
+  {
+    "path": "src/api/paperRuntime.ts",
+    "sha256": "809908db0b0f18bfc3f3a3855a7abdaf1483467a8be7a9a0d44271b2be9f051a"
+  },
+  {
+    "path": "src/api/portfolio.ts",
+    "sha256": "183b386020725105e333f2ade9a686cebd7ca6abf1571ba765b0b19b5c61cc89"
+  },
+  {
+    "path": "src/api/portfolioLedger.ts",
+    "sha256": "6088b46fd618daa08b154b8edf7973661de254b2a50dde49e56fc37b6807cc0c"
+  },
+  {
+    "path": "src/api/promptTemplates.ts",
+    "sha256": "3918c9b7b28612bbe44a92a9e904466ce29e035f78fa35ff91eb84d58a066f2f"
+  },
+  {
+    "path": "src/api/quantResearch.ts",
+    "sha256": "d8b90973ae15c5ece5c9df6a8bb32782d900aded5f95cddab3109e13a2cb152b"
+  },
+  {
+    "path": "src/api/quote.ts",
+    "sha256": "3c8a5b886000a1f4c83973e5e0b659e929e0c423ea945fdb1e58f5438a601437"
+  },
+  {
+    "path": "src/api/simulation.ts",
+    "sha256": "02c739a2e06024e5639fe2ae1436f0d88633e50d82f59282bcd593eed7a72762"
+  },
+  {
+    "path": "src/api/stockAnalysis.ts",
+    "sha256": "b10615350409135871e752100eee6712eb1b6323b8ca1d7ae08295af7fd09ea0"
+  },
+  {
+    "path": "src/api/strategy.ts",
+    "sha256": "cd89036693c250633ab058829eafc98892b02353bba2d3845077bfe5c873f4ca"
+  },
+  {
+    "path": "src/api/sync.ts",
+    "sha256": "b9a6af2e48b377fbdef5a6b196c9344a73fcd1a2a735ca4787a5d4aee029eb0a"
+  },
+  {
+    "path": "src/api/workspace.ts",
+    "sha256": "288ef872210d2b2bb3d4de9b759982501aec937bba0ddf63db98a78224205974"
+  },
+  {
+    "path": "src/components/LanguageSwitcher.vue",
+    "sha256": "8259551e05aafbc3c6c60447790246ae1cbc96a296eeb5320c7789c614d0ff30"
+  },
+  {
+    "path": "src/components/__tests__/LanguageSwitcher.test.ts",
+    "sha256": "ca72e0922c2ef7501d85a4984337e2307b634a196f005baef3cb333c02ffad98"
+  },
+  {
+    "path": "src/components/aiResearch/ApprovalPanel.vue",
+    "sha256": "8621ae12ffeb209c367dede6905843907378df77035a1729b1d837cbd0b79599"
+  },
+  {
+    "path": "src/components/aiResearch/CandidatePanel.vue",
+    "sha256": "80f583f5c298bd956bb8434e8b086ed6f2fbf73d60ab1813b0296cb881a8f3c2"
+  },
+  {
+    "path": "src/components/aiResearch/DataPanel.vue",
+    "sha256": "48ab0da70da05fd41c513521c4a0ed8b122a1ef879cc99dafc920588e74437f7"
+  },
+  {
+    "path": "src/components/aiResearch/DecisionPanel.vue",
+    "sha256": "4ffebd5071dfb42c33624244c4981b81b6990797ba8b1fbf7a8d72f33805fc33"
+  },
+  {
+    "path": "src/components/aiResearch/EvidencePanel.vue",
+    "sha256": "83beac1cdc224e0f413fd81a0bbcd92bef1fd94e137ab07a0e9bcc4fd0f780a6"
+  },
+  {
+    "path": "src/components/aiResearch/HypothesisPanel.vue",
+    "sha256": "516b5465c3891dcc83a4271000802f952c917aaf65e2715f69d1d04f36bfd2eb"
+  },
+  {
+    "path": "src/components/aiResearch/LedgerPanel.vue",
+    "sha256": "085ca19c99e31fd8c5b731868596e3d62892ddc62b2f2b06c2b92107da72327b"
+  },
+  {
+    "path": "src/components/aiResearch/RunHistoryPanel.vue",
+    "sha256": "07e6a0f363dd254a3517884fdaea10d8d3953dc28b921639bbc7016f191f00e7"
+  },
+  {
+    "path": "src/components/aiResearch/TaskEventTimeline.vue",
+    "sha256": "74aefe4132783610a30d75f4b733ed6b3ed804e57e8ad54f3a2ec53afe8b3f07"
+  },
+  {
+    "path": "src/components/aiResearch/TrustedResearchWorkbench.vue",
+    "sha256": "5f0f58add09c25313fa8b42329c3705645b16bd8ca63ca34bb01f7d3a81d18e2"
+  },
+  {
+    "path": "src/components/aichat/ChatMessageBubble.vue",
+    "sha256": "25b11faaebd42a66ba5ddeeb97f5031e4258124e598f57f132b0f779e0f1a10d"
+  },
+  {
+    "path": "src/components/aichat/CitationList.vue",
+    "sha256": "4f1b5c3b8affffe249fd1ae28bde92003b512b65d6eb4dd7432dc778fb9cda64"
+  },
+  {
+    "path": "src/components/aichat/StockAnalysisReportCard.vue",
+    "sha256": "f34a41905d9d72b6fee4a732a10b68d6a26542a8fc0a8f4c993bc91cc9a35727"
+  },
+  {
+    "path": "src/components/aichat/StockAnalysisTaskCard.vue",
+    "sha256": "ba8e84403d300aea2f28aa145fed45b586381e1ce8529d8bf181ab23c502c388"
+  },
+  {
+    "path": "src/components/aichat/StrategyDraftCard.vue",
+    "sha256": "a23ef374085e828ec4cf7ce2e8f6db0a1f1a377486ebf777d73091081abb7101"
+  },
+  {
+    "path": "src/components/asset-research/BondPanel.vue",
+    "sha256": "08881de8d07aa67bb487630dfc1d18c959abc6148dae485a10aa106c8639d9be"
+  },
+  {
+    "path": "src/components/asset-research/FuturesPanel.vue",
+    "sha256": "9ffcfe593429b8341c820cc7b5e1e3b8d61ddbb2cd8cf4ac5b33ebd257d62cb1"
+  },
+  {
+    "path": "src/components/asset-research/ModelCardPanel.vue",
+    "sha256": "beb038518c197f116a3a726ec6276e6cca7a1d9ab6a64fc3ccc948d80c2a7a5b"
+  },
+  {
+    "path": "src/components/auth/AuthFrame.vue",
+    "sha256": "7f154b7a9df91940db49618f2fa055f9a68ade5188f5617803fa0998f1f1c4c4"
+  },
+  {
+    "path": "src/components/backtest/BacktestHistoryTable.vue",
+    "sha256": "c1ed95a8b7685c2bf943e690ae43548423f0b47eb6e7554481635caebef5918c"
+  },
+  {
+    "path": "src/components/backtest/BacktestMetricsPanel.vue",
+    "sha256": "4391f6503b28d89b549bb7c04e880066003ecb618a365263c586c21e466edc29"
+  },
+  {
+    "path": "src/components/backtest/OverfittingPanel.vue",
+    "sha256": "209fa2b911066dc0f5c4850ce8153053df5e26bf2d8d5fd880cc2c036c829e57"
+  },
+  {
+    "path": "src/components/backtest/StrategyExplanationCard.vue",
+    "sha256": "3f6968550e390780db87a03a191fe44031690c6ab4774dd5686ff25446e8bd54"
+  },
+  {
+    "path": "src/components/backtest/StrategyScoreCard.vue",
+    "sha256": "29013d45fceb8ffb66b20efc8938706857b3b2e943e717fcffb313644eecdd7e"
+  },
+  {
+    "path": "src/components/charts/ChartEmptyState.vue",
+    "sha256": "b4616ade8314b7e0cdeaf899bfe1c70405f016ed74dd9ba54fd5dc52126a524d"
+  },
+  {
+    "path": "src/components/charts/DrawdownChart.vue",
+    "sha256": "9744004e46700218f45a160fa5a6edcac29472827a45ef66bddfad538d1c34a7"
+  },
+  {
+    "path": "src/components/charts/EquityCurve.vue",
+    "sha256": "cb61ab0461cb4c88cdc6c61439be0ac75163b1ab3781285b9516fa5465af5b0e"
+  },
+  {
+    "path": "src/components/charts/KlineChart.vue",
+    "sha256": "d84ac41daf2fd8a8c569bfbec8b85d74db0b6292a607dfd8c3fd98fcc32ef688"
+  },
+  {
+    "path": "src/components/charts/MetricCard.vue",
+    "sha256": "9dc5ddd14b04fcc2d194bc33e3622c57bf26a19de67a41b0cd07a1ed159e0213"
+  },
+  {
+    "path": "src/components/charts/PerformancePanel.vue",
+    "sha256": "bcdc1f0a4420cc1d57a9d58531be3146bc26334fa6df48b5d0d45afe6edcc67c"
+  },
+  {
+    "path": "src/components/charts/ReturnHeatmap.vue",
+    "sha256": "50917c9374c1335e144a5d00e2350bc0d2cde1417f62ebabf142554160af9863"
+  },
+  {
+    "path": "src/components/charts/TradeRecordsTable.vue",
+    "sha256": "66b43a6d21b4d082aa6f3e7c6d89142501a1aa3df77f801077ffec0590941fb1"
+  },
+  {
+    "path": "src/components/charts/TradeSignalChart.vue",
+    "sha256": "f49b24a8d8e205dc0a1291d0ff049a1b64b5d474d5e5d74f49066a20ea5519d8"
+  },
+  {
+    "path": "src/components/common/AppLayout.vue",
+    "sha256": "592cf945c31561505696c5b4622ca5eac409683e71746f74945db63e0b4afe4f"
+  },
+  {
+    "path": "src/components/common/DataTableSkeleton.vue",
+    "sha256": "1eec4f0d338bda2ac7acfb9d513f27e3f26cf796f56e9a0111643adfb4e47726"
+  },
+  {
+    "path": "src/components/common/ErrorBoundary.vue",
+    "sha256": "dab8600e08b8c2f9a098d6b2f69b2cb9100555a2e67a4fc1c228d308e11af270"
+  },
+  {
+    "path": "src/components/common/LogViewer.vue",
+    "sha256": "083984f6eaf241915425729fb8a0c2d81b1fa0caa3f70befb2bc93c1e06c229d"
+  },
+  {
+    "path": "src/components/common/MonacoEditor.vue",
+    "sha256": "049f59725d0f96eed463eaab4ff42017ef650a9d7b60903db258a13e04438c6c"
+  },
+  {
+    "path": "src/components/common/ResponsiveDataGrid.vue",
+    "sha256": "d45b7bf3c033d09cdf37ecac395a233621e192b5d92be009a75757b6bf3eab3a"
+  },
+  {
+    "path": "src/components/common/ThemeSwitcher.vue",
+    "sha256": "402337e073fa255963b4488daee81e424205b6658302651bdcbc014f0709703f"
+  },
+  {
+    "path": "src/components/common/ThemeToggle.vue",
+    "sha256": "791b9032968bfed0ae6d2ada884e41e5e0451f89449180026ab9a29b1d4721fb"
+  },
+  {
+    "path": "src/components/common/loadMonacoEditor.ts",
+    "sha256": "38f1eedc516ea60833f4600ca7e76fea7e07bebfc0101356e135e2f30442927b"
+  },
+  {
+    "path": "src/components/common/logViewerHelpers.ts",
+    "sha256": "ec42b5dfa6c4cf38621ada8750b100d516e0fdc91824929dd2116f8c60014a68"
+  },
+  {
+    "path": "src/components/research/ResearchWorkflowGuide.vue",
+    "sha256": "ab5231f08f3cbb90ec6f1498aa78acfa6e9f2745131320489d31e79f5627f0ba"
+  },
+  {
+    "path": "src/components/stock-analysis/SignalHistoryPanel.vue",
+    "sha256": "dc45fa96df219d00fb177b8fc297569d72e370ac0a1c5524be21308d0143d96c"
+  },
+  {
+    "path": "src/components/stock-analysis/SignalQualityPanel.vue",
+    "sha256": "d726e8956edaaf2b87fb53bb26a351e49346e0af0721a58c6639735c36a246e3"
+  },
+  {
+    "path": "src/components/workspace/AutoTradingConfigDialog.vue",
+    "sha256": "c5f82f655851288eabb60aa9b18328612d2aafe282b66e66ed6d4096fb475350"
+  },
+  {
+    "path": "src/components/workspace/BatchOptimizationConfigDialog.vue",
+    "sha256": "7298cd3e09ea6998d90bcecf95798514824127497a24dfce0d9a2ecf817d4c83"
+  },
+  {
+    "path": "src/components/workspace/ChangeSymbolDialog.vue",
+    "sha256": "72f9121f4e1da322f86539b7100d8a79ef26c75e9b2eee42441bf46c19d4611a"
+  },
+  {
+    "path": "src/components/workspace/CreateUnitDialog.vue",
+    "sha256": "a8315a527a6a28cf1054089ddb364dfb883a8a083914a5c6eff6c765fab22705"
+  },
+  {
+    "path": "src/components/workspace/CreateWorkspaceDialog.vue",
+    "sha256": "c7d867ddac31cfd31d06ac0cbebf8878a5578d70d621135a6a4ee5546ee5fc8c"
+  },
+  {
+    "path": "src/components/workspace/DataSourceDialog.vue",
+    "sha256": "5c4ad51b1e286cbee74830f5f3da78908b74730f10bab3793ee8c61b60194cf6"
+  },
+  {
+    "path": "src/components/workspace/ExportTradingUnitsDialog.vue",
+    "sha256": "630d291e60430c153b9a99dea32ecb51ffcf21a9ba1f11b17ca605e56d55073d"
+  },
+  {
+    "path": "src/components/workspace/GroupLinkDialog.vue",
+    "sha256": "160af03e807b2e26cc8bb544eb0b9360e093232bb830e436f3d6699fe3960493"
+  },
+  {
+    "path": "src/components/workspace/GroupRenameDialog.vue",
+    "sha256": "61853d3b911eb36d53137dbe2354cb80098e52dd8734f9fb01175549b71bd5b4"
+  },
+  {
+    "path": "src/components/workspace/ImportTradingUnitsDialog.vue",
+    "sha256": "02d997c1645917fcfdb7e40f06c10730378186309062da0ceec929fcbc55676c"
+  },
+  {
+    "path": "src/components/workspace/OptimizationConfigDialog.vue",
+    "sha256": "061a6a0407a3b2299458359c87d7e639529041dad23bebc679f5cbd9690ceb21"
+  },
+  {
+    "path": "src/components/workspace/OptimizationThreadDialog.vue",
+    "sha256": "cd1898ed7e47b2ee8c56b91eaa1b64df795a2224acd9a3e83ddb960ed13ec2f9"
+  },
+  {
+    "path": "src/components/workspace/PositionManagerDialog.vue",
+    "sha256": "1c7886db7dac37701dc67369500ba856def1aa4918c58260a9a767183bcf91ac"
+  },
+  {
+    "path": "src/components/workspace/ScheduledOptimizationDialog.vue",
+    "sha256": "d402b59629ef0451d36e1e4e270bc69a5b5829d1287471c4682026041e7bd0b1"
+  },
+  {
+    "path": "src/components/workspace/StrategyParamsDialog.vue",
+    "sha256": "2abe3242578687ed1a463ea69c8f4fbd4248cf1ec93ba34e0a73a9ab095c3fc6"
+  },
+  {
+    "path": "src/components/workspace/TradingDayStatsDialog.vue",
+    "sha256": "ef8d410a056154eaadd19d460cd33e49674c2088952c4dec61e0c4ab268b2006"
+  },
+  {
+    "path": "src/components/workspace/TradingGatewaySelect.vue",
+    "sha256": "615eb23fac40187c8eb05a535f089867cf3fe39f3c0614471addeb8b8c5d9acd"
+  },
+  {
+    "path": "src/components/workspace/TradingPositionDialog.vue",
+    "sha256": "6ac30f1d3b84d115b0453583d8fdc4808568ccbf56b2010d717384a2f6bc26bf"
+  },
+  {
+    "path": "src/components/workspace/TradingUnitDetailDialog.vue",
+    "sha256": "4d08cdd24fa2b091144a12043fa9b4679c165faaa8a0799dc6da21821690229f"
+  },
+  {
+    "path": "src/components/workspace/TradingWorkspaceUnitsTab.styles.css",
+    "sha256": "5172b28574872c91acc53ad3b77ab5626f44675f18b20c29086d1eab2d7a1f87"
+  },
+  {
+    "path": "src/components/workspace/TradingWorkspaceUnitsTab.vue",
+    "sha256": "afa0f7fb0e121b55f2ee3baf82d0cd0074263382f716b6d63a88fe81813f7f86"
+  },
+  {
+    "path": "src/components/workspace/UnitActionsBar.vue",
+    "sha256": "8ee560aa60a9f01e228b7acaab780d40b3ef22b02974df0e2db7432276e7039b"
+  },
+  {
+    "path": "src/components/workspace/UnitRenameDialog.vue",
+    "sha256": "43de573c800d1033605ef2107e3b1e91157aed757cd9bef6bea4e26c40020623"
+  },
+  {
+    "path": "src/components/workspace/UnitRunStatusBadge.vue",
+    "sha256": "a74dd3ddf0a4ca3fc38a0f7ee11613f395f2ed99b9f1e41ef56fe6176edf3dc7"
+  },
+  {
+    "path": "src/components/workspace/UnitRuntimeDialog.vue",
+    "sha256": "a121b2e9b52f70708c728bbf09ffb9442b76ca0ccabd76928613cc119041aab2"
+  },
+  {
+    "path": "src/components/workspace/UnitSettingsDialog.vue",
+    "sha256": "bd187d5b3243e9f0ff8e1549a735cf1ab2934b388f5593ba20d8890f2a7cda99"
+  },
+  {
+    "path": "src/components/workspace/UnitTable.vue",
+    "sha256": "3381e2da6f0a1332cd8868b8ac6cc4921721bb56ca3d21a00074c126d70322a7"
+  },
+  {
+    "path": "src/components/workspace/WorkspaceCard.vue",
+    "sha256": "326b4375fa613c0a1b2520dde19da6123f68e0d7f1184428fb12be3a6c11810f"
+  },
+  {
+    "path": "src/components/workspace/WorkspaceDataSourceDialog.vue",
+    "sha256": "e0ab77bcea905b919b551cb0d2008be86b6e7fb96aba7add57df894847cd141c"
+  },
+  {
+    "path": "src/components/workspace/WorkspaceOptimizationTab.vue",
+    "sha256": "5b0b9bab4d7ab6ff8577c755ceae9860900f00d5757bad2c417ee5b02fea88c7"
+  },
+  {
+    "path": "src/components/workspace/WorkspaceReportTab.vue",
+    "sha256": "d512ae9d975ef2bf9c02c92fe6384529c0b16e1f2af4faafbe90307161533fcd"
+  },
+  {
+    "path": "src/components/workspace/WorkspaceUnitsTab.vue",
+    "sha256": "e0b3341b91bbdd512e10666f9a32a701adaba00ecb5cde889cb3c61d22660aa9"
+  },
+  {
+    "path": "src/components/workspace/optimization/WorkspaceOptimizationPane.vue",
+    "sha256": "6c3be34fa47e754950bb9d7b0c2a7a73d057c62559413cd3943e9aee42f4de8c"
+  },
+  {
+    "path": "src/components/workspace/optimization/createTimedAsyncComponent.ts",
+    "sha256": "28cdce75cf0c40c9845576f885b7b9e7631fe6ddf311550bd163a553b0e5d404"
+  },
+  {
+    "path": "src/components/workspace/optimization/optimizationObjective.ts",
+    "sha256": "fab0e1da346a346241fc2da05afb8ef8da124bf378fc94a36d1ca0a2490f7cd0"
+  },
+  {
+    "path": "src/components/workspace/optimization/useWorkspaceOptimizationTab.ts",
+    "sha256": "a348f5da38e5e0cfbfc65de4d4cd3153ace5252d9a3c1993cdd3606b1c705721"
+  },
+  {
+    "path": "src/components/workspace/tradingUnitTransfer.ts",
+    "sha256": "2f3e178253c2b4dd19720de0b4fc1b29c001d777b31a1386e69aa6bce2a5403a"
+  },
+  {
+    "path": "src/components/workspace/units/useWorkspaceUnitsTab.ts",
+    "sha256": "2b01f3a51faf618c2579ea9a5f1a57cd8171860089ad0d98d4ed534812cb745d"
+  },
+  {
+    "path": "src/composables/useAIChatPage.ts",
+    "sha256": "622626508559bc6fcd6d236b42a1bb9a6ce0a08f86a2423d0e0a3d64e9979ac2"
+  },
+  {
+    "path": "src/composables/useAIChatRendering.ts",
+    "sha256": "08b0dd6fe79740973c41b0282207b600aa97fcc5f02136b62ee19184c2bed35b"
+  },
+  {
+    "path": "src/composables/useAiResearchApproval.ts",
+    "sha256": "65e65c8edc00a6ccd47d120567102377974b569f19476b23fea9dbe477f0cf13"
+  },
+  {
+    "path": "src/composables/useAiResearchV2.ts",
+    "sha256": "f0f305591c5d843caaf4161bb45aab30115d1bceaffdd75a73c28d53e7227af7"
+  },
+  {
+    "path": "src/composables/useAssetAnalysisTask.ts",
+    "sha256": "54cef088fe58a5f60e1621ed8236b6d74c41bfd45f5200eed2365d957fb41c50"
+  },
+  {
+    "path": "src/composables/useAsyncModule.ts",
+    "sha256": "970ed8c3cec63e0e9fec2b6164e7ac6f8af200c645471d7afbe357beb55b1114"
+  },
+  {
+    "path": "src/composables/useAutoTradingControls.ts",
+    "sha256": "ceba16d8895f55ea1c30b83ee8f96b83d3d6856df34f0b5989c8a9a5a21d18f6"
+  },
+  {
+    "path": "src/composables/useBacktestRuntime.ts",
+    "sha256": "6b76fbcdb86997cc84c30e0baf001430b0ccad3dee1175dfd77be3f54a51d86b"
+  },
+  {
+    "path": "src/composables/useChartResize.ts",
+    "sha256": "7b92b2a80699a59ad64e9a2d91540c30939f549ebd581f894b6991081e4d0498"
+  },
+  {
+    "path": "src/composables/useInstanceActions.ts",
+    "sha256": "5f2a1b1e0c52ace416d2cc2d418f8c8dec16d69ff6b592be26b6860427ed524d"
+  },
+  {
+    "path": "src/composables/useKeyboardShortcuts.ts",
+    "sha256": "6a5389a3ad5d1267a9f4389bb3f6c16d67b9e4d9412379872ad94962172ba17e"
+  },
+  {
+    "path": "src/composables/useKnowledgeBasePage.ts",
+    "sha256": "2c636de182b1180a31d15b42548fdfdbb36652ff2596af8d7c648696a340122d"
+  },
+  {
+    "path": "src/composables/useOverfittingRuntime.ts",
+    "sha256": "91d4acc969c304cf37c706f56565976d77a0ae5c712294b20b9c405404912c01"
+  },
+  {
+    "path": "src/composables/useStockAnalysisTask.ts",
+    "sha256": "534d78b472591233648ab7c046fe41f09a47039fc794a6c70d1e954bcfe38919"
+  },
+  {
+    "path": "src/composables/useStrategyDraftWorkspaceExecution.ts",
+    "sha256": "9b097fff62f18992ac4958ac7762a1f02af13a083a8515f266c946124f1aca8e"
+  },
+  {
+    "path": "src/composables/useUnitTableRendering.ts",
+    "sha256": "cdc6445328dfec3d616e54a9385ccc48548876cebded84f5c10d0cdd4a8cc038"
+  },
+  {
+    "path": "src/constants/chartColors.ts",
+    "sha256": "cb7d760a9d5385ba46be13ff4429a4a213d62579f930e7176ebbfba4e567ded3"
+  },
+  {
+    "path": "src/constants/strategy.ts",
+    "sha256": "83cbd9f701d7640746d86ed1a25db20263581c6ef7c875700cb220fd7587b3f3"
+  },
+  {
+    "path": "src/contracts/ai-research-approval-errors.v1.json",
+    "sha256": "932614b5cf736673881b061e9b224ec6d8a516dbac5c6fc8de98a883b26f7202"
+  },
+  {
+    "path": "src/contracts/aiResearchApprovalErrors.ts",
+    "sha256": "76f8f86afb1d820719c34a1d3120d3f1e8896326ffeae4f2e514af5120f0d265"
+  },
+  {
+    "path": "src/i18n/__tests__/i18n-index.test.ts",
+    "sha256": "4b59c993b229899b8d2599e1788e4d88074462c10ba838225f6787670aaa185b"
+  },
+  {
+    "path": "src/i18n/__tests__/locale-completeness.test.ts",
+    "sha256": "a2848881d8c830f4a87e20eb5dd6d361bd13d1e831f1dcdf8334c7679d9e915c"
+  },
+  {
+    "path": "src/i18n/i18n.d.ts",
+    "sha256": "fca39a66030f93b565ec7d6665798bc615de93302008bbe076774ec74b6cabff"
+  },
+  {
+    "path": "src/i18n/index.ts",
+    "sha256": "4a24fd7400174dd66bf6840babc6acc8b94f19b69bdb4f9c170fe56b56a1c1a9"
+  },
+  {
+    "path": "src/i18n/locales/de-DE.ts",
+    "sha256": "39c813b23fca458b8ed78a0e79c17b2f1b8795bbda58a9b1f74a779baf964def"
+  },
+  {
+    "path": "src/i18n/locales/en-US.ts",
+    "sha256": "7526df7c7053cd8692e3a30c596b310e18e15e8bb21366daa0157b454f710f1c"
+  },
+  {
+    "path": "src/i18n/locales/fr-FR.ts",
+    "sha256": "6e447f16ebde0d36824f95df715db0431c32f0ad13dab6dc36d16fea176a5810"
+  },
+  {
+    "path": "src/i18n/locales/it-IT.ts",
+    "sha256": "4cf0eeb6ea4a2ea0a81e528569b110e9dfea8180c8095991d9c8fb7cfaa69362"
+  },
+  {
+    "path": "src/i18n/locales/ja-JP.ts",
+    "sha256": "d9d27ea20614fad5845d19ee2f78ed5374dd0eca1f3fe966dac3df6d3f31c431"
+  },
+  {
+    "path": "src/i18n/locales/localeFactory.ts",
+    "sha256": "b834fd2e0f6ad1f214221b07e2f1da675cdaf4be285117c589a4b15e7513f720"
+  },
+  {
+    "path": "src/i18n/locales/registry.ts",
+    "sha256": "fef498a222f70118660c7bc2690faea925cc1ac82dae2e13d0202eec7911143c"
+  },
+  {
+    "path": "src/i18n/locales/ru-RU.ts",
+    "sha256": "5d0f31f4b69ca049b62959165353b6ac114e9760efddf714697b3059bc8bdf30"
+  },
+  {
+    "path": "src/i18n/locales/zh-CN.ts",
+    "sha256": "fe089a44171fdb669bc83b66824a2d48f64a7c656e63db4a568f9d91850fca21"
+  },
+  {
+    "path": "src/main.ts",
+    "sha256": "8d3adf702d5c3c017bbc1773d0e50327182ff5065f846beda1c13582e97a2bf0"
+  },
+  {
+    "path": "src/navigation/capabilities.ts",
+    "sha256": "513bd0c1e3524e7a60976b00b99ec3317ddb90715ae2e697b275fee968133664"
+  },
+  {
+    "path": "src/navigation/routes.ts",
+    "sha256": "64d36581edff70a2dc1a8efa5fbd90dc80f5817d5df09049a331246d7c60f877"
+  },
+  {
+    "path": "src/router/index.ts",
+    "sha256": "4bdd522cbce2aba1a45f96806408111b1df7131fdd2fa38bcc553c95b9dcde27"
+  },
+  {
+    "path": "src/stores/__tests__/auth.spec.ts",
+    "sha256": "5ab011b93279b040ec3ac21de6db8a22c6e77c0be1488da63d41a4edc7e25e36"
+  },
+  {
+    "path": "src/stores/__tests__/backtest.spec.ts",
+    "sha256": "1a009265dcb3895b2bfebe0eefc9d48dd2cdbd4a60ba79ff22a549bef2d0e85a"
+  },
+  {
+    "path": "src/stores/auth.ts",
+    "sha256": "4888e5d4fa9d06de04e3396ee92d4e44a16dba236d9d09d6a3a5f96d95ab94a0"
+  },
+  {
+    "path": "src/stores/backtest.ts",
+    "sha256": "d71e390c190abbc7181ebff1a931857b22c873fecf2a71537150388611f1972a"
+  },
+  {
+    "path": "src/stores/kbChat.ts",
+    "sha256": "4871036ee578ea3208158361aba8b7f06ecf5ff25d794d5ddf5000a91e5516f3"
+  },
+  {
+    "path": "src/stores/knowledgeBase.ts",
+    "sha256": "4f2a37900e7019d390dd35d2c1c76942254f0fdcba07364ad63d5b22143cfc2c"
+  },
+  {
+    "path": "src/stores/quote.ts",
+    "sha256": "96f53c602447ea923dc9a8b9d5f18c82f7cf364b23a7b08a1f27b2300a78c347"
+  },
+  {
+    "path": "src/stores/simulation.ts",
+    "sha256": "c157929c7b078a724df7fd6fb78956554b1a3285f02012e71a8ff4c2cefcb7a0"
+  },
+  {
+    "path": "src/stores/strategy.ts",
+    "sha256": "9f0f62d90d3ca94f46b8d3afbc34cb210bb5dac08b53c31fe449b2f675d3d1f5"
+  },
+  {
+    "path": "src/stores/theme.ts",
+    "sha256": "10d924c4de1ecf3a4a194a1453831243b09cad77cf43afe66ba3b8ac8d3ef2e5"
+  },
+  {
+    "path": "src/stores/workspace.ts",
+    "sha256": "9c64fa6171d4917aa5a024db04b8fc5e7893255b658792495e78d25717da87cc"
+  },
+  {
+    "path": "src/style.css",
+    "sha256": "fab022cb1c77f026f64483065131647af225568cbcccc004a80c61ee41136e6e"
+  },
+  {
+    "path": "src/styles/_responsive.scss",
+    "sha256": "6587ed6c63e5d3d4e319925d982d327ff6ef8d4d4e38de078bdd0669b93dd536"
+  },
+  {
+    "path": "src/styles/_tokens.scss",
+    "sha256": "9b8fc5992c850fa7875b331c9fc72ccd90c4eaf9c0ef5a0f55f9b2e47dad506d"
+  },
+  {
+    "path": "src/styles/design-system.scss",
+    "sha256": "86ac099d037a1e610ef796aa974c5f458cc8e5e2ff4276de9af695abccc19982"
+  },
+  {
+    "path": "src/styles/mobile.scss",
+    "sha256": "d5fe02efec9ca9a9cce6808f6b6264c8f3bc15162a746ea3bc4a9b04a47a9802"
+  },
+  {
+    "path": "src/test/mountWithPlugins.ts",
+    "sha256": "71fdf5a2963e95ca89496a37c328350c072c8d5a1c0a640d9e8d03ee53ed6ce6"
+  },
+  {
+    "path": "src/test/stubs.ts",
+    "sha256": "0a273ae9d44db54ee649e29c2c37904227d52bbc2eaf0cc23a68cf0e68c8eba0"
+  },
+  {
+    "path": "src/types/aiResearchV2.ts",
+    "sha256": "e9b41ab35be7fd7b5201c9582d58db9814af5ac5c96cf06feb7368132b2f0c6a"
+  },
+  {
+    "path": "src/types/analytics.ts",
+    "sha256": "442d715da19d3691d480b5d28510c5a7d16f5b36b22ab0435ba0db1fbea1d4e1"
+  },
+  {
+    "path": "src/types/charts.ts",
+    "sha256": "80446f5641673124d94cadb28c657b34ecd5ed62c4c70ae9c9cc6071179dd501"
+  },
+  {
+    "path": "src/types/element-plus-locale.d.ts",
+    "sha256": "728ab2dc996ed6a7260d6008ab56a13cbef7c335334214467158fdf6961c6217"
+  },
+  {
+    "path": "src/types/index.d.ts",
+    "sha256": "6850f86733b0fd790842695df0690b79e5bc2caa1f70c8ed6bc50adf2d5570c5"
+  },
+  {
+    "path": "src/types/researchWorkflow.ts",
+    "sha256": "34683628cb61475bef8f5d64d46ce0ed877e8995028ba42549b58da90728abc6"
+  },
+  {
+    "path": "src/types/strategy.ts",
+    "sha256": "47fa60bab73c15e75af8c5e217f67e2d3ada6ff4c59328dccbf4b83c6db7aa5e"
+  },
+  {
+    "path": "src/types/trust.ts",
+    "sha256": "4e8a3eba0b33d5b00d0a5c17ed605afc67c7f1a4ba016da842eef2fae69d3a6f"
+  },
+  {
+    "path": "src/types/workspace.ts",
+    "sha256": "0b7293b7b01522e71807cf09f81d9f4f1299d8ca5d3c94fbb94bd57297b40dda"
+  },
+  {
+    "path": "src/utils/auditTracker.ts",
+    "sha256": "ede3283492a6465d1b99841478ce4fac040877917fbb73e4eaf2c129af5626f4"
+  },
+  {
+    "path": "src/utils/chartTheme.ts",
+    "sha256": "d2dd189defed7ed94304037ae89f848dc0e2c8a021e9d2c3fdbb73ff8fc30d32"
+  },
+  {
+    "path": "src/utils/exportUtils.ts",
+    "sha256": "8e4bc249612e6600066c32f19d5dff4e9005518bf7d668f69db3a120ac87c2a7"
+  },
+  {
+    "path": "src/utils/markdown-sanitizer.ts",
+    "sha256": "7cfc166b463db11b7431e783a6b1209bf097bd3b2bbbab3b3cdff434e6c06d07"
+  },
+  {
+    "path": "src/utils/newsArticleFormat.ts",
+    "sha256": "34073e64a7a49ababd1519866d91809ef97ad9f129ba69d53f2122d7d8620f2c"
+  },
+  {
+    "path": "src/utils/quoteFormat.ts",
+    "sha256": "436db33a796b9b9bf794749da486c00ba6822d42bd69a8f2e36b4afa64a293ca"
+  },
+  {
+    "path": "src/utils/session.ts",
+    "sha256": "f87cddeec670831ebd5a7509ef509dc27a8a9bd3a6ebe2e8ea815503913b205e"
+  },
+  {
+    "path": "src/utils/tokenRef.ts",
+    "sha256": "20935e305f5c3372b08cbda547fe4736545236da15887e6160e8e4ecb303d24d"
+  },
+  {
+    "path": "src/views/AIChatPage.styles.scss",
+    "sha256": "18f279c5da0c2b600bdfc9fcd43684a3c5c738fe7e9ec374911965c670415b7e"
+  },
+  {
+    "path": "src/views/AIChatPage.vue",
+    "sha256": "d4328c70aaf4519eac0dc49072996cbe710f71df08419194c31a44031c84467e"
+  },
+  {
+    "path": "src/views/AIObservabilityPage.vue",
+    "sha256": "741d009623020e3d6fc4a568914f837a04dc4f5ec07ac054bbdf4806ec542a3d"
+  },
+  {
+    "path": "src/views/AITradingPage.styles.css",
+    "sha256": "2aaf64eb09cc47345d117f3fae1b47132a10f0d1b0c1691946ab38f71497c684"
+  },
+  {
+    "path": "src/views/AITradingPage.vue",
+    "sha256": "3d4daefb817bbf526d875e147c601cd9ca1f05cd4c51ba85635d538d43ee0161"
+  },
+  {
+    "path": "src/views/BacktestPage.vue",
+    "sha256": "e9506b288adff1ffde441ee6f41f016e36ea3ef1196231a4ece87154415e86b1"
+  },
+  {
+    "path": "src/views/BacktestResultPage.vue",
+    "sha256": "6c214b64a243ec04ba18879d336da3c24555a83c8e04e65feef70b44d6c8d17e"
+  },
+  {
+    "path": "src/views/BrokerProfilesPage.vue",
+    "sha256": "f8ee802b39b7d45f54c351fccdbdd2dbf31da31d02dcf490a197014a11bad355"
+  },
+  {
+    "path": "src/views/DashboardPage.vue",
+    "sha256": "3986dce5ff621ba5f8f457418a0fd2ab137ad0476a480613263e50df07f212b2"
+  },
+  {
+    "path": "src/views/DataPage.css",
+    "sha256": "eff48f6d4385f2403e61c9fbda21c0b28942732f600a6b4dac4c8e610ed2ea2f"
+  },
+  {
+    "path": "src/views/DataPage.vue",
+    "sha256": "1530fcd08b8c523f881e13594eb7447e97314a0cf798f256ea4b9b4a8ff3c381"
+  },
+  {
+    "path": "src/views/GatewayConnectDialog.vue",
+    "sha256": "b7aedfc2b17d92faf2a64f3cb07c54de392d3814080be090aa60a20c79ebf8dd"
+  },
+  {
+    "path": "src/views/GatewayStatusPage.css",
+    "sha256": "b8664ed7c9bb4b8adcd92d185a6d8c17926b25c3e476ed6a987c0cecde9d210e"
+  },
+  {
+    "path": "src/views/GatewayStatusPage.vue",
+    "sha256": "84aa03d39719d6b186c77d0517206873aff7d1bbb81e5aa3ad3bb2a7fc577cf0"
+  },
+  {
+    "path": "src/views/KnowledgeBaseDocumentPage.vue",
+    "sha256": "edacc62dc9a0af7b1b0bf7bbd5575192f7ba44bd59f059c810dfb280025e43c0"
+  },
+  {
+    "path": "src/views/KnowledgeBasePage.css",
+    "sha256": "647bb7d083c726a874fea473e30e9b66ca483fc197220259702165142339cb39"
+  },
+  {
+    "path": "src/views/KnowledgeBasePage.vue",
+    "sha256": "50987b0492940dc3552fda38ebd2a9c6bdc44fbddb9272fb4c5ac6bd0382319e"
+  },
+  {
+    "path": "src/views/LoginPage.vue",
+    "sha256": "1b15bbde2714086c0f12adcef77094b46d675082331f1f17510087c7b05a0a56"
+  },
+  {
+    "path": "src/views/NewsIntelligencePage.vue",
+    "sha256": "e4b6a937927ed7c7f6eeca7d42e3e84713bac5343a10984f8ea84011931390f0"
+  },
+  {
+    "path": "src/views/OptionsChainPage.vue",
+    "sha256": "8f7cf5bea5ecea5d5975e207a0704071bf715ad3407776e0942dd24d9c84849a"
+  },
+  {
+    "path": "src/views/PaperTradingDetailPage.vue",
+    "sha256": "4160c3fb007578a85bc98a5d573d806772b78cf6de112104bf54e4f1037c5fca"
+  },
+  {
+    "path": "src/views/PortfolioLedgerPage.vue",
+    "sha256": "6c3a8307bbbadcb258f3d705a19ae28607795353374354a0ea5f996162f749f3"
+  },
+  {
+    "path": "src/views/PortfolioPage.vue",
+    "sha256": "397edcb9c4c4a76a060bd7f7aeb283f4def0456987101ea36f06567dac113e67"
+  },
+  {
+    "path": "src/views/PromptTemplatesPage.vue",
+    "sha256": "a1f1717797bde77b15013219242f3ae754339653defc2e3aaaf6458918ee64be"
+  },
+  {
+    "path": "src/views/QuantToolsPage.vue",
+    "sha256": "085eaf09e3c410b4675164e2e0fa6552d675a7f158449707686f72968f958e25"
+  },
+  {
+    "path": "src/views/QuotePage.vue",
+    "sha256": "13c61d5bd810ef38bd4f7cac3afd95600cd7d84fb8a0e00537d1d606994a9460"
+  },
+  {
+    "path": "src/views/RegisterPage.vue",
+    "sha256": "d2076b8e2b4293b876a91cec7f62d79f90544fc3f7d53989e5810cc72db2f2c8"
+  },
+  {
+    "path": "src/views/RiskControlPage.vue",
+    "sha256": "23211a284310d6ecd043b48a516c510a08478dc453b43d6dbc0e09fe00e85abd"
+  },
+  {
+    "path": "src/views/ScannerPage.vue",
+    "sha256": "4d29f03db55ef4a484d05108c0fd38b7ef379482cc28d5308f3cecefc80dd76d"
+  },
+  {
+    "path": "src/views/SettingsPage.vue",
+    "sha256": "0f80147638e1b5da972a16d2db56e2222f333f000aea6a2cb5e991e403eb660a"
+  },
+  {
+    "path": "src/views/StrategyPage.css",
+    "sha256": "8f77cff6494675110f4424c19a06f447e1a1281a771010cca6d2f7f22f63a844"
+  },
+  {
+    "path": "src/views/StrategyPage.vue",
+    "sha256": "0ced86a993ce09968c113aee1ef2bae027b400da6a91add06fd89f8bb71afb2c"
+  },
+  {
+    "path": "src/views/__tests__/BacktestPage.spec.ts",
+    "sha256": "6ca33f010965f65a22aa2a9a1c2fdc011384b35e0be4193580d28f830031b2e1"
+  },
+  {
+    "path": "src/views/__tests__/StrategyPage.spec.ts",
+    "sha256": "d0da3323ed2c9e4ca44dae2af68466aa1d9521ddbc4a4328f77eccff3c46f1b6"
+  },
+  {
+    "path": "src/views/config/AIProviderConfigPage.vue",
+    "sha256": "83487a57cf379cb7ce7d0ef9a550b887f9d64515273587f1efbc73146e0a73fd"
+  },
+  {
+    "path": "src/views/config/ConfigAILayout.vue",
+    "sha256": "b85f03317a45563d509067ced22034277bd47fc4e63f128f1e881d8a2c97de1f"
+  },
+  {
+    "path": "src/views/config/ConfigDataLayout.vue",
+    "sha256": "48f2aee8e3cda6bc4ca30b48238777a4d0e8686d5bcf9758503df1a96259aa11"
+  },
+  {
+    "path": "src/views/data/AirflowDagsPage.vue",
+    "sha256": "7dbbe88d2cbef5fbf2d06c14f5b03cc0e902ce2829db3fc466a0fa849b980170"
+  },
+  {
+    "path": "src/views/data/DataExecutionsPage.vue",
+    "sha256": "d320ae1d930d12f0740cb75e78b636b4efdc3d44141364497a03ea38e620e7ac"
+  },
+  {
+    "path": "src/views/data/DataGovernancePage.vue",
+    "sha256": "3826b01817c060c6161996cd73fffca7338d33a2c57bca6992766242cbacd245"
+  },
+  {
+    "path": "src/views/data/DataInterfacesPage.vue",
+    "sha256": "ac093fcbbd29b69d22fcc83531da390ae950edc6a051bea4f538445958fb6b20"
+  },
+  {
+    "path": "src/views/data/DataLayout.vue",
+    "sha256": "656e64166110b11cc4da47778d5605a4a495f10d30335172102f105d4b8b33a2"
+  },
+  {
+    "path": "src/views/data/DataMarketPage.vue",
+    "sha256": "b6213962a0c6606cf038f9e4c0e1f42e502bc990af478dc31a067e4e0e1ecb22"
+  },
+  {
+    "path": "src/views/data/DataScriptDetailPage.vue",
+    "sha256": "2fa6c5dc0e241a6e60a8ca89957594d007ee6ba8cacfc344da00a3dc36ceccbf"
+  },
+  {
+    "path": "src/views/data/DataScriptsPage.vue",
+    "sha256": "88d86a7a13f882629a9ed1ea60ba70211280b9517020d0a8a5207d5c3922a8ec"
+  },
+  {
+    "path": "src/views/data/DataSyncPage.styles.css",
+    "sha256": "06a63e152a60ca6f239645d1472242b53bbb4c51d79b22208c0d800be5015287"
+  },
+  {
+    "path": "src/views/data/DataSyncPage.vue",
+    "sha256": "8c3d9fcb97d9617c78d9ee89bc0e4c5ab56aeb1ea7d40ee6f2876b94f75a75dd"
+  },
+  {
+    "path": "src/views/data/DataTableDetailPage.vue",
+    "sha256": "68350478320dd2375c4b2ecfc079daadbbf8bc112184fc94e60f52c7efa5039b"
+  },
+  {
+    "path": "src/views/data/DataTablesPage.vue",
+    "sha256": "5e9eec3561b895bb25edc396d21bdc327705f96b159b09a6d47ac9079a0f4411"
+  },
+  {
+    "path": "src/views/data/DataTasksPage.vue",
+    "sha256": "476060dfa7f3c032721122670c361184dd93300638edfd0d07a5604f469df9d5"
+  },
+  {
+    "path": "src/views/data/DataTopicsPage.vue",
+    "sha256": "51a8065c144899edc89766773420ecf3e98cccb05a5bd33f12bdf41e06da6353"
+  },
+  {
+    "path": "src/views/data/components/DataSyncActiveTasks.vue",
+    "sha256": "477d263a246ed27197060d6c79ff3a0d4d4a10cd1aaac8ac7375ae7ba6abecea"
+  },
+  {
+    "path": "src/views/data/components/DataSyncConfigForm.vue",
+    "sha256": "93011a4a47e5b9f8642cbb30fc9616b0365c4a8dd130c4a6f58e694a8feb2851"
+  },
+  {
+    "path": "src/views/data/components/DataSyncDatabaseTables.vue",
+    "sha256": "3fb90241165b29c83ecdad3dfc0500b351cc69e6e2b6be70d102c138c8258354"
+  },
+  {
+    "path": "src/views/data/useDataPage.ts",
+    "sha256": "6d6e5cf142ca08ffcff4aaa585186e0e4619d22a77accc4af141f1ce544ae0e2"
+  },
+  {
+    "path": "src/views/data/utils.ts",
+    "sha256": "fd9338f8a51e91603316e7589c53e777f8e42f5d4bd2f58e7b323d9f42953fe9"
+  },
+  {
+    "path": "src/views/gateway/useGatewayStatusPage.ts",
+    "sha256": "8518690c1afadf76fa78b9897b20902ff42cdd358ff4617236dffc7339c8fe34"
+  },
+  {
+    "path": "src/views/gatewayStatusHelpers.ts",
+    "sha256": "bb100b903166106790ddb3f9ffaf697472a67f92cbdd210f7e66e7a6c57ba77f"
+  },
+  {
+    "path": "src/views/investment/AssetAnalysisPage.vue",
+    "sha256": "689fb0749671b84ba606efa8cd680d0c7cb5c26bd69258f6efdbdd0159a27f58"
+  },
+  {
+    "path": "src/views/investment/StockAnalysisPage.vue",
+    "sha256": "b880577967a51261158f58870397f3a7891a0c08e24c1caabfabcf7bb2aa33a1"
+  },
+  {
+    "path": "src/views/knowledge-base-components/KnowledgeBaseDocMetadata.vue",
+    "sha256": "7e197e415f0c5b59930a3bc2b8719c243b14bb845674459d8e855fdc9298463d"
+  },
+  {
+    "path": "src/views/knowledge-base-components/KnowledgeBaseDocSidePanel.vue",
+    "sha256": "08c9627a4aad16d8ad01b8bb17a57873959068bbc55eff9eb52834051686efd7"
+  },
+  {
+    "path": "src/views/knowledge-base-components/KnowledgeBaseDocSourceView.vue",
+    "sha256": "c79a78d93082a2a32b9c25893f06fabbe8f5247b9333ab519269c1045f314f94"
+  },
+  {
+    "path": "src/views/knowledge-base/KnowledgeBaseDialogs.vue",
+    "sha256": "46aec983f64263425b6c8fa7269f58d6598aab7ace22ba87330168e3274bd69a"
+  },
+  {
+    "path": "src/views/knowledge-base/KnowledgeBaseHero.vue",
+    "sha256": "ad3cacf74620da89d095aa3d176324453cfe73294627127f19c87d12dde44849"
+  },
+  {
+    "path": "src/views/strategy-components/StrategyDetailDialog.vue",
+    "sha256": "57235f114f488c2b9a9ebe1f136a74a7deffce9d111a5ee0d909b581515f629e"
+  },
+  {
+    "path": "src/views/strategy-components/StrategyEditDialog.vue",
+    "sha256": "2ed381954b48e1ac9d45f5139a4ea57d0f66affb20575a1bae556ec3655b680e"
+  },
+  {
+    "path": "src/views/strategy-components/StrategyTemplateCard.vue",
+    "sha256": "a29d5c98508211f0b9f73b216c325a5701571f4905ec001a4b2a8aef6671d4ee"
+  },
+  {
+    "path": "src/views/strategy/aiResearchTaskTypes.ts",
+    "sha256": "d795ff5f9f4c0f5bcf700ec930b789e7cc302b5812c71daaf70b75c31751dc1b"
+  },
+  {
+    "path": "src/views/strategy/aiResearchValueAdapters.ts",
+    "sha256": "586d04a9e6c0e40f435768b6ba03bb94f244e480bba6cea536d824684ccb454b"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchMarketData.ts",
+    "sha256": "c3d4a6d393acb14614ac274d6fa67bfca707becb1d3087f7e2adcaf949db4589"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchRunExecution.ts",
+    "sha256": "2b78f1fe6bac8f18d591bc1aef31a9b3ac12725efd7e4cd4b056a00d28935962"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchRunRecordAdapters.ts",
+    "sha256": "a2ee526b45c7c75b834013b289e8dc26b221d0539db33a05c847db08b46ac55a"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchRuntimeOperations.ts",
+    "sha256": "b3d7ec0ef939bd460286c70b9e9eaeaa3bcca1fb830773e6c00987191f85b731"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchRuntimeProjections.ts",
+    "sha256": "08dae69a13fa1465f603fa2956924ae6c19c232da1b7bbe03adea273460ae871"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchTaskLifecycle.ts",
+    "sha256": "ce2716b6412b6ec80c95df21c7c248e8a0c2ccf999daa210d462760bcd3b716c"
+  },
+  {
+    "path": "src/views/strategy/useAIResearchTaskState.ts",
+    "sha256": "a14564e76aa64b5b33ea47901260834eea214714fbd01c87f668af0fd211f553"
+  },
+  {
+    "path": "src/views/strategy/useStrategyPage.ts",
+    "sha256": "e83833e08f8a02cda749811dd28876961235a9b0eda3d34d01a8910786e3a3ad"
+  },
+  {
+    "path": "src/views/strategy/useStrategyPageDialogs.ts",
+    "sha256": "eb87a8cff4c462bcbc7436f95c17ac3da10f628eff0b1d147893a92910dd0788"
+  },
+  {
+    "path": "src/views/strategy/useStrategyPageViewState.ts",
+    "sha256": "77c3b151a5f31a48ee200ea3525b96e74dec11f35c6190384e183a3f825d8137"
+  },
+  {
+    "path": "src/views/workspace/WorkspaceDetailPage.vue",
+    "sha256": "8ff5ee7bfe74666234c1502ff4d59731bd547b4f0d5d2fd96c879e4c6bc3748a"
+  },
+  {
+    "path": "src/views/workspace/WorkspaceListPage.vue",
+    "sha256": "fb91aba100fff8925865c675a6e2b1df3aa32c0d6473ce1d576d8227ef2d29ee"
+  },
+  {
+    "path": "src/views/workspace/useWorkspaceDetailResources.ts",
+    "sha256": "c621623d0789db6953b993b993cc99833d8dfa049de8cd6b95d1b144f7c7515d"
+  },
+  {
+    "path": "src/views/workspace/workspaceDetailFormatters.ts",
+    "sha256": "f78e08f788f24941ac929358a68f1635c4f05b3bafda64ca5f237602bb4971c6"
+  },
+  {
+    "path": "tailwind.config.js",
+    "sha256": "38dd5008e9d8fc4262361eeb4a15c76a91e9d8c0c1f3dab4cbc45697ff3f8427"
+  },
+  {
+    "path": "tsconfig.json",
+    "sha256": "1d0f46aa87bc71ddb4c2a9d7430e280212c7674a2bee1247ffaa3e8602ec13c7"
+  },
+  {
+    "path": "tsconfig.node.json",
+    "sha256": "52f81598ae25bfaa7ae1ccec76e04d13326e708643854bbc5653fa4bf0a760e6"
+  },
+  {
+    "path": "vite.config.ts",
+    "sha256": "b8660b45cc92a466fbc539f967a342db387e84971f88cb704ad626da7aa17a74"
+  },
+  {
+    "path": "vitest.config.ts",
+    "sha256": "a0765a10e336ffa110fa9844a0ff1aaefe6fdf1b294f41e403c5b7f228990653"
+  }
+]

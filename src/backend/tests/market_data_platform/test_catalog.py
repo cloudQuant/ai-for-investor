@@ -15,7 +15,8 @@ from app.db.database import Base, async_session_maker
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ITERATION_196_HEAD = "20260908_ai_research_approval_authority"
-INTEGRATED_HEAD = "20260911_market_data_b2_completeness_evidence"
+PRE_OPTIMIZATION_HEAD = "20260911_market_data_b2_completeness_evidence"
+INTEGRATED_HEAD = "20261012_optimization_objective_direction"
 RESEARCH_BINDING_RECEIPT_TABLES = {
     "md_research_data_bindings",
     "md_research_data_binding_scopes",
@@ -343,7 +344,11 @@ def test_catalog_migration_accepts_current_startup_created_schema_at_iteration_1
             "semantic_record_key_sha256",
             "available_at",
         )
-        assert ScriptDirectory.from_config(config).get_heads() == [INTEGRATED_HEAD]
+        script = ScriptDirectory.from_config(config)
+        integrated_head = script.get_revision(INTEGRATED_HEAD)
+        assert integrated_head is not None
+        assert integrated_head.down_revision == PRE_OPTIMIZATION_HEAD
+        assert script.get_heads() == [INTEGRATED_HEAD]
 
         command.downgrade(config, ITERATION_196_HEAD)
         command.upgrade(config, "head")

@@ -1,0 +1,5 @@
+
+> ai-for-investor-frontend@0.1.0 verify:node-engines
+> node scripts/check-node-engine-compat.mjs
+
+Node engine compatibility passed (v20.20.2; 233 required packages checked; 86 optional packages skipped).

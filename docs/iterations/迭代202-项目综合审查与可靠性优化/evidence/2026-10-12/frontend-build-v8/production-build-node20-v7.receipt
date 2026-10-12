@@ -1,0 +1,8 @@
+command=PATH=/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin:$PATH npm run build -- --config ./.codex-vite-chunk-diagnostics.config.ts
+node=v20.20.2
+npm=11.6.2
+start_utc=2026-10-12T11:57:05Z
+source_hashes=/tmp/ai-for-investor-iteration201-bundle/node20-v7-source-hashes.txt
+end_utc=2026-10-12T12:01:10Z
+exit_code=0
+log=/tmp/ai-for-investor-iteration201-bundle/production-build-node20-v7.log

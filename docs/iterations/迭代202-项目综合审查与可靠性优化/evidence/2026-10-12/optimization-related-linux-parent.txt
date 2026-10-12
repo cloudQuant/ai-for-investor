@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 169 items
+
+tests/test_optimization_api.py ......................................... [ 24%]
+..........                                                               [ 30%]
+tests/test_optimization_helpers.py ..............                        [ 38%]
+tests/test_optimization_submission.py .........................          [ 53%]
+tests/test_optimization_task_state.py ................................   [ 72%]
+tests/test_optimization_service.py ..................................... [ 94%]
+..........                                                               [100%]
+
+======================= 169 passed in 642.86s (0:10:42) ========================

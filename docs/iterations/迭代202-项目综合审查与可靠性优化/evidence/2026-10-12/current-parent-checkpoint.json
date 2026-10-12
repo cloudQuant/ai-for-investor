@@ -1,0 +1,319 @@
+{
+  "captured_at": "2026-10-12T08:50:28.854358+00:00",
+  "status": "INCOMPLETE",
+  "user_constraint": "Keep other projects running; serialize heavy acceptance where possible.",
+  "frontend": "Clean install, engines, audit, typecheck and lint PASS. Full unit/build/browser still pending.",
+  "mysql": "Explicit prod aiomysql extra 0.3.2: lease and migration 2 passed.",
+  "d12": "Clean Compose up exit 1 after 353.71s; later health success is not fresh-start PASS.",
+  "sandbox": "2 bootstrap diagnostic tests FAIL; product bootstrap budget unchanged.",
+  "backend_full": "Interrupted after 8126 collected / 1 collection error; targeted collection diagnosis pending. Exit 143 after guarded stop of owned PID 121.",
+  "protected_file_hashes": {
+    "README.md": "567e395a4cab245e1f4bd537e031a30eea09b6d73f23c19bdd622cba18b3261f",
+    "README.en.md": "4ed5d90ae00539f96f51372861afbb175b47065d3d0542027e26aad36d3f77fa",
+    "DISCLAIMER.md": "fd420a6dffaf498f7c6dae6a3c22a8b1cb87e5e5dc950bf8d53c517298083f49",
+    "LICENSE-REVIEW.md": "e71620f9c4910a7587f524649f759248ea7f0e29d2d58eb44a0c340e277e8919",
+    "LICENSE-SCOPE-DRAFT.md": "2d8c1bd505bc92f90b0bc67eecd15d568298295a939e76f316311b0152f2d4c1",
+    "LICENSE-SOURCE-AVAILABLE-DRAFT.md": "dd02817f393232f5cbeb833e417ddaa89142e1ee3a10360b0c690ccdbcc41f44"
+  },
+  "iteration201_size_checks": [
+    {
+      "path": "src/backend/app/services/market_data/store.py",
+      "lines": 1703,
+      "limit": 3900
+    },
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "lines": 2130,
+      "limit": 2900
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "lines": 2041,
+      "limit": 2650
+    },
+    {
+      "path": "src/backend/app/services/market_instrument.py",
+      "lines": 1246,
+      "limit": 2150
+    },
+    {
+      "path": "src/backend/app/services/position_valuation.py",
+      "lines": 1128,
+      "limit": 2000
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_manager.py",
+      "lines": 504,
+      "limit": 1800
+    },
+    {
+      "path": "src/backend/app/services/market_data/cffex_settlement_collector.py",
+      "lines": 1334,
+      "limit": 1335
+    },
+    {
+      "path": "src/backend/app/services/market_data/stock_valuation_collector.py",
+      "lines": 1113,
+      "limit": 1115
+    },
+    {
+      "path": "src/backend/app/services/market_data/publication.py",
+      "lines": 1109,
+      "limit": 1115
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_finalize.py",
+      "lines": 2176,
+      "limit": 2178
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPage.ts",
+      "lines": 5854,
+      "limit": 6500
+    }
+  ],
+  "new_production_module_sizes": [
+    {
+      "path": "src/backend/app/api/portfolio/asset_spec_adapter.py",
+      "lines": 456
+    },
+    {
+      "path": "src/backend/app/api/portfolio/instance_resolution.py",
+      "lines": 368
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_common.py",
+      "lines": 186
+    },
+    {
+      "path": "src/backend/app/api/portfolio/position_aggregation.py",
+      "lines": 464
+    },
+    {
+      "path": "src/backend/app/config_parsing.py",
+      "lines": 50
+    },
+    {
+      "path": "src/backend/app/db/bootstrap_admin.py",
+      "lines": 19
+    },
+    {
+      "path": "src/backend/app/db/persistence_boundaries.py",
+      "lines": 62
+    },
+    {
+      "path": "src/backend/app/db/schema_readiness.py",
+      "lines": 46
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_binding.py",
+      "lines": 349
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_lifecycle.py",
+      "lines": 456
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_projection.py",
+      "lines": 922
+    },
+    {
+      "path": "src/backend/app/services/asset_research/task_leases.py",
+      "lines": 93
+    },
+    {
+      "path": "src/backend/app/services/market_data/persisted_fetch_boundary.py",
+      "lines": 96
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_calendar.py",
+      "lines": 882
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_calendar_grid.py",
+      "lines": 154
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_evidence.py",
+      "lines": 909
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_evidence_receipts.py",
+      "lines": 761
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_persistence.py",
+      "lines": 807
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_persistence_validation.py",
+      "lines": 281
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_projection.py",
+      "lines": 806
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_adapter.py",
+      "lines": 987
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_catalog.py",
+      "lines": 494
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_dynamic_data.py",
+      "lines": 503
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_projection.py",
+      "lines": 399
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_contract_specs.py",
+      "lines": 419
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_position_normalization.py",
+      "lines": 424
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_snapshot.py",
+      "lines": 368
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_startup.py",
+      "lines": 369
+    },
+    {
+      "path": "src/backend/app/services/valuation_numeric.py",
+      "lines": 362
+    },
+    {
+      "path": "src/backend/app/services/valuation_position.py",
+      "lines": 353
+    },
+    {
+      "path": "src/backend/app/services/valuation_prices.py",
+      "lines": 741
+    },
+    {
+      "path": "src/backend/app/services/valuation_projection.py",
+      "lines": 59
+    },
+    {
+      "path": "src/backend/app/services/valuation_types.py",
+      "lines": 41
+    },
+    {
+      "path": "src/frontend/src/components/workspace/optimization/optimizationObjective.ts",
+      "lines": 49
+    },
+    {
+      "path": "src/frontend/src/utils/newsArticleFormat.ts",
+      "lines": 6
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchValueAdapters.ts",
+      "lines": 64
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchMarketData.ts",
+      "lines": 813
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRunRecordAdapters.ts",
+      "lines": 709
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRuntimeOperations.ts",
+      "lines": 635
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRuntimeProjections.ts",
+      "lines": 552
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPageDialogs.ts",
+      "lines": 169
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPageViewState.ts",
+      "lines": 93
+    },
+    {
+      "path": "src/frontend/src/views/workspace/useWorkspaceDetailResources.ts",
+      "lines": 34
+    },
+    {
+      "path": "src/frontend/src/views/workspace/workspaceDetailFormatters.ts",
+      "lines": 23
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "mysql-extra-install-parent.txt",
+      "sha256": "af9b6c2341c6538760f3a93156234b270fff98a661a67c299fd1ab3f163fdfb0"
+    },
+    {
+      "path": "mysql-extra-acceptance-parent.txt",
+      "sha256": "0a546bae266484631755aa72834379febd1412821cc59111bcf3fbb965728b8f"
+    },
+    {
+      "path": "mysql-extra-container-parent-receipt.json",
+      "sha256": "b3d4eed3c015b5ad94b410889a7a9d49ecef5ec3025b3c5c4a37f932b3a7963d"
+    },
+    {
+      "path": "frontend-ci-v3-parent.txt",
+      "sha256": "7c78353e358780d8f6b992b8d61e4e2edab361a9c59c29a66d5a10eb5dddf4cd"
+    },
+    {
+      "path": "frontend-v3-parent-receipt.json",
+      "sha256": "c3d47f501bdb9b0872953a79106b77bf054e121a3b20f643603280a681695146"
+    },
+    {
+      "path": "node20-engines-v3-parent.txt",
+      "sha256": "f0768070704a838d05f44a37ebeac5b7b2be1e619cd0d464ce108a02c91a74d6"
+    },
+    {
+      "path": "node24-engines-v3-parent.txt",
+      "sha256": "3c7aa87c02722c73d906fe369339d42bc8695e8230b50469119b39db5bbb4acb"
+    },
+    {
+      "path": "npm-audit-v3-parent.txt",
+      "sha256": "f63cadf44e04ef7d408fb5a257f81f3c749e86d68a45915a4182a274a0166c98"
+    },
+    {
+      "path": "frontend-typecheck-v3-parent.txt",
+      "sha256": "d80faa434b9b4945bfeb6eee26948bf5394595eb192745c84d475f965dab3fd6"
+    },
+    {
+      "path": "frontend-lint-v3-parent.txt",
+      "sha256": "73878867f16852f02fc3cad2583e1e9a4ae1d4d0fd710852e7a5333aa19697b0"
+    },
+    {
+      "path": "source-size-v3-parent.txt",
+      "sha256": "3cb45fff138a17bdca640b3dc9bace99dcaceb79cd9739e57e68c0c12fa1333b"
+    },
+    {
+      "path": "d12-clean-down-parent.txt",
+      "sha256": "37c371b753ae0cea15f6c0f655f52f18c2f6848d2deb3cc8d9e5cee0a6b6cbae"
+    },
+    {
+      "path": "d12-clean-up-parent.txt",
+      "sha256": "5730c4706e1d48cb7e6d945f8f09b3f46a07c566baac782ff9328f66ba6d787c"
+    },
+    {
+      "path": "d12-clean-parent-receipt.json",
+      "sha256": "4f3cd3093997c5194c1b30e47cdc165f7482fc5842b5a70979f3d7d543f225d3"
+    },
+    {
+      "path": "linux-sandbox-diagnostic-parent.txt",
+      "sha256": "573787a9ec8b704f072f0daa1e7177e1ceee8b6730d6124034ed0213290cb93a"
+    },
+    {
+      "path": "backend-full-linux-parent.txt",
+      "sha256": "513f20c1c8490cdeb2ebee6468cda17b1d4cd92e575b9b91f05dedb6ea677d55"
+    }
+  ]
+}

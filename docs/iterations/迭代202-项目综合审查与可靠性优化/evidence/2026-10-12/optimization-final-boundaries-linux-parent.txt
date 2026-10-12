@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 15 items
+
+tests/test_iteration202_optimization_acceptance.py ..........F..         [ 86%]
+tests/test_iteration202_optimization_artifact_download.py ..             [100%]
+
+=================================== FAILURES ===================================
+_________ test_blocked_thread_runner_does_not_block_asyncio_heartbeat __________
+tests/test_iteration202_optimization_acceptance.py:176: in test_blocked_thread_runner_does_not_block_asyncio_heartbeat
+    task_id = submit_optimization(
+E   TypeError: submit_optimization() missing 1 required keyword-only argument: 'get_strategy_dir'
+=========================== short test summary info ============================
+FAILED tests/test_iteration202_optimization_acceptance.py::test_blocked_thread_runner_does_not_block_asyncio_heartbeat
+======================== 1 failed, 14 passed in 53.91s =========================

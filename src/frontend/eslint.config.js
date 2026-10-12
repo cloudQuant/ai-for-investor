@@ -1,4 +1,5 @@
 import eslint from '@eslint/js'
+import globals from 'globals'
 import tseslint from 'typescript-eslint'
 import pluginVue from 'eslint-plugin-vue'
 
@@ -26,11 +27,20 @@ export default tseslint.config(
 
   // Vue files: use typescript parser for <script lang="ts">
   {
-    files: ['**/*.vue'],
+    files: ['src/**/*.vue'],
     languageOptions: {
+      globals: globals.browser,
       parserOptions: {
         parser: tseslint.parser,
       },
+    },
+  },
+
+  // Frontend maintenance scripts execute in Node rather than the browser.
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 

@@ -1,0 +1,19 @@
+[
+  {
+    "check": "frontend-ci-v2-parent",
+    "command": [
+      "npm",
+      "ci",
+      "--ignore-scripts",
+      "--no-audit"
+    ],
+    "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+    "started_at": "2026-10-12T08:03:47.655027+00:00",
+    "finished_at": "2026-10-12T08:06:42.735690+00:00",
+    "elapsed_seconds": 175.07,
+    "exit_code": -9,
+    "log": "frontend-ci-v2-parent.txt",
+    "sha256": "ce4182ebb864cfacbfabaf5619cb7faf9ba9a99af3a58c58db3561dcbeb4b417",
+    "lock_sha256": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e"
+  }
+]

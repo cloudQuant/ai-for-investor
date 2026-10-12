@@ -1,0 +1,103 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - button "打开导航菜单" [ref=e8] [cursor=pointer]:
+        - img [ref=e10]
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: 策略研究
+          - heading "策略研究" [level=2] [ref=e15]
+        - navigation "策略研究 主导航" [ref=e16]:
+          - button "策略管理" [ref=e17] [cursor=pointer]:
+            - img [ref=e19]
+            - generic [ref=e21]: 策略管理
+          - button "策略研究" [ref=e22] [cursor=pointer]:
+            - img [ref=e24]
+            - generic [ref=e27]: 策略研究
+    - generic [ref=e28]:
+      - 'button "当前主题: 黑曜" [active] [ref=e30] [cursor=pointer]':
+        - generic [ref=e32]: 🌙
+      - button "语言" [ref=e34] [cursor=pointer]:
+        - img [ref=e36]
+        - generic [ref=e38]: 中文
+      - button "用户菜单 (Style Preview)" [ref=e40] [cursor=pointer]:
+        - generic [ref=e41]: S
+        - img [ref=e43]
+  - main [ref=e45]:
+    - generic [ref=e46]:
+      - region "研究工作区" [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49]: 策略研究工作区
+          - heading "研究工作区" [level=1] [ref=e50]
+          - paragraph [ref=e51]: 集中管理策略想法、Backtrader 单元和回测执行上下文，快速判断哪些研究可以继续推进。
+        - generic [ref=e52]:
+          - button "新建工作区" [ref=e53] [cursor=pointer]:
+            - generic [ref=e54]:
+              - img [ref=e56]
+              - text: 新建工作区
+          - radiogroup "视图模式" [ref=e58]:
+            - generic "卡片视图" [ref=e59]:
+              - radio "卡片视图" [checked] [ref=e60]
+              - img [ref=e63] [cursor=pointer]
+            - generic "表格视图" [ref=e65]:
+              - radio "表格视图" [ref=e66]
+              - img [ref=e69] [cursor=pointer]
+        - generic "工作区统计" [ref=e71]:
+          - article [ref=e72]:
+            - generic [ref=e73]: 全部工作区
+            - strong [ref=e74]: "0"
+          - article [ref=e75]:
+            - generic [ref=e76]: 运行中
+            - strong [ref=e77]: "0"
+          - article [ref=e78]:
+            - generic [ref=e79]: 已完成
+            - strong [ref=e80]: "0"
+          - article [ref=e81]:
+            - generic [ref=e82]: 已选择
+            - strong [ref=e83]: "0"
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]:
+            - generic [ref=e87]: 工作区清单
+            - heading "策略研究列表" [level=2] [ref=e88]
+          - paragraph [ref=e89]: 当前显示 0 个工作区
+        - region "从策略想法到可复核结果" [ref=e91]:
+          - generic [ref=e92]:
+            - text: 研究流程
+            - heading "从策略想法到可复核结果" [level=2] [ref=e93]
+          - list [ref=e94]:
+            - listitem [ref=e95]:
+              - generic [ref=e96]: "1"
+              - generic [ref=e97]:
+                - generic [ref=e98]:
+                  - strong [ref=e99]: 创建研究工作区
+                  - generic [ref=e100]: 现在开始
+                - paragraph [ref=e101]: 为本次策略想法建立可追溯的研究上下文。
+                - button "新建工作区" [ref=e102] [cursor=pointer]:
+                  - generic [ref=e103]: 新建工作区
+            - listitem [ref=e104]:
+              - generic [ref=e105]: "2"
+              - generic [ref=e106]:
+                - generic [ref=e107]:
+                  - strong [ref=e108]: 配置策略与数据
+                  - generic [ref=e109]: 下一步
+                - paragraph [ref=e110]: 添加策略单元，确认标的、周期、参数和数据范围。
+            - listitem [ref=e111]:
+              - generic [ref=e112]: "3"
+              - generic [ref=e113]:
+                - generic [ref=e114]:
+                  - strong [ref=e115]: 运行回测
+                  - generic [ref=e116]: 下一步
+                - paragraph [ref=e117]: 提交一次可复现的验证，并等待运行状态完成。
+            - listitem [ref=e118]:
+              - generic [ref=e119]: "4"
+              - generic [ref=e120]:
+                - generic [ref=e121]:
+                  - strong [ref=e122]: 审阅并决定下一步
+                  - generic [ref=e123]: 下一步
+                - paragraph [ref=e124]: 查看绩效、风险和稳健性，再决定优化、模拟或复盘。
+      - text: "*"
+```

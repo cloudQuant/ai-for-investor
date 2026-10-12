@@ -1,0 +1,178 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.8, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 1 item
+
+tests/test_iteration202_deployment_database.py +++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~ Stack of Thread-3 (_connection_worker_thread) (12935360512) ~~~~~~~~~~
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/aiosqlite/core.py", line 59, in _connection_worker_thread
+    future, function = tx.get()
+~~~~~~~~~~~~~~~~~~~ Stack of loguru-writer-60 (12901707776) ~~~~~~~~~~~~~~~~~~~~
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~~~~ Stack of loguru-writer-59 (6173847552) ~~~~~~~~~~~~~~~~~~~~
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~~~~ Stack of loguru-writer-58 (6157021184) ~~~~~~~~~~~~~~~~~~~~
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~~~~ Stack of loguru-writer-57 (6140194816) ~~~~~~~~~~~~~~~~~~~~
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~~~~~~~ Stack of MainThread (8372084352) ~~~~~~~~~~~~~~~~~~~~~~~
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pytest/__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/config/__init__.py", line 223, in console_main
+    code = main()
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/config/__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/main.py", line 318, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/main.py", line 372, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/main.py", line 396, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/runner.py", line 118, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/runner.py", line 137, in runtestprotocol
+    reports.append(call_and_report(item, "call", log))
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/runner.py", line 244, in call_and_report
+    call = CallInfo.from_call(
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/runner.py", line 353, in from_call
+    result: TResult | None = func()
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/runner.py", line 245, in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/runner.py", line 179, in pytest_runtest_call
+    item.runtest()
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical/pytest_asyncio/plugin.py", line 469, in runtest
+    super().runtest()
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/python.py", line 1720, in runtest
+    self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/_pytest/python.py", line 166, in pytest_pyfunc_call
+    result = testfunction(**testargs)
+  File "/tmp/ai-investor-iter200-202-20261012.afLb99/canonical/pytest_asyncio/plugin.py", line 716, in inner
+    runner.run(coro, context=context)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/asyncio/base_events.py", line 641, in run_until_complete
+    self.run_forever()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/asyncio/base_events.py", line 608, in run_forever
+    self._run_once()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/asyncio/base_events.py", line 1936, in _run_once
+    handle._run()
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/asyncio/events.py", line 84, in _run
+    self._context.run(self._callback, *self._args)
+  File "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/test_iteration202_deployment_database.py", line 153, in test_upgrade_previous_schema_then_start_without_ddl
+    _run_alembic(database_url, _PREVIOUS_RELEASE_REVISION)
+  File "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/test_iteration202_deployment_database.py", line 107, in _run_alembic
+    result = subprocess.run(
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/subprocess.py", line 2113, in _communicate
+    ready = selector.select(timeout)
+  File "/Users/yunjinqi/opt/anaconda3/lib/python3.11/selectors.py", line 415, in select
+    fd_event_list = self._selector.poll(timeout)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++

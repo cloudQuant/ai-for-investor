@@ -1,7 +1,7 @@
 /** Unit-table state and operations for a workspace. */
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type TableColumnCtx } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -9,6 +9,7 @@ import { workspaceApi } from '@/api/workspace'
 import { getErrorMessage } from '@/api/index'
 import type { StrategyUnit } from '@/types/workspace'
 import type { TagType } from '@/constants/strategy'
+import { resolveOptimizationTarget } from '../optimization/optimizationObjective'
 
 export interface WorkspaceUnitsTabProps {
   workspaceId: string
@@ -89,7 +90,11 @@ export function useWorkspaceUnitsTab(props: WorkspaceUnitsTabProps) {
     }
   }
 
-  function handleRowDblClick(row: StrategyUnit, column?: { type?: string }, event?: Event) {
+  function handleRowDblClick(
+    row: StrategyUnit,
+    column: TableColumnCtx<StrategyUnit> | null,
+    event: MouseEvent,
+  ) {
     if (!canOpenReport(row)) return
     if (column?.type === 'selection') return
     const target = event?.target as HTMLElement | null
@@ -488,9 +493,12 @@ export function useWorkspaceUnitsTab(props: WorkspaceUnitsTabProps) {
           const nWorkers = (oc.n_workers as number) || 4
           const mode = (oc.mode as string) || 'grid'
           const timeout = (oc.timeout as number) || 0
+          const target = resolveOptimizationTarget(oc.objective, oc.direction)
           const result = await workspaceApi.submitOptimization(props.workspaceId, {
             unit_id: u.id,
             param_ranges: paramRanges,
+            objective: target.objective,
+            direction: target.direction,
             n_workers: nWorkers,
             mode,
             timeout,
@@ -581,12 +589,20 @@ export function useWorkspaceUnitsTab(props: WorkspaceUnitsTabProps) {
     return map[status || ''] || '-'
   }
 
-  function objectiveLabel(obj: string | undefined) {
-    if (!obj) return '-'
-    const map: Record<string, string> = {
-      sharpe_max: t('units.bestSharpe'), max_return: t('units.bestReturn'), min_drawdown: t('units.leastDrawdown'),
+  function objectiveLabel(obj: unknown, direction?: unknown) {
+    if (typeof obj !== 'string' || !obj) return '-'
+    if (!['sharpe_ratio', 'total_return', 'max_drawdown', 'sharpe_max', 'max_return', 'min_drawdown'].includes(obj)) {
+      return obj
     }
-    return map[obj] || obj
+    const target = resolveOptimizationTarget(obj, direction)
+    const map: Record<string, string> = {
+      sharpe_ratio: t('optimization.sharpe'),
+      total_return: t('optimization.totalReturn'),
+      max_drawdown: t('optimization.maxDrawdown'),
+    }
+    const label = map[target.objective]
+    const directionLabel = t(target.direction === 'maximize' ? 'optimization.maximize' : 'optimization.minimize')
+    return `${label} (${directionLabel})`
   }
 
   function formatOptimizationCount(row: StrategyUnit): string {

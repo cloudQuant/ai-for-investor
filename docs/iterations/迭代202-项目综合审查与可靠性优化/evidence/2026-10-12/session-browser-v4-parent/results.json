@@ -1,0 +1,450 @@
+{
+  "config": {
+    "configFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/iteration202.config.ts",
+    "rootDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-fixture",
+        "name": "chromium-fixture",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "iteration202-session-workspace.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+      "command": "node_modules/.bin/vite --host 127.0.0.1 --port 4177 --strictPort",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 120000,
+      "env": {
+        "VITE_API_TARGET": "http://127.0.0.1:4178"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "iteration202-session-workspace.spec.ts",
+      "file": "iteration202-session-workspace.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "AC-D09: retains credentials through 503 and network failures, then confirms identity on retry",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 79450,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('identity-retry-panel')\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 60000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('identity-retry-panel')\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('identity-retry-panel')\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 60000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('identity-retry-panel')\u001b[22m\n\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:423:58",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                      "column": 58,
+                      "line": 423
+                    },
+                    "snippet": "  421 |\n  422 |   await page.goto('/research/workspaces')\n> 423 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })\n      |                                                          ^\n  424 |   expect(meCalls).toBe(4)\n  425 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)\n  426 |   expect(workspaceRequests).toEqual([])"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                        "column": 58,
+                        "line": 423
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('identity-retry-panel')\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 60000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('identity-retry-panel')\u001b[22m\n\n\n  421 |\n  422 |   await page.goto('/research/workspaces')\n> 423 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })\n      |                                                          ^\n  424 |   expect(meCalls).toBe(4)\n  425 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)\n  426 |   expect(workspaceRequests).toEqual([])\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:423:58"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:34:06.804Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                    "column": 58,
+                    "line": 423
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-80b65c2f9a57275824b8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 398,
+          "column": 1
+        },
+        {
+          "title": "AC-D09: a real startup 401 clears the expired identity and returns to the login form",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 23151,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:36:00.669Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-7accd1a8cd5d86181968",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 446,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: a late A 401 cannot log out B, while B own 401 still expires B",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "timedOut",
+                  "duration": 120704,
+                  "error": {
+                    "message": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m",
+                    "stack": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m"
+                  },
+                  "errors": [
+                    {
+                      "message": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:36:30.996Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-a32ca5abd91f127ca658",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 470,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 12717,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:38:37.396Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-c5d5bcd4bcc6aae76da3",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 526,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: logout clears A workspace data before B opens the same workspace route",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 51247,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#workspace-detail-title')\nExpected: \u001b[32m\"Workspace A fixture\"\u001b[39m\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#workspace-detail-title')\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#workspace-detail-title')\nExpected: \u001b[32m\"Workspace A fixture\"\u001b[39m\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#workspace-detail-title')\u001b[22m\n\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:642:57",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                      "column": 57,
+                      "line": 642
+                    },
+                    "snippet": "  640 |   await navigateInSpa(page, '/research/workspaces/shared')\n  641 |   await expect(page).toHaveURL(/\\/research\\/workspaces\\/shared$/)\n> 642 |   await expect(page.locator('#workspace-detail-title')).toHaveText('Workspace A fixture')\n      |                                                         ^\n  643 |   const aRow = page.getByRole('row').filter({ hasText: 'Unit A fixture' })\n  644 |   await expect(aRow).toBeVisible()\n  645 |   await aRow.locator('.el-checkbox__inner').click()"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                        "column": 57,
+                        "line": 642
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#workspace-detail-title')\nExpected: \u001b[32m\"Workspace A fixture\"\u001b[39m\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for locator('#workspace-detail-title')\u001b[22m\n\n\n  640 |   await navigateInSpa(page, '/research/workspaces/shared')\n  641 |   await expect(page).toHaveURL(/\\/research\\/workspaces\\/shared$/)\n> 642 |   await expect(page.locator('#workspace-detail-title')).toHaveText('Workspace A fixture')\n      |                                                         ^\n  643 |   const aRow = page.getByRole('row').filter({ hasText: 'Unit A fixture' })\n  644 |   await expect(aRow).toBeVisible()\n  645 |   await aRow.locator('.el-checkbox__inner').click()\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:642:57"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:39:00.273Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                    "column": 57,
+                    "line": 642
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-6bada4faaca24595d2f8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 575,
+          "column": 1
+        },
+        {
+          "title": "AC-D11: late A detail and units cannot replace B during same-route workspace navigation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 13257,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:40:01.834Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-3e11c--route-workspace-navigation-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-6b78327f36035e4019b2",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 676,
+          "column": 1
+        },
+        {
+          "title": "AC-D11: B detail and units remain active when they finish before late A responses",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6817,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T10:40:20.332Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-5037e-ish-before-late-A-responses-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-82e20585f3d768a15de8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 751,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-12T10:33:39.035Z",
+    "duration": 409376.17199999996,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

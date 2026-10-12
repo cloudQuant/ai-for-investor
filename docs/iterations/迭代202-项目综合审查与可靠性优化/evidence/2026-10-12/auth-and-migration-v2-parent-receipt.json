@@ -1,0 +1,45 @@
+{
+  "recorded_at": "2026-10-12T07:57:51.807560+00:00",
+  "status": "IN_PROGRESS",
+  "auth": {
+    "exit_code": 0,
+    "passed": 27,
+    "warnings": 4,
+    "pytest_seconds": 368.31,
+    "test_files": [
+      "tests/test_iteration202_auth_boundaries.py",
+      "tests/test_auth.py"
+    ],
+    "environment": "Anaconda base Python 3.11.8 with canonical-v2 target; exact final dev lock"
+  },
+  "migration": {
+    "mysql": "INCOMPLETE: pytest watchdog 180s during previous revision subprocess",
+    "postgresql": "INCOMPLETE: pytest watchdog 180s during previous revision subprocess"
+  },
+  "artifacts": [
+    {
+      "path": "auth-boundaries-v2-parent.txt",
+      "sha256": "82be4920b977dd732b3f0a9f402dd5f8eb019bc89b0edbcd5db2deb29561b1e0"
+    },
+    {
+      "path": "canonical-v2-integrity-parent.json",
+      "sha256": "35a83ece5d40a418f8844e6b1e1cadc78f016d65e358f8c113ee4e07440de7ff"
+    },
+    {
+      "path": "canonical-import-timing-parent.json",
+      "sha256": "2cc1d3c1a197cffe91a5bc329794137d60fb5d8edeb3885594bae93f6d054be1"
+    },
+    {
+      "path": "mysql-migration-v2-parent.txt",
+      "sha256": "ae071b5a91485137b93f2c0d59f11355ff2e6cf936b7e843b33590ee555ce2cf"
+    },
+    {
+      "path": "postgres-migration-v2-parent.txt",
+      "sha256": "9565e893533c459bebde35c13a47b21ed65cbf2681823088a49b79dea222b51e"
+    },
+    {
+      "path": "supported-migration-v2-parent-receipt.json",
+      "sha256": "84c89315f7d9526925105a6400070cbe0aeebfba453d55e91c39e8c91edf0169"
+    }
+  ]
+}

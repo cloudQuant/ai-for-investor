@@ -16,6 +16,10 @@ from app.models.optimization import OptimizationTask
 from app.schemas.backtest import TaskStatus
 
 logger = logging.getLogger(__name__)
+_ACTIVE_STATUSES = (
+    TaskStatus.PENDING.value,
+    TaskStatus.RUNNING.value,
+)
 
 
 class OptimizationExecutionManager:
@@ -28,6 +32,8 @@ class OptimizationExecutionManager:
         total: int,
         param_ranges: dict[str, Any],
         n_workers: int,
+        objective: str | None = None,
+        direction: str | None = None,
     ) -> OptimizationTask:
         """Create a new persisted optimization task."""
         task = OptimizationTask(
@@ -40,6 +46,8 @@ class OptimizationExecutionManager:
             results=[],
             param_ranges=param_ranges,
             n_workers=n_workers,
+            objective=objective,
+            direction=direction,
         )
 
         async with async_session_maker() as session:
@@ -80,25 +88,28 @@ class OptimizationExecutionManager:
 
         async with async_session_maker() as session:
             result = await session.execute(
-                update(OptimizationTask).where(OptimizationTask.id == task_id).values(**values)
+                update(OptimizationTask)
+                .where(
+                    OptimizationTask.id == task_id,
+                    OptimizationTask.status.in_(_ACTIVE_STATUSES),
+                )
+                .values(**values)
             )
             await session.commit()
             return result.rowcount > 0
 
     async def set_cancelled(self, task_id: str, user_id: str | None = None) -> bool:
         """Mark task as cancelled. Returns False if not found or ownership mismatch."""
-        task = await self.get_task(task_id, user_id)
-        if not task:
-            return False
-
         async with async_session_maker() as session:
-            await session.execute(
-                update(OptimizationTask)
-                .where(OptimizationTask.id == task_id)
-                .values(status=TaskStatus.CANCELLED.value)
+            statement = update(OptimizationTask).where(
+                OptimizationTask.id == task_id,
+                OptimizationTask.status.in_(_ACTIVE_STATUSES),
             )
+            if user_id is not None:
+                statement = statement.where(OptimizationTask.user_id == user_id)
+            result = await session.execute(statement.values(status=TaskStatus.CANCELLED.value))
             await session.commit()
-        return True
+            return result.rowcount > 0
 
     async def is_cancelled(self, task_id: str) -> bool:
         """Check if task is marked cancelled in DB (for cross-instance cancel check)."""

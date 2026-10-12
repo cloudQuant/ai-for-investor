@@ -12,7 +12,7 @@ import pandas as pd
 import requests
 from akshare.stock_feature.stock_technology_ths import _get_file_content_ths
 from bs4 import BeautifulSoup
-from py_mini_racer import py_mini_racer
+from py_mini_racer import MiniRacer
 
 from app.data_fetch.configs.db_config import DB_CONFIG
 from app.data_fetch.providers.akshare_to_mysql import AkshareToMySql
@@ -45,7 +45,7 @@ class StockRankCxdThs(AkshareToMySql):
             "一年新低": "2",
             "历史新低": "1",
         }
-        js_code = py_mini_racer.MiniRacer()
+        js_code = MiniRacer()
         js_code.eval(_get_file_content_ths("ths.js"))
         frames = []
         page_count = max(1, int(max_pages))

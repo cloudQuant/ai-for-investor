@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-10-12T09:42:46.957323+00:00",
+  "optimization_related": "169 passed / 642.86s pytest / exit 0",
+  "production_registry_audit": {
+    "exit_code": 0,
+    "dependencies": 124,
+    "vulnerabilities": 0
+  },
+  "locks": {
+    "requirements-dev.lock": "6b364dec1106a567294881e16dc626ba52c01e5678a5d2913bb7078258e6a2cb",
+    "requirements-prod.lock": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b"
+  },
+  "artifacts": [
+    {
+      "path": "optimization-related-linux-parent.txt",
+      "sha256": "316aac2986f023b0c62fa45fc02b2a5eac83745b4680497da5d16bca421ff74c"
+    },
+    {
+      "path": "optimization-related-linux-parent-receipt.json",
+      "sha256": "027ad36cfbbf2505353812953ac72a922686e8d1dfd11d0399cfac89965cc88d"
+    },
+    {
+      "path": "pip-audit-prod-v3-parent.json",
+      "sha256": "9bd46070775197ca39757f458541360ec557d7f22fba7c37b561c2f7859c53e7"
+    },
+    {
+      "path": "pip-audit-prod-v3-parent.txt",
+      "sha256": "79d30422388543b2563e1dde76bb7e7857d7ef0c6fdf05c8c71598633ca07e1e"
+    }
+  ]
+}

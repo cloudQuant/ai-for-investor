@@ -1,0 +1,234 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 8032 items / 24 deselected / 1 skipped / 8008 selected
+
+tests/asset_research/bond/test_bond_plugin_analytics.py ...              [  0%]
+tests/asset_research/bond/test_valuation.py ...                          [  0%]
+tests/asset_research/crypto/test_crypto_market_quality.py ...            [  0%]
+tests/asset_research/crypto/test_crypto_plugin_market_quality.py ...     [  0%]
+tests/asset_research/fund/test_fund_metrics.py ..                        [  0%]
+tests/asset_research/fund/test_fund_plugin_metrics.py ..                 [  0%]
+tests/asset_research/futures/test_futures_plugin_term_structure.py ..    [  0%]
+tests/asset_research/futures/test_futures_term_structure.py ..           [  0%]
+tests/asset_research/fx/test_fx_outcome_evaluator.py ..                  [  0%]
+tests/asset_research/fx/test_fx_quotes.py ....                           [  0%]
+tests/asset_research/option/test_chain_quality.py .....                  [  0%]
+tests/asset_research/option/test_costs.py ..                             [  0%]
+tests/asset_research/option/test_plugin_analytics.py ........            [  0%]
+tests/asset_research/option/test_pricing.py .......                      [  0%]
+tests/asset_research/test_akshare_providers.py ....                      [  0%]
+tests/asset_research/test_api.py .................                       [  0%]
+tests/asset_research/test_approved_manifest_importer.py ..               [  0%]
+tests/asset_research/test_citation_verifier.py ...                       [  0%]
+tests/asset_research/test_compliance_policy.py ..                        [  0%]
+tests/asset_research/test_data_adapter.py .......                        [  1%]
+tests/asset_research/test_decision_policy.py ..........................  [  1%]
+tests/asset_research/test_drift.py ..                                    [  1%]
+tests/asset_research/test_evaluation.py ....                             [  1%]
+tests/asset_research/test_identity.py .........................          [  1%]
+tests/asset_research/test_lifecycle_executor.py ....                     [  1%]
+tests/asset_research/test_llm_guardrails.py ....                         [  1%]
+tests/asset_research/test_llm_provider.py ..                             [  1%]
+tests/asset_research/test_llm_report_generator.py ....                   [  1%]
+tests/asset_research/test_master_data.py ..                              [  1%]
+tests/asset_research/test_metrics.py .ssss                               [  2%]
+tests/asset_research/test_migration.py ............                      [  2%]
+tests/asset_research/test_model_cards.py .                               [  2%]
+tests/asset_research/test_model_governance_api.py ...                    [  2%]
+tests/asset_research/test_model_promotion.py ..............              [  2%]
+tests/asset_research/test_models.py ....                                 [  2%]
+tests/asset_research/test_mysql_contract.py sss                          [  2%]
+tests/asset_research/test_orchestrator.py ............                   [  2%]
+tests/asset_research/test_outcome_evaluator.py ...................       [  2%]
+tests/asset_research/test_outcome_scheduler.py ....                      [  2%]
+tests/asset_research/test_plugin_outcome_contracts.py .................. [  3%]
+...............                                                          [  3%]
+tests/asset_research/test_plugins.py ..                                  [  3%]
+tests/asset_research/test_position_context.py ...                        [  3%]
+tests/asset_research/test_provider_base.py ...                           [  3%]
+tests/asset_research/test_registry.py .                                  [  3%]
+tests/asset_research/test_report_artifacts.py ......                     [  3%]
+tests/asset_research/test_report_contracts.py .......                    [  3%]
+tests/asset_research/test_retention.py ....                              [  3%]
+tests/asset_research/test_schedule_manifests.py ...                      [  3%]
+tests/asset_research/test_schedule_policy.py ........                    [  3%]
+tests/asset_research/test_schedule_runner.py ...........                 [  3%]
+tests/asset_research/test_schedules.py ......                            [  3%]
+tests/asset_research/test_signal_history.py .                            [  4%]
+tests/asset_research/test_source_concurrency.py .                        [  4%]
+tests/asset_research/test_source_registry.py ..                          [  4%]
+tests/asset_research/test_stock_compat.py ..                             [  4%]
+tests/asset_research/test_stock_dual_write.py ...                        [  4%]
+tests/asset_research/test_stock_reconciliation.py ...                    [  4%]
+tests/asset_research/test_task_lifecycle.py ..............               [  4%]
+tests/asset_research/test_task_runner.py .............                   [  4%]
+tests/asset_research/test_task_runner_supported_db.py s                  [  4%]
+tests/market_data_platform/test_access_authorization.py ................ [  4%]
+........                                                                 [  4%]
+tests/market_data_platform/test_akshare_live_acceptance_harness.py ..... [  4%]
+........                                                                 [  4%]
+tests/market_data_platform/test_akshare_provider.py .................... [  5%]
+..............................                                           [  5%]
+tests/market_data_platform/test_akshare_runner_provider.py ....F........ [  5%]
+..F.........+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~ Stack of Thread-3 (_connection_worker_thread) (281471998423424) ~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/aiosqlite/core.py", line 59, in _connection_worker_thread
+    future, function = tx.get()
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-70 (281472929993088) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-69 (281472488173952) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-68 (281472479719808) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-67 (281472471265664) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~~~~ Stack of MainThread (281473024316608) ~~~~~~~~~~~~~~~~~~~~~
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/usr/local/lib/python3.11/site-packages/pytest/__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+  File "/usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py", line 223, in console_main
+    code = main()
+  File "/usr/local/lib/python3.11/site-packages/_pytest/config/__init__.py", line 199, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/main.py", line 318, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/usr/local/lib/python3.11/site-packages/_pytest/main.py", line 372, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/main.py", line 396, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/runner.py", line 118, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/runner.py", line 137, in runtestprotocol
+    reports.append(call_and_report(item, "call", log))
+  File "/usr/local/lib/python3.11/site-packages/_pytest/runner.py", line 244, in call_and_report
+    call = CallInfo.from_call(
+  File "/usr/local/lib/python3.11/site-packages/_pytest/runner.py", line 353, in from_call
+    result: TResult | None = func()
+  File "/usr/local/lib/python3.11/site-packages/_pytest/runner.py", line 245, in <lambda>
+    lambda: runtest_hook(item=item, **kwds),
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/runner.py", line 179, in pytest_runtest_call
+    item.runtest()
+  File "/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py", line 469, in runtest
+    super().runtest()
+  File "/usr/local/lib/python3.11/site-packages/_pytest/python.py", line 1720, in runtest
+    self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/usr/local/lib/python3.11/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/usr/local/lib/python3.11/site-packages/_pytest/python.py", line 166, in pytest_pyfunc_call
+    result = testfunction(**testargs)
+  File "/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py", line 716, in inner
+    runner.run(coro, context=context)
+  File "/usr/local/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 641, in run_until_complete
+    self.run_forever()
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 608, in run_forever
+    self._run_once()
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 1937, in _run_once
+    handle = None  # Needed to break cycles when an exception occurs.
+  File "/usr/local/lib/python3.11/selectors.py", line 481, in select
+    return ready
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++

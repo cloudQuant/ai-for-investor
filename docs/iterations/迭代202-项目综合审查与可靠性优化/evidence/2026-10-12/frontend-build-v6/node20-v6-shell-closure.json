@@ -1,0 +1,21 @@
+{
+  "shellRoots": [
+    "\u0000vite/preload-helper.js",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/index.html",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vue-router/dist/devtools-EWN81iOl.mjs",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vue-router/dist/vue-router.mjs",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/LanguageSwitcher.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/LanguageSwitcher.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/LanguageSwitcher.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ErrorBoundary.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ErrorBoundary.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ErrorBoundary.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ThemeSwitcher.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ThemeSwitcher.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ThemeSwitcher.vue",
+    "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/main.ts"
+  ],
+  "shellModuleCount": 962,
+  "elementPlusBarrelIncluded": false,
+  "barrelImportChain": []
+}

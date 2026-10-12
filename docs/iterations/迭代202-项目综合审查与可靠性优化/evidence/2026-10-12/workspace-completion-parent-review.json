@@ -1,0 +1,27 @@
+{
+  "reviewed_at": "2026-10-12T14:26:05.218Z",
+  "reviewer": "primary",
+  "files": [
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "sha256": "541635078e32a2b3b1adc88d1fbbdd4202c07b95110772b701cfe5323091a02e"
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_position_normalization.py",
+      "sha256": "1a2c9f897a86ad2cb799efa26c2854d23bd3f9bc10b5359c814255c821ecc4a9"
+    },
+    {
+      "path": "src/backend/tests/test_trading_workspace_service.py",
+      "sha256": "6cef459b8e05a592f196bac1fe3f24e44fe00e232ecb5bc28e177c93ef0a1fde"
+    }
+  ],
+  "checks": [
+    "Compared direction/open-size/alias-size bodies and original ordering against executed full-v3 source",
+    "Found and corrected instance-method seam regression: directional helper now receives self._first_row_number callback",
+    "New deferred alias test substitutes instance return values and verifies exact directional output",
+    "Preserved classmethod open-size and instance direction seams plus hydrate=False CTP path"
+  ],
+  "static_verdict": "PASS_AFTER_REVIEW_FIX",
+  "behavioral_verdict": "PASS",
+  "independent_regression": "backend-final-delta-parent-review.json"
+}

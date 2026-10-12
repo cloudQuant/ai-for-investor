@@ -37,6 +37,15 @@ from app.services.market_data.field_quality import (
     FieldQualityValueError,
     normalize_numeric_field_value,
 )
+from app.services.market_data.persisted_fetch_boundary import (
+    PersistedProviderFetchBoundaryError,
+    _await_lease_release_after_cancellation,
+    _await_persistence_after_cancellation,
+    persist_provider_fetch,
+    require_lower_sha256,
+    utc_now,
+    utc_parser,
+)
 from app.services.market_data.providers import (
     MarketDataProviderRequest,
     ProviderFetchResult,
@@ -44,7 +53,6 @@ from app.services.market_data.providers import (
 )
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.store import (
-    DeferredProviderFetch,
     MarketDataStore,
     PersistedProviderFetch,
 )
@@ -357,7 +365,7 @@ class CffexSettlementCollector:
             field_name="source_descriptor_id",
             maximum=128,
         )
-        self._clock = clock or _utc_now
+        self._clock = clock or utc_now
 
     async def collect(
         self,
@@ -457,12 +465,14 @@ class CffexSettlementCollector:
                     # complete that critical section before re-raising an
                     # interrupt outcome with the durable prefix.
                     persistence_task = asyncio.create_task(
-                        self._store.persist_provider_result(
-                            target.context,
-                            result,
-                            received_at=local_received_at,
-                            source_authorization=target.source_authorization,
-                            fetch_lease=lease,
+                        persist_provider_fetch(
+                            self._store.persist_provider_result(
+                                target.context,
+                                result,
+                                received_at=local_received_at,
+                                source_authorization=target.source_authorization,
+                                fetch_lease=lease,
+                            )
                         )
                     )
                     try:
@@ -472,26 +482,26 @@ class CffexSettlementCollector:
                             persisted = await _await_persistence_after_cancellation(
                                 persistence_task
                             )
+                        except PersistedProviderFetchBoundaryError as persistence_error:
+                            if persisted_fetches:
+                                raise CffexSettlementCollectorPartialPublishCancelledError(
+                                    persisted_fetches
+                                ) from cancellation
+                            raise cancellation from persistence_error
                         except BaseException as persistence_error:
                             # A failed Store task has no returned receipt to
                             # append. Preserve the original cancellation and
                             # let recovery inspect Store's published/hidden
                             # boundary rather than fabricating a prefix.
                             raise cancellation from persistence_error
-                        if not isinstance(persisted, PersistedProviderFetch):
-                            if persisted_fetches:
-                                raise CffexSettlementCollectorPartialPublishCancelledError(
-                                    persisted_fetches
-                                ) from cancellation
-                            raise cancellation
                         persisted_fetches.append(persisted)
                         raise CffexSettlementCollectorPartialPublishCancelledError(
                             persisted_fetches
                         ) from cancellation
-                    if not isinstance(persisted, PersistedProviderFetch):
+                    except PersistedProviderFetchBoundaryError as exc:
                         raise CffexSettlementCollectorError(
                             "CFFEX_SETTLEMENT_DEFERRED_RECEIPT_UNSUPPORTED"
-                        )
+                        ) from exc
                     persisted_fetches.append(persisted)
             except Exception as exc:
                 if persisted_fetches:
@@ -1001,14 +1011,7 @@ def _source_descriptor_sha256(descriptor: CffexSettlementSourceDescriptor) -> st
 
 
 def _require_lower_sha256(value: object, *, code: str) -> str:
-    """Require a non-secret canonical digest without reflecting an invalid value."""
-    if (
-        not isinstance(value, str)
-        or len(value) != 64
-        or any(character not in "0123456789abcdef" for character in value)
-    ):
-        raise CffexSettlementCollectorError(code)
-    return value
+    return require_lower_sha256(value, code=code, error_type=CffexSettlementCollectorError)
 
 
 def _assert_row_market_and_date(*, row: Mapping[str, object], trading_date: date) -> None:
@@ -1233,10 +1236,7 @@ def _require_cffex_symbol(value: object) -> str:
     return value
 
 
-def _as_utc(value: object, *, field_name: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-        raise CffexSettlementCollectorError("CFFEX_SETTLEMENT_TIMESTAMP_INVALID")
-    return value.astimezone(UTC)
+_as_utc = utc_parser(CffexSettlementCollectorError, "CFFEX_SETTLEMENT_TIMESTAMP_INVALID")
 
 
 def _require_text(value: object, *, field_name: str, maximum: int) -> str:
@@ -1310,38 +1310,6 @@ def _json_safe(value: object, *, depth: int = 0) -> object:
             raise CffexSettlementCollectorError("CFFEX_SETTLEMENT_SOURCE_PAYLOAD_INVALID")
         return _json_safe(scalar, depth=depth + 1)
     raise CffexSettlementCollectorError("CFFEX_SETTLEMENT_SOURCE_PAYLOAD_INVALID")
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
-
-
-async def _await_persistence_after_cancellation(
-    persistence_task: asyncio.Task[PersistedProviderFetch | DeferredProviderFetch],
-) -> PersistedProviderFetch | DeferredProviderFetch:
-    """Finish one shielded Store critical section despite repeated cancels.
-
-    The caller re-raises cancellation immediately after this task returns, but
-    cannot let an interrupt split Store publication from the collector's
-    in-memory durable-prefix record. A second cancellation therefore waits for
-    the same task instead of creating an unobserved commit/return gap.
-    """
-    while True:
-        try:
-            return await asyncio.shield(persistence_task)
-        except asyncio.CancelledError:
-            if persistence_task.done():
-                return persistence_task.result()
-
-
-async def _await_lease_release_after_cancellation(release_task: asyncio.Task[bool]) -> bool:
-    """Finish one release task before reporting a cancellation after durable publication."""
-    while True:
-        try:
-            return await asyncio.shield(release_task)
-        except asyncio.CancelledError:
-            if release_task.done():
-                return release_task.result()
 
 
 __all__ = [

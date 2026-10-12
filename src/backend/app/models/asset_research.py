@@ -497,8 +497,8 @@ class AssetSignalSchedule(RetentionMixin, Base):
             "(owner_scope IN ('PUBLIC_SHADOW', 'ADMIN_EVAL') "
             "AND approved_manifest_id IS NOT NULL AND manifest_entry_key IS NOT NULL "
             "AND manifest_content_hash IS NOT NULL AND "
-            "((enabled = 1 AND system_target_key IS NOT NULL) "
-            "OR (enabled = 0 AND system_target_key IS NULL)))",
+            "((enabled = TRUE AND system_target_key IS NOT NULL) "
+            "OR (enabled = FALSE AND system_target_key IS NULL)))",
             name="ck_asset_schedule_manifest_owner",
         ),
     )

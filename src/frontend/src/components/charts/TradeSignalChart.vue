@@ -58,8 +58,8 @@ import { TRADE_SIGNAL_MA_COLORS, TRADE_SIGNAL_SUB_COLORS } from '@/constants/cha
 const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
-  klines: KlineData[]
-  signals: TradeSignal[]
+  klines?: KlineData[]
+  signals?: TradeSignal[]
   indicators?: Record<string, (number | null)[]>
   height?: number
 }>(), {

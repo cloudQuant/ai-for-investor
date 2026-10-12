@@ -1,0 +1,176 @@
+
+ RUN  v4.1.11 /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
+
+ ✓ src/__tests__/views/StrategyPage.test.ts (158 tests) 17697ms
+     ✓ continues research from current result when paper review fails  399ms
+     ✓ continues research from current result when live candidate review expires  786ms
+     ✓ starts paper trading from an achieved history record  911ms
+     ✓ marks paper trading as failed when start response is not started  548ms
+     ✓ reviews paper trading from an achieved history record  430ms
+     ✓ uses live handoff embedded in paper review without rebuilding it  1864ms
+     ✓ sends only the exact classified asset type as Iteration 197 bridge intent for BTCUSDT  484ms
+ ✓ src/__tests__/views/DataPage.test.ts (62 tests) 2715ms
+     ✓ keeps lifecycle and user queries off legacy online refresh when the server capability is disabled  375ms
+ ✓ src/__tests__/views/AIChatPage.test.ts (24 tests) 577ms
+ ✓ src/__tests__/views/QuotePage.test.ts (2 tests) 175ms
+ ✓ src/__tests__/views/StockAnalysisPage.test.ts (5 tests) 140ms
+ ✓ src/__tests__/components/common/AppLayout.test.ts (25 tests) 760ms
+       ✓ 应该渲染侧边栏  463ms
+ ✓ src/__tests__/components/aiResearch/TrustedResearchWorkbench.test.ts (18 tests) 378ms
+ ✓ src/__tests__/views/AssetAnalysisPage.test.ts (12 tests) 284ms
+ ✓ src/__tests__/components/aiResearch/ApprovalPanel.test.ts (22 tests) 488ms
+ ✓ src/__tests__/views/AIProviderConfigPage.test.ts (4 tests) 149ms
+ ✓ src/__tests__/components/workspace/WorkspaceUnitsTab.test.ts (14 tests) 626ms
+ ✓ src/__tests__/components/workspace/WorkspaceOptimizationTab.test.ts (13 tests) 280ms
+ ✓ src/__tests__/components/workspace/CreateUnitDialog.test.ts (11 tests) 160ms
+ ✓ src/__tests__/views/SettingsPage.test.ts (11 tests) 208ms
+ ✓ src/views/__tests__/StrategyPage.spec.ts (7 tests) 109ms
+ ✓ src/__tests__/views/data/AirflowDagsPage.test.ts (4 tests) 81ms
+ ✓ src/__tests__/views/data/DataSyncPage.test.ts (3 tests) 109ms
+ ✓ src/__tests__/utils/markdown-sanitizer.test.ts (27 tests) 266ms
+ ✓ src/__tests__/views/PortfolioPage.test.ts (24 tests) 164ms
+ ✓ src/i18n/__tests__/i18n-index.test.ts (9 tests) 166ms
+ ✓ src/__tests__/views/data/DataGovernancePage.test.ts (4 tests) 99ms
+ ✓ src/__tests__/views/ScannerPage.test.ts (7 tests) 290ms
+ ✓ src/__tests__/views/BacktestResultPage.test.ts (10 tests) 230ms
+ ✓ src/__tests__/views/data/DataTasksPage.test.ts (10 tests) 156ms
+ ✓ src/__tests__/views/GatewayStatusPage.test.ts (5 tests) 125ms
+ ✓ src/__tests__/views/workspace/WorkspaceListPage.test.ts (14 tests) 103ms
+ ✓ src/__tests__/views/BacktestPage.test.ts (13 tests) 131ms
+ ✓ src/__tests__/views/data/DataInterfacesPage.test.ts (9 tests) 170ms
+ ✓ src/__tests__/composables/useBacktestRuntime.test.ts (29 tests) 279ms
+ ✓ src/__tests__/components/workspace/WorkspaceReportTab.test.ts (11 tests) 322ms
+ ✓ src/__tests__/composables/useAiResearchApproval.test.ts (88 tests) 147ms
+ ✓ src/__tests__/views/NewsIntelligencePage.test.ts (5 tests) 112ms
+ ✓ src/__tests__/components/aiResearch/EvidencePanel.test.ts (18 tests) 250ms
+ ✓ src/__tests__/components/charts/MetricCard.test.ts (21 tests) 135ms
+ ✓ src/i18n/__tests__/locale-completeness.test.ts (18 tests) 310ms
+ ✓ src/__tests__/components/ErrorBoundary.test.ts (7 tests) 68ms
+ ✓ src/views/__tests__/BacktestPage.spec.ts (6 tests) 147ms
+ ✓ src/stores/__tests__/backtest.spec.ts (10 tests) 213ms
+ ✓ src/__tests__/views/KnowledgeBasePage.test.ts (3 tests) 171ms
+ ✓ src/__tests__/views/BrokerProfilesPage.test.ts (4 tests) 92ms
+ ✓ src/__tests__/views/AITradingPage.test.ts (3 tests) 77ms
+ ✓ src/__tests__/contracts/aiResearchApprovalErrorCatalog.test.ts (3 tests) 441ms
+ ✓ src/__tests__/views/PromptTemplatesPage.test.ts (4 tests) 110ms
+ ✓ src/__tests__/stores/theme.test.ts (13 tests) 29ms
+ ✓ src/__tests__/views/workspace/WorkspaceDetailPage.test.ts (6 tests) 147ms
+ ✓ src/__tests__/views/data/DataScriptsPage.test.ts (9 tests) 164ms
+ ✓ src/__tests__/views/AIObservabilityPage.test.ts (3 tests) 101ms
+ ✓ src/__tests__/components/aichat/ChatMessageBubble.test.ts (2 tests) 63ms
+ ✓ src/__tests__/components/aiResearch/TaskObservabilityPanels.test.ts (2 tests) 23ms
+ ✓ src/__tests__/composables/useAiResearchV2.test.ts (41 tests) 36ms
+ ✓ src/__tests__/composables/useAssetAnalysisTask.test.ts (5 tests) 62ms
+ ✓ src/__tests__/views/KnowledgeBaseDocumentPage.test.ts (3 tests) 71ms
+ ✓ src/__tests__/views/data/DataExecutionsPage.test.ts (4 tests) 65ms
+ ✓ src/__tests__/components/charts/TradeSignalChart.test.ts (15 tests) 61ms
+ ✓ src/__tests__/views/Dashboard.test.ts (7 tests) 67ms
+ ✓ src/__tests__/components/workspace/BatchOptimizationConfigDialog.test.ts (7 tests) 65ms
+ ✓ src/__tests__/components/strategy/StrategyDetailDialog.test.ts (1 test) 38ms
+ ✓ src/__tests__/components/workspace/AutoTradingConfigDialog.test.ts (6 tests) 68ms
+ ✓ src/__tests__/components/workspace/OptimizationConfigDialog.test.ts (7 tests) 72ms
+ ✓ src/__tests__/views/OptionsChainPage.test.ts (1 test) 55ms
+ ✓ src/__tests__/components/OverfittingPanel.test.ts (5 tests) 67ms
+ ✓ src/__tests__/components/workspace/UnitTable.test.ts (4 tests) 53ms
+ ✓ src/__tests__/components/workspace/UnitSettingsDialog.test.ts (5 tests) 74ms
+ ✓ src/__tests__/components/common/MonacoEditor.test.ts (12 tests) 43ms
+ ✓ src/__tests__/views/DataTopicsPage.test.ts (2 tests) 99ms
+ ✓ src/__tests__/components/charts/EquityCurve.test.ts (9 tests) 44ms
+ ✓ src/__tests__/components/workspace/DataSourceDialog.test.ts (5 tests) 99ms
+ ✓ src/__tests__/stores/workspace.test.ts (21 tests) 24ms
+ ✓ src/__tests__/views/LoginPage.test.ts (4 tests) 92ms
+ ✓ src/__tests__/views/PaperTradingDetailPage.test.ts (2 tests) 61ms
+ ✓ src/__tests__/components/charts/PerformancePanel.test.ts (6 tests) 35ms
+ ✓ src/__tests__/composables/useAutoTradingControls.test.ts (7 tests) 58ms
+ ✓ src/__tests__/components/common/LogViewer.test.ts (6 tests) 82ms
+ ✓ src/__tests__/views/RegisterPage.test.ts (4 tests) 64ms
+ ✓ src/__tests__/views/PortfolioLedgerPage.test.ts (2 tests) 46ms
+ ✓ src/__tests__/views/QuantToolsPage.test.ts (1 test) 48ms
+ ✓ src/__tests__/composables/useStrategyDraftWorkspaceExecution.test.ts (4 tests) 21ms
+ ✓ src/__tests__/views/data/DataScriptDetailPage.test.ts (3 tests) 66ms
+ ✓ src/__tests__/composables/useOverfittingRuntime.test.ts (3 tests) 59ms
+ ✓ src/__tests__/components/strategy/StrategyTemplateCard.test.ts (3 tests) 49ms
+ ✓ src/__tests__/utils/auditTracker.test.ts (20 tests) 31ms
+ ✓ src/__tests__/components/aichat/StockAnalysisReportCard.test.ts (1 test) 34ms
+ ✓ src/__tests__/components/strategy/StrategyEditDialog.test.ts (1 test) 45ms
+ ✓ src/__tests__/components/common/ThemeToggle.test.ts (3 tests) 47ms
+ ✓ src/__tests__/utils/exportUtils.test.ts (23 tests) 33ms
+ ✓ src/__tests__/components/aichat/StockAnalysisTaskCard.test.ts (3 tests) 45ms
+ ✓ src/__tests__/components/StrategyScoreCard.test.ts (1 test) 37ms
+ ✓ src/__tests__/utils.test.ts (22 tests) 25ms
+ ✓ src/__tests__/api/index.test.ts (40 tests) 32ms
+ ✓ src/components/__tests__/LanguageSwitcher.test.ts (6 tests) 51ms
+ ✓ src/__tests__/components/workspace/TradingPositionDialog.test.ts (3 tests) 35ms
+ ✓ src/__tests__/components/workspace/createTimedAsyncComponent.test.ts (3 tests) 36ms
+ ✓ src/__tests__/types/aiResearchApproval.test.ts (34 tests) 124ms
+ ✓ src/__tests__/views/RiskControlPage.test.ts (1 test) 37ms
+ ✓ src/__tests__/router/index.test.ts (49 tests) 37ms
+ ✓ src/__tests__/api/strategyApproval.test.ts (13 tests) 81ms
+ ✓ src/__tests__/components/charts/TradeRecordsTable.test.ts (1 test) 60ms
+ ✓ src/__tests__/composables/useInstanceActions.test.ts (17 tests) 109ms
+ ✓ src/__tests__/composables/useUnitTableRendering.test.ts (49 tests) 49ms
+ ✓ src/__tests__/components/common/ResponsiveDataGrid.test.ts (1 test) 26ms
+ ✓ src/__tests__/components/charts/ReturnHeatmap.test.ts (8 tests) 47ms
+ ✓ src/__tests__/api/retry-interceptor.test.ts (32 tests) 24ms
+ ✓ src/__tests__/components/common/ThemeSwitcher.test.ts (1 test) 91ms
+ ✓ src/__tests__/api/aiTrading.test.ts (7 tests) 39ms
+ ✓ src/__tests__/views/data/DataLayout.test.ts (2 tests) 25ms
+ ✓ src/__tests__/components/workspace/PositionManagerDialog.test.ts (2 tests) 52ms
+ ✓ src/__tests__/stores/knowledgeBase.test.ts (16 tests) 61ms
+ ✓ src/__tests__/composables/useAsyncModule.test.ts (3 tests) 23ms
+ ✓ src/__tests__/components/StrategyExplanationCard.test.ts (1 test) 31ms
+ ✓ src/__tests__/components/common/DataTableSkeleton.test.ts (1 test) 22ms
+ ✓ src/__tests__/stores/auth.test.ts (19 tests) 20ms
+ ✓ src/__tests__/api/airflow.test.ts (11 tests) 17ms
+ ✓ src/__tests__/api/marketData.test.ts (25 tests) 30ms
+ ✓ src/__tests__/components/charts/DrawdownChart.test.ts (2 tests) 37ms
+ ✓ src/__tests__/App.test.ts (1 test) 18ms
+ ✓ src/__tests__/components/research/ResearchWorkflowGuide.test.ts (1 test) 19ms
+ ✓ src/__tests__/api/small-clients.test.ts (6 tests) 18ms
+ ✓ src/stores/__tests__/auth.spec.ts (9 tests) 12ms
+ ✓ src/__tests__/views/strategy/StrategyCollaborators.test.ts (5 tests) 17ms
+ ✓ src/__tests__/stores/kbChat.test.ts (13 tests) 14ms
+ ✓ src/__tests__/api/iteration170.test.ts (5 tests) 8ms
+ ✓ src/__tests__/components/asset-research/AssetResearchPanels.test.ts (3 tests) 34ms
+ ✓ src/__tests__/api/akshare.test.ts (6 tests) 7ms
+ ✓ src/__tests__/components/common/logViewerHelpers.test.ts (25 tests) 8ms
+ ✓ src/__tests__/api/kbChat.test.ts (5 tests) 10ms
+ ✓ src/__tests__/api/promptTemplates.test.ts (4 tests) 4ms
+ ✓ src/__tests__/api/strategy.test.ts (33 tests) 11ms
+ ✓ src/__tests__/api/knowledgeBase.test.ts (9 tests) 12ms
+ ✓ src/__tests__/composables/aiResearchApprovalHash.test.ts (4 tests) 15ms
+ ✓ src/__tests__/api/quote.test.ts (11 tests) 12ms
+ ✓ src/__tests__/composables/useChartResize.test.ts (1 test) 15ms
+ ✓ src/__tests__/components/charts/KlineChart.test.ts (2 tests) 14ms
+ ✓ src/__tests__/stores/persistence.test.ts (12 tests) 10ms
+ ✓ src/__tests__/components/workspace/tradingUnitTransfer.test.ts (10 tests) 9ms
+ ✓ src/__tests__/utils/chartTheme.test.ts (2 tests) 9ms
+ ✓ src/__tests__/stores/strategy.test.ts (9 tests) 10ms
+ ✓ src/__tests__/api/assetResearch.test.ts (1 test) 15ms
+ ✓ src/__tests__/api/stockAnalysis.test.ts (3 tests) 9ms
+ ✓ src/__tests__/api/workspace.test.ts (2 tests) 7ms
+ ✓ src/__tests__/stores/simulation.test.ts (8 tests) 10ms
+ ✓ src/__tests__/api/quantResearch.test.ts (12 tests) 17ms
+ ✓ src/__tests__/api/aiObservability.test.ts (10 tests) 7ms
+ ✓ src/__tests__/navigation/capabilities.test.ts (1 test) 6ms
+ ✓ src/__tests__/router.test.ts (5 tests) 8ms
+ ✓ src/__tests__/api/auth.test.ts (3 tests) 6ms
+ ✓ src/__tests__/stores/backtest.test.ts (5 tests) 8ms
+ ✓ src/__tests__/api/liveTrading.test.ts (12 tests) 8ms
+ ✓ src/__tests__/api/analytics.test.ts (6 tests) 7ms
+ ✓ src/__tests__/api/backtest.test.ts (9 tests) 6ms
+ ✓ src/__tests__/api/simulation.test.ts (2 tests) 6ms
+ ✓ src/__tests__/api/portfolio.test.ts (10 tests) 7ms
+ ✓ src/__tests__/styles/designSystem.test.ts (2 tests) 3ms
+ ✓ src/__tests__/utils/session.test.ts (8 tests) 6ms
+ ✓ src/__tests__/utils/quoteFormat.test.ts (6 tests) 3ms
+ ✓ src/__tests__/types/aiResearchV2.test.ts (15 tests) 4ms
+ ✓ src/__tests__/navigation/routes.test.ts (3 tests) 3ms
+ ✓ src/__tests__/composables/useAIChatRendering.test.ts (4 tests) 3ms
+
+ Test Files  157 passed (157)
+      Tests  1721 passed (1721)
+   Start at  20:41:09
+   Duration  143.89s (transform 12.76s, setup 20.66s, import 22.70s, tests 34.01s, environment 42.29s)
+
+JSON report written to /tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v10-parent-vitest-results.json

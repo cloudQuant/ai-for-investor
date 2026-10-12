@@ -1,0 +1,69 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.8, pytest-9.0.3, pluggy-1.6.0 -- /Users/yunjinqi/opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 55 items
+
+tests/test_ctp_certification_workspaces.py::test_workspace_dry_run_is_offline_and_lists_all_cases[simnow-workspace0] PASSED [  1%]
+tests/test_ctp_certification_workspaces.py::test_workspace_dry_run_is_offline_and_lists_all_cases[hongyuan-workspace1] PASSED [  3%]
+tests/test_ctp_certification_workspaces.py::test_workspace_default_start_is_an_offline_preflight[workspace0] PASSED [  5%]
+tests/test_ctp_certification_workspaces.py::test_workspace_default_start_is_an_offline_preflight[workspace1] PASSED [  7%]
+tests/test_ctp_certification_workspaces.py::test_workspace_template_does_not_implicitly_start_a_gateway[workspace0] PASSED [  9%]
+tests/test_ctp_certification_workspaces.py::test_workspace_template_does_not_implicitly_start_a_gateway[workspace1] PASSED [ 10%]
+tests/test_ctp_certification_workspaces.py::test_workspace_requires_explicit_execute_for_live_case[workspace0] PASSED [ 12%]
+tests/test_ctp_certification_workspaces.py::test_workspace_requires_explicit_execute_for_live_case[workspace1] PASSED [ 14%]
+tests/test_ctp_certification_workspaces.py::test_internal_case_runner_cannot_bypass_execution_confirmation[workspace0] PASSED [ 16%]
+tests/test_ctp_certification_workspaces.py::test_internal_case_runner_cannot_bypass_execution_confirmation[workspace1] PASSED [ 18%]
+tests/test_ctp_certification_workspaces.py::test_workspace_propagates_a_case_failure_as_a_nonzero_exit_code[workspace0] PASSED [ 20%]
+tests/test_ctp_certification_workspaces.py::test_workspace_propagates_a_case_failure_as_a_nonzero_exit_code[workspace1] PASSED [ 21%]
+tests/test_ctp_certification_workspaces.py::test_workspace_contains_the_full_certification_case_set[workspace0] PASSED [ 23%]
+tests/test_ctp_certification_workspaces.py::test_workspace_contains_the_full_certification_case_set[workspace1] PASSED [ 25%]
+tests/test_ctp_certification_workspaces.py::test_workspace_reports_are_gitignored[workspace0] PASSED [ 27%]
+tests/test_ctp_certification_workspaces.py::test_workspace_reports_are_gitignored[workspace1] PASSED [ 29%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_docx_report_uses_its_workspace_paths PASSED [ 30%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_config_loads_credentials_from_reference_workspace_env_file PASSED [ 32%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_runner_retries_an_empty_native_startup_crash PASSED [ 34%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_started_store_masks_investor_id_in_console_output PASSED [ 36%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_create_cerebro_injects_store_seed_bars_into_live_feed PASSED [ 38%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_wait_for_live_market_price_uses_the_ctp_quote_cache PASSED [ 40%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_remote_validation_only_disables_local_cash_precheck_when_explicit PASSED [ 41%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_remote_negative_close_probe_bypasses_only_position_precheck PASSED [ 43%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_remote_order_preflight_blocks_zero_available_funds PASSED [ 45%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_run_with_timeout_drains_pending_broker_updates PASSED [ 47%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_runtime_records_auth_events_with_surrogate_safe_json PASSED [ 49%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_snapshot_writer_escapes_ctp_surrogate_text PASSED [ 50%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_reconciliation_ignores_unrelated_position_snapshot_fluctuation PASSED [ 52%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_ctp_bridge_uses_session_order_ref_and_correlates_response_error PASSED [ 54%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_ctp_bridge_leaves_unmatched_query_errors_unassociated PASSED [ 56%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_ctp_query_callback_emits_a_safe_normalized_order_row PASSED [ 58%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_ctp_query_callback_patches_the_active_spi_module PASSED [ 60%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_ctp_query_bridge_waits_for_a_counter_response PASSED [ 61%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_registers_ctp_order_query_callback_before_connecting PASSED [ 63%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_started_store_installs_ctp_callback_bridge PASSED [ 65%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_local_submit_ack_is_not_treated_as_counter_acceptance PASSED [ 67%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_helper_collects_runtime_events_from_all_log_streams PASSED [ 69%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_result_writer_escapes_ctp_surrogate_text PASSED [ 70%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_c01_validates_auth_without_starting_a_market_data_feed PASSED [ 72%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_t03_waits_for_a_remote_cancel_terminal_status PASSED [ 74%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_e01_uses_a_bounded_insufficient_funds_probe PASSED [ 76%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_e01_reports_a_safe_block_when_a_passive_probe_is_accepted PASSED [ 78%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_e02_uses_the_scoped_remote_close_rejection_path PASSED [ 80%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_error_cases_require_their_specific_counter_error_semantics PASSED [ 81%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_default_contract_is_a_live_certification_contract PASSED [ 83%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_docx_conclusion_uses_the_configurable_certification_contract PASSED [ 85%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_e01_records_post_run_ctp_callbacks_before_evaluating_result PASSED [ 87%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_local_rejection_cases_seed_a_deterministic_live_feed[V01] PASSED [ 89%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_local_rejection_cases_seed_a_deterministic_live_feed[V02] PASSED [ 90%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_local_rejection_cases_seed_a_deterministic_live_feed[E02] PASSED [ 92%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_local_rejection_cases_seed_a_deterministic_live_feed[EM01] PASSED [ 94%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_local_rejection_cases_seed_a_deterministic_live_feed[L04] PASSED [ 96%]
+tests/test_ctp_certification_workspaces.py::test_hongyuan_e02_marks_local_position_rejection_as_blocked_not_remote_failure PASSED [ 98%]
+tests/test_ctp_certification_workspaces.py::test_workspaces_are_discoverable_strategy_templates PASSED [100%]
+
+- generated xml file: /Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/docx-final-dev-parent-ctp-workspaces.xml -
+======================== 55 passed in 62.45s (0:01:02) =========================

@@ -88,6 +88,39 @@ async def test_default_market_lookup_reads_only_the_mysql_warehouse():
 
 
 @pytest.mark.asyncio
+async def test_history_cache_lookup_fails_closed_when_storage_is_unavailable():
+    class UnavailableHistoryCacheService(MarketInstrumentService):
+        async def _fetch_rows(self, *_args, **_kwargs):
+            raise RuntimeError("cache storage unavailable")
+
+    rows = await UnavailableHistoryCacheService()._lookup_history_cache(
+        asset_type="stock",
+        symbol="000001",
+        start_date="2026-06-01",
+        end_date="2026-06-19",
+        period="daily",
+    )
+
+    assert rows == []
+
+
+def test_history_gap_merge_reads_provider_from_compatibility_facade(monkeypatch):
+    from app.services import market_instrument
+
+    monkeypatch.setattr(market_instrument, "_WAREHOUSE_PROVIDER", "patched_warehouse")
+    payload = MarketInstrumentService()._merge_history_gap(
+        warehouse_payload={"symbol": "000001", "snapshot": {}},
+        rows=[{"date": "2026-06-19", "close": 10.0}],
+        period="daily",
+        provider_suffix="cache",
+    )
+
+    assert payload["provider"] == "patched_warehouse+cache"
+    assert payload["history"]["total"] == 1
+    assert payload["snapshot"]["price"] == 10.0
+
+
+@pytest.mark.asyncio
 async def test_legacy_online_refresh_is_rejected_before_warehouse_or_provider_io():
     """The legacy endpoint cannot bypass the v2 persistence and receipt boundary."""
 

@@ -26,6 +26,7 @@
             {{ row.sort_order + 1 }}
           </template>
         </el-table-column>
+        <!-- @vue-generic {StrategyUnit} -->
         <el-table-column
           :label="t('workspaceDialogs.statusCol')"
           width="156"
@@ -223,6 +224,7 @@
             {{ formatSignedNumber(row.trading_snapshot?.max_drawdown_rate, 2, false, '%') }}
           </template>
         </el-table-column>
+        <!-- @vue-generic {StrategyUnit} -->
         <el-table-column
           :label="t('workspaceDialogs.detailCol')"
           width="90"
@@ -315,6 +317,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { TableColumnCtx } from 'element-plus'
 
 import type { StrategyUnit } from '@/types/workspace'
 import {
@@ -338,7 +341,7 @@ defineProps<{
 
 const emit = defineEmits<{
   'selection-change': [rows: StrategyUnit[]]
-  'row-dblclick': [row: StrategyUnit, column?: { type?: string }, event?: Event]
+  'row-dblclick': [row: StrategyUnit, column: TableColumnCtx<StrategyUnit> | null, event: MouseEvent]
   'open-detail': [unit: StrategyUnit]
 }>()
 
@@ -351,7 +354,11 @@ function handleSelectionChange(rows: StrategyUnit[]) {
   emit('selection-change', rows)
 }
 
-function handleRowDoubleClick(row: StrategyUnit, column: { type?: string }, event: Event) {
+function handleRowDoubleClick(
+  row: StrategyUnit,
+  column: TableColumnCtx<StrategyUnit> | null,
+  event: MouseEvent,
+) {
   emit('row-dblclick', row, column, event)
 }
 

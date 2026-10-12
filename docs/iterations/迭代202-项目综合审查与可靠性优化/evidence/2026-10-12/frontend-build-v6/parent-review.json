@@ -1,0 +1,55 @@
+{
+  "captured_at": "2026-10-12T11:51:14.416Z",
+  "build": "PASS exit 0, 599 seconds",
+  "static_chunk_graph": "108 chunks, independent Tarjan SCC check found no static cycles",
+  "shell_barrel_included": false,
+  "bundle_gate": "FAIL: /login missing manifest source src/views/LoginPage.vue",
+  "acceptance": "Not accepted; preserve route facade and rerun unchanged budget",
+  "artifacts": [
+    {
+      "name": "production-build-node20-v6.log",
+      "sha256": "b1bdaddddabab1e703668ad308da3bf6181e3b1e445fdd709298fd50c3d677be",
+      "bytes": 104283
+    },
+    {
+      "name": "production-build-node20-v6.receipt",
+      "sha256": "62957816e41ffef6d8861d27506c2a6efad6c3162634b2095fa539eb6ad99c4e",
+      "bytes": 517
+    },
+    {
+      "name": "bundle-size-gate-node20-v6.log",
+      "sha256": "455bbccd83c7ec807c3e94e849aa9f6b62cd6a243ec4e953da54065e836d8c92",
+      "bytes": 213
+    },
+    {
+      "name": "bundle-size-gate-node20-v6.receipt",
+      "sha256": "6dcb25e93f48d691015882dd8ee9f717ddd68fd13149115e91a2fb158e4d2bc6",
+      "bytes": 165
+    },
+    {
+      "name": "node20-v6-shell-closure.json",
+      "sha256": "b8081f19036488d5d3cf6e146f09299a2ba022ba8e3e40aa4eb3152f148b60da",
+      "bytes": 1593
+    },
+    {
+      "name": "node20-v6-chunk-modules.json",
+      "sha256": "41cc9b5dc59ad11f455eec8ac666aac9b87f2511921b298b0bde66239b174f2f",
+      "bytes": 532747
+    },
+    {
+      "name": "node20-v6-source-hashes.txt",
+      "sha256": "22ed13471d2d331b01282eb541e3203cf769c03b7c62d8b4e6c7747ceb939e7f",
+      "bytes": 1513
+    },
+    {
+      "name": "typecheck-node20-rerun.log",
+      "sha256": "d80faa434b9b4945bfeb6eee26948bf5394595eb192745c84d475f965dab3fd6",
+      "bytes": 64
+    },
+    {
+      "name": "typecheck-node20-rerun.receipt",
+      "sha256": "9478f90b0b422ea65b62420a962a3811c66c3c5ba1e487b5c652741b1ef112ac",
+      "bytes": 134
+    }
+  ]
+}

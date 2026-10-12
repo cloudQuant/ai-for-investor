@@ -1,0 +1,7 @@
+{
+  "state": "INCOMPLETE_HARNESS_INITIALIZATION",
+  "error": "Source scanner assumed optional public directory exists; rg exited 2 before any check started.",
+  "steps": [],
+  "product_changes": false,
+  "rerun": "frontend-final-v14-matrix-parent"
+}

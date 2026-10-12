@@ -1,0 +1,45 @@
+{
+  "started_at": "2026-10-12T12:26:07Z",
+  "finished_at": "2026-10-12T12:33:48Z",
+  "exit_code": 0,
+  "junit_suite": "<testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"32\" time=\"166.353\" timestamp=\"2026-10-12T12:30:13.016572+00:00\" hostname=\"d82d76ccc646\">",
+  "verdict": "PASS",
+  "environment": {
+    "container": "iter202-akshare-timeout-v6-parent",
+    "image": "sha256:52470c079926ff74c31525cb35e099fe61fa50415eb1189f116291a91972050c",
+    "network": "none",
+    "init": true,
+    "python": "image Python 3.11",
+    "plugins": [
+      "pytest_asyncio.plugin",
+      "pytest_timeout"
+    ],
+    "pytest_watchdog_seconds": 180,
+    "test_configured_runner_timeout_seconds": 0.1
+  },
+  "test_sha256": "63f1a954ebabc8f47a69659f8c61f06900eb0f680dffde3ae621f06a9a82bb30",
+  "command": "python -m pytest -p pytest_asyncio.plugin -p pytest_timeout -o timeout=180 -o timeout_method=signal -vv --maxfail=0 tests/market_data_platform/test_akshare_runner_provider.py --junitxml=/tmp/akshare-v7-parent.xml",
+  "review": "Full test file: actual subprocess fork, ready handshake before original 0.1s timeout, parent/child/PGID absent at return; production code unchanged. v6 wrapper termination retained separately.",
+  "files": [
+    {
+      "path": "akshare-v7-parent.txt",
+      "sha256": "7814c1b56c7304ae0a64a20e2a024650e773edb14d14dbc57d100eeff429bf2a"
+    },
+    {
+      "path": "akshare-v7-parent.xml",
+      "sha256": "918ecc5b213170e31f68a8533b556dc9944baa72546c74c098f798dbff224af6"
+    },
+    {
+      "path": "akshare-v7-started.txt",
+      "sha256": "e4b8a101536ac60a6985a169f1dc8e13afafd62474cc90988fe87e990236c7c6"
+    },
+    {
+      "path": "akshare-v7-finished.txt",
+      "sha256": "abb36c09487e040042f8ebb8a5dd7689e4633a3140d2265bb51b3d63d5e7123c"
+    },
+    {
+      "path": "akshare-v7-exit-code.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    }
+  ]
+}

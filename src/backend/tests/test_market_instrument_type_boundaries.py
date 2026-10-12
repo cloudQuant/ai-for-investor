@@ -4,7 +4,13 @@ from types import ModuleType
 import pandas as pd
 import pytest
 
-from app.services.market_instrument import MarketInstrumentService, _first_present
+from app.services import market_instrument
+from app.services.market_instrument import (
+    LegacyMarketDataOnlineRefreshDisabledError,
+    MarketAssetType,
+    MarketInstrumentService,
+    _first_present,
+)
 
 
 @pytest.mark.asyncio
@@ -36,6 +42,18 @@ def test_first_present_reads_string_keys_from_a_hashable_key_mapping():
     row = UserDict({1: "not a candidate", "price": 1.25, "close": 1.2})
 
     assert _first_present(row, "close", "price") == 1.2
+
+
+def test_market_instrument_facade_keeps_compatibility_exports_and_methods():
+    assert market_instrument.MarketInstrumentService is MarketInstrumentService
+    assert market_instrument.MarketAssetType is MarketAssetType
+    assert market_instrument.LegacyMarketDataOnlineRefreshDisabledError is (
+        LegacyMarketDataOnlineRefreshDisabledError
+    )
+    assert market_instrument._first_present is _first_present
+    assert callable(MarketInstrumentService._lookup_stock_warehouse)
+    assert callable(MarketInstrumentService._lookup_history_cache)
+    assert callable(MarketInstrumentService._build_indicators)
 
 
 def test_fx_lookup_reads_selected_fields_from_a_pandas_row(monkeypatch):

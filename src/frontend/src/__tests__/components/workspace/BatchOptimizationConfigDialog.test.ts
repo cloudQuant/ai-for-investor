@@ -9,11 +9,12 @@ vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
 
+const batchOptimizationMocks = vi.hoisted(() => ({
+  updateUnit: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('@/api/workspace', () => ({
-  workspaceApi: {
-    submitUnitOptimization: vi.fn().mockResolvedValue({ task_id: 't-1' }),
-    updateUnit: vi.fn().mockResolvedValue(undefined),
-  },
+  workspaceApi: batchOptimizationMocks,
 }))
 
 vi.mock('@/api/index', () => ({
@@ -22,6 +23,7 @@ vi.mock('@/api/index', () => ({
 }))
 
 import BatchOptimizationConfigDialog from '@/components/workspace/BatchOptimizationConfigDialog.vue'
+import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
 
 const units = [
@@ -62,7 +64,8 @@ describe('BatchOptimizationConfigDialog', () => {
   it('initForm pre-fills from the first unit with optimization_config', () => {
     const vm = doMount({ unitIds: ['u-1'] }).vm as any
     vm.initForm()
-    expect(vm.form.objective).toBe('max_return')
+    expect(vm.form.objective).toBe('total_return')
+    expect(vm.form.direction).toBe('maximize')
     expect(vm.form.n_workers).toBe(8)
   })
 
@@ -79,5 +82,26 @@ describe('BatchOptimizationConfigDialog', () => {
     const before = vm.form.param_layers.length
     vm.addParamLayer()
     expect(vm.form.param_layers.length).toBe(before + 1)
+  })
+
+  it('saves the selected canonical objective and direction for every unit', async () => {
+    const vm = doMount({ unitIds: ['u-1', 'u-2'] }).vm as any
+    vm.form.objective = 'max_drawdown'
+    vm.form.direction = 'minimize'
+
+    await vm.handleSave()
+
+    expect(workspaceApi.updateUnit).toHaveBeenCalledWith('ws-1', 'u-1', expect.objectContaining({
+      optimization_config: expect.objectContaining({
+        objective: 'max_drawdown',
+        direction: 'minimize',
+      }),
+    }))
+    expect(workspaceApi.updateUnit).toHaveBeenCalledWith('ws-1', 'u-2', expect.objectContaining({
+      optimization_config: expect.objectContaining({
+        objective: 'max_drawdown',
+        direction: 'minimize',
+      }),
+    }))
   })
 })

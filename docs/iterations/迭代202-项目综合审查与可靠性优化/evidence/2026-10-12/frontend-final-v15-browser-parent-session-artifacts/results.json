@@ -1,0 +1,365 @@
+{
+  "config": {
+    "configFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/iteration202.config.ts",
+    "rootDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-fixture",
+        "name": "chromium-fixture",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "iteration202-session-workspace.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+      "command": "node_modules/.bin/vite preview --host 127.0.0.1 --port 4177 --strictPort",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 120000,
+      "env": {
+        "VITE_API_TARGET": "http://127.0.0.1:4178"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "iteration202-session-workspace.spec.ts",
+      "file": "iteration202-session-workspace.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "AC-D09: retains credentials through 503 and network failures, then confirms identity on retry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 17164,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:33:42.714Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-80b65c2f9a57275824b8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 436,
+          "column": 1
+        },
+        {
+          "title": "AC-D09: a real startup 401 clears the expired identity and returns to the login form",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 586,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:34:03.192Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-7accd1a8cd5d86181968",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 484,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: a late A 401 cannot log out B, while B own 401 still expires B",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1850,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:34:03.812Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-a32ca5abd91f127ca658",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 508,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3063,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:34:05.734Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-c5d5bcd4bcc6aae76da3",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 564,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: logout clears A workspace data before B opens the same workspace route",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2093,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:34:08.887Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-6bada4faaca24595d2f8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 613,
+          "column": 1
+        },
+        {
+          "title": "AC-D11: late A detail and units cannot replace B during same-route workspace navigation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 809,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:34:11.071Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-3e11c--route-workspace-navigation-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-6b78327f36035e4019b2",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 714,
+          "column": 1
+        },
+        {
+          "title": "AC-D11: B detail and units remain active when they finish before late A responses",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 846,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T14:34:11.936Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-browser-parent-session-artifacts/playwright/iteration202-session-works-5037e-ish-before-late-A-responses-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-82e20585f3d768a15de8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 789,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-12T14:33:41.104Z",
+    "duration": 31804.641,
+    "expected": 7,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

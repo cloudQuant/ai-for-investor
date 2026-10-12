@@ -1,0 +1,17 @@
+{
+  "added": [
+    "python-docx==1.2.0"
+  ],
+  "removed": [],
+  "changed": [],
+  "old_dev_sha256": "6b364dec1106a567294881e16dc626ba52c01e5678a5d2913bb7078258e6a2cb",
+  "new_dev_sha256": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+  "prod_sha256": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b",
+  "pyproject_only_delta_is_dev_docx": true,
+  "verdict": "PASS",
+  "old_requirement_entries": 172,
+  "new_requirement_entries": 173,
+  "old_registry_pins": 171,
+  "new_registry_pins": 172,
+  "git_requirement_entries": 1
+}

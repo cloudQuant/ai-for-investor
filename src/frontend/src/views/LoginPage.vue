@@ -5,7 +5,29 @@
     :title="t('auth.loginTitle')"
     :subtitle="t('auth.loginSubtitle')"
   >
+    <div
+      v-if="hasUnconfirmedToken"
+      class="auth-identity-state"
+      :data-testid="identityNeedsRetry ? 'identity-retry-panel' : 'identity-checking-panel'"
+      :role="identityNeedsRetry ? 'alert' : 'status'"
+    >
+      <p>{{ identityNeedsRetry ? t('auth.identityUnconfirmed') : t('common.loading') }}</p>
+      <p v-if="identityNeedsRetry && authStore.identityError">
+        {{ authStore.identityError }}
+      </p>
+      <el-button
+        v-if="identityNeedsRetry"
+        data-testid="identity-retry"
+        type="primary"
+        :loading="retryingIdentity"
+        @click="retryIdentity"
+      >
+        {{ t('auth.retryIdentity') }}
+      </el-button>
+    </div>
+
     <el-form
+      v-else
       ref="formRef"
       class="auth-form"
       :model="form"
@@ -20,7 +42,7 @@
           data-testid="login-username"
           :placeholder="t('auth.username')"
           :aria-label="t('auth.username')"
-          prefix-icon="User"
+          :prefix-icon="User"
           size="large"
           autocomplete="username"
         />
@@ -33,7 +55,7 @@
           type="password"
           :placeholder="t('auth.password')"
           :aria-label="t('auth.password')"
-          prefix-icon="Lock"
+          :prefix-icon="Lock"
           size="large"
           show-password
           autocomplete="current-password"
@@ -69,9 +91,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { Lock, User } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import type { ElInput, FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -84,7 +107,14 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const retryingIdentity = ref(false)
 const usernameInputRef = ref<InstanceType<typeof ElInput> | null>(null)
+const hasUnconfirmedToken = computed(() =>
+  !!authStore.token && authStore.identityStatus !== 'confirmed',
+)
+const identityNeedsRetry = computed(() =>
+  !!authStore.token && authStore.identityStatus === 'retryable_error',
+)
 
 const form = reactive({
   username: '',
@@ -101,6 +131,8 @@ const rules: FormRules = {
 }
 
 async function handleLogin() {
+  if (loading.value || hasUnconfirmedToken.value) return
+
   if (!formRef.value) {
     console.warn('[Login] formRef is null, skipping validation')
   } else {
@@ -112,16 +144,35 @@ async function handleLogin() {
   try {
     await authStore.login(form)
     ElMessage.success(t('auth.loginSuccess'))
-
-    // BUG-11: 验证重定向路径安全性，防止 XSS
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
-    const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
-    router.push(safeRedirect)
+    navigateAfterAuthentication()
   } catch {
     // 错误已在拦截器中处理
   } finally {
     loading.value = false
   }
+}
+
+async function retryIdentity() {
+  if (retryingIdentity.value || !identityNeedsRetry.value) return
+
+  retryingIdentity.value = true
+  try {
+    if (await authStore.fetchUser()) {
+      ElMessage.success(t('auth.identityConfirmed'))
+      navigateAfterAuthentication()
+    }
+  } catch {
+    // Keep the retained token and let the store expose the retryable error.
+  } finally {
+    retryingIdentity.value = false
+  }
+}
+
+function navigateAfterAuthentication() {
+  // BUG-11: 验证重定向路径安全性，防止 XSS
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+  router.push(safeRedirect)
 }
 
 onMounted(() => {

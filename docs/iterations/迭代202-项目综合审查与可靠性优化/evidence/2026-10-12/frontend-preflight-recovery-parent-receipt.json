@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-10-12T10:36:44.589641+00:00",
+  "node": "20.20.2",
+  "debounce": {
+    "command": "npm run test -- --run src/__tests__/views/StrategyPage.test.ts -t \"debounces data precheck and ignores an older result after asset changes\" --bail=1 --maxWorkers=1",
+    "exit_code": 0,
+    "observed": "1 passed / 157 skipped; test 3.22s, total 32.79s",
+    "started_at_from_vitest": "2026-10-12T18:26:17+08:00"
+  },
+  "browser_v2": {
+    "verdict": "INCOMPLETE",
+    "exit_code": 130,
+    "cause": "Missing node_modules/.vite/deps/chunk-QT43MKE5.js; first case failed. Parent verified cwd and sent SIGINT to owned Playwright PID 3482.",
+    "cleanup": "Moved old output/cache into task temp directory; no shared process was stopped."
+  },
+  "browser_v3": {
+    "verdict": "INCOMPLETE",
+    "exit_code": 130,
+    "cause": "Authorized vite.config.ts edit raced with subsequent freeze instruction, restarting server during dependency scan. Parent verified cwd and sent SIGINT to owned Playwright PID 4726.",
+    "cleanup": "Preserved output/cache; froze frontend edits; ran explicit dependency optimization."
+  },
+  "precompile": {
+    "command": "npm exec vite optimize -- --force",
+    "exit_code": 0,
+    "note": "CLI prints deprecation notice; used once to rebuild corrupted/interrupted dev cache before controlled browser rerun."
+  },
+  "files": [
+    {
+      "path": "frontend-debounce-v4-parent.txt",
+      "sha256": "d30657539fce61f61a3a34aacbefe39885d4f4c54aceeeacecbe96e7b9415607"
+    },
+    {
+      "path": "frontend-session-browser-v2-parent.txt",
+      "sha256": "57a082df42c91eb77fc5b59d9a40a7f7dfb60ff6f8426ba1fec9d7e308f64dc2"
+    },
+    {
+      "path": "frontend-session-browser-v3-parent.txt",
+      "sha256": "c0e06d816d62e9db215a5a6bf04d97ffae4f093797f3e1f093833dc749d31415"
+    },
+    {
+      "path": "frontend-vite-optimize-parent.txt",
+      "sha256": "5cd33ad8f9008c47420d40714221a6cfc88c46fd0ceb7a3f93169de8880b9202"
+    }
+  ]
+}

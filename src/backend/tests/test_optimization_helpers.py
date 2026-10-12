@@ -67,7 +67,7 @@ def test_submission_helper_starts_thread_and_sets_initial_task(tmp_path: Path):
     assert thread_instances[0].args[5] == str(tmp_path / "artifacts")
 
 
-def test_task_gateway_load_uses_runtime_fallback_when_db_errors():
+def test_task_gateway_load_fails_closed_when_user_scoped_db_lookup_errors():
     runtime_task = {"status": "running", "completed": 1}
 
     result = load_optimization_task_state(
@@ -80,7 +80,7 @@ def test_task_gateway_load_uses_runtime_fallback_when_db_errors():
         build_runtime_task=lambda db_task: {"status": "completed"},
     )
 
-    assert result == runtime_task
+    assert result is None
 
 
 def test_task_gateway_load_prefers_runtime_state_while_db_task_is_active():
@@ -193,6 +193,7 @@ def test_service_trial_wrapper_accepts_artifact_root_and_forwards_it():
         tmp_base,
         artifact_root,
         *,
+        cancellation_marker,
         parse_trial_logs_fn,
         subprocess_module,
     ):
@@ -202,6 +203,7 @@ def test_service_trial_wrapper_accepts_artifact_root_and_forwards_it():
             trial_index=trial_index,
             tmp_base=tmp_base,
             artifact_root=artifact_root,
+            cancellation_marker=cancellation_marker,
             parse_trial_logs_fn=parse_trial_logs_fn,
             subprocess_module=subprocess_module,
         )
@@ -410,7 +412,7 @@ def test_thread_runner_success_path_updates_runtime_and_persists_final_state():
         [{"fast": 5}],
         1,
         persist_to_db=True,
-        run_single_trial_fn=lambda strategy_dir, params, trial_index, tmp_base, artifact_root: {
+        run_single_trial_fn=lambda strategy_dir, params, trial_index, tmp_base, artifact_root, cancellation_marker: {
             "success": True,
             "params": params,
             "trial_index": trial_index,
@@ -421,7 +423,7 @@ def test_thread_runner_success_path_updates_runtime_and_persists_final_state():
         get_task_fn=lambda task_id: runtime_task,
         update_task_fn=_update_task,
         process_pool_executor_cls=DummyExecutor,
-        as_completed_fn=lambda futures: list(futures.keys()),
+        as_completed_fn=lambda futures, timeout=None: list(futures),
         mkdtemp_fn=lambda prefix: "/tmp/thread-runner-test",
         rmtree_fn=lambda path, ignore_errors=True: removed_paths.append((path, ignore_errors)),
     )
@@ -476,7 +478,7 @@ def test_thread_runner_updates_manifest_and_summary(tmp_path: Path):
         1,
         persist_to_db=False,
         artifact_root=str(artifact_root),
-        run_single_trial_fn=lambda strategy_dir, params, trial_index, tmp_base, root: {
+        run_single_trial_fn=lambda strategy_dir, params, trial_index, tmp_base, root, cancellation_marker: {
             "success": trial_index == 0,
             "params": params,
             "trial_index": trial_index,
@@ -489,7 +491,7 @@ def test_thread_runner_updates_manifest_and_summary(tmp_path: Path):
         get_task_fn=lambda task_id: runtime_task,
         update_task_fn=_update_task,
         process_pool_executor_cls=DummyExecutor,
-        as_completed_fn=lambda futures: list(futures.keys()),
+        as_completed_fn=lambda futures, timeout=None: list(futures),
         mkdtemp_fn=lambda prefix: str(tmp_path / "tmp_runner"),
         rmtree_fn=lambda path, ignore_errors=True: None,
     )

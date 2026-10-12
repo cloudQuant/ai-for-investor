@@ -12,7 +12,9 @@ import re
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Protocol
+from importlib import import_module
+from types import ModuleType
+from typing import Protocol
 
 from loguru import logger
 
@@ -46,18 +48,20 @@ MetricCounter = CounterProtocol | None
 MetricGauge = GaugeProtocol | None
 MetricHistogram = HistogramProtocol | None
 
+_prometheus_client: ModuleType | None
 try:
-    import prometheus_client as _prometheus_client_module
-
+    _prometheus_client = import_module("prometheus_client")
     PROMETHEUS_AVAILABLE = True
 except ImportError:
-    _prometheus_client_module = None
+    _prometheus_client = None
     PROMETHEUS_AVAILABLE = False
 
-_prometheus_client: Any = _prometheus_client_module
-
 # Create a custom registry to avoid conflicts
-_registry: Any = _prometheus_client.CollectorRegistry() if PROMETHEUS_AVAILABLE else None
+_registry: object | None = (
+    _prometheus_client.CollectorRegistry()
+    if PROMETHEUS_AVAILABLE and _prometheus_client is not None
+    else None
+)
 
 # ==================== Business Metrics ====================
 
@@ -146,7 +150,7 @@ def _init_metrics() -> None:
     global ASSET_RESEARCH_LLM_COST_USD_TOTAL, ASSET_RESEARCH_LLM_FALLBACK_TOTAL
     global ASSET_RESEARCH_MIGRATION_RECONCILIATION_TOTAL
 
-    if not PROMETHEUS_AVAILABLE or _registry is None:
+    if not PROMETHEUS_AVAILABLE or _prometheus_client is None or _registry is None:
         return
 
     # Backtest metrics
@@ -362,7 +366,7 @@ def get_metrics_output() -> str:
     Raises:
         RuntimeError: If prometheus_client is not installed.
     """
-    if not PROMETHEUS_AVAILABLE or _registry is None:
+    if not PROMETHEUS_AVAILABLE or _prometheus_client is None or _registry is None:
         raise RuntimeError(
             "prometheus_client is not installed. Install it with: pip install prometheus_client"
         )

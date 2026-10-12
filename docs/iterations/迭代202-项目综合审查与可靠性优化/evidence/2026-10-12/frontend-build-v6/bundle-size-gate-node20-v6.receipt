@@ -1,0 +1,6 @@
+gate_start_utc=2026-10-12T11:49:02Z
+command=bash ../../scripts/ci/check_bundle_size.sh dist
+v20.20.2
+gate_end_utc=2026-10-12T11:49:02Z
+exit_code=1
+elapsed_seconds=0

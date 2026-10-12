@@ -1,0 +1,1 @@
+Node engine compatibility passed (v24.19.0; 233 required packages checked; 86 optional packages skipped).

@@ -1,0 +1,58 @@
+[
+  {
+    "check": "d12-clean-down-parent",
+    "command": [
+      "docker",
+      "compose",
+      "--project-directory",
+      "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "--project-name",
+      "iter202-d12",
+      "--env-file",
+      "/tmp/iter202-d12-compose.env",
+      "-f",
+      "docker/docker-compose.yml",
+      "-f",
+      "docker/compose/dev.yml",
+      "down",
+      "--volumes",
+      "--remove-orphans"
+    ],
+    "started_at": "2026-10-12T08:25:50.743446+00:00",
+    "finished_at": "2026-10-12T08:26:11.706341+00:00",
+    "elapsed_seconds": 20.97,
+    "exit_code": 0,
+    "log": "d12-clean-down-parent.txt",
+    "sha256": "37c371b753ae0cea15f6c0f655f52f18c2f6848d2deb3cc8d9e5cee0a6b6cbae"
+  },
+  {
+    "check": "d12-clean-up-parent",
+    "command": [
+      "docker",
+      "compose",
+      "--project-directory",
+      "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "--project-name",
+      "iter202-d12",
+      "--env-file",
+      "/tmp/iter202-d12-compose.env",
+      "-f",
+      "docker/docker-compose.yml",
+      "-f",
+      "docker/compose/dev.yml",
+      "up",
+      "-d",
+      "--no-build",
+      "--wait",
+      "--wait-timeout",
+      "360",
+      "backend"
+    ],
+    "started_at": "2026-10-12T08:26:11.829547+00:00",
+    "finished_at": "2026-10-12T08:32:05.528763+00:00",
+    "elapsed_seconds": 353.71,
+    "exit_code": 1,
+    "log": "d12-clean-up-parent.txt",
+    "sha256": "5730c4706e1d48cb7e6d945f8f09b3f46a07c566baac782ff9328f66ba6d787c"
+  }
+]

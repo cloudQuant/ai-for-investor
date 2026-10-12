@@ -1,0 +1,50 @@
+{
+  "observed_at": "2026-10-12T12:30:19.028Z",
+  "frontend": {
+    "session": 84455,
+    "wrapper_exit_code": 143,
+    "state": "INCOMPLETE",
+    "cause": "Unknown source of termination signal; no root-requested stop",
+    "final_json_present": false,
+    "source_digest_definition": "v8 receipt hashes compact JSON; raw manifest SHA is separately recorded here",
+    "continuation": "fresh detached v9 full suite, unchanged source and test limits"
+  },
+  "akshare": {
+    "session": 28369,
+    "wrapper_exit_code": 143,
+    "junit": {
+      "tests": 32,
+      "failures": 0,
+      "errors": 0
+    },
+    "pytest_console_summary": "32 passed in 263.36s",
+    "state": "JUnit assertions PASS; wrapper INCOMPLETE, pytest exit code not captured",
+    "continuation": "v7 rerun inside the same isolated container with in-container exit receipt; no production changes"
+  },
+  "files": [
+    {
+      "path": "frontend-vitest-v8-parent.txt",
+      "sha256": "c1ada6cc4fdc0b7c9f933ac9f969b024ae9c4bc4aef3311d80e01621ffb31bc7"
+    },
+    {
+      "path": "frontend-vitest-v8-parent-receipt.json",
+      "sha256": "485454892034bc6ee337a080f2ce1ed4e9a3b87e6038266693153ba446a3b3e8"
+    },
+    {
+      "path": "frontend-vitest-v8-parent-source-manifest.json",
+      "sha256": "e9cdd1ebef5993f7b0c648666c658a9cd395fbd65e5a1b374b15278667dca9ed"
+    },
+    {
+      "path": "akshare-timeout-ready-v6-parent-receipt.json",
+      "sha256": "ca028926910434834cafed8002b8f619e36ba13d98ff0e1af84cabb89ba8e752"
+    },
+    {
+      "path": "akshare-timeout-ready-v6-parent-tests.txt",
+      "sha256": "8dc546f61e5513e6d8d0841fc6ed0fe5b40d9331a2785a9db65652d382f9ed71"
+    },
+    {
+      "path": "akshare-timeout-ready-v6-parent.xml",
+      "sha256": "7bd4d86f834b79338865769dad1b440948c3a3c02c644b2e3753d0949ec94225"
+    }
+  ]
+}

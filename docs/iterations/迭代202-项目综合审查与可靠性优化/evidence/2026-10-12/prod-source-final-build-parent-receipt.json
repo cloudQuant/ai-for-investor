@@ -1,0 +1,30 @@
+{
+  "started_at": "2026-10-12T14:26:42.408Z",
+  "pid": 1978,
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+  "command": [
+    "docker",
+    "build",
+    "--progress=plain",
+    "--iidfile",
+    "/tmp/ai-investor-iter200-202-20261012.afLb99/prod-source-final-build-parent.iid",
+    "-f",
+    "src/backend/Dockerfile",
+    "-t",
+    "iter202-d14-backend:20261012-source-final",
+    "."
+  ],
+  "source_manifest": "backend-final-static-v4-parent-source-manifest.json",
+  "source_manifest_sha256": "a5e166904a491ac215a29e6c162797bf91d20946b1acd383445ce1d073a5a3fe",
+  "dockerfile_sha256": "b3679ae71fc4f290836dd75a2be1b29337fb3ff11d354b4aa7ae9c6635c7b43e",
+  "production_lock_sha256": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b",
+  "state": "PASS",
+  "child_pid": 1991,
+  "exit_code": 0,
+  "signal": null,
+  "finished_at": "2026-10-12T15:25:08.556Z",
+  "elapsed_seconds": 3506.158,
+  "source_unchanged": true,
+  "log_sha256": "005fad18111279841792ff9178f086336ff2ec9fc9c5d667e7d2900b89602b7f",
+  "image_id": "sha256:ad00640ed6c2b51761b5b9e6d7b70030ecd809a868b3b301aa36c6bfd19732f2"
+}

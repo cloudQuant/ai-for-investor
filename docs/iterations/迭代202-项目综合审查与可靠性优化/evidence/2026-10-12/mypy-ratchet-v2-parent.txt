@@ -1,0 +1,1 @@
+mypy_ratchet: errors=0 baseline=0 delta=+0

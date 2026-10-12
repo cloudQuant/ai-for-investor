@@ -1,0 +1,33 @@
+{
+  "state": "PASS",
+  "command": [
+    "/Users/yunjinqi/opt/anaconda3/bin/conda",
+    "run",
+    "--no-capture-output",
+    "-n",
+    "base",
+    "python",
+    "-m",
+    "pytest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-p",
+    "pytest_timeout",
+    "-o",
+    "timeout=180",
+    "-o",
+    "timeout_method=signal",
+    "-vv",
+    "tests/test_workspace_json_consumers.py",
+    "--junitxml=/Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/workspace-json-fixture-parent.xml"
+  ],
+  "started_at": "2026-10-12T15:11:21.843Z",
+  "source_sha256": "095960b224df8d298c14f967bf3a8706c9d074a4d6f79156c13778482bd6e14a",
+  "dev_lock": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+  "review": "Primary reviewed explicit supported objective/direction replacing conflicting prior run fields, nested saved JSON preservation and original input unchanged; invalid prior config produces exactly current-run fields. Production function and other report tests unchanged. Ruff 0.16.2 check and format --check both exit 0.",
+  "exit_code": 0,
+  "signal": null,
+  "finished_at": "2026-10-12T15:11:59.788Z",
+  "source_unchanged": true,
+  "log_sha256": "4ac2b4f3c0d55b860532e16b9d5098cd6477d07fa598a702b72113316dd70d6f"
+}

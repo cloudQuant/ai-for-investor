@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 import httpx
 import pytest
+
 from app.services.market_data.opendata_credentials import (
     OpendataCredentials,
     OpendataCredentialsError,

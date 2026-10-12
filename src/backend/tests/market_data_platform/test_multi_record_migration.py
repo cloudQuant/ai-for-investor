@@ -24,6 +24,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PREVIOUS_HEAD_REVISION = "20260911_market_data_deferred_publications"
 SEMANTIC_RECORD_KEYS_REVISION = "20260911_market_data_semantic_record_keys"
 B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
+OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION = "20261012_optimization_objective_direction"
 SINGLE_RECORD_SEMANTIC_KEY_CANONICAL_JSON = (
     '{"record_identity_contract_version":"market-data-semantic-record-key-v1","scope":"singleton"}'
 )
@@ -639,8 +640,11 @@ def test_semantic_record_key_revision_remains_the_b2_evidence_predecessor() -> N
 
     revision = script.get_revision(SEMANTIC_RECORD_KEYS_REVISION)
     evidence_revision = script.get_revision(B2_COMPLETENESS_EVIDENCE_REVISION)
+    objective_revision = script.get_revision(OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION)
     assert revision is not None
     assert revision.down_revision == PREVIOUS_HEAD_REVISION
     assert evidence_revision is not None
     assert evidence_revision.down_revision == SEMANTIC_RECORD_KEYS_REVISION
-    assert script.get_heads() == [B2_COMPLETENESS_EVIDENCE_REVISION]
+    assert objective_revision is not None
+    assert objective_revision.down_revision == B2_COMPLETENESS_EVIDENCE_REVISION
+    assert script.get_heads() == [OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION]

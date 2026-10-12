@@ -1,0 +1,18 @@
+[
+  {
+    "flags": [
+      "-S"
+    ],
+    "seconds": 62.65,
+    "exit_code": 0,
+    "stdout": "1.3.0",
+    "stderr": ""
+  },
+  {
+    "flags": [],
+    "seconds": 92.94,
+    "exit_code": 0,
+    "stdout": "1.3.0",
+    "stderr": ""
+  }
+]

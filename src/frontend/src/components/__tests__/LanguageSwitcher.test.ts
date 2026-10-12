@@ -23,7 +23,7 @@ vi.mock('vue-i18n', () => ({
   }),
 }))
 
-vi.mock('element-plus', () => ({
+vi.mock('element-plus/es/components/message/index.mjs', () => ({
   ElMessage: { warning: (msg: string) => warningMock(msg) },
 }))
 

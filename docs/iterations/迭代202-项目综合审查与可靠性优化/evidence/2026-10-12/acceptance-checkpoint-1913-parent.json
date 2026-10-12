@@ -1,0 +1,56 @@
+{
+  "captured_at": "2026-10-12T11:12:15.746Z",
+  "artifacts": [
+    {
+      "path": "frontend-session-browser-v5-preview-parent.txt",
+      "sha256": "0829520f65b554472fbc9dc21fc29156dd97c105a3b482bda43d2ecb27d75bd6"
+    },
+    {
+      "path": "frontend-session-browser-v5-preview-parent-receipt.json",
+      "sha256": "5e105ca5d504d39ac668525da796c34fdd925e822eefc1d28d6d985a6f3c847e"
+    },
+    {
+      "path": "frontend-session-browser-v5-preview-parent-dist-manifest.json",
+      "sha256": "ab82c5a8f05a680f47cfc108ca19647a1d0430089f64ccb964196e0e6c5ff9cf"
+    },
+    {
+      "path": "d12-clean-v2-parent-receipt.json",
+      "sha256": "9200d640d4b424aefde82b9b5bce1f2229b742e5749899ca9e8bab97ffc97846"
+    },
+    {
+      "path": "d12-clean-up-v2-parent.txt",
+      "sha256": "b61fa2a899d65343738be9d6368fde63773a1bcbe3f014dcd9b97f13a98de9a0"
+    },
+    {
+      "path": "d12-clean-v2-backend-redacted.log",
+      "sha256": "974abc93cc3127b7598f46a860729759c37d6afd14e3cad88cfc2d41fce6bc3d"
+    },
+    {
+      "path": "d12-clean-v2-backend-state.json",
+      "sha256": "46b7cf82725c3a0d057c00c30cd0a8985737516641dd9d1a87df857baf59d04f"
+    },
+    {
+      "path": "backend-full-v2-linux-parent.txt",
+      "sha256": "a434e448f08798cd03bce93a6bc8eabd47645fab34383cdce10d9666b705b90f"
+    },
+    {
+      "path": "backend-full-v2-linux-parent-receipt.json",
+      "sha256": "50968706d69bbfdcff9ed07c4438df32329dd45f50dd327783b3cd8b5ff4910a"
+    },
+    {
+      "path": "iter202-prod-optional-router-status.log",
+      "sha256": "3889deddc1e117b8956fcd9ea1fb2daa6cb3bd9bd60decdf76385c53726875be"
+    },
+    {
+      "path": "iter202-dev-logdir-build-receipt.md",
+      "sha256": "8454afde84a738d50ba20ea51e6b84e5ba0de1a7ca048a2111baa8d29c476dc8"
+    },
+    {
+      "path": "iter202-dev-logdir-final-build.log",
+      "sha256": "2cdbb7b436ef547bb1d1a4e7ea1e146f0d88e9d55ecfff04551cda8356abe3ad"
+    }
+  ],
+  "preview": "FAIL: TDZ; 3 failed, 1 interrupted, 3 not run; parent stopped owned Playwright after reproducing shared bootstrap fault",
+  "d12": "INCOMPLETE: up exit1,563.39s; late health 200 does not replace fresh-start gate",
+  "backend_full": "INCOMPLETE: thread watchdog terminates process before JUnit; prior failures not summarized"
+}

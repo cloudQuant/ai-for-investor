@@ -11,10 +11,10 @@ Provides:
 
 import logging
 import typing
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.api.deps import get_current_user
 from app.schemas.backtest_enhanced import OptimizationRequest
@@ -45,10 +45,10 @@ class ParamRangeSpec(BaseModel):
         type: Data type (int or float).
     """
 
-    start: float
-    end: float
-    step: float
-    type: str = "float"  # int or float
+    start: float = Field(strict=True, allow_inf_nan=False)
+    end: float = Field(strict=True, allow_inf_nan=False)
+    step: float = Field(strict=True, allow_inf_nan=False)
+    type: Literal["int", "float"] = "float"
 
 
 class OptimizationSubmitRequest(BaseModel):
@@ -63,6 +63,14 @@ class OptimizationSubmitRequest(BaseModel):
     strategy_id: str
     param_ranges: dict[str, ParamRangeSpec]
     n_workers: int = Field(default=4, ge=1, le=32)
+    objective: Literal["sharpe_ratio", "max_drawdown", "total_return"] | None = None
+    direction: Literal["maximize", "minimize"] | None = None
+
+    @model_validator(mode="after")
+    def validate_objective_pair(self) -> "OptimizationSubmitRequest":
+        if (self.objective is None) != (self.direction is None):
+            raise ValueError("objective and direction must be provided together")
+        return self
 
 
 class OptimizationSubmitResponse(BaseModel):
@@ -97,17 +105,24 @@ async def submit_optimization_task_internal(
     param_ranges: dict[str, dict[str, Any]],
     n_workers: int,
     user_id: str,
+    objective: str | None = None,
+    direction: str | None = None,
 ) -> OptimizationSubmitResponse:
     from app.services.optimization.execution_manager import (
         get_optimization_execution_manager,
     )
+    from app.services.optimization.submission import count_param_grid_combinations
     from app.services.param_optimization_service import generate_param_grid
 
     tpl = get_template_by_id(strategy_id)
     if not tpl:
         raise HTTPException(status_code=404, detail=f"Strategy {strategy_id} not found")
 
-    grid = generate_param_grid(param_ranges)
+    try:
+        count_param_grid_combinations(param_ranges)
+        grid = generate_param_grid(param_ranges)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if not grid:
         raise HTTPException(
             status_code=400,
@@ -122,6 +137,8 @@ async def submit_optimization_task_internal(
             total=len(grid),
             param_ranges=param_ranges,
             n_workers=n_workers,
+            objective=objective,
+            direction=direction,
         )
         task_id = str(db_task.id)
 
@@ -131,6 +148,8 @@ async def submit_optimization_task_internal(
             n_workers=n_workers,
             task_id=task_id,
             persist_to_db=True,
+            objective=objective,
+            direction=direction,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -158,7 +177,10 @@ async def submit_backtest_optimization_task_internal(
     if not tpl:
         raise HTTPException(status_code=404, detail=f"Strategy {request.strategy_id} not found")
 
-    total = estimate_backtest_optimization_total(request)
+    try:
+        total = estimate_backtest_optimization_total(request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if total <= 0:
         raise HTTPException(status_code=400, detail="Optimization task is empty")
 
@@ -173,6 +195,8 @@ async def submit_backtest_optimization_task_internal(
             total=total,
             param_ranges=param_spec or {},
             n_workers=n_workers,
+            objective=request.metric,
+            direction="minimize" if request.metric == "max_drawdown" else "maximize",
         )
         task_id = str(db_task.id)
 
@@ -261,6 +285,8 @@ async def submit_optimization_task(
         param_ranges=_build_param_ranges(request.param_ranges),
         n_workers=request.n_workers,
         user_id=current_user.sub,
+        objective=request.objective,
+        direction=request.direction,
     )
 
 

@@ -5,28 +5,38 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useStrategyStore } from '@/stores/strategy'
+import { isAIResearchMarketDataPlatformBridgeEnabled, useAIResearchMarketData, type AIResearchMarketDataPrecheckSnapshot } from './useAIResearchMarketData'
+import { isRecord, optionalNumber, optionalBoolean, containsRedactedSecret, stringFromUnknown, nullableString, stringArrayFromUnknown, uniqueTextItems, arrayFromUnknown, parseResearchDate, routeQueryText } from './aiResearchValueAdapters'
+import { useStrategyPageDialogs } from './useStrategyPageDialogs'
+import { useAIResearchRuntimeProjections } from './useAIResearchRuntimeProjections'
+import { useAIResearchRunRecordAdapters } from './useAIResearchRunRecordAdapters'
+import { useAIResearchRuntimeOperations } from './useAIResearchRuntimeOperations'
+import { useStrategyPageViewState } from './useStrategyPageViewState'
 import {
-  createMarketDataQueryFromContract,
-  hasMarketDataCapabilities,
-  hasMarketDataQueryContract,
-  isMarketDataQueryV2FallbackError,
-  marketDataApi,
-  type MarketAssetType,
-  type MarketDataCapabilitiesResponse,
-  type MarketDataQueryContract,
-  type MarketDataQueryResponse,
-} from '@/api/marketData'
+  AI_RESEARCH_TASK_MAX_TIMEOUT_MS,
+  AI_RESEARCH_TASK_MIN_TIMEOUT_MS,
+  AI_RESEARCH_TASK_POLL_INTERVAL_MS,
+  sleep,
+  useAIResearchTaskLifecycle,
+} from './useAIResearchTaskLifecycle'
+import { useAIResearchRunExecution } from './useAIResearchRunExecution'
+import { useAIResearchTaskState } from './useAIResearchTaskState'
+import type {
+  AIResearchAutoContinuationSource,
+  AIResearchMandateInput,
+  AIResearchMandateSnapshot,
+  AIResearchPreparedSubmission,
+  AIResearchRunnableInput,
+  AIResearchSubmissionSnapshot,
+} from './aiResearchTaskTypes'
+import type { MarketAssetType, MarketDataCapabilitiesResponse } from '@/api/marketData'
 import { strategyApi } from '@/api/strategy'
-import { stripStrategyMeta } from '@/constants/strategy'
-import type { ParamSpec, Strategy, StrategyTemplate } from '@/types'
+import type { Strategy } from '@/types'
 import type {
   AIStrategyLiveReadinessItem,
-  AIStrategyLiveHandoffApprovalRequest,
   AIStrategyLiveHandoffPackage,
-  AIStrategyLiveTradingPrepare,
   AIStrategyGateGap,
   AIStrategyIterationProgress,
-  AIStrategyOutOfSampleValidation,
   AIStrategyPaperReviewLock,
   AIStrategyPaperMonitoringRule,
   AIStrategyPaperTradingRuleEvaluation,
@@ -35,7 +45,6 @@ import type {
   AIStrategyPipelineSummary,
   AIStrategyPipelineStep,
   AIStrategyPromotionAuditItem,
-  AIStrategyQualityGateEvaluation,
   AIStrategyResearchConfigProfile,
   AIStrategyResearchRunRequest,
   AIStrategyResearchRunRecord,
@@ -47,112 +56,89 @@ import type {
   InvestmentMandateResponse,
   ResearchPipelineEvent,
 } from '@/api/strategy'
-import type { DataPrecheckResponse } from '@/types/trust'
-import type { Workspace, StrategyUnit, TradingSnapshot, UnitStatusResponse } from '@/types/workspace'
-
-/**
- * The authenticated data service owns effective rollout state. Browser build
- * flags are intentionally not an authority: a stale bundle must never enable
- * a bridge that the serving backend has disabled, nor suppress an approved
- * strict-local bridge after the backend has enabled it.
- */
-function isAIResearchMarketDataPlatformBridgeEnabled(
-  capabilities: MarketDataCapabilitiesResponse | null,
-): boolean {
-  return capabilities?.query_v2_enabled === true
-    && capabilities.research_backtest_bridge_enabled === true
-}
-
-function isAIResearchMarketDataCacheFillEnabled(
-  capabilities: MarketDataCapabilitiesResponse | null,
-): boolean {
-  return capabilities?.query_v2_enabled === true
-    && capabilities.research_cache_fill_enabled === true
-}
-
-/**
- * Research needs a time-series bars contract. The browser uses this only to
- * verify the family returned by the server-owned control plane; the server
- * still resolves and issues the concrete contract for the selected symbol.
- *
- * Crypto's ``realtime`` family is a quote snapshot, so it cannot be used as
- * research bars. ``crypto.range`` is its dedicated bars family and remains
- * fail-closed until the server marks that product executable.
- */
-const AI_RESEARCH_STRICT_BARS_FAMILY_IDS: Record<MarketAssetType, string> = {
-  stock: 'stock.realtime',
-  futures: 'futures.realtime',
-  bond: 'bond.realtime',
-  fund: 'fund.realtime',
-  option: 'option.realtime',
-  fx: 'fx.realtime',
-  crypto: 'crypto.range',
-}
-
-function aiResearchStrictBarsFamilyId(assetType: MarketAssetType): string {
-  return AI_RESEARCH_STRICT_BARS_FAMILY_IDS[assetType]
-}
-
-/**
- * Keep an explicit family lifecycle rejection separate from a transport or
- * rollout outage. A rejected unconfigured product must neither call the v2
- * query endpoint nor take a legacy fallback path.
- */
-function isAIResearchMarketDataFamilyUnconfiguredError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const response = (error as { response?: { data?: unknown } }).response
-  const data = response?.data
-  if (!data || typeof data !== 'object') return false
-  const record = data as Record<string, unknown>
-  const detail = record.detail
-  const details = record.details
-  const detailCode = detail && typeof detail === 'object'
-    ? (detail as Record<string, unknown>).code
-    : undefined
-  const detailsCode = details && typeof details === 'object'
-    ? (details as Record<string, unknown>).code
-    : undefined
-  return [record.code, detailCode, detailsCode].some(code => code === 'DATA_FAMILY_UNCONFIGURED')
-}
 
 export function useStrategyPage() {
   const { t } = useI18n()
   const route = useRoute()
   const router = useRouter()
   const strategyStore = useStrategyStore()
-  const aiResearchMarketDataCapabilities = ref<MarketDataCapabilitiesResponse | null>(null)
-  const aiResearchMarketDataPlatformBridgeEnabled = computed(() => (
-    isAIResearchMarketDataPlatformBridgeEnabled(aiResearchMarketDataCapabilities.value)
-  ))
-  const aiResearchMarketDataCacheFillEnabled = computed(() => (
-    isAIResearchMarketDataCacheFillEnabled(aiResearchMarketDataCapabilities.value)
-  ))
-  let aiResearchMarketDataCapabilitiesResolved = false
-  let aiResearchMarketDataCapabilitiesRequest: Promise<MarketDataCapabilitiesResponse | null> | null = null
-  let aiResearchMarketDataCapabilitiesRequestGeneration = 0
 
-  // ---- State ----
-  const isInvestmentStrategyResearchRoute = computed(() =>
-    String(route.path || '').startsWith('/investment/strategies')
-  )
-  const showAIResearchTab = computed(() => isInvestmentStrategyResearchRoute.value)
-  const showStrategyManagementTabs = computed(() => !isInvestmentStrategyResearchRoute.value)
-  const activeTab = ref(showAIResearchTab.value ? 'aiResearch' : 'gallery')
-  const searchKeyword = ref('')
-  const categoryFilter = ref('')
+  const {
+    isInvestmentStrategyResearchRoute,
+    showAIResearchTab,
+    showStrategyManagementTabs,
+    activeTab,
+    searchKeyword,
+    categoryFilter,
+    strategies,
+    templates,
+    loading,
+    filteredTemplates,
+    displayedTemplates,
+    strategyCategoryCount,
+    strategyManagementStats,
+  } = useStrategyPageViewState({ route, strategyStore, t })
 
-  const dialogVisible = ref(false)
-  const viewDialogVisible = ref(false)
-  const detailVisible = ref(false)
-  const isEdit = ref(false)
-  const saving = ref(false)
-  const editingId = ref('')
-  const currentStrategy = ref<Strategy | null>(null)
+  const {
+    form,
+    dialogVisible,
+    viewDialogVisible,
+    detailVisible,
+    isEdit,
+    saving,
+    editingId,
+    currentStrategy,
+    detailTemplate,
+    detailTab,
+    readmeContent,
+    readmeLoading,
+    paramTableData,
+    openTemplateDetail,
+    goBacktest,
+    showCreateDialog,
+    editStrategy,
+    viewStrategy,
+    useTemplate,
+    updateStrategyForm,
+    saveStrategy,
+    deleteStrategy,
+  } = useStrategyPageDialogs({ t, router, strategyStore, activeTab })
 
-  const detailTemplate = ref<StrategyTemplate | null>(null)
-  const detailTab = ref('readme')
-  const readmeContent = ref('')
-  const readmeLoading = ref(false)
+  const {
+    validationWindowFromUnknown,
+    outOfSampleValidationFromHandoff,
+    hasResearchRuntimeEnvironment,
+    researchRuntimeItems,
+    runtimeItemsFromPayloads,
+    gatewayRuntimeItemsFromSnapshot,
+    hasPaperEnvironment,
+    paperEnvironmentItems,
+    environmentItemsFromPayload,
+    runtimeEnvironmentPayload,
+    firstRuntimeAssetSpecFromPayload,
+    iterationOutOfSampleValidation,
+    formatBacktestPercent,
+    researchIterationBacktestSummary,
+    formatOutOfSampleWindow,
+    outOfSampleTagType,
+    outOfSampleStatusLabel,
+    recordOutOfSampleSummary,
+    strategyIdFromIterationPayload,
+    iterationPayloadHasStrategy,
+    iterationPayloadRank,
+    compareIterationPayloads,
+    bestIterationPayloadForRecord,
+    bestStrategyIdForRecord,
+    fallbackSnapshotStrategyId,
+    gatewayConfigJsonFromRunRecord,
+    gatewayConfigJsonFromTaskSnapshot,
+    liveGatewayConfigJsonFromRunRecord,
+    runtimeAssetSpecsPayload,
+    iterationStrategyPayload,
+    iterationUnitPayload,
+    iterationRunResultPayload,
+    iterationUnitStatusPayload,
+  } = useAIResearchRuntimeProjections({ t, formatMetric, aiResearchStageLabel, outOfSampleRatioPct })
   const aiResearchRunning = ref(false)
   const aiResearchResult = ref<AIStrategyResearchRunResponse | null>(null)
   const aiResearchActiveConfigProfile = ref<AIStrategyResearchConfigProfile | null>(null)
@@ -161,34 +147,6 @@ export function useStrategyPage() {
   const AI_RESEARCH_RUNS_AUTO_REFRESH_MS = 30_000
   let aiResearchRunsAutoRefreshTimer: ReturnType<typeof setTimeout> | null = null
   let aiResearchRunsAutoRefreshActive = false
-  const aiResearchTaskId = ref('')
-  const aiResearchTaskStatus = ref('')
-  const aiResearchTaskStage = ref('')
-  const aiResearchTaskProgress = ref(0)
-  const aiResearchTaskIteration = ref<number | null>(null)
-  const aiResearchBacktestTaskId = ref('')
-  const aiResearchCancelledBacktestTaskId = ref('')
-  const aiResearchTaskPaperWorkspaceId = ref('')
-  const aiResearchTaskPaperUnitId = ref('')
-  const aiResearchTaskPaperStarted = ref(false)
-  const aiResearchTaskLiveWorkspaceId = ref('')
-  const aiResearchTaskLiveUnitId = ref('')
-  const aiResearchTaskLivePrepared = ref(false)
-  const aiResearchTaskPipeline = ref<AIStrategyPipelineSummary | null>(null)
-  const aiResearchTaskRequestSnapshot = ref<Record<string, unknown> | null>(null)
-  const aiResearchTaskAutoContinuationSource = ref<AIResearchAutoContinuationSource | null>(null)
-  const aiResearchTaskContinuedFromRunId = ref('')
-  const aiResearchTaskContinuationSource = ref('')
-  const aiResearchTaskContinuationContext = ref<Record<string, unknown>>({})
-  const aiResearchTaskError = ref('')
-  const aiResearchTaskMessage = ref('')
-  const aiResearchTaskLatestIteration = ref<Record<string, unknown> | null>(null)
-  const aiResearchTaskBestIteration = ref<Record<string, unknown> | null>(null)
-  const aiResearchTaskAssetSpecs = ref<Record<string, Record<string, unknown>>>({})
-  const aiResearchTaskBacktestEnvironment = ref<Record<string, unknown>>({})
-  const aiResearchTaskPromotionAudit = ref<AIStrategyPromotionAuditItem[]>([])
-  const aiResearchCancelling = ref(false)
-  const aiResearchCancelRequested = ref(false)
   const aiResearchPaperStartingRunId = ref('')
   const aiResearchPaperReviewingRunId = ref('')
   const aiResearchLiveHandoffLoadingRunId = ref('')
@@ -256,24 +214,6 @@ export function useStrategyPage() {
     append('gate', comparison.gate_deltas || {})
     return rows
   })
-  const aiResearchPrecheckLoading = ref(false)
-  const aiResearchCacheFillLoading = ref(false)
-  const aiResearchPrecheckResult = ref<DataPrecheckResponse | null>(null)
-  const aiResearchPrecheckError = ref('')
-  const aiResearchMarketDataPlatformStatus = ref<AIResearchMarketDataPlatformStatus>({
-    path: 'legacy',
-    provider: null,
-    coverageStatus: null,
-    coverageRatio: null,
-    queryId: null,
-    detail: null,
-  })
-  const aiResearchMarketDataQueryContracts = new Map<string, MarketDataQueryContract>()
-  const AI_RESEARCH_PRECHECK_DEBOUNCE_MS = 350
-  let aiResearchPrecheckTimer: ReturnType<typeof setTimeout> | null = null
-  let aiResearchPrecheckController: AbortController | null = null
-  let aiResearchPrecheckSequence = 0
-  let aiResearchCacheFillSequence = 0
 
   const AI_RESEARCH_STAGE_LABELS: Record<string, string> = {
     queued: '排队中',
@@ -369,23 +309,6 @@ export function useStrategyPage() {
   type AIResearchWorkflowMode = NonNullable<AIStrategyResearchRunRequest['workflow_mode']>
   type AIResearchPromptGenerationMode = 'default' | 'ai'
 
-  type AIResearchMarketDataPlatformStatus = {
-    path: (
-      | 'legacy'
-      | 'strict_local'
-      | 'local_first'
-      | 'provider_persisted'
-      | 'legacy_fallback'
-      | 'unsupported'
-      | 'error'
-    )
-    provider: string | null
-    coverageStatus: string | null
-    coverageRatio: number | null
-    queryId: string | null
-    detail: string | null
-  }
-
   const AI_RESEARCH_WORKFLOW_STEPS: NonNullable<AIStrategyResearchRunRequest['workflow_steps']> = [
     'ideation',
     'generation',
@@ -419,13 +342,6 @@ export function useStrategyPage() {
     '实盘网关配置必须是 JSON 对象',
     '实盘网关配置包含脱敏凭据，请重新输入真实网关配置',
   ])
-
-  const form = reactive({
-    name: '',
-    description: '',
-    code: '',
-    category: 'custom',
-  })
 
   const aiResearchForm = reactive({
     prompt: '',
@@ -489,18 +405,125 @@ export function useStrategyPage() {
     live_gateway_config_json: '',
   })
 
-  const aiResearchMarketDataAssetTypeOptions: ReadonlyArray<{
-    value: MarketAssetType
-    label: string
-  }> = [
-    { value: 'stock', label: t('strategy.aiResearchAssetTypes.stock') },
-    { value: 'futures', label: t('strategy.aiResearchAssetTypes.futures') },
-    { value: 'bond', label: t('strategy.aiResearchAssetTypes.bond') },
-    { value: 'fund', label: t('strategy.aiResearchAssetTypes.fund') },
-    { value: 'option', label: t('strategy.aiResearchAssetTypes.option') },
-    { value: 'fx', label: t('strategy.aiResearchAssetTypes.fx') },
-    { value: 'crypto', label: t('strategy.aiResearchAssetTypes.crypto') },
-  ]
+  const {
+    workspaceFromResearchRunRecord,
+    researchResultFromRunRecord,
+    researchResultFromTaskSummary,
+    researchIterationsFromRunRecord,
+    researchIterationFromRunRecord,
+    strategyFromIterationRecord,
+    paperTradingFromRunRecord,
+    paperUnitFromRunRecord,
+    paperWorkspaceFromRunRecord,
+    fallbackPaperUnitFromRunRecord,
+    paperRunStatusFromHandoff,
+    unitFromIterationRecord,
+    unitStatusFromIterationRecord,
+    metricFromPayload,
+    unitTradingMode,
+    emptyTradingSnapshot,
+  } = useAIResearchRunRecordAdapters({
+    minPaperTradingDays: DEFAULT_AI_RESEARCH_MIN_PAPER_TRADING_DAYS,
+    runtimeAssetSpecsPayload,
+    runtimeEnvironmentPayload,
+    bestIterationPayloadForRecord,
+    bestStrategyFromRunRecord,
+    fallbackSnapshotStrategyId,
+    iterationStrategyPayload,
+    iterationUnitPayload,
+    iterationRunResultPayload,
+    iterationUnitStatusPayload,
+    validationWindowFromUnknown,
+    promotionAuditFromPayload,
+    hydrateLiveHandoffFromRunRecord,
+    liveTradingPreparedAtFromPipeline,
+  })
+
+  const {
+    aiResearchMarketDataCapabilities,
+    aiResearchMarketDataPlatformBridgeEnabled,
+    aiResearchMarketDataCacheFillEnabled,
+    aiResearchMarketDataPlatformStatus,
+    aiResearchMarketDataAssetTypeOptions,
+    aiResearchPrecheckLoading,
+    aiResearchCacheFillLoading,
+    aiResearchPrecheckResult,
+    aiResearchPrecheckError,
+    aiResearchPrecheckTagType,
+    aiResearchPrecheckSummary,
+    aiResearchMarketDataPlatformTagType,
+    aiResearchMarketDataPlatformSummary,
+    aiResearchStrictMarketDataRunBlockReason,
+    aiResearchStrictMarketDataRunBlocked,
+    aiResearchStrictMarketDataRunBlockReasonForStatus,
+    isAIResearchMarketDataAssetType,
+    aiResearchResolvedMarketDataAssetType,
+    aiResearchMarketDataAssetTypeFromDataConfig,
+    aiResearchPrecheckAssetType,
+    aiResearchLegacyPeriod,
+    aiResearchQueryWindow,
+    aiResearchQueryContractKey,
+    setAIResearchMarketDataPlatformStatus,
+    resolveAIResearchMarketDataCapabilities,
+    resolveAIResearchMarketDataContract,
+    runAIResearchMarketDataPlatformPrecheck,
+    runAIResearchDataPrecheck,
+    warmAIResearchLocalCache,
+    scheduleAIResearchDataPrecheck,
+    AI_RESEARCH_FUTURES_PREFIXES,
+    isAIResearchFuturesSymbol,
+    aiResearchAssetConstraintLine,
+  } = useAIResearchMarketData({ t, aiResearchForm })
+
+  const aiResearchTaskState = useAIResearchTaskState({
+    aiResearchForm,
+    aiResearchTaskAutoContinuationSourceFromTask,
+    gatewayConfigJsonFromTaskSnapshot,
+    aiResearchMarketDataAssetTypeFromDataConfig,
+    resolvedAIResearchTaskBacktestEnvironment,
+    aiResearchTaskRestoredCommission,
+    aiResearchTaskUsesManualCommission,
+    promotionAuditFromPayload,
+  })
+  const {
+    aiResearchTaskId,
+    aiResearchTaskStatus,
+    aiResearchTaskStage,
+    aiResearchTaskProgress,
+    aiResearchTaskIteration,
+    aiResearchBacktestTaskId,
+    aiResearchCancelledBacktestTaskId,
+    aiResearchTaskPaperWorkspaceId,
+    aiResearchTaskPaperUnitId,
+    aiResearchTaskPaperStarted,
+    aiResearchTaskLiveWorkspaceId,
+    aiResearchTaskLiveUnitId,
+    aiResearchTaskLivePrepared,
+    aiResearchTaskPipeline,
+    aiResearchTaskRequestSnapshot,
+    aiResearchTaskAutoContinuationSource,
+    aiResearchTaskContinuedFromRunId,
+    aiResearchTaskContinuationSource,
+    aiResearchTaskContinuationContext,
+    aiResearchTaskError,
+    aiResearchTaskMessage,
+    aiResearchTaskLatestIteration,
+    aiResearchTaskBestIteration,
+    aiResearchTaskAssetSpecs,
+    aiResearchTaskBacktestEnvironment,
+    aiResearchTaskPromotionAudit,
+    aiResearchCancelling,
+    aiResearchCancelRequested,
+    isAIResearchTaskTerminal,
+    isAIResearchTaskCancelled,
+    isRestorableAIResearchTask,
+    boundedNumber,
+    aiResearchTaskPollTimeoutMs,
+    applyAIResearchTaskStatus,
+    applyAIResearchTaskSnapshotToForm,
+    aiResearchTaskFailureMessage,
+    resetAIResearchTaskState,
+  } = aiResearchTaskState
 
   const aiResearchHeroSteps = computed(() => [
     { key: 'idea', index: '01', label: t('strategy.aiResearchHeroStepIdea') },
@@ -538,114 +561,6 @@ export function useStrategyPage() {
         : t('common.disable'),
     },
   ])
-
-  const aiResearchPrecheckTagType = computed(() => {
-    if (aiResearchPrecheckError.value) return 'danger'
-    const status = aiResearchPrecheckResult.value?.status
-    if (status === 'pass') return 'success'
-    if (status === 'failed') return 'danger'
-    if (status === 'warning') return 'warning'
-    return 'info'
-  })
-
-  const aiResearchPrecheckSummary = computed(() => {
-    if (aiResearchPrecheckError.value) return aiResearchPrecheckError.value
-    const result = aiResearchPrecheckResult.value
-    if (!result) return '未预检'
-    const issueCount = (result.reasons?.length || 0) + (result.warnings?.length || 0)
-    const label = result.passed ? '预检通过' : '预检未通过'
-    return issueCount ? `${label} · ${issueCount} 项` : label
-  })
-
-  const aiResearchMarketDataPlatformTagType = computed<'success' | 'warning' | 'danger' | 'info'>(() => {
-    const path = aiResearchMarketDataPlatformStatus.value.path
-    if (path === 'strict_local' || path === 'local_first' || path === 'provider_persisted') return 'success'
-    if (path === 'error') return 'danger'
-    if (path === 'legacy_fallback' || path === 'unsupported') return 'warning'
-    return 'info'
-  })
-
-  const aiResearchMarketDataPlatformSummary = computed(() => {
-    const status = aiResearchMarketDataPlatformStatus.value
-    if (status.path === 'strict_local') {
-      const ratio = status.coverageRatio === null ? '-' : `${(status.coverageRatio * 100).toFixed(2)}%`
-      const provider = status.provider ? ` · ${status.provider}` : ''
-      return `数据中台严格本地预检${provider} · ${status.coverageStatus || 'unknown'} · ${ratio}`
-    }
-    if (status.path === 'provider_persisted') {
-      const ratio = status.coverageRatio === null ? '-' : `${(status.coverageRatio * 100).toFixed(2)}%`
-      const provider = status.provider ? ` · ${status.provider}` : ''
-      return `数据中台已补齐并持久化${provider} · ${status.coverageStatus || 'unknown'} · ${ratio}`
-    }
-    if (status.path === 'local_first') {
-      const ratio = status.coverageRatio === null ? '-' : `${(status.coverageRatio * 100).toFixed(2)}%`
-      const provider = status.provider ? ` · ${status.provider}` : ''
-      return `数据中台本地优先预检${provider} · ${status.coverageStatus || 'unknown'} · ${ratio}`
-    }
-    if (status.path === 'legacy_fallback') return '数据中台不可用，已保留原预检'
-    if (status.path === 'unsupported') return '当前标的尚无数据中台契约'
-    if (status.path === 'error') return '数据中台预检异常，原预检结果未改变'
-    return '原数据预检'
-  })
-
-  function aiResearchStrictMarketDataRunBlockReasonForStatus(
-    status: AIResearchMarketDataPlatformStatus,
-  ): string {
-    if (status.path === 'strict_local') return ''
-    if (status.path === 'legacy') {
-      return '严格本地市场数据预检尚未完成，无法运行 AI 策略'
-    }
-    if (status.path === 'unsupported') {
-      return `严格本地市场数据预检被阻断：${status.detail || '当前标的尚无数据中台契约'}`
-    }
-    if (status.path === 'legacy_fallback') {
-      return '严格本地市场数据预检不可用，无法运行 AI 策略'
-    }
-    if (status.detail === 'MARKET_DATA_STRICT_LOCAL_INCOMPLETE') {
-      const coverage = status.coverageRatio === null
-        ? ''
-        : `（覆盖率 ${(status.coverageRatio * 100).toFixed(2)}%）`
-      return `严格本地市场数据覆盖不完整${coverage}，无法运行 AI 策略`
-    }
-    return `严格本地市场数据预检被阻断：${status.detail || '预检未通过'}`
-  }
-
-  const aiResearchStrictMarketDataRunBlockReason = computed(() => {
-    if (!aiResearchMarketDataPlatformBridgeEnabled.value) return ''
-    if (aiResearchPrecheckLoading.value) {
-      return '严格本地市场数据预检正在进行，请等待预检完成后再运行'
-    }
-    return aiResearchStrictMarketDataRunBlockReasonForStatus(
-      aiResearchMarketDataPlatformStatus.value,
-    )
-  })
-
-  const aiResearchStrictMarketDataRunBlocked = computed(() => (
-    aiResearchStrictMarketDataRunBlockReason.value.length > 0
-  ))
-
-  // ---- Computed ----
-  const strategies = computed(() => strategyStore.strategies)
-  const templates = computed(() => strategyStore.templates)
-  const loading = computed(() => strategyStore.loading)
-
-  const filteredTemplates = computed(() => {
-    let list = templates.value
-    if (categoryFilter.value) {
-      list = list.filter(t => t.category === categoryFilter.value)
-    }
-    if (searchKeyword.value) {
-      const kw = searchKeyword.value.toLowerCase()
-      list = list.filter(t =>
-        t.name.toLowerCase().includes(kw) ||
-        t.description.toLowerCase().includes(kw) ||
-        t.id.toLowerCase().includes(kw)
-      )
-    }
-    return list
-  })
-
-  const displayedTemplates = computed(() => filteredTemplates.value)
   const aiResearchSelectedConfigProfile = computed(() =>
     aiResearchConfigProfiles.value.find(
       profile => profile.id === aiResearchSelectedConfigProfileId.value
@@ -783,31 +698,6 @@ export function useStrategyPage() {
     })
     return [...keys]
   })
-  const strategyCategoryCount = computed(() =>
-    new Set(templates.value.map((template) => template.category || 'custom')).size
-  )
-  const strategyManagementStats = computed(() => [
-    {
-      key: 'templates',
-      label: t('strategy.metricTemplates'),
-      value: templates.value.length,
-    },
-    {
-      key: 'owned',
-      label: t('strategy.metricMyStrategies'),
-      value: strategies.value.length,
-    },
-    {
-      key: 'filtered',
-      label: t('strategy.metricFiltered'),
-      value: filteredTemplates.value.length,
-    },
-    {
-      key: 'categories',
-      label: t('strategy.metricCategories'),
-      value: strategyCategoryCount.value,
-    },
-  ])
 
   const aiBestSharpe = computed(() => {
     const metrics = aiResearchResult.value?.best_metrics
@@ -1095,38 +985,6 @@ export function useStrategyPage() {
     return bestIteration ? iterationOutOfSampleValidation(bestIteration) : null
   })
 
-  const paramTableData = computed(() => {
-    if (!detailTemplate.value) return []
-    return Object.entries(detailTemplate.value.params).map(([name, spec]: [string, ParamSpec]) => ({
-      name,
-      default: spec.default ?? '-',
-      type: spec.type ?? '-',
-      description: spec.description ?? name,
-    }))
-  })
-
-  // ---- Methods ----
-  async function openTemplateDetail(t: StrategyTemplate) {
-    detailTemplate.value = t
-    detailTab.value = 'readme'
-    detailVisible.value = true
-    readmeContent.value = ''
-    readmeLoading.value = true
-    try {
-      const res = await strategyApi.getTemplateReadme(t.id)
-      readmeContent.value = res.content ?? ''
-    } catch {
-      readmeContent.value = ''
-    } finally {
-      readmeLoading.value = false
-    }
-  }
-
-  function goBacktest(t: StrategyTemplate) {
-    detailVisible.value = false
-    router.push({ path: '/backtest/legacy', query: { strategy: t.id } })
-  }
-
   function formatMetric(value: unknown, digits = 2) {
     if (value === null || value === undefined || value === '') return '-'
     const number = typeof value === 'number' ? value : Number(value)
@@ -1287,31 +1145,6 @@ export function useStrategyPage() {
     return date.toLocaleString()
   }
 
-  function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-  }
-
-  function containsRedactedSecret(value: unknown): boolean {
-    if (typeof value === 'string') return value.trim() === '***'
-    if (Array.isArray(value)) return value.some(item => containsRedactedSecret(item))
-    if (!isRecord(value)) return false
-    return Object.values(value).some(item => containsRedactedSecret(item))
-  }
-
-  function optionalNumber(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value)) return value
-    if (typeof value === 'string' && value.trim()) {
-      const number = Number(value)
-      return Number.isFinite(number) ? number : null
-    }
-    return null
-  }
-
-  function optionalBoolean(value: unknown, fallback = false) {
-    if (typeof value === 'boolean') return value
-    return fallback
-  }
-
   function outOfSampleRatioPct(value: unknown) {
     const ratio = optionalNumber(value)
     if (ratio === null) return 25
@@ -1321,13 +1154,6 @@ export function useStrategyPage() {
   function outOfSampleRatioValue() {
     const ratio = Number(aiResearchForm.out_of_sample_ratio_pct || 25) / 100
     return Number(ratio.toFixed(4))
-  }
-
-  function parseResearchDate(value: string) {
-    const trimmed = value.trim()
-    if (!trimmed) return null
-    const date = new Date(`${trimmed}T00:00:00Z`)
-    return Number.isNaN(date.getTime()) ? null : date
   }
 
   function requiredOutOfSampleValidationError() {
@@ -1349,524 +1175,10 @@ export function useStrategyPage() {
     return ''
   }
 
-  function aiResearchAssetTypeForSymbol(symbol: string): MarketAssetType | undefined {
-    const normalized = symbol.trim().toUpperCase()
-    if (isAIResearchFuturesSymbol(normalized)) return 'futures'
-    if (/(USDT|USDC|PERP|SWAP|BTC|ETH)/.test(normalized)) return 'crypto'
-    if (/\.(SZ|SH|BJ)$/.test(normalized) || /^\d{6}$/.test(normalized)) return 'stock'
-    return undefined
-  }
-
-  function isAIResearchMarketDataAssetType(value: unknown): value is MarketAssetType {
-    return aiResearchMarketDataAssetTypeOptions.some(option => option.value === value)
-  }
-
-  function aiResearchSelectedMarketDataAssetType(): MarketAssetType | undefined {
-    const value = aiResearchForm.market_data_asset_type
-    return isAIResearchMarketDataAssetType(value) ? value : undefined
-  }
-
-  function aiResearchResolvedMarketDataAssetType(symbol: string): MarketAssetType | undefined {
-    return aiResearchSelectedMarketDataAssetType() ?? aiResearchAssetTypeForSymbol(symbol)
-  }
-
-  function aiResearchMarketDataAssetTypeFromDataConfig(value: unknown): '' | MarketAssetType {
-    if (!isRecord(value)) return ''
-    const assetType = value.market_data_asset_type
-    return isAIResearchMarketDataAssetType(assetType) ? assetType : ''
-  }
-
-  function aiResearchPrecheckAssetType(): MarketAssetType | undefined {
-    return aiResearchResolvedMarketDataAssetType(aiResearchForm.symbol)
-  }
-
-  function aiResearchLegacyPeriod(): 'daily' | 'weekly' | 'monthly' | null {
-    if (aiResearchForm.timeframe === '1d') return 'daily'
-    if (aiResearchForm.timeframe === '1w') return 'weekly'
-    if (aiResearchForm.timeframe === '1mo') return 'monthly'
-    return null
-  }
-
-  function aiResearchQueryWindow(): { start: string; end: string } | null {
-    const start = parseResearchDate(aiResearchForm.start_date)
-    const endInclusive = parseResearchDate(aiResearchForm.end_date)
-    if (!start || !endInclusive || start > endInclusive) return null
-    endInclusive.setUTCDate(endInclusive.getUTCDate() + 1)
-    return { start: start.toISOString(), end: endInclusive.toISOString() }
-  }
-
-  interface AIResearchMarketDataPrecheckSnapshot {
-    symbol: string
-    assetType: MarketAssetType | undefined
-    timeframe: string
-    startDate: string | null
-    endDate: string | null
-    period: 'daily' | 'weekly' | 'monthly' | null
-    window: { start: string; end: string } | null
-  }
-
-  function captureAIResearchMarketDataPrecheckSnapshot(): AIResearchMarketDataPrecheckSnapshot | null {
-    const symbol = aiResearchForm.symbol.trim()
-    if (!symbol) return null
-    return {
-      symbol,
-      assetType: aiResearchResolvedMarketDataAssetType(symbol),
-      timeframe: aiResearchForm.timeframe,
-      startDate: aiResearchForm.start_date || null,
-      endDate: aiResearchForm.end_date || null,
-      period: aiResearchLegacyPeriod(),
-      window: aiResearchQueryWindow(),
-    }
-  }
-
-  function aiResearchQueryContractKey(
-    assetType: MarketAssetType,
-    symbol: string,
-    period: 'daily' | 'weekly' | 'monthly',
-  ): string {
-    // The server resolves exact imported symbols and deliberately does not
-    // case-fold identifiers. Preserve that boundary in the client cache so
-    // an earlier contract can never be reused for a different instrument.
-    return `${assetType}:${symbol.trim()}:${period}`
-  }
-
-  function setAIResearchMarketDataPlatformStatus(
-    status: Partial<AIResearchMarketDataPlatformStatus> & Pick<AIResearchMarketDataPlatformStatus, 'path'>,
-  ): AIResearchMarketDataPlatformStatus {
-    const nextStatus: AIResearchMarketDataPlatformStatus = {
-      provider: null,
-      coverageStatus: null,
-      coverageRatio: null,
-      queryId: null,
-      detail: null,
-      ...status,
-    }
-    aiResearchMarketDataPlatformStatus.value = nextStatus
-    return nextStatus
-  }
-
-  /**
-   * Read authenticated, server-owned rollout state. Page load and passive
-   * prechecks may use the most recently resolved value, while any action that
-   * submits or continues research forces a fresh authorization decision.
-   *
-   * An absent, malformed, or failed response remains null. A client that has
-   * never received an enabled server capability can keep the Iteration 196
-   * path active; a submit-time caller that has already received an enabled
-   * capability treats that null as an unavailable strict-data authorization
-   * and blocks rather than silently downgrading its known gate.
-   */
-  async function resolveAIResearchMarketDataCapabilities(
-    { forceRefresh = false }: { forceRefresh?: boolean } = {},
-  ): Promise<MarketDataCapabilitiesResponse | null> {
-    if (!forceRefresh && aiResearchMarketDataCapabilitiesResolved) {
-      return aiResearchMarketDataCapabilities.value
-    }
-    if (!forceRefresh && aiResearchMarketDataCapabilitiesRequest) {
-      return aiResearchMarketDataCapabilitiesRequest
-    }
-
-    const requestGeneration = ++aiResearchMarketDataCapabilitiesRequestGeneration
-    const request = marketDataApi.getCapabilities()
-      .then((value: unknown) => (hasMarketDataCapabilities(value) ? value : null))
-      .catch(() => null)
-      .then(capabilities => {
-        // A forced submit-time read can supersede a still-pending page-load
-        // request. Do not let that older response restore stale authority.
-        if (requestGeneration === aiResearchMarketDataCapabilitiesRequestGeneration) {
-          // Do not erase a previously authenticated enabled capability on a
-          // transport or schema failure. It remains a safety constraint for
-          // submit-time callers, but cannot itself authorize a new request.
-          if (capabilities) {
-            aiResearchMarketDataCapabilities.value = capabilities
-          }
-          aiResearchMarketDataCapabilitiesResolved = true
-        }
-        return capabilities
-      })
-    aiResearchMarketDataCapabilitiesRequest = request
-    try {
-      return await request
-    } finally {
-      if (aiResearchMarketDataCapabilitiesRequest === request) {
-        aiResearchMarketDataCapabilitiesRequest = null
-      }
-    }
-  }
-
-  function isAIResearchMarketDataContractCompatible(
-    contract: MarketDataQueryContract,
-    assetType: MarketAssetType,
-    period: 'daily' | 'weekly' | 'monthly',
-  ): boolean {
-    const expectedFrequency = period === 'daily' ? '1d' : period === 'weekly' ? '1w' : '1mo'
-    return contract.request.data_kind === 'bars'
-      && contract.request.frequency === expectedFrequency
-      && contract.request.family_id === aiResearchStrictBarsFamilyId(assetType)
-      && contract.request.family_contract_version === 'market-data-family-v1'
-  }
-
-  /**
-   * A strategy-research precheck may display strict-local evidence only when
-   * the response is bound to the exact server-issued contract.  This is a
-   * runtime check because an upgraded frontend can still receive a stale or
-   * mixed-deployment HTTP payload despite its TypeScript declaration.
-   */
-  function isAIResearchMarketDataResponseCompatible(
-    response: MarketDataQueryResponse,
-    contract: MarketDataQueryContract,
-    assetType: MarketAssetType,
-    period: 'daily' | 'weekly' | 'monthly',
-  ): boolean {
-    const expectedFrequency = period === 'daily' ? '1d' : period === 'weekly' ? '1w' : '1mo'
-    const request = contract.request
-    return typeof response.canonical_id === 'string'
-      && response.canonical_id === request.identity.canonical_id
-      && typeof response.dataset_code === 'string'
-      && response.dataset_code === request.dataset_code
-      && response.asset_type === assetType
-      && typeof response.instrument_metadata_version === 'string'
-      && response.instrument_metadata_version.trim().length > 0
-      && response.data_kind === request.data_kind
-      && response.frequency === expectedFrequency
-      && response.frequency === request.frequency
-      && response.source_policy_id === request.source_policy_id
-      && response.family_id === request.family_id
-      && response.family_contract_version === request.family_contract_version
-  }
-
-  async function resolveAIResearchMarketDataContract(
-    assetType: MarketAssetType,
-    symbol: string,
-    period: 'daily' | 'weekly' | 'monthly',
-  ): Promise<MarketDataQueryContract | null> {
-    const key = aiResearchQueryContractKey(assetType, symbol, period)
-    const cached = aiResearchMarketDataQueryContracts.get(key)
-    if (cached && isAIResearchMarketDataContractCompatible(cached, assetType, period)) return cached
-    if (cached) aiResearchMarketDataQueryContracts.delete(key)
-
-    const expectedFamilyId = aiResearchStrictBarsFamilyId(assetType)
-    const contract = await marketDataApi.getQueryContract({
-      asset_type: assetType,
-      symbol,
-      period,
-      family_id: expectedFamilyId,
-    })
-    if (!hasMarketDataQueryContract(contract)) return null
-    if (!isAIResearchMarketDataContractCompatible(contract, assetType, period)) {
-      return null
-    }
-    aiResearchMarketDataQueryContracts.set(key, contract)
-    return contract
-  }
-
-  async function runAIResearchMarketDataPlatformPrecheck(
-    snapshot: AIResearchMarketDataPrecheckSnapshot,
-    controller: AbortController,
-    {
-      fillLocalCache = false,
-      forceStrictLocalReread = false,
-      capabilities: preResolvedCapabilities,
-    }: {
-      fillLocalCache?: boolean
-      forceStrictLocalReread?: boolean
-      capabilities?: MarketDataCapabilitiesResponse | null
-    } = {},
-  ): Promise<AIResearchMarketDataPlatformStatus | null> {
-    const capabilities = preResolvedCapabilities === undefined
-      ? await resolveAIResearchMarketDataCapabilities()
-      : preResolvedCapabilities
-    if (controller.signal.aborted) return null
-    if (
-      fillLocalCache
-        ? !isAIResearchMarketDataCacheFillEnabled(capabilities)
-        : !forceStrictLocalReread
-          && !isAIResearchMarketDataPlatformBridgeEnabled(capabilities)
-    ) return null
-
-    const { assetType, symbol, period, window } = snapshot
-    if (!assetType || !period || !window) {
-      return setAIResearchMarketDataPlatformStatus({
-        path: 'unsupported',
-        detail: 'TYPED_QUERY_CONTRACT_UNAVAILABLE',
-      })
-    }
-    let contractIssued = false
-    try {
-      const contract = await resolveAIResearchMarketDataContract(assetType, symbol, period)
-      if (controller.signal.aborted) return null
-      if (!contract) {
-        return setAIResearchMarketDataPlatformStatus({
-          path: 'unsupported',
-          detail: 'TYPED_QUERY_CONTRACT_UNAVAILABLE',
-        })
-      }
-      contractIssued = true
-      // Both scheduled and interactive prechecks are deliberately strict-local
-      // so inspecting a research form never starts an external provider
-      // request. Only the separate, explicit cache-fill action may use the
-      // reviewed local-first collection purpose. It persists independently
-      // validated market facts only; it never creates an Iteration 196
-      // research/backtest artifact or approval input.
-      const executionOptions = fillLocalCache
-        ? {
-            mode: 'local_first' as const,
-            purpose: 'research_cache_fill' as const,
-            consistency: 'display' as const,
-            page_size: 500,
-          }
-        : {
-            mode: 'local_only' as const,
-            purpose: 'research' as const,
-            consistency: 'strict' as const,
-            knowledge_cutoff: new Date().toISOString(),
-            page_size: 500,
-          }
-      const response: MarketDataQueryResponse = await marketDataApi.queryLocalFirst(
-        createMarketDataQueryFromContract(contract, {
-          ...window,
-          ...executionOptions,
-        }),
-        { signal: controller.signal, suppressErrorMessage: true },
-      )
-      if (controller.signal.aborted) return null
-      if (!isAIResearchMarketDataResponseCompatible(response, contract, assetType, period)) {
-        return setAIResearchMarketDataPlatformStatus({
-          path: 'error',
-          queryId: typeof response.query_id === 'string' ? response.query_id : null,
-          detail: 'MARKET_DATA_STRICT_LOCAL_RESPONSE_MISMATCH',
-        })
-      }
-      if (response.coverage.status !== 'complete') {
-        return setAIResearchMarketDataPlatformStatus({
-          path: 'error',
-          coverageStatus: response.coverage.status,
-          coverageRatio: response.coverage.coverage_ratio,
-          queryId: response.query_id,
-          detail: 'MARKET_DATA_STRICT_LOCAL_INCOMPLETE',
-        })
-      }
-      const lastFetch = response.fetches[response.fetches.length - 1]
-      return setAIResearchMarketDataPlatformStatus({
-        path: fillLocalCache
-          ? response.fetches.length > 0
-            ? 'provider_persisted'
-            : 'local_first'
-          : 'strict_local',
-        provider: lastFetch?.provider_id || null,
-        coverageStatus: response.coverage.status,
-        coverageRatio: response.coverage.coverage_ratio,
-        queryId: response.query_id,
-      })
-    } catch (error) {
-      if (controller.signal.aborted) return null
-      if (!contractIssued && isAIResearchMarketDataFamilyUnconfiguredError(error)) {
-        return setAIResearchMarketDataPlatformStatus({
-          path: 'unsupported',
-          detail: 'DATA_FAMILY_UNCONFIGURED',
-        })
-      }
-      if (!contractIssued && isMarketDataQueryV2FallbackError(error)) {
-        return setAIResearchMarketDataPlatformStatus({
-          path: 'legacy_fallback',
-          detail: 'MARKET_DATA_QUERY_V2_UNAVAILABLE',
-        })
-      }
-      return setAIResearchMarketDataPlatformStatus({
-        path: 'error',
-        detail: 'MARKET_DATA_QUERY_V2_PRECHECK_FAILED',
-      })
-    }
-  }
-
-  async function runAIResearchDataPrecheck(
-    {
-      interactive = true,
-      forceStrictLocalReread = false,
-    }: {
-      interactive?: boolean
-      forceStrictLocalReread?: boolean
-    } = {},
-  ) {
-    const snapshot = captureAIResearchMarketDataPrecheckSnapshot()
-    if (!snapshot) {
-      if (interactive) ElMessage.warning(t('strategy.aiResearchSymbolRequired'))
-      return
-    }
-    const requestSequence = ++aiResearchPrecheckSequence
-    aiResearchPrecheckController?.abort()
-    const controller = new AbortController()
-    aiResearchPrecheckController = controller
-    aiResearchPrecheckLoading.value = true
-    aiResearchPrecheckError.value = ''
-    try {
-      // Capability is only needed for the optional Iteration 197 sidecar.
-      // Start the established Iteration 196 precheck immediately so a delayed
-      // rollout-state read cannot turn a debounced input edit into a silent
-      // no-op. The snapshot/sequence fence below still governs both results.
-      const capabilitiesRequest = resolveAIResearchMarketDataCapabilities()
-      const result = await marketDataApi.runPrecheck({
-        asset_type: snapshot.assetType,
-        symbol: snapshot.symbol,
-        timeframe: snapshot.timeframe,
-        start_date: snapshot.startDate,
-        end_date: snapshot.endDate,
-      }, { signal: controller.signal })
-      if (requestSequence !== aiResearchPrecheckSequence) return
-      aiResearchPrecheckResult.value = result
-      const capabilities = await capabilitiesRequest
-      if (requestSequence !== aiResearchPrecheckSequence || controller.signal.aborted) return
-      // The Iteration 196 precheck remains authoritative. The Iteration 197
-      // sidecar can issue a strict-local v2 control-plane or fact request only
-      // when the authenticated backend has enabled that bridge.
-      if (
-        forceStrictLocalReread
-        || isAIResearchMarketDataPlatformBridgeEnabled(capabilities)
-      ) {
-        await runAIResearchMarketDataPlatformPrecheck(snapshot, controller, {
-          fillLocalCache: false,
-          forceStrictLocalReread,
-        })
-      } else {
-        setAIResearchMarketDataPlatformStatus({ path: 'legacy' })
-      }
-      if (interactive) {
-        if (result.passed) {
-          ElMessage.success(t('strategy.aiResearchPrecheckPassed'))
-        } else {
-          ElMessage.warning(t('strategy.aiResearchPrecheckBlocked'))
-        }
-      }
-    } catch {
-      if (requestSequence !== aiResearchPrecheckSequence || controller.signal.aborted) return
-      aiResearchPrecheckResult.value = null
-      aiResearchPrecheckError.value = '预检失败'
-      if (interactive) ElMessage.error(t('strategy.aiResearchPrecheckFailed'))
-    } finally {
-      if (requestSequence === aiResearchPrecheckSequence) {
-        aiResearchPrecheckLoading.value = false
-      }
-    }
-  }
-
-  async function warmAIResearchLocalCache() {
-    const snapshot = captureAIResearchMarketDataPrecheckSnapshot()
-    if (!snapshot) {
-      ElMessage.warning(t('strategy.aiResearchSymbolRequired'))
-      return
-    }
-
-    const requestSequence = ++aiResearchPrecheckSequence
-    const cacheFillSequence = ++aiResearchCacheFillSequence
-    aiResearchPrecheckController?.abort()
-    const controller = new AbortController()
-    aiResearchPrecheckController = controller
-    aiResearchCacheFillLoading.value = true
-    aiResearchPrecheckError.value = ''
-    try {
-      const capabilities = await resolveAIResearchMarketDataCapabilities({ forceRefresh: true })
-      if (requestSequence !== aiResearchPrecheckSequence || controller.signal.aborted) return
-      if (!isAIResearchMarketDataCacheFillEnabled(capabilities)) return
-
-      await runAIResearchMarketDataPlatformPrecheck(
-        snapshot,
-        controller,
-        { fillLocalCache: true },
-      )
-      if (requestSequence !== aiResearchPrecheckSequence || controller.signal.aborted) return
-
-      const cacheFillPath = aiResearchMarketDataPlatformStatus.value.path
-      if (cacheFillPath !== 'provider_persisted' && cacheFillPath !== 'local_first') return
-
-      // A successful collection receipt only proves that market facts were
-      // persisted. Re-read the exact frozen v2 query strictly locally. This
-      // must not call or rewrite the Iteration 196 precheck: cache filling is
-      // independent of the backtest bridge and is never a research artifact.
-      await runAIResearchMarketDataPlatformPrecheck(snapshot, controller, {
-        fillLocalCache: false,
-        forceStrictLocalReread: true,
-      })
-    } finally {
-      if (cacheFillSequence === aiResearchCacheFillSequence) {
-        aiResearchCacheFillLoading.value = false
-      }
-    }
-  }
-
-  function scheduleAIResearchDataPrecheck() {
-    if (aiResearchPrecheckTimer !== null) clearTimeout(aiResearchPrecheckTimer)
-    // Invalidate the in-flight result as soon as an input changes, rather
-    // than after the next debounced request starts. This prevents an old
-    // symbol's successful response from briefly replacing the precheck while
-    // the user is already editing a different asset.
-    aiResearchPrecheckSequence += 1
-    aiResearchCacheFillSequence += 1
-    aiResearchPrecheckController?.abort()
-    aiResearchPrecheckController = null
-    aiResearchPrecheckLoading.value = false
-    aiResearchCacheFillLoading.value = false
-    setAIResearchMarketDataPlatformStatus({ path: 'legacy' })
-    if (!aiResearchForm.symbol.trim()) return
-    aiResearchPrecheckTimer = setTimeout(() => {
-      aiResearchPrecheckTimer = null
-      void runAIResearchDataPrecheck({ interactive: false })
-    }, AI_RESEARCH_PRECHECK_DEBOUNCE_MS)
-  }
-
   function aiResearchSymbolLabel() {
     const symbol = aiResearchForm.symbol.trim() || '待研究标的'
     const symbolName = aiResearchForm.symbol_name.trim()
     return symbolName ? `${symbolName}（${symbol}）` : symbol
-  }
-
-  const AI_RESEARCH_FUTURES_PREFIXES = [
-    'IF', 'IC', 'IH', 'IM', 'T', 'TF', 'TL', 'TS',
-    'AU', 'AG', 'CU', 'AL', 'ZN', 'PB', 'NI', 'SN', 'AO', 'RB', 'HC', 'SS',
-    'BU', 'RU', 'BR', 'FU', 'SP', 'WR',
-    'SC', 'LU', 'NR', 'BC', 'EC',
-    'A', 'B', 'C', 'CS', 'EB', 'EG', 'I', 'J', 'JD', 'JM', 'L', 'LH',
-    'M', 'P', 'PG', 'PP', 'RR', 'V', 'Y',
-    'SA', 'FG', 'MA', 'TA', 'SR', 'CF', 'OI', 'RM', 'AP', 'CJ', 'CY',
-    'PF', 'PK', 'SF', 'SM', 'UR', 'WH', 'ZC',
-    'SI', 'LC',
-  ].sort((left, right) => right.length - left.length)
-
-  function isAIResearchFuturesSymbol(symbol: string) {
-    const normalized = symbol.trim().toUpperCase()
-    if (!normalized) return false
-    if (/\.(CFE|CFFEX|SHFE|INE|DCE|CZCE|GFEX)$/.test(normalized)) return true
-    return AI_RESEARCH_FUTURES_PREFIXES.some(prefix => {
-      if (!normalized.startsWith(prefix)) return false
-      const suffix = normalized.slice(prefix.length)
-      if (/\d/.test(suffix)) return true
-      return !suffix && prefix.length >= 2
-    })
-  }
-
-  function aiResearchAssetConstraintLine() {
-    const assetType = aiResearchResolvedMarketDataAssetType(aiResearchForm.symbol)
-    if (assetType === 'futures') {
-      return '按期货/合约资产处理，必须使用交易所或本地资产规格中的合约乘数、保证金、杠杆、最小变动价位和真实手续费估算仓位与风险。'
-    }
-    if (assetType === 'crypto') {
-      return '按数字资产或永续合约处理，必须显式考虑资金费率、杠杆、滑点、交易费率和保证金约束。'
-    }
-    if (assetType === 'stock') {
-      return '按股票资产处理，必须控制单票仓位、换手率、手续费和不可成交假设，避免过度交易。'
-    }
-    if (assetType === 'bond') {
-      return '按债券资产处理，必须使用久期、票息、应计利息、到期收益率、流动性和交易成本约束评估仓位与风险。'
-    }
-    if (assetType === 'fund') {
-      return '按基金或 ETF 资产处理，必须区分净值与二级市场价格，并考虑跟踪误差、申赎、流动性和交易成本。'
-    }
-    if (assetType === 'option') {
-      return '按期权资产处理，必须使用到期日、行权价、合约乘数、Greeks、隐含波动率、保证金和流动性约束评估风险。'
-    }
-    if (assetType === 'fx') {
-      return '按外汇资产处理，必须明确货币对方向、报价精度、点差、隔夜利息、交易时段和杠杆约束。'
-    }
-    return '必须从交易所或本地资产规格读取手续费、合约乘数、保证金、价格精度和最小下单量，并在仓位 sizing 中使用这些约束。'
   }
 
   function aiResearchQualityGateLines() {
@@ -2062,44 +1374,6 @@ export function useStrategyPage() {
       aiResearchPromptGenerationLoading.value = false
       aiResearchPromptGenerationDialogVisible.value = false
     }
-  }
-
-  interface AIResearchMandateSnapshot {
-    rawPrompt: string
-    promptOrigin: 'explicit' | 'auto_generated'
-    symbol: string | null
-    symbolName: string | null
-    marketDataAssetType: MarketAssetType | undefined
-    timeframe: string | null
-    riskConstraints: Record<string, unknown>
-    tradingConstraints: Record<string, unknown>
-    qualityGates: Record<string, unknown>
-  }
-
-  interface AIResearchSubmissionSnapshot {
-    request: AIStrategyResearchRunRequest
-    mandate: AIResearchMandateSnapshot
-    marketDataAssetType: MarketAssetType | undefined
-  }
-
-  interface AIResearchMandateInput {
-    prompt: string
-    symbol: string
-    shouldUseServerGeneratedPrompt?: boolean
-  }
-
-  interface AIResearchRunnableInput extends AIResearchMandateInput {
-    shouldUseServerGeneratedPrompt: boolean
-  }
-
-  interface AIResearchAutoContinuationSource {
-    prompt: string
-    mandateId: string
-  }
-
-  interface AIResearchPreparedSubmission {
-    input: AIResearchRunnableInput
-    submission: AIResearchSubmissionSnapshot
   }
 
   function aiResearchMarketDataPrecheckSnapshotFromSubmission(
@@ -3183,460 +2457,6 @@ export function useStrategyPage() {
     } finally {
       aiResearchConfigProfileImporting.value = false
     }
-  }
-
-  function validationWindowFromUnknown(value: unknown): Record<string, string> | null {
-    if (!isRecord(value)) return null
-    const entries = Object.entries(value)
-      .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-    return entries.length ? Object.fromEntries(entries) : null
-  }
-
-  function outOfSampleValidationFromHandoff(
-    handoff: Record<string, unknown> | null | undefined
-  ): AIStrategyOutOfSampleValidation | null {
-    if (!isRecord(handoff)) return null
-    const payload = handoff.out_of_sample_validation
-    if (!isRecord(payload)) return null
-    return {
-      status: typeof payload.status === 'string' ? payload.status : null,
-      window: validationWindowFromUnknown(payload.window),
-      metrics: isRecord(payload.metrics) ? payload.metrics : {},
-      gate_evaluations: Array.isArray(payload.gate_evaluations)
-        ? payload.gate_evaluations as AIStrategyQualityGateEvaluation[]
-        : [],
-      failures: Array.isArray(payload.failures)
-        ? payload.failures.filter((item): item is string => typeof item === 'string')
-        : [],
-      failure_reason: typeof payload.failure_reason === 'string' ? payload.failure_reason : null,
-    }
-  }
-
-  type PaperEnvironmentItem = {
-    key: string
-    label: string
-    value: string
-  }
-
-  function hasResearchRuntimeEnvironment(record: AIStrategyResearchRunRecord) {
-    return researchRuntimeItems(record).length > 0
-  }
-
-  function researchRuntimeItems(
-    record: AIStrategyResearchRunRecord | null | undefined,
-    handoff?: Record<string, unknown> | null
-  ): PaperEnvironmentItem[] {
-    const environment = runtimeEnvironmentPayload(record, handoff)
-    const specs = runtimeAssetSpecsPayload(record, handoff)
-    return runtimeItemsFromPayloads(environment, specs)
-  }
-
-  function runtimeItemsFromPayloads(
-    environment: Record<string, unknown>,
-    assetSpecs: Record<string, unknown>,
-    requestSnapshot?: Record<string, unknown> | null
-  ): PaperEnvironmentItem[] {
-    const items = environmentItemsFromPayload(environment)
-    const existing = new Set(items.map(item => item.key))
-    const appendItem = (item: PaperEnvironmentItem) => {
-      if (existing.has(item.key) || !item.value) return
-      items.push(item)
-      existing.add(item.key)
-    }
-    for (const item of gatewayRuntimeItemsFromSnapshot(requestSnapshot)) {
-      appendItem(item)
-    }
-    const asset = firstRuntimeAssetSpecFromPayload(assetSpecs)
-    if (!asset) return items
-
-    if (!existing.has('asset_symbol')) {
-      items.unshift({ key: 'asset_symbol', label: t('strategy.aiResearchAsset'), value: asset.symbol })
-      existing.add('asset_symbol')
-    }
-    const appendSpecNumber = (key: string, label: string, digits = 2) => {
-      if (existing.has(key)) return
-      const value = asset.spec[key]
-      if (value === undefined || value === null || value === '') return
-      items.push({ key, label, value: formatMetric(value, digits) })
-      existing.add(key)
-    }
-    const appendSpecText = (key: string, label: string) => {
-      if (existing.has(key)) return
-      const value = asset.spec[key]
-      if (value === undefined || value === null || value === '') return
-      items.push({ key, label, value: String(value) })
-      existing.add(key)
-    }
-    appendSpecNumber('multiplier', '合约乘数', 2)
-    appendSpecNumber('margin', '保证金', 4)
-    appendSpecNumber('margin_rate', '保证金率', 4)
-    appendSpecNumber('leverage', '杠杆', 2)
-    appendSpecNumber('max_leverage', '最大杠杆', 2)
-    appendSpecNumber('commission', '手续费', 6)
-    appendSpecNumber('commission_rate', '手续费率', 6)
-    if (!items.some(item => item.label === '资产来源')) appendSpecText('asset_spec_source', '资产来源')
-    if (!items.some(item => item.label === '资产来源')) appendSpecText('source', '资产来源')
-    if (!items.some(item => item.label === '费用来源')) appendSpecText('fee_source', '费用来源')
-    return items.slice(0, 10)
-  }
-
-  function gatewayRuntimeItemsFromSnapshot(
-    requestSnapshot?: Record<string, unknown> | null
-  ): PaperEnvironmentItem[] {
-    if (!isRecord(requestSnapshot) || !isRecord(requestSnapshot.gateway_config)) return []
-    const gatewayConfig = requestSnapshot.gateway_config
-    const params = isRecord(gatewayConfig.params) ? gatewayConfig.params : {}
-    const gatewayParams = isRecord(params.gateway) ? params.gateway : {}
-    const ctpParams = isRecord(params.ctp) ? params.ctp : {}
-    const ibParams = isRecord(params.ib) ? params.ib : {}
-    const mt5Params = isRecord(params.mt5) ? params.mt5 : {}
-    const text = (...values: unknown[]) => {
-      for (const value of values) {
-        if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-        const parsed = stringFromUnknown(value)
-        if (parsed) return parsed
-      }
-      return ''
-    }
-    const items: PaperEnvironmentItem[] = []
-    const appendText = (key: string, label: string, value: string) => {
-      if (!value) return
-      items.push({ key, label, value })
-    }
-    appendText(
-      'gateway_name',
-      '网关',
-      text(
-        gatewayConfig.name,
-        gatewayConfig.preset_id,
-        params.name,
-        params.preset_id,
-        gatewayParams.provider
-      )
-    )
-    appendText(
-      'gateway_exchange',
-      '交易所',
-      text(
-        gatewayConfig.exchange,
-        gatewayConfig.exchange_id,
-        gatewayConfig.exchange_type,
-        params.exchange,
-        params.exchange_id,
-        params.exchange_type,
-        gatewayParams.exchange,
-        gatewayParams.exchange_id,
-        gatewayParams.exchange_type
-      )
-    )
-    appendText(
-      'gateway_mode',
-      '模式',
-      text(
-        gatewayConfig.mode,
-        gatewayConfig.trading_mode,
-        params.mode,
-        params.trading_mode,
-        gatewayParams.mode,
-        gatewayParams.trading_mode
-      )
-    )
-    appendText(
-      'gateway_broker',
-      '经纪商',
-      text(
-        gatewayConfig.broker_id,
-        params.broker_id,
-        ctpParams.broker_id,
-        ibParams.broker_id,
-        mt5Params.broker_id,
-        gatewayParams.broker_id
-      )
-    )
-    return items
-  }
-
-  function hasPaperEnvironment(handoff: Record<string, unknown> | null | undefined) {
-    return paperEnvironmentItems(handoff).length > 0
-  }
-
-  function paperEnvironmentItems(
-    handoff: Record<string, unknown> | null | undefined
-  ): PaperEnvironmentItem[] {
-    if (!isRecord(handoff) || !isRecord(handoff.backtest_environment)) return []
-    return environmentItemsFromPayload(handoff.backtest_environment)
-  }
-
-  function environmentItemsFromPayload(environment: Record<string, unknown>): PaperEnvironmentItem[] {
-    const items: PaperEnvironmentItem[] = []
-    const appendNumber = (key: string, label: string, digits = 2) => {
-      const value = environment[key]
-      if (value === undefined || value === null || value === '') return
-      items.push({ key, label, value: formatMetric(value, digits) })
-    }
-    const appendText = (key: string, label: string) => {
-      const value = environment[key]
-      if (value === undefined || value === null || value === '') return
-      items.push({ key, label, value: String(value) })
-    }
-    const startDate = environment.start_date
-    const endDate = environment.end_date
-    if (startDate || endDate) {
-      items.push({
-        key: 'date_range',
-        label: t('strategy.aiResearchPeriod'),
-        value: `${startDate || '-'} 至 ${endDate || '-'}`,
-      })
-    }
-    appendNumber('initial_cash', '初始资金', 2)
-    appendNumber('commission', '手续费', 6)
-    appendNumber('multiplier', '合约乘数', 2)
-    appendNumber('margin', '保证金', 4)
-    appendNumber('annual_days', '年化天数', 0)
-    appendText('calc_method', '收益')
-    appendText('weight_mode', '权重')
-    appendText('asset_spec_source', '资产来源')
-    return items
-  }
-
-  function runtimeEnvironmentPayload(
-    record: AIStrategyResearchRunRecord | null | undefined,
-    handoff?: Record<string, unknown> | null
-  ): Record<string, unknown> {
-    const environment: Record<string, unknown> = {}
-    const merge = (source: unknown) => {
-      if (isRecord(source)) Object.assign(environment, source)
-    }
-    merge(record?.backtest_environment)
-    merge(handoff?.backtest_environment)
-    if (handoff !== undefined && isRecord(record?.paper_handoff)) {
-      merge(record.paper_handoff.backtest_environment)
-    }
-    return environment
-  }
-
-  function firstRuntimeAssetSpecFromPayload(
-    specs: Record<string, unknown>
-  ): { symbol: string; spec: Record<string, unknown> } | null {
-    for (const [symbol, spec] of Object.entries(specs)) {
-      if (!isRecord(spec)) continue
-      return { symbol, spec }
-    }
-    return null
-  }
-
-  function iterationOutOfSampleValidation(
-    item: AIStrategyResearchRunResponse['iterations'][number]
-  ): AIStrategyOutOfSampleValidation | null {
-    const hasWindow = Boolean(item.validation_window)
-    const hasMetrics = Boolean(Object.keys(item.validation_metrics || {}).length)
-    const hasGates = Boolean((item.validation_gate_evaluations || []).length)
-    const hasFailures = Boolean((item.validation_failures || []).length)
-    if (!item.validation_status && !hasWindow && !hasMetrics && !hasGates && !hasFailures) {
-      return null
-    }
-    return {
-      status: item.validation_status ?? null,
-      window: item.validation_window ?? null,
-      metrics: item.validation_metrics ?? {},
-      gate_evaluations: item.validation_gate_evaluations ?? [],
-      failures: item.validation_failures ?? [],
-      failure_reason: item.validation_failure_reason ?? null,
-    }
-  }
-
-  function formatBacktestPercent(value: unknown, { absolute = false } = {}) {
-    const number = optionalNumber(value)
-    if (number === null) return ''
-    return `${formatMetric(absolute ? Math.abs(number) : number)}%`
-  }
-
-  function researchIterationBacktestSummary(
-    item: AIStrategyResearchRunResponse['iterations'][number]
-  ) {
-    const metrics = isRecord(item.metrics) ? item.metrics : {}
-    const rows: { key: string; label: string; value: string }[] = []
-    const appendMetric = (
-      key: string,
-      label: string,
-      keys: string[],
-      formatter: (value: unknown) => string = value => formatMetric(value)
-    ) => {
-      const value = keys
-        .map(metricKey => metrics[metricKey])
-        .find(metricValue => optionalNumber(metricValue) !== null)
-      if (value === undefined || value === null || value === '') return
-      const formatted = formatter(value)
-      if (!formatted || formatted === '-') return
-      rows.push({ key, label, value: formatted })
-    }
-    const runStatus = stringFromUnknown(item.unit_status?.run_status, item.run_result.status)
-    if (runStatus) rows.push({ key: 'run_status', label: t('common.status'), value: runStatus })
-    if (item.run_result.task_id) {
-      rows.push({ key: 'task_id', label: t('strategy.aiResearchTask'), value: item.run_result.task_id })
-    }
-    appendMetric('total_return', '总收益', ['total_return', 'return'], value =>
-      formatBacktestPercent(value)
-    )
-    appendMetric('annual_return', '年化', ['annual_return', 'annualized_return'], value =>
-      formatBacktestPercent(value)
-    )
-    appendMetric('max_drawdown', '最大回撤', ['max_drawdown', 'max_drawdown_rate'], value =>
-      formatBacktestPercent(value, { absolute: true })
-    )
-    appendMetric('win_rate', '胜率', ['win_rate'], value => formatBacktestPercent(value))
-    appendMetric('net_profit', '净利润', ['net_profit', 'total_pnl', 'pnl'])
-    appendMetric('final_value', '最终权益', ['final_value', 'portfolio_value'])
-    appendMetric('trading_cost', '交易成本', ['trading_cost', 'commission'])
-    if (item.unit_status?.bar_count) {
-      rows.push({ key: 'bar_count', label: t('strategy.aiResearchKline'), value: formatMetric(item.unit_status.bar_count, 0) })
-    }
-    return rows
-  }
-
-  function formatOutOfSampleWindow(window: Record<string, string> | null | undefined) {
-    if (!window) return ''
-    const trainStart = window.train_start
-    const trainEnd = window.train_end
-    const validationStart = window.validation_start
-    const validationEnd = window.validation_end
-    if (!trainStart || !trainEnd || !validationStart || !validationEnd) return ''
-    return `训练 ${trainStart} - ${trainEnd}；样本外 ${validationStart} - ${validationEnd}`
-  }
-
-  function outOfSampleTagType(status: string | null | undefined) {
-    if (status === 'passed') return 'success'
-    if (status === 'failed') return 'danger'
-    if (status === 'skipped') return 'info'
-    return 'warning'
-  }
-
-  function outOfSampleStatusLabel(status: string | null | undefined) {
-    const normalized = String(status || '').trim()
-    const labels: Record<string, string> = {
-      passed: '已通过',
-      failed: '未通过',
-      skipped: '已跳过',
-      not_required: '无需验证',
-      pending: '待验证',
-      running: '验证中',
-    }
-    return labels[normalized] ?? aiResearchStageLabel(normalized || 'not_required')
-  }
-
-  function recordOutOfSampleSummary(record: AIStrategyResearchRunRecord) {
-    const handoffValidation = outOfSampleValidationFromHandoff(record.paper_handoff)
-    if (handoffValidation?.status) return `样本外 ${outOfSampleStatusLabel(handoffValidation.status)}`
-    const gates = record.quality_gates || {}
-    if (optionalBoolean(gates.out_of_sample_validation, false)) {
-      return `样本外 ${formatMetric(outOfSampleRatioPct(gates.out_of_sample_ratio), 0)}%`
-    }
-    return ''
-  }
-
-  function strategyIdFromIterationPayload(payload: Record<string, unknown>) {
-    const strategySnapshot = iterationStrategyPayload(payload)
-    return stringFromUnknown(strategySnapshot.id ?? payload.strategy_id, '').trim()
-  }
-
-  function iterationPayloadHasStrategy(payload: Record<string, unknown>) {
-    const strategySnapshot = iterationStrategyPayload(payload)
-    return Boolean(
-      strategyIdFromIterationPayload(payload)
-      || stringFromUnknown(strategySnapshot.code, '')
-      || stringFromUnknown(payload.strategy_code, '')
-      || stringFromUnknown(payload.code, '')
-    )
-  }
-
-  function iterationPayloadRank(payload: Record<string, unknown>) {
-    const metrics = isRecord(payload.metrics) ? payload.metrics : {}
-    return [
-      optionalBoolean(payload.passed, false) ? 1 : 0,
-      optionalNumber(payload.quality_score) ?? 0,
-      optionalNumber(payload.sharpe_ratio)
-        ?? optionalNumber(metrics.sharpe_ratio)
-        ?? optionalNumber(metrics.sharpe)
-        ?? optionalNumber(metrics.sharpeRatio)
-        ?? 0,
-      optionalNumber(payload.total_trades)
-        ?? optionalNumber(metrics.total_trades)
-        ?? optionalNumber(metrics.totalTrades)
-        ?? optionalNumber(metrics.trades)
-        ?? 0,
-      -(optionalNumber(payload.iteration) ?? 0),
-    ]
-  }
-
-  function compareIterationPayloads(
-    candidate: Record<string, unknown>,
-    current: Record<string, unknown>
-  ) {
-    const candidateRank = iterationPayloadRank(candidate)
-    const currentRank = iterationPayloadRank(current)
-    for (let index = 0; index < candidateRank.length; index += 1) {
-      const delta = candidateRank[index] - currentRank[index]
-      if (delta !== 0) return delta
-    }
-    return 0
-  }
-
-  function bestIterationPayloadForRecord(record: AIStrategyResearchRunRecord) {
-    const iterations = (record.iterations || []).filter(isRecord)
-    if (!iterations.length) return null
-    const bestIteration = optionalNumber(record.best_iteration)
-    if (bestIteration !== null) {
-      const matched = iterations.find(
-        payload => optionalNumber(payload.iteration) === bestIteration
-      )
-      if (matched) return matched
-    }
-    const candidates = iterations.filter(iterationPayloadHasStrategy)
-    const pool = candidates.length ? candidates : iterations
-    return pool.reduce(
-      (best, payload) => (compareIterationPayloads(payload, best) > 0 ? payload : best),
-      pool[0]
-    )
-  }
-
-  function bestStrategyIdForRecord(record: AIStrategyResearchRunRecord) {
-    const direct = stringFromUnknown(record.best_strategy_id, '').trim()
-    if (direct) return direct
-    const payload = bestIterationPayloadForRecord(record)
-    if (!payload) return ''
-    const payloadStrategyId = strategyIdFromIterationPayload(payload)
-    if (payloadStrategyId) return payloadStrategyId
-    return iterationPayloadHasStrategy(payload) ? fallbackSnapshotStrategyId(record) : ''
-  }
-
-  function fallbackSnapshotStrategyId(record: AIStrategyResearchRunRecord) {
-    return `${record.run_id}-strategy`
-  }
-
-  function gatewayConfigJsonFromRunRecord(record: AIStrategyResearchRunRecord) {
-    const payload = bestIterationPayloadForRecord(record)
-    const snapshot = payload && isRecord(payload.unit_snapshot) ? payload.unit_snapshot : {}
-    const handoff = isRecord(record.paper_handoff) ? record.paper_handoff : {}
-    const candidates = [snapshot.gateway_config, handoff.gateway_config]
-    const gatewayConfig = candidates.find(
-      item => isRecord(item) && Object.keys(item).length > 0 && !containsRedactedSecret(item)
-    )
-    return isRecord(gatewayConfig) ? JSON.stringify(gatewayConfig) : ''
-  }
-
-  function gatewayConfigJsonFromTaskSnapshot(snapshot: Record<string, unknown>) {
-    const gatewayConfig = snapshot.gateway_config
-    if (!isRecord(gatewayConfig) || containsRedactedSecret(gatewayConfig)) return ''
-    return JSON.stringify(gatewayConfig)
-  }
-
-  function liveGatewayConfigJsonFromRunRecord(record: AIStrategyResearchRunRecord) {
-    const handoffPayload = record.live_handoff?.handoff
-    const gatewayConfig = isRecord(handoffPayload?.gateway_config)
-      ? handoffPayload.gateway_config
-      : null
-    if (!isRecord(gatewayConfig) || containsRedactedSecret(gatewayConfig)) return ''
-    return JSON.stringify(gatewayConfig)
   }
 
   function bestStrategyFromRunRecord(record: AIStrategyResearchRunRecord): Strategy | null {
@@ -5010,693 +3830,6 @@ export function useStrategyPage() {
     }
   }
 
-  function workspaceFromResearchRunRecord(record: AIStrategyResearchRunRecord): Workspace {
-    return {
-      id: record.research_workspace_id,
-      user_id: '',
-      name: `AI投研 - ${record.symbol}`,
-      description: null,
-      workspace_type: 'research',
-      settings: { ai_research: { runs: [record] } },
-      trading_config: {},
-      unit_count: 0,
-      completed_count: record.iteration_count,
-      status: 'completed',
-      created_at: record.started_at,
-      updated_at: record.completed_at,
-    }
-  }
-
-  function researchResultFromRunRecord(
-    record: AIStrategyResearchRunRecord
-  ): AIStrategyResearchRunResponse {
-    const iterations = researchIterationsFromRunRecord(record)
-    const snapshotBestStrategy = bestStrategyFromRunRecord(record)
-    return {
-      run_id: record.run_id,
-      status: record.status,
-      achieved: record.achieved,
-      target_sharpe: record.target_sharpe,
-      started_at: record.started_at,
-      completed_at: record.completed_at,
-      best_iteration: record.best_iteration,
-      best_quality_score: record.best_quality_score,
-      best_quality_gate_evaluations: record.best_quality_gate_evaluations ?? [],
-      best_diagnostics: record.best_diagnostics ?? {},
-      best_metrics: record.best_metrics ?? {},
-      research_workspace: workspaceFromResearchRunRecord(record),
-      iterations,
-      best_strategy: snapshotBestStrategy?.code?.trim() ? snapshotBestStrategy : null,
-      paper_trading: paperTradingFromRunRecord(record),
-      paper_monitoring_plan: record.paper_monitoring_plan ?? [],
-      pipeline: record.pipeline,
-      promotion_audit: promotionAuditFromPayload(record.promotion_audit),
-      run_record: record,
-      next_actions: record.next_actions ?? [],
-      message: 'AI research result restored from run history',
-    }
-  }
-
-  function researchResultFromTaskSummary(
-    task: AIStrategyResearchTaskResponse
-  ): AIStrategyResearchRunResponse | null {
-    if (!task.run_id || !task.research_workspace_id) return null
-    const request: Record<string, unknown> = isRecord(task.request_snapshot)
-      ? task.request_snapshot
-      : {}
-    const latestIteration = isRecord(task.latest_iteration) ? task.latest_iteration : null
-    const bestIterationPayload = isRecord(task.best_iteration_payload)
-      ? task.best_iteration_payload
-      : null
-    const taskIterations: Record<string, unknown>[] = []
-    const appendTaskIteration = (payload: Record<string, unknown> | null) => {
-      if (!payload) return
-      const iteration = optionalNumber(payload.iteration)
-      if (
-        iteration !== null
-        && taskIterations.some(item => optionalNumber(item.iteration) === iteration)
-      ) {
-        return
-      }
-      taskIterations.push(payload)
-    }
-    appendTaskIteration(bestIterationPayload)
-    appendTaskIteration(latestIteration)
-    const bestMetrics = isRecord(task.best_metrics) ? task.best_metrics : {}
-    const bestSharpe = optionalNumber(task.best_sharpe)
-      ?? optionalNumber(bestMetrics.sharpe_ratio)
-      ?? optionalNumber(bestMetrics.sharpe)
-      ?? optionalNumber(latestIteration?.sharpe_ratio)
-      ?? optionalNumber(latestIteration?.sharpe)
-      ?? 0
-    const bestIteration = optionalNumber(task.best_iteration)
-      ?? optionalNumber(bestIterationPayload?.iteration)
-      ?? optionalNumber(latestIteration?.iteration)
-      ?? optionalNumber(task.current_iteration)
-      ?? null
-    const achieved = optionalBoolean(
-      task.achieved,
-      Boolean(task.paper_trading_started && String(task.status || '').toLowerCase() === 'completed')
-    )
-    const runStatus = String(
-      task.current_stage === 'interrupted'
-        ? 'interrupted'
-        : task.run_status || (achieved ? 'achieved' : task.status || 'completed')
-    )
-    const targetSharpe = optionalNumber(task.target_sharpe) ?? optionalNumber(request.target_sharpe) ?? 0
-    const paperHandoff = isRecord(task.paper_handoff) ? task.paper_handoff : {}
-    const bestDiagnostics = isRecord(task.best_diagnostics) ? task.best_diagnostics : {}
-    const assetSpecs = isRecord(task.asset_specs) && Object.keys(task.asset_specs).length
-      ? task.asset_specs as Record<string, Record<string, unknown>>
-      : isRecord(paperHandoff.asset_specs)
-        ? paperHandoff.asset_specs as Record<string, Record<string, unknown>>
-        : {}
-    const backtestEnvironment = isRecord(task.backtest_environment)
-      && Object.keys(task.backtest_environment).length
-      ? task.backtest_environment
-      : isRecord(paperHandoff.backtest_environment)
-        ? paperHandoff.backtest_environment
-        : {}
-    const taskPipeline = task.pipeline ?? {
-      current_stage: task.current_stage || 'completed',
-      status: task.run_status || task.status || 'completed',
-      progress: task.progress ?? 100,
-      ready_for_live: Boolean(task.paper_review_ready_for_live),
-      steps: [],
-    }
-    const liveWorkspaceId = task.live_workspace_id ?? taskPipeline.live_workspace_id ?? null
-    const liveWorkspaceName = task.live_workspace_name ?? null
-    const liveUnitId = task.live_unit_id ?? taskPipeline.live_unit_id ?? null
-    const liveTradingPrepared = Boolean(
-      task.live_trading_prepared
-      || taskPipeline.live_trading_prepared
-      || taskPipeline.current_stage === 'live_trading_prepare'
-    )
-    const liveTradingPreparedAt = task.live_trading_prepared_at
-      ?? taskPipeline.live_trading_prepared_at
-      ?? liveTradingPreparedAtFromPipeline(taskPipeline)
-      ?? null
-    const taskContinuationContext = isRecord(task.continuation_context)
-      ? { ...task.continuation_context }
-      : {}
-    const requestContinuationContext = isRecord(request.continuation_context)
-      ? { ...request.continuation_context }
-      : {}
-    const continuationContext = Object.keys(taskContinuationContext).length
-      ? taskContinuationContext
-      : requestContinuationContext
-    const record: AIStrategyResearchRunRecord = {
-      run_id: task.run_id,
-      prompt: stringFromUnknown(request.prompt),
-      symbol: stringFromUnknown(request.symbol),
-      symbol_name: stringFromUnknown(request.symbol_name, stringFromUnknown(request.symbol)),
-      timeframe: stringFromUnknown(request.timeframe, '1d'),
-      timeframe_n: optionalNumber(request.timeframe_n) ?? 1,
-      start_date: stringFromUnknown(request.start_date) || null,
-      end_date: stringFromUnknown(request.end_date) || null,
-      initial_cash:
-        optionalNumber(backtestEnvironment.initial_cash)
-        ?? optionalNumber(request.initial_cash)
-        ?? undefined,
-      commission:
-        optionalNumber(backtestEnvironment.commission)
-        ?? optionalNumber(request.commission)
-        ?? undefined,
-      annual_days:
-        optionalNumber(backtestEnvironment.annual_days)
-        ?? optionalNumber(request.annual_days)
-        ?? undefined,
-      calc_method:
-        stringFromUnknown(backtestEnvironment.calc_method, stringFromUnknown(request.calc_method))
-        || undefined,
-      weight_mode:
-        stringFromUnknown(backtestEnvironment.weight_mode, stringFromUnknown(request.weight_mode))
-        || undefined,
-      group_name: stringFromUnknown(request.group_name) || undefined,
-      asset_specs: assetSpecs,
-      backtest_environment: backtestEnvironment,
-      status: runStatus,
-      achieved,
-      target_sharpe: targetSharpe,
-      quality_gates: {
-        target_sharpe: targetSharpe,
-        min_total_trades: optionalNumber(request.min_total_trades) ?? 0,
-        max_drawdown_limit: optionalNumber(request.max_drawdown_limit),
-        min_total_return: optionalNumber(request.min_total_return),
-        min_annual_return: optionalNumber(request.min_annual_return),
-        min_win_rate: optionalNumber(request.min_win_rate),
-        out_of_sample_validation: optionalBoolean(request.out_of_sample_validation, true),
-        require_out_of_sample_validation: optionalBoolean(
-          request.require_out_of_sample_validation,
-          false
-        ),
-        out_of_sample_ratio: optionalNumber(request.out_of_sample_ratio) ?? 0.25,
-        min_out_of_sample_sharpe: optionalNumber(request.min_out_of_sample_sharpe),
-        min_out_of_sample_trades: optionalNumber(request.min_out_of_sample_trades),
-        robustness_validation: optionalBoolean(request.robustness_validation, true),
-        require_robustness_validation: optionalBoolean(
-          request.require_robustness_validation,
-          true
-        ),
-        robustness_methods: request.robustness_methods ?? ['monte_carlo'],
-        min_robustness_score: optionalNumber(request.min_robustness_score) ?? 55,
-        robustness_monte_carlo_iterations:
-          optionalNumber(request.robustness_monte_carlo_iterations) ?? 300,
-        robustness_random_seed: optionalNumber(request.robustness_random_seed),
-        min_paper_trading_days:
-          optionalNumber(request.min_paper_trading_days) ?? DEFAULT_AI_RESEARCH_MIN_PAPER_TRADING_DAYS,
-      },
-      min_total_trades: optionalNumber(request.min_total_trades) ?? 0,
-      max_iterations: optionalNumber(task.max_iterations) ?? optionalNumber(request.max_iterations) ?? 0,
-      iteration_count: Math.max(
-        optionalNumber(task.iteration_count) ?? 0,
-        taskIterations.length,
-        latestIteration ? 1 : 0
-      ),
-      best_iteration: bestIteration,
-      best_sharpe: bestSharpe,
-      best_quality_score: optionalNumber(task.best_quality_score) ?? 0,
-      best_quality_gate_evaluations: task.best_quality_gate_evaluations ?? [],
-      best_diagnostics: bestDiagnostics,
-      best_metrics: bestMetrics,
-      best_strategy_id: task.best_strategy_id ?? null,
-      best_strategy_name: task.best_strategy_name ?? null,
-      research_workspace_id: task.research_workspace_id,
-      mandate_id: (task.mandate_id ?? stringFromUnknown(request.mandate_id)) || null,
-      seed_strategy_id: stringFromUnknown(request.seed_strategy_id) || null,
-      continued_from_run_id: stringFromUnknown(
-        task.continued_from_run_id,
-        stringFromUnknown(request.continue_from_run_id)
-      ) || null,
-      continuation_source: stringFromUnknown(
-        task.continuation_source,
-        stringFromUnknown(continuationContext.source)
-      ) || null,
-      continuation_context: continuationContext,
-      paper_workspace_id: task.paper_workspace_id ?? null,
-      paper_workspace_name: stringFromUnknown(
-        task.paper_workspace_name,
-        stringFromUnknown(paperHandoff.paper_workspace_name, stringFromUnknown(request.paper_workspace_name))
-      ) || null,
-      paper_unit_id: task.paper_unit_id ?? null,
-      paper_trading_started: Boolean(task.paper_trading_started),
-      paper_monitoring_plan: task.paper_monitoring_plan ?? [],
-      paper_handoff: paperHandoff,
-      paper_review_status: task.paper_review_status ?? null,
-      paper_review_ready_for_live: Boolean(task.paper_review_ready_for_live),
-      paper_reviewed_at: task.paper_reviewed_at ?? null,
-      paper_review_evaluations: task.paper_review_evaluations ?? [],
-      paper_review_next_actions: task.paper_review_next_actions ?? [],
-      live_readiness_checklist: task.live_readiness_checklist ?? [],
-      live_readiness_expires_at: task.live_readiness_expires_at ?? null,
-      live_handoff: task.live_handoff ?? null,
-      live_handoff_approval: task.live_handoff_approval ?? null,
-      live_workspace_id: liveWorkspaceId,
-      live_workspace_name: liveWorkspaceName,
-      live_unit_id: liveUnitId,
-      live_trading_prepared: liveTradingPrepared,
-      live_trading_prepared_at: liveTradingPreparedAt,
-      pipeline: taskPipeline,
-      promotion_audit: promotionAuditFromPayload(task.promotion_audit),
-      next_actions: task.next_actions ?? [],
-      started_at: task.started_at ?? task.submitted_at,
-      completed_at: task.completed_at ?? task.started_at ?? task.submitted_at,
-      iterations: taskIterations,
-    }
-    hydrateLiveHandoffFromRunRecord(record)
-    return {
-      ...researchResultFromRunRecord(record),
-      message: 'AI research result restored from task summary',
-    }
-  }
-
-  function researchIterationsFromRunRecord(
-    record: AIStrategyResearchRunRecord
-  ): AIStrategyResearchIteration[] {
-    return (record.iterations || [])
-      .filter(isRecord)
-      .map((payload, index) => researchIterationFromRunRecord(record, payload, index + 1))
-  }
-
-  function researchIterationFromRunRecord(
-    record: AIStrategyResearchRunRecord,
-    payload: Record<string, unknown>,
-    fallbackIteration: number
-  ): AIStrategyResearchIteration {
-    const iteration = Math.max(Math.trunc(optionalNumber(payload.iteration) ?? fallbackIteration), 1)
-    const metrics = isRecord(payload.metrics) ? payload.metrics : {}
-    const strategy = strategyFromIterationRecord(record, payload, iteration)
-    const unit = unitFromIterationRecord(record, payload, strategy, metrics)
-    const runResult = iterationRunResultPayload(payload)
-    const runStatus = stringFromUnknown(
-      payload.run_status ?? runResult.status ?? unit.run_status,
-      'completed'
-    )
-    const taskId = nullableString(payload.task_id)
-      ?? nullableString(runResult.task_id)
-      ?? unit.last_task_id
-    return {
-      iteration,
-      strategy,
-      unit,
-      run_result: {
-        unit_id: unit.id,
-        task_id: taskId,
-        status: runStatus,
-      },
-      unit_status: unitStatusFromIterationRecord(unit, payload, runStatus, taskId, metrics),
-      metrics,
-      sharpe_ratio: optionalNumber(payload.sharpe_ratio) ?? metricFromPayload(metrics, 'sharpe_ratio', 'sharpe') ?? 0,
-      total_trades: optionalNumber(payload.total_trades) ?? metricFromPayload(metrics, 'total_trades', 'trades') ?? 0,
-      validation_status: nullableString(payload.validation_status),
-      validation_window: validationWindowFromUnknown(payload.validation_window),
-      validation_metrics: isRecord(payload.validation_metrics) ? payload.validation_metrics : {},
-      validation_gate_evaluations: arrayFromUnknown<AIStrategyQualityGateEvaluation>(
-        payload.validation_gate_evaluations
-      ),
-      validation_failures: stringArrayFromUnknown(payload.validation_failures),
-      validation_failure_reason: nullableString(payload.validation_failure_reason),
-      quality_score: optionalNumber(payload.quality_score) ?? record.best_quality_score ?? 0,
-      quality_gate_evaluations: arrayFromUnknown<AIStrategyQualityGateEvaluation>(
-        payload.quality_gate_evaluations
-      ),
-      passed: Boolean(payload.passed),
-      failure_reason: nullableString(payload.failure_reason),
-      quality_gate_failures: stringArrayFromUnknown(payload.quality_gate_failures),
-      diagnostics: isRecord(payload.diagnostics)
-        ? payload.diagnostics as AIStrategyResearchIteration['diagnostics']
-        : {},
-      improvement_plan: stringArrayFromUnknown(payload.improvement_plan),
-      improvement_notes: stringArrayFromUnknown(payload.improvement_notes),
-      next_actions: stringArrayFromUnknown(payload.next_actions),
-    }
-  }
-
-  function strategyFromIterationRecord(
-    record: AIStrategyResearchRunRecord,
-    payload: Record<string, unknown>,
-    iteration: number
-  ): Strategy {
-    const snapshot = iterationUnitPayload(payload)
-    const strategySnapshot = iterationStrategyPayload(payload)
-    const strategyId = stringFromUnknown(
-      strategySnapshot.id ?? payload.strategy_id,
-      record.best_strategy_id || fallbackSnapshotStrategyId(record)
-    )
-    const strategyName = stringFromUnknown(
-      strategySnapshot.name ?? payload.strategy_name,
-      record.best_strategy_name || `AI策略 第${iteration}轮`
-    )
-    const diagnostics = isRecord(payload.diagnostics) ? payload.diagnostics : {}
-    return {
-      id: strategyId,
-      user_id: '',
-      name: strategyName,
-      description: stringFromUnknown(strategySnapshot.description, stringFromUnknown(diagnostics.summary, record.prompt)),
-      code: stringFromUnknown(strategySnapshot.code, stringFromUnknown(payload.strategy_code, stringFromUnknown(payload.code, ''))),
-      params: isRecord(strategySnapshot.params)
-        ? strategySnapshot.params as Strategy['params']
-        : isRecord(snapshot.params) ? snapshot.params as Strategy['params'] : {},
-      category: stringFromUnknown(strategySnapshot.category, stringFromUnknown(snapshot.category, 'custom')),
-      created_at: stringFromUnknown(strategySnapshot.created_at, record.started_at),
-      updated_at: stringFromUnknown(strategySnapshot.updated_at, record.completed_at),
-    }
-  }
-
-  function paperTradingFromRunRecord(
-    record: AIStrategyResearchRunRecord
-  ): AIStrategyPaperTradingStart | null {
-    if (!record.paper_trading_started || !record.paper_workspace_id || !record.paper_unit_id) {
-      return null
-    }
-    const handoff = isRecord(record.paper_handoff) ? record.paper_handoff : {}
-    const paperUnit = paperUnitFromRunRecord(record, handoff)
-    const runStatus = paperUnit.run_status
-    const taskId = paperUnit.last_task_id
-    return {
-      workspace: paperWorkspaceFromRunRecord(record),
-      unit: paperUnit,
-      run_result: {
-        unit_id: paperUnit.id,
-        task_id: taskId,
-        status: runStatus,
-      },
-      started: Boolean(record.paper_trading_started),
-      handoff,
-    }
-  }
-
-  function paperUnitFromRunRecord(
-    record: AIStrategyResearchRunRecord,
-    handoff: Record<string, unknown>
-  ): StrategyUnit {
-    const payload = bestIterationPayloadForRecord(record)
-    if (!payload) return fallbackPaperUnitFromRunRecord(record, handoff)
-    const iteration = Math.max(
-      Math.trunc(optionalNumber(payload.iteration) ?? record.best_iteration ?? 1),
-      1
-    )
-    const metrics = isRecord(payload.metrics) ? payload.metrics : record.best_metrics ?? {}
-    const strategy = strategyFromIterationRecord(record, payload, iteration)
-    const researchUnit = unitFromIterationRecord(record, payload, strategy, metrics)
-    const runStatus = paperRunStatusFromHandoff(handoff, 'running')
-    const taskId = nullableString(handoff.paper_task_id) ?? researchUnit.last_task_id
-    return {
-      ...researchUnit,
-      id: record.paper_unit_id || researchUnit.id,
-      workspace_id: record.paper_workspace_id || researchUnit.workspace_id,
-      trading_mode: 'paper',
-      data_config: {
-        ...researchUnit.data_config,
-        ai_research_run_id: record.run_id,
-        ai_research_workspace_id: record.research_workspace_id,
-      },
-      unit_settings: {
-        ...researchUnit.unit_settings,
-        ai_research_handoff: handoff,
-      },
-      run_status: runStatus,
-      last_task_id: taskId,
-      gateway_config: Object.keys(researchUnit.gateway_config || {}).length
-        ? researchUnit.gateway_config
-        : isRecord(handoff.gateway_config)
-          ? handoff.gateway_config as StrategyUnit['gateway_config']
-          : {},
-      updated_at: record.completed_at,
-    }
-  }
-
-  function paperWorkspaceFromRunRecord(record: AIStrategyResearchRunRecord): Workspace {
-    return {
-      id: record.paper_workspace_id || '',
-      user_id: '',
-      name: record.paper_workspace_name || `AI模拟 - ${record.symbol}`,
-      description: null,
-      workspace_type: 'trading',
-      settings: {
-        ai_research_handoff: {
-          last_handoff: isRecord(record.paper_handoff) ? record.paper_handoff : {},
-        },
-      },
-      trading_config: {},
-      unit_count: record.paper_unit_id ? 1 : 0,
-      completed_count: 0,
-      status: 'running',
-      created_at: record.completed_at,
-      updated_at: record.completed_at,
-    }
-  }
-
-  function fallbackPaperUnitFromRunRecord(
-    record: AIStrategyResearchRunRecord,
-    handoff: Record<string, unknown>
-  ): StrategyUnit {
-    const assetSpecs = runtimeAssetSpecsPayload(record, handoff)
-    const environment = runtimeEnvironmentPayload(record, handoff)
-    const dataConfig: Record<string, unknown> = {
-      symbol: record.symbol,
-      ai_research_run_id: record.run_id,
-      ai_research_workspace_id: record.research_workspace_id,
-    }
-    if (Object.keys(assetSpecs).length) dataConfig.asset_specs = assetSpecs
-    if (Object.keys(environment).length) dataConfig.backtest_environment = environment
-    const unitSettings: Record<string, unknown> = {
-      ...environment,
-      ai_research_handoff: handoff,
-    }
-    if (Object.keys(assetSpecs).length) unitSettings.asset_specs = assetSpecs
-    return {
-      id: record.paper_unit_id || `${record.run_id}-paper-unit`,
-      workspace_id: record.paper_workspace_id || '',
-      group_name: record.group_name || record.best_strategy_name || 'AI策略',
-      strategy_id: record.best_strategy_id || null,
-      strategy_name: record.best_strategy_name || 'AI策略',
-      symbol: record.symbol,
-      symbol_name: record.symbol_name || record.symbol,
-      timeframe: record.timeframe,
-      timeframe_n: record.timeframe_n,
-      category: 'custom',
-      sort_order: 0,
-      data_config: dataConfig,
-      unit_settings: unitSettings,
-      params: {},
-      optimization_config: {},
-      trading_mode: 'paper',
-      gateway_config: isRecord(handoff.gateway_config)
-        ? handoff.gateway_config as StrategyUnit['gateway_config']
-        : {},
-      lock_trading: false,
-      lock_running: false,
-      trading_instance_id: null,
-      trading_snapshot: emptyTradingSnapshot('paper'),
-      run_status: paperRunStatusFromHandoff(handoff, 'running'),
-      run_count: 1,
-      last_run_time: null,
-      last_task_id: nullableString(handoff.paper_task_id),
-      last_optimization_task_id: null,
-      bar_count: null,
-      metrics_snapshot: record.best_metrics ?? {},
-      created_at: record.started_at,
-      updated_at: record.completed_at,
-    }
-  }
-
-  function runtimeAssetSpecsPayload(
-    record: AIStrategyResearchRunRecord | null | undefined,
-    handoff?: Record<string, unknown> | null
-  ) {
-    const specs: Record<string, unknown> = {}
-    const merge = (source: unknown) => {
-      if (!isRecord(source)) return
-      for (const [symbol, spec] of Object.entries(source)) {
-        if (isRecord(spec)) specs[symbol] = spec
-      }
-    }
-    merge(record?.asset_specs)
-    merge(handoff?.asset_specs)
-    if (handoff !== undefined && isRecord(record?.paper_handoff)) {
-      merge(record.paper_handoff.asset_specs)
-    }
-    return specs
-  }
-
-  function paperRunStatusFromHandoff(
-    handoff: Record<string, unknown>,
-    fallback: StrategyUnit['run_status']
-  ): StrategyUnit['run_status'] {
-    const status = stringFromUnknown(handoff.paper_run_status, fallback)
-    return ['idle', 'queued', 'running', 'completed', 'failed', 'cancelled', 'timeout'].includes(status)
-      ? status as StrategyUnit['run_status']
-      : fallback
-  }
-
-  function unitFromIterationRecord(
-    record: AIStrategyResearchRunRecord,
-    payload: Record<string, unknown>,
-    strategy: Strategy,
-    metrics: Record<string, unknown>
-  ): StrategyUnit {
-    const snapshot = iterationUnitPayload(payload)
-    const runResult = iterationRunResultPayload(payload)
-    const runStatus = stringFromUnknown(
-      payload.run_status ?? runResult.status ?? snapshot.run_status,
-      'completed'
-    ) as StrategyUnit['run_status']
-    const taskId = nullableString(payload.task_id)
-      ?? nullableString(runResult.task_id)
-      ?? nullableString(snapshot.last_task_id)
-    return {
-      id: stringFromUnknown(
-        payload.unit_id ?? runResult.unit_id,
-        stringFromUnknown(snapshot.id, `${record.run_id}-unit`)
-      ),
-      workspace_id: stringFromUnknown(snapshot.workspace_id, record.research_workspace_id),
-      group_name: stringFromUnknown(snapshot.group_name, strategy.name),
-      strategy_id: strategy.id,
-      strategy_name: strategy.name,
-      symbol: stringFromUnknown(snapshot.symbol, record.symbol),
-      symbol_name: stringFromUnknown(snapshot.symbol_name, record.symbol_name || record.symbol),
-      timeframe: stringFromUnknown(snapshot.timeframe, record.timeframe),
-      timeframe_n: optionalNumber(snapshot.timeframe_n) ?? record.timeframe_n,
-      category: stringFromUnknown(snapshot.category, strategy.category),
-      sort_order: 0,
-      data_config: isRecord(snapshot.data_config) ? snapshot.data_config : {},
-      unit_settings: isRecord(snapshot.unit_settings) ? snapshot.unit_settings : {},
-      params: isRecord(snapshot.params) ? snapshot.params : {},
-      optimization_config: isRecord(snapshot.optimization_config) ? snapshot.optimization_config : {},
-      trading_mode: unitTradingMode(snapshot),
-      gateway_config: isRecord(snapshot.gateway_config)
-        ? snapshot.gateway_config as StrategyUnit['gateway_config']
-        : {},
-      lock_trading: Boolean(snapshot.lock_trading),
-      lock_running: Boolean(snapshot.lock_running),
-      trading_instance_id: nullableString(snapshot.trading_instance_id),
-      trading_snapshot: emptyTradingSnapshot(unitTradingMode(snapshot)),
-      run_status: runStatus,
-      run_count: optionalNumber(snapshot.run_count) ?? 1,
-      last_run_time: optionalNumber(snapshot.last_run_time),
-      last_task_id: taskId,
-      last_optimization_task_id: nullableString(snapshot.last_optimization_task_id),
-      bar_count: optionalNumber(snapshot.bar_count),
-      metrics_snapshot: metrics,
-      created_at: record.started_at,
-      updated_at: record.completed_at,
-    }
-  }
-
-  function iterationStrategyPayload(payload: Record<string, unknown>) {
-    if (isRecord(payload.strategy_snapshot) && Object.keys(payload.strategy_snapshot).length) {
-      return payload.strategy_snapshot
-    }
-    return isRecord(payload.strategy) ? payload.strategy : {}
-  }
-
-  function iterationUnitPayload(payload: Record<string, unknown>) {
-    if (isRecord(payload.unit_snapshot) && Object.keys(payload.unit_snapshot).length) {
-      return payload.unit_snapshot
-    }
-    return isRecord(payload.unit) ? payload.unit : {}
-  }
-
-  function iterationRunResultPayload(payload: Record<string, unknown>) {
-    return isRecord(payload.run_result) ? payload.run_result : {}
-  }
-
-  function iterationUnitStatusPayload(payload: Record<string, unknown>) {
-    return isRecord(payload.unit_status) ? payload.unit_status : {}
-  }
-
-  function unitStatusFromIterationRecord(
-    unit: StrategyUnit,
-    payload: Record<string, unknown>,
-    runStatus: string,
-    taskId: string | null,
-    metrics: Record<string, unknown>
-  ): UnitStatusResponse {
-    const status = iterationUnitStatusPayload(payload)
-    const statusRunStatus = stringFromUnknown(status.run_status, runStatus)
-    const statusTaskId = nullableString(status.last_task_id) ?? taskId
-    const statusMetrics = isRecord(status.metrics_snapshot) ? status.metrics_snapshot : metrics
-    const tradingSnapshot = isRecord(status.trading_snapshot)
-      ? {
-          ...emptyTradingSnapshot(unit.trading_mode),
-          ...status.trading_snapshot,
-        } as TradingSnapshot
-      : emptyTradingSnapshot(unit.trading_mode)
-    return {
-      id: stringFromUnknown(status.id, unit.id),
-      run_status: statusRunStatus as UnitStatusResponse['run_status'],
-      last_task_id: statusTaskId,
-      metrics_snapshot: statusMetrics,
-      run_progress: optionalNumber(status.run_progress),
-      run_message: nullableString(status.run_message),
-      run_count: optionalNumber(status.run_count) ?? unit.run_count,
-      last_run_time: optionalNumber(status.last_run_time) ?? unit.last_run_time,
-      bar_count: optionalNumber(status.bar_count) ?? unit.bar_count,
-      trading_instance_id: nullableString(status.trading_instance_id) ?? unit.trading_instance_id,
-      trading_snapshot: tradingSnapshot,
-      trading_mode: stringFromUnknown(status.trading_mode, unit.trading_mode) as UnitStatusResponse['trading_mode'],
-      lock_trading: optionalBoolean(status.lock_trading, unit.lock_trading),
-      lock_running: optionalBoolean(status.lock_running, unit.lock_running),
-      opt_status: nullableString(status.opt_status),
-      opt_total: optionalNumber(status.opt_total),
-      opt_completed: optionalNumber(status.opt_completed),
-      opt_progress: optionalNumber(status.opt_progress),
-      opt_elapsed_time: optionalNumber(status.opt_elapsed_time),
-      opt_remaining_time: optionalNumber(status.opt_remaining_time),
-    }
-  }
-
-  function metricFromPayload(payload: Record<string, unknown>, ...keys: string[]) {
-    for (const key of keys) {
-      const value = optionalNumber(payload[key])
-      if (value !== null) return value
-    }
-    return null
-  }
-
-  function unitTradingMode(snapshot: Record<string, unknown>) {
-    return stringFromUnknown(snapshot.trading_mode, 'paper') as StrategyUnit['trading_mode']
-  }
-
-  function emptyTradingSnapshot(mode: StrategyUnit['trading_mode']): TradingSnapshot {
-    return {
-      instance_id: null,
-      instance_status: 'idle',
-      mode,
-      error: null,
-      started_at: null,
-      stopped_at: null,
-      gateway_summary: null,
-      long_position: 0,
-      short_position: 0,
-      today_pnl: null,
-      position_pnl: null,
-      latest_price: null,
-      change_pct: null,
-      long_market_value: null,
-      short_market_value: null,
-      leverage: null,
-      cumulative_pnl: null,
-      max_drawdown_rate: null,
-      trading_day: null,
-      updated_at: null,
-      detail_route: null,
-      positions: [],
-      trades: [],
-    }
-  }
-
-  function stringFromUnknown(value: unknown, fallback = '') {
-    const text = typeof value === 'string' ? value.trim() : ''
-    return text || fallback
-  }
-
-  function routeQueryText(value: unknown) {
-    if (Array.isArray(value)) return stringFromUnknown(value[0])
-    return stringFromUnknown(value)
-  }
-
   function aiResearchRouteRunId() {
     return (
       routeQueryText(route.query.ai_research_run_id)
@@ -5734,29 +3867,6 @@ export function useStrategyPage() {
     if (timeframe) aiResearchForm.timeframe = timeframe
     if (knowledgeBaseId) aiResearchForm.knowledge_base_id = knowledgeBaseId
     return true
-  }
-
-  function nullableString(value: unknown) {
-    const text = typeof value === 'string' ? value.trim() : ''
-    return text || null
-  }
-
-  function stringArrayFromUnknown(value: unknown) {
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      : []
-  }
-
-  function uniqueTextItems(items: unknown[]) {
-    return [...new Set(
-      items
-        .map(item => stringFromUnknown(item))
-        .filter(Boolean)
-    )]
-  }
-
-  function arrayFromUnknown<T>(value: unknown): T[] {
-    return Array.isArray(value) ? value.filter(isRecord) as T[] : []
   }
 
   async function restoreAIResearchResultFromTask(
@@ -5874,115 +3984,17 @@ export function useStrategyPage() {
     }
   }
 
-  async function startPaperFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    aiResearchPaperStartingRunId.value = record.run_id
-    try {
-      const paper = await strategyApi.startAIResearchPaperTrading(
-        record.run_id,
-        aiResearchPaperStartRequest(record)
-      )
-      const responseRecord = paper.run_record ?? null
-      if (!paper.started) {
-        const failedRecord = responseRecord ?? paperStartFailedRunRecord(record, paper)
-        upsertAIResearchRunRecord(failedRecord)
-        applyPaperStartToCurrentResult(record.run_id, paper, failedRecord)
-        try {
-          await refreshAIResearchRunRecord(record.run_id, record.research_workspace_id)
-        } catch {
-          // Keep the local failed start state visible even if history refresh fails.
-        }
-        ElMessage.error(t('strategy.aiResearchPaperStartFailed'))
-        return
-      }
-      const updatedRecord = responseRecord ?? paperStartedRunRecord(record, paper)
-      upsertAIResearchRunRecord(updatedRecord)
-      applyPaperStartToCurrentResult(record.run_id, paper, updatedRecord)
-      try {
-        await refreshAIResearchRunRecord(record.run_id, record.research_workspace_id)
-      } catch {
-        // Keep the local started state visible even if history refresh fails.
-      }
-      ElMessage.success(t('strategy.aiResearchPaperStartedSuccess'))
-    } catch (error) {
-      if (notifyAIResearchConfigError(error)) return
-      try {
-        await refreshAIResearchRunRecord(record.run_id, record.research_workspace_id)
-      } catch {
-        // Keep the original start failure visible even if history refresh fails.
-      }
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchPaperStartingRunId.value = ''
-    }
-  }
 
-  async function startPaperFromCurrentResult() {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await startPaperFromResearchRecord(record)
-  }
 
-  async function viewBestStrategyFromCurrentResult() {
-    const result = aiResearchResult.value
-    if (!result) return
-    if (result.best_strategy) {
-      viewStrategy(result.best_strategy)
-      return
-    }
-    const record = result.run_record
-    if (!record) return
-    await viewStrategyFromResearchRecord(record)
-  }
 
-  async function viewResearchIterationStrategy(item: AIStrategyResearchIteration) {
-    if (item.strategy.code.trim()) {
-      viewStrategy(item.strategy)
-      return
-    }
-    if (!item.strategy.id) return
-    aiResearchStrategyViewingRunId.value = aiResearchResult.value?.run_id || item.strategy.id
-    try {
-      const strategy = await strategyApi.get(item.strategy.id)
-      viewStrategy(strategy)
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchStrategyViewingRunId.value = ''
-    }
-  }
 
-  async function viewStrategyFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    const snapshotStrategy = bestStrategyFromRunRecord(record)
-    if (snapshotStrategy?.code?.trim()) {
-      viewStrategy(snapshotStrategy)
-      return
-    }
-    const strategyId = bestStrategyIdForRecord(record)
-    if (!strategyId) return
-    aiResearchStrategyViewingRunId.value = record.run_id
-    try {
-      const strategy = await strategyApi.get(strategyId)
-      viewStrategy(strategy)
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchStrategyViewingRunId.value = ''
-    }
-  }
 
-  function viewAIResearchVersionCode(version: AIStrategyResearchVersion) {
-    viewStrategy({
-      id: version.strategy_id || version.id,
-      user_id: '',
-      name: version.strategy_name || version.version_name,
-      description: version.change_summary || version.ai_rationale || '',
-      code: version.code,
-      params: {},
-      category: 'custom',
-      created_at: version.created_at,
-      updated_at: version.updated_at,
-    })
-  }
+
+
+
+
+
+
 
   function paperMonitoringPlanFromHandoff(
     handoff: Record<string, unknown> | null | undefined
@@ -5991,388 +4003,39 @@ export function useStrategyPage() {
     return Array.isArray(plan) ? (plan as AIStrategyPaperMonitoringRule[]) : undefined
   }
 
-  async function reviewPaperFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    aiResearchPaperReviewingRunId.value = record.run_id
-    try {
-      const review = await strategyApi.reviewAIResearchPaperTrading(
-        record.run_id,
-        record.research_workspace_id
-      )
-      aiResearchPaperReviews[record.run_id] = review
-      delete aiResearchLiveHandoffs[record.run_id]
-      let updatedRecord = reviewedRunRecord(record, review)
-      if (review.live_handoff) {
-        aiResearchLiveHandoffs[record.run_id] = review.live_handoff
-        updatedRecord = liveHandoffRunRecord(updatedRecord, review.live_handoff)
-      }
-      upsertAIResearchRunRecord(updatedRecord)
-      applyPaperReviewToCurrentResult(record.run_id, updatedRecord)
-      ElMessage.success(review.ready_for_live ? t('strategy.aiResearchPaperReadyForLive') : t('strategy.aiResearchPaperReviewUpdated'))
-      if (review.live_handoff) {
-        ElMessage.success(review.live_handoff.ready_for_live ? t('strategy.aiResearchLiveHandoffGenerated') : t('strategy.aiResearchLiveHandoffBlocked'))
-      } else if (review.ready_for_live) {
-        await buildLiveHandoffFromResearchRecord(updatedRecord)
-      }
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchPaperReviewingRunId.value = ''
-    }
-  }
 
-  async function reviewPaperFromCurrentResult() {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await reviewPaperFromResearchRecord(record)
-  }
 
-  async function buildLiveHandoffFromCurrentResult() {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await buildLiveHandoffFromResearchRecord(record)
-  }
 
-  async function approveCurrentLiveHandoff(decision: 'approved' | 'rejected') {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await approveLiveHandoffFromResearchRecord(record, decision)
-  }
 
-  async function prepareLiveTradingFromCurrentResult() {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await prepareLiveTradingFromResearchRecord(record)
-  }
 
-  async function activateLiveTradingFromCurrentResult() {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await activateLiveTradingFromResearchRecord(record)
-  }
 
-  async function deactivateLiveTradingFromCurrentResult() {
-    const record = aiResearchResult.value?.run_record
-    if (!record) return
-    await deactivateLiveTradingFromResearchRecord(record)
-  }
 
-  async function buildLiveHandoffFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    aiResearchLiveHandoffLoadingRunId.value = record.run_id
-    try {
-      const handoff = await strategyApi.buildAIResearchLiveHandoff(
-        record.run_id,
-        record.research_workspace_id
-      )
-      aiResearchLiveHandoffs[record.run_id] = handoff
-      const updatedRecord = liveHandoffRunRecord(record, handoff)
-      upsertAIResearchRunRecord(updatedRecord)
-      applyResearchRunRecordToCurrentResult(updatedRecord)
-      ElMessage.success(handoff.ready_for_live ? t('strategy.aiResearchLiveHandoffGenerated') : t('strategy.aiResearchLiveHandoffBlocked'))
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchLiveHandoffLoadingRunId.value = ''
-    }
-  }
 
-  async function approveLiveHandoffFromResearchRecord(
-    record: AIStrategyResearchRunRecord,
-    decision: 'approved' | 'rejected'
-  ) {
-    const handoff = liveHandoffForRecord(record)
-    if (!handoff || !canApproveLiveHandoff(handoff)) return
-    const confirmMessage = decision === 'approved'
-      ? t('strategy.aiResearchApproveLiveHandoffConfirm')
-      : t('strategy.aiResearchRejectLiveHandoffConfirm')
-    try {
-      await ElMessageBox.confirm(confirmMessage, t('strategy.aiResearchLiveHandoffApproval'), {
-        type: decision === 'approved' ? 'success' : 'warning',
-      })
-    } catch {
-      return
-    }
 
-    aiResearchLiveHandoffApprovingRunId.value = `${record.run_id}:${decision}`
-    const payload: AIStrategyLiveHandoffApprovalRequest = decision === 'approved'
-      ? {
-          decision,
-          approver: 'web',
-          comment: '前端人工审批通过',
-          account_confirmed: true,
-          risk_limit_confirmed: true,
-          deployment_window: '人工审批通过后执行',
-        }
-      : {
-          decision,
-          approver: 'web',
-          comment: '前端人工驳回',
-          account_confirmed: false,
-          risk_limit_confirmed: false,
-        }
-    try {
-      const updatedHandoff = await strategyApi.approveAIResearchLiveHandoff(
-        record.run_id,
-        payload,
-        record.research_workspace_id
-      )
-      aiResearchLiveHandoffs[record.run_id] = updatedHandoff
-      const updatedRecord = liveHandoffRunRecord(record, updatedHandoff)
-      upsertAIResearchRunRecord(updatedRecord)
-      applyResearchRunRecordToCurrentResult(updatedRecord)
-      ElMessage.success(decision === 'approved' ? t('strategy.aiResearchLiveHandoffApproved') : t('strategy.aiResearchLiveHandoffRejected'))
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchLiveHandoffApprovingRunId.value = ''
-    }
-  }
 
-  async function prepareLiveTradingFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    if (!canPrepareLiveTradingFromRecord(record)) return
-    aiResearchLiveTradingPreparingRunId.value = record.run_id
-    try {
-      const prepared = await strategyApi.prepareAIResearchLiveTrading(
-        record.run_id,
-        aiResearchLivePrepareRequest(record),
-        record.research_workspace_id
-      )
-      const updatedRecord = liveTradingPreparedRunRecord(record, prepared)
-      upsertAIResearchRunRecord(updatedRecord)
-      applyResearchRunRecordToCurrentResult(updatedRecord)
-      ElMessage.success(t('strategy.aiResearchLiveUnitPrepared'))
-    } catch (error) {
-      if (notifyAIResearchConfigError(error)) return
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchLiveTradingPreparingRunId.value = ''
-    }
-  }
 
-  async function activateLiveTradingFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    if (!canActivateLiveTradingFromRecord(record)) return
-    aiResearchLiveTradingActivatingRunId.value = record.run_id
-    try {
-      const activated = await strategyApi.activateAIResearchLiveTrading(
-        record.run_id,
-        record.research_workspace_id
-      )
-      if (activated.activated !== true || activated.activation_status !== 'running') {
-        throw new Error('AI research live activation was not confirmed by the server')
-      }
-      const updatedRecord = liveTradingActivatedRunRecord(record, activated)
-      upsertAIResearchRunRecord(updatedRecord)
-      applyResearchRunRecordToCurrentResult(updatedRecord)
-      ElMessage.success(t('strategy.aiResearchLiveUnitActivated'))
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchLiveTradingActivatingRunId.value = ''
-    }
-  }
 
-  async function deactivateLiveTradingFromResearchRecord(record: AIStrategyResearchRunRecord) {
-    if (!canDeactivateLiveTradingFromRecord(record)) return
-    aiResearchLiveTradingDeactivatingRunId.value = record.run_id
-    try {
-      const deactivated = await strategyApi.deactivateAIResearchLiveTrading(
-        record.run_id,
-        record.research_workspace_id
-      )
-      if (deactivated.prepared !== false || deactivated.activation_status !== 'deactivated') {
-        throw new Error('AI research live deactivation was not confirmed by the server')
-      }
-      delete aiResearchLiveHandoffs[record.run_id]
-      const updatedRecord = liveTradingDeactivatedRunRecord(record, deactivated)
-      upsertAIResearchRunRecord(updatedRecord)
-      applyResearchRunRecordToCurrentResult(updatedRecord)
-      ElMessage.success(t('strategy.aiResearchLiveUnitDeactivated'))
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchLiveTradingDeactivatingRunId.value = ''
-    }
-  }
 
-  function liveHandoffRunRecord(
-    record: AIStrategyResearchRunRecord,
-    handoff: AIStrategyLiveHandoffPackage
-  ): AIStrategyResearchRunRecord {
-    const approval = handoff.approval ?? record.live_handoff_approval ?? null
-    const recordPipeline = record.pipeline ?? null
-    const handoffPipeline = handoff.pipeline ?? null
-    return {
-      ...record,
-      live_handoff: handoff,
-      live_handoff_approval: approval,
-      pipeline: {
-        ...(recordPipeline ?? {}),
-        ...(handoffPipeline ?? {}),
-        current_stage: handoffPipeline?.current_stage ?? recordPipeline?.current_stage ?? 'live_candidate',
-        status: handoffPipeline?.status ?? recordPipeline?.status ?? record.status,
-        progress: handoffPipeline?.progress ?? recordPipeline?.progress ?? (handoff.ready_for_live ? 100 : 90),
-        ready_for_live: handoffPipeline?.ready_for_live ?? recordPipeline?.ready_for_live ?? handoff.ready_for_live,
-        steps: handoffPipeline?.steps ?? recordPipeline?.steps ?? [],
-        live_handoff_status: handoff.status,
-        live_handoff_generated_at: handoff.generated_at,
-        live_handoff_ready_for_live: handoff.ready_for_live,
-        live_handoff_approval_required: handoff.approval_required,
-        live_handoff_blocker_count: handoff.deployment_blockers.length,
-        live_handoff_approval_status: approval?.decision
-          ?? handoffPipeline?.live_handoff_approval_status
-          ?? recordPipeline?.live_handoff_approval_status,
-        live_handoff_approved: approval?.approved
-          ?? handoffPipeline?.live_handoff_approved
-          ?? recordPipeline?.live_handoff_approved,
-        live_handoff_approved_at: approval?.approved
-          ? approval.decided_at
-          : handoffPipeline?.live_handoff_approved_at ?? recordPipeline?.live_handoff_approved_at,
-        live_handoff_rejected_at: approval && !approval.approved
-          ? approval.decided_at
-          : handoffPipeline?.live_handoff_rejected_at ?? recordPipeline?.live_handoff_rejected_at,
-      },
-      next_actions: handoff.next_actions?.length ? handoff.next_actions : record.next_actions,
-    }
-  }
 
-  function liveTradingPreparedRunRecord(
-    record: AIStrategyResearchRunRecord,
-    prepared: AIStrategyLiveTradingPrepare
-  ): AIStrategyResearchRunRecord {
-    const handoff = isRecord(prepared.handoff) ? prepared.handoff : {}
-    const preparedAt = stringFromUnknown(
-      handoff.live_trading_prepared_at,
-      new Date().toISOString()
-    )
-    const previousSteps = record.pipeline?.steps ?? []
-    const nextSteps = upsertPipelineStep(
-      upsertPipelineStep(previousSteps, {
-        key: 'live_handoff',
-        label: t('strategy.aiResearchLiveHandoff'),
-        status: 'completed',
-      }),
-      {
-        key: 'live_trading_prepare',
-        label: t('strategy.aiResearchLivePreparation'),
-        status: 'completed',
-        live_trading_prepared: prepared.prepared,
-        live_workspace_id: prepared.workspace.id,
-        live_unit_id: prepared.unit.id,
-        live_unit_locked: Boolean(prepared.unit.lock_trading || prepared.unit.lock_running),
-        prepared_at: preparedAt,
-      }
-    )
-    const liveHandoff = record.live_handoff
-      ? {
-          ...record.live_handoff,
-          handoff: {
-            ...(record.live_handoff.handoff ?? {}),
-            live_trading_prepare: handoff,
-          },
-          next_actions: prepared.next_actions,
-        }
-      : record.live_handoff
-    return {
-      ...record,
-      live_handoff: liveHandoff,
-      live_workspace_id: prepared.workspace.id,
-      live_workspace_name: prepared.workspace.name,
-      live_unit_id: prepared.unit.id,
-      live_trading_prepared: prepared.prepared,
-      live_trading_prepared_at: preparedAt,
-      pipeline: {
-        ...(record.pipeline ?? {}),
-        current_stage: 'live_trading_prepare',
-        status: record.pipeline?.status ?? record.live_handoff?.status ?? record.status,
-        progress: record.pipeline?.progress ?? 100,
-        ready_for_live: record.pipeline?.ready_for_live ?? true,
-        live_trading_prepared: prepared.prepared,
-        live_trading_prepared_at: preparedAt,
-        live_workspace_id: prepared.workspace.id,
-        live_unit_id: prepared.unit.id,
-        live_unit_locked: Boolean(prepared.unit.lock_trading || prepared.unit.lock_running),
-        steps: nextSteps,
-      },
-      next_actions: prepared.next_actions?.length ? prepared.next_actions : record.next_actions,
-    }
-  }
 
-  function liveTradingActivatedRunRecord(
-    record: AIStrategyResearchRunRecord,
-    activated: AIStrategyLiveTradingPrepare
-  ): AIStrategyResearchRunRecord {
-    const preparedRecord = liveTradingPreparedRunRecord(record, activated)
-    const steps = upsertPipelineStep(preparedRecord.pipeline?.steps ?? [], {
-      key: 'live_trading_activation',
-      label: t('strategy.livePipeline.activation'),
-      status: 'completed',
-    })
-    return {
-      ...preparedRecord,
-      pipeline: {
-        ...(preparedRecord.pipeline ?? {}),
-        current_stage: 'live_trading_active',
-        status: preparedRecord.pipeline?.status ?? preparedRecord.status,
-        progress: preparedRecord.pipeline?.progress ?? 100,
-        ready_for_live: preparedRecord.pipeline?.ready_for_live ?? true,
-        live_handoff_activated: true,
-        live_handoff_activation_status: 'running',
-        live_handoff_activation_instance_id: activated.activation_instance_id ?? null,
-        steps,
-      },
-      next_actions: activated.next_actions?.length ? activated.next_actions : preparedRecord.next_actions,
-    }
-  }
 
-  function liveTradingDeactivatedRunRecord(
-    record: AIStrategyResearchRunRecord,
-    deactivated: AIStrategyLiveTradingPrepare
-  ): AIStrategyResearchRunRecord {
-    const deactivatedAt = new Date().toISOString()
-    const steps = upsertPipelineStep(record.pipeline?.steps ?? [], {
-      key: 'live_trading_deactivation',
-      label: t('strategy.livePipeline.deactivation'),
-      status: 'completed',
-    })
-    return {
-      ...record,
-      live_handoff: null,
-      live_handoff_approval: null,
-      live_workspace_id: null,
-      live_workspace_name: null,
-      live_unit_id: null,
-      live_trading_prepared: false,
-      live_trading_prepared_at: null,
-      pipeline: {
-        ...(record.pipeline ?? {}),
-        current_stage: 'live_handoff_deactivated',
-        status: record.pipeline?.status ?? record.status,
-        progress: record.pipeline?.progress ?? 100,
-        ready_for_live: false,
-        live_handoff_activated: false,
-        live_handoff_activation_status: 'deactivated',
-        live_handoff_activation_instance_id: deactivated.activation_instance_id ?? null,
-        live_handoff_deactivated_at: deactivatedAt,
-        live_trading_prepared: false,
-        live_trading_prepared_at: null,
-        live_workspace_id: null,
-        live_unit_id: null,
-        live_unit_locked: true,
-        steps,
-      },
-      next_actions: deactivated.next_actions?.length ? deactivated.next_actions : record.next_actions,
-    }
-  }
 
-  function upsertPipelineStep(
-    steps: AIStrategyPipelineStep[],
-    nextStep: AIStrategyPipelineStep
-  ): AIStrategyPipelineStep[] {
-    const index = steps.findIndex(step => step.key === nextStep.key)
-    if (index < 0) return [...steps, nextStep]
-    return steps.map((step, currentIndex) =>
-      currentIndex === index ? { ...step, ...nextStep } : step
-    )
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   async function continueResearchFromCurrentPaperReview() {
     const record = aiResearchResult.value?.run_record
@@ -6750,271 +4413,6 @@ export function useStrategyPage() {
     return request
   }
 
-  function isAIResearchTaskTerminal(task: AIStrategyResearchTaskResponse) {
-    return ['completed', 'failed', 'cancelled'].includes(String(task.status || '').toLowerCase())
-  }
-
-  function isAIResearchTaskCancelled(task: AIStrategyResearchTaskResponse) {
-    return String(task.status || '').toLowerCase() === 'cancelled'
-  }
-
-  function isRestorableAIResearchTask(task: AIStrategyResearchTaskResponse) {
-    return isAIResearchTaskTerminal(task) && Boolean(task.result || task.run_id)
-  }
-
-  function sleep(ms: number) {
-    return new Promise(resolve => window.setTimeout(resolve, ms))
-  }
-
-  const AI_RESEARCH_TASK_POLL_INTERVAL_MS = 1500
-  const AI_RESEARCH_TASK_MIN_TIMEOUT_MS = 10 * 60 * 1000
-  const AI_RESEARCH_TASK_MAX_TIMEOUT_MS = 8 * 60 * 60 * 1000
-
-  function boundedNumber(value: unknown, fallback: number, min: number, max: number) {
-    const parsed = Number(value)
-    if (!Number.isFinite(parsed)) return fallback
-    return Math.min(Math.max(parsed, min), max)
-  }
-
-  function aiResearchTaskPollTimeoutMs(
-    payload?: AIStrategyResearchRunRequest,
-    task?: AIStrategyResearchTaskResponse
-  ) {
-    const snapshot: Record<string, unknown> = isRecord(task?.request_snapshot)
-      ? task.request_snapshot
-      : {}
-    const maxIterations = boundedNumber(
-      payload?.max_iterations
-        ?? task?.max_iterations
-        ?? snapshot.max_iterations
-        ?? aiResearchForm.max_iterations,
-      3,
-      1,
-      8
-    )
-    const backtestTimeoutSeconds = boundedNumber(
-      payload?.backtest_timeout_seconds ?? snapshot.backtest_timeout_seconds,
-      600,
-      1,
-      3600
-    )
-    const outOfSampleValidation = payload?.out_of_sample_validation ?? snapshot.out_of_sample_validation
-    const robustnessValidation = payload?.robustness_validation ?? snapshot.robustness_validation ?? false
-    const validationFactor = 1
-      + (outOfSampleValidation === false ? 0 : 1)
-      + (robustnessValidation === false ? 0 : 1)
-    const estimatedSeconds = maxIterations * validationFactor * backtestTimeoutSeconds + 240
-    return boundedNumber(
-      estimatedSeconds * 1000,
-      AI_RESEARCH_TASK_MIN_TIMEOUT_MS,
-      AI_RESEARCH_TASK_MIN_TIMEOUT_MS,
-      AI_RESEARCH_TASK_MAX_TIMEOUT_MS
-    )
-  }
-
-  function applyAIResearchTaskStatus(task: AIStrategyResearchTaskResponse) {
-    const pipeline = task.pipeline ?? null
-    const sameTask = aiResearchTaskId.value === task.task_id
-    const hasTaskKey = (key: string) => Object.prototype.hasOwnProperty.call(task, key)
-    aiResearchTaskId.value = task.task_id
-    aiResearchTaskStatus.value = task.status
-    aiResearchTaskStage.value = task.current_stage || task.status
-    aiResearchTaskProgress.value = Number(task.progress || 0)
-    aiResearchTaskIteration.value = task.current_iteration ?? task.iteration_count ?? null
-    aiResearchBacktestTaskId.value = task.current_backtest_task_id || ''
-    aiResearchCancelledBacktestTaskId.value = task.cancelled_backtest_task_id || ''
-    aiResearchTaskPaperWorkspaceId.value = task.paper_workspace_id || ''
-    aiResearchTaskPaperUnitId.value = task.paper_unit_id || ''
-    aiResearchTaskPaperStarted.value = Boolean(task.paper_trading_started)
-    aiResearchTaskLiveWorkspaceId.value = task.live_workspace_id || pipeline?.live_workspace_id || ''
-    aiResearchTaskLiveUnitId.value = task.live_unit_id || pipeline?.live_unit_id || ''
-    aiResearchTaskLivePrepared.value = Boolean(
-      task.live_trading_prepared || pipeline?.live_trading_prepared
-    )
-    aiResearchTaskPipeline.value = pipeline
-    if (hasTaskKey('continued_from_run_id') || !sameTask) {
-      aiResearchTaskContinuedFromRunId.value = stringFromUnknown(task.continued_from_run_id)
-    }
-    if (hasTaskKey('continuation_source') || !sameTask) {
-      aiResearchTaskContinuationSource.value = stringFromUnknown(task.continuation_source)
-    }
-    if (hasTaskKey('continuation_context') || !sameTask) {
-      aiResearchTaskContinuationContext.value = isRecord(task.continuation_context)
-        ? { ...task.continuation_context }
-        : {}
-    }
-    if (isRecord(task.request_snapshot)) {
-      aiResearchTaskRequestSnapshot.value = task.request_snapshot
-    } else if (hasTaskKey('request_snapshot') || !sameTask) {
-      aiResearchTaskRequestSnapshot.value = {}
-    }
-    if (hasTaskKey('request_explicit_fields') || !sameTask) {
-      aiResearchTaskAutoContinuationSource.value = aiResearchTaskAutoContinuationSourceFromTask(task)
-    }
-    if (hasTaskKey('asset_specs') || !sameTask) {
-      aiResearchTaskAssetSpecs.value = isRecord(task.asset_specs)
-        ? task.asset_specs as Record<string, Record<string, unknown>>
-        : {}
-    }
-    if (hasTaskKey('backtest_environment') || !sameTask) {
-      aiResearchTaskBacktestEnvironment.value = isRecord(task.backtest_environment)
-        ? task.backtest_environment
-        : {}
-    }
-    if (hasTaskKey('promotion_audit') || !sameTask) {
-      aiResearchTaskPromotionAudit.value = promotionAuditFromPayload(task.promotion_audit)
-    }
-    aiResearchTaskError.value = aiResearchTaskFailureMessage(task)
-    aiResearchTaskMessage.value = String(task.message || '').trim()
-    aiResearchTaskLatestIteration.value = task.latest_iteration ?? null
-    if (hasTaskKey('best_iteration_payload') || !sameTask) {
-      aiResearchTaskBestIteration.value = isRecord(task.best_iteration_payload)
-        ? task.best_iteration_payload
-        : null
-    }
-  }
-
-  function applyAIResearchTaskSnapshotToForm(task: AIStrategyResearchTaskResponse) {
-    const snapshot = isRecord(task.request_snapshot) ? task.request_snapshot : null
-    if (!snapshot) return
-    const environment = resolvedAIResearchTaskBacktestEnvironment(task, snapshot)
-    const prompt = stringFromUnknown(snapshot.prompt)
-    const symbol = stringFromUnknown(snapshot.symbol)
-    const symbolName = stringFromUnknown(snapshot.symbol_name)
-    const timeframe = stringFromUnknown(snapshot.timeframe)
-    const startDate = stringFromUnknown(snapshot.start_date)
-    const endDate = stringFromUnknown(snapshot.end_date)
-    if (prompt) aiResearchForm.prompt = prompt
-    aiResearchForm.workflow_mode = snapshot.workflow_mode === 'prompt' ? 'prompt' : 'auto'
-    if (symbol) aiResearchForm.symbol = symbol
-    if (symbolName || snapshot.symbol_name !== undefined) aiResearchForm.symbol_name = symbolName
-    aiResearchForm.market_data_asset_type = aiResearchMarketDataAssetTypeFromDataConfig(
-      snapshot.data_config,
-    )
-    if (timeframe) aiResearchForm.timeframe = timeframe
-    aiResearchForm.timeframe_n = optionalNumber(snapshot.timeframe_n) ?? aiResearchForm.timeframe_n
-    aiResearchForm.start_date = startDate
-    aiResearchForm.end_date = endDate
-    aiResearchForm.knowledge_base_id = stringFromUnknown(snapshot.knowledge_base_id)
-    aiResearchForm.thinking_mode = optionalBoolean(snapshot.thinking_mode, false)
-    aiResearchForm.target_sharpe = optionalNumber(snapshot.target_sharpe) ?? aiResearchForm.target_sharpe
-    aiResearchForm.min_total_trades =
-      optionalNumber(snapshot.min_total_trades) ?? aiResearchForm.min_total_trades
-    aiResearchForm.max_iterations = optionalNumber(snapshot.max_iterations) ?? aiResearchForm.max_iterations
-    aiResearchForm.initial_cash =
-      (environment ? optionalNumber(environment.initial_cash) : null)
-      ?? optionalNumber(snapshot.initial_cash)
-      ?? aiResearchForm.initial_cash
-    const commission = aiResearchTaskRestoredCommission(task, snapshot)
-    if (commission !== null) {
-      aiResearchForm.commission = commission
-      aiResearchForm.use_manual_commission = aiResearchTaskUsesManualCommission(task, snapshot)
-    } else {
-      aiResearchForm.use_manual_commission = false
-    }
-    aiResearchForm.annual_days =
-      (environment ? optionalNumber(environment.annual_days) : null)
-      ?? optionalNumber(snapshot.annual_days)
-      ?? aiResearchForm.annual_days
-    aiResearchForm.calc_method = environment
-      ? stringFromUnknown(environment.calc_method, stringFromUnknown(snapshot.calc_method, aiResearchForm.calc_method))
-      : stringFromUnknown(snapshot.calc_method, aiResearchForm.calc_method)
-    aiResearchForm.weight_mode = environment
-      ? stringFromUnknown(environment.weight_mode, stringFromUnknown(snapshot.weight_mode, aiResearchForm.weight_mode))
-      : stringFromUnknown(snapshot.weight_mode, aiResearchForm.weight_mode)
-    aiResearchForm.group_name = stringFromUnknown(snapshot.group_name)
-    aiResearchForm.backtest_timeout_seconds =
-      optionalNumber(snapshot.backtest_timeout_seconds) ?? aiResearchForm.backtest_timeout_seconds
-    aiResearchForm.poll_interval_seconds =
-      optionalNumber(snapshot.poll_interval_seconds) ?? aiResearchForm.poll_interval_seconds
-    aiResearchForm.research_workspace_id = stringFromUnknown(snapshot.research_workspace_id)
-    aiResearchForm.trading_workspace_id = stringFromUnknown(snapshot.trading_workspace_id)
-    aiResearchForm.seed_strategy_id = stringFromUnknown(snapshot.seed_strategy_id)
-    const taskContinuationContext = isRecord(task.continuation_context)
-      ? task.continuation_context
-      : null
-    const snapshotContinuationContext = isRecord(snapshot.continuation_context)
-      ? snapshot.continuation_context
-      : null
-    const continuationContext = taskContinuationContext ?? snapshotContinuationContext
-    const continuationRunId = continuationContext
-      ? stringFromUnknown(continuationContext.run_id)
-      : ''
-    const continuationSource = continuationContext
-      ? stringFromUnknown(continuationContext.source)
-      : ''
-    aiResearchForm.continue_from_run_id =
-      stringFromUnknown(task.continued_from_run_id, stringFromUnknown(snapshot.continue_from_run_id))
-      || continuationRunId
-    aiResearchForm.continuation_source =
-      stringFromUnknown(task.continuation_source, continuationSource)
-    aiResearchForm.start_paper_trading = optionalBoolean(snapshot.start_paper_trading, true)
-    aiResearchForm.paper_workspace_name = stringFromUnknown(snapshot.paper_workspace_name)
-    if (snapshot.gateway_config !== undefined) {
-      aiResearchForm.gateway_config_json = gatewayConfigJsonFromTaskSnapshot(snapshot)
-    }
-    const maxDrawdownLimit = optionalNumber(snapshot.max_drawdown_limit)
-    aiResearchForm.use_max_drawdown_limit = maxDrawdownLimit !== null
-    aiResearchForm.max_drawdown_limit = maxDrawdownLimit ?? aiResearchForm.max_drawdown_limit
-    const minTotalReturn = optionalNumber(snapshot.min_total_return)
-    aiResearchForm.use_min_total_return = minTotalReturn !== null
-    aiResearchForm.min_total_return = minTotalReturn ?? aiResearchForm.min_total_return
-    const minAnnualReturn = optionalNumber(snapshot.min_annual_return)
-    aiResearchForm.use_min_annual_return = minAnnualReturn !== null
-    aiResearchForm.min_annual_return = minAnnualReturn ?? aiResearchForm.min_annual_return
-    const minWinRate = optionalNumber(snapshot.min_win_rate)
-    aiResearchForm.use_min_win_rate = minWinRate !== null
-    aiResearchForm.min_win_rate = minWinRate ?? aiResearchForm.min_win_rate
-    aiResearchForm.out_of_sample_validation =
-      optionalBoolean(snapshot.out_of_sample_validation, aiResearchForm.out_of_sample_validation)
-    aiResearchForm.require_out_of_sample_validation = optionalBoolean(
-      snapshot.require_out_of_sample_validation,
-      false
-    )
-    const outOfSampleRatio = optionalNumber(snapshot.out_of_sample_ratio)
-    if (outOfSampleRatio !== null) aiResearchForm.out_of_sample_ratio_pct = outOfSampleRatio * 100
-    const minOutOfSampleSharpe = optionalNumber(snapshot.min_out_of_sample_sharpe)
-    aiResearchForm.use_min_out_of_sample_sharpe = minOutOfSampleSharpe !== null
-    aiResearchForm.min_out_of_sample_sharpe =
-      minOutOfSampleSharpe ?? aiResearchForm.min_out_of_sample_sharpe
-    const minOutOfSampleTrades = optionalNumber(snapshot.min_out_of_sample_trades)
-    aiResearchForm.use_min_out_of_sample_trades = minOutOfSampleTrades !== null
-    aiResearchForm.min_out_of_sample_trades =
-      minOutOfSampleTrades ?? aiResearchForm.min_out_of_sample_trades
-    aiResearchForm.robustness_validation =
-      optionalBoolean(snapshot.robustness_validation, aiResearchForm.robustness_validation)
-    aiResearchForm.require_robustness_validation = optionalBoolean(
-      snapshot.require_robustness_validation,
-      aiResearchForm.require_robustness_validation
-    )
-    const robustnessMethods = stringArrayFromUnknown(snapshot.robustness_methods)
-    aiResearchForm.robustness_methods = robustnessMethods.length
-      ? robustnessMethods
-      : aiResearchForm.robustness_methods
-    aiResearchForm.min_robustness_score =
-      optionalNumber(snapshot.min_robustness_score) ?? aiResearchForm.min_robustness_score
-    aiResearchForm.robustness_monte_carlo_iterations =
-      optionalNumber(snapshot.robustness_monte_carlo_iterations)
-      ?? aiResearchForm.robustness_monte_carlo_iterations
-    aiResearchForm.robustness_random_seed = optionalNumber(snapshot.robustness_random_seed)
-    const minPaperTradingDays = optionalNumber(snapshot.min_paper_trading_days)
-    if (minPaperTradingDays !== null) {
-      aiResearchForm.min_paper_trading_days = Math.max(0, minPaperTradingDays)
-    }
-  }
-
-  function aiResearchTaskFailureMessage(task: AIStrategyResearchTaskResponse) {
-    if (isAIResearchTaskCancelled(task)) return ''
-    if (String(task.status || '').toLowerCase() !== 'failed') return ''
-    return String(task.error || task.message || 'AI research task failed').trim()
-  }
-
-  function aiResearchErrorMessage(error: unknown) {
-    if (error instanceof Error && error.message.trim()) return error.message.trim()
-    const message = String(error || '').trim()
-    return message || t('strategy.aiResearchRunFailed')
-  }
-
   function isAIResearchResultPaperStartFailure(result: AIStrategyResearchRunResponse) {
     const pipeline = result.pipeline ?? result.run_record?.pipeline
     return Boolean(
@@ -7057,34 +4455,6 @@ export function useStrategyPage() {
     ElMessage.warning(t('strategy.aiResearchTargetNotMet'))
   }
 
-  function resetAIResearchTaskState() {
-    aiResearchTaskId.value = ''
-    aiResearchTaskStatus.value = ''
-    aiResearchTaskStage.value = ''
-    aiResearchTaskProgress.value = 0
-    aiResearchTaskIteration.value = null
-    aiResearchBacktestTaskId.value = ''
-    aiResearchCancelledBacktestTaskId.value = ''
-    aiResearchTaskPaperWorkspaceId.value = ''
-    aiResearchTaskPaperUnitId.value = ''
-    aiResearchTaskPaperStarted.value = false
-    aiResearchTaskLiveWorkspaceId.value = ''
-    aiResearchTaskLiveUnitId.value = ''
-    aiResearchTaskLivePrepared.value = false
-    aiResearchTaskPipeline.value = null
-    aiResearchTaskRequestSnapshot.value = null
-    aiResearchTaskAutoContinuationSource.value = null
-    aiResearchTaskContinuedFromRunId.value = ''
-    aiResearchTaskContinuationSource.value = ''
-    aiResearchTaskContinuationContext.value = {}
-    aiResearchTaskError.value = ''
-    aiResearchTaskMessage.value = ''
-    aiResearchTaskLatestIteration.value = null
-    aiResearchTaskAssetSpecs.value = {}
-    aiResearchTaskBacktestEnvironment.value = {}
-    aiResearchTaskPromotionAudit.value = []
-  }
-
   function prepareAIResearchOutputForRun() {
     aiResearchResult.value = null
     clearAIResearchArtifacts()
@@ -7117,15 +4487,6 @@ export function useStrategyPage() {
       return null
     }
     return { prompt, symbol, shouldUseServerGeneratedPrompt }
-  }
-
-  function applyCanonicalAIResearchPrompt(
-    result: AIStrategyResearchRunResponse,
-    shouldUseServerGeneratedPrompt: boolean
-  ) {
-    if (!shouldUseServerGeneratedPrompt) return
-    const canonicalPrompt = stringFromUnknown(result.run_record?.prompt)
-    if (canonicalPrompt) aiResearchForm.prompt = canonicalPrompt
   }
 
   async function bindAIResearchConfigProfileToRunRecord(
@@ -7190,346 +4551,65 @@ export function useStrategyPage() {
     return true
   }
 
-  async function runAIResearchRequest(
-    payload: AIStrategyResearchRunRequest
-  ): Promise<AIStrategyResearchRunResponse> {
-    const apiWithTasks = strategyApi as typeof strategyApi & {
-      submitAIResearchTask?: typeof strategyApi.submitAIResearchTask
-      getAIResearchTask?: typeof strategyApi.getAIResearchTask
-    }
-    if (
-      typeof apiWithTasks.submitAIResearchTask !== 'function'
-      || typeof apiWithTasks.getAIResearchTask !== 'function'
-    ) {
-      return strategyApi.runAIResearchLoop(payload)
-    }
+  const {
+    aiResearchErrorMessage,
+    runAIResearchRequest,
+    pollAIResearchTask,
+    restoreActiveAIResearchTask,
+    cancelAIResearchTask,
+  } = useAIResearchTaskLifecycle({
+    t,
+    api: strategyApi,
+    taskState: aiResearchTaskState,
+    aiResearchRunning,
+    aiResearchResult,
+    restoreAIResearchResultFromTask,
+    syncAIResearchFormFromResult,
+    setAIResearchConfigProfileFromRunRecord,
+    upsertAIResearchRunRecord,
+    loadAIResearchRuns,
+    refreshAIResearchRunRecord,
+    researchResultFromRunRecord,
+    notifyAIResearchResult,
+    scheduleAIResearchRunsAutoRefresh,
+  })
 
-    const task = await apiWithTasks.submitAIResearchTask(payload)
-    return pollAIResearchTask(task, aiResearchTaskPollTimeoutMs(payload, task))
-  }
-
-  async function continueAIResearchFromRunRecord(
-    record: AIStrategyResearchRunRecord,
-    continueRun: NonNullable<typeof strategyApi.continueAIResearchRun>,
-    prepared?: AIResearchPreparedSubmission
-  ) {
-    const input = prepared?.input ?? aiResearchRunnableInput()
-    if (!input) return
-    let submission = prepared?.submission
-    if (!submission) {
-      try {
-        submission = captureAIResearchSubmission(input)
-      } catch (error) {
-        handleAIResearchRunError(error)
-        return
-      }
-    }
-    const mandate = await ensureAIResearchMandateConfirmed(submission.mandate)
-    if (!mandate) return
-    let request: AIStrategyResearchRunRequest = {
-      ...submission.request,
-      mandate_id: mandate.id,
-    }
-    const capabilityDecision = await resolveAIResearchMarketDataCapabilitiesForAction()
-    if (!await ensureAIResearchStrictLocalMarketDataReady(
-      submission,
-      capabilityDecision.capabilities,
-      capabilityDecision.lastKnownBridgeEnabled,
-    )) return
-    request = applyAIResearchMarketDataBridgeIntent(
-      request,
-      capabilityDecision.capabilities,
-      submission.marketDataAssetType,
-    )
-
-    prepareAIResearchOutputForRun()
-    aiResearchRunning.value = true
-    resetAIResearchTaskState()
-    aiResearchCancelRequested.value = false
-    try {
-      const overrides: Partial<AIStrategyResearchRunRequest> & Record<string, unknown> = {
-        ...request,
-      }
-      delete overrides.continue_from_run_id
-      delete overrides.seed_strategy_id
-      delete overrides.continuation_context
-      const task = await continueRun(
-        record.run_id,
-        { overrides },
-        record.research_workspace_id
-      )
-      const result = await pollAIResearchTask(
-        task,
-        aiResearchTaskPollTimeoutMs(request, task)
-      )
-      applyCanonicalAIResearchPrompt(result, input.shouldUseServerGeneratedPrompt)
-      await applyCompletedAIResearchResult(result)
-    } catch (error) {
-      handleAIResearchRunError(error)
-    } finally {
-      aiResearchRunning.value = false
-      scheduleAIResearchRunsAutoRefresh()
-    }
-  }
-
-  async function pollAIResearchTask(
-    task: AIStrategyResearchTaskResponse,
-    timeoutMs = aiResearchTaskPollTimeoutMs(undefined, task)
-  ): Promise<AIStrategyResearchRunResponse> {
-    const apiWithTasks = strategyApi as typeof strategyApi & {
-      getAIResearchTask?: typeof strategyApi.getAIResearchTask
-    }
-    applyAIResearchTaskStatus(task)
-    const deadline = Date.now() + timeoutMs
-    const maxPolls = Math.max(
-      240,
-      Math.ceil(timeoutMs / AI_RESEARCH_TASK_POLL_INTERVAL_MS) + 2
-    )
-    for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-      if (task.status === 'completed') {
-        if (task.result) return task.result
-        const restoredResult = await restoreAIResearchResultFromTask(task)
-        if (restoredResult) return restoredResult
-        throw new Error('AI research task completed without a result')
-      }
-      if (isAIResearchTaskCancelled(task)) {
-        const restoredResult = await restoreAIResearchResultFromTask(task)
-        if (restoredResult) return restoredResult
-        throw new Error('AI_RESEARCH_CANCELLED')
-      }
-      if (isAIResearchTaskTerminal(task)) {
-        const restoredResult = await restoreAIResearchResultFromTask(task)
-        if (restoredResult) return restoredResult
-        throw new Error(task.error || task.message || 'AI research task failed')
-      }
-      if (Date.now() > deadline) {
-        break
-      }
-      if (typeof apiWithTasks.getAIResearchTask !== 'function') {
-        throw new Error('AI research task polling is unavailable')
-      }
-      task = await apiWithTasks.getAIResearchTask(task.task_id)
-      applyAIResearchTaskStatus(task)
-      if (!isAIResearchTaskTerminal(task)) {
-        await sleep(AI_RESEARCH_TASK_POLL_INTERVAL_MS)
-      }
-    }
-    throw new Error(`AI research task polling timed out after ${Math.round(timeoutMs / 1000)}s`)
-  }
-
-  async function restoreActiveAIResearchTask() {
-    const apiWithTasks = strategyApi as typeof strategyApi & {
-      listAIResearchTasks?: typeof strategyApi.listAIResearchTasks
-    }
-    if (aiResearchRunning.value || typeof apiWithTasks.listAIResearchTasks !== 'function') return
-    try {
-      const response = await apiWithTasks.listAIResearchTasks(true, 5)
-      const task = response.items.find(item => !isAIResearchTaskTerminal(item))
-      if (task) {
-        aiResearchRunning.value = true
-        applyAIResearchTaskSnapshotToForm(task)
-        aiResearchResult.value = await pollAIResearchTask(task)
-      } else {
-        if (aiResearchResult.value) return
-        const recentResponse = await apiWithTasks.listAIResearchTasks(false, 5)
-        const restoredTask = recentResponse.items.find(isRestorableAIResearchTask)
-        if (!restoredTask) return
-        applyAIResearchTaskSnapshotToForm(restoredTask)
-        applyAIResearchTaskStatus(restoredTask)
-        aiResearchResult.value = restoredTask.result ?? await restoreAIResearchResultFromTask(restoredTask)
-      }
-      if (!aiResearchResult.value) return
-      syncAIResearchFormFromResult(aiResearchResult.value)
-      if (aiResearchResult.value.run_record) {
-        setAIResearchConfigProfileFromRunRecord(aiResearchResult.value.run_record)
-        upsertAIResearchRunRecord(aiResearchResult.value.run_record)
-      } else {
-        await loadAIResearchRuns()
-      }
-      notifyAIResearchResult(aiResearchResult.value)
-    } catch (error) {
-      aiResearchTaskError.value = aiResearchErrorMessage(error)
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchRunning.value = false
-      scheduleAIResearchRunsAutoRefresh()
-    }
-  }
-
-  async function cancelAIResearchTask() {
-    const taskId = aiResearchTaskId.value
-    const cancelTask = (strategyApi as { cancelAIResearchTask?: (taskId: string) => Promise<AIStrategyResearchTaskResponse> }).cancelAIResearchTask
-    if (!taskId || typeof cancelTask !== 'function') return
-    aiResearchCancelling.value = true
-    aiResearchCancelRequested.value = true
-    try {
-      const task = await cancelTask(taskId)
-      applyAIResearchTaskStatus(task)
-      aiResearchTaskError.value = ''
-      aiResearchRunning.value = false
-      if (task.run_id) {
-        try {
-          const record = await refreshAIResearchRunRecord(task.run_id, task.research_workspace_id)
-          if (record) {
-            aiResearchResult.value = researchResultFromRunRecord(record)
-          }
-        } catch {
-          await loadAIResearchRuns()
-        }
-      }
-      ElMessage.success(
-        task.child_cancelled && task.cancelled_backtest_task_id
-          ? 'AI投研任务已取消，当前回测任务已同步取消'
-          : 'AI投研任务已取消'
-      )
-    } catch {
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchCancelling.value = false
-    }
-  }
-
-  async function continueAIResearchFromTaskSnapshot() {
-    const taskId = aiResearchTaskId.value
-    const continueTask = (strategyApi as {
-      continueAIResearchTask?: (
-        taskId: string,
-        data: { overrides?: Partial<AIStrategyResearchRunRequest> & Record<string, unknown> }
-      ) => Promise<AIStrategyResearchTaskResponse>
-    }).continueAIResearchTask
-    if (!taskId || typeof continueTask !== 'function' || aiResearchRunning.value) return
-    const autoContinuationSource = aiResearchTaskAutoContinuationSource.value
-    const input = aiResearchContinuationRunnableInput(autoContinuationSource)
-    if (!input) return
-    let submission: AIResearchSubmissionSnapshot
-    try {
-      submission = captureAIResearchSubmission(input)
-    } catch (error) {
-      handleAIResearchRunError(error)
-      return
-    }
-    if (
-      autoContinuationSource
-      && aiResearchMandate.value?.id !== autoContinuationSource.mandateId
-    ) {
-      await loadAIResearchMandate(autoContinuationSource.mandateId)
-    }
-    const mandate = await ensureAIResearchMandateConfirmed(submission.mandate)
-    if (!mandate) return
-    let request: AIStrategyResearchRunRequest = {
-      ...submission.request,
-      mandate_id: mandate.id,
-    }
-    const capabilityDecision = await resolveAIResearchMarketDataCapabilitiesForAction()
-    if (!await ensureAIResearchStrictLocalMarketDataReady(
-      submission,
-      capabilityDecision.capabilities,
-      capabilityDecision.lastKnownBridgeEnabled,
-    )) return
-    request = applyAIResearchMarketDataBridgeIntent(
-      request,
-      capabilityDecision.capabilities,
-      submission.marketDataAssetType,
-    )
-
-    prepareAIResearchOutputForRun()
-    aiResearchRunning.value = true
-    aiResearchCancelRequested.value = false
-    aiResearchTaskError.value = ''
-    try {
-      const overrides: Partial<AIStrategyResearchRunRequest> & Record<string, unknown> = { ...request }
-      const task = await continueTask(taskId, { overrides })
-      aiResearchResult.value = await pollAIResearchTask(
-        task,
-        aiResearchTaskPollTimeoutMs(request, task)
-      )
-      if (input.shouldUseServerGeneratedPrompt) {
-        const canonicalPrompt = stringFromUnknown(aiResearchResult.value.run_record?.prompt)
-        if (canonicalPrompt) aiResearchForm.prompt = canonicalPrompt
-      }
-      if (aiResearchResult.value.run_record) {
-        setAIResearchConfigProfileFromRunRecord(aiResearchResult.value.run_record)
-        upsertAIResearchRunRecord(aiResearchResult.value.run_record)
-      } else {
-        await loadAIResearchRuns()
-      }
-      notifyAIResearchResult(aiResearchResult.value)
-    } catch (error) {
-      if (
-        error instanceof Error
-        && error.message === 'AI_RESEARCH_CANCELLED'
-        && aiResearchCancelRequested.value
-      ) {
-        aiResearchTaskError.value = ''
-        return
-      }
-      if (notifyAIResearchConfigError(error)) {
-        aiResearchTaskError.value = ''
-        return
-      }
-      aiResearchTaskError.value = aiResearchErrorMessage(error)
-      ElMessage.error(t('strategy.aiResearchRunFailed'))
-    } finally {
-      aiResearchRunning.value = false
-      scheduleAIResearchRunsAutoRefresh()
-    }
-  }
-
-  async function retryAIResearchFromTaskSnapshot() {
-    if (!canRetryAIResearchTask.value || aiResearchRunning.value) return
-    clearAIResearchContinuation()
-    await runAIResearchLoop()
-  }
-
-  async function runAIResearchLoop() {
-    await runAIResearchPreparedLoop()
-  }
-
-  async function runAIResearchPreparedLoop(prepared?: AIResearchPreparedSubmission) {
-    const input = prepared?.input ?? aiResearchRunnableInput()
-    if (!input) return
-    let submission = prepared?.submission
-    if (!submission) {
-      try {
-        submission = captureAIResearchSubmission(input)
-      } catch (error) {
-        handleAIResearchRunError(error)
-        return
-      }
-    }
-    const mandate = await ensureAIResearchMandateConfirmed(submission.mandate)
-    if (!mandate) return
-    let request: AIStrategyResearchRunRequest = {
-      ...submission.request,
-      mandate_id: mandate.id,
-    }
-    const capabilityDecision = await resolveAIResearchMarketDataCapabilitiesForAction()
-    if (!await ensureAIResearchStrictLocalMarketDataReady(
-      submission,
-      capabilityDecision.capabilities,
-      capabilityDecision.lastKnownBridgeEnabled,
-    )) return
-    request = applyAIResearchMarketDataBridgeIntent(
-      request,
-      capabilityDecision.capabilities,
-      submission.marketDataAssetType,
-    )
-
-    prepareAIResearchOutputForRun()
-    aiResearchRunning.value = true
-    resetAIResearchTaskState()
-    aiResearchCancelRequested.value = false
-    try {
-      const result = await runAIResearchRequest(request)
-      applyCanonicalAIResearchPrompt(result, input.shouldUseServerGeneratedPrompt)
-      await applyCompletedAIResearchResult(result)
-    } catch (error) {
-      handleAIResearchRunError(error)
-    } finally {
-      aiResearchRunning.value = false
-      scheduleAIResearchRunsAutoRefresh()
-    }
-  }
+  const {
+    applyCanonicalAIResearchPrompt,
+    continueAIResearchFromRunRecord,
+    continueAIResearchFromTaskSnapshot,
+    retryAIResearchFromTaskSnapshot,
+    runAIResearchLoop,
+    runAIResearchPreparedLoop,
+  } = useAIResearchRunExecution({
+    api: strategyApi,
+    taskState: aiResearchTaskState,
+    aiResearchForm,
+    aiResearchRunning,
+    aiResearchResult,
+    aiResearchMandate,
+    canRetryAIResearchTask: () => canRetryAIResearchTask.value,
+    aiResearchRunnableInput,
+    aiResearchContinuationRunnableInput,
+    captureAIResearchSubmission,
+    loadAIResearchMandate,
+    ensureAIResearchMandateConfirmed,
+    resolveAIResearchMarketDataCapabilitiesForAction,
+    ensureAIResearchStrictLocalMarketDataReady,
+    applyAIResearchMarketDataBridgeIntent,
+    prepareAIResearchOutputForRun,
+    runAIResearchRequest,
+    applyCompletedAIResearchResult,
+    handleAIResearchRunError,
+    clearAIResearchContinuation,
+    scheduleAIResearchRunsAutoRefresh,
+    aiResearchTaskPollTimeoutMs,
+    pollAIResearchTask,
+    setAIResearchConfigProfileFromRunRecord,
+    upsertAIResearchRunRecord,
+    loadAIResearchRuns,
+    notifyAIResearchResult,
+  })
 
   function openResearchWorkspace() {
     const workspaceId = aiResearchResult.value?.research_workspace.id
@@ -7554,74 +4634,6 @@ export function useStrategyPage() {
     const workspaceId = record.live_workspace_id || record.pipeline?.live_workspace_id
     if (!workspaceId) return
     router.push({ name: 'TradingWorkspaceDetail', params: { id: workspaceId } })
-  }
-
-  function showCreateDialog() {
-    isEdit.value = false
-    editingId.value = ''
-    Object.assign(form, { name: '', description: '', code: '', category: 'custom' })
-    dialogVisible.value = true
-  }
-
-  function editStrategy(strategy: Strategy) {
-    isEdit.value = true
-    editingId.value = strategy.id
-    Object.assign(form, {
-      name: strategy.name,
-      description: strategy.description || '',
-      code: strategy.code,
-      category: strategy.category,
-    })
-    dialogVisible.value = true
-  }
-
-  function viewStrategy(strategy: Strategy) {
-    currentStrategy.value = strategy
-    viewDialogVisible.value = true
-  }
-
-  function useTemplate(template: StrategyTemplate) {
-    detailVisible.value = false
-    isEdit.value = false
-    editingId.value = ''
-    Object.assign(form, {
-      name: template.name + ` (${t('strategy.typeCopy')})`,
-      description: stripStrategyMeta(template.description),
-      code: template.code,
-      category: template.category,
-    })
-    activeTab.value = 'my'
-    dialogVisible.value = true
-  }
-
-  function updateStrategyForm(nextForm: typeof form) {
-    Object.assign(form, nextForm)
-  }
-
-  async function saveStrategy() {
-    if (!form.name || !form.code) {
-      ElMessage.warning(t('strategy.warnNameOrCodeEmpty'))
-      return
-    }
-    saving.value = true
-    try {
-      if (isEdit.value) {
-        await strategyStore.updateStrategy(editingId.value, form)
-        ElMessage.success(t('strategy.updated'))
-      } else {
-        await strategyStore.createStrategy(form)
-        ElMessage.success(t('strategy.created'))
-      }
-      dialogVisible.value = false
-    } finally {
-      saving.value = false
-    }
-  }
-
-  async function deleteStrategy(id: string) {
-    await ElMessageBox.confirm(t('strategy.confirmDeleteText'), t('strategy.confirmDeleteTitle'), { type: 'warning' })
-    await strategyStore.deleteStrategy(id)
-    ElMessage.success(t('strategy.deleted'))
   }
 
   onMounted(async () => {
@@ -7697,11 +4709,67 @@ export function useStrategyPage() {
   onUnmounted(() => {
     aiResearchRunsAutoRefreshActive = false
     clearAIResearchRunsAutoRefresh()
-    if (aiResearchPrecheckTimer !== null) clearTimeout(aiResearchPrecheckTimer)
-    aiResearchPrecheckController?.abort()
   })
 
-  return {
+    const {
+    startPaperFromResearchRecord,
+    startPaperFromCurrentResult,
+    viewBestStrategyFromCurrentResult,
+    viewResearchIterationStrategy,
+    viewStrategyFromResearchRecord,
+    viewAIResearchVersionCode,
+    reviewPaperFromResearchRecord,
+    reviewPaperFromCurrentResult,
+    buildLiveHandoffFromCurrentResult,
+    approveCurrentLiveHandoff,
+    prepareLiveTradingFromCurrentResult,
+    activateLiveTradingFromCurrentResult,
+    deactivateLiveTradingFromCurrentResult,
+    buildLiveHandoffFromResearchRecord,
+    approveLiveHandoffFromResearchRecord,
+    prepareLiveTradingFromResearchRecord,
+    activateLiveTradingFromResearchRecord,
+    deactivateLiveTradingFromResearchRecord,
+    liveHandoffRunRecord,
+    liveTradingPreparedRunRecord,
+    liveTradingActivatedRunRecord,
+    liveTradingDeactivatedRunRecord,
+    upsertPipelineStep,
+  } = useAIResearchRuntimeOperations({
+    t,
+    aiResearchPaperStartingRunId,
+    aiResearchStrategyViewingRunId,
+    aiResearchPaperReviewingRunId,
+    aiResearchLiveHandoffLoadingRunId,
+    aiResearchLiveHandoffApprovingRunId,
+    aiResearchLiveTradingPreparingRunId,
+    aiResearchLiveTradingActivatingRunId,
+    aiResearchLiveTradingDeactivatingRunId,
+    aiResearchLiveHandoffs,
+    aiResearchPaperReviews,
+    aiResearchResult,
+    aiResearchPaperStartRequest,
+    aiResearchLivePrepareRequest,
+    refreshAIResearchRunRecord,
+    upsertAIResearchRunRecord,
+    applyPaperStartToCurrentResult,
+    applyPaperReviewToCurrentResult,
+    applyResearchRunRecordToCurrentResult,
+    paperStartFailedRunRecord,
+    paperStartedRunRecord,
+    reviewedRunRecord,
+    bestStrategyFromRunRecord,
+    bestStrategyIdForRecord,
+    liveHandoffForRecord,
+    canApproveLiveHandoff,
+    canPrepareLiveTradingFromRecord,
+    canActivateLiveTradingFromRecord,
+    canDeactivateLiveTradingFromRecord,
+    notifyAIResearchConfigError,
+    viewStrategy,
+  })
+
+return {
     t,
     route,
     router,

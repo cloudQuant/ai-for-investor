@@ -1,0 +1,84 @@
+{
+  "checked_at": "2026-10-12T15:16:53.816749+00:00",
+  "baseline_manifest": "full-v3-executed-source-manifest.json",
+  "baseline_files": 2301,
+  "current_files": 2303,
+  "changes": [
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "before": "2738374021e592e2bda250044ab8dccd89ef36bd5341b3476192641ec9e87be7",
+      "sha256": "f05dfa96741122d0aab66df0c46a8e7d022edfbdd7dabfea119a4c5b30d0d37b",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_calculations.py",
+      "before": null,
+      "sha256": "ed72f70002daecef3a11f9670a90f6813ce0ac7ff552fb2ddd5334c0039004e0",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_position_normalization.py",
+      "before": "1390b7a0f7acdde1e2dfebd7cd0e4c7080cf60ce8fd1a840ba0b61792d7a47d0",
+      "sha256": "1a2c9f897a86ad2cb799efa26c2854d23bd3f9bc10b5359c814255c821ecc4a9",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "before": "93c156cbe8326f60b316dfd713afda7a0c844bec4a38c9731de502504c9aff1a",
+      "sha256": "541635078e32a2b3b1adc88d1fbbdd4202c07b95110772b701cfe5323091a02e",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_akshare_runner_provider.py",
+      "before": "2e00bee256e8f6f4546f8d054c29e703caf8d28eddf358ec1aa589d117b0463c",
+      "sha256": "63f1a954ebabc8f47a69659f8c61f06900eb0f680dffde3ae621f06a9a82bb30",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_openbb_provider.py",
+      "before": "aba7a5e51583ac8ac0c17d88ef018d3ee380af05d56d5f2a89d2fecf8c432843",
+      "sha256": "c2eae3c5b736a9e3a4d6739d61d71a82215248142c53c50b1c35f92ecde776f0",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/test_iteration197_acceptance_runner.py",
+      "before": "874f51135434f6c0e0c68714be6f813824e8f135399a458c674deb7895ec4ee0",
+      "sha256": "98cb48d3767fbd61e707cdd486ca01fb46b8e0b4d6101e2463581fe3641de193",
+      "receipt": "iteration197-sealed-fixture-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/test_main_lifespan_and_websocket.py",
+      "before": "f25ed238af4179d5498652721443c64766c526440db407161e3e384151978803",
+      "sha256": "93a3a1a9686b9cd044cae950601a5aa6a1b764833e55d343f01c332ab9244186",
+      "receipt": "websocket-fixture-final-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_calculation_boundaries.py",
+      "before": null,
+      "sha256": "299f608b25705b28c32628a0db001df2e41aa4c45da6ffb5895bdac351bedec8",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/test_service_edge_cases_113.py",
+      "before": "b94f56d21f755c8f0534a42f647cd8241e53b5239d737468319a3ec88fcea7bd",
+      "sha256": "51d5d455fdaab269fb7e8a432a1f1c120a88c8c5ac54a3bf705a8ff404b1f128",
+      "receipt": "service-edge-fixture-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/test_trading_workspace_service.py",
+      "before": "8a7e6bb4e93515a17c1eb04043cf63f6ecbe1e93665de07c4de37e8e73264e7c",
+      "sha256": "6cef459b8e05a592f196bac1fe3f24e44fe00e232ecb5bc28e177c93ef0a1fde",
+      "receipt": "backend-final-delta-parent-receipt.json"
+    },
+    {
+      "path": "src/backend/tests/test_workspace_json_consumers.py",
+      "before": "eed664c6bb9dae852f8deae1395e0f7938d8fa114d362f51792b0aafed7791d6",
+      "sha256": "095960b224df8d298c14f967bf3a8706c9d074a4d6f79156c13778482bd6e14a",
+      "receipt": "workspace-json-fixture-parent-receipt.json"
+    }
+  ],
+  "deleted": [],
+  "unmapped": [],
+  "dependency_delta": "docx-dev-lock-diff-parent.json",
+  "verdict": "PASS"
+}

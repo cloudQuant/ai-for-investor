@@ -183,16 +183,19 @@ def generate_refresh_token_id() -> str:
 
 
 def decode_access_token(token: str) -> dict | None:
-    """Decode a JWT token.
+    """Decode a JWT access token and reject tokens issued for another purpose.
 
     Args:
         token: The JWT token to decode.
 
     Returns:
-        The decoded payload, or None if decoding fails.
+        The decoded access-token payload, or None if decoding fails or the token
+        is not explicitly marked for access.
     """
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("token_type") != TOKEN_TYPE_ACCESS:
+            return None
         return payload
     except InvalidTokenError:
         return None

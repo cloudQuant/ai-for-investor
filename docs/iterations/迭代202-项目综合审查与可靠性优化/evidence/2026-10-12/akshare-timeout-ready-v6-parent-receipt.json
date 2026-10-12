@@ -1,0 +1,45 @@
+{
+  "started_at": "2026-10-12T12:13:44.269Z",
+  "test_source": "src/backend/tests/market_data_platform/test_akshare_runner_provider.py",
+  "test_sha256": "63f1a954ebabc8f47a69659f8c61f06900eb0f680dffde3ae621f06a9a82bb30",
+  "container": "iter202-akshare-timeout-v6-parent",
+  "fixture_correction": "Explicit sleep entrypoint; v5 duplicated inherited sleep argv and never ran tests.",
+  "steps": [
+    {
+      "label": "start",
+      "command": [
+        "docker",
+        "run",
+        "--detach",
+        "--name",
+        "iter202-akshare-timeout-v6-parent",
+        "--init",
+        "--network",
+        "none",
+        "--entrypoint",
+        "sleep",
+        "iter202-parent-regression-snapshot:20261012-v3",
+        "infinity"
+      ],
+      "started_at": "2026-10-12T12:13:44.280Z",
+      "finished_at": "2026-10-12T12:13:51.185Z",
+      "elapsed_seconds": 6.905,
+      "exit_code": 0,
+      "log": "akshare-timeout-ready-v6-parent-start.txt"
+    },
+    {
+      "label": "copy",
+      "command": [
+        "docker",
+        "cp",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/market_data_platform/test_akshare_runner_provider.py",
+        "iter202-akshare-timeout-v6-parent:/work/src/backend/tests/market_data_platform/test_akshare_runner_provider.py"
+      ],
+      "started_at": "2026-10-12T12:13:51.189Z",
+      "finished_at": "2026-10-12T12:13:51.679Z",
+      "elapsed_seconds": 0.49,
+      "exit_code": 0,
+      "log": "akshare-timeout-ready-v6-parent-copy.txt"
+    }
+  ]
+}

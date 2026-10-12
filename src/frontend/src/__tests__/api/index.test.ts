@@ -5,6 +5,7 @@ import { AxiosError } from 'axios'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { AUTH_EXPIRED_EVENT } from '@/utils/session'
+import { beginSession, getSessionGeneration, setToken } from '@/utils/tokenRef'
 
 // The auth store persists its session-scoped Pinia payload under this key.
 const sessionStorageMock = (() => {
@@ -19,7 +20,7 @@ const sessionStorageMock = (() => {
 Object.defineProperty(global, 'sessionStorage', { value: sessionStorageMock })
 
 // Mock Element Plus
-vi.mock('element-plus', () => ({
+vi.mock('element-plus/es/components/message/index.mjs', () => ({
   ElMessage: {
     error: vi.fn(),
     success: vi.fn(),
@@ -51,6 +52,7 @@ describe('API module', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     sessionStorageMock.clear()
+    setToken(null)
   })
 
   afterEach(() => {
@@ -141,12 +143,18 @@ describe('API module', () => {
     })
 
     it('should handle 401 error', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       sessionStorageMock.setItem('auth', JSON.stringify({ token: 'my-jwt-token' }))
-      const error = { response: { status: 401, data: {} } }
+      const error = {
+        config: {
+          __sessionGeneration: getSessionGeneration(),
+          __sessionToken: 'my-jwt-token',
+        },
+        response: { status: 401, data: {} },
+      }
       await expect(handler.rejected(error)).rejects.toBe(error)
       expect(sessionStorageMock.setItem).toHaveBeenCalledWith(
         'auth',
@@ -157,7 +165,7 @@ describe('API module', () => {
     })
 
     it('should handle 403 error', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const error = { response: { status: 403, data: {} } }
@@ -166,7 +174,7 @@ describe('API module', () => {
     })
 
     it('should handle 404 error', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const error = { response: { status: 404, data: {} } }
@@ -175,7 +183,7 @@ describe('API module', () => {
     })
 
     it('should handle 500 error', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const error = { response: { status: 500, data: {} } }
@@ -184,7 +192,7 @@ describe('API module', () => {
     })
 
     it('should handle generic error with detail', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const error = { response: { status: 422, data: { detail: '验证错误' } } }
@@ -193,7 +201,7 @@ describe('API module', () => {
     })
 
     it('should handle generic error without detail', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const error = { response: { status: 422, data: {} } }
@@ -205,7 +213,7 @@ describe('API module', () => {
       [403, 's3://private-bucket/raw-holdout'],
       [500, '/srv/research/internal.sqlite'],
     ])('suppresses raw server text for an approval-owned %i error', async (status, detail) => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const originalAdapter = api.defaults.adapter
       api.defaults.adapter = async (config) => {
@@ -231,7 +239,7 @@ describe('API module', () => {
     })
 
     it('keeps ordinary API error toasts enabled through the real interceptor chain', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const originalAdapter = api.defaults.adapter
       api.defaults.adapter = async (config) => {
@@ -255,13 +263,17 @@ describe('API module', () => {
     })
 
     it('still expires the auth session when a closed projector suppresses a 401 toast', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       sessionStorageMock.setItem('auth', JSON.stringify({ token: 'approval-token' }))
       const error = {
-        config: { suppressErrorToast: true },
+        config: {
+          suppressErrorToast: true,
+          __sessionGeneration: getSessionGeneration(),
+          __sessionToken: 'approval-token',
+        },
         response: { status: 401, data: { detail: 'file:///private/token' } },
       }
 
@@ -275,6 +287,146 @@ describe('API module', () => {
         expect.objectContaining({ type: AUTH_EXPIRED_EVENT }),
       )
       expect(ElMessage.error).not.toHaveBeenCalled()
+    })
+
+    it('ignores a late 401 from session A after session B starts', async () => {
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
+      const api = (await import('@/api/index')).default
+      const originalAdapter = api.defaults.adapter
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+      let rejectAdapter!: (error: unknown) => void
+      let requestConfig: any
+      let markStarted!: () => void
+      const started = new Promise<void>((resolve) => { markStarted = resolve })
+
+      api.defaults.adapter = (config) => new Promise((_, reject) => {
+        requestConfig = config
+        rejectAdapter = reject
+        markStarted()
+      })
+
+      try {
+        beginSession('token-a')
+        sessionStorageMock.setItem('auth', JSON.stringify({ token: 'token-a' }))
+        const requestA = api.get('/session-a', { skipRetry: true })
+        await started
+        expect(requestConfig.headers.Authorization).toBe('Bearer token-a')
+
+        beginSession('token-b')
+        sessionStorageMock.setItem('auth', JSON.stringify({ token: 'token-b' }))
+        const response = {
+          status: 401,
+          statusText: 'expired A',
+          data: {},
+          headers: {},
+          config: requestConfig,
+        }
+        rejectAdapter(new AxiosError('expired A', undefined, requestConfig, undefined, response))
+
+        await expect(requestA).rejects.toThrow('superseded session')
+        expect(sessionStorageMock.getItem('auth')).toContain('token-b')
+        expect(dispatchSpy).not.toHaveBeenCalledWith(
+          expect.objectContaining({ type: AUTH_EXPIRED_EVENT }),
+        )
+        expect(ElMessage.error).not.toHaveBeenCalled()
+      } finally {
+        api.defaults.adapter = originalAdapter
+      }
+    })
+
+    it('does not return a late success from session A to session B', async () => {
+      const api = (await import('@/api/index')).default
+      const originalAdapter = api.defaults.adapter
+      let resolveAdapter!: (response: any) => void
+      let requestConfig: any
+      let markStarted!: () => void
+      const started = new Promise<void>((resolve) => { markStarted = resolve })
+
+      api.defaults.adapter = (config) => new Promise((resolve) => {
+        requestConfig = config
+        resolveAdapter = resolve
+        markStarted()
+      })
+
+      try {
+        beginSession('token-a')
+        const requestA = api.get('/session-a-success')
+        await started
+        beginSession('token-b')
+        resolveAdapter({
+          data: { account: 'A' },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: requestConfig,
+        })
+
+        await expect(requestA).rejects.toThrow('superseded session')
+      } finally {
+        api.defaults.adapter = originalAdapter
+      }
+    })
+
+    it('does not retry a transient response under a replacement session', async () => {
+      const api = (await import('@/api/index')).default
+      const { RETRY_CONFIG } = await import('@/api/index')
+      const originalAdapter = api.defaults.adapter
+      const originalDelay = RETRY_CONFIG.initialDelay
+      const originalJitter = RETRY_CONFIG.jitterRange
+      let rejectAdapter!: (error: unknown) => void
+      let requestConfig: any
+      let markStarted!: () => void
+      let adapterCalls = 0
+      const started = new Promise<void>((resolve) => { markStarted = resolve })
+
+      vi.useFakeTimers()
+      RETRY_CONFIG.initialDelay = 1000
+      RETRY_CONFIG.jitterRange = 0
+      api.defaults.adapter = (config) => {
+        adapterCalls += 1
+        if (adapterCalls > 1) {
+          return Promise.resolve({
+            data: { account: 'unexpected-retry' },
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config,
+          })
+        }
+        return new Promise((_, reject) => {
+          requestConfig = config
+          rejectAdapter = reject
+          markStarted()
+        })
+      }
+
+      try {
+        beginSession('token-a')
+        const requestA = api.get('/retry-session-a')
+        await started
+        const rejectedRequest = expect(requestA).rejects.toThrow('superseded session')
+        const response = {
+          status: 503,
+          statusText: 'unavailable',
+          data: {},
+          headers: {},
+          config: requestConfig,
+        }
+        rejectAdapter(new AxiosError('unavailable', undefined, requestConfig, undefined, response))
+        await Promise.resolve()
+        await Promise.resolve()
+
+        beginSession('token-b')
+        await vi.advanceTimersByTimeAsync(1000)
+        await rejectedRequest
+        expect(adapterCalls).toBe(1)
+        expect(requestConfig.headers.Authorization).toBe('Bearer token-a')
+      } finally {
+        api.defaults.adapter = originalAdapter
+        RETRY_CONFIG.initialDelay = originalDelay
+        RETRY_CONFIG.jitterRange = originalJitter
+        vi.useRealTimers()
+      }
     })
   })
 
@@ -368,7 +520,7 @@ describe('API module', () => {
 
   describe('Retry behavior on response interceptor', () => {
     it('should not duplicate ElMessage on retried failures (skip generic)', async () => {
-      const { ElMessage } = await import('element-plus')
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default
       const handler = (api.interceptors.response as any).handlers[0]
 

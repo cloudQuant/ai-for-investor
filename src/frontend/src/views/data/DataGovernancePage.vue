@@ -243,7 +243,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column
+            <!-- @vue-generic {DataGovernanceEndpoint} --><el-table-column
               :label="t('dataPages.governanceActions')"
               fixed="right"
               width="120"

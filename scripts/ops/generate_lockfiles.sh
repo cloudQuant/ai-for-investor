@@ -38,11 +38,12 @@ fi
 
 # --- Generate requirements-dev.lock ---
 echo ""
-echo "--- Generating requirements-dev.lock (dev + backtrader/data/redis) ---"
+echo "--- Generating requirements-dev.lock (dev + postgres/backtrader/data/redis) ---"
 (
     cd "$BACKEND_DIR"
     "$UV_BIN" pip compile pyproject.toml \
         --extra dev \
+        --extra postgres \
         --extra backtrader \
         --extra data \
         --extra redis \

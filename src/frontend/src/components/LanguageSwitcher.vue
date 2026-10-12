@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Promotion } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 import { useI18n } from 'vue-i18n'
 import { setLocale, getLocaleLabel } from '@/i18n'
 import { LOCALE_ENTRIES } from '@/i18n/locales/registry'

@@ -34,7 +34,7 @@ import { DRAWDOWN_AREA_END, DRAWDOWN_AREA_START } from '@/constants/chartColors'
 const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
-  data: DrawdownPoint[]
+  data?: DrawdownPoint[]
   height?: number
 }>(), {
   data: () => [],

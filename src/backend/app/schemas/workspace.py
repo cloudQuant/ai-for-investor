@@ -3,7 +3,7 @@ Workspace and StrategyUnit Pydantic schemas.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -293,6 +293,8 @@ class UnitOptimizationRequest(BaseModel):
     n_workers: int = Field(default=4, ge=1, le=32)
     mode: str = Field("grid", description="Optimization mode: grid/random")
     timeout: int = Field(0, ge=0, description="Timeout in seconds (0 = no limit)")
+    objective: Literal["sharpe_ratio", "max_drawdown", "total_return"]
+    direction: Literal["maximize", "minimize"]
 
 
 class ApplyBestParamsRequest(BaseModel):
@@ -300,7 +302,11 @@ class ApplyBestParamsRequest(BaseModel):
 
     unit_id: str
     optimization_task_id: str
-    result_index: int = Field(0, ge=0, description="Index of result to apply (0 = best)")
+    result_index: int | None = Field(
+        None,
+        ge=0,
+        description="Persisted result-array index to apply; omitted selects the configured best",
+    )
 
 
 class OptimizationArtifactResponse(BaseModel):

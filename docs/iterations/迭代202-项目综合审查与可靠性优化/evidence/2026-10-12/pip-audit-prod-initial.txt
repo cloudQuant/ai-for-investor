@@ -1,0 +1,4 @@
+WARNING:pip_audit._cli:--no-deps is supported, but users are encouraged to fully hash their pinned dependencies
+WARNING:pip_audit._cli:Consider using a tool like `pip-compile`: https://pip-tools.readthedocs.io/en/latest/#using-hashes
+Found 17 known vulnerabilities in 2 packages
+ERROR conda.cli.main_run:execute(125): `conda run python -m pip_audit --requirement config/requirements-prod.lock --no-deps --disable-pip --desc --format json --output /tmp/ai-investor-iter200-202-20261012.afLb99/pip-audit-prod-initial.json` failed. (See above for error)

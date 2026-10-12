@@ -1,0 +1,211 @@
+{
+  "state": "PASS",
+  "reviewed_at": "2026-10-12T15:17:50.427Z",
+  "backend_workpackages": {
+    "WP-01": [
+      {
+        "file": "market_data_platform/test_store.py",
+        "counts": {
+          "passed": 47
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_query_service.py",
+        "counts": {
+          "passed": 69
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_query_resolution.py",
+        "counts": {
+          "passed": 12
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_store_extracted_boundaries.py",
+        "counts": {
+          "passed": 5
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      }
+    ],
+    "WP-02": [
+      {
+        "file": "test_portfolio_api.py",
+        "counts": {
+          "passed": 129
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      },
+      {
+        "file": "test_portfolio_ledger.py",
+        "counts": {
+          "passed": 2
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      },
+      {
+        "file": "test_portfolio_ledger_analytics.py",
+        "counts": {
+          "passed": 2
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      },
+      {
+        "file": "test_portfolio_boundaries.py",
+        "counts": {
+          "passed": 3
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      },
+      {
+        "file": "test_portfolio_calculation_boundaries.py",
+        "counts": {
+          "passed": 2
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      }
+    ],
+    "WP-03": [
+      {
+        "file": "test_trading_workspace_service.py",
+        "counts": {
+          "passed": 164
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      },
+      {
+        "file": "test_paper_runtime_service.py",
+        "counts": {
+          "passed": 14
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      }
+    ],
+    "WP-04": [
+      {
+        "file": "test_market_instrument_api.py",
+        "counts": {
+          "passed": 15
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "test_market_instrument_freshness.py",
+        "counts": {
+          "passed": 15
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "test_market_instrument_type_boundaries.py",
+        "counts": {
+          "passed": 6
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      }
+    ],
+    "WP-05": [
+      {
+        "file": "test_position_valuation.py",
+        "counts": {
+          "passed": 9
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      },
+      {
+        "file": "test_trading_workspace_service.py",
+        "counts": {
+          "passed": 164
+        },
+        "receipt": "backend-final-delta-parent-review.json"
+      }
+    ],
+    "WP-06": [
+      {
+        "file": "test_ai_strategy_research_service.py",
+        "counts": {
+          "passed": 219
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "test_ai_strategy_research_task_manager_boundaries.py",
+        "counts": {
+          "passed": 3
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      }
+    ],
+    "WP-08": [
+      {
+        "file": "market_data_platform/test_cffex_settlement_collector.py",
+        "counts": {
+          "passed": 38
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_stock_valuation_collector.py",
+        "counts": {
+          "passed": 23
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_iteration201_shared_boundaries.py",
+        "counts": {
+          "passed": 6
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      }
+    ],
+    "WP-09": [
+      {
+        "file": "market_data_platform/test_publication_recovery.py",
+        "counts": {
+          "passed": 2
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_deferred_publication.py",
+        "counts": {
+          "passed": 8
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "test_ai_research_holdout_finalize.py",
+        "counts": {
+          "passed": 55
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      },
+      {
+        "file": "market_data_platform/test_iteration201_shared_boundaries.py",
+        "counts": {
+          "passed": 6
+        },
+        "receipt": "backend-full-v3-complete-parent-review.json"
+      }
+    ]
+  },
+  "frontend_workpackage": {
+    "id": "WP-07",
+    "receipt": "frontend-final-v15-matrix-parent-review.json",
+    "node20_passed": 1726,
+    "node24_passed": 1726,
+    "public_return_keys_before": 498,
+    "public_return_keys_after": 498,
+    "implementation_review": "strategy-task-completion-parent-review.json"
+  },
+  "static": "backend-final-static-v4-parent-receipt.json",
+  "final_lock_typecheck": "docx-final-dev-parent-review.json",
+  "source_sizes": "final-source-sizes-and-protected-files-parent.json",
+  "version_mapping": "full-v3-final-source-delta-parent.json",
+  "note": "Counts overlap between workpackages; do not sum as unique tests. Original full run retains its 25 FAILs, all mapped in backend-final-composite-parent-review.json."
+}

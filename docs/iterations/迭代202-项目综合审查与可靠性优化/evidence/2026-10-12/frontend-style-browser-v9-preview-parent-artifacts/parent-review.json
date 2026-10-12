@@ -1,0 +1,107 @@
+{
+  "reviewed_at": "2026-10-12T12:38:19.370Z",
+  "verdict": "PASS",
+  "tests": {
+    "passed": 9,
+    "failed": 0,
+    "seconds": 34.9,
+    "workers": 1,
+    "retries": 0
+  },
+  "test_sha256": "ff964e9f0db09dad3bb6b503dddb55ddef2fcdb2232fa228fa49c78a63138f47",
+  "review": "The only test change waits for the exact theme popper to become hidden using the existing timeout; original scrollWidth <=390 assertions remain. Product CSS and dist unchanged.",
+  "visual_review": [
+    "chromium-style-regression-login-light-desktop.png",
+    "webkit-style-regression-workspace-dark-mobile.png"
+  ],
+  "current_screenshots": [
+    {
+      "path": "screenshots/chromium-style-regression-login-dark-desktop.png",
+      "sha256": "5422198ddcafdf78401518c29ff6c9b9900e61cded5d7b8a1ae9b81e436812b7"
+    },
+    {
+      "path": "screenshots/chromium-style-regression-login-dark-mobile.png",
+      "sha256": "8cf44694c008e04326f89d528454336a014e78f870b8ce90fae844f59a146b6b"
+    },
+    {
+      "path": "screenshots/chromium-style-regression-login-light-desktop.png",
+      "sha256": "0cf221fb75bd220fd49ef7c4f04b7fe6be1234edc5cd73955e200fcd66134941"
+    },
+    {
+      "path": "screenshots/chromium-style-regression-workspace-dark-desktop.png",
+      "sha256": "5cf1bbffc3c75bff3521113b61cd6f7f3918a68ef0b2030beaba7dce2e717d60"
+    },
+    {
+      "path": "screenshots/chromium-style-regression-workspace-dark-mobile.png",
+      "sha256": "ddc2626eced729a161353d490d820bea6327c3f25229413122eb33c43e1e9aae"
+    },
+    {
+      "path": "screenshots/chromium-style-regression-workspace-light-desktop.png",
+      "sha256": "16020e360d00dffa24948869e6deaf8f2d1f67456e1bbe5acb14f66959b8fb0f"
+    },
+    {
+      "path": "screenshots/firefox-style-regression-login-dark-desktop.png",
+      "sha256": "98ec19ca6c3fe5541ad3e1c672d63065cffeb89d392ad51559857ba7f4c6baba"
+    },
+    {
+      "path": "screenshots/firefox-style-regression-login-dark-mobile.png",
+      "sha256": "8d2ceff340126d16b1f885bec064c96800eb44d8ec601d71c802a9855098eaf9"
+    },
+    {
+      "path": "screenshots/firefox-style-regression-login-light-desktop.png",
+      "sha256": "eba914946a3cd63af18672af5a70042bc3dd6ea109701e376d24fbf86c8a696a"
+    },
+    {
+      "path": "screenshots/firefox-style-regression-workspace-dark-desktop.png",
+      "sha256": "1dd19d0e3a11485cee5e4e72c3e1efe24385540408a19f1f560fb60eb63c9bbe"
+    },
+    {
+      "path": "screenshots/firefox-style-regression-workspace-dark-mobile.png",
+      "sha256": "bf0bbe072f83474f2d010af234a83d5c11532caf1db671b932fbf43f5a2fec63"
+    },
+    {
+      "path": "screenshots/firefox-style-regression-workspace-light-desktop.png",
+      "sha256": "e2d15f64bca71851378455d82121e95dba6030edad815227691801040fb9f692"
+    },
+    {
+      "path": "screenshots/webkit-style-regression-login-dark-desktop.png",
+      "sha256": "be90a82c493e6b38b4c1193ae092e466bf6998084e70bf64f21e22d282cae6f4"
+    },
+    {
+      "path": "screenshots/webkit-style-regression-login-dark-mobile.png",
+      "sha256": "564d80aa715b3f8e5d2d981793b4d46240f30eaea708de799ed3a40a38e171ca"
+    },
+    {
+      "path": "screenshots/webkit-style-regression-login-light-desktop.png",
+      "sha256": "999738cee6f9c1fa1024080389e8ac4371fea3a924520437bdc1a61ab1640238"
+    },
+    {
+      "path": "screenshots/webkit-style-regression-workspace-dark-desktop.png",
+      "sha256": "8208a8ff9f2569328b4599a6d407d89713e77e50da561484533298ff3d6116b9"
+    },
+    {
+      "path": "screenshots/webkit-style-regression-workspace-dark-mobile.png",
+      "sha256": "aa62ffa376f4c48073c738cb782532cd8fe1f633c094aceff79251fe8335193e"
+    },
+    {
+      "path": "screenshots/webkit-style-regression-workspace-light-desktop.png",
+      "sha256": "e501dff23c70ede78eeb535aab358a3c6566ee398dfa2dff0e6b5a651f4bfd00"
+    }
+  ],
+  "preexisting_screenshots": "Three unprefixed screenshots were inherited from previous runs and are excluded from current evidence; retained in preexisting-screenshots-not-current.",
+  "browser_boundary": "Installed Playwright Chromium145/Firefox146/WebKit26; minimum Safari16.4/Chrome111/Firefox128 NOT_RUN",
+  "diagnostic": [
+    {
+      "path": "diagnostic/iteration202-mobile-overflow-diagnostic.js",
+      "sha256": "ba179eafbe3be582280a0f60927a2810f07eb72bdc7ecc3a10528b28c467b189"
+    },
+    {
+      "path": "diagnostic/iteration202-mobile-overflow-diagnostic-receipt.md",
+      "sha256": "8186fede2153d80bde0fdb9cf7531567efa88463cd81a9404c01c2ccbaa40ba9"
+    },
+    {
+      "path": "diagnostic/iteration202-mobile-overflow-diagnostic-observations.json",
+      "sha256": "0154714417faa43ab8814cc8e1c06a7367e23da578fbc910eaef84873a0cb6bf"
+    }
+  ]
+}

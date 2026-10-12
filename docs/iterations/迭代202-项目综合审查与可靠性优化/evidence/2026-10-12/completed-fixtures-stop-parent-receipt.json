@@ -1,0 +1,50 @@
+{
+  "state": "PASS",
+  "checked_at": "2026-10-12T15:36:02.559Z",
+  "exit_code": 0,
+  "scope": "Stop only six exact-ID completed acceptance fixtures created by this task. Preserve containers, images, volumes and evidence. No unrelated project processes or Docker daemon were stopped.",
+  "containers": [
+    {
+      "name": "iter202-final-delta-parent",
+      "id": "0814f4de95fe5a732179a33aee67713c8155608185baf4d1d67fa9c21103a6c8",
+      "before": "running",
+      "after": "exited",
+      "verified": true
+    },
+    {
+      "name": "iter202-openbb-root-parent",
+      "id": "1413c9c811d3fb82b60bcf1508831914f61a129651cf226bd92f0939a4688517",
+      "before": "running",
+      "after": "exited",
+      "verified": true
+    },
+    {
+      "name": "iter202-akshare-timeout-v6-parent",
+      "id": "d82d76ccc646f3be96bee476ac5df4505516f9becc7480dba9ac32948730bf33",
+      "before": "running",
+      "after": "exited",
+      "verified": true
+    },
+    {
+      "name": "iter202-parent-regression-init",
+      "id": "40f4b05981c8f545b25ea37f12a10eb7c2d1a15d59b74ab315772a8c9e52ca8a",
+      "before": "running",
+      "after": "exited",
+      "verified": true
+    },
+    {
+      "name": "iter202-parent-regression",
+      "id": "8035a63dbedbaef9ee90c806b518930d99ad2c97c6324da98fdaaa2d702b1c80",
+      "before": "running",
+      "after": "exited",
+      "verified": true
+    },
+    {
+      "name": "iter202-d12-postgres-1",
+      "id": "37f164ba1bfaf3a7c4f953ad445e210b47bd92f9c9ecb7d0f477ee478f466244",
+      "before": "running",
+      "after": "exited",
+      "verified": true
+    }
+  ]
+}

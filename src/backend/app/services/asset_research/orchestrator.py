@@ -61,6 +61,7 @@ from app.schemas.asset_research import (
     RawAssetSnapshot,
     SignalSummaryResponse,
 )
+from app.services.asset_research import task_leases
 from app.services.asset_research.compliance import AssetResearchCompliancePolicy
 from app.services.asset_research.concurrency import (
     AssetResearchSourceConcurrencyLimiter,
@@ -104,6 +105,7 @@ class AssetResearchOrchestrationError(ValueError):
 
 
 _SYSTEM_SCHEDULE_OWNER_SCOPES = frozenset({"PUBLIC_SHADOW", "ADMIN_EVAL"})
+_as_utc = task_leases.as_utc
 
 
 class AssetDataAdapter(Protocol):
@@ -136,13 +138,6 @@ class _FrozenScheduleRun:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _as_utc(value: datetime) -> datetime:
-    """Normalize SQLite's naive DATETIME reads and aware production reads."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 def _task_payload(
@@ -1829,7 +1824,7 @@ class AssetResearchOrchestrator:
                             error_code="TASK_RUNNER_NONTERMINAL",
                             record_metric=False,
                         )
-                    service._release_task_lease(task, lease_token=lease_token)
+                    task_leases.release_task_lease(task, lease_token=lease_token)
                     if task.status in {"SUCCEEDED", "FAILED", "CANCELLED"}:
                         terminal_metric = (
                             task.asset_type,
@@ -1852,9 +1847,13 @@ class AssetResearchOrchestrator:
         lease_token: str,
     ) -> AssetAnalysisTask | None:
         """Run a matching durable task lease without allowing a second worker to take it."""
-        task = await self.db.get(AssetAnalysisTask, task_id)
-        if task is None or task.status != "RUNNING" or task.lease_token != lease_token:
+        task = await self.db.get(AssetAnalysisTask, task_id, populate_existing=True)
+        lease_state = task_leases.validate_task_lease(task, lease_token=lease_token, now=_now())
+        if task is None or lease_state is task_leases.TaskLeaseState.LOST:
             return None
+        if lease_state is task_leases.TaskLeaseState.EXPIRED:
+            self._fail_task(task, error_code="TASK_LEASE_EXPIRED", record_metric=False)
+            return task
         try:
             await self.require_research_capability(task.asset_type)
         except AssetResearchOrchestrationError as exc:
@@ -1889,6 +1888,7 @@ class AssetResearchOrchestrator:
             instrument,
             cutoff_at=analysis_at,
             defer_terminal_transition=True,
+            lease_token=lease_token,
         )
 
     def _fail_task(
@@ -1909,15 +1909,6 @@ class AssetResearchOrchestrator:
                 status="FAILED",
                 duration_seconds=self._task_duration_seconds(task),
             )
-
-    @staticmethod
-    def _release_task_lease(task: AssetAnalysisTask, *, lease_token: str) -> None:
-        """Release only the lease owned by the caller's worker token."""
-        if task.lease_token != lease_token:
-            return
-        task.lease_token = None
-        task.lease_expires_at = None
-        task.lease_heartbeat_at = None
 
     async def get_task(self, *, user_id: str, task_id: str) -> AssetAnalysisTaskResponse | None:
         task = await self._owned_task(user_id=user_id, task_id=task_id)
@@ -2003,6 +1994,7 @@ class AssetResearchOrchestrator:
         *,
         cutoff_at: datetime,
         defer_terminal_transition: bool = False,
+        lease_token: str | None = None,
     ) -> AssetAnalysisTask:
         """Run deterministic research before attempting the secondary report resource.
 
@@ -2030,6 +2022,13 @@ class AssetResearchOrchestrator:
                     cutoff_at=cutoff_at,
                 )
             )
+            if lease_token is not None:
+                await task_leases.require_active_task_lease(
+                    self.db,
+                    task_id=task.id,
+                    lease_token=lease_token,
+                    now=_now(),
+                )
             raw_snapshot = await self._collect_authorized_snapshot(identity, cutoff_at=cutoff_at)
             await self.db.refresh(task)
             if task.status == "CANCELLED":

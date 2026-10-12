@@ -1,0 +1,23 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "iter202-d12_backtrader_dev",
+    "--entrypoint",
+    "curl",
+    "iter202-d12-backend-logdir:20261012-final",
+    "-fsS",
+    "--max-time",
+    "10",
+    "http://backend:8000/api/v1/health"
+  ],
+  "started_at": "2026-10-12T11:36:40.211Z",
+  "finished_at": "2026-10-12T11:36:42.256Z",
+  "exit_code": 0,
+  "response": "{\"status\":\"healthy\",\"version\":\"2.0.0\",\"database\":\"healthy\",\"uptime\":113.0}",
+  "stderr": "",
+  "scope": "Independent HTTP peer on isolated internal Compose network; host-published port not available in this fixture",
+  "image": "iter202-d12-backend-logdir:20261012-final"
+}

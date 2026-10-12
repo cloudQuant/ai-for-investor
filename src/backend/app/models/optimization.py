@@ -29,6 +29,8 @@ class OptimizationTask(Base):
         param_ranges: Original parameter range specification (JSON).
         n_workers: Number of parallel workers.
         error_message: Error message if failed.
+        objective: Metric selected for task ranking, if supplied.
+        direction: Whether the selected objective is maximized or minimized.
         created_at: Task creation timestamp.
         updated_at: Last update timestamp.
     """
@@ -46,6 +48,8 @@ class OptimizationTask(Base):
     param_ranges = Column(JSON, nullable=True)
     n_workers = Column(Integer, default=4)
     error_message = Column(Text, nullable=True)
+    objective = Column(String(64), nullable=True)
+    direction = Column(String(16), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,

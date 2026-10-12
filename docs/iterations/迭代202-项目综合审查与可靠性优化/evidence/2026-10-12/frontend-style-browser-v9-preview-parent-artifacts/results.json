@@ -1,0 +1,477 @@
+{
+  "config": {
+    "configFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4.config.ts",
+    "rootDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-style-regression",
+        "name": "chromium-style-regression",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+        "testIgnore": [],
+        "testMatch": [
+          "style-regression.spec.ts"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox-style-regression",
+        "name": "firefox-style-regression",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+        "testIgnore": [],
+        "testMatch": [
+          "style-regression.spec.ts"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-style-regression",
+        "name": "webkit-style-regression",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+        "testIgnore": [],
+        "testMatch": [
+          "style-regression.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+      "command": "node_modules/.bin/vite preview --host 127.0.0.1 --port 4187 --strictPort",
+      "url": "http://127.0.0.1:4187",
+      "reuseExistingServer": false,
+      "timeout": 120000,
+      "env": {
+        "VITE_API_TARGET": "http://127.0.0.1:4188"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "style-regression.spec.ts",
+      "file": "style-regression.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "login form keeps light and dark visual states on desktop and mobile",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-style-regression",
+              "projectName": "chromium-style-regression",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2799,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:03.278Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-d2ba0653b3d2a44e97c8",
+          "file": "style-regression.spec.ts",
+          "line": 204,
+          "column": 1
+        },
+        {
+          "title": "register form renders all four input prefix icons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-style-regression",
+              "projectName": "chromium-style-regression",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 746,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:08.218Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-register--c9bb9-all-four-input-prefix-icons-chromium-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-fe4ed1b0f38a52918e07",
+          "file": "style-regression.spec.ts",
+          "line": 245,
+          "column": 1
+        },
+        {
+          "title": "workspace layout, create form, utility compatibility and dark theme remain usable",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-style-regression",
+              "projectName": "chromium-style-regression",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3620,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:09.055Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-chromium-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-6cba536b183a774def44",
+          "file": "style-regression.spec.ts",
+          "line": 253,
+          "column": 1
+        },
+        {
+          "title": "login form keeps light and dark visual states on desktop and mobile",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox-style-regression",
+              "projectName": "firefox-style-regression",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3596,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:14.633Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-login-for-e0040-tates-on-desktop-and-mobile-firefox-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-e6bd6a7cac68f5aed0bb",
+          "file": "style-regression.spec.ts",
+          "line": 204,
+          "column": 1
+        },
+        {
+          "title": "register form renders all four input prefix icons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox-style-regression",
+              "projectName": "firefox-style-regression",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 733,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:20.587Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-register--c9bb9-all-four-input-prefix-icons-firefox-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-f68de8a82359a09ad9b5",
+          "file": "style-regression.spec.ts",
+          "line": 245,
+          "column": 1
+        },
+        {
+          "title": "workspace layout, create form, utility compatibility and dark theme remain usable",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox-style-regression",
+              "projectName": "firefox-style-regression",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3307,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:21.361Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-firefox-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-8e4d95218c5fd43ef9ee",
+          "file": "style-regression.spec.ts",
+          "line": 253,
+          "column": 1
+        },
+        {
+          "title": "login form keeps light and dark visual states on desktop and mobile",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-style-regression",
+              "projectName": "webkit-style-regression",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3608,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:26.300Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-login-for-e0040-tates-on-desktop-and-mobile-webkit-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-2407f826625732f9f0a6",
+          "file": "style-regression.spec.ts",
+          "line": 204,
+          "column": 1
+        },
+        {
+          "title": "register form renders all four input prefix icons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-style-regression",
+              "projectName": "webkit-style-regression",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1075,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:30.854Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-register--c9bb9-all-four-input-prefix-icons-webkit-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-391364f9e96f2aac868b",
+          "file": "style-regression.spec.ts",
+          "line": 245,
+          "column": 1
+        },
+        {
+          "title": "workspace layout, create form, utility compatibility and dark theme remain usable",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-style-regression",
+              "projectName": "webkit-style-regression",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3221,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:35:31.998Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-webkit-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-dde9d56bcb243e30f8cd",
+          "file": "style-regression.spec.ts",
+          "line": 253,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-12T12:35:00.578Z",
+    "duration": 34906.446,
+    "expected": 9,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

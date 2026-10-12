@@ -1,0 +1,37 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /opt/workspace/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 600.0s
+timeout method: thread
+timeout func_only: False
+collected 1 item
+
+tests/test_iteration202_deployment_database.py F                         [100%]
+
+=================================== FAILURES ===================================
+_____________ test_upgrade_previous_schema_then_start_without_ddl ______________
+tests/test_iteration202_deployment_database.py:150: in test_upgrade_previous_schema_then_start_without_ddl
+    await _drop_iter202_tables(database_url)
+tests/test_iteration202_deployment_database.py:124: in _drop_iter202_tables
+    engine = create_async_engine(database_url)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/engine.py:120: in create_async_engine
+    sync_engine = _create_engine(url, **kw)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in create_engine
+    ???
+/usr/local/lib/python3.11/site-packages/sqlalchemy/util/deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/create.py:617: in create_engine
+    dbapi = dbapi_meth(**dbapi_args)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/mysql/aiomysql.py:229: in import_dbapi
+    __import__("aiomysql"), __import__("pymysql")
+    ^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'aiomysql'
+=========================== short test summary info ============================
+FAILED tests/test_iteration202_deployment_database.py::test_upgrade_previous_schema_then_start_without_ddl
+============================== 1 failed in 34.19s ==============================

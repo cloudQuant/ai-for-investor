@@ -1,0 +1,41 @@
+{
+  "started_at": "2026-10-12T12:34:59.098Z",
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "command": [
+    "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config=e2e/tailwind4.config.ts",
+    "--reporter=list,json",
+    "--output=/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-style-browser-v9-preview-parent-artifacts/playwright"
+  ],
+  "source_before": [
+    {
+      "path": "e2e/tailwind4.config.ts",
+      "sha256": "09d29f1dec8f06bd32a14bbb20f5705284ec5b336c477f729752540e15b3128b"
+    },
+    {
+      "path": "e2e/tailwind4/style-regression.spec.ts",
+      "sha256": "ff964e9f0db09dad3bb6b503dddb55ddef2fcdb2232fa228fa49c78a63138f47"
+    },
+    {
+      "path": "vite.config.ts",
+      "sha256": "2d39d0b74b62dd2039b194eeff9821c484b5ca7db38f016dc56f7231ab65ca6e"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e"
+    }
+  ],
+  "dist_manifest_sha256": "878905898e08a995a04bc7220ab46cffe90c3d224a5c8f87c8bb4231b42dbc6b",
+  "workers": 1,
+  "retries": 0,
+  "state": "PASS",
+  "pid": 76381,
+  "finished_at": "2026-10-12T12:35:35.511Z",
+  "elapsed_seconds": 36.414,
+  "exit_code": 0,
+  "signal": null,
+  "dist_unchanged": true,
+  "source_unchanged": true
+}

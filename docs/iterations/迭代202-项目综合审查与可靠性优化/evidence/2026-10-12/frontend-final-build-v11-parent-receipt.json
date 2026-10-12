@@ -1,0 +1,29 @@
+{
+  "started_at": "2026-10-12T14:01:25.697Z",
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "node": "20.20.2",
+  "source_manifest": "frontend-v10-source-manifest.json",
+  "source_changes_before": [],
+  "steps": [
+    {
+      "label": "build",
+      "command": [
+        "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/npm",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-10-12T14:01:25.764Z",
+      "state": "FAIL",
+      "exit_code": null,
+      "error": "Error: spawn /Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/npm ENOENT",
+      "finished_at": "2026-10-12T14:01:25.767Z",
+      "elapsed_seconds": 0.003,
+      "log": "frontend-final-build-v11-parent-build.txt",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "state": "FAIL",
+  "dist_identical_to_browser_tested_v8": true,
+  "source_changes_after": [],
+  "finished_at": "2026-10-12T14:01:25.828Z"
+}

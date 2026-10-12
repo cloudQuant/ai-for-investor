@@ -1,14 +1,25 @@
 # 迭代 200：验收
 
+## 2026-10-12 当前工作树复验
+
+状态：**PASS / ACCEPTED_LOCAL**。本节和[最终验收汇总](../迭代202-项目综合审查与可靠性优化/FINAL_ACCEPTANCE.md)是当前结论，下方 T1–T69 保留各次历史结果。
+
+- 最终 dev 锁 `a2d2c91b…` 的 172 个 registry pin 与隔离安装一致，另有固定 Git Backtrader；新增 python-docx 1.2.0 不改变原 pin。开发/生产/frontend registry 审计无已知公告，Git 来源不冒充 registry 审计覆盖。
+- Mypy 1.20.2：667 文件零错误，ratchet 0/0；Ruff 0.16.2 check/format 和源码尺寸棘轮通过。
+- Node 20.20.2 / 24.19.0 各 1,726 项全量单测通过；Vue/Vite 类型、零 warning ESLint、正式构建和原 bundle 预算通过，两套 176 文件产物一致。
+- 最终产物会话/工作区浏览器 7 项、Chromium/Firefox/WebKit 样式 9 项通过，零重试；最低 Safari 16.4 / Chrome 111 / Firefox 128 未运行。
+- 后端完整原批次为 7,853 passed / 25 failed / 131 skipped（含 1 个 collection skip）/ 24 performance deselected，选中范围无未运行用例。25 个失败逐一关联到完整相关文件复验通过；12 个最终源码变化有完整版本映射。[组合复核](../迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/backend-final-composite-parent-review.json)保留原始 FAIL，并不声称同一轮最终全套零失败。
+- THS dry-run/历史补缺依用户决定延至 OpenData；真实行情/交易、生产域名/CA、远端 CI 和发布未运行。本地通过不授予发布批准。
+
 ## 判定规则
 
-CQ-200-01 至 CQ-200-05、CQ-200-07 至 CQ-200-22 以本地静态检查、依赖安装和 fixture 测试记录结果。CQ-200-06 的 T1–T61 行是历史失败快照；T62–T64 的 0/625 是当时快照，当前树以 T69 的 canonical dev lock Mypy 1.20.2、0-error ratchet、当前前端门禁和全量非性能回归为准。局部 fixture、静态门禁和本地非性能回归均不替代未运行的外部系统验收，也不表示 CI workflow 已运行。
+CQ-200-01 至 CQ-200-05、CQ-200-07 至 CQ-200-22 以本地静态检查、依赖安装和 fixture 测试记录结果。CQ-200-06 的 T1–T61 行是历史失败快照；T62–T64 的 0/625 是当时快照，T69 是上一轮完整本地证据；本次当前树以上方 2026-10-12 的最终锁、Mypy、前端矩阵和后端组合证据为准。局部 fixture、静态门禁和本地非性能回归均不替代未运行的外部系统验收，也不表示 CI workflow 已运行。
 
 ## 用例与结果
 
 | ID | 检查 | 预期 | 状态 / 证据 |
 | --- | --- | --- | --- |
-| CQ-200-06（T69 当前复验） | canonical dev lock 的全量 Mypy、0-error ratchet 与最终本地非性能回归 | 固定锁环境零错误、ratchet 不抬高基线；所有非性能测试通过 | PASS：170 个锁定包同步；`mypy app` 为 `Success: no issues found in 630 source files`，ratchet 为 `errors=0 baseline=0 delta=+0`；最终 `pytest -q -m "not performance" --maxfail=0` 为 `7864 passed, 123 skipped, 24 deselected in 3206.49s`。未运行 CI workflow。 |
+| CQ-200-06（T69 历史复验） | canonical dev lock 的全量 Mypy、0-error ratchet 与最终本地非性能回归 | 固定锁环境零错误、ratchet 不抬高基线；所有非性能测试通过 | PASS：170 个锁定包同步；`mypy app` 为 `Success: no issues found in 630 source files`，ratchet 为 `errors=0 baseline=0 delta=+0`；最终 `pytest -q -m "not performance" --maxfail=0` 为 `7864 passed, 123 skipped, 24 deselected in 3206.49s`。未运行 CI workflow。 |
 | CQ-200-68（T69） | CI 固定开发锁下的 Mypy 可复现性 | 四个 CI scope 与全量 Mypy 都在 canonical lock 下通过 | PASS：四个 scope 分别为 58、7、4、15 个源文件零错误；workflow 已改为先安装 dev lock 再 `--no-deps -e .`。远端 CI 为 NOT_RUN。 |
 | CQ-200-69（T69） | 已知告警枚举的 wire value 与兼容字符串输入 | webhook、摘要和按类型统计输出稳定 value；未知值安全回退 | PASS：监控/告警六文件 `204 passed`；直接用例覆盖三种已知 enum、内置 str、未知 `str, Enum`、`None`、未知对象，以及 webhook/摘要缺失时间戳时的安全 `null` 投影。未发真实通知或连接外部服务。 |
 | CQ-200-70（T69） | warning-free 前端 lint 与受审查的尺寸棘轮 | lint 不接受 warning；格式化增量不静默放宽尺寸门禁 | PASS：Node 24 下 lint/typecheck 通过，Vitest `156 files / 1695 tests` 通过，build/manifest bundle hard budgets 通过；7 个 lint 格式路径经逐项审查后精确更新，`large_file_ratchet.py` 通过。 |

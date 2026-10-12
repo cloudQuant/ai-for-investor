@@ -6,7 +6,7 @@
     >
       <span class="workspace-detail-header-separator">/</span>
       <el-tag
-        v-if="store.currentWorkspace"
+        v-if="currentWorkspace"
         size="small"
         :type="workspaceType === 'trading' ? 'warning' : 'info'"
         effect="plain"
@@ -14,7 +14,7 @@
         {{ workspaceType === 'trading' ? t('workspaceDetail.tagTrading') : t('workspaceDetail.tagResearch') }}
       </el-tag>
       <span class="workspace-detail-header-name">
-        {{ store.currentWorkspace?.name || t('workspaceDetail.nameLoading') }}
+        {{ currentWorkspace?.name || t('workspaceDetail.nameLoading') }}
       </span>
     </teleport>
 
@@ -23,7 +23,7 @@
       to="#page-header-actions"
     >
       <el-button
-        v-if="store.currentWorkspace && workspaceType !== 'trading'"
+        v-if="currentWorkspace && workspaceType !== 'trading'"
         class="workspace-detail-header-action"
         size="small"
         @click="showDataSourceDialog = true"
@@ -40,7 +40,7 @@
     </teleport>
 
     <div
-      v-if="store.loading && !store.currentWorkspace"
+      v-if="store.loading && !currentWorkspace"
       class="workspace-detail-state"
     >
       <el-icon
@@ -53,7 +53,7 @@
     </div>
 
     <div
-      v-else-if="!store.currentWorkspace"
+      v-else-if="!currentWorkspace"
       class="workspace-detail-empty"
     >
       <el-empty :description="t('workspaceDetail.emptyNotFound')" />
@@ -69,13 +69,13 @@
           <span class="workspace-detail-kicker">{{ workspaceHero.kicker }}</span>
           <div class="workspace-detail-title-row">
             <h1 id="workspace-detail-title">
-              {{ store.currentWorkspace.name }}
+              {{ currentWorkspace.name }}
             </h1>
             <el-tag
-              :type="statusTagType(store.currentWorkspace.status)"
+              :type="statusTagType(currentWorkspace.status)"
               effect="plain"
             >
-              {{ statusLabel(store.currentWorkspace.status) }}
+              {{ statusLabel(currentWorkspace.status) }}
             </el-tag>
           </div>
           <p>{{ workspaceDescription }}</p>
@@ -99,8 +99,8 @@
         </div>
 
         <div class="workspace-detail-meta">
-          <span>{{ t('workspaceDetail.createdAt') }}: {{ formatTime(store.currentWorkspace.created_at) }}</span>
-          <span>{{ t('workspaceDetail.updatedAt') }}: {{ formatTime(store.currentWorkspace.updated_at) }}</span>
+          <span>{{ t('workspaceDetail.createdAt') }}: {{ formatWorkspaceTime(currentWorkspace.created_at) }}</span>
+          <span>{{ t('workspaceDetail.updatedAt') }}: {{ formatWorkspaceTime(currentWorkspace.updated_at) }}</span>
         </div>
 
         <div
@@ -208,6 +208,7 @@
           >
             <TradingWorkspaceUnitsTab
               v-if="workspaceType === 'trading'"
+              :key="workspaceId"
               :workspace-id="workspaceId"
               :active="activeTab === 'units'"
               :toolbar-in-header="false"
@@ -215,6 +216,7 @@
             />
             <WorkspaceUnitsTab
               v-else
+              :key="workspaceId"
               :workspace-id="workspaceId"
               :active="activeTab === 'units'"
               :toolbar-in-header="false"
@@ -223,6 +225,7 @@
           </el-tab-pane>
           <WorkspaceOptimizationPane
             v-if="showOptTab"
+            :key="workspaceId"
             :workspace-id="workspaceId"
             :active="activeTab === 'optimization'"
             :initial-unit-id="initialOptUnitId"
@@ -234,6 +237,7 @@
             closable
           >
             <WorkspaceReportTab
+              :key="workspaceId"
               :workspace-id="workspaceId"
               :active="activeTab === 'report'"
               :toolbar-in-header="false"
@@ -245,9 +249,10 @@
       </section>
 
       <WorkspaceDataSourceDialog
+        :key="workspaceId"
         v-model="showDataSourceDialog"
         :workspace-id="workspaceId"
-        :workspace="store.currentWorkspace"
+        :workspace="currentWorkspace"
         @saved="store.fetchWorkspace(workspaceId)"
       />
     </template>
@@ -255,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -276,6 +281,12 @@ import WorkspaceOptimizationPane from '@/components/workspace/optimization/Works
 import type { TagType } from '@/constants/strategy'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { UnitRunStatus, WorkspaceStatus, WorkspaceType } from '@/types/workspace'
+import {
+  formatSignedNumber,
+  formatWorkspaceTime,
+  parseWorkspaceTime,
+} from '@/views/workspace/workspaceDetailFormatters'
+import { useWorkspaceDetailResources } from '@/views/workspace/useWorkspaceDetailResources'
 
 const { t } = useI18n()
 
@@ -293,6 +304,16 @@ let headerTargetTimer: ReturnType<typeof setInterval> | null = null
 const initialOptUnitId = ref('')
 const initialReportUnitId = ref('')
 const initialReportUnitIds = ref<string[]>([])
+const { currentWorkspace, currentUnits } = useWorkspaceDetailResources(
+  workspaceId,
+  store,
+  () => {
+    activeTab.value = 'units'
+    showOptTab.value = false
+    showReportTab.value = false
+    showDataSourceDialog.value = false
+  },
+)
 
 const detailIcons: Record<string, Component> = {
   Connection,
@@ -302,7 +323,7 @@ const detailIcons: Record<string, Component> = {
 }
 
 const workspaceType = computed<WorkspaceType>(() =>
-  store.currentWorkspace?.workspace_type
+  currentWorkspace.value?.workspace_type
   ?? (route.meta.workspaceType === 'trading' ? 'trading' : 'research')
 )
 
@@ -321,37 +342,37 @@ const workspaceHero = computed(() => {
 })
 
 const workspaceDescription = computed(() =>
-  store.currentWorkspace?.description?.trim()
+  currentWorkspace.value?.description?.trim()
   || workspaceHero.value.fallbackDescription
 )
 
 const unitCount = computed(() =>
-  store.units.length || store.currentWorkspace?.unit_count || 0
+  currentUnits.value.length || currentWorkspace.value?.unit_count || 0
 )
 
 const completedUnitCount = computed(() => {
-  const completed = store.units.filter(unit => unit.run_status === 'completed').length
-  return completed || store.currentWorkspace?.completed_count || 0
+  const completed = currentUnits.value.filter(unit => unit.run_status === 'completed').length
+  return completed || currentWorkspace.value?.completed_count || 0
 })
 
 const activeUnitCount = computed(() =>
-  store.units.filter(unit => isActiveUnitStatus(unit.run_status)).length
+  currentUnits.value.filter(unit => isActiveUnitStatus(unit.run_status)).length
 )
 
 const liveUnitCount = computed(() =>
-  store.units.filter(unit => unit.trading_mode === 'live').length
+  currentUnits.value.filter(unit => unit.trading_mode === 'live').length
 )
 
 const paperUnitCount = computed(() =>
-  store.units.filter(unit => unit.trading_mode !== 'live').length
+  currentUnits.value.filter(unit => unit.trading_mode !== 'live').length
 )
 
 const lockedUnitCount = computed(() =>
-  store.units.filter(unit => unit.lock_running || unit.lock_trading).length
+  currentUnits.value.filter(unit => unit.lock_running || unit.lock_trading).length
 )
 
 const failedUnitCount = computed(() =>
-  store.units.filter(unit =>
+  currentUnits.value.filter(unit =>
     unit.run_status === 'failed'
     || unit.run_status === 'cancelled'
     || unit.run_status === 'timeout'
@@ -360,11 +381,11 @@ const failedUnitCount = computed(() =>
 )
 
 const runtimeActiveUnitCount = computed(() =>
-  store.units.filter(unit => isTradingRuntimeActive(unit)).length
+  currentUnits.value.filter(unit => isTradingRuntimeActive(unit)).length
 )
 
 const gatewayConfiguredCount = computed(() =>
-  store.units.filter(unit => hasGatewayConfig(unit.gateway_config)).length
+  currentUnits.value.filter(unit => hasGatewayConfig(unit.gateway_config)).length
 )
 
 const gatewayRequiredCount = computed(() =>
@@ -372,7 +393,7 @@ const gatewayRequiredCount = computed(() =>
 )
 
 const todayPnl = computed(() => {
-  const values = store.units
+  const values = currentUnits.value
     .map(unit => unit.trading_snapshot?.today_pnl)
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
   if (!values.length) {
@@ -382,11 +403,11 @@ const todayPnl = computed(() => {
 })
 
 const tradingLastUpdatedAt = computed(() => {
-  const timestamps = store.units
-    .map(unit => parseTimeValue(unit.trading_snapshot?.updated_at || unit.updated_at))
+  const timestamps = currentUnits.value
+    .map(unit => parseWorkspaceTime(unit.trading_snapshot?.updated_at || unit.updated_at))
     .filter((value): value is number => typeof value === 'number')
-  const latest = timestamps.length ? Math.max(...timestamps) : parseTimeValue(store.currentWorkspace?.updated_at)
-  return latest ? formatTime(latest) : '-'
+  const latest = timestamps.length ? Math.max(...timestamps) : parseWorkspaceTime(currentWorkspace.value?.updated_at)
+  return latest ? formatWorkspaceTime(latest) : '-'
 })
 
 const tradingGatewayCoverage = computed(() => {
@@ -550,7 +571,7 @@ function handleTabRemove(name: string | number) {
 }
 
 const dataSourceTypeLabel = computed(() => {
-  const type = store.currentWorkspace?.settings?.data_source?.type || 'csv'
+  const type = currentWorkspace.value?.settings?.data_source?.type || 'csv'
   const labels: Record<string, string> = {
     csv: 'CSV',
     mysql: 'MySQL',
@@ -610,38 +631,6 @@ function statusLabel(status: WorkspaceStatus): string {
   }
   return map[status] || status
 }
-
-function parseTimeValue(value: string | number | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === 'string' && value) {
-    const timestamp = new Date(value).getTime()
-    return Number.isNaN(timestamp) ? null : timestamp
-  }
-  return null
-}
-
-function formatTime(value: string | number | null | undefined) {
-  const timestamp = parseTimeValue(value)
-  return timestamp ? new Date(timestamp).toLocaleString() : ''
-}
-
-function formatSignedNumber(value: number | null) {
-  if (value === null) {
-    return '-'
-  }
-  const prefix = value > 0 ? '+' : ''
-  return `${prefix}${value.toFixed(2)}`
-}
-
-watch(workspaceId, async (id) => {
-  activeTab.value = 'units'
-  showOptTab.value = false
-  showReportTab.value = false
-  await store.fetchWorkspace(id)
-  await store.fetchUnits(id)
-}, { immediate: true })
 
 function updateHeaderTargetsReady() {
   if (typeof document === 'undefined') {

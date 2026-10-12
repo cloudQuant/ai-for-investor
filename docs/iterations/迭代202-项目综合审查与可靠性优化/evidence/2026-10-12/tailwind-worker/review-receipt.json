@@ -1,0 +1,77 @@
+{
+  "captured_at": "2026-10-12T09:26:29.117063+00:00",
+  "evidence_origin": "worker run; parent inspected assertions and representative screenshots, not a parent rerun",
+  "stats": {
+    "startTime": "2026-10-12T07:14:41.486Z",
+    "duration": 133977.801,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "coverage": "Chromium145, Firefox146, WebKit26; controlled API fixture; desktop/mobile, light/dark",
+  "minimum_browser_versions": "NOT_RUN: Safari16.4, Chrome111, Firefox128",
+  "limitation": "WebKit placeholder checks emitted CSSOM rule; Chromium/Firefox also assert computed color. Current final integration/bundle and parent browser rerun remain pending.",
+  "artifacts": [
+    {
+      "path": "browser-results.txt",
+      "sha256": "d20efe41358f50a685d50f53543b42221fb81f155a4af8bf542f73871dcb9d82"
+    },
+    {
+      "path": "playwright-results.json",
+      "sha256": "4ef72ea65c709e781fe218b2aa8e37896984a61e0045095af37005c29dceb8b3"
+    },
+    {
+      "path": "css-diff-notes.txt",
+      "sha256": "7e603814b9f591697c9d4eb094804ba3c3608417c6fcd2f102ba26e3e3c14c2f"
+    },
+    {
+      "path": "css-key-class-comparison.txt",
+      "sha256": "1be647ae487534a950c5ac3b1a1d8113feff8e5b03dde35ab67ea21a31b11259"
+    },
+    {
+      "path": "baseline-manifest.json",
+      "sha256": "c1c16d9df6a12d59f718902bd81084b638a766aa1fb791d7340145c3097991f9"
+    },
+    {
+      "path": "v4-project-manifest.json",
+      "sha256": "24a62a39996190b31701f298e61770bfdb9a3ad4bdf773037863cfaef34a067c"
+    },
+    {
+      "path": "chromium-style-regression-workspace-light-desktop.png",
+      "sha256": "2db8ecd79a0b362fd003283a9b0c89b3575fa2c818b29b78bc01761200ded51a"
+    },
+    {
+      "path": "chromium-style-regression-workspace-dark-mobile.png",
+      "sha256": "eb0a3930893e5bbd3f0fbf9dbe260061e2a2032e185705fa4f83b7cd4f80bd51"
+    },
+    {
+      "path": "chromium-style-regression-login-dark-mobile.png",
+      "sha256": "8cf44694c008e04326f89d528454336a014e78f870b8ce90fae844f59a146b6b"
+    },
+    {
+      "path": "firefox-style-regression-workspace-light-desktop.png",
+      "sha256": "a8643f4092f88b70ede940283b34f852f483d9228cd3e5c531e0a4f046e3a594"
+    },
+    {
+      "path": "firefox-style-regression-workspace-dark-mobile.png",
+      "sha256": "972ea9947503c0ce615c1647dcbe3fb77e4db8655c0af859dcdd510fa99ecb6e"
+    },
+    {
+      "path": "firefox-style-regression-login-dark-mobile.png",
+      "sha256": "8d2ceff340126d16b1f885bec064c96800eb44d8ec601d71c802a9855098eaf9"
+    },
+    {
+      "path": "webkit-style-regression-workspace-light-desktop.png",
+      "sha256": "d34b92a03cb145d3e4e02f4e8a5c9a932e823340e8bcbdf816d7fe1a1493a403"
+    },
+    {
+      "path": "webkit-style-regression-workspace-dark-mobile.png",
+      "sha256": "d6132d4b6daf0ce21c77d56174dfa15f19313c56b83d82c60cf7f02b1da85677"
+    },
+    {
+      "path": "webkit-style-regression-login-dark-mobile.png",
+      "sha256": "d13b05eaeedfcbc4e2405672777a184bff358c71982b9aad76a637433b1fff68"
+    }
+  ]
+}

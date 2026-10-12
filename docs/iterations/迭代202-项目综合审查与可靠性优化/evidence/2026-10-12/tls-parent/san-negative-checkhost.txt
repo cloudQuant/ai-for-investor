@@ -1,0 +1,2 @@
+Hostname wrong.investor.iter202.test does NOT match certificate
+exit_status=1

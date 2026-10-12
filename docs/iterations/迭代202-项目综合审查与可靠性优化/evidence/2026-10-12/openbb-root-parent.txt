@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 94 items / 89 deselected / 5 selected
+
+tests/market_data_platform/test_openbb_provider.py::test_openbb_runner_directories_reject_checkout_ancestors_and_descendants[OPENBB_RUNNER_HOME] PASSED [ 20%]
+tests/market_data_platform/test_openbb_provider.py::test_openbb_runner_directories_reject_checkout_ancestors_and_descendants[OPENBB_RUNNER_WORKDIR] PASSED [ 40%]
+tests/market_data_platform/test_openbb_provider.py::test_openbb_subprocess_provider_rejects_a_runner_script_inside_the_checkout PASSED [ 60%]
+tests/market_data_platform/test_openbb_provider.py::test_openbb_runner_directory_rejects_a_no_git_parent_of_the_application_cwd PASSED [ 80%]
+tests/market_data_platform/test_openbb_provider.py::test_openbb_subprocess_provider_copied_runner_blocks_unattested_artifact PASSED [100%]
+
+--------------- generated xml file: /tmp/openbb-root-parent.xml ----------------
+====================== 5 passed, 89 deselected in 11.13s =======================
