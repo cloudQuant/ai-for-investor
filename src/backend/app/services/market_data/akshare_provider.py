@@ -1448,7 +1448,7 @@ class _AkShareSubprocessRunner:
             receipt, stderr_prefix = await asyncio.wait_for(
                 asyncio.shield(completion_task), timeout=timeout_seconds
             )
-        except TimeoutError as exc:
+        except asyncio.TimeoutError as exc:
             raise AkShareProviderError("AKSHARE_TIMEOUT") from exc
         except asyncio.CancelledError:
             initial_cancellation = True
@@ -1673,7 +1673,7 @@ class AkShareMarketDataProvider:
         """Await one verified runner receipt before releasing capacity."""
         try:
             await asyncio.wait_for(self._semaphore.acquire(), timeout=self._timeout_seconds)
-        except TimeoutError as exc:
+        except asyncio.TimeoutError as exc:
             raise AkShareProviderError("AKSHARE_TIMEOUT") from exc
         try:
             envelope = {
@@ -1692,7 +1692,7 @@ class AkShareMarketDataProvider:
                 execution=execution,
                 source_revision=source_revision,
             )
-        except TimeoutError as exc:
+        except (asyncio.TimeoutError, TimeoutError) as exc:
             raise AkShareProviderError("AKSHARE_TIMEOUT") from exc
         except AkShareProviderError:
             raise

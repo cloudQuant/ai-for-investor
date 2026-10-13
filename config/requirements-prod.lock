@@ -244,6 +244,8 @@ protobuf==7.35.1
     #   opentelemetry-proto
 purgedcv==0.1.3
     # via ai-for-investor-backend (pyproject.toml)
+pyarrow==25.0.1
+    # via ai-for-investor-backend (pyproject.toml)
 pycparser==3.0
     # via cffi
 pydantic==2.13.4

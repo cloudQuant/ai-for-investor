@@ -323,6 +323,8 @@ py-cpuinfo==9.0.0
     # via pytest-benchmark
 py-serializable==2.1.0
     # via cyclonedx-python-lib
+pyarrow==25.0.1
+    # via ai-for-investor-backend (pyproject.toml)
 pycparser==3.0
     # via cffi
 pydantic==2.13.4

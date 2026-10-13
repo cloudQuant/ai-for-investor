@@ -396,7 +396,6 @@
               </el-tag>
             </template>
           </el-table-column>
-          <!-- @vue-generic {import('@/api/liveTrading').GatewayHealthInfo} -->
           <el-table-column
             :label="t('gatewayStatus.fieldHeartbeat')"
             width="120"

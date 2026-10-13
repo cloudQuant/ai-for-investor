@@ -55,46 +55,27 @@ export function renderMarkdown(raw: string | null | undefined, options?: Sanitiz
   const html = marked.parse(raw, { async: false }) as string
 
   // Build tag whitelist based on options
-  const tags = [...ALLOWED_TAGS]
+  const disallowedTags = new Set<string>()
   if (options?.allowImages === false) {
-    const imgIndex = tags.indexOf('img')
-    if (imgIndex !== -1) {
-      tags.splice(imgIndex, 1)
-    }
+    disallowedTags.add('img')
   }
   if (options?.allowLinks === false) {
-    const aIndex = tags.indexOf('a')
-    if (aIndex !== -1) {
-      tags.splice(aIndex, 1)
-    }
+    disallowedTags.add('a')
   }
+  const tags = ALLOWED_TAGS.filter(tag => !disallowedTags.has(tag))
 
   // Build attribute whitelist based on options
-  const attrs = [...ALLOWED_ATTR]
+  const disallowedAttrs = new Set<string>()
   if (options?.allowImages === false) {
-    const srcIndex = attrs.indexOf('src')
-    if (srcIndex !== -1) {
-      attrs.splice(srcIndex, 1)
-    }
-    const altIndex = attrs.indexOf('alt')
-    if (altIndex !== -1) {
-      attrs.splice(altIndex, 1)
-    }
+    disallowedAttrs.add('src')
+    disallowedAttrs.add('alt')
   }
   if (options?.allowLinks === false) {
-    const hrefIndex = attrs.indexOf('href')
-    if (hrefIndex !== -1) {
-      attrs.splice(hrefIndex, 1)
-    }
-    const targetIndex = attrs.indexOf('target')
-    if (targetIndex !== -1) {
-      attrs.splice(targetIndex, 1)
-    }
-    const relIndex = attrs.indexOf('rel')
-    if (relIndex !== -1) {
-      attrs.splice(relIndex, 1)
-    }
+    disallowedAttrs.add('href')
+    disallowedAttrs.add('target')
+    disallowedAttrs.add('rel')
   }
+  const attrs = ALLOWED_ATTR.filter(attr => !disallowedAttrs.has(attr))
 
   const precleaned = html
     .replace(DANGEROUS_REMOTE_TAG_RE, '')

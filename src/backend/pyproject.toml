@@ -81,6 +81,7 @@ backtrader = [
 data = [
     "akshare>=1.18.96; python_version >= '3.11'",
     "akshare>=1.18.88,<1.18.89; python_version < '3.11'",
+    "pyarrow>=14.0.0,<26.0.0",
     "soupsieve>=2.9.0",
 ]
 ai = ["litellm>=1.40,<2.0"]

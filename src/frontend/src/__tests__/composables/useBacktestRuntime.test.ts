@@ -209,6 +209,16 @@ describe('useBacktestRuntime', () => {
       expect(runtime.loading.value).toBe(true)
     })
 
+    it('ignores valid JSON that is not a runtime event', async () => {
+      const { runtime } = build()
+      runtime.startRuntime('task-4c')
+      const ws = await waitForWs()
+
+      ws.emitRaw('{}')
+      expect(runtime.loading.value).toBe(true)
+      expect(runtime.progressInfo.value.message).toBe('提交任务中...')
+    })
+
     it('handles progress event', async () => {
       const { runtime } = build()
       runtime.startRuntime('task-5')
@@ -240,10 +250,11 @@ describe('useBacktestRuntime', () => {
       runtime.startRuntime('task-6')
       const ws = await waitForWs()
 
-      ws.emit({ type: 'completed', progress: 100 })
+      ws.emit({ type: 'completed', progress: 100, message: 'done' })
       await vi.waitFor(() => {
         expect(runtime.loading.value).toBe(false)
       })
+      expect(runtime.progressInfo.value.message).toBe('done')
       expect(mocks.fetchResult).toHaveBeenCalledWith('task-6')
       expect(mocks.refreshResults).toHaveBeenCalled()
       expect(ElMessage.success).toHaveBeenCalledWith('回测完成')
@@ -358,6 +369,23 @@ describe('useBacktestRuntime', () => {
   })
 
   describe('WebSocket error and close fallback', () => {
+    it('sends heartbeats only while the WebSocket is open', async () => {
+      vi.useFakeTimers()
+      const { runtime } = build()
+      runtime.startRuntime('task-heartbeat')
+      const ws = MockWebSocket.instances[0]
+      expect(ws).toBeDefined()
+
+      ws.readyState = MockWebSocket.OPEN
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(ws.send).toHaveBeenCalledWith('ping')
+
+      ws.readyState = MockWebSocket.CLOSING
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(ws.send).toHaveBeenCalledTimes(1)
+      runtime.stopRuntime()
+    })
+
     it('starts polling fallback on WebSocket error', async () => {
       const { backtestApi } = await import('@/api/backtest')
       vi.mocked(backtestApi.getStatus).mockResolvedValue({
@@ -374,6 +402,26 @@ describe('useBacktestRuntime', () => {
       await vi.waitFor(() => {
         expect(backtestApi.getStatus).toHaveBeenCalledWith('task-10')
       })
+    })
+
+    it('does not start polling again when fallback is already running', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      vi.mocked(backtestApi.getStatus).mockResolvedValue({
+        task_id: 'task-10b',
+        status: 'running',
+      })
+
+      const { runtime } = build()
+      runtime.startRuntime('task-10b')
+      const ws = await waitForWs()
+      ws.triggerError()
+
+      await vi.waitFor(() => {
+        expect(backtestApi.getStatus).toHaveBeenCalledTimes(1)
+      })
+      runtime.startPollingFallback('task-10b')
+      expect(backtestApi.getStatus).toHaveBeenCalledTimes(1)
+      runtime.stopRuntime()
     })
 
     it('starts polling fallback on abnormal close', async () => {
@@ -400,11 +448,22 @@ describe('useBacktestRuntime', () => {
       const { runtime } = build()
       runtime.startRuntime('task-12')
       const ws = await waitForWs()
-      // Manually set loading=false so the close handler short-circuits
-      runtime.stopRuntime()
       ws.triggerClose(1000)
 
       expect(backtestApi.getStatus).not.toHaveBeenCalled()
+    })
+
+    it('does not start polling after an abnormal close when loading is already false', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      const { runtime } = build()
+      runtime.startRuntime('task-12b')
+      const ws = await waitForWs()
+
+      runtime.loading.value = false
+      ws.triggerClose(1006)
+
+      expect(backtestApi.getStatus).not.toHaveBeenCalled()
+      runtime.stopRuntime()
     })
   })
 
@@ -449,38 +508,69 @@ describe('useBacktestRuntime', () => {
       await vi.waitFor(() => {
         expect(ElMessage.warning).toHaveBeenCalledWith('回测已取消')
       })
+      expect(runtime.loading.value).toBe(false)
+      expect(runtime.currentTaskId.value).toBe('')
     })
 
-    it('reports query failure after max polling attempts', async () => {
+    it('uses the generic failure message when failure details cannot be loaded', async () => {
       const { backtestApi } = await import('@/api/backtest')
       const { ElMessage } = await import('element-plus')
-      // Force every getStatus to reject; combined with directly invoking
-      // pollResult with a synthetic high-attempts state we can hit the
-      // "attempts >= POLL_MAX_ATTEMPTS - 1" branch.
+      vi.mocked(backtestApi.getStatus).mockResolvedValue({
+        task_id: 'task-failed-no-details',
+        status: 'failed',
+      })
+
+      const { runtime, mocks } = build()
+      mocks.fetchResult.mockRejectedValue(new Error('details unavailable'))
+      runtime.startRuntime('task-failed-no-details')
+      const ws = await waitForWs()
+      ws.triggerError()
+
+      await vi.waitFor(() => {
+        expect(ElMessage.error).toHaveBeenCalledWith('回测失败: 未知错误')
+      })
+      expect(runtime.loading.value).toBe(false)
+      expect(runtime.currentTaskId.value).toBe('')
+    })
+
+    it('reports query failure and resets state after the final polling attempt', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      const { ElMessage } = await import('element-plus')
       vi.mocked(backtestApi.getStatus).mockRejectedValue(new Error('network down'))
 
       const { runtime } = build()
-      runtime.startRuntime('task-poll-fail')
-      const ws = await waitForWs()
-
-      // Speed up: stub sleep to skip delays. We can't easily reach 60
-      // attempts without waiting, so we replace the implementation by
-      // using fake timers.
       vi.useFakeTimers()
+      runtime.startRuntime('task-poll-fail')
+      const ws = MockWebSocket.instances[0]
       ws.triggerError()
-      // Advance through 60 polling attempts (each ~1-5s, but we don't
-      // care about real time since timers are faked)
-      for (let i = 0; i < 65; i++) {
-        await vi.advanceTimersByTimeAsync(5000)
-      }
-      vi.useRealTimers()
+      await vi.runAllTimersAsync()
 
-      // Either the per-iteration error path (attempts >= MAX-1) or the
-      // outer-loop timeout (loading still true at end) fires.
-      expect(
-        vi.mocked(ElMessage.error).mock.calls.length +
-          vi.mocked(ElMessage.warning).mock.calls.length,
-      ).toBeGreaterThan(0)
+      expect(backtestApi.getStatus).toHaveBeenCalledTimes(60)
+      expect(ElMessage.error).toHaveBeenCalledWith('回测结果查询失败')
+      expect(ElMessage.warning).not.toHaveBeenCalled()
+      expect(runtime.loading.value).toBe(false)
+      expect(runtime.currentTaskId.value).toBe('')
+    })
+
+    it('warns and resets state when the maximum polling attempts expire', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      const { ElMessage } = await import('element-plus')
+      vi.mocked(backtestApi.getStatus).mockResolvedValue({
+        task_id: 'task-poll-timeout',
+        status: 'running',
+      })
+
+      const { runtime } = build()
+      vi.useFakeTimers()
+      runtime.startRuntime('task-poll-timeout')
+      const ws = MockWebSocket.instances[0]
+      ws.triggerError()
+      await vi.runAllTimersAsync()
+
+      expect(backtestApi.getStatus).toHaveBeenCalledTimes(60)
+      expect(ElMessage.warning).toHaveBeenCalledWith('回测超时，请稍后查看结果')
+      expect(runtime.loading.value).toBe(false)
+      expect(runtime.currentTaskId.value).toBe('')
     })
 
     it('exits polling silently when sleep is aborted', async () => {
@@ -505,6 +595,59 @@ describe('useBacktestRuntime', () => {
       runtime.stopRuntime()
 
       // No error or warning message should be raised by the abort path
+      expect(ElMessage.error).not.toHaveBeenCalled()
+      expect(ElMessage.warning).not.toHaveBeenCalled()
+    })
+
+    it('returns without querying when pollResult starts after the runtime stopped', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      const { ElMessage } = await import('element-plus')
+      const { runtime } = build()
+
+      await runtime.pollResult('task-stopped')
+
+      expect(backtestApi.getStatus).not.toHaveBeenCalled()
+      expect(ElMessage.warning).not.toHaveBeenCalled()
+    })
+
+    it('silently exits when a status request rejects after polling is aborted', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      const { ElMessage } = await import('element-plus')
+      let rejectStatus!: (error: Error) => void
+      vi.mocked(backtestApi.getStatus).mockImplementation(() => new Promise((_, reject) => {
+        rejectStatus = reject
+      }))
+
+      const { runtime } = build()
+      runtime.loading.value = true
+      const polling = runtime.pollResult('task-aborted-request')
+      await vi.waitFor(() => expect(rejectStatus).toBeTypeOf('function'))
+
+      runtime.stopRuntime()
+      rejectStatus(new Error('request finished after abort'))
+      await polling
+
+      expect(ElMessage.error).not.toHaveBeenCalled()
+      expect(ElMessage.warning).not.toHaveBeenCalled()
+    })
+
+    it('does not schedule another delay when polling is aborted during a status request', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      const { ElMessage } = await import('element-plus')
+      let resolveStatus!: (status: { task_id: string; status: string }) => void
+      vi.mocked(backtestApi.getStatus).mockImplementation(() => new Promise((resolve) => {
+        resolveStatus = resolve
+      }))
+
+      const { runtime } = build()
+      runtime.loading.value = true
+      const polling = runtime.pollResult('task-aborted-sleep')
+      await vi.waitFor(() => expect(resolveStatus).toBeTypeOf('function'))
+
+      runtime.stopRuntime()
+      resolveStatus({ task_id: 'task-aborted-sleep', status: 'running' })
+      await polling
+
       expect(ElMessage.error).not.toHaveBeenCalled()
       expect(ElMessage.warning).not.toHaveBeenCalled()
     })

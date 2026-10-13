@@ -86,6 +86,21 @@ describe('useStrategyStore', () => {
     expect(store.currentStrategy?.name).toBe('Updated')
   })
 
+  it('updates a non-current strategy without replacing the selected detail', async () => {
+    const store = useStrategyStore()
+    await store.fetchStrategies()
+    store.currentStrategy = {
+      id: 's-current', user_id: 'u1', name: 'Selected', code: 'current-code',
+      params: {}, category: 'custom', created_at: '', updated_at: '',
+    } as never
+    const selectedStrategy = store.currentStrategy
+
+    await store.updateStrategy('s1', { name: 'Updated' })
+
+    expect(store.strategies[0].name).toBe('Updated')
+    expect(store.currentStrategy).toEqual(selectedStrategy)
+  })
+
   it('should clear current strategy and decrement total after deleting tracked strategy', async () => {
     const store = useStrategyStore()
     await store.fetchStrategies()
@@ -97,6 +112,23 @@ describe('useStrategyStore', () => {
     expect(store.strategies).toEqual([])
     expect(store.currentStrategy).toBeNull()
     expect(store.total).toBe(0)
+  })
+
+  it('keeps the list, total, and selected detail when deleting an absent strategy', async () => {
+    const store = useStrategyStore()
+    await store.fetchStrategies()
+    store.currentStrategy = {
+      id: 's-current', user_id: 'u1', name: 'Selected', code: 'current-code',
+      params: {}, category: 'custom', created_at: '', updated_at: '',
+    } as never
+    const selectedStrategy = store.currentStrategy
+
+    await store.deleteStrategy('missing')
+
+    expect(strategyApi.delete).toHaveBeenCalledWith('missing')
+    expect(store.strategies.map(strategy => strategy.id)).toEqual(['s1'])
+    expect(store.total).toBe(1)
+    expect(store.currentStrategy).toEqual(selectedStrategy)
   })
 
   it('should reset loading after template fetch failure', async () => {

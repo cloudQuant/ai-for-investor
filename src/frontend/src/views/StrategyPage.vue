@@ -213,7 +213,7 @@
                   row-key="id"
                   highlight-current-row
                   :empty-text="t('strategy.aiResearchConfigEmpty')"
-                  @row-click="(profile) => applyAIResearchConfigProfile(profile)"
+                  @row-click="(profile: AIStrategyResearchConfigProfile) => applyAIResearchConfigProfile(profile)"
                 >
                   <el-table-column
                     :label="t('strategy.strategyName')"
@@ -226,7 +226,7 @@
                       </div>
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchConfigProfile} --><el-table-column
+                  <el-table-column
                     label="标的"
                     min-width="110"
                   >
@@ -234,7 +234,7 @@
                       {{ aiResearchConfigProfileValue(row, 'symbol') }}
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchConfigProfile} --><el-table-column
+                  <el-table-column
                     label="周期"
                     width="76"
                   >
@@ -242,7 +242,7 @@
                       {{ aiResearchConfigProfileValue(row, 'timeframe') }}
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchConfigProfile} --><el-table-column
+                  <el-table-column
                     label="Sharpe"
                     width="86"
                   >
@@ -250,7 +250,7 @@
                       {{ aiResearchConfigProfileMetric(row, 'target_sharpe') }}
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchConfigProfile} --><el-table-column
+                  <el-table-column
                     label="轮数"
                     width="72"
                   >
@@ -258,7 +258,7 @@
                       {{ aiResearchConfigProfileMetric(row, 'max_iterations', 0) }}
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchConfigProfile} --><el-table-column
+                  <el-table-column
                     label="样本外"
                     width="86"
                   >
@@ -266,7 +266,7 @@
                       {{ aiResearchConfigProfileOos(row) }}
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchConfigProfile} --><el-table-column
+                  <el-table-column
                     label="操作"
                     width="174"
                     fixed="right"
@@ -1845,7 +1845,7 @@
                       </el-tag>
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchVersion} --><el-table-column
+                  <el-table-column
                     label="指标"
                     min-width="240"
                   >
@@ -1861,7 +1861,7 @@
                       </span>
                     </template>
                   </el-table-column>
-                  <!-- @vue-generic {import('@/api/strategy').AIStrategyResearchVersion} --><el-table-column
+                  <el-table-column
                     label="操作"
                     width="110"
                   >
@@ -2813,7 +2813,7 @@
               :label="t('strategy.createdAt')"
               width="180"
             />
-            <!-- @vue-generic {import('@/types').Strategy} --><el-table-column
+            <el-table-column
               :label="$t('common.action')"
               width="220"
               fixed="right"
@@ -2971,6 +2971,7 @@ import { Delete, EditPen, Link, MagicStick, Plus, RefreshRight, Search, Upload, 
 import { getCategoryType, getCategoryLabel, stripStrategyMeta } from '@/constants/strategy'
 import MonacoEditor from '@/components/common/MonacoEditor.vue'
 import TrustedResearchWorkbench from '@/components/aiResearch/TrustedResearchWorkbench.vue'
+import type { AIStrategyResearchConfigProfile } from '@/api/strategy'
 import StrategyEditDialog from './strategy-components/StrategyEditDialog.vue'
 import StrategyDetailDialog from './strategy-components/StrategyDetailDialog.vue'
 import StrategyTemplateCard from './strategy-components/StrategyTemplateCard.vue'

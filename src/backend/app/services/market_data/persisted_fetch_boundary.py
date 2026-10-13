@@ -11,6 +11,7 @@ from app.services.market_data.store import PersistedProviderFetch
 
 _TaskResult = TypeVar("_TaskResult")
 _Error = TypeVar("_Error", bound=Exception)
+_CancellationError = TypeVar("_CancellationError", bound=BaseException)
 _UTC = timezone.utc
 
 
@@ -22,6 +23,33 @@ class UtcParser(Protocol):
     """A collector-specific parser for one timestamp field."""
 
     def __call__(self, value: object, *, field_name: str) -> datetime: ...
+
+
+def find_cancellation_error(
+    error: BaseException,
+    error_type: type[_CancellationError],
+) -> _CancellationError | None:
+    """Find a typed cancellation outcome retained in an exception chain.
+
+    Python 3.10 may expose a plain ``CancelledError`` when awaiting a task
+    whose coroutine raised a ``CancelledError`` subclass. The original typed
+    outcome remains linked through ``__cause__`` or ``__context__``.
+    """
+    pending = [error]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        current_id = id(current)
+        if current_id in visited:
+            continue
+        visited.add(current_id)
+        if isinstance(current, error_type):
+            return current
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        if current.__context__ is not None:
+            pending.append(current.__context__)
+    return None
 
 
 def require_persisted_provider_fetch(receipt: object) -> PersistedProviderFetch:

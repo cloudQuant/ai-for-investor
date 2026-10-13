@@ -154,23 +154,35 @@ def isolate_ai_provider_config(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 async def setup_db():
-    """Rebuild all tables before each test, cleanup after."""
+    """Rebuild tables per test and keep pooled SQLite connections loop-local."""
     limiter.reset()
     response_cache = importlib.import_module("app.utils.response_cache")
     response_cache._cache_backend = response_cache.MemoryCacheBackend()
-    async with _test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    sink = _ai_log_module._default_sink
-    if sink is not None:
+    # Preserve the engine/sessionmaker objects imported by application modules,
+    # while ensuring a connection from the previous test loop is not reused.
+    await _test_engine.dispose()
+    try:
+        async with _test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield
+    finally:
+        sink = _ai_log_module._default_sink
         try:
-            await sink.shutdown()
+            if sink is not None:
+                try:
+                    await sink.shutdown()
+                finally:
+                    _ai_log_module._default_sink = None
         finally:
-            _ai_log_module._default_sink = None
-    async with _test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    limiter.reset()
-    response_cache._cache_backend = response_cache.MemoryCacheBackend()
+            try:
+                async with _test_engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.drop_all)
+            finally:
+                try:
+                    await _test_engine.dispose()
+                finally:
+                    limiter.reset()
+                    response_cache._cache_backend = response_cache.MemoryCacheBackend()
 
 
 # ==================== HTTP Client Fixture ====================

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from time import perf_counter
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
-from app.db.database import async_session_maker
+from app.db.database import Base, async_session_maker
 from app.models.asset_research import (
     AssetAnalysisReport,
     AssetAnalysisTask,
@@ -110,8 +113,9 @@ _CLAIM_AT = _FIRE_AT + timedelta(days=4, minutes=50)  # 12:00 on day 4
 async def _seed_due_schedule(
     *,
     fire_at: datetime,
+    session_maker: async_sessionmaker[AsyncSession] = async_session_maker,
 ) -> tuple[str, str]:
-    async with async_session_maker() as db:
+    async with session_maker() as db:
         user = User(
             username="asset_schedule_runner_user",
             email="asset-schedule-runner@example.test",
@@ -314,9 +318,10 @@ def _runner(
     data: _FuturesData,
     *,
     misfire_grace_seconds: int | None = None,
+    session_maker: async_sessionmaker[AsyncSession] = async_session_maker,
 ) -> AssetResearchScheduleRunner:
     return AssetResearchScheduleRunner(
-        session_maker=async_session_maker,
+        session_maker=session_maker,
         orchestrator_factory=lambda db: AssetResearchOrchestrator(db, data_adapter=data),
         lease_seconds=120,
         max_retries=2,
@@ -429,18 +434,35 @@ async def test_capacity_fixture_persists_one_approved_100_instrument_cycle_witho
 
 
 @pytest.mark.asyncio
-async def test_two_workers_can_claim_one_due_schedule_only_once() -> None:
-    fire_at = _FIRE_AT
-    await _seed_due_schedule(fire_at=fire_at)
-    first = _runner(_FuturesData())
-    second = _runner(_FuturesData())
-
-    first_claim, second_claim = await asyncio.gather(
-        first.claim_due(now=fire_at + timedelta(minutes=1)),
-        second.claim_due(now=fire_at + timedelta(minutes=1)),
+async def test_two_workers_can_claim_one_due_schedule_only_once(tmp_path: Path) -> None:
+    """Independent workers race against one test-local database in the same loop."""
+    test_engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'schedule_runner_concurrency.sqlite3'}",
+        connect_args={"timeout": 30},
+        poolclass=NullPool,
     )
+    test_session_maker = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    try:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-    assert len(first_claim) + len(second_claim) == 1
+        fire_at = _FIRE_AT
+        await _seed_due_schedule(fire_at=fire_at, session_maker=test_session_maker)
+        first = _runner(_FuturesData(), session_maker=test_session_maker)
+        second = _runner(_FuturesData(), session_maker=test_session_maker)
+
+        first_claim, second_claim = await asyncio.gather(
+            first.claim_due(now=fire_at + timedelta(minutes=1)),
+            second.claim_due(now=fire_at + timedelta(minutes=1)),
+        )
+
+        assert len(first_claim) + len(second_claim) == 1
+    finally:
+        await test_engine.dispose()
 
 
 @pytest.mark.asyncio

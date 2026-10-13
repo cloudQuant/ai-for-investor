@@ -1371,7 +1371,11 @@ def _index_matches(
     reflected_type = str(index.get("type") or "").upper()
     if dialect_name in {"mysql", "mariadb"}:
         expected_type = "UNIQUE" if unique else ""
-        if reflected_type != expected_type:
+        # SQLAlchemy 2.1 omits ``type`` for reflected MySQL indexes.  The
+        # information_schema check below still verifies the physical BTREE
+        # type, uniqueness, and visibility.  When the dialect does return a
+        # type (for example on older SQLAlchemy releases), reject mismatches.
+        if reflected_type and reflected_type != expected_type:
             return False
     elif reflected_type:
         return False

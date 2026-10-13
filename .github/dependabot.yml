@@ -9,6 +9,7 @@ updates:
   # Python backend (pip) - production + dev locks live in config/
   - package-ecosystem: "pip"
     directory: "/src/backend"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -28,6 +29,7 @@ updates:
   # Frontend (npm)
   - package-ecosystem: "npm"
     directory: "/src/frontend"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -40,11 +42,21 @@ updates:
     # pinia 3+/4 and @vitejs/plugin-vue 6 are major migrations deferred to
     # 194 Task J: they need full vitest/build validation and possibly code
     # adaptation before landing, not just the ratchet baseline refresh.
+    # Temporary compatibility holds: typescript-eslint 8.71.2 requires
+    # TypeScript <6.1; jsdom 30.1.1 drops Node 20; Element Plus 2.14.6 pulls
+    # @vueuse/core 15 (Node >=22) and breaks current vue-tsc 2 types. Remove
+    # these after the runtime and toolchain receive a dedicated upgrade.
     ignore:
       - dependency-name: "pinia"
         versions: [">=3"]
       - dependency-name: "@vitejs/plugin-vue"
         versions: [">=6"]
+      - dependency-name: "typescript"
+        versions: [">=6.1"]
+      - dependency-name: "jsdom"
+        versions: [">=30"]
+      - dependency-name: "element-plus"
+        versions: [">=2.14.6"]
 
   # Docker base images
   # Runtime majors (python >=3.13, node >=21) are deferred to 194 Task J:
@@ -52,6 +64,7 @@ updates:
   # needs a dedicated compatibility check first. Patch tags still flow.
   - package-ecosystem: "docker"
     directory: "/src/backend"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -66,6 +79,7 @@ updates:
 
   - package-ecosystem: "docker"
     directory: "/src/frontend"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -81,6 +95,7 @@ updates:
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"

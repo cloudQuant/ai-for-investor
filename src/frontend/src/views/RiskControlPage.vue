@@ -73,7 +73,6 @@
           :label="t('riskControl.runtimeInstance')"
           min-width="200"
         />
-        <!-- @vue-generic {RiskRule} -->
         <el-table-column
           :label="t('riskControl.status')"
           width="120"

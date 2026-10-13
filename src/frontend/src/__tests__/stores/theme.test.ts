@@ -128,6 +128,17 @@ describe('useThemeStore', () => {
     expect(meta).toBeTruthy()
   })
 
+  it('creates a dark theme-color meta tag when no tag exists', () => {
+    const store = useThemeStore()
+    store.setTheme('obsidian')
+
+    store.init()
+
+    const meta = document.querySelector('meta[name="theme-color"]')
+    expect(meta?.getAttribute('content')).toBe('#141414')
+    expect(document.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
+  })
+
   it('currentThemeLabel returns correct label', () => {
     const store = useThemeStore()
     expect(store.currentThemeLabel).toBe('极光')

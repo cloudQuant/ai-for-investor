@@ -659,10 +659,21 @@ def test_mysql_catalog_index_drift_fails_closed(
         )
 
 
-@pytest.mark.parametrize("dialect", ["sqlite", "postgresql", "mysql", "mariadb"])
+@pytest.mark.parametrize(
+    ("dialect", "mysql_index_type"),
+    [
+        ("sqlite", None),
+        ("postgresql", None),
+        ("mysql", None),
+        ("mysql", "UNIQUE"),
+        ("mariadb", None),
+        ("mariadb", "UNIQUE"),
+    ],
+)
 def test_cross_dialect_unique_constraint_pairing_accepts_real_reflection_shapes(
     monkeypatch,
     dialect: str,
+    mysql_index_type: str | None,
 ) -> None:
     migration = _migration_module()
     name = "uq_example_scope"
@@ -684,14 +695,14 @@ def test_cross_dialect_unique_constraint_pairing_accepts_real_reflection_shapes(
         ]
     elif dialect in {"mysql", "mariadb"}:
         unique["duplicates_index"] = name
-        indexes = [
-            {
-                "name": name,
-                "column_names": columns,
-                "unique": True,
-                "type": "UNIQUE",
-            }
-        ]
+        index: dict[str, Any] = {
+            "name": name,
+            "column_names": columns,
+            "unique": True,
+        }
+        if mysql_index_type is not None:
+            index["type"] = mysql_index_type
+        indexes = [index]
         bind = _CatalogBind(
             dialect,
             server_version_info=(8, 0, 36) if dialect == "mysql" else (10, 11, 8),

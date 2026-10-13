@@ -1308,7 +1308,7 @@ async def test_refresh_queries_do_not_reuse_local_first_singleflight_followers()
 
 def test_legacy_data_routes_remain_registered_alongside_v2_query_route() -> None:
     """Iteration 197 adds a new route and does not replace page-critical legacy paths."""
-    paths = {route.path for route in app.routes}
+    paths = set(app.openapi()["paths"])
 
     assert "/api/v1/data/queries" in paths
     assert "/api/v1/data/kline" in paths
