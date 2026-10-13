@@ -144,7 +144,9 @@ describe('useAuthStore', () => {
     expect(store.token).toBe('valid-token')
     expect(store.user).toBeNull()
     expect(store.identityStatus).toBe('retryable_error')
-    expect(store.identityError).toBeTruthy()
+    expect(store.identityError).toBe(error instanceof Error
+      ? error.message
+      : 'Unable to confirm the current user.')
     expect(store.isAuthenticated).toBe(false)
     expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
   })

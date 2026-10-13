@@ -46,7 +46,10 @@ function collectRuntimeDiagnostics(page: Page): void {
   runtimeDiagnosticsByPage.set(page, diagnostics)
 
   page.on('pageerror', error => {
-    diagnostics.push({ source: 'pageerror', message: error.stack ?? error.message })
+    diagnostics.push({
+      source: 'pageerror',
+      message: error.stack || error.message || error.name || 'Unknown browser runtime error',
+    })
   })
   page.on('console', message => {
     const text = message.text()
@@ -483,6 +486,10 @@ test('AC-D09: retains credentials through 503 and network failures, then confirm
 
   await page.goto('/research/workspaces')
   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+  const initialIdentityError = page.getByTestId('identity-retry-panel').locator('p').nth(1)
+  await expect(initialIdentityError).toBeVisible()
+  await expect(initialIdentityError).toHaveText(/\S/)
+  await expect(page.locator('.el-message--error')).toHaveCount(0)
   expect(meCalls).toBe(4)
   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
   expect(workspaceRequests).toEqual([])
@@ -491,6 +498,10 @@ test('AC-D09: retains credentials through 503 and network failures, then confirm
   await page.getByTestId('identity-retry').click()
   await expect.poll(() => meCalls, { timeout: 60_000 }).toBe(8)
   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+  const retryIdentityError = page.getByTestId('identity-retry-panel').locator('p').nth(1)
+  await expect(retryIdentityError).toBeVisible()
+  await expect(retryIdentityError).toHaveText(/\S/)
+  await expect(page.locator('.el-message--error')).toHaveCount(0)
   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
   await expect(page.getByTestId('login-submit')).toHaveCount(0)
 

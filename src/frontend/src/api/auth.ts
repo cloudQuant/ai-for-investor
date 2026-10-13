@@ -11,6 +11,6 @@ export const authApi = {
   },
 
   async getMe(): Promise<UserInfo> {
-    return api.get<UserInfo>('/auth/me')
+    return api.get<UserInfo>('/auth/me', { suppressErrorToast: true })
   },
 }
