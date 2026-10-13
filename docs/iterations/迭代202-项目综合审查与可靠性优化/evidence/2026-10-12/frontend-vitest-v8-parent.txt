@@ -1,0 +1,176 @@
+
+ RUN  v4.1.11 /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
+
+ ✓ src/__tests__/views/StrategyPage.test.ts (158 tests) 10673ms
+     ✓ keeps a confirmed auto mandate for a persisted blank-auto run continuation  313ms
+ ✓ src/__tests__/views/DataPage.test.ts (62 tests) 6643ms
+     ✓ aborts a v2 cursor lifecycle when the selected family changes after the first page resolves  436ms
+     ✓ remembers successful queries independently for each asset type  360ms
+     ✓ restores only the saved selection for the asset type being opened  814ms
+     ✓ uses crypto position columns when crypto history has no ohlc prices  406ms
+ ✓ src/__tests__/composables/useAiResearchV2.test.ts (41 tests) 57ms
+ ✓ src/__tests__/composables/useAiResearchApproval.test.ts (88 tests) 257ms
+ ✓ src/__tests__/views/AIChatPage.test.ts (24 tests) 18639ms
+     ✓ loads knowledge bases on mount  1479ms
+     ✓ automatically selects and remembers the only available knowledge base  417ms
+     ✓ restores a valid manually selected knowledge base when multiple are available  1111ms
+     ✓ renders existing assistant response  1532ms
+     ✓ can collapse and expand the conversation panel  1570ms
+     ✓ can collapse and expand the context panel  2333ms
+     ✓ opens a mobile conversation drawer and restores focus after closing it  552ms
+     ✓ closes a mobile context drawer with Escape  1521ms
+     ✓ renders conversation title in sidebar  2371ms
+     ✓ confirms before deleting a conversation from the sidebar  2194ms
+     ✓ loads conversation history when clicking a conversation title  787ms
+     ✓ renders welcome suggested prompts when there are no messages  590ms
+     ✓ only exposes knowledge QA mode in the knowledge base chat page  713ms
+     ✓ passes selected session model when sending a message  308ms
+ ✓ src/__tests__/api/marketData.test.ts (25 tests) 240ms
+ ✓ src/__tests__/components/aiResearch/TrustedResearchWorkbench.test.ts (18 tests) 4182ms
+     ✓ starts with an explicit draft action instead of an implicit confirmation action  1079ms
+     ✓ requires a registered server-side data receipt before a draft can be created  313ms
+     ✓ clears a stale candidate query when history selection switches to another run  385ms
+     ✓ renders candidate bindings without exposing sealed evaluation content  620ms
+     ✓ binds explicit freeze confirmation to the displayed candidate hash  350ms
+     ✓ does not expose a holdout action for a mutable or incompletely bound candidate  350ms
+ ✓ src/__tests__/views/AssetAnalysisPage.test.ts (12 tests) 7669ms
+     ✓ requires an explicit candidate confirmation before creating research, then displays only the published decision  3697ms
+     ✓ uses the identity level declared by an approved fund candidate instead of a page default  974ms
+     ✓ clears a completed asset result before rendering another asset type  433ms
+     ✓ saves only a published report to a selected caller knowledge base  1273ms
+     ✓ labels public shadow history instead of presenting it as the caller's own research  491ms
+     ✓ keeps a published decision visible and explains when secondary report rendering failed  382ms
+ ✓ src/__tests__/api/index.test.ts (40 tests) 110ms
+ ✓ src/__tests__/router/index.test.ts (49 tests) 316ms
+ ✓ src/__tests__/composables/useBacktestRuntime.test.ts (29 tests) 711ms
+ ✓ src/__tests__/views/ScannerPage.test.ts (7 tests) 1537ms
+     ✓ configures indicator rules and precomputes pool metrics from the manager dialog  316ms
+     ✓ creates and edits scanner plans from the plan editor dialog  417ms
+ ✓ src/__tests__/views/BacktestResultPage.test.ts (10 tests) 704ms
+ ✓ src/__tests__/views/PortfolioPage.test.ts (24 tests) 1827ms
+     ✓ hasOpenPosition ignores zero residuals but keeps hedged positions  473ms
+ ✓ src/__tests__/components/aiResearch/ApprovalPanel.test.ts (22 tests) 2158ms
+     ✓ renders the closed ACTIVE package and all thirteen safe gates for a reviewer  302ms
+ ✓ src/__tests__/components/common/AppLayout.test.ts (25 tests) 2877ms
+       ✓ 应该渲染侧边栏  1940ms
+ ✓ src/__tests__/stores/kbChat.test.ts (13 tests) 58ms
+ ✓ src/__tests__/stores/knowledgeBase.test.ts (16 tests) 735ms
+     ✓ updateDocument calls API and refreshes the documents list  304ms
+     ✓ deleteDocument deletes via API and refreshes both lists  308ms
+ ✓ src/__tests__/stores/workspace.test.ts (21 tests) 446ms
+       ✓ fetchWorkspaces populates list and total  316ms
+ ✓ src/__tests__/api/strategy.test.ts (33 tests) 415ms
+ ✓ src/__tests__/stores/auth.test.ts (19 tests) 66ms
+ ✓ src/__tests__/components/aiResearch/EvidencePanel.test.ts (18 tests) 1562ms
+     ✓ renders holdout lifecycle RECONCILING separately from missing evidence  449ms
+ ✓ src/__tests__/types/aiResearchApproval.test.ts (34 tests) 44ms
+ ✓ src/__tests__/api/iteration170.test.ts (5 tests) 15ms
+ ✓ src/__tests__/api/retry-interceptor.test.ts (32 tests) 32ms
+ ✓ src/__tests__/utils/auditTracker.test.ts (20 tests) 113ms
+ ✓ src/__tests__/views/NewsIntelligencePage.test.ts (5 tests) 319ms
+ ✓ src/__tests__/views/QuotePage.test.ts (2 tests) 557ms
+     ✓ loads quotes and covers symbol, sort, column, format, and chart helpers  445ms
+ ✓ src/__tests__/utils/markdown-sanitizer.test.ts (27 tests) 7003ms
+       ✓ Property 4: never outputs dangerous elements from malicious input  995ms
+       ✓ Property 4: event handlers and javascript: URIs are stripped from actual HTML attributes  2663ms
+       ✓ Property 4: preserves safe Markdown content structure  2421ms
+ ✓ src/__tests__/views/strategy/StrategyCollaborators.test.ts (5 tests) 478ms
+     ✓ keeps a rejected market data family unsupported without issuing a query fallback  461ms
+ ✓ src/__tests__/components/workspace/WorkspaceOptimizationTab.test.ts (13 tests) 12486ms
+     ✓ mounts cleanly  5228ms
+     ✓ formatParams renders key=value pairs and handles non-objects  2884ms
+     ✓ fmtVal formats numbers to 4 decimals  711ms
+     ✓ fmtMoney formats numbers and passes strings  533ms
+     ✓ progressPct computes percentage from completed/total  829ms
+     ✓ hasResults reflects rows or running state  435ms
+     ✓ does not call the first displayed row best without objective metadata  347ms
+     ✓ displayRows sorts by the active sort key descending by default  395ms
+     ✓ keeps the backend maximize best when the user reverses display sorting  334ms
+     ✓ does not invent a best row for an empty objective-bound result  425ms
+ ✓ src/__tests__/views/workspace/WorkspaceDetailPage.test.ts (6 tests) 8108ms
+     ✓ fetches workspace detail and units from the route id  1987ms
+     ✓ keeps a reused route component and its unit actions bound to the new workspace id  396ms
+     ✓ renders the trading runtime overview for trading workspaces  601ms
+     ✓ opens the optimization tab when a unit tab requests it  4762ms
+ ✓ src/__tests__/composables/useUnitTableRendering.test.ts (49 tests) 914ms
+       ✓ returns localized date string  858ms
+ ✓ src/__tests__/components/workspace/WorkspaceUnitsTab.test.ts (14 tests) 15969ms
+     ✓ mounts cleanly  1937ms
+     ✓ inferBatchParamType returns int for integer ranges and float otherwise  2168ms
+     ✓ calculateBatchTotalCombinations multiplies per-param counts  1220ms
+     ✓ optimization status predicates classify states  723ms
+     ✓ getOptimizationTotal/Completed clamp to >= 0  1647ms
+     ✓ shouldShowOptimizationProgress reflects active vs terminal state  352ms
+     ✓ runStatusTagType and runStatusLabel map known statuses  1210ms
+     ✓ optimizationStatusTagType/Label handle null  1314ms
+     ✓ objectiveLabel maps known objectives  917ms
+     ✓ batch submission maps a legacy objective into the canonical request pair  913ms
+     ✓ formatOptimizationCount renders completed/total or dash  621ms
+     ✓ unitResultSummary renders metrics and failure reasons  364ms
+     ✓ canOpenReport requires completed status and a task id  1478ms
+     ✓ selection computeds reflect store state  720ms
+ ✓ src/__tests__/utils/exportUtils.test.ts (23 tests) 300ms
+ ✓ src/__tests__/views/BacktestPage.test.ts (13 tests) 11870ms
+     ✓ mounts without error  1434ms
+     ✓ runBacktest warns if no strategy selected  2429ms
+     ✓ onStrategyChange clears config when empty  318ms
+     ✓ onStrategyChange loads config  686ms
+     ✓ viewResult navigates to result page  669ms
+     ✓ cancelBacktest does nothing without taskId  3550ms
+     ✓ closeWebSocket handles null ws  402ms
+     ✓ runBacktest surfaces submission errors  1654ms
+ ✓ src/__tests__/composables/useInstanceActions.test.ts (17 tests) 952ms
+ ✓ src/__tests__/views/SettingsPage.test.ts (11 tests) 5911ms
+     ✓ renders redesigned settings workspace  1376ms
+     ✓ loads current user AI usage on mount  378ms
+     ✓ switches the mobile settings section without removing desktop content  433ms
+     ✓ loads and renders AI model preferences on mount  540ms
+     ✓ saves AI model preferences  485ms
+     ✓ tests selected AI model connectivity  535ms
+     ✓ changePassword validates empty fields  352ms
+     ✓ changePassword validates mismatch  454ms
+     ✓ changePassword validates min length  587ms
+ ✓ src/__tests__/views/StockAnalysisPage.test.ts (5 tests) 6248ms
+     ✓ renders a standalone single-stock analysis workspace instead of chat  2300ms
+     ✓ restores the latest completed report and its export actions on mount  1131ms
+     ✓ creates stock analysis task from the form defaults  1042ms
+     ✓ updates selected modules when research depth changes  488ms
+     ✓ renders completed report sections as sanitized Markdown instead of raw syntax  1262ms
+ ✓ src/__tests__/components/common/logViewerHelpers.test.ts (25 tests) 34ms
+ ✓ src/__tests__/composables/useStrategyDraftWorkspaceExecution.test.ts (4 tests) 62ms
+ ✓ src/__tests__/api/akshare.test.ts (6 tests) 9ms
+ ✓ src/__tests__/views/workspace/WorkspaceListPage.test.ts (14 tests) 3276ms
+     ✓ fetches research workspaces on mount via the workspaceType watcher  707ms
+     ✓ statusLabel maps known statuses and falls back to the raw value  361ms
+     ✓ formatTime returns empty for falsy and a string otherwise  686ms
+     ✓ shows the first-run research workflow and opens workspace creation from its action  443ms
+     ✓ toggleSelect adds then removes an id  473ms
+ ✓ src/__tests__/views/AIProviderConfigPage.test.ts (4 tests) 5066ms
+     ✓ loads provider list without exposing saved keys  2059ms
+     ✓ filters providers by status, type, and search keyword  904ms
+     ✓ saves edits through the dialog draft  746ms
+     ✓ creates, toggles, and deletes providers from the workbench actions  1329ms
+ ✓ src/__tests__/api/strategyApproval.test.ts (13 tests) 381ms
+     ✓ redacts an unsafe credential URI reason from the decision API response  318ms
+ ✓ src/__tests__/stores/theme.test.ts (13 tests) 1734ms
+     ✓ setTheme updates mode  460ms
+     ✓ toggleTheme switches between aurora and obsidian  313ms
+     ✓ all 7 themes apply CSS variables  315ms
+ ✓ src/__tests__/composables/useAssetAnalysisTask.test.ts (5 tests) 661ms
+     ✓ pauses background polling while the page is hidden and refreshes on return  571ms
+ ✓ src/__tests__/views/data/DataGovernancePage.test.ts (4 tests) 5432ms
+     ✓ bootstraps and loads providers and endpoints on mount  2788ms
+     ✓ renders the redesigned governance workbench  970ms
+     ✓ loads endpoints for the selected provider  396ms
+     ✓ opens endpoint details and runs preview and job actions  1242ms
+ ✓ src/__tests__/components/charts/MetricCard.test.ts (21 tests) 2859ms
+       ✓ 应该正确渲染标题和值  604ms
+       ✓ 应该使用指定的危险颜色  383ms
+       ✓ 应该显示工具提示图标  498ms
+ ✓ src/__tests__/components/ErrorBoundary.test.ts (7 tests) 1613ms
+       ✓ 子组件抛出错误后应显示错误 UI  573ms
+       ✓ 应显示截断的错误消息（不超过 200 字符）  546ms
+ ✓ src/__tests__/views/AITradingPage.test.ts (3 tests) 2317ms
+     ✓ loads config and history, then executes a dry-run trade  1376ms
+     ✓ uses connected account selections for live trading  465ms
+     ✓ confirms and cancels pending trades through the dialog flow  464ms

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "bundle-size-gate-node20-v7.log",
+    "bytes": 178,
+    "sha256": "c30c2f755f37a8a8f55a1045ee4f1bbcda6ed46f05daabbe13a92d223dd0b4bf"
+  },
+  {
+    "name": "bundle-size-gate-node20-v7.receipt",
+    "bytes": 218,
+    "sha256": "b5ff87f9aef10c32309e1babdc07c09b520653e7b5caec09b11b71c5968f68d2"
+  },
+  {
+    "name": "bundle-size-gate-node20-v8.log",
+    "bytes": 1615,
+    "sha256": "147782e6815372aca960048f4662edfb92d180b88a50788b15966646391b70ed"
+  },
+  {
+    "name": "bundle-size-gate-node20-v8.receipt",
+    "bytes": 218,
+    "sha256": "970fe073810a964ccaf8f4e13784d1d9034ccf831436b87574a5975660d0668a"
+  },
+  {
+    "name": "node20-v8-chunk-diagnostics.json",
+    "bytes": 64145,
+    "sha256": "e439b98318527b0c2be2190094bace7dc4d5511aa8f3bdeca2490e1091a34c70"
+  },
+  {
+    "name": "node20-v8-config-hashes.txt",
+    "bytes": 334,
+    "sha256": "44a63f5e2982b0b2c3e40169fb84219662fcbdbe3a1cfa12d06d038010a69ee4"
+  },
+  {
+    "name": "node20-v8-source-hashes.txt",
+    "bytes": 1038,
+    "sha256": "c22bd97da694d5b0af6c7ea7c99208179d13436f015e15a4831327d674683406"
+  },
+  {
+    "name": "node20-v8-static-closures.json",
+    "bytes": 234365,
+    "sha256": "6bcfd586cdbb8f212ea09fc9e0a37563613584e077f0e5a8904e82fd59504449"
+  },
+  {
+    "name": "production-build-node20-v7.log",
+    "bytes": 103320,
+    "sha256": "5d3d2de820f8aa73a0cebef389ab57426d6d1987547f0cc357b5d2207cfc868a"
+  },
+  {
+    "name": "production-build-node20-v7.receipt",
+    "bytes": 408,
+    "sha256": "4ea2bdfd61f6157fa5c73686ecaf297fb1406484fa138082c5a7f71be729e055"
+  },
+  {
+    "name": "production-build-node20-v8.log",
+    "bytes": 19631,
+    "sha256": "ecc221e8b1c1472c60d11c79a47a9a78b6f5b505bcbf9c91bc1a19bc6431f60c"
+  },
+  {
+    "name": "production-build-node20-v8.receipt",
+    "bytes": 408,
+    "sha256": "6e627339a8a10d73e9f1253d29252c35a782524c94619101bf9cf3da8b7bab77"
+  }
+]

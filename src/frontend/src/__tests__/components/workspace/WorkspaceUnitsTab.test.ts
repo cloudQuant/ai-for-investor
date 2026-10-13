@@ -19,6 +19,7 @@ vi.mock('@/api/workspace', () => ({
   workspaceApi: {
     runUnits: vi.fn().mockResolvedValue(undefined),
     stopUnits: vi.fn().mockResolvedValue(undefined),
+    submitOptimization: vi.fn().mockResolvedValue({ task_id: 'opt-1', total_combinations: 3 }),
   },
 }))
 
@@ -37,7 +38,14 @@ const storeState = {
   }),
   clearSelection: vi.fn(),
   fetchUnits: vi.fn().mockResolvedValue(undefined),
-  pollStatus: vi.fn().mockResolvedValue(undefined),
+  pollStatus: vi.fn().mockImplementation(async () => {
+    for (const unit of storeState.units) {
+      if (unit.opt_status === 'pending' || unit.opt_status === 'queued') {
+        unit.opt_status = 'completed'
+        unit.opt_completed = unit.opt_total
+      }
+    }
+  }),
 }
 
 vi.mock('@/stores/workspace', () => ({
@@ -45,6 +53,7 @@ vi.mock('@/stores/workspace', () => ({
 }))
 
 import WorkspaceUnitsTab from '@/components/workspace/WorkspaceUnitsTab.vue'
+import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
 
 const childStubs = {
@@ -148,9 +157,30 @@ describe('WorkspaceUnitsTab', () => {
 
   it('objectiveLabel maps known objectives', () => {
     const vm = doMount().vm as any
-    expect(vm.objectiveLabel('sharpe_max')).toBe('units.bestSharpe')
+    expect(vm.objectiveLabel('sharpe_max')).toBe('optimization.sharpe (optimization.maximize)')
+    expect(vm.objectiveLabel('min_drawdown')).toBe('optimization.maxDrawdown (optimization.minimize)')
     expect(vm.objectiveLabel(undefined)).toBe('-')
     expect(vm.objectiveLabel('custom')).toBe('custom')
+  })
+
+  it('batch submission maps a legacy objective into the canonical request pair', async () => {
+    storeState.units = [{
+      id: 'u-1',
+      strategy_name: 'Alpha',
+      optimization_config: {
+        objective: 'min_drawdown',
+        param_layers: [{ param_name: 'fast', opt_type: 'equal_diff', start: 1, end: 3, step: 1 }],
+      },
+    }]
+    storeState.selectedUnitIds = ['u-1']
+
+    await (doMount().vm as any).handleBatchSubmitOpt()
+
+    expect(workspaceApi.submitOptimization).toHaveBeenCalledWith('ws-1', expect.objectContaining({
+      unit_id: 'u-1',
+      objective: 'max_drawdown',
+      direction: 'minimize',
+    }))
   })
 
   it('formatOptimizationCount renders completed/total or dash', () => {

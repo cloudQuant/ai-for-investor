@@ -1,0 +1,90 @@
+        <Coroutine test_live_close_respects_explicit_quantity>
+        <Coroutine test_live_close_rejects_quantity_above_position>
+        <Coroutine test_live_close_matches_ib_client_portal_contract_description>
+        <Coroutine test_live_close_accepts_wrapped_positions_payload>
+        <Coroutine test_live_close_rejects_size_step_mismatch_before_gateway_send>
+        <Coroutine test_live_close_allows_below_minimum_position_to_reduce_risk>
+        <Coroutine test_live_close_splits_market_orders_by_exchange_max_mkt_size>
+        <Coroutine test_live_close_aggregates_same_direction_contract_rows>
+        <Coroutine test_live_close_splits_ctp_today_and_yesterday_offsets>
+        <Coroutine test_live_close_splits_ctp_td_and_history_position_aliases>
+        <Coroutine test_live_close_partial_ctp_quantity_splits_today_then_yesterday>
+        <Coroutine test_live_close_handles_raw_mt5_short_trade_action>
+        <Coroutine test_live_close_rejects_mt5_position_without_position_id>
+        <Coroutine test_live_close_splits_mt5_positions_by_position_id>
+        <Coroutine test_live_close_partial_mt5_quantity_splits_by_position_id>
+        <Coroutine test_live_close_handles_raw_ctp_short_position_direction>
+        <Coroutine test_live_close_handles_float_string_ctp_short_position_direction>
+        <Coroutine test_live_close_handles_bybit_position_idx_short_position>
+        <Coroutine test_live_close_rejects_hedged_symbol_without_requested_side>
+        <Coroutine test_live_close_uses_explicit_position_side_for_hedged_symbol>
+        <Coroutine test_live_close_infers_short_side_from_raw_instruction>
+        <Coroutine test_live_close_rejects_gateway_error_payload>
+      <Class TestDirectOrderServiceFindGateway>
+        <Function test_find_gateway_uses_gateway_manual_discovery>
+        <Function test_find_gateway_exception_returns_none>
+    <Module test_enhanced_logger.py>
+      <Class TestSensitiveDataFiltering>
+        <Function test_filter_password>
+        <Function test_filter_api_key>
+        <Function test_filter_nested_dict>
+        <Function test_filter_nested_dict_safe_keys>
+        <Function test_filter_list_of_dicts>
+        <Function test_no_filter_for_safe_data>
+        <Function test_short_secret_masking>
+        <Function test_filter_redacts_credentials_embedded_in_safe_text_fields>
+        <Function test_structured_serializer_redacts_message_exception_and_context>
+        <Function test_log_record_patcher_redacts_plain_sink_message_and_exception>
+        <Function test_global_loguru_patcher_redacts_actual_sink_records>
+      <Class TestSetupLogger>
+        <Function test_setup_logger_returns_logger>
+        <Function test_setup_logger_creates_log_directory>
+        <Function test_setup_logger_suppresses_noisy_third_party_debug_logs>
+        <Function test_pytest_log_dir_isolated_from_repo_logs>
+        <Function test_error_file_handler_never_diagnoses_local_variables>
+      <Class TestLogFileArchival>
+        <Function test_archive_stale_dated_logs_compresses_inactive_file>
+        <Function test_archive_stale_dated_logs_skips_current_recent_and_non_dated>
+      <Class TestLogRotationPolicy>
+        <Function test_daily_or_size_rotation_triggers_when_size_cap_would_be_exceeded>
+        <Function test_daily_or_size_rotation_triggers_on_date_boundary>
+        <Function test_daily_or_size_rotation_can_disable_size_cap>
+      <Class TestGetLogger>
+        <Function test_get_logger_with_name>
+        <Function test_get_logger_without_name>
+      <Class TestLogContext>
+        <Function test_context_manager_binds_variables>
+        <Function test_context_manager_exit>
+      <Class TestBindRequestContext>
+        <Function test_bind_request_context_basic>
+        <Function test_bind_request_context_with_user>
+        <Function test_bind_request_context_with_extra>
+      <Class TestBindTaskContext>
+        <Function test_bind_task_context_basic>
+        <Function test_bind_task_context_with_user>
+        <Function test_bind_task_context_with_type>
+      <Class TestLogLevel>
+        <Function test_log_level_values>
+      <Class TestAuditLogger>
+        <Function test_audit_logger_initialization>
+        <Function test_audit_logger_has_required_methods>
+      <Class TestLoggingMiddleware>
+        <Function test_logging_middleware_initialization>
+        <Function test_audit_logging_middleware_initialization>
+        <Function test_performance_logging_middleware_initialization>
+
+==================================== ERRORS ====================================
+_______ ERROR collecting tests/test_ensure_dual_stress_running_script.py _______
+tests/test_ensure_dual_stress_running_script.py:16: in <module>
+    raise RuntimeError("POSIX true/false/ps commands are required for stress-script tests")
+E   RuntimeError: POSIX true/false/ps commands are required for stress-script tests
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /usr/local/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_ensure_dual_stress_running_script.py - RuntimeError: POSIX t...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+============== 4803 tests collected, 1 error in 194.59s (0:03:14) ==============

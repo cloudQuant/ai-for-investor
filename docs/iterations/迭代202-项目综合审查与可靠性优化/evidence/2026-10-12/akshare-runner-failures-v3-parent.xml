@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="9" time="187.174" timestamp="2026-10-12T11:17:36.721734+00:00" hostname="8035a63dbedb"><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_process_receipt_reuses_parent_normalization" time="0.521" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;protocol_version&quot;] = &quot;other&quot;-AKSHARE_RUNNER_PROTOCOL_MISMATCH]" time="1.436" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;request&quot;][&quot;provider_symbol&quot;] = &quot;SUBSTITUTED&quot;-AKSHARE_RUNNER_PROTOCOL_MISMATCH]" time="0.569" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;execution&quot;][&quot;endpoint&quot;] = &quot;forex_hist_em&quot;-AKSHARE_RUNNER_PROTOCOL_MISMATCH]" time="1.636" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;source_revision&quot;] = &quot;akshare-substituted:stock_zh_a_hist&quot;-AKSHARE_RUNNER_SOURCE_REVISION_MISMATCH]" time="0.758" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;response_rows&quot;] = {&quot;not&quot;: &quot;a-list&quot;}-AKSHARE_RUNNER_INVALID_RESPONSE]" time="0.350" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;unexpected&quot;] = &quot;unreviewed&quot;-AKSHARE_RUNNER_INVALID_RESPONSE]" time="0.309" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_rejects_protocol_echo_and_result_tampering[result[&quot;response_rows&quot;][0][&quot;\u80a1\u7968\u4ee3\u7801&quot;] = &quot;000002&quot;-AKSHARE_IDENTITY_MISMATCH]" time="0.273" /><testcase classname="market_data_platform.test_akshare_runner_provider" name="test_akshare_runner_success_reaps_descendants_before_return" time="180.312"><failure message="Failed: Timeout (&gt;180.0s) from pytest-timeout.">/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:469: in runtest
+    super().runtest()
+/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:716: in inner
+    runner.run(coro, context=context)
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:641: in run_until_complete
+    self.run_forever()
+/usr/local/lib/python3.11/asyncio/base_events.py:608: in run_forever
+    self._run_once()
+/usr/local/lib/python3.11/asyncio/base_events.py:1898: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (&gt;180.0s) from pytest-timeout.</failure></testcase></testsuite></testsuites>

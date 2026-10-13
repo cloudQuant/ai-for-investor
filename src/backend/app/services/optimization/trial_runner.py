@@ -3,10 +3,13 @@ import logging
 import math
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import yaml
@@ -260,6 +263,122 @@ def parse_trial_logs(
     }
 
 
+def _signal_process_group(pid: int, signal_number: int) -> None:
+    if os.name == "posix":
+        try:
+            os.killpg(pid, signal_number)
+        except ProcessLookupError:
+            pass
+        return
+
+    try:
+        os.kill(pid, signal_number)
+    except ProcessLookupError:
+        pass
+
+
+def _terminate_subprocess_tree(
+    process: Any,
+    *,
+    grace_seconds: float = 2.0,
+) -> tuple[str, str]:
+    """Terminate a trial's process group and wait for the launched process."""
+    pid = int(process.pid)
+    if os.name == "posix":
+        _signal_process_group(pid, signal.SIGTERM)
+    else:
+        process.terminate()
+    try:
+        stdout, stderr = process.communicate(timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            _signal_process_group(pid, signal.SIGKILL)
+        else:
+            process.kill()
+        stdout, stderr = process.communicate()
+
+    if os.name == "posix":
+        try:
+            os.killpg(pid, 0)
+        except ProcessLookupError:
+            pass
+        else:
+            _signal_process_group(pid, signal.SIGKILL)
+            deadline = time.monotonic() + grace_seconds
+            while time.monotonic() < deadline:
+                try:
+                    os.killpg(pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError(f"Trial process group {pid} did not exit after SIGKILL")
+
+    process.wait()
+    return stdout or "", stderr or ""
+
+
+def _run_trial_subprocess(
+    command: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    cancel_marker: str | None,
+    subprocess_module: Any,
+    timeout_seconds: float = 600,
+) -> tuple[int, str, str, bool]:
+    """Run a trial while polling for task cancellation and managing its process group."""
+    popen = getattr(subprocess_module, "Popen", None)
+    if not isinstance(subprocess_module, ModuleType) or not callable(popen):
+        # Compatibility for narrow unit doubles; production uses Popen so an
+        # active subprocess can be stopped when its task is cancelled.
+        process = subprocess_module.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            env=env,
+        )
+        return (
+            int(getattr(process, "returncode", 0) or 0),
+            getattr(process, "stdout", "") or "",
+            getattr(process, "stderr", "") or "",
+            False,
+        )
+
+    popen_kwargs: dict[str, Any] = {
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "env": env,
+    }
+    if os.name == "posix":
+        popen_kwargs["start_new_session"] = True
+    elif os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+    process = popen(command, **popen_kwargs)
+    deadline = time.monotonic() + timeout_seconds
+    marker_path = Path(cancel_marker) if cancel_marker else None
+    while True:
+        if marker_path is not None and marker_path.is_file():
+            stdout, stderr = _terminate_subprocess_tree(process)
+            return int(process.returncode or 0), stdout, stderr, True
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            stdout, stderr = _terminate_subprocess_tree(process)
+            timeout_note = f"Trial subprocess exceeded {timeout_seconds:g} seconds"
+            return int(process.returncode or -1), stdout, f"{stderr}\n{timeout_note}", False
+        try:
+            stdout, stderr = process.communicate(timeout=min(0.1, remaining))
+            return int(process.returncode or 0), stdout or "", stderr or "", False
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def run_single_trial(
     strategy_dir: str,
     params: dict[str, Any],
@@ -269,6 +388,7 @@ def run_single_trial(
     *,
     parse_trial_logs_fn: Callable[[Path], dict[str, float] | None] = parse_trial_logs,
     subprocess_module: Any = subprocess,
+    cancellation_marker: str | None = None,
 ) -> dict[str, Any]:
     strategy_path = Path(strategy_dir)
     trial_dir = Path(tmp_base) / f"trial_{trial_index}"
@@ -277,6 +397,11 @@ def run_single_trial(
     stderr_text = ""
 
     try:
+        if cancellation_marker and Path(cancellation_marker).is_file():
+            result["cancelled"] = True
+            result["error"] = "cancelled before trial started"
+            return result
+
         shutil.copytree(strategy_path, trial_dir, dirs_exist_ok=True)
 
         logs_dir = trial_dir / "logs"
@@ -296,6 +421,11 @@ def run_single_trial(
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
 
+        if cancellation_marker and Path(cancellation_marker).is_file():
+            result["cancelled"] = True
+            result["error"] = "cancelled before subprocess started"
+            return result
+
         run_py = trial_dir / "run.py"
 
         project_root = Path(strategy_dir).parent.parent
@@ -304,17 +434,18 @@ def run_single_trial(
         extra_paths = [str(strategy_dir), str(trial_dir)]
         env["PYTHONPATH"] = os.pathsep.join(extra_paths + [env.get("PYTHONPATH", "")])
 
-        proc = subprocess_module.run(
+        return_code, stdout_text, stderr_text, cancelled = _run_trial_subprocess(
             [sys.executable, "-O", str(run_py)],
             cwd=str(trial_dir),
-            capture_output=True,
-            text=True,
-            timeout=600,
             env=env,
+            cancel_marker=cancellation_marker,
+            subprocess_module=subprocess_module,
         )
-        stdout_text = getattr(proc, "stdout", "") or ""
-        stderr_text = getattr(proc, "stderr", "") or ""
-        return_code = int(getattr(proc, "returncode", 0) or 0)
+
+        if cancelled:
+            result["cancelled"] = True
+            result["error"] = "trial cancelled"
+            return result
 
         if return_code != 0:
             result["exit_code"] = return_code

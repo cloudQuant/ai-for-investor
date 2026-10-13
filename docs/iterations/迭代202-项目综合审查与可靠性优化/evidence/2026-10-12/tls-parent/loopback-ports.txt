@@ -1,0 +1,1 @@
+loopback ports: http=51840 https=51841 pebble-management=51842 challtestsrv-management=51843

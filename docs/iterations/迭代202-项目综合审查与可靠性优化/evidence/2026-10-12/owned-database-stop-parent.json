@@ -1,0 +1,35 @@
+[
+  {
+    "command": [
+      "docker",
+      "compose",
+      "--project-directory",
+      "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+      "--project-name",
+      "iter202-d12",
+      "--env-file",
+      "/tmp/iter202-d12-compose.env",
+      "-f",
+      "docker/docker-compose.yml",
+      "-f",
+      "docker/compose/dev.yml",
+      "stop"
+    ],
+    "started_at": "2026-10-12T08:56:05.391101+00:00",
+    "finished_at": "2026-10-12T08:56:54.224389+00:00",
+    "exit_code": 0,
+    "output": " Container iter202-d12-backend-1 Stopping \n Container iter202-d12-backend-1 Stopped \n Container iter202-d12-migrate-1 Stopping \n Container iter202-d12-migrate-1 Stopped \n Container iter202-d12-postgres-1 Stopping \n Container iter202-d12-postgres-1 Stopped \n"
+  },
+  {
+    "command": [
+      "docker",
+      "stop",
+      "iter202-mysql",
+      "iter202-postgres"
+    ],
+    "started_at": "2026-10-12T08:56:54.253100+00:00",
+    "finished_at": "2026-10-12T08:57:06.689978+00:00",
+    "exit_code": 0,
+    "output": "iter202-mysql\niter202-postgres\n"
+  }
+]

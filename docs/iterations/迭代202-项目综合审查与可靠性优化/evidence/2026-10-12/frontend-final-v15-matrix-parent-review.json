@@ -1,0 +1,15 @@
+{
+  "reviewed_at": "2026-10-12T14:34:34.533Z",
+  "reviewer": "primary",
+  "verdict": "PASS",
+  "matrix_receipt": "frontend-final-v15-matrix-parent-receipt.json",
+  "node20_tests": 1726,
+  "node24_tests": 1726,
+  "failed": 0,
+  "source_unchanged": true,
+  "node20_node24_dist_identical": true,
+  "dist_files": 176,
+  "source_manifest_sha256": "71d3ba3986311601512cb534d92b0da64b30287852abb5cca66dec4efc3c60f0",
+  "checks": "Full Vue/Vite typecheck, zero-warning ESLint, full Vitest, official npm build and unchanged bundle budget on Node20.20.2 and Node24.19.0",
+  "browser": "Final production preview suite running separately"
+}

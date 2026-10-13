@@ -1,5 +1,8 @@
 """Prometheus contracts for multi-asset research observability."""
 
+import importlib.util
+import sys
+
 import pytest
 
 from app.api.metrics import metrics_status
@@ -15,6 +18,28 @@ from app.middleware.metrics import (
     record_asset_research_task,
     set_asset_research_queue_depth,
 )
+
+
+def test_optional_prometheus_dependency_fails_closed_without_breaking_metrics_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Optional metrics remain inert when prometheus_client cannot be imported."""
+    module_path = metrics_module.__file__
+    assert module_path is not None
+    spec = importlib.util.spec_from_file_location("metrics_without_prometheus", module_path)
+    assert spec is not None and spec.loader is not None
+    fallback_metrics = importlib.util.module_from_spec(spec)
+
+    monkeypatch.setitem(sys.modules, "prometheus_client", None)
+    spec.loader.exec_module(fallback_metrics)
+
+    assert fallback_metrics.is_metrics_available() is False
+    assert fallback_metrics._registry is None
+    assert fallback_metrics.BACKTEST_TOTAL is None
+    fallback_metrics.record_backtest_start("strategy-without-metrics")
+    fallback_metrics.record_asset_research_task(asset_type="stock", status="SUCCEEDED")
+    with pytest.raises(RuntimeError, match="prometheus_client is not installed"):
+        fallback_metrics.get_metrics_output()
 
 
 @pytest.mark.skipif(not is_metrics_available(), reason="prometheus_client is optional")

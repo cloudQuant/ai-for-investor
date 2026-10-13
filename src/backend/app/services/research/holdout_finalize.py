@@ -10,15 +10,16 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from hashlib import sha256
-from typing import Any, TypeGuard
+from typing import Any
 
-from sqlalchemy import CursorResult, Result, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import database
+from app.db import persistence_boundaries as _persistence
 from app.models.ai_research_v2 import (
     ResearchArtifact,
     ResearchArtifactContent,
@@ -52,6 +53,11 @@ from app.services.research.promotion import (
     promotion_policy_material_hash,
     resolve_server_policy,
 )
+
+_cursor_rowcount = _persistence.cursor_rowcount
+_is_sha256 = _persistence.is_holdout_sha256
+_optional_time = _persistence.optional_stored_utc
+_as_utc = _persistence.stored_utc
 
 _BINDING_SCHEMA_VERSION = "holdout-artifact-binding-v1"
 _EVIDENCE_SCHEMA_VERSION = "sealed-holdout-evidence-v1"
@@ -2161,33 +2167,6 @@ def _required_hash(value: str | None) -> str:
         raise ValueError("HOLDOUT_FINALIZE_EXECUTION_INVALID")
     assert isinstance(value, str)
     return value
-
-
-def _optional_time(value: datetime | None) -> datetime | None:
-    return _as_utc(value) if value is not None else None
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None or value.utcoffset() is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _is_sha256(value: object) -> TypeGuard[str]:
-    if not isinstance(value, str) or len(value) != 64 or value != value.lower():
-        return False
-    try:
-        int(value, 16)
-    except ValueError:
-        return False
-    return True
-
-
-def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
-    """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
-    if isinstance(result, CursorResult):
-        return result.rowcount or 0
-    return 0
 
 
 def _safe_reason_code(exc: ValueError) -> str:

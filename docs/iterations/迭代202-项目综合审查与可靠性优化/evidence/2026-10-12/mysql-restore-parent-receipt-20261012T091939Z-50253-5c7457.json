@@ -1,0 +1,368 @@
+{
+  "backup_artifact": null,
+  "checks": [
+    {
+      "name": "list project containers exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "list project volumes exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "list project networks exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "fresh isolated Compose project",
+      "result": "PASS"
+    },
+    {
+      "name": "start disposable MySQL 8 service exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "wait for MySQL readiness exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "read MySQL container ID exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "read MySQL image ID exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "list project volumes exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "list project containers exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "list project volumes exit code",
+      "observed": 0,
+      "result": "PASS"
+    },
+    {
+      "name": "list project networks exit code",
+      "observed": 0,
+      "result": "PASS"
+    }
+  ],
+  "commands": [
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "--all",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:19:40Z",
+      "name": "list project containers",
+      "started_at_utc": "2026-10-12T09:19:39Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "volume",
+        "ls",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:19:40Z",
+      "name": "list project volumes",
+      "started_at_utc": "2026-10-12T09:19:40Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "network",
+        "ls",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:19:40Z",
+      "name": "list project networks",
+      "started_at_utc": "2026-10-12T09:19:40Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-restore-parent",
+        "--env-file",
+        "/private/tmp/iter202-restore-parent-8eyslul7/mysql.env",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "up",
+        "--detach",
+        "mysql"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:19:45Z",
+      "name": "start disposable MySQL 8 service",
+      "started_at_utc": "2026-10-12T09:19:40Z",
+      "stderr": " Network iter202-restore-parent_default Creating \n Network iter202-restore-parent_default Created \n Volume iter202-restore-parent_mysql_data Creating \n Volume iter202-restore-parent_mysql_data Created \n Container iter202-restore-parent-mysql-1 Creating \n Container iter202-restore-parent-mysql-1 Created \n Container iter202-restore-parent-mysql-1 Starting \n Container iter202-restore-parent-mysql-1 Started \n",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-restore-parent",
+        "--env-file",
+        "/private/tmp/iter202-restore-parent-8eyslul7/mysql.env",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "exec",
+        "--no-TTY",
+        "mysql",
+        "sh",
+        "-ec",
+        "export MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\"; until mysqladmin --user=root --silent ping; do sleep 2; done"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:22Z",
+      "name": "wait for MySQL readiness",
+      "started_at_utc": "2026-10-12T09:19:45Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-restore-parent",
+        "--env-file",
+        "/private/tmp/iter202-restore-parent-8eyslul7/mysql.env",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "ps",
+        "--quiet",
+        "mysql"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:25Z",
+      "name": "read MySQL container ID",
+      "started_at_utc": "2026-10-12T09:20:22Z",
+      "stderr": "",
+      "stdout": "602c432c8626f3c3626a91a72a123f07920b79cde9535e45383528fbe41d8a64\n",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "inspect",
+        "--format",
+        "{{.Image}}",
+        "602c432c8626f3c3626a91a72a123f07920b79cde9535e45383528fbe41d8a64"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:26Z",
+      "name": "read MySQL image ID",
+      "started_at_utc": "2026-10-12T09:20:25Z",
+      "stderr": "",
+      "stdout": "sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b\n",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "volume",
+        "ls",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:26Z",
+      "name": "list project volumes",
+      "started_at_utc": "2026-10-12T09:20:26Z",
+      "stderr": "",
+      "stdout": "iter202-restore-parent_mysql_data\n",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-restore-parent",
+        "--env-file",
+        "/private/tmp/iter202-restore-parent-8eyslul7/mysql.env",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "exec",
+        "--no-TTY",
+        "mysql",
+        "sh",
+        "-ec",
+        "export MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\"; exec mysql --user=root --database=\"$MYSQL_DATABASE\" --batch --raw --skip-column-names"
+      ],
+      "exit_code": 1,
+      "finished_at_utc": "2026-10-12T09:20:27Z",
+      "name": "verify MySQL server version",
+      "started_at_utc": "2026-10-12T09:20:26Z",
+      "stderr": "ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)\n",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-restore-parent",
+        "--env-file",
+        "/private/tmp/iter202-restore-parent-8eyslul7/mysql.env",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "-f",
+        "/private/tmp/iter202-restore-parent-8eyslul7/compose.yml",
+        "down",
+        "--volumes",
+        "--remove-orphans"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:35Z",
+      "name": "remove only the disposable Compose project and its volumes",
+      "started_at_utc": "2026-10-12T09:20:28Z",
+      "stderr": " Container iter202-restore-parent-mysql-1 Stopping \n Container iter202-restore-parent-mysql-1 Stopped \n Container iter202-restore-parent-mysql-1 Removing \n Container iter202-restore-parent-mysql-1 Removed \n Volume iter202-restore-parent_mysql_data Removing \n Network iter202-restore-parent_default Removing \n Volume iter202-restore-parent_mysql_data Removed \n Network iter202-restore-parent_default Removed \n",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "--all",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:36Z",
+      "name": "list project containers",
+      "started_at_utc": "2026-10-12T09:20:35Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "volume",
+        "ls",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:36Z",
+      "name": "list project volumes",
+      "started_at_utc": "2026-10-12T09:20:36Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    },
+    {
+      "argv": [
+        "docker",
+        "network",
+        "ls",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=iter202-restore-parent"
+      ],
+      "exit_code": 0,
+      "finished_at_utc": "2026-10-12T09:20:36Z",
+      "name": "list project networks",
+      "started_at_utc": "2026-10-12T09:20:36Z",
+      "stderr": "",
+      "stdout": "",
+      "timed_out": false
+    }
+  ],
+  "database_name": "iter202_restore_parent",
+  "destructive_restore_scope": {
+    "authorized": false,
+    "database_name": "iter202_restore_parent",
+    "self_owned_ephemeral_database_only": true
+  },
+  "errors": [
+    "HarnessError: verify MySQL server version exited 1; expected 0. ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)"
+  ],
+  "finished_at_utc": "2026-10-12T09:20:36Z",
+  "image_id": "sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b",
+  "log_path": "/private/tmp/ai-investor-iter200-202-20261012.afLb99/mysql-restore-parent-log-20261012T091939Z-50253-5c7457.jsonl",
+  "mysql_version": null,
+  "project_name": "iter202-restore-parent",
+  "readback_values": {
+    "after_authorized_restore": null,
+    "after_guarded_restore": null
+  },
+  "receipt_path": "/private/tmp/ai-investor-iter200-202-20261012.afLb99/mysql-restore-parent-receipt-20261012T091939Z-50253-5c7457.json",
+  "schema": "mysql-restore-parent-harness/v1",
+  "source_sha256": {
+    "docker_mysql_backup.sh": "9285b3e71aaf5db22a1512f1af03f86d1efe05688ce92d5065c4ed9ca7e480d3",
+    "docker_mysql_restore.sh": "dcef257429497a805f004b8a41787b3ea753d59b6f95b345311302c8b597666f"
+  },
+  "source_sha256_at_start": {
+    "docker_mysql_backup.sh": "9285b3e71aaf5db22a1512f1af03f86d1efe05688ce92d5065c4ed9ca7e480d3",
+    "docker_mysql_restore.sh": "dcef257429497a805f004b8a41787b3ea753d59b6f95b345311302c8b597666f"
+  },
+  "started_at_utc": "2026-10-12T09:19:39Z",
+  "status": "FAIL",
+  "temporary_volume": "iter202-restore-parent_mysql_data"
+}

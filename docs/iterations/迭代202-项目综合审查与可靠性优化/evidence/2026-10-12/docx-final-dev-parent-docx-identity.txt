@@ -1,0 +1,2 @@
+/tmp/ai-investor-iter200-202-20261012.afLb99/canonical-v2/docx/__init__.py
+1.2.0

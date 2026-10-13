@@ -58,12 +58,25 @@ describe('Pinia Persistence', () => {
       expect(auth.initialized).toBe(false)
     })
 
-    it('auth store isAuthenticated computed reflects token state', () => {
+    it('auth store requires a confirmed identity to be authenticated', () => {
       const auth = useAuthStore()
       expect(auth.isAuthenticated).toBe(false)
 
       auth.token = 'valid-token'
+      expect(auth.isAuthenticated).toBe(false)
+
+      auth.user = {
+        id: '1',
+        username: 'test',
+        email: 'test@test.com',
+        is_active: true,
+        created_at: '2024-01-01',
+      }
+      auth.identityStatus = 'confirmed'
       expect(auth.isAuthenticated).toBe(true)
+
+      auth.identityStatus = 'retryable_error'
+      expect(auth.isAuthenticated).toBe(false)
 
       auth.token = null
       expect(auth.isAuthenticated).toBe(false)

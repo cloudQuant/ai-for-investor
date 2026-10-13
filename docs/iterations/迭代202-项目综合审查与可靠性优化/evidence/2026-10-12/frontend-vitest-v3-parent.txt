@@ -1,0 +1,26 @@
+
+> ai-for-investor-frontend@0.1.0 test
+> vitest --run --maxWorkers=1
+
+
+ RUN  v4.1.11 /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
+
+ ❯ src/__tests__/views/StrategyPage.test.ts (158 tests | 18 failed) 805926ms
+     × shows strategy library and my strategies under strategy management 11195ms
+     × runs AI research loop from form input 12197ms
+     × restarts an interrupted AI research task when no strategy snapshot exists 10949ms
+     × cancels a running AI research task 13511ms
+     × continues AI research from a cancelled run with completed iterations 13351ms
+     × reviews paper trading from an achieved history record 17415ms
+     × continues research directly from a failed paper review record 11330ms
+     × auto-refreshes monitored AI research history with paper review progress 12053ms
+     × debounces data precheck and ignores an older result after asset changes 1579ms
+     × uses crypto.range for crypto daily research bars and fails closed with a 1d envelope 11575ms
+     × uses crypto.range for crypto monthly research bars and fails closed with a 1mo envelope 31744ms
+     × does not query v2 when the sidecar contract has a different family 17576ms
+     × hard-blocks an AI research run when strict local market-data coverage is incomplete 60451ms
+     × hard-blocks a classified new research run when its strict v2 contract is unavailable 23453ms
+     × hard-blocks a classified new research run when its strict v2 contract returns a legacy fallback error 8459ms
+     × hard-blocks a task continuation when strict local coverage is incomplete 18762ms
+     × keeps a v2 execution failure after contract issuance out of the legacy fallback path 14270ms
+     × hard-blocks a new research action when its strict local query fails after contract issuance 10512ms

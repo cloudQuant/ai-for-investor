@@ -127,6 +127,7 @@
           :data="articles"
           :empty-text="t('newsIntel.emptyArticles')"
         >
+          <!-- @vue-generic {NewsArticleItem} -->
           <el-table-column
             :label="t('newsIntel.colHeadline')"
             min-width="280"
@@ -172,7 +173,7 @@
               <code class="news-cluster-code">{{ displayValue(scope.row.cluster_id) }}</code>
             </template>
           </el-table-column>
-          <el-table-column
+          <!-- @vue-generic {NewsArticleItem} --><el-table-column
             :label="t('newsIntel.colActions')"
             width="220"
           >
@@ -509,6 +510,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Document, Filter, Link, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { marketIntelApi, type NewsArticleItem } from '@/api/marketIntel'
+import { formatNewsArticleMeta } from '@/utils/newsArticleFormat'
 
 const { t } = useI18n()
 
@@ -819,11 +821,7 @@ function impactClass(impact: unknown) {
 }
 
 function articleMeta(article: NewsArticleItem) {
-  const parts = [
-    article.source || t('newsIntel.unknownSource'),
-    ...(article.tickers ?? []),
-  ].filter(Boolean)
-  return parts.join(' · ')
+  return formatNewsArticleMeta(article, t('newsIntel.unknownSource'))
 }
 
 let rssRefreshTimer: ReturnType<typeof setInterval> | null = null

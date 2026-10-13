@@ -1,0 +1,33 @@
+{
+  "state": "PASS",
+  "command": [
+    "/Users/yunjinqi/opt/anaconda3/bin/conda",
+    "run",
+    "--no-capture-output",
+    "-n",
+    "base",
+    "python",
+    "-m",
+    "pytest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-p",
+    "pytest_timeout",
+    "-o",
+    "timeout=180",
+    "-o",
+    "timeout_method=signal",
+    "-vv",
+    "tests/test_service_edge_cases_113.py",
+    "--junitxml=/Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/service-edge-fixture-parent.xml"
+  ],
+  "started_at": "2026-10-12T15:04:36.237Z",
+  "source_sha256": "51d5d455fdaab269fb7e8a432a1f1c120a88c8c5ac54a3bf705a8ff404b1f128",
+  "dev_lock": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+  "review": "Primary reviewed explicit first-collection cancellation event with timeout-compatible iterator: only first trial submitted, pending future cancelled once, no cancelled result read. Pre-cancel, executor RuntimeError and cleanup RuntimeError branches preserved with explicit execution assertions. Production runner unchanged.",
+  "exit_code": 0,
+  "signal": null,
+  "finished_at": "2026-10-12T15:05:07.945Z",
+  "source_unchanged": true,
+  "log_sha256": "4bb77f1e62c82ccea9f2250d7a464163f3c534c80ef6e4eceedd9438146d87dd"
+}

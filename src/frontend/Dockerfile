@@ -1,5 +1,5 @@
 # 构建阶段
-FROM node:20-alpine as builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -19,8 +19,13 @@ COPY . .
 # 构建
 RUN npm run build
 
-# 生产阶段
-FROM nginx:alpine
+# Production runtime shared by the final frontend stage and isolated TLS tests.
+FROM nginx:alpine AS nginx-runtime
+
+# TLS certificate validation in nginx-prod-entrypoint.sh uses the OpenSSL CLI.
+RUN apk add --no-cache openssl
+
+FROM nginx-runtime AS production
 
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html

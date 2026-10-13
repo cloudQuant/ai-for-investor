@@ -1,0 +1,246 @@
+{
+  "started_at": "2026-10-12T14:27:06.874Z",
+  "pid": 2140,
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "source_manifest": "frontend-final-v15-matrix-parent-source-manifest.json",
+  "source_manifest_sha256": "71d3ba3986311601512cb534d92b0da64b30287852abb5cca66dec4efc3c60f0",
+  "runtimes": [
+    {
+      "label": "node20",
+      "node": "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+      "version": "v20.20.2"
+    },
+    {
+      "label": "node24",
+      "node": "/Users/yunjinqi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "version": "v24.19.0"
+    }
+  ],
+  "steps": [
+    {
+      "label": "node20-typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "started_at": "2026-10-12T14:27:06.942Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node20-typecheck.txt",
+      "pid": 2160,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:27:29.785Z",
+      "elapsed_seconds": 22.843,
+      "log_sha256": "d80faa434b9b4945bfeb6eee26948bf5394595eb192745c84d475f965dab3fd6"
+    },
+    {
+      "label": "node20-vite-typecheck",
+      "command": [
+        "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "tsconfig.node.json",
+        "--noEmit",
+        "--tsBuildInfoFile",
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-matrix-parent-node20.tsbuildinfo"
+      ],
+      "started_at": "2026-10-12T14:27:29.790Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node20-vite-typecheck.txt",
+      "pid": 2303,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:27:32.783Z",
+      "elapsed_seconds": 2.993,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "node20-lint",
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "started_at": "2026-10-12T14:27:32.784Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node20-lint.txt",
+      "pid": 2340,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:27:41.136Z",
+      "elapsed_seconds": 8.352,
+      "log_sha256": "73878867f16852f02fc3cad2583e1e9a4ae1d4d0fd710852e7a5333aa19697b0"
+    },
+    {
+      "label": "node20-vitest",
+      "command": [
+        "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=1",
+        "--no-file-parallelism",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-matrix-parent-node20-vitest-results.json"
+      ],
+      "started_at": "2026-10-12T14:27:41.137Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node20-vitest.txt",
+      "pid": 2414,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:29:47.475Z",
+      "elapsed_seconds": 126.338,
+      "log_sha256": "9a59dcc37d2f12380e479454fec78acb119b340e49c174d07d44fba509bf35f3"
+    },
+    {
+      "label": "node20-build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-10-12T14:29:47.484Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node20-build.txt",
+      "pid": 3568,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:30:40.995Z",
+      "elapsed_seconds": 53.511,
+      "log_sha256": "4f0ec5081174d9a957739a090f70d24d0752b6ab359287e6ba01dc923387d9df"
+    },
+    {
+      "label": "node20-bundle",
+      "command": [
+        "bash",
+        "../../scripts/ci/check_bundle_size.sh",
+        "dist"
+      ],
+      "started_at": "2026-10-12T14:30:40.999Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node20-bundle.txt",
+      "pid": 3990,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:30:43.246Z",
+      "elapsed_seconds": 2.247,
+      "log_sha256": "3a195d175f004977613de283c385d690f07ca014fe1700ff6a07f328a47282be"
+    },
+    {
+      "label": "node24-typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "started_at": "2026-10-12T14:30:43.273Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node24-typecheck.txt",
+      "pid": 5474,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:30:58.173Z",
+      "elapsed_seconds": 14.9,
+      "log_sha256": "d80faa434b9b4945bfeb6eee26948bf5394595eb192745c84d475f965dab3fd6"
+    },
+    {
+      "label": "node24-vite-typecheck",
+      "command": [
+        "/Users/yunjinqi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "tsconfig.node.json",
+        "--noEmit",
+        "--tsBuildInfoFile",
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-matrix-parent-node24.tsbuildinfo"
+      ],
+      "started_at": "2026-10-12T14:30:58.174Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node24-vite-typecheck.txt",
+      "pid": 5545,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:30:59.302Z",
+      "elapsed_seconds": 1.128,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "node24-lint",
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "started_at": "2026-10-12T14:30:59.303Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node24-lint.txt",
+      "pid": 5560,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:31:07.069Z",
+      "elapsed_seconds": 7.766,
+      "log_sha256": "73878867f16852f02fc3cad2583e1e9a4ae1d4d0fd710852e7a5333aa19697b0"
+    },
+    {
+      "label": "node24-vitest",
+      "command": [
+        "/Users/yunjinqi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=1",
+        "--no-file-parallelism",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v15-matrix-parent-node24-vitest-results.json"
+      ],
+      "started_at": "2026-10-12T14:31:07.071Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node24-vitest.txt",
+      "pid": 5645,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:32:33.984Z",
+      "elapsed_seconds": 86.913,
+      "log_sha256": "13c8025da4f7d2f89450bc0c05d61cd20e70d8e8dcfb36711783d719e5fae377"
+    },
+    {
+      "label": "node24-build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-10-12T14:32:33.986Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node24-build.txt",
+      "pid": 6264,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:33:31.711Z",
+      "elapsed_seconds": 57.725,
+      "log_sha256": "cb24dab4a9305ff4336abe0eaadc0aef9253b79967e09290c4316afb6f781dc6"
+    },
+    {
+      "label": "node24-bundle",
+      "command": [
+        "bash",
+        "../../scripts/ci/check_bundle_size.sh",
+        "dist"
+      ],
+      "started_at": "2026-10-12T14:33:31.715Z",
+      "state": "PASS",
+      "log": "frontend-final-v15-matrix-parent-node24-bundle.txt",
+      "pid": 6844,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:33:36.033Z",
+      "elapsed_seconds": 4.318,
+      "log_sha256": "3a195d175f004977613de283c385d690f07ca014fe1700ff6a07f328a47282be"
+    }
+  ],
+  "state": "PASS",
+  "source_unchanged": true,
+  "finished_at": "2026-10-12T14:33:36.236Z"
+}

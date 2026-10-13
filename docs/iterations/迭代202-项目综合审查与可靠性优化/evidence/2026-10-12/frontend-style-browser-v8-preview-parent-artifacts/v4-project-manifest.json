@@ -1,0 +1,11 @@
+{
+  "node": "v20.20.2",
+  "tailwindcss": "4.3.3",
+  "tailwindPostcss": "4.3.3",
+  "sass": "dart-sass\t1.99.0\t(Sass Compiler)\t[Dart]",
+  "sourceFiles": "Full src/**/*.vue/js/ts/tsx scanned from frontend cwd; mobile.scss compiled first and inlined for this offline PostCSS pass.",
+  "sourceBytes": 19783,
+  "mobileBytes": 5535,
+  "outputBytes": 62036,
+  "outputSha256": "6689ad3cf95e261b045daadecfeeb4281a261b0b5717305125b01f014f655cd6"
+}

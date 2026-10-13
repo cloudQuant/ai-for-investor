@@ -109,6 +109,8 @@ class TestOptimizationSubmit:
                 "fast": ParamRangeSpec(start=5, end=15, step=5, type="int"),
             },
             n_workers=4,
+            objective="sharpe_ratio",
+            direction="maximize",
         )
 
         mock_db_task = MagicMock()
@@ -127,7 +129,7 @@ class TestOptimizationSubmit:
                     mock_mgr = AsyncMock()
                     mock_mgr.create_task = AsyncMock(return_value=mock_db_task)
                     mock_get_mgr.return_value = mock_mgr
-                    with patch("app.api.optimization_api.submit_optimization"):
+                    with patch("app.api.optimization_api.submit_optimization") as mock_submit:
                         result = await submit_optimization_task(
                             request=request, current_user=mock_current_user
                         )
@@ -135,6 +137,11 @@ class TestOptimizationSubmit:
                         assert result.task_id == "task_123"
                         assert result.total_combinations == 3
                         assert "submitted" in result.message.lower()
+                        mock_submit.assert_called_once()
+                        assert mock_submit.call_args.kwargs["objective"] == "sharpe_ratio"
+                        assert mock_submit.call_args.kwargs["direction"] == "maximize"
+                        assert mock_mgr.create_task.call_args.kwargs["objective"] == "sharpe_ratio"
+                        assert mock_mgr.create_task.call_args.kwargs["direction"] == "maximize"
 
     async def test_submit_optimization_strategy_not_found(self, mock_current_user):
         """Test when strategy does not exist."""
@@ -261,6 +268,69 @@ class TestOptimizationSubmit:
                     # Verify n_workers=4 was passed
                     call_kwargs = mock_submit.call_args.kwargs
                     assert call_kwargs["n_workers"] == 4
+
+    async def test_oversized_range_does_not_create_db_task(
+        self, mock_current_user, mock_strategy_template
+    ):
+        from app.api.optimization_api import submit_optimization_task_internal
+
+        mock_mgr = AsyncMock()
+        with patch(
+            "app.api.optimization_api.get_template_by_id", return_value=mock_strategy_template
+        ):
+            with patch(
+                "app.services.optimization.execution_manager.get_optimization_execution_manager",
+                return_value=mock_mgr,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await submit_optimization_task_internal(
+                        strategy_id="test_strategy",
+                        param_ranges={
+                            "period": {"start": 1, "end": 10001, "step": 1, "type": "int"}
+                        },
+                        n_workers=2,
+                        user_id=mock_current_user.sub,
+                    )
+
+        assert exc_info.value.status_code == 400
+        mock_mgr.create_task.assert_not_called()
+
+    async def test_finite_huge_range_returns_400_before_db_task_creation(
+        self, mock_current_user, mock_strategy_template
+    ):
+        from app.api.optimization_api import submit_optimization_task_internal
+
+        mock_mgr = AsyncMock()
+        with patch(
+            "app.api.optimization_api.get_template_by_id", return_value=mock_strategy_template
+        ):
+            with patch(
+                "app.services.optimization.execution_manager.get_optimization_execution_manager",
+                return_value=mock_mgr,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await submit_optimization_task_internal(
+                        strategy_id="test_strategy",
+                        param_ranges={"period": {"start": 0.0, "end": 1e100, "step": 1.0}},
+                        n_workers=2,
+                        user_id=mock_current_user.sub,
+                    )
+
+        assert exc_info.value.status_code == 400
+        assert "combination limit" in exc_info.value.detail
+        mock_mgr.create_task.assert_not_called()
+
+    async def test_objective_direction_must_be_paired(self):
+        from pydantic import ValidationError
+
+        from app.api.optimization_api import OptimizationSubmitRequest, ParamRangeSpec
+
+        with pytest.raises(ValidationError, match="provided together"):
+            OptimizationSubmitRequest(
+                strategy_id="test_strategy",
+                param_ranges={"period": ParamRangeSpec(start=1, end=2, step=1, type="int")},
+                objective="sharpe_ratio",
+            )
 
     async def test_submit_backtest_optimization_success(
         self, mock_current_user, mock_strategy_template

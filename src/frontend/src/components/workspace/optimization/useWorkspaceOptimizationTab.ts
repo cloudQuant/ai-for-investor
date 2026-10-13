@@ -7,6 +7,12 @@ import { useI18n } from 'vue-i18n'
 import { workspaceApi } from '@/api/workspace'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { getErrorMessage } from '@/api/index'
+import type {
+  OptimizationDirection,
+  OptimizationObjective,
+  OptimizationResultRow,
+} from '@/types/workspace'
+import { isOptimizationDirection, isOptimizationObjective } from './optimizationObjective'
 
 export interface WorkspaceOptimizationTabProps {
   workspaceId: string
@@ -31,6 +37,15 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
   const resultRows = ref<Record<string, unknown>[]>([])
   const paramNames = ref<string[]>([])
   const optimizationTaskId = ref('')
+  const optimizationObjective = ref<OptimizationObjective | null>(null)
+  const optimizationDirection = ref<OptimizationDirection | null>(null)
+  const optimizationTieBreak = ref<string | null>(null)
+  const backendBestRow = ref<OptimizationResultRow | null>(null)
+  const selectedResultSourceIndex = ref<number | null>(null)
+  const hasBoundObjective = computed(() => (
+    isOptimizationObjective(optimizationObjective.value)
+    && isOptimizationDirection(optimizationDirection.value)
+  ))
   const showFilter = ref(false)
   const sortKey = ref('sharpe_ratio')
   const sortDir = ref<'asc' | 'desc'>('desc')
@@ -71,6 +86,7 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
     { key: 'initial_cash', label: t('optimization.initialCash'), width: 100, money: true },
     { key: 'net_value', label: t('optimization.netValue'), width: 80 },
     { key: 'net_profit', label: t('optimization.netProfit'), width: 100, money: true },
+    { key: 'total_return', label: t('optimization.totalReturn') + '%', width: 100, sortable: true },
     { key: 'annual_return', label: t('optimization.annualizedReturn') + '%', width: 100, sortable: true },
     { key: 'max_leverage', label: t('optimization.maxLeverage'), width: 80 },
     { key: 'max_market_value', label: t('optimization.maxMarketValue'), width: 100, money: true },
@@ -138,11 +154,13 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
   }
 
   const displayRows = computed(() => {
-    const rows = resultRows.value.map(r => {
+    const rows = resultRows.value.map<Record<string, unknown>>((r, sourceIndex) => {
       const recalced = _recalcAnnual(r)
-      return recalced != null && recalced !== r.annual_return
-        ? { ...r, annual_return: recalced }
-        : r
+      return {
+        ...r,
+        ...(recalced != null && recalced !== r.annual_return ? { annual_return: recalced } : {}),
+        __workspaceSourceIndex: sourceIndex,
+      }
     })
     const key = sortKey.value
     const dir = sortDir.value === 'desc' ? -1 : 1
@@ -154,19 +172,92 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
     return rows
   })
 
+  const selectedResult = computed(() => {
+    const sourceIndex = selectedResultSourceIndex.value
+    return sourceIndex == null ? null : resultRows.value[sourceIndex] ?? null
+  })
+
+  const featuredResult = computed(() => (
+    hasBoundObjective.value ? backendBestRow.value : selectedResult.value
+  ))
+
   const bestParamsStr = computed(() => {
-    if (!displayRows.value.length) return '-'
-    const best = displayRows.value[0]
-    const params = best.params as Record<string, number> | undefined
-    if (!params) return '-'
+    const params = featuredResult.value?.params as Record<string, number | string> | undefined
+    if (!params) {
+      if (!resultRows.value.length) {
+        return hasBoundObjective.value ? t('optimization.noBestResult') : t('optimization.noResult')
+      }
+      return hasBoundObjective.value
+        ? t('optimization.noBestResult')
+        : t('optimization.selectResultToContinue')
+    }
     return Object.entries(params).map(([k, v]) => `${k}=${v}`).join(', ')
   })
 
-  const bestSharpe = computed(() => {
-    if (!displayRows.value.length) return '-'
-    const val = displayRows.value[0].sharpe_ratio
-    return typeof val === 'number' ? val.toFixed(4) : '-'
+  const featuredParamsLabel = computed(() => (
+    t(hasBoundObjective.value ? 'optimization.bestResult' : 'optimization.selectedResult')
+  ))
+
+  const featuredMetricKey = computed(() => (
+    hasBoundObjective.value ? optimizationObjective.value : 'sharpe_ratio'
+  ))
+
+  const featuredMetricLabel = computed(() => {
+    if (featuredMetricKey.value === 'total_return') return t('optimization.totalReturn')
+    if (featuredMetricKey.value === 'max_drawdown') return t('optimization.maxDrawdown')
+    return t('optimization.sharpe')
   })
+
+  const optimizationTargetLabel = computed(() => {
+    if (optimizationObjective.value === 'total_return') return t('optimization.totalReturn')
+    if (optimizationObjective.value === 'max_drawdown') return t('optimization.maxDrawdown')
+    return optimizationObjective.value ? t('optimization.sharpe') : '-'
+  })
+
+  const optimizationDirectionLabel = computed(() => {
+    if (optimizationDirection.value === 'maximize') return t('optimization.maximize')
+    if (optimizationDirection.value === 'minimize') return t('optimization.minimize')
+    return '-'
+  })
+
+  const featuredMetricValue = computed(() => {
+    const row = featuredResult.value
+    if (!row) return '-'
+    const value = row[featuredMetricKey.value as string]
+    return typeof value === 'number' ? value.toFixed(4) : '-'
+  })
+
+  const canApplyFeaturedResult = computed(() => (
+    !!optimizationTaskId.value
+    && !!featuredResult.value
+    && typeof featuredResult.value.result_index === 'number'
+  ))
+
+  const canReportFeaturedResult = computed(() => !!featuredResult.value)
+
+  function handleSelectResult(row: Record<string, unknown> | null) {
+    if (!row || !Number.isInteger(row.__workspaceSourceIndex)) {
+      selectedResultSourceIndex.value = null
+      return
+    }
+    selectedResultSourceIndex.value = row.__workspaceSourceIndex as number
+  }
+
+  function getResultRowKey(row: Record<string, unknown>) {
+    if (typeof row.result_index === 'number') return `result-${row.result_index}`
+    return `source-${String(row.__workspaceSourceIndex ?? '')}`
+  }
+
+  function clearResultData() {
+    resultRows.value = []
+    paramNames.value = []
+    optimizationTaskId.value = ''
+    optimizationObjective.value = null
+    optimizationDirection.value = null
+    optimizationTieBreak.value = null
+    backendBestRow.value = null
+    selectedResultSourceIndex.value = null
+  }
 
   // --- Bug-11 fix: restore saved optimization display config on mount ---
   function _restoreOptDefaults() {
@@ -210,8 +301,12 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
   })
 
   async function loadResults() {
-    if (!selectedUnitId.value) return
+    if (!selectedUnitId.value) {
+      clearResultData()
+      return
+    }
     loading.value = true
+    clearResultData()
     try {
       const progress = await workspaceApi.getOptimizationProgress(props.workspaceId, selectedUnitId.value).catch(() => null)
       if (progress) {
@@ -224,31 +319,32 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
       const results = await workspaceApi.getOptimizationResults(props.workspaceId, selectedUnitId.value).catch(() => null)
       // Backend returns `rows`; also tolerate legacy `results` key
       const rowsData = results?.rows ?? results?.results
-      if (results && rowsData) {
+      if (results && Array.isArray(rowsData)) {
         const rows = rowsData as Record<string, unknown>[]
         resultRows.value = rows
         paramNames.value = Array.isArray(results.param_names) ? (results.param_names as string[]) : deriveParamNames(rows)
         optimizationTaskId.value = typeof results.task_id === 'string' ? results.task_id : ''
+        optimizationObjective.value = isOptimizationObjective(results.objective) ? results.objective : null
+        optimizationDirection.value = isOptimizationDirection(results.direction) ? results.direction : null
+        optimizationTieBreak.value = typeof results.tie_break === 'string' ? results.tie_break : null
+        backendBestRow.value = results.best && typeof results.best === 'object' ? results.best : null
+        selectedResultSourceIndex.value = null
         optimizationStatus.value = (results.status as string) || optimizationStatus.value
         total.value = (results.total as number) || total.value
         completed.value = (results.completed as number) || completed.value
         failed.value = (results.failed as number) || failed.value
         // Sync default sort to backend's objective
-        if (results.objective && typeof results.objective === 'string') {
-          sortKey.value = results.objective
-          sortDir.value = results.objective === 'max_drawdown' ? 'asc' : 'desc'
+        if (isOptimizationObjective(optimizationObjective.value) && isOptimizationDirection(optimizationDirection.value)) {
+          sortKey.value = optimizationObjective.value
+          sortDir.value = optimizationDirection.value === 'maximize' ? 'desc' : 'asc'
         }
-        initializeAnalysisControls(typeof results.objective === 'string' ? results.objective : sortKey.value)
+        initializeAnalysisControls(hasBoundObjective.value ? optimizationObjective.value as string : sortKey.value)
       } else {
-        resultRows.value = []
-        paramNames.value = []
-        optimizationTaskId.value = ''
+        clearResultData()
         selectedAnalysisParams.value = []
       }
     } catch {
-      resultRows.value = []
-      paramNames.value = []
-      optimizationTaskId.value = ''
+      clearResultData()
       selectedAnalysisParams.value = []
     } finally {
       loading.value = false
@@ -312,7 +408,19 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
        if (data.results && Array.isArray(data.results)) {
          resultRows.value = data.results
          paramNames.value = Array.isArray(data.param_names) ? (data.param_names as string[]) : deriveParamNames(data.results)
-         initializeAnalysisControls(typeof data.objective === 'string' ? data.objective : sortKey.value)
+         optimizationTaskId.value = typeof data.task_id === 'string' ? data.task_id : ''
+         optimizationObjective.value = isOptimizationObjective(data.objective) ? data.objective : null
+         optimizationDirection.value = isOptimizationDirection(data.direction) ? data.direction : null
+         optimizationTieBreak.value = typeof data.tie_break === 'string' ? data.tie_break : null
+         backendBestRow.value = hasBoundObjective.value && data.best && typeof data.best === 'object'
+           ? data.best as OptimizationResultRow
+           : null
+         selectedResultSourceIndex.value = null
+         if (hasBoundObjective.value) {
+           sortKey.value = optimizationObjective.value as string
+           sortDir.value = optimizationDirection.value === 'maximize' ? 'desc' : 'asc'
+         }
+         initializeAnalysisControls(hasBoundObjective.value ? optimizationObjective.value as string : sortKey.value)
          ElMessage.success(t('optimization.loaded') + ` ${data.results.length} ` + t('optimization.nResultsCount', { n: '' }))
        } else {
          ElMessage.warning(t('optimization.fileFormatErr'))
@@ -330,7 +438,11 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
        unit_id: selectedUnitId.value,
        exported_at: new Date().toISOString(),
        param_names: paramNames.value,
-       objective: sortKey.value,
+       task_id: optimizationTaskId.value || null,
+       objective: hasBoundObjective.value ? optimizationObjective.value : null,
+       direction: hasBoundObjective.value ? optimizationDirection.value : null,
+       tie_break: hasBoundObjective.value ? optimizationTieBreak.value : null,
+       best: hasBoundObjective.value ? backendBestRow.value : null,
        results: resultRows.value,
      }
      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -345,7 +457,8 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
 
   // --- Apply best + open chart ---
   async function handleApplyBestAndOpen() {
-    await handleApplyBest()
+    const applied = await handleApplyBest()
+    if (!applied) return
     const unit = units.value.find(u => u.id === selectedUnitId.value)
     if (unit) {
       window.open(`/backtest/legacy?symbol=${unit.symbol}&timeframe=${unit.timeframe}`, '_blank')
@@ -354,20 +467,31 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
 
   // --- Test report ---
   function handleTestReport() {
-    if (!displayRows.value.length) return
-    const best = displayRows.value[0]
+    const result = featuredResult.value
+    if (!result) {
+      ElMessage.warning(t(hasBoundObjective.value
+        ? 'optimization.noBestResult'
+        : 'optimization.selectResultToContinue'))
+      return
+    }
     const reportDialogStyle: CSSProperties = { whiteSpace: 'pre-wrap', fontFamily: 'monospace' }
     const lines = [
       '=== ' + t('optimization.paramReportTitle') + ' ===',
       t('optimization.parameterUnit') + `: ${selectedUnitId.value}`,
       t('optimization.totalCombos') + `: ${total.value}`,
-      t('optimization.bestParams') + `: ${formatParams(best.params)}`,
-      t('optimization.sharpe') + `: ${fmtVal(best.sharpe_ratio)}`,
-      t('optimization.annualReturn') + `: ${fmtVal(best.annual_return)}`,
-      t('optimization.maxDrawdown') + `: ${fmtVal(best.max_drawdown)}`,
-      t('optimization.winRate') + `: ${fmtVal(best.win_rate)}`,
-      t('optimization.profitFactor') + `: ${fmtVal(best.profit_factor)}`,
-      t('optimization.tradeCount') + `: ${best.total_trades ?? '-'}`,
+      (hasBoundObjective.value ? t('optimization.bestParams') : t('optimization.selectedResult'))
+        + `: ${formatParams(result.params)}`,
+      ...(hasBoundObjective.value ? [
+        `${t('optimization.objectiveLabel')}: ${optimizationTargetLabel.value}`,
+        `${t('optimization.directionLabel')}: ${optimizationDirectionLabel.value}`,
+        `${t('optimization.tieBreak')}: ${optimizationTieBreak.value || '-'}`,
+      ] : []),
+      t('optimization.sharpe') + `: ${fmtVal(result.sharpe_ratio)}`,
+      t('optimization.annualReturn') + `: ${fmtVal(result.annual_return)}`,
+      t('optimization.maxDrawdown') + `: ${fmtVal(result.max_drawdown)}`,
+      t('optimization.winRate') + `: ${fmtVal(result.win_rate)}`,
+      t('optimization.profitFactor') + `: ${fmtVal(result.profit_factor)}`,
+      t('optimization.tradeCount') + `: ${result.total_trades ?? '-'}`,
     ]
     ElMessageBox.alert(lines.join('\n'), t('optimization.paramReportTitle'), {
       confirmButtonText: t('optimization.close'),
@@ -421,28 +545,38 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
   }
 
   async function handleApplyBest() {
-    if (!selectedUnitId.value || !displayRows.value.length) return
-    const unit = units.value.find(u => u.id === selectedUnitId.value)
-    const taskId = unit?.last_optimization_task_id
-    if (!taskId) {
-      ElMessage.warning(t('optimization.noTaskFound'))
-      return
+    const result = featuredResult.value
+    if (!selectedUnitId.value || !result) {
+      ElMessage.warning(t(hasBoundObjective.value
+        ? 'optimization.noBestResult'
+        : 'optimization.selectResultToContinue'))
+      return false
     }
-    const bestRow = displayRows.value[0]
-    const backendIdx = typeof bestRow.result_index === 'number' ? bestRow.result_index : 0
+    const resultIndex = result.result_index
+    if (typeof resultIndex !== 'number' || !optimizationTaskId.value) {
+      ElMessage.warning(t('optimization.noTaskFound'))
+      return false
+    }
     try {
-      await ElMessageBox.confirm(t('optimization.confirmApplyBest') + '?', t('optimization.applyBestParams'), { type: 'info' })
+      const isBest = hasBoundObjective.value
+      await ElMessageBox.confirm(
+        t(isBest ? 'optimization.confirmApplyBest' : 'optimization.confirmApplySelectedResult') + '?',
+        t(isBest ? 'optimization.applyBestParams' : 'optimization.applySelectedResult'),
+        { type: 'info' },
+      )
       await workspaceApi.applyBestParams(props.workspaceId, {
         unit_id: selectedUnitId.value,
-        optimization_task_id: taskId,
-        result_index: backendIdx,
+        optimization_task_id: optimizationTaskId.value,
+        result_index: resultIndex,
       })
-      ElMessage.success(t('optimization.bestParamsApplied'))
+      ElMessage.success(t(isBest ? 'optimization.bestParamsApplied' : 'optimization.selectedParamsApplied'))
       store.fetchUnits(props.workspaceId)
+      return true
     } catch (e: unknown) {
       if (e !== 'cancel' && (e as { message?: string })?.message !== 'cancel') {
         ElMessage.error(getErrorMessage(e, t('optimization.applyFailed')))
       }
+      return false
     }
   }
 
@@ -625,6 +759,12 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
     resultRows,
     paramNames,
     optimizationTaskId,
+    optimizationObjective,
+    optimizationDirection,
+    optimizationTieBreak,
+    backendBestRow,
+    selectedResultSourceIndex,
+    hasBoundObjective,
     showFilter,
     sortKey,
     sortDir,
@@ -647,8 +787,18 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
     emptyStateDescription,
     _recalcAnnual,
     displayRows,
+    selectedResult,
+    featuredResult,
     bestParamsStr,
-    bestSharpe,
+    featuredParamsLabel,
+    featuredMetricLabel,
+    featuredMetricValue,
+    optimizationTargetLabel,
+    optimizationDirectionLabel,
+    canApplyFeaturedResult,
+    canReportFeaturedResult,
+    handleSelectResult,
+    getResultRowKey,
     _restoreOptDefaults,
     loadResults,
     applySort,

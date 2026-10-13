@@ -1,16 +1,17 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 
 import {
   clearAccessToken,
   dispatchAuthExpired,
   getAccessToken,
 } from '@/utils/session'
+import { expireSession, getSessionGeneration, getToken } from '@/utils/tokenRef'
 import i18n from '@/i18n'
 
 /** Per-request controls for localized or explicitly handled API fallbacks. */
-export interface ApiRequestConfig<D = unknown> extends AxiosRequestConfig<D> {
+export interface ApiRequestConfig<D = unknown, P = unknown> extends AxiosRequestConfig<D, P> {
   /** The caller projects a closed, localized error code and owns user notification. */
   suppressErrorToast?: boolean
   suppressErrorMessage?: boolean
@@ -40,13 +41,60 @@ type ApiErrorPayload = {
   [k: string]: unknown
 }
 
-interface ApiClient extends AxiosInstance {
-  request<T = unknown, D = unknown>(config: ApiRequestConfig<D>): Promise<T>
-  get<T = unknown, D = unknown>(url: string, config?: ApiRequestConfig<D>): Promise<T>
-  delete<T = unknown, D = unknown>(url: string, config?: ApiRequestConfig<D>): Promise<T>
-  post<T = unknown, D = unknown>(url: string, data?: D, config?: ApiRequestConfig<D>): Promise<T>
-  put<T = unknown, D = unknown>(url: string, data?: D, config?: ApiRequestConfig<D>): Promise<T>
-  patch<T = unknown, D = unknown>(url: string, data?: D, config?: ApiRequestConfig<D>): Promise<T>
+interface ApiClient extends Omit<
+  AxiosInstance,
+  'request' | 'get' | 'delete' | 'post' | 'put' | 'patch'
+> {
+  request<T = unknown, D = unknown, P = unknown>(config: ApiRequestConfig<D, P>): Promise<T>
+  get<T = unknown, D = unknown, P = unknown>(
+    url: string,
+    config?: ApiRequestConfig<D, P>,
+  ): Promise<T>
+  delete<T = unknown, D = unknown, P = unknown>(
+    url: string,
+    config?: ApiRequestConfig<D, P>,
+  ): Promise<T>
+  post<T = unknown, D = unknown, P = unknown>(
+    url: string,
+    data?: D,
+    config?: ApiRequestConfig<D, P>,
+  ): Promise<T>
+  put<T = unknown, D = unknown, P = unknown>(
+    url: string,
+    data?: D,
+    config?: ApiRequestConfig<D, P>,
+  ): Promise<T>
+  patch<T = unknown, D = unknown, P = unknown>(
+    url: string,
+    data?: D,
+    config?: ApiRequestConfig<D, P>,
+  ): Promise<T>
+}
+
+type SessionRequestConfig = InternalAxiosRequestConfig & {
+  __sessionGeneration?: number
+  __sessionToken?: string | null
+  __retryCount?: number
+  __isRetrying?: boolean
+  suppressErrorToast?: boolean
+  suppressErrorMessage?: boolean
+  skipRetry?: boolean
+}
+
+class SupersededSessionRequestError extends Error {
+  constructor() {
+    super('Request belongs to a superseded session')
+    this.name = 'SupersededSessionRequestError'
+  }
+}
+
+export function isSupersededSessionRequestError(error: unknown): boolean {
+  return error instanceof SupersededSessionRequestError
+}
+
+function isStaleSessionRequest(config: SessionRequestConfig | undefined): boolean {
+  return config?.__sessionGeneration !== undefined
+    && config.__sessionGeneration !== getSessionGeneration()
 }
 
 // --- Retry Interceptor Configuration ---
@@ -172,13 +220,24 @@ const api = axios.create({
   },
 }) as ApiClient
 
-// 请求拦截器 — reads token from in-memory ref (set by auth store)
-import { getToken } from '@/utils/tokenRef'
-
+// Request interceptor captures one session token and generation for its full lifetime.
 api.interceptors.request.use(
-  (config) => {
-    // Priority: in-memory token (set by auth store) > sessionStorage (persisted)
-    const token = getToken() || getAccessToken()
+  (rawConfig) => {
+    const config = rawConfig as SessionRequestConfig
+    if (config.__sessionGeneration === undefined) {
+      const generation = getSessionGeneration()
+      const token = getToken() || getAccessToken()
+      if (generation !== getSessionGeneration()) {
+        throw new SupersededSessionRequestError()
+      }
+      config.__sessionGeneration = generation
+      config.__sessionToken = token
+    } else if (config.__sessionGeneration !== getSessionGeneration()) {
+      throw new SupersededSessionRequestError()
+    }
+
+    // Retries keep the token snapshot captured on the original request.
+    const token = config.__sessionToken
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -192,15 +251,19 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    const config = response.config as SessionRequestConfig | undefined
+    if (isStaleSessionRequest(config)) {
+      return Promise.reject(new SupersededSessionRequestError())
+    }
     return response.data
   },
   async (error: AxiosError) => {
-    const config = error.config as InternalAxiosRequestConfig & {
-      __retryCount?: number
-      __isRetrying?: boolean
-      suppressErrorToast?: boolean
-      suppressErrorMessage?: boolean
-      skipRetry?: boolean
+    const config = error.config as SessionRequestConfig | undefined
+
+    if (isSupersededSessionRequestError(error) || isStaleSessionRequest(config)) {
+      return Promise.reject(isSupersededSessionRequestError(error)
+        ? error
+        : new SupersededSessionRequestError())
     }
 
     // --- Retry Logic ---
@@ -241,8 +304,14 @@ api.interceptors.response.use(
     const suppressErrorToast = config?.suppressErrorToast === true
 
     if (status === 401) {
-      clearAccessToken()
-      dispatchAuthExpired()
+      if (
+        config?.__sessionGeneration !== undefined
+        && config.__sessionToken
+        && expireSession(config.__sessionGeneration)
+      ) {
+        clearAccessToken()
+        dispatchAuthExpired()
+      }
       if (!suppressErrorToast) {
         ElMessage.error(isGenericMsg ? tt('apiClient.errAuthExpired') : msg)
       }

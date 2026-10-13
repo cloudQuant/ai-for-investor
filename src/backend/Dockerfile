@@ -9,8 +9,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /opt/workspace/ai-for-investor/src/backend
 
-# 安装系统依赖
-RUN true
+# Git is required to install the exact pinned Backtrader VCS dependency in the
+# production lock; CA certificates validate the remote during that build.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
 
 # 先 COPY 锁文件（变更频率低，利于 layer 缓存）；显式从 config/ SSOT 复制，
 # 与 CI pip-audit 审计对象保持同一份文件（迭代193 P0-1：消除双锁漂移）。
@@ -24,7 +27,12 @@ COPY strategies /opt/workspace/ai-for-investor/strategies
 # 锁文件缺失应构建失败而非静默回退到 pyproject extras——回退会使镜像依赖
 # 集与 CI pip-audit 审计对象再次漂移。
 RUN pip install --no-cache-dir -r requirements-prod.lock && \
-    pip install --no-cache-dir -e ".[prod]"
+    pip install --no-cache-dir --no-deps -e .
+
+# WeasyPrint is imported by the API router at startup and needs Pango/GObject.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p \
     /opt/workspace/ai-for-investor/datas \
@@ -49,4 +57,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # 生产环境使用 Gunicorn 管理多个 Uvicorn worker
 # WEB_CONCURRENCY 控制 worker 数量，默认 2（适合 2 核服务器）
 # 单 worker 模式可设置 WEB_CONCURRENCY=1
-CMD ["sh", "-c", "gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2} --timeout 300 --graceful-timeout 30 --access-logfile - --error-logfile -"]
+# exec replaces the shell so docker-init can forward termination signals to Gunicorn.
+CMD ["sh", "-c", "exec gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-2} --timeout 300 --graceful-timeout 30 --access-logfile - --error-logfile -"]

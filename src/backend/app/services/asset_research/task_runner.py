@@ -18,20 +18,16 @@ from app.config import get_settings
 from app.db.database import async_session_maker
 from app.middleware.metrics import record_asset_research_task, set_asset_research_queue_depth
 from app.models.asset_research import AssetAnalysisTask
+from app.services.asset_research import task_leases
 from app.services.asset_research.orchestrator import AssetResearchOrchestrator
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+_as_utc = task_leases.as_utc
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +120,10 @@ class AssetResearchTaskRunner:
                             AssetAnalysisTask.lease_token.is_(None),
                         )
                         .order_by(AssetAnalysisTask.created_at, AssetAnalysisTask.id)
-                        .limit(self._max_batch)
+                        # A lease starts consuming time as soon as it is
+                        # committed.  Claim only tasks that can enter execution
+                        # immediately; tasks beyond this capacity stay QUEUED.
+                        .limit(min(self._max_batch, self._max_concurrency))
                     )
                 ).scalars()
             )
@@ -191,11 +190,13 @@ class AssetResearchTaskRunner:
         claims = await self.claim_due(now=run_time)
         semaphore = asyncio.Semaphore(self._max_concurrency)
 
-        async def run_claim_with_permit(claim: ClaimedAnalysisTask) -> None:
+        async def run_claim_with_permit(
+            claim: ClaimedAnalysisTask, *, now: datetime | None
+        ) -> None:
             async with semaphore:
-                await self._run_claim(claim)
+                await self._run_claim(claim, now=now)
 
-        await asyncio.gather(*(run_claim_with_permit(claim) for claim in claims))
+        await asyncio.gather(*(run_claim_with_permit(claim, now=now) for claim in claims))
         return len(claims)
 
     def wake(self) -> bool:
@@ -229,7 +230,7 @@ class AssetResearchTaskRunner:
         except Exception as exc:
             logger.error("Interactive asset-research task wake failed: {}", exc)
 
-    async def _run_claim(self, claim: ClaimedAnalysisTask) -> None:
+    async def _run_claim(self, claim: ClaimedAnalysisTask, *, now: datetime | None = None) -> None:
         """Run one matching lease and atomically commit its terminal transition.
 
         The worker's session may have an old in-memory task object while an
@@ -244,48 +245,65 @@ class AssetResearchTaskRunner:
         lost_claim = False
         try:
             async with self._session_maker() as db:
-                task = await db.get(AssetAnalysisTask, claim.task_id)
-                if task is None or task.lease_token != claim.lease_token:
-                    return
-                record_asset_research_task(asset_type=task.asset_type, status="RUNNING")
-                heartbeat_task = asyncio.create_task(
-                    self._maintain_lease_heartbeat(claim, heartbeat_stop),
-                    name=f"asset-research-task-heartbeat:{claim.task_id}",
+                task = await db.get(
+                    AssetAnalysisTask,
+                    claim.task_id,
+                    populate_existing=True,
                 )
-                service = self._orchestrator_factory(db)
-                await service.run_claimed_task(
-                    task_id=claim.task_id,
-                    lease_token=claim.lease_token,
-                )
-                with db.no_autoflush:
-                    task = await db.get(AssetAnalysisTask, claim.task_id)
                 if task is None:
-                    await db.rollback()
                     return
-                asset_type = task.asset_type
-                started_at = task.started_at
-                terminal_update = await self._finalize_claimed_task(db, claim=claim, task=task)
-                if terminal_update is not None:
-                    await db.commit()
-                    duration_seconds = (
-                        max(
-                            0.0,
-                            (terminal_update.completed_at - _as_utc(started_at)).total_seconds(),
-                        )
-                        if started_at is not None
-                        else None
-                    )
-                    record_asset_research_task(
-                        asset_type=asset_type,
-                        status=terminal_update.status,
-                        duration_seconds=duration_seconds,
-                    )
-                else:
-                    # A cancellation or another terminal transition won the
-                    # compare-and-set.  Discard all in-flight snapshots,
-                    # predictions, runs and reports from this worker.
+                dispatch_time = _as_utc(now or _now())
+                lease_state = task_leases.validate_task_lease(
+                    task,
+                    lease_token=claim.lease_token,
+                    now=dispatch_time,
+                )
+                if lease_state is task_leases.TaskLeaseState.LOST:
+                    return
+                if lease_state is task_leases.TaskLeaseState.EXPIRED:
+                    error_code = "TASK_LEASE_EXPIRED"
                     await db.rollback()
-                    lost_claim = True
+                else:
+                    record_asset_research_task(asset_type=task.asset_type, status="RUNNING")
+                    heartbeat_task = asyncio.create_task(
+                        self._maintain_lease_heartbeat(claim, heartbeat_stop),
+                        name=f"asset-research-task-heartbeat:{claim.task_id}",
+                    )
+                    service = self._orchestrator_factory(db)
+                    await service.run_claimed_task(
+                        task_id=claim.task_id,
+                        lease_token=claim.lease_token,
+                    )
+                    with db.no_autoflush:
+                        task = await db.get(AssetAnalysisTask, claim.task_id)
+                    if task is None:
+                        await db.rollback()
+                        return
+                    asset_type = task.asset_type
+                    started_at = task.started_at
+                    terminal_update = await self._finalize_claimed_task(db, claim=claim, task=task)
+                    if terminal_update is not None:
+                        await db.commit()
+                        duration_seconds = (
+                            max(
+                                0.0,
+                                (
+                                    terminal_update.completed_at - _as_utc(started_at)
+                                ).total_seconds(),
+                            )
+                            if started_at is not None
+                            else None
+                        )
+                        record_asset_research_task(
+                            asset_type=asset_type,
+                            status=terminal_update.status,
+                            duration_seconds=duration_seconds,
+                        )
+                    else:
+                        # A cancellation or another terminal transition won the
+                        # compare-and-set. Discard this worker's in-flight facts.
+                        await db.rollback()
+                        lost_claim = True
         except Exception as exc:
             error_code = str(getattr(exc, "code", type(exc).__name__))
         finally:

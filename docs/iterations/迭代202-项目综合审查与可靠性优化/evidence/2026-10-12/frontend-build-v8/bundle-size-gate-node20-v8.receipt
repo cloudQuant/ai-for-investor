@@ -1,0 +1,6 @@
+command=bash ../../scripts/ci/check_bundle_size.sh dist
+node=v20.20.2
+start_utc=2026-10-12T12:06:41Z
+end_utc=2026-10-12T12:06:46Z
+exit_code=0
+log=/tmp/ai-for-investor-iteration201-bundle/bundle-size-gate-node20-v8.log

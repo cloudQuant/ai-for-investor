@@ -24,7 +24,8 @@ from app.models.workspace import (
 )
 from app.schemas.workspace import ApplyBestParamsRequest, UnitOptimizationRequest
 from app.services.optimization.execution_manager import get_optimization_execution_manager
-from app.services.optimization.task_state import build_results_response
+from app.services.optimization.submission import BEST_RESULT_TIE_BREAK
+from app.services.optimization.task_state import build_results_response, select_best_result
 from app.services.param_optimization_service import (
     get_optimization_progress,
     get_optimization_results,
@@ -64,6 +65,8 @@ def _merge_optimization_config(
     n_workers: int,
     artifact_root: str,
     submitted_at: str,
+    objective: str,
+    direction: str,
 ) -> WorkspaceJSONMapping:
     config = _safe_workspace_json_mapping(current_config)
     config.update(
@@ -72,6 +75,8 @@ def _merge_optimization_config(
             "n_workers": n_workers,
             "artifact_root": artifact_root,
             "submitted_at": submitted_at,
+            "objective": objective,
+            "direction": direction,
         }
     )
     return config
@@ -319,16 +324,6 @@ async def get_unit_optimization_results(
             return None
 
         task_id = str(unit.last_optimization_task_id)
-        oc = _safe_workspace_json_mapping(unit.optimization_config)
-        objective_key = oc.get("objective", "sharpe_max") or "sharpe_max"
-        objective_map = {
-            "sharpe_max": "sharpe_ratio",
-            "max_return": "annual_return",
-            "min_drawdown": "max_drawdown",
-        }
-        objective = objective_map.get(str(objective_key), str(objective_key))
-        reverse_sort = objective != "max_drawdown"
-
         mgr = get_optimization_execution_manager()
         db_task = await mgr.get_task(task_id, user_id=user_id)
         if db_task and db_task.results is not None:
@@ -340,29 +335,12 @@ async def get_unit_optimization_results(
                 "completed": db_task.completed,
                 "failed": db_task.failed,
                 "results": db_task.results,
+                "objective": db_task.objective,
+                "direction": db_task.direction,
             }
-            results_response = build_results_response(task_id, task_dict)
-            rows = list(results_response.get("rows") or [])
-            rows.sort(
-                key=lambda row: row.get(objective, 999999 if not reverse_sort else -999999),
-                reverse=reverse_sort,
-            )
-            results_response["rows"] = rows
-            results_response["best"] = rows[0] if rows else None
-            results_response["objective"] = objective
-            return results_response
+            return build_results_response(task_id, task_dict)
 
-        fallback_response = get_optimization_results(task_id, user_id=user_id, use_db=False)
-        if fallback_response:
-            rows = list(fallback_response.get("rows") or [])
-            rows.sort(
-                key=lambda row: row.get(objective, 999999 if not reverse_sort else -999999),
-                reverse=reverse_sort,
-            )
-            fallback_response["rows"] = rows
-            fallback_response["best"] = rows[0] if rows else None
-            fallback_response["objective"] = objective
-        return fallback_response
+        return get_optimization_results(task_id, user_id=user_id, use_db=False)
 
 
 async def cancel_unit_optimization(
@@ -421,11 +399,34 @@ async def apply_best_params(
         if str(db_task.strategy_id or "").strip() != str(unit.strategy_id or "").strip():
             return {"error": "OPTIMIZATION_TASK_UNIT_MISMATCH"}
 
-        results = db_task.results
-        if req.result_index >= len(results):
-            return {"error": f"Result index {req.result_index} out of range"}
+        results = cast("list[dict[str, Any]]", db_task.results)
+        result_index = req.result_index
+        if result_index is None:
+            selected = select_best_result(
+                results,
+                objective=cast("str | None", db_task.objective),
+                direction=cast("str | None", db_task.direction),
+            )
+            if selected is None:
+                return {
+                    "error": (
+                        "No configured best result is available; specify result_index explicitly"
+                    )
+                }
+            result_index = next(
+                (index for index, result in enumerate(results) if result is selected),
+                None,
+            )
+            if result_index is None:
+                return {
+                    "error": (
+                        "No configured best result is available; specify result_index explicitly"
+                    )
+                }
+        if result_index >= len(results):
+            return {"error": f"Result index {result_index} out of range"}
 
-        best = results[req.result_index]
+        best = results[result_index]
         best_params = best.get("params", {})
 
         current_params: dict[str, Any] = cast("dict[str, Any]", unit.params) or {}
@@ -511,6 +512,8 @@ async def submit_unit_optimization(
             total=len(grid),
             param_ranges=param_ranges,
             n_workers=req.n_workers,
+            objective=req.objective,
+            direction=req.direction,
         )
         task_id = str(db_task.id)
         artifact_root = unit_runtime_dir / "optimization_runs" / task_id
@@ -525,6 +528,9 @@ async def submit_unit_optimization(
                 "param_names": list(param_ranges.keys()),
                 "param_ranges": param_ranges,
                 "n_workers": req.n_workers,
+                "objective": req.objective,
+                "direction": req.direction,
+                "tie_break": BEST_RESULT_TIE_BREAK,
                 "created_at": db_task.created_at.isoformat() if db_task.created_at else "",
             },
         )
@@ -537,6 +543,8 @@ async def submit_unit_optimization(
             persist_to_db=True,
             strategy_dir=str(unit_runtime_dir),
             artifact_root=str(artifact_root),
+            objective=req.objective,
+            direction=req.direction,
         )
 
         unit_row: Any = unit
@@ -547,6 +555,8 @@ async def submit_unit_optimization(
             n_workers=req.n_workers,
             artifact_root=str(artifact_root),
             submitted_at=datetime.now(timezone.utc).isoformat(),
+            objective=req.objective,
+            direction=req.direction,
         )
         await session.commit()
 

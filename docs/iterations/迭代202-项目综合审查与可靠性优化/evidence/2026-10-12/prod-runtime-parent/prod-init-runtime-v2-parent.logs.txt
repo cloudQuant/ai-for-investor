@@ -1,0 +1,68 @@
+# Redacted v2 container log capture; started 2026-10-12T11:56:00.782Z UTC
+
+[stderr]
+2026-10-12T11:56:23.279429220Z [2026-10-12 11:56:23 +0000] [7] [INFO] Starting gunicorn 26.0.0
+2026-10-12T11:56:23.282508845Z [2026-10-12 11:56:23 +0000] [7] [INFO] Listening at: http://0.0.0.0:8000 (7)
+2026-10-12T11:56:23.284489137Z [2026-10-12 11:56:23 +0000] [7] [INFO] Using worker: uvicorn.workers.UvicornWorker
+2026-10-12T11:56:23.372930054Z [2026-10-12 11:56:23 +0000] [8] [INFO] Booting worker with pid: 8
+2026-10-12T11:56:23.524885804Z [2026-10-12 11:56:23 +0000] [9] [INFO] Booting worker with pid: 9
+2026-10-12T11:56:24.122199929Z [2026-10-12 11:56:24 +0000] [7] [INFO] Control socket listening at /home/appuser/.gunicorn/gunicorn.ctl
+
+
+[stderr]
+2026-10-12T11:59:47.267531092Z [2026-10-12 11:59:47 +0000] [8] [INFO] Started server process [8]
+2026-10-12T11:59:47.269063509Z [2026-10-12 11:59:47 +0000] [8] [INFO] Waiting for application startup.
+2026-10-12T11:59:47.269081259Z [2026-10-12 11:59:47 +0000] [9] [INFO] Started server process [9]
+2026-10-12T11:59:47.269083134Z [2026-10-12 11:59:47 +0000] [9] [INFO] Waiting for application startup.
+
+
+[stdout]
+2026-10-12T11:59:57.259194680Z {"timestamp": "2026-10-12T11:59:56.766+00:00", "level": "WARNING", "message": "Semantic retrieval is unavailable; using lexical fallback", "module": "semantic_retrieval_service", "request_id": "N/A", "exception": {"type": "ModuleNotFoundError", "message": "No module named 'chromadb'", "traceback": "Traceback (most recent call last):\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 88, in warm_up\n    await asyncio.to_thread(self._ensure_ready)\n  File \"/usr/local/lib/python3.12/asyncio/threads.py\", line 25, in to_thread\n    return await loop.run_in_executor(None, func_call)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 241, in _ensure_ready\n    import chromadb\nModuleNotFoundError: No module named 'chromadb'\n"}}
+2026-10-12T11:59:57.263308305Z {"timestamp": "2026-10-12T11:59:56.756+00:00", "level": "WARNING", "message": "Semantic retrieval is unavailable; using lexical fallback", "module": "semantic_retrieval_service", "request_id": "N/A", "exception": {"type": "ModuleNotFoundError", "message": "No module named 'chromadb'", "traceback": "Traceback (most recent call last):\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 88, in warm_up\n    await asyncio.to_thread(self._ensure_ready)\n  File \"/usr/local/lib/python3.12/asyncio/threads.py\", line 25, in to_thread\n    return await loop.run_in_executor(None, func_call)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 241, in _ensure_ready\n    import chromadb\nModuleNotFoundError: No module named 'chromadb'\n"}}
+2026-10-12T11:59:57.769948389Z 127.0.0.1:53864 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:57.788017222Z 127.0.0.1:51840 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.059799472Z 127.0.0.1:34966 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.096391791Z 127.0.0.1:43648 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.135038333Z 127.0.0.1:45488 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.135079666Z 127.0.0.1:39892 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.244182083Z 127.0.0.1:49308 - "GET /health HTTP/1.1" 200
+
+[stderr]
+2026-10-12T11:59:57.372474555Z [2026-10-12 11:59:57 +0000] [8] [INFO] Application startup complete.
+2026-10-12T11:59:57.382288972Z [2026-10-12 11:59:57 +0000] [9] [INFO] Application startup complete.
+
+
+[stdout]
+2026-10-12T12:00:29.978438125Z 127.0.0.1:49858 - "GET /health HTTP/1.1" 200
+
+
+[stdout]
+2026-10-12T12:01:06.550727253Z 127.0.0.1:41954 - "GET /health HTTP/1.1" 200
+
+
+[Failure final app log snapshot at 2026-10-12T12:01:21.569Z UTC]
+2026-10-12T11:59:57.259194680Z {"timestamp": "2026-10-12T11:59:56.766+00:00", "level": "WARNING", "message": "Semantic retrieval is unavailable; using lexical fallback", "module": "semantic_retrieval_service", "request_id": "N/A", "exception": {"type": "ModuleNotFoundError", "message": "No module named 'chromadb'", "traceback": "Traceback (most recent call last):\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 88, in warm_up\n    await asyncio.to_thread(self._ensure_ready)\n  File \"/usr/local/lib/python3.12/asyncio/threads.py\", line 25, in to_thread\n    return await loop.run_in_executor(None, func_call)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 241, in _ensure_ready\n    import chromadb\nModuleNotFoundError: No module named 'chromadb'\n"}}
+2026-10-12T11:59:57.263308305Z {"timestamp": "2026-10-12T11:59:56.756+00:00", "level": "WARNING", "message": "Semantic retrieval is unavailable; using lexical fallback", "module": "semantic_retrieval_service", "request_id": "N/A", "exception": {"type": "ModuleNotFoundError", "message": "No module named 'chromadb'", "traceback": "Traceback (most recent call last):\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 88, in warm_up\n    await asyncio.to_thread(self._ensure_ready)\n  File \"/usr/local/lib/python3.12/asyncio/threads.py\", line 25, in to_thread\n    return await loop.run_in_executor(None, func_call)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/workspace/ai-for-investor/src/backend/app/services/semantic_retrieval_service.py\", line 241, in _ensure_ready\n    import chromadb\nModuleNotFoundError: No module named 'chromadb'\n"}}
+2026-10-12T11:59:57.769948389Z 127.0.0.1:53864 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:57.788017222Z 127.0.0.1:51840 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.059799472Z 127.0.0.1:34966 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.096391791Z 127.0.0.1:43648 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.135038333Z 127.0.0.1:45488 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.135079666Z 127.0.0.1:39892 - "GET /health HTTP/1.1" 200
+2026-10-12T11:59:58.244182083Z 127.0.0.1:49308 - "GET /health HTTP/1.1" 200
+2026-10-12T12:00:29.978438125Z 127.0.0.1:49858 - "GET /health HTTP/1.1" 200
+2026-10-12T12:01:06.550727253Z 127.0.0.1:41954 - "GET /health HTTP/1.1" 200
+
+[stderr stream]
+2026-10-12T11:56:23.279429220Z [2026-10-12 11:56:23 +0000] [7] [INFO] Starting gunicorn 26.0.0
+2026-10-12T11:56:23.282508845Z [2026-10-12 11:56:23 +0000] [7] [INFO] Listening at: http://0.0.0.0:8000 (7)
+2026-10-12T11:56:23.284489137Z [2026-10-12 11:56:23 +0000] [7] [INFO] Using worker: uvicorn.workers.UvicornWorker
+2026-10-12T11:56:23.372930054Z [2026-10-12 11:56:23 +0000] [8] [INFO] Booting worker with pid: 8
+2026-10-12T11:56:23.524885804Z [2026-10-12 11:56:23 +0000] [9] [INFO] Booting worker with pid: 9
+2026-10-12T11:56:24.122199929Z [2026-10-12 11:56:24 +0000] [7] [INFO] Control socket listening at /home/appuser/.gunicorn/gunicorn.ctl
+2026-10-12T11:59:47.267531092Z [2026-10-12 11:59:47 +0000] [8] [INFO] Started server process [8]
+2026-10-12T11:59:47.269063509Z [2026-10-12 11:59:47 +0000] [8] [INFO] Waiting for application startup.
+2026-10-12T11:59:47.269081259Z [2026-10-12 11:59:47 +0000] [9] [INFO] Started server process [9]
+2026-10-12T11:59:47.269083134Z [2026-10-12 11:59:47 +0000] [9] [INFO] Waiting for application startup.
+2026-10-12T11:59:57.372474555Z [2026-10-12 11:59:57 +0000] [8] [INFO] Application startup complete.
+2026-10-12T11:59:57.382288972Z [2026-10-12 11:59:57 +0000] [9] [INFO] Application startup complete.

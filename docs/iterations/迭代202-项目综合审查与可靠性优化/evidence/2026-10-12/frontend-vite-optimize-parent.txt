@@ -1,0 +1,4 @@
+manually calling optimizeDeps is deprecated. This is done automatically and does not need to be called manually.
+6:31:48 PM [vite] (client) Forced re-optimization of dependencies
+Optimizing dependencies:
+  @element-plus/icons-vue, axios, dayjs, dompurify, echarts, element-plus, element-plus/dist/locale/de.mjs, element-plus/dist/locale/en.mjs, element-plus/dist/locale/fr.mjs, element-plus/dist/locale/it.mjs, element-plus/dist/locale/ja.mjs, element-plus/dist/locale/ru.mjs, element-plus/dist/locale/zh-cn.mjs, marked, pinia, pinia-plugin-persistedstate, vue, vue-i18n, vue-router

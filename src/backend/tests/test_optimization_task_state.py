@@ -15,7 +15,10 @@ from app.services.optimization.task_state import (
     build_runtime_task_from_db_task,
     estimate_remaining_seconds,
     get_runtime_task,
+    mark_runtime_task_cancelled,
+    select_best_result,
     set_runtime_task,
+    transition_runtime_task,
     update_runtime_task,
 )
 
@@ -186,6 +189,25 @@ class TestBuildFromDBTask:
         assert task["total"] == 0
         assert task["n_workers"] == 4
         assert task["created_at"] == ""
+
+    def test_persists_objective_metadata_from_db_task(self):
+        db_task = _FakeDBTask(
+            status="running",
+            strategy_id="demo",
+            param_ranges={},
+            total=2,
+            completed=0,
+            failed=0,
+            results=[],
+            n_workers=1,
+            created_at=None,
+            error_message=None,
+            objective="max_drawdown",
+            direction="minimize",
+        )
+        task = build_runtime_task_from_db_task(db_task)
+        assert task["objective"] == "max_drawdown"
+        assert task["direction"] == "minimize"
 
 
 class TestBuildProgressResponse:
@@ -487,7 +509,9 @@ class TestBuildResultsResponse:
         }
         resp = build_results_response("t1", task)
         assert resp["rows"][0]["annual_return"] == 0.25  # Best first
-        assert resp["best"]["annual_return"] == 0.25
+        assert resp["best"] is None
+        assert resp["objective"] is None
+        assert resp["direction"] is None
         assert resp["rows"][0]["params"] == {"fast": 15}
         assert resp["rows"][0]["result_index"] == 1
         assert resp["rows"][1]["params"] == {"fast": 5}
@@ -507,7 +531,92 @@ class TestBuildResultsResponse:
         assert resp["rows"] == []
         assert resp["best"] is None
 
+    def test_explicit_objective_selects_same_best_and_preserves_result_index(self):
+        task = {
+            "status": "completed",
+            "strategy_id": "test",
+            "objective": "max_drawdown",
+            "direction": "minimize",
+            "param_names": ["fast"],
+            "total": 2,
+            "completed": 2,
+            "failed": 0,
+            "results": [
+                {
+                    "trial_index": 4,
+                    "params": {"fast": 5},
+                    "metrics": {"max_drawdown": 8.0},
+                },
+                {
+                    "trial_index": 2,
+                    "params": {"fast": 2},
+                    "metrics": {"max_drawdown": 3.0},
+                },
+            ],
+        }
+
+        response = build_results_response("objective-task", task)
+
+        assert response["objective"] == "max_drawdown"
+        assert response["direction"] == "minimize"
+        assert response["tie_break"] == "lowest_trial_index"
+        assert response["best"]["params"] == {"fast": 2}
+        assert response["best"]["result_index"] == 1
+        assert response["rows"][0]["result_index"] == 1
+
     def test_metric_names_constant(self):
         assert "sharpe_ratio" in METRIC_NAMES
         assert "total_return" in METRIC_NAMES
         assert "max_drawdown" in METRIC_NAMES
+
+    def test_explicit_objective_selects_best_with_stable_ties(self):
+        results = [
+            {
+                "trial_index": 5,
+                "params": {"period": 5},
+                "metrics": {"sharpe_ratio": 2.5, "total_return": 0.15},
+            },
+            {
+                "trial_index": 2,
+                "params": {"period": 2},
+                "metrics": {"sharpe_ratio": 2.5, "total_return": 0.20},
+            },
+            {
+                "trial_index": 1,
+                "params": {"period": 1},
+                "metrics": {"sharpe_ratio": float("nan")},
+            },
+        ]
+        selected = select_best_result(
+            results,
+            objective="sharpe_ratio",
+            direction="maximize",
+        )
+        assert selected is results[1]
+        assert (
+            select_best_result(
+                results,
+                objective="total_return",
+                direction="minimize",
+            )
+            is results[0]
+        )
+
+    def test_terminal_transition_preserves_first_winner(self):
+        set_runtime_task("cas-task", {"status": "running", "completed": 0})
+
+        cancelled = mark_runtime_task_cancelled("cas-task")
+        completed = transition_runtime_task("cas-task", "completed", completed=1)
+
+        assert cancelled is not None and cancelled["status"] == "cancelled"
+        assert completed is not None and completed["status"] == "cancelled"
+        assert completed["completed"] == 0
+
+    def test_cancel_after_completed_does_not_overwrite_terminal_winner(self):
+        set_runtime_task("done-task", {"status": "running", "completed": 1})
+        completed = transition_runtime_task("done-task", "completed", completed=1)
+
+        cancelled = mark_runtime_task_cancelled("done-task")
+
+        assert completed is not None and completed["status"] == "completed"
+        assert cancelled is not None and cancelled["status"] == "completed"

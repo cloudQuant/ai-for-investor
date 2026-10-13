@@ -5,7 +5,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.optimization.submission import generate_param_grid, submit_optimization
+from app.services.optimization.submission import (
+    MAX_GRID_COMBINATIONS,
+    count_param_grid_combinations,
+    generate_param_grid,
+    submit_optimization,
+)
 
 
 class TestGenerateParamGrid:
@@ -40,6 +45,50 @@ class TestGenerateParamGrid:
     def test_empty_params(self):
         grid = generate_param_grid({})
         assert grid == [{}]
+
+    @pytest.mark.parametrize(
+        "spec, message",
+        [
+            ({"start": 1, "end": 3, "step": 0}, "step must be positive"),
+            ({"start": 3, "end": 1, "step": 1}, "grid is empty"),
+            ({"start": float("nan"), "end": 3, "step": 1}, "finite number"),
+            ({"start": 1, "end": float("inf"), "step": 1}, "finite number"),
+            (
+                {"start": 1, "end": 1.0000001, "step": 0.00000004},
+                "supported precision",
+            ),
+            (
+                {"start": 1.5, "end": 3, "step": 1, "type": "int"},
+                "requires integer",
+            ),
+            (
+                {"start": 1, "end": 3, "step": 1, "type": []},
+                "type must be",
+            ),
+        ],
+    )
+    def test_rejects_invalid_ranges(self, spec, message):
+        with pytest.raises(ValueError, match=message):
+            generate_param_grid({"period": spec})
+
+    def test_counts_grid_without_materializing_and_caps_size(self):
+        assert count_param_grid_combinations({"a": {"start": 1, "end": 10, "step": 1}}) == 10
+        with pytest.raises(ValueError, match="combination limit"):
+            count_param_grid_combinations(
+                {"a": {"start": 1, "end": MAX_GRID_COMBINATIONS + 1, "step": 1}}
+            )
+
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            {"start": 0.0, "end": 1e100, "step": 1.0},
+            {"start": 0.0, "end": 1.0, "step": 1e-30},
+            {"start": -1e308, "end": 1e308, "step": 1e-308},
+        ],
+    )
+    def test_finite_but_huge_ranges_fail_with_bounded_value_error(self, spec):
+        with pytest.raises(ValueError, match="combination limit"):
+            count_param_grid_combinations({"x": spec})
 
 
 class TestSubmitOptimization:
@@ -225,3 +274,59 @@ class TestSubmitOptimization:
         )
 
         deps["set_task_fn"].assert_called_once_with("tid", build_result)
+
+    def test_oversized_grid_is_rejected_before_materialization_or_task_creation(self, tmp_path):
+        strategy_dir = tmp_path / "strat"
+        strategy_dir.mkdir()
+        (strategy_dir / "run.py").write_text("# strategy")
+        materialize = MagicMock()
+        set_task = MagicMock()
+
+        with pytest.raises(ValueError, match="combination limit"):
+            submit_optimization(
+                strategy_id="strat",
+                param_ranges={
+                    "period": {
+                        "start": 1,
+                        "end": MAX_GRID_COMBINATIONS + 1,
+                        "step": 1,
+                    }
+                },
+                get_strategy_dir=MagicMock(return_value=strategy_dir),
+                generate_param_grid_fn=materialize,
+                set_task_fn=set_task,
+                build_initial_runtime_task_fn=MagicMock(),
+                created_at_fn=MagicMock(),
+                running_status="running",
+                thread_cls=MagicMock(),
+                run_optimization_thread_fn=MagicMock(),
+                task_id_factory=MagicMock(),
+            )
+
+        materialize.assert_not_called()
+        set_task.assert_not_called()
+
+    def test_finite_huge_grid_is_rejected_before_service_task_creation(self, tmp_path):
+        strategy_dir = tmp_path / "strat"
+        strategy_dir.mkdir()
+        (strategy_dir / "run.py").write_text("# harmless local strategy")
+        materialize = MagicMock()
+        set_task = MagicMock()
+
+        with pytest.raises(ValueError, match="combination limit"):
+            submit_optimization(
+                strategy_id="strat",
+                param_ranges={"x": {"start": 0.0, "end": 1e100, "step": 1.0}},
+                get_strategy_dir=MagicMock(return_value=strategy_dir),
+                generate_param_grid_fn=materialize,
+                set_task_fn=set_task,
+                build_initial_runtime_task_fn=MagicMock(),
+                created_at_fn=MagicMock(),
+                running_status="running",
+                thread_cls=MagicMock(),
+                run_optimization_thread_fn=MagicMock(),
+                task_id_factory=MagicMock(),
+            )
+
+        materialize.assert_not_called()
+        set_task.assert_not_called()

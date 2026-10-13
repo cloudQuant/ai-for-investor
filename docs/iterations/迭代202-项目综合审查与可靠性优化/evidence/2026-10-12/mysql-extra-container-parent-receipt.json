@@ -1,0 +1,52 @@
+[
+  {
+    "check": "mysql-extra-install-parent",
+    "command": [
+      "docker",
+      "exec",
+      "iter202-parent-mysql-extra",
+      "python",
+      "-m",
+      "pip",
+      "install",
+      "--no-deps",
+      "aiomysql==0.3.2"
+    ],
+    "image": "sha256:859ea39e831c3d540151a8cefa4c641ca109a92548699b86cb39a615a0127ae1",
+    "additional_test_dependency": "aiomysql==0.3.2 from production lock; dev lock excludes mysql extra",
+    "started_at": "2026-10-12T08:11:03.655906+00:00",
+    "finished_at": "2026-10-12T08:11:14.112346+00:00",
+    "elapsed_seconds": 10.46,
+    "exit_code": 0,
+    "log": "mysql-extra-install-parent.txt",
+    "sha256": "af9b6c2341c6538760f3a93156234b270fff98a661a67c299fd1ab3f163fdfb0"
+  },
+  {
+    "check": "mysql-extra-acceptance-parent",
+    "command": [
+      "docker",
+      "exec",
+      "iter202-parent-mysql-extra",
+      "python",
+      "-m",
+      "pytest",
+      "-p",
+      "pytest_asyncio.plugin",
+      "-p",
+      "pytest_timeout",
+      "-o",
+      "timeout=600",
+      "-q",
+      "tests/asset_research/test_task_runner_supported_db.py",
+      "tests/test_iteration202_deployment_database.py::test_upgrade_previous_schema_then_start_without_ddl"
+    ],
+    "image": "sha256:859ea39e831c3d540151a8cefa4c641ca109a92548699b86cb39a615a0127ae1",
+    "additional_test_dependency": "aiomysql==0.3.2 from production lock; dev lock excludes mysql extra",
+    "started_at": "2026-10-12T08:11:14.115937+00:00",
+    "finished_at": "2026-10-12T08:17:03.274625+00:00",
+    "elapsed_seconds": 349.16,
+    "exit_code": 0,
+    "log": "mysql-extra-acceptance-parent.txt",
+    "sha256": "0a546bae266484631755aa72834379febd1412821cc59111bcf3fbb965728b8f"
+  }
+]

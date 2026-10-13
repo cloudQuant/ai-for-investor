@@ -1,0 +1,46 @@
+{
+  "reviewed_at": "2026-10-12T15:05:51.470Z",
+  "state": "PASS",
+  "checks": [
+    {
+      "receipt": "websocket-fixture-final-parent-receipt.json",
+      "state": "PASS",
+      "source_unchanged": true,
+      "exit_code": 0,
+      "result": "=================== 5 passed, 1 skipped, 1 warning in 3.97s ====================",
+      "log_hash_verified": true
+    },
+    {
+      "receipt": "iteration197-sealed-fixture-parent-receipt.json",
+      "state": "PASS",
+      "source_unchanged": true,
+      "exit_code": 0,
+      "result": "============================= 34 passed in 32.36s ==============================",
+      "log_hash_verified": true
+    },
+    {
+      "receipt": "service-edge-fixture-parent-receipt.json",
+      "state": "PASS",
+      "source_unchanged": true,
+      "exit_code": 0,
+      "result": "============================== 11 passed in 7.44s ==============================",
+      "log_hash_verified": true
+    }
+  ],
+  "ruff": {
+    "version": "0.16.2",
+    "files": [
+      "src/backend/tests/test_main_lifespan_and_websocket.py",
+      "src/backend/tests/test_iteration197_acceptance_runner.py",
+      "src/backend/tests/test_service_edge_cases_113.py"
+    ],
+    "check_exit": 0,
+    "format_check_exit": 0
+  },
+  "production_code_changed": false,
+  "limitations": [
+    "WebSocket ping-pong existing skip remains.",
+    "Historical Iteration 197 runner deliberately rejects the newer current schema; fixture test success is not renewed Iteration 197 live acceptance.",
+    "No live providers or trading actions were executed."
+  ]
+}

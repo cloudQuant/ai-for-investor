@@ -1,0 +1,48 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.8, pytest-9.0.3, pluggy-1.6.0 -- /Users/yunjinqi/opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 34 items
+
+tests/test_iteration197_acceptance_runner.py::test_registry_covers_all_named_acceptance_cases_and_formal_matrix_ids PASSED [  2%]
+tests/test_iteration197_acceptance_runner.py::test_each_executable_mode_maps_only_to_a_formal_required_gate PASSED [  5%]
+tests/test_iteration197_acceptance_runner.py::test_alembic_evidence_uses_the_sealed_iteration197_checkout_tip PASSED [  8%]
+tests/test_iteration197_acceptance_runner.py::test_alembic_evidence_rejects_an_unreviewed_successor_tip PASSED [ 11%]
+tests/test_iteration197_acceptance_runner.py::test_alembic_evidence_rejects_multiple_heads PASSED [ 14%]
+tests/test_iteration197_acceptance_runner.py::test_alembic_evidence_rejects_missing_required_ancestor PASSED [ 17%]
+tests/test_iteration197_acceptance_runner.py::test_current_iteration202_checkout_is_not_iteration197_sealed_evidence PASSED [ 20%]
+tests/test_iteration197_acceptance_runner.py::test_iter196_baseline_provenance_requires_the_fixed_append_only_receipt_chain PASSED [ 23%]
+tests/test_iteration197_acceptance_runner.py::test_iter196_baseline_provenance_rejects_an_unexpected_correction_reference PASSED [ 26%]
+tests/test_iteration197_acceptance_runner.py::test_iter196_baseline_provenance_rejects_a_changed_original_receipt PASSED [ 29%]
+tests/test_iteration197_acceptance_runner.py::test_iter196_baseline_provenance_rejects_a_correction_without_the_second_parent_relation PASSED [ 32%]
+tests/test_iteration197_acceptance_runner.py::test_iter196_baseline_provenance_rejects_a_different_merge_second_parent PASSED [ 35%]
+tests/test_iteration197_acceptance_runner.py::test_recovery_is_incompatible_for_a_formal_g2_only_case PASSED [ 38%]
+tests/test_iteration197_acceptance_runner.py::test_formal_case_selection_emits_one_result_per_case_asset_gate_slice PASSED [ 41%]
+tests/test_iteration197_acceptance_runner.py::test_offline_dry_run_emits_not_run_slices_and_never_invokes_a_case_command PASSED [ 44%]
+tests/test_iteration197_acceptance_runner.py::test_offline_case_uses_child_socket_audit_and_required_junit_evidence PASSED [ 47%]
+tests/test_iteration197_acceptance_runner.py::test_ac17_offline_driver_binds_each_asset_to_runner_and_exact_source_boundary PASSED [ 50%]
+tests/test_iteration197_acceptance_runner.py::test_ac36_offline_is_not_run_without_research_or_b2_fixture_evidence PASSED [ 52%]
+tests/test_iteration197_acceptance_runner.py::test_offline_network_guard_blocks_tcp_and_writes_an_audit_record PASSED [ 55%]
+tests/test_iteration197_acceptance_runner.py::test_offline_zero_exit_without_junit_is_fail_closed PASSED [ 58%]
+tests/test_iteration197_acceptance_runner.py::test_offline_network_audit_attempt_is_fail_even_with_passing_junit PASSED [ 61%]
+tests/test_iteration197_acceptance_runner.py::test_offline_command_failure_is_fail_after_valid_junit PASSED [ 64%]
+tests/test_iteration197_acceptance_runner.py::test_dirty_candidate_requires_explicit_allowlist_and_redacts_sensitive_paths PASSED [ 67%]
+tests/test_iteration197_acceptance_runner.py::test_non_dry_run_stops_before_scope_or_command_when_dirty_paths_are_unallowlisted PASSED [ 70%]
+tests/test_iteration197_acceptance_runner.py::test_unknown_and_mode_incompatible_case_selection_are_incomplete_and_not_dropped PASSED [ 73%]
+tests/test_iteration197_acceptance_runner.py::test_invalid_asset_filter_is_incomplete_without_scope_or_provider_work PASSED [ 76%]
+tests/test_iteration197_acceptance_runner.py::test_live_missing_explicit_approval_is_blocked_before_scope_or_command PASSED [ 79%]
+tests/test_iteration197_acceptance_runner.py::test_external_configuration_requires_an_isolated_timezone_aware_approval_envelope PASSED [ 82%]
+tests/test_iteration197_acceptance_runner.py::test_live_approved_environment_still_requires_a_bound_source_manifest PASSED [ 85%]
+tests/test_iteration197_acceptance_runner.py::test_live_source_manifest_must_cover_the_exact_case_asset_slice PASSED [ 88%]
+tests/test_iteration197_acceptance_runner.py::test_live_valid_approval_never_becomes_pass_without_a_reviewed_case_driver PASSED [ 91%]
+tests/test_iteration197_acceptance_runner.py::test_scope_drift_is_a_fail_not_a_provider_fallback PASSED [ 94%]
+tests/test_iteration197_acceptance_runner.py::test_invalid_iter196_baseline_stops_before_scope_or_child_command PASSED [ 97%]
+tests/test_iteration197_acceptance_runner.py::test_main_writes_result_json_and_keeps_missing_live_configuration_non_sensitive PASSED [100%]
+
+- generated xml file: /Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/iteration197-sealed-fixture-parent.xml -
+============================= 34 passed in 32.36s ==============================

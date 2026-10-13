@@ -1,0 +1,57 @@
+{
+  "base_archive_sha256": "0f94e5a4d2d4339c649d2c89ee0e8996c3629bd95a57b23896d6bb7b997d762a",
+  "overlay_archive_sha256": "54e5f1363a22ad76b8312a55fb09e70eb891a1fa3d6d652f0ac01e988287f4d8",
+  "entries": [
+    {
+      "path": "config/requirements-prod.lock",
+      "size": 9654,
+      "sha256": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b"
+    },
+    {
+      "path": "docker/backend.dev.Dockerfile",
+      "size": 2000,
+      "sha256": "8c381728c9099ed59f80198a59f1c6f7d0306bdf87a203b1de45a584130e9f70"
+    },
+    {
+      "path": "docker/compose/dev.yml",
+      "size": 5450,
+      "sha256": "de4ff5b471921afc81e522966f55011aa2fdf71ba3d05a59e27e96434d75062e"
+    },
+    {
+      "path": "src/backend/pyproject.toml",
+      "size": 5611,
+      "sha256": "f54f90241ee84791c58cd4f27496e9ec3383143188815772bcc25fbdece1de4a"
+    },
+    {
+      "path": "src/backend/tests/test_iteration202_optimization_acceptance.py",
+      "size": 9981,
+      "sha256": "00fc7894c55e1fb3e12c78c3d45986d181967b1d215f3cb4a24fa5bb13f63a7c"
+    },
+    {
+      "path": "src/backend/tests/test_iteration202_optimization_artifact_download.py",
+      "size": 7647,
+      "sha256": "81ad2ed184d736ee381fe517fd72deb3ae884dc6901264cdb930ca69524c432d"
+    },
+    {
+      "path": "src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+      "size": 30310,
+      "sha256": "63a7a8b70a93e433c1365a78d9a58af9631c2202ba9fd629f068d3ade1216bae"
+    },
+    {
+      "path": "src/frontend/src/main.ts",
+      "size": 3116,
+      "sha256": "8d3adf702d5c3c017bbc1773d0e50327182ff5065f846beda1c13582e97a2bf0"
+    },
+    {
+      "path": "src/frontend/src/views/BacktestPage.vue",
+      "size": 23737,
+      "sha256": "e9506b288adff1ffde441ee6f41f016e36ea3ef1196231a4ece87154415e86b1"
+    },
+    {
+      "path": "src/frontend/vite.config.ts",
+      "size": 4929,
+      "sha256": "359d28a834dddba5c19e7f3aa1e8f3b1209e76a1f1d5de75898c1127a4d7d5fe"
+    }
+  ],
+  "note": "Tar members generated from hashed byte buffers; prior v2 capture refused Dockerfile concurrent-edit mismatch before pytest ran."
+}

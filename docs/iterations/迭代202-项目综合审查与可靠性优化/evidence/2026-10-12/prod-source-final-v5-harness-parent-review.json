@@ -1,0 +1,21 @@
+{
+  "reviewed_at": "2026-10-12T14:32:44.885Z",
+  "reviewer": "primary",
+  "harness": "/tmp/ai-investor-iter200-202-20261012.afLb99/prod-init-runtime-v5-parent.cjs",
+  "harness_sha256": "fdd20ca19a58194f57c5ef5f72f84917be819cab93f5a04e9a947c5828f8ff4d",
+  "checks": [
+    "Read all 752 lines and exact Docker argv allowlist",
+    "Fixed production image/container, existing internal fixture network and database identity validated before mutations",
+    "Only new random runtime role with existing-table DML/sequence usage, no DDL privilege; permission read-back checked",
+    "Runtime env mode 0600, random secrets and SCRAM verifier never printed; explicit secret redaction",
+    "Read actual /proc tree, require init/master/two workers and both startup markers, independent health/db HTTP",
+    "TERM with 35-second grace; require actual worker and master shutdown markers, exit 0, OOM false, no forced-kill marker",
+    "Schema fingerprint normalization strips only pg_dump random restrict tokens"
+  ],
+  "static_verdict": "PASS",
+  "execution_verdict": "NOT_RUN_WAITING_FINAL_IMAGE",
+  "limitations": [
+    "This is the isolated local fixture; no production deployment or external provider validation",
+    "Primary will retain actual allowlisted shutdown event lines in addition to harness summaries"
+  ]
+}

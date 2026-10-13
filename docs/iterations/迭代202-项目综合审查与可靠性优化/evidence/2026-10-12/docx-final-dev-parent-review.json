@@ -1,0 +1,61 @@
+{
+  "reviewed_at": "2026-10-12T14:50:11.328Z",
+  "receipt_state": "PASS",
+  "checks": [
+    {
+      "label": "dependency-sync",
+      "state": "PASS",
+      "exit_code": 0,
+      "log_hash_matches": true
+    },
+    {
+      "label": "docx-identity",
+      "state": "PASS",
+      "exit_code": 0,
+      "log_hash_matches": true
+    },
+    {
+      "label": "ctp-workspaces",
+      "state": "PASS",
+      "exit_code": 0,
+      "log_hash_matches": true
+    },
+    {
+      "label": "audit",
+      "state": "PASS",
+      "exit_code": 0,
+      "log_hash_matches": true
+    },
+    {
+      "label": "mypy",
+      "state": "PASS",
+      "exit_code": 0,
+      "log_hash_matches": true
+    },
+    {
+      "label": "mypy-ratchet",
+      "state": "PASS",
+      "exit_code": 0,
+      "log_hash_matches": true
+    }
+  ],
+  "ctp_result": "======================== 55 passed in 62.45s (0:01:02) =========================",
+  "mypy": "Success: no issues found in 667 source files",
+  "ratchet": "mypy_ratchet: errors=0 baseline=0 delta=+0",
+  "audited_dependencies": 173,
+  "advisories": 0,
+  "skipped": [
+    {
+      "name": "backtrader",
+      "reason": "URL requirements cannot be pinned to a specific package version"
+    }
+  ],
+  "dev_lock": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+  "prod_lock": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b",
+  "boundaries": [
+    "Only offline certification workspace entry points and fake provider/helper calls were exercised; no live CTP connection, order, cancellation, or production report generation.",
+    "Original Git-ignore and report path assertions ran unchanged in the real checkout.",
+    "Registry audit does not attest Git-sourced Backtrader."
+  ],
+  "verdict": "PASS"
+}

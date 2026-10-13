@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -19,6 +19,45 @@ const BACKEND_PROXY = {
     ws: true,
   },
 }
+let authChunkModules: Set<string> | undefined
+let shellChunkModules: Set<string> | undefined
+
+const ELEMENT_PLUS_COMPONENT_ENTRY_PATHS: Readonly<Record<string, string>> = {
+  ElButton: 'element-plus/es/components/button/index.mjs',
+  ElConfigProvider: 'element-plus/es/components/config-provider/index.mjs',
+  ElDropdown: 'element-plus/es/components/dropdown/index.mjs',
+  ElDropdownItem: 'element-plus/es/components/dropdown/index.mjs',
+  ElDropdownMenu: 'element-plus/es/components/dropdown/index.mjs',
+  ElForm: 'element-plus/es/components/form/index.mjs',
+  ElFormItem: 'element-plus/es/components/form/index.mjs',
+  ElIcon: 'element-plus/es/components/icon/index.mjs',
+  ElInput: 'element-plus/es/components/input/index.mjs',
+  ElResult: 'element-plus/es/components/result/index.mjs',
+}
+
+function elementPlusResolvers() {
+  return ElementPlusResolver().map((resolver) => {
+    if (typeof resolver === 'function' || resolver.type !== 'component') return resolver
+
+    return {
+      ...resolver,
+      async resolve(name: string) {
+        const resolved = await resolver.resolve(name)
+        const entryPath = ELEMENT_PLUS_COMPONENT_ENTRY_PATHS[name]
+        if (
+          entryPath &&
+          resolved &&
+          typeof resolved === 'object' &&
+          'from' in resolved &&
+          resolved.from === 'element-plus/es'
+        ) {
+          return { ...resolved, from: entryPath }
+        }
+        return resolved
+      },
+    }
+  })
+}
 
 // Iteration 175 §2 — High_Coverage_Core modules and their >= 90% per-path
 // thresholds. Listed inline so the source-of-truth lives next to the global
@@ -37,12 +76,19 @@ const HIGH_COVERAGE_CORE_THRESHOLDS = {
 export default defineConfig({
   plugins: [
     vue(),
+    {
+      name: 'reset-auth-chunk-modules',
+      buildStart() {
+        authChunkModules = undefined
+        shellChunkModules = undefined
+      },
+    },
     AutoImport({
-      resolvers: [ElementPlusResolver()],
+      resolvers: [elementPlusResolvers()],
       dts: 'auto-imports.d.ts',
     }),
     Components({
-      resolvers: [ElementPlusResolver()],
+      resolvers: [elementPlusResolvers()],
       dts: 'components.d.ts',
     }),
   ],
@@ -52,7 +98,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     sequence: {
-      setupFiles: 'first',
+      setupFiles: 'list',
     },
     testTimeout: 10000,
     coverage: {
@@ -111,21 +157,16 @@ export default defineConfig({
     sourcemap: ENABLE_BUILD_SOURCEMAP,
     rollupOptions: {
       output: {
-        // Keep the app-wide UI/framework modules and Vite's preload helper in
-        // one shared chunk. This avoids loading a large lazy chunk just to reach
-        // the helper and keeps /login within its all-assets request budget.
-        manualChunks(id: string) {
+        onlyExplicitManualChunks: true,
+        // Keep the complete static app-shell closure together. Route-specific
+        // modules stay lazy so /login does not preload unrelated page UI.
+        manualChunks(id: string, { getModuleIds, getModuleInfo }) {
           const normalizedId = id.replace(/\\/g, '/')
+          const modulePath = (moduleId: string) =>
+            moduleId.replace(/\\/g, '/').split('?')[0]
+          const matchesSource = (moduleId: string, sourcePath: string) =>
+            modulePath(moduleId).endsWith(sourcePath)
           if (normalizedId.includes('vite/preload-helper.js')) return 'application-vendor'
-          if (
-            id.includes('node_modules/element-plus/') ||
-            id.includes('node_modules/@element-plus/') ||
-            id.includes('node_modules/vue-router/') ||
-            id.includes('node_modules/pinia/') ||
-            normalizedId.includes('/src/components/LanguageSwitcher.vue') ||
-            normalizedId.includes('/src/components/common/ThemeSwitcher.vue')
-          )
-            return 'application-vendor'
           // echarts ships zrender as runtime dep — keep them together.
           if (
             id.includes('node_modules/echarts/') ||
@@ -139,6 +180,57 @@ export default defineConfig({
             id.includes('node_modules/@monaco-editor/')
           )
             return 'monaco-editor'
+
+          if (!authChunkModules || !shellChunkModules) {
+            const moduleIds = [...getModuleIds()]
+            const shellRoots = moduleIds.filter((moduleId) => {
+              const path = modulePath(moduleId)
+              return (
+                path.endsWith('/index.html') ||
+                path.endsWith('/src/main.ts') ||
+                moduleId.includes('vite/preload-helper.js') ||
+                moduleId.includes('node_modules/vue-router/') ||
+                matchesSource(moduleId, '/src/components/LanguageSwitcher.vue') ||
+                matchesSource(moduleId, '/src/components/common/ThemeSwitcher.vue') ||
+                matchesSource(moduleId, '/src/components/common/ErrorBoundary.vue')
+              )
+            })
+            const authRoots = moduleIds.filter((moduleId) =>
+              matchesSource(moduleId, '/src/views/LoginPage.vue') ||
+              matchesSource(moduleId, '/src/components/auth/AuthFrame.vue'),
+            )
+
+            const collectStaticDependencies = (roots: string[]) => {
+              const visited = new Set<string>()
+              const pending = [...roots]
+              while (pending.length > 0) {
+                const current = pending.pop()
+                if (!current || visited.has(current)) continue
+                visited.add(current)
+                const info = getModuleInfo(current)
+                if (info) pending.push(...info.importedIds)
+              }
+              return visited
+            }
+
+            const shellModules = collectStaticDependencies(shellRoots)
+            const authModules = collectStaticDependencies(authRoots)
+            shellChunkModules = shellModules
+            authChunkModules = new Set(
+              [...authModules].filter(
+                (moduleId) =>
+                  !shellModules.has(moduleId) &&
+                  !matchesSource(moduleId, '/src/views/LoginPage.vue'),
+              ),
+            )
+          }
+          if (
+            modulePath(id).endsWith('/index.html') ||
+            modulePath(id).endsWith('/src/main.ts')
+          )
+            return undefined
+          if (shellChunkModules?.has(id)) return 'application-vendor'
+          if (authChunkModules?.has(id)) return 'auth'
           return undefined
         },
       },

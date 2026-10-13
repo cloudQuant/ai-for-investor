@@ -6,15 +6,19 @@
 #   LOCAL_FRONTEND_PORT (default: 3000)
 #   LOCAL_DB_PORT       (default: 5432)
 #
-# Environment variables for initialization:
-#   DB_AUTO_CREATE_SCHEMA=true       - Auto-create database tables on first start
-#   DB_AUTO_CREATE_DEFAULT_ADMIN=true - Create default admin user
-#   SEED_DATA=true                   - Populate development sample data
+# Database initialization is explicit: the one-shot `migrate` service applies
+# Alembic revisions before the backend starts. Backend startup only verifies
+# the current migration revision; it does not run DDL or create an admin.
+# To bootstrap an administrator after migration, run:
+#   docker compose -f docker/docker-compose.yml -f docker/compose/dev.yml \
+#     run --rm --no-deps --entrypoint python backend -m app.db.bootstrap_admin
+#   ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_EMAIL configure that one-shot command.
+# DB_AUTO_CREATE_SCHEMA is an opt-in development-only create_all path; leave it
+# false for databases managed by Alembic. SEED_DATA is separately opt-in.
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: backtrader_postgres_dev
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-backtrader}
@@ -37,7 +41,7 @@ services:
     build:
       context: .
       dockerfile: docker/backend.dev.Dockerfile
-    container_name: backtrader_backend_dev
+    init: true
     restart: unless-stopped
     environment:
       APP_NAME: ai-for-investor
@@ -54,12 +58,13 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      DB_AUTO_CREATE_SCHEMA: ${DB_AUTO_CREATE_SCHEMA:-true}
-      DB_AUTO_CREATE_DEFAULT_ADMIN: ${DB_AUTO_CREATE_DEFAULT_ADMIN:-true}
+      DB_AUTO_CREATE_SCHEMA: ${DB_AUTO_CREATE_SCHEMA:-false}
+      DB_AUTO_CREATE_DEFAULT_ADMIN: "false"
       SEED_DATA: ${SEED_DATA:-false}
       BACKTEST_TIMEOUT: "300"
       TZ: Asia/Shanghai
       LOG_FORMAT: ${LOG_FORMAT:-text}
+      LOG_DIR: /var/log/ai-for-investor
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
     ports:
       - "${LOCAL_BACKEND_PORT:-8000}:8000"
@@ -69,14 +74,34 @@ services:
       - ./datas:/opt/workspace/ai-for-investor/datas
       - ./scripts:/opt/workspace/ai-for-investor/scripts
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 180s
+    networks:
+      - backtrader_dev
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/backend.dev.Dockerfile
+    restart: "no"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production}
+      DATABASE_TYPE: postgresql
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-backtrader}:${POSTGRES_PASSWORD:-backtrader_dev}@postgres:5432/${POSTGRES_DB:-ai_for_investor}
+      DB_AUTO_CREATE_SCHEMA: "false"
+      DB_AUTO_CREATE_DEFAULT_ADMIN: "false"
+      TZ: Asia/Shanghai
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - backtrader_dev
 
@@ -84,7 +109,6 @@ services:
     build:
       context: .
       dockerfile: docker/frontend.dev.Dockerfile
-    container_name: backtrader_frontend_dev
     restart: unless-stopped
     environment:
       VITE_API_BASE_URL: http://localhost:${LOCAL_BACKEND_PORT:-8000}
@@ -112,7 +136,6 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.55
     profiles: ["observability"]
-    container_name: backtrader_jaeger_dev
     restart: unless-stopped
     environment:
       COLLECTOR_OTLP_ENABLED: "true"

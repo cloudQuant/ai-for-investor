@@ -1,0 +1,141 @@
+
+> ai-for-investor-frontend@0.1.0 prebuild
+> npm run verify:approval-errors
+
+
+> ai-for-investor-frontend@0.1.0 verify:approval-errors
+> node scripts/verify-ai-research-approval-errors.mjs
+
+Verified ai-research-approval-errors/v1: 48 backend/frontend entries, 6dd9f6ce55ec595c9441ae08e26f6cc0845549eb1c950a6a28481ad973870d53
+
+> ai-for-investor-frontend@0.1.0 build
+> vite build
+
+vite v6.4.4 building for production...
+transforming...
+✓ 4078 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                              0.67 kB │ gzip:     0.40 kB
+dist/.vite/manifest.json                                                    25.23 kB │ gzip:     3.21 kB
+dist/assets/codicon-Brq4_Ui5.ttf                                           140.96 kB
+dist/assets/json.worker-BF9eV5mS.js                                        406.18 kB
+dist/assets/html.worker-DhJ4VZMp.js                                        715.95 kB
+dist/assets/css.worker-CqwWTjeG.js                                       1,053.32 kB
+dist/assets/ts.worker-DTZAwq0V.js                                        7,043.07 kB
+dist/assets/ResponsiveDataGrid-BFDJC53P.css                                  0.21 kB │ gzip:     0.13 kB
+dist/assets/RiskControlPage-D4-gZ1Yy.css                                     0.38 kB │ gzip:     0.21 kB
+dist/assets/EquityCurve-Thwpo_5Y.css                                         0.45 kB │ gzip:     0.25 kB
+dist/assets/ConfigAILayout-C26uyOMw.css                                      0.97 kB │ gzip:     0.38 kB
+dist/assets/ConfigDataLayout-CeWFpAV1.css                                    0.99 kB │ gzip:     0.37 kB
+dist/assets/PaperTradingDetailPage-ZRuGmReX.css                              1.02 kB │ gzip:     0.44 kB
+dist/assets/DataTableSkeleton-CNfEi4NX.css                                   1.07 kB │ gzip:     0.41 kB
+dist/assets/ResearchWorkflowGuide-Dm_AgDL1.css                               2.59 kB │ gzip:     0.67 kB
+dist/assets/AuthFrame-3AJny8VY.css                                           4.43 kB │ gzip:     1.26 kB
+dist/assets/DataTasksPage-dXbR9aen.css                                       6.64 kB │ gzip:     1.36 kB
+dist/assets/DataScriptDetailPage-BzXBzsGw.css                                6.70 kB │ gzip:     1.38 kB
+dist/assets/SettingsPage-i9CyOfU7.css                                        6.78 kB │ gzip:     1.31 kB
+dist/assets/AIObservabilityPage-BhQyyRj7.css                                 6.88 kB │ gzip:     1.26 kB
+dist/assets/AirflowDagsPage-BprgdWgg.css                                     7.01 kB │ gzip:     1.36 kB
+dist/assets/DataTablesPage-CYH_dHzg.css                                      7.10 kB │ gzip:     1.57 kB
+dist/assets/AIProviderConfigPage-vjslqJxs.css                                7.27 kB │ gzip:     1.37 kB
+dist/assets/DataTableDetailPage-DOb3sgNz.css                                 7.27 kB │ gzip:     1.58 kB
+dist/assets/DashboardPage-Bx47bvwL.css                                       7.36 kB │ gzip:     1.47 kB
+dist/assets/PromptTemplatesPage-DAn1qGHI.css                                 7.65 kB │ gzip:     1.42 kB
+dist/assets/DataExecutionsPage-IfWj_jPl.css                                  7.86 kB │ gzip:     1.43 kB
+dist/assets/GatewayStatusPage-Dv85VZJR.css                                   7.93 kB │ gzip:     1.47 kB
+dist/assets/AppLayout-7Qa_7Ub3.css                                           7.97 kB │ gzip:     1.56 kB
+dist/assets/DataInterfacesPage-Ce6HvQyj.css                                  8.37 kB │ gzip:     1.49 kB
+dist/assets/DataGovernancePage-E6ZZRGMD.css                                  8.62 kB │ gzip:     1.54 kB
+dist/assets/PortfolioPage-Bo8X7K2N.css                                       9.87 kB │ gzip:     1.81 kB
+dist/assets/AssetAnalysisPage-Cgo2roZG.css                                  10.68 kB │ gzip:     2.02 kB
+dist/assets/DataSyncPage-CECzdEip.css                                       10.70 kB │ gzip:     1.76 kB
+dist/assets/BacktestPage-CV7OnlLX.css                                       11.10 kB │ gzip:     1.77 kB
+dist/assets/WorkspaceListPage-BgF9JbsA.css                                  11.22 kB │ gzip:     1.90 kB
+dist/assets/DataScriptsPage-CVpiZe-H.css                                    11.24 kB │ gzip:     2.16 kB
+dist/assets/DataTopicsPage-D56ZD9oS.css                                     11.94 kB │ gzip:     2.15 kB
+dist/assets/NewsIntelligencePage-CqxK571c.css                               13.22 kB │ gzip:     2.41 kB
+dist/assets/AITradingPage-DHOG_m5-.css                                      13.80 kB │ gzip:     2.41 kB
+dist/assets/KnowledgeBasePage-M4I6XFE2.css                                  14.05 kB │ gzip:     1.97 kB
+dist/assets/BacktestResultPage-BquhCnLp.css                                 14.19 kB │ gzip:     2.28 kB
+dist/assets/KnowledgeBaseDocumentPage-B-jBef4m.css                          15.93 kB │ gzip:     2.78 kB
+dist/assets/StockAnalysisPage-LkWbumi9.css                                  16.66 kB │ gzip:     2.77 kB
+dist/assets/QuotePage-B8-kG_u9.css                                          17.36 kB │ gzip:     3.09 kB
+dist/assets/WorkspaceDetailPage-BnfXUJly.css                                18.98 kB │ gzip:     3.02 kB
+dist/assets/ScannerPage-49nHKfrg.css                                        20.89 kB │ gzip:     3.06 kB
+dist/assets/DataMarketPage-Cy_SGVlX.css                                     24.76 kB │ gzip:     3.55 kB
+dist/assets/AIChatPage-BNdObE28.css                                         31.95 kB │ gzip:     4.95 kB
+dist/assets/StrategyPage-C5jhCOAy.css                                       59.64 kB │ gzip:     7.58 kB
+dist/assets/index-B3YnNExG.css                                              59.65 kB │ gzip:    11.67 kB
+dist/assets/monaco-editor-CB2SckMT.css                                     162.39 kB │ gzip:    25.00 kB
+dist/assets/application-vendor-5gTvW4lH.css                                365.00 kB │ gzip:    49.05 kB
+dist/assets/DataLayout-Dh2B-fuR.js                                           0.19 kB │ gzip:     0.17 kB
+dist/assets/ResponsiveDataGrid-DeRgWWfm.js                                   0.51 kB │ gzip:     0.32 kB
+dist/assets/paperRuntime-DCXQszDs.js                                         0.54 kB │ gzip:     0.28 kB
+dist/assets/chartColors-fOjwj2fb.js                                          0.57 kB │ gzip:     0.35 kB
+dist/assets/utils-B-3MHJw2.js                                                0.59 kB │ gzip:     0.37 kB
+dist/assets/knowledgeBase-CgL1XvIW.js                                        0.70 kB │ gzip:     0.27 kB
+dist/assets/aiObservability-hGft81Q6.js                                      0.87 kB │ gzip:     0.37 kB
+dist/assets/strategy-Bqt0PbC-.js                                             0.87 kB │ gzip:     0.40 kB
+dist/assets/DataTableSkeleton-D-pCrkDx.js                                    0.92 kB │ gzip:     0.50 kB
+dist/assets/liveTrading-ByJaz-gM.js                                          1.13 kB │ gzip:     0.39 kB
+dist/assets/stockAnalysis-DaHog2SZ.js                                        1.21 kB │ gzip:     0.46 kB
+dist/assets/ConfigAILayout-mAO-kmBg.js                                       1.32 kB │ gzip:     0.74 kB
+dist/assets/ResearchWorkflowGuide-DMgf7ILj.js                                1.49 kB │ gzip:     0.77 kB
+dist/assets/ConfigDataLayout-B2xiu5WN.js                                     1.62 kB │ gzip:     0.78 kB
+dist/assets/marketIntel-BAlwpWUf.js                                          1.87 kB │ gzip:     0.60 kB
+dist/assets/knowledgeBase-gpX4HqA2.js                                        1.93 kB │ gzip:     0.66 kB
+dist/assets/akshare-DYUEwCi1.js                                              2.09 kB │ gzip:     0.55 kB
+dist/assets/AuthFrame.vue_vue_type_style_index_0_lang-C7dR6AyZ.js            2.36 kB │ gzip:     1.01 kB
+dist/assets/RiskControlPage-BVreG8IS.js                                      3.29 kB │ gzip:     1.26 kB
+dist/assets/LoginPage-Cg5FaXSl.js                                            3.55 kB │ gzip:     1.50 kB
+dist/assets/RegisterPage-Dd94yr1Q.js                                         3.67 kB │ gzip:     1.22 kB
+dist/assets/EquityCurve.vue_vue_type_script_setup_true_lang-AIaZs0BH.js      6.01 kB │ gzip:     2.50 kB
+dist/assets/marketData-BrO65zhF.js                                           6.38 kB │ gzip:     2.14 kB
+dist/assets/DataTablesPage-CVbnUmG3.js                                       6.45 kB │ gzip:     2.32 kB
+dist/assets/DataScriptDetailPage-Un_WjRtF.js                                 7.07 kB │ gzip:     1.99 kB
+dist/assets/DashboardPage-Bznbp7Kj.js                                        7.61 kB │ gzip:     2.54 kB
+dist/assets/DataTableDetailPage-BdExG1tm.js                                  7.90 kB │ gzip:     2.62 kB
+dist/assets/PaperTradingDetailPage-D9KZIwSF.js                               9.95 kB │ gzip:     2.45 kB
+dist/assets/DataExecutionsPage-B8K9F3uu.js                                  11.05 kB │ gzip:     3.25 kB
+dist/assets/AirflowDagsPage-CiP8xM42.js                                     11.72 kB │ gzip:     3.42 kB
+dist/assets/SettingsPage-CVppq-R6.js                                        12.26 kB │ gzip:     3.18 kB
+dist/assets/PromptTemplatesPage-BrhJRizC.js                                 12.26 kB │ gzip:     3.47 kB
+dist/assets/DataTopicsPage-CwvdKZ_L.js                                      12.31 kB │ gzip:     3.67 kB
+dist/assets/DataGovernancePage-DeCe1ysb.js                                  13.79 kB │ gzip:     3.51 kB
+dist/assets/AIObservabilityPage-CU5tQfvH.js                                 13.82 kB │ gzip:     3.11 kB
+dist/assets/AITradingPage-BVY8PdWX.js                                       13.92 kB │ gzip:     4.42 kB
+dist/assets/AppLayout-D7z5NOA2.js                                           14.36 kB │ gzip:     4.02 kB
+dist/assets/DataTasksPage-BwGF0KCQ.js                                       14.46 kB │ gzip:     3.98 kB
+dist/assets/AIProviderConfigPage-Dppd_B9-.js                                16.07 kB │ gzip:     4.16 kB
+dist/assets/DataInterfacesPage-DazWDXq7.js                                  16.96 kB │ gzip:     4.39 kB
+dist/assets/NewsIntelligencePage-qHn5K3ej.js                                17.26 kB │ gzip:     4.76 kB
+dist/assets/DataScriptsPage-CJFgKevI.js                                     17.35 kB │ gzip:     4.59 kB
+dist/assets/WorkspaceListPage-CaK86e6T.js                                   18.24 kB │ gzip:     5.14 kB
+dist/assets/BacktestPage-D5hLRel5.js                                        19.12 kB │ gzip:     6.03 kB
+dist/assets/KnowledgeBaseDocumentPage-DY1rkwhH.js                           19.34 kB │ gzip:     5.54 kB
+dist/assets/DataSyncPage-DeTkz9m1.js                                        22.19 kB │ gzip:     5.52 kB
+dist/assets/StockAnalysisPage-D7Gjunez.js                                   23.51 kB │ gzip:     6.79 kB
+dist/assets/PortfolioPage-C753ZO7U.js                                       25.98 kB │ gzip:     7.25 kB
+dist/assets/ScannerPage-DB1deUeB.js                                         27.02 kB │ gzip:     6.94 kB
+dist/assets/WorkspaceOptimizationTab-DWqDhjJl.js                            32.16 kB │ gzip:     8.89 kB
+dist/assets/GatewayStatusPage-CFXd-xI6.js                                   35.70 kB │ gzip:     7.62 kB
+dist/assets/AssetAnalysisPage-nqbISqHL.js                                   38.08 kB │ gzip:    11.05 kB
+dist/assets/QuotePage-DLUw2I5m.js                                           38.35 kB │ gzip:    11.17 kB
+dist/assets/KnowledgeBasePage-BuEGD5vi.js                                   52.99 kB │ gzip:    11.84 kB
+dist/assets/BacktestResultPage-wWNFBQrt.js                                  66.79 kB │ gzip:    19.13 kB
+dist/assets/markdown-sanitizer-CgL9J455.js                                  73.39 kB │ gzip:    24.73 kB
+dist/assets/AIChatPage-D4tchqxH.js                                          74.40 kB │ gzip:    20.49 kB
+dist/assets/DataMarketPage-BW9N4kIe.js                                      91.90 kB │ gzip:    23.49 kB
+dist/assets/index-BvuBcH4p.js                                              115.67 kB │ gzip:    37.48 kB
+dist/assets/WorkspaceDetailPage-LKRZkKdO.js                                230.43 kB │ gzip:    49.34 kB
+dist/assets/StrategyPage-e8SZxJ1N.js                                       351.48 kB │ gzip:    88.85 kB
+dist/assets/echarts-DU_99LXV.js                                          1,135.48 kB │ gzip:   382.28 kB
+dist/assets/application-vendor-DgwN1iit.js                               2,071.12 kB │ gzip:   652.55 kB
+dist/assets/monaco-editor-DIvOQTYS.js                                    4,487.91 kB │ gzip: 1,153.54 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 33m 50s

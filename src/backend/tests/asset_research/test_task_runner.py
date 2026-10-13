@@ -135,6 +135,128 @@ async def test_task_runner_publishes_queue_depth_before_claiming(monkeypatch) ->
 
 
 @pytest.mark.asyncio
+async def test_task_runner_leaves_work_queued_until_execution_capacity_is_available(
+    monkeypatch,
+) -> None:
+    """A blocked worker cannot consume the lease of a task waiting on its semaphore."""
+    first_task_id = await _seed_pending_task()
+    async with async_session_maker() as db:
+        first_task = await db.get(AssetAnalysisTask, first_task_id)
+        assert first_task is not None
+        second_task = await AssetResearchOrchestrator(db).create_pending(
+            user_id=first_task.user_id,
+            request=AssetAnalysisCreateRequest(
+                asset_type="futures", canonical_id="futures:CFFEX:IF2609:CNY"
+            ),
+        )
+        second_task_id = second_task.id
+        await db.commit()
+
+    base_time = datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc)
+    clock = [base_time]
+    monkeypatch.setattr(task_runner_module, "_now", lambda: clock[0])
+    monkeypatch.setattr(orchestrator_module, "_now", lambda: clock[0])
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    first_dispatches: list[str] = []
+    second_dispatches: list[tuple[str, str]] = []
+
+    class _BlockingFirstService:
+        def __init__(self, db: object) -> None:
+            self.db = db
+
+        async def run_claimed_task(self, *, task_id: str, lease_token: str) -> None:
+            task = await self.db.get(AssetAnalysisTask, task_id)  # type: ignore[union-attr]
+            assert task is not None
+            assert task.lease_token == lease_token
+            first_dispatches.append(task_id)
+            first_started.set()
+            await release_first.wait()
+            task.status = "SUCCEEDED"
+            task.progress = 100
+            task.completed_at = clock[0]
+
+    class _FinishingSecondService:
+        def __init__(self, db: object) -> None:
+            self.db = db
+
+        async def run_claimed_task(self, *, task_id: str, lease_token: str) -> None:
+            task = await self.db.get(AssetAnalysisTask, task_id)  # type: ignore[union-attr]
+            assert task is not None
+            assert task.status == "RUNNING"
+            assert task.lease_token == lease_token
+            assert task.lease_expires_at is not None
+            assert task.lease_expires_at.replace(tzinfo=timezone.utc) > clock[0]
+            second_dispatches.append((task_id, lease_token))
+            task.status = "SUCCEEDED"
+            task.progress = 100
+            task.completed_at = clock[0]
+
+    first_runner = AssetResearchTaskRunner(
+        session_maker=async_session_maker,
+        orchestrator_factory=_BlockingFirstService,
+        lease_seconds=5,
+        max_batch=2,
+        max_concurrency=1,
+    )
+
+    async def hold_without_renewing(
+        claim: task_runner_module.ClaimedAnalysisTask, stop: asyncio.Event
+    ) -> None:
+        await stop.wait()
+
+    monkeypatch.setattr(first_runner, "_maintain_lease_heartbeat", hold_without_renewing)
+    second_runner = AssetResearchTaskRunner(
+        session_maker=async_session_maker,
+        orchestrator_factory=_FinishingSecondService,
+        lease_seconds=5,
+        max_batch=2,
+        max_concurrency=1,
+    )
+
+    first_run = asyncio.create_task(first_runner.run_due(now=base_time))
+    try:
+        await asyncio.wait_for(first_started.wait(), timeout=1)
+        async with async_session_maker() as db:
+            rows = list(
+                (
+                    await db.execute(
+                        select(AssetAnalysisTask).where(
+                            AssetAnalysisTask.id.in_([first_task_id, second_task_id])
+                        )
+                    )
+                ).scalars()
+            )
+        assert len([task for task in rows if task.status == "RUNNING"]) == 1
+        assert len([task for task in rows if task.status == "QUEUED"]) == 1
+        first_claimed_id = next(task.id for task in rows if task.status == "RUNNING")
+        queued_id = next(task.id for task in rows if task.status == "QUEUED")
+
+        clock[0] = base_time + timedelta(seconds=6)
+        processed_by_second = await second_runner.run_due(now=clock[0])
+        assert processed_by_second == 1
+        assert len(second_dispatches) == 1
+        assert second_dispatches[0][0] == queued_id
+
+        release_first.set()
+        assert await asyncio.wait_for(first_run, timeout=1) == 1
+    finally:
+        release_first.set()
+        if not first_run.done():
+            await first_run
+
+    async with async_session_maker() as db:
+        expired_task = await db.get(AssetAnalysisTask, first_claimed_id)
+        queued_task = await db.get(AssetAnalysisTask, queued_id)
+        assert expired_task is not None
+        assert queued_task is not None
+        assert expired_task.status == "FAILED"
+        assert expired_task.error_code == "TASK_LEASE_EXPIRED"
+        assert queued_task.status == "SUCCEEDED"
+        assert queued_task.lease_token is None
+
+
+@pytest.mark.asyncio
 async def test_task_runner_turns_an_expired_running_lease_into_a_retryable_failure() -> None:
     task_id = await _seed_pending_task()
     now = datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc)

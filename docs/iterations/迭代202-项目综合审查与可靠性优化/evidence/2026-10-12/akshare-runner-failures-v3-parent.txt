@@ -1,0 +1,146 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 9 items
+
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_process_receipt_reuses_parent_normalization PASSED [ 11%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["protocol_version"] = "other"-AKSHARE_RUNNER_PROTOCOL_MISMATCH] PASSED [ 22%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["request"]["provider_symbol"] = "SUBSTITUTED"-AKSHARE_RUNNER_PROTOCOL_MISMATCH] PASSED [ 33%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["execution"]["endpoint"] = "forex_hist_em"-AKSHARE_RUNNER_PROTOCOL_MISMATCH] PASSED [ 44%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["source_revision"] = "akshare-substituted:stock_zh_a_hist"-AKSHARE_RUNNER_SOURCE_REVISION_MISMATCH] PASSED [ 55%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["response_rows"] = {"not": "a-list"}-AKSHARE_RUNNER_INVALID_RESPONSE] PASSED [ 66%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["unexpected"] = "unreviewed"-AKSHARE_RUNNER_INVALID_RESPONSE] PASSED [ 77%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["response_rows"][0]["\u80a1\u7968\u4ee3\u7801"] = "000002"-AKSHARE_IDENTITY_MISMATCH] PASSED [ 88%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_success_reaps_descendants_before_return FAILED                                                                   [100%]
+
+=================================== FAILURES ===================================
+_________ test_akshare_runner_success_reaps_descendants_before_return __________
+/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:469: in runtest
+    super().runtest()
+/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:716: in inner
+    runner.run(coro, context=context)
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:641: in run_until_complete
+    self.run_forever()
+/usr/local/lib/python3.11/asyncio/base_events.py:608: in run_forever
+    self._run_once()
+/usr/local/lib/python3.11/asyncio/base_events.py:1898: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>180.0s) from pytest-timeout.
+----------------------------- Captured stdout call -----------------------------
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~ Stack of Thread-2 (_connection_worker_thread) (281472858845568) ~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/aiosqlite/core.py", line 59, in _connection_worker_thread
+    future, function = tx.get()
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-60 (281473580372352) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-59 (281473138422144) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-58 (281473129968000) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+~~~~~~~~~~~~~~~~~ Stack of loguru-writer-57 (281473121513856) ~~~~~~~~~~~~~~~~~~
+  File "/usr/local/lib/python3.11/threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/local/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/usr/local/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/local/lib/python3.11/site-packages/loguru/_handler.py", line 300, in _queued_writer
+    message = queue.get()
+  File "/usr/local/lib/python3.11/multiprocessing/queues.py", line 365, in get
+    res = self._reader.recv_bytes()
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 216, in recv_bytes
+    buf = self._recv_bytes(maxlength)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+  File "/usr/local/lib/python3.11/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+--------------------------- Captured stdout teardown ---------------------------
+{"timestamp": "2026-10-12T11:20:43.868+00:00", "level": "ERROR", "message": "unhandled exception during asyncio.run() shutdown\ntask: <Task finished name='Task-123' coro=<test_akshare_runner_success_reaps_descendants_before_return() done, defined at /work/src/backend/tests/market_data_platform/test_akshare_runner_provider.py:570> exception=AkShareProviderError('AKSHARE_RUNNER_CLEANUP_FAILED')>", "module": "base_events", "request_id": "N/A", "exception": {"type": "AkShareProviderError", "message": "AKSHARE_RUNNER_CLEANUP_FAILED", "traceback": "Traceback (most recent call last):\n  File \"/work/src/backend/tests/market_data_platform/test_akshare_runner_provider.py\", line 616, in test_akshare_runner_success_reaps_descendants_before_return\n    result = await provider.fetch(_request())\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/src/backend/app/services/market_data/akshare_provider.py\", line 1624, in fetch\n    response_rows = await self._fetch_response_rows(\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/src/backend/app/services/market_data/akshare_provider.py\", line 1685, in _fetch_response_rows\n    response = await self._runner.execute(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/src/backend/app/services/market_data/akshare_provider.py\", line 1475, in execute\n    cleanup_cancellation = await _await_runner_cleanup(cleanup_task)\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/work/src/backend/app/services/market_data/akshare_provider.py\", line 1224, in _await_runner_cleanup\n    raise AkShareProviderError(\"AKSHARE_RUNNER_CLEANUP_FAILED\", detail=_error_detail(error))\napp.services.market_data.akshare_provider.AkShareProviderError: AKSHARE_RUNNER_CLEANUP_FAILED\n"}}
+---------------------------- Captured log teardown -----------------------------
+ERROR    asyncio:base_events.py:1785 unhandled exception during asyncio.run() shutdown
+task: <Task finished name='Task-123' coro=<test_akshare_runner_success_reaps_descendants_before_return() done, defined at /work/src/backend/tests/market_data_platform/test_akshare_runner_provider.py:570> exception=AkShareProviderError('AKSHARE_RUNNER_CLEANUP_FAILED')>
+Traceback (most recent call last):
+  File "/work/src/backend/tests/market_data_platform/test_akshare_runner_provider.py", line 616, in test_akshare_runner_success_reaps_descendants_before_return
+    result = await provider.fetch(_request())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/src/backend/app/services/market_data/akshare_provider.py", line 1624, in fetch
+    response_rows = await self._fetch_response_rows(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/src/backend/app/services/market_data/akshare_provider.py", line 1685, in _fetch_response_rows
+    response = await self._runner.execute(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/src/backend/app/services/market_data/akshare_provider.py", line 1475, in execute
+    cleanup_cancellation = await _await_runner_cleanup(cleanup_task)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/src/backend/app/services/market_data/akshare_provider.py", line 1224, in _await_runner_cleanup
+    raise AkShareProviderError("AKSHARE_RUNNER_CLEANUP_FAILED", detail=_error_detail(error))
+app.services.market_data.akshare_provider.AkShareProviderError: AKSHARE_RUNNER_CLEANUP_FAILED
+-------- generated xml file: /tmp/akshare-runner-failures-v3-parent.xml --------
+=========================== short test summary info ============================
+FAILED tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_success_reaps_descendants_before_return - Failed: Timeout (>180.0s) from pytest-timeout.
+=================== 1 failed, 8 passed in 187.18s (0:03:07) ====================

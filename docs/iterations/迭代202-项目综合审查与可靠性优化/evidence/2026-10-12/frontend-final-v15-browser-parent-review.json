@@ -1,0 +1,43 @@
+{
+  "reviewed_at": "2026-10-12T14:36:06.507Z",
+  "reviewer": "primary",
+  "verdict": "PASS",
+  "receipt": "frontend-final-v15-browser-parent-receipt.json",
+  "source_changes_after_browser": [],
+  "dist_matches_both_node_matrix_builds": true,
+  "dist_unchanged": true,
+  "results": [
+    {
+      "label": "session",
+      "stats": {
+        "startTime": "2026-10-12T14:33:41.104Z",
+        "duration": 31804.641,
+        "expected": 7,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    {
+      "label": "style",
+      "stats": {
+        "startTime": "2026-10-12T14:34:13.809Z",
+        "duration": 23897.078,
+        "expected": 9,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  ],
+  "visual_checks": [
+    "Chromium light desktop login: form/cards/alignment and icon presentation intact",
+    "WebKit dark 390px mobile workspace: navigation/cards/actions/list fit viewport"
+  ],
+  "screenshots": 18,
+  "scope": "Controlled API responses, production dist preview, single worker and zero retries; installed Chromium/Firefox/WebKit engines",
+  "not_run": [
+    "Minimum Safari16.4/Chrome111/Firefox128 versions",
+    "Real provider/production deployment"
+  ]
+}

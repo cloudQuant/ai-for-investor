@@ -1,0 +1,48 @@
+{
+  "at": "2026-10-12T14:25:01.087Z",
+  "baseline_image": "sha256:52470c079926ff74c31525cb35e099fe61fa50415eb1189f116291a91972050c",
+  "baseline_manifest": "full-v3-executed-source-manifest.json",
+  "changes": [
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "before": "2738374021e592e2bda250044ab8dccd89ef36bd5341b3476192641ec9e87be7",
+      "sha256": "f05dfa96741122d0aab66df0c46a8e7d022edfbdd7dabfea119a4c5b30d0d37b"
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_calculations.py",
+      "before": null,
+      "sha256": "ed72f70002daecef3a11f9670a90f6813ce0ac7ff552fb2ddd5334c0039004e0"
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_position_normalization.py",
+      "before": "1390b7a0f7acdde1e2dfebd7cd0e4c7080cf60ce8fd1a840ba0b61792d7a47d0",
+      "sha256": "1a2c9f897a86ad2cb799efa26c2854d23bd3f9bc10b5359c814255c821ecc4a9"
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "before": "93c156cbe8326f60b316dfd713afda7a0c844bec4a38c9731de502504c9aff1a",
+      "sha256": "541635078e32a2b3b1adc88d1fbbdd4202c07b95110772b701cfe5323091a02e"
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_akshare_runner_provider.py",
+      "before": "2e00bee256e8f6f4546f8d054c29e703caf8d28eddf358ec1aa589d117b0463c",
+      "sha256": "63f1a954ebabc8f47a69659f8c61f06900eb0f680dffde3ae621f06a9a82bb30"
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_openbb_provider.py",
+      "before": "aba7a5e51583ac8ac0c17d88ef018d3ee380af05d56d5f2a89d2fecf8c432843",
+      "sha256": "c2eae3c5b736a9e3a4d6739d61d71a82215248142c53c50b1c35f92ecde776f0"
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_calculation_boundaries.py",
+      "before": null,
+      "sha256": "299f608b25705b28c32628a0db001df2e41aa4c45da6ffb5895bdac351bedec8"
+    },
+    {
+      "path": "src/backend/tests/test_trading_workspace_service.py",
+      "before": "8a7e6bb4e93515a17c1eb04043cf63f6ecbe1e93665de07c4de37e8e73264e7c",
+      "sha256": "6cef459b8e05a592f196bac1fe3f24e44fe00e232ecb5bc28e177c93ef0a1fde"
+    }
+  ],
+  "archive_sha256": "ffcbd8076ab160ed0187259934ad1b24d9a1210ecab0f2b48398de4c9e4b8a98"
+}

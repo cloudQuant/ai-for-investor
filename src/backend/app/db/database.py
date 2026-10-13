@@ -852,15 +852,24 @@ async def verify_database_connection() -> None:
         await conn.execute(text("SELECT 1"))
 
 
+async def verify_database_schema() -> None:
+    """Verify database revision using read-only queries only."""
+    from app.db.schema_readiness import verify_database_revision
+
+    await verify_database_revision(_get_engine())
+
+
 async def ensure_database_ready() -> None:
-    """Ensure schema and default bootstrap data exist."""
+    """Prepare explicitly configured dev schema or verify deployed schema."""
     if settings.DB_AUTO_CREATE_SCHEMA:
         await create_tables()
     else:
-        await verify_database_connection()
-        await ensure_schema_compatibility()
+        await verify_database_schema()
     if settings.DB_AUTO_CREATE_DEFAULT_ADMIN:
-        await create_default_admin()
+        logger.warning(
+            "DB_AUTO_CREATE_DEFAULT_ADMIN is ignored during application startup; "
+            "run `python -m app.db.bootstrap_admin` explicitly after migrations"
+        )
 
 
 async def create_default_admin():

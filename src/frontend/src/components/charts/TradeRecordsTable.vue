@@ -250,7 +250,7 @@ import type { TradeRecord } from '@/types/analytics'
 const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
-  trades: TradeRecord[]
+  trades?: TradeRecord[]
 }>(), {
   trades: () => [],
 })

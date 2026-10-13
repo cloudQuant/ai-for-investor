@@ -1,0 +1,30 @@
+{
+  "reviewed_at": "2026-10-12T14:17:36.187Z",
+  "reviewer": "primary",
+  "baseline": "Frozen full-v3 snapshot API copied read-only from iter202-parent-regression-init",
+  "scope": [
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "sha256": "f05dfa96741122d0aab66df0c46a8e7d022edfbdd7dabfea119a4c5b30d0d37b"
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_calculations.py",
+      "sha256": "ed72f70002daecef3a11f9670a90f6813ce0ac7ff552fb2ddd5334c0039004e0"
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_calculation_boundaries.py",
+      "sha256": "299f608b25705b28c32628a0db001df2e41aa4c45da6ffb5895bdac351bedec8"
+    }
+  ],
+  "checks": [
+    "Read all extracted calculation bodies against previous facade implementations",
+    "Confirmed same helper names/signatures and injected function seams",
+    "Confirmed valuation occurs before source metadata writes and preserves exception propagation",
+    "Confirmed warning ordering, output fields, source filtering, rounding and EPSILON forwarding",
+    "Read both new failure-boundary tests"
+  ],
+  "static_verdict": "PASS",
+  "behavioral_verdict": "PASS",
+  "worker_report": "2 boundary tests, Ruff 0.16.2 and target canonical Mypy 1.20.2 passed; not substituted for primary acceptance",
+  "independent_regression": "backend-final-delta-parent-review.json"
+}

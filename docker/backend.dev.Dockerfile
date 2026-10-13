@@ -7,18 +7,28 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies (curl for healthcheck)
+# Install Git for the pinned Backtrader VCS dependency and curl for healthchecks.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends ca-certificates curl git && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/workspace/ai-for-investor/src/backend
 
-# Copy dependency files first for better layer caching
-COPY src/backend/pyproject.toml /opt/workspace/ai-for-investor/src/backend/
+# Install the audited lockfile, including the async PostgreSQL driver used by
+# the default dev DATABASE_URL. Do not fall back to an incomplete extra set.
+COPY config/requirements-dev.lock /tmp/requirements-dev.lock
+RUN pip install --no-cache-dir -r /tmp/requirements-dev.lock
 
-# Install Python dependencies in editable mode
-RUN pip install -e ".[dev,backtrader]" 2>/dev/null || pip install -e ".[dev]"
+COPY src/backend /opt/workspace/ai-for-investor/src/backend
+RUN pip install --no-cache-dir --no-deps -e .
+
+# WeasyPrint is imported by the API router at startup and needs Pango/GObject.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Keep app log writes outside the source bind mount watched by uvicorn --reload.
+ENV LOG_DIR=/var/log/ai-for-investor
 
 # Create necessary directories
 RUN mkdir -p \
@@ -26,6 +36,7 @@ RUN mkdir -p \
     /opt/workspace/ai-for-investor/workspace_units \
     /opt/workspace/ai-for-investor/src/backend/data \
     /opt/workspace/ai-for-investor/src/backend/logs \
+    /var/log/ai-for-investor \
     /opt/workspace/ai-for-investor/strategies
 
 # Copy entrypoint script
@@ -34,7 +45,7 @@ RUN chmod +x /usr/local/bin/entrypoint-dev.sh
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint-dev.sh"]

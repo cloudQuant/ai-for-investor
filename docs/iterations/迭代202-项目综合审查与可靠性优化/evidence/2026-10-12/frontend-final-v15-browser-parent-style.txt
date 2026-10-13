@@ -1,0 +1,16 @@
+[2m[WebServer] [22m(node:8770) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 9 tests using 1 worker
+
+  ✓  1 [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:204:1 › login form keeps light and dark visual states on desktop and mobile (1.6s)
+  ✓  2 [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:245:1 › register form renders all four input prefix icons (332ms)
+  ✓  3 [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:253:1 › workspace layout, create form, utility compatibility and dark theme remain usable (2.6s)
+  ✓  4 [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:204:1 › login form keeps light and dark visual states on desktop and mobile (3.0s)
+  ✓  5 [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:245:1 › register form renders all four input prefix icons (754ms)
+  ✓  6 [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:253:1 › workspace layout, create form, utility compatibility and dark theme remain usable (2.6s)
+  ✓  7 [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:204:1 › login form keeps light and dark visual states on desktop and mobile (2.8s)
+  ✓  8 [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:245:1 › register form renders all four input prefix icons (702ms)
+  ✓  9 [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:253:1 › workspace layout, create form, utility compatibility and dark theme remain usable (2.8s)
+
+  9 passed (23.9s)

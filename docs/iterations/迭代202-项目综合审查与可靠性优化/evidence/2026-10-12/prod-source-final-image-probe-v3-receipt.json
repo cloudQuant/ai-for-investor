@@ -1,0 +1,25 @@
+{
+  "state": "COMPLETE",
+  "started_at": "2026-10-12T15:31:33.869Z",
+  "image": "sha256:ad00640ed6c2b51761b5b9e6d7b70030ecd809a868b3b301aa36c6bfd19732f2",
+  "watchdog_ms": 180000,
+  "command": [
+    "run",
+    "--rm",
+    "--init",
+    "--name",
+    "iter202-prod-source-probe-parent",
+    "--network",
+    "none",
+    "--mount",
+    "type=bind,source=/tmp/ai-investor-iter200-202-20261012.afLb99/prod-source-final-image-expected.json,target=/tmp/expected.json,readonly",
+    "--entrypoint",
+    "python",
+    "iter202-d14-backend:20261012-source-final",
+    "-c",
+    "<prod-source-final-image-probe-v3.py>"
+  ],
+  "exit_code": 0,
+  "signal": null,
+  "finished_at": "2026-10-12T15:31:44.109Z"
+}

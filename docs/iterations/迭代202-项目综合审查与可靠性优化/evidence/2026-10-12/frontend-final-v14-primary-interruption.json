@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-12T14:23:20.183Z",
+  "verified_process": "97187 97187 /Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node /tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-matrix-parent.cjs frontend-final-v14-matrix-parent",
+  "action": "SIGTERM to this explicitly owned detached matrix process group only",
+  "reason": "Independent review confirmed missing aiResearchRunning=true in continuation extraction; stop remaining build/Node24 checks before patching.",
+  "completed_steps": [
+    "node20-typecheck",
+    "node20-vite-typecheck",
+    "node20-lint",
+    "node20-vitest",
+    "node20-build",
+    "node20-bundle"
+  ],
+  "verdict": "INCOMPLETE_INTERRUPTED_FOR_CONFIRMED_CODE_FIX"
+}

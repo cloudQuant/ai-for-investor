@@ -10,8 +10,11 @@ import runpy
 import signal
 import subprocess
 import sys
+from collections.abc import Awaitable
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
+from typing import Any, TypeVar, cast
 
 import pytest
 
@@ -27,6 +30,7 @@ from app.services.market_data.provider_contracts import AKSHARE_PROVIDER_CONTRAC
 from app.services.market_data.providers import MarketDataProviderRequest
 
 UTC = timezone.utc
+_Awaited = TypeVar("_Awaited")
 
 
 def _request(**changes: object) -> MarketDataProviderRequest:
@@ -703,43 +707,88 @@ time.sleep(10)
 @pytest.mark.skipif(os.name != "posix", reason="requires a POSIX process group")
 async def test_akshare_runner_timeout_kills_and_reaps_descendants_before_return(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A timeout does not permit a forked source child to survive the provider call."""
+    """A timeout kills the real runner group after its child is confirmed alive."""
     ready = tmp_path / "child-ready"
-    survived = tmp_path / "child-survived"
     runner_pid = tmp_path / "runner-pid"
+    child_pid = tmp_path / "child-pid"
+    timeout_seconds = 0.1
+
+    async def _wait_for_child_ready() -> None:
+        while not (ready.is_file() and runner_pid.is_file() and child_pid.is_file()):
+            await asyncio.sleep(0.01)
+
+    class _RunnerAsyncioProxy:
+        """Intercept only the runner's shielded completion Future timeout."""
+
+        def __init__(self, real_asyncio: ModuleType) -> None:
+            self._real_asyncio = real_asyncio
+            self._original_wait_for = real_asyncio.wait_for
+            self.intercepted_waits = 0
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._real_asyncio, name)
+
+        async def wait_for(
+            self, awaitable: Awaitable[_Awaited], timeout: float | None = None
+        ) -> _Awaited:
+            is_runner_completion = isinstance(awaitable, self._real_asyncio.Future)
+            if is_runner_completion and timeout == timeout_seconds:
+                self.intercepted_waits += 1
+                if self.intercepted_waits != 1:
+                    raise AssertionError("expected one runner completion timeout gate")
+                await self._original_wait_for(_wait_for_child_ready(), timeout=10.0)
+
+                parent_process_id = int(runner_pid.read_text(encoding="utf-8"))
+                child_process_id = int(child_pid.read_text(encoding="utf-8"))
+                assert os.getpgid(parent_process_id) == parent_process_id
+                assert os.getpgid(child_process_id) == parent_process_id
+                assert os.killpg(parent_process_id, 0) is None
+                assert _process_is_alive(parent_process_id)
+                assert _process_is_alive(child_process_id)
+
+            return cast(_Awaited, await self._original_wait_for(awaitable, timeout=timeout))
+
     provider = _provider(
         tmp_path,
         f"""
 import os
 from pathlib import Path
+import signal
 import sys
-import time
 
 sys.stdin.buffer.readline()
 Path({str(runner_pid)!r}).write_text(str(os.getpid()), encoding="utf-8")
 child = os.fork()
 if child == 0:
+    Path({str(child_pid)!r}).write_text(str(os.getpid()), encoding="utf-8")
     Path({str(ready)!r}).touch()
-    time.sleep(0.35)
-    Path({str(survived)!r}).touch()
-    time.sleep(10)
-    os._exit(0)
-while not Path({str(ready)!r}).exists():
-    time.sleep(0.01)
-time.sleep(10)
+    while True:
+        signal.pause()
+while True:
+    signal.pause()
 """,
-        timeout_seconds=0.1,
+        timeout_seconds=timeout_seconds,
     )
+    real_asyncio = akshare_provider.asyncio
+    timeout_gate = _RunnerAsyncioProxy(real_asyncio)
+    # Replace the provider module's alias only; patching the original asyncio
+    # module would also alter wait_for calls made by pytest and other code.
+    monkeypatch.setattr(akshare_provider, "asyncio", timeout_gate)
 
     with pytest.raises(AkShareProviderError) as timed_out:
         await provider.fetch(_request())
 
-    await asyncio.sleep(0.45)
     assert timed_out.value.code == "AKSHARE_TIMEOUT"
+    assert timeout_gate.intercepted_waits == 1
     assert ready.exists()
-    assert not survived.exists()
-    assert not _process_is_alive(int(runner_pid.read_text(encoding="utf-8")))
+    parent_process_id = int(runner_pid.read_text(encoding="utf-8"))
+    child_process_id = int(child_pid.read_text(encoding="utf-8"))
+    assert not _process_is_alive(parent_process_id)
+    assert not _process_is_alive(child_process_id)
+    with pytest.raises(ProcessLookupError):
+        os.killpg(parent_process_id, 0)
 
 
 @pytest.mark.asyncio

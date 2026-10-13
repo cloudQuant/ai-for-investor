@@ -18,6 +18,7 @@ services:
     build:
       context: .
       dockerfile: src/backend/Dockerfile
+    init: true
     container_name: backtrader_backend_local
     restart: unless-stopped
     environment:
@@ -75,6 +76,7 @@ services:
       - "${LOCAL_HTTP_PORT:-8080}:80"
     volumes:
       - ./docker/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx.prod.locations.conf:/etc/nginx/conf.d/ai-investor-proxy.inc:ro
     depends_on:
       backend:
         condition: service_healthy

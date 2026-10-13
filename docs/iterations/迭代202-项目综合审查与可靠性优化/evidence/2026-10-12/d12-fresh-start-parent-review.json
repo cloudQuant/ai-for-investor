@@ -1,0 +1,23 @@
+{
+  "captured_at": "2026-10-12T11:38:29.372Z",
+  "fresh_compose_up": {
+    "exit_code": 0,
+    "elapsed_seconds": 205.189
+  },
+  "peer_http": {
+    "exit_code": 0,
+    "status": "healthy",
+    "database": "healthy"
+  },
+  "host_port_probe": {
+    "exit_code": 7,
+    "scope": "internal fixture network has empty published port endpoints; not an application startup failure"
+  },
+  "verdict": "PASS for AC-D12 backend first-start gate; host port publishing not accepted by this isolated fixture",
+  "source_hashes": {
+    "docker/compose/dev.yml": "b5f8bb5009d3be659c0a0e0e0452be154aa300fec4a342f64cb26ee838f1eae8",
+    "docker/compose/prod.yml": "d983e5bbb46a86d5dc6615bd26d323558e4a71d1cf10e72c50f6ba55537c1a21",
+    "docker/compose/local.yml": "2743c9d7db73f58bc30c5706bfbf054f17846ff0432e1ed0d422c2b8c40b67f3",
+    "src/backend/Dockerfile": "b3679ae71fc4f290836dd75a2be1b29337fb3ff11d354b4aa7ae9c6635c7b43e"
+  }
+}

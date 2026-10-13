@@ -1,0 +1,12 @@
+{
+  "node": "v25.1.0",
+  "tailwindcss": "3.4.19",
+  "sass": "1.99.0",
+  "postcss": "8.5.18",
+  "method": "Compile src/styles/mobile.scss with Sass, prepend compiled CSS to src/style.css without its SCSS @import, then compile with Tailwind CLI and tailwind.config.js.",
+  "files": {
+    "tailwind-v3-baseline.input.css": "e6a93396d134143ad749fc944dd8c9aab3bcb733be84ec6773eb84c46ebcb2d3",
+    "tailwind-v3-baseline.css": "5fdc5538932fa997852d302e85b57f81624a9359e271e0de9d36ebda5d4048f9",
+    "mobile.v3.css": "1a2561152b31bf9914d1ed1c5431eae562501b6b50b3721c50bb8345af8b3fb8"
+  }
+}

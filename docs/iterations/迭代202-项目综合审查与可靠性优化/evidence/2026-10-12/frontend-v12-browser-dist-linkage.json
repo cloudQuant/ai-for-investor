@@ -1,0 +1,50 @@
+{
+  "before_dist_matches_style_v9": true,
+  "build": {
+    "started_at": "2026-10-12T14:01:59.896Z",
+    "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+    "node": "20.20.2",
+    "source_manifest": "frontend-v10-source-manifest.json",
+    "source_changes_before": [],
+    "steps": [
+      {
+        "label": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "started_at": "2026-10-12T14:01:59.981Z",
+        "state": "PASS",
+        "pid": 85652,
+        "exit_code": 0,
+        "signal": null,
+        "finished_at": "2026-10-12T14:02:40.892Z",
+        "elapsed_seconds": 40.911,
+        "log": "frontend-final-build-v12-parent-build.txt",
+        "log_sha256": "6a882c1933269595917782e04a3ab2a329a19f32f0f268010a7a67917c02e131"
+      },
+      {
+        "label": "bundle",
+        "command": [
+          "bash",
+          "../../scripts/ci/check_bundle_size.sh",
+          "dist"
+        ],
+        "started_at": "2026-10-12T14:02:40.893Z",
+        "state": "PASS",
+        "pid": 86158,
+        "exit_code": 0,
+        "signal": null,
+        "finished_at": "2026-10-12T14:02:43.360Z",
+        "elapsed_seconds": 2.467,
+        "log": "frontend-final-build-v12-parent-bundle.txt",
+        "log_sha256": "147782e6815372aca960048f4662edfb92d180b88a50788b15966646391b70ed"
+      }
+    ],
+    "state": "PASS",
+    "dist_identical_to_browser_tested_v8": true,
+    "source_changes_after": [],
+    "finished_at": "2026-10-12T14:02:43.421Z"
+  }
+}

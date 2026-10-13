@@ -1,0 +1,237 @@
+{
+  "recorded_at": "2026-10-12T15:40:47.965888+08:00",
+  "run": "/tmp/ai-investor-iter200-202-20261012.afLb99/tls-parent/iter202-d14-20261012153050-67492",
+  "exit_code": 0,
+  "verdict": "PASS",
+  "served_fingerprint_observations": 6,
+  "lineage_identity_observations": 5,
+  "source_changes_since_start": [],
+  "artifact_policy": "ACME challenge path values redacted; env, keys and CSR files excluded",
+  "observed": [
+    "real Pebble HTTP-01 issuance and valid certificate",
+    "SAN mismatch rejection",
+    "reload failure rollback",
+    "post-activation nginx -T failure rollback",
+    "issuance and renewal failures preserve active TLS",
+    "dot and dotdot lineage names rejected",
+    "IP-only HTTP"
+  ],
+  "artifacts": [
+    {
+      "file": "activation-failure.log",
+      "sha256": "5ff725d96ba14b1f05a6b616f747dba2eb905244cdba6c52a36faea96e7c6494"
+    },
+    {
+      "file": "activation-trap-failure.log",
+      "sha256": "b182b3f1c542f5451e19052998e97f338092cc752b4c36a2e4d8d16256d06eeb"
+    },
+    {
+      "file": "blank-cert-dir.txt",
+      "sha256": "1b7dc82b4b0966d0df7567b2ce110c2b8ac7d86f840a5fae2823b31605a605c8"
+    },
+    {
+      "file": "bootstrap.log",
+      "sha256": "a6fa65d967a620a5b5e30b877357cb439af1ea9707bfb2828e941494ff4033a6"
+    },
+    {
+      "file": "cert-name-dot.log",
+      "sha256": "a0e804af063b680b9204fdf6d56f081cd9c919a5b7b01ece71a3bc1435f5856f"
+    },
+    {
+      "file": "cert-name-dotdot.log",
+      "sha256": "a0e804af063b680b9204fdf6d56f081cd9c919a5b7b01ece71a3bc1435f5856f"
+    },
+    {
+      "file": "certificate-identity.after-activation-failure.txt",
+      "sha256": "27f957613dac60a5eba06b441a09d9e453ef908e2d7b203ce074da7cdeb583ea"
+    },
+    {
+      "file": "certificate-identity.after-issuance-failure.txt",
+      "sha256": "27f957613dac60a5eba06b441a09d9e453ef908e2d7b203ce074da7cdeb583ea"
+    },
+    {
+      "file": "certificate-identity.after-renewal-failure.txt",
+      "sha256": "27f957613dac60a5eba06b441a09d9e453ef908e2d7b203ce074da7cdeb583ea"
+    },
+    {
+      "file": "certificate-identity.after-trap-failure.txt",
+      "sha256": "27f957613dac60a5eba06b441a09d9e453ef908e2d7b203ce074da7cdeb583ea"
+    },
+    {
+      "file": "certificate-identity.before-failures.txt",
+      "sha256": "27f957613dac60a5eba06b441a09d9e453ef908e2d7b203ce074da7cdeb583ea"
+    },
+    {
+      "file": "certificate-serial.txt",
+      "sha256": "74a8a6c9943e2be88161bfc018a1730e6f9128cbec87bfc3ace8c434f69b7d3f"
+    },
+    {
+      "file": "compose-final.log",
+      "sha256": "a331f33fbefaa6082b4959e8b8ebb10e989161ab6860412134a333478afcfbc8"
+    },
+    {
+      "file": "compose.log",
+      "sha256": "60a217540fe65122d662b7050f2908c7f96a99eab31a84f4ecaad16c8dd35c1d"
+    },
+    {
+      "file": "exit-status.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "http-acme-validation.txt",
+      "sha256": "ab098c0b071f03dc3067cde2b3ac523cd19cbf91a550ed73636daf558404d251"
+    },
+    {
+      "file": "http-healthz.txt",
+      "sha256": "b4e7f611873f1b3b6c80e1a3bf62a3245ff446e67e9d459c2c6c3423c711016f"
+    },
+    {
+      "file": "https-after-activation-failure-errors.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "https-after-activation-failure.ready.txt",
+      "sha256": "e52c00b41d132b13d83ff0f9edcd85e0147b01d3d7f2ae6cb639e27cff69c8e5"
+    },
+    {
+      "file": "https-after-activation-failure.txt",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "https-after-issuance-failure.txt",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "https-after-renewal-failure.txt",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "https-after-trap-failure-errors.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "https-after-trap-failure.ready.txt",
+      "sha256": "e52c00b41d132b13d83ff0f9edcd85e0147b01d3d7f2ae6cb639e27cff69c8e5"
+    },
+    {
+      "file": "https-after-trap-failure.txt",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "https-healthz.txt",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "image-digests.txt",
+      "sha256": "c71e90170cfda2360964225c883d4b1dd2bf25a3cfeb5617c24e48a110ea8b23"
+    },
+    {
+      "file": "ip-only-certbot-init.log",
+      "sha256": "1a38b8b0d6693fedb549abfd754eb04c7c636b44d496d82453654565e2778929"
+    },
+    {
+      "file": "ip-only-http-healthz.txt",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "ip-only-https-healthz.txt",
+      "sha256": "cf3fa1a9b7796335aa3e326fb73ba5145e6591e3a1389a3df61b30de09ad77c2"
+    },
+    {
+      "file": "ip-only-nginx-config.txt",
+      "sha256": "27bfee5a4360ae9f16b01daed48953fae26b1f73371bc757f4b342cda8108e22"
+    },
+    {
+      "file": "ip-only-nginx-test.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "ip-only-nginx.log",
+      "sha256": "5fa2071586246c6b15a7f93fa5e7919c1f9f634b6805a3f3a3bef963a4fe75c7"
+    },
+    {
+      "file": "issuance-failure.log",
+      "sha256": "51df75aead80f5859acd96b012b94388b66e95f774990a4c08bf7cb8a2853cc9"
+    },
+    {
+      "file": "issued-certificate.txt",
+      "sha256": "ae1b39710388f364a5fd73f39c4c686621238a2faddb921e1e64e292d6aa554a"
+    },
+    {
+      "file": "loopback-ports.txt",
+      "sha256": "ae6c309e98fb7a74e6062207e1aee0756be9d6f7a82782ed5b454111b03bd5eb"
+    },
+    {
+      "file": "openssl-s_client.log",
+      "sha256": "e83c80ea83fd1de85be1e3afc3547a9d4b3ef093a4a412c17d144d2ddab1bbd7"
+    },
+    {
+      "file": "outcome.txt",
+      "sha256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431"
+    },
+    {
+      "file": "renewal-failure.log",
+      "sha256": "b64c0c8a98910bb82116d9ed0d7192c225cab55b4c28b82571be6850044414ef"
+    },
+    {
+      "file": "run.log",
+      "sha256": "94bf8b2f02286fb6288a1ac95cb5491ea6e6191768e6fcb8f8f5e9c0e1cccf73"
+    },
+    {
+      "file": "san-negative-checkhost.txt",
+      "sha256": "8a9de60a172ffc2f20cb70ab9856994c1bdf683c9621bcd970902c810387a7d9"
+    },
+    {
+      "file": "san-negative-container-id.txt",
+      "sha256": "f99e0da750375842f85ba3b76a14b33acfb0aeecfa0249d3d543588099b1c346"
+    },
+    {
+      "file": "san-negative-nginx-config.txt",
+      "sha256": "6fc099342bfda008868e2afec6b8f34c624fe7b917a43f93afb76e5bba694ef9"
+    },
+    {
+      "file": "san-negative-nginx.log",
+      "sha256": "ee94a924c8888c3da28f09456910ad2ca17b095b02d620f9334309da7293b0a1"
+    },
+    {
+      "file": "source-hashes.sha256",
+      "sha256": "59dbcc11ec1c3f3b24974c9b532e23ec6c365a676f1ee5cb9dbb315e37a4e5de"
+    },
+    {
+      "file": "static-http-nginx-test.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "tls-certificate.txt",
+      "sha256": "ae1b39710388f364a5fd73f39c4c686621238a2faddb921e1e64e292d6aa554a"
+    },
+    {
+      "file": "tls-lineage-fingerprint.before-failures.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    },
+    {
+      "file": "tls-served-fingerprint.after-activation-failure.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    },
+    {
+      "file": "tls-served-fingerprint.after-invalid-cert-name.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    },
+    {
+      "file": "tls-served-fingerprint.after-issuance-failure.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    },
+    {
+      "file": "tls-served-fingerprint.after-renewal-failure.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    },
+    {
+      "file": "tls-served-fingerprint.after-trap-failure.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    },
+    {
+      "file": "tls-served-fingerprint.before-failures.txt",
+      "sha256": "820e651ddfe8c56e27d568c309e7fb9a0552ca07f578b66a783d13e05f86746a"
+    }
+  ]
+}

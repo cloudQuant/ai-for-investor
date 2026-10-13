@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { reactive } from 'vue'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => {
@@ -9,10 +10,10 @@ vi.mock('vue-i18n', () => ({
   } }),
 }))
 
-const route = {
+const route = reactive({
   params: { id: 'workspace-1' },
   meta: { workspaceType: 'research' },
-}
+})
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
@@ -21,8 +22,15 @@ vi.mock('vue-router', () => ({
 
 const fetchWorkspace = vi.fn().mockResolvedValue(undefined)
 const fetchUnits = vi.fn().mockResolvedValue(undefined)
-
 let storeState: any
+const activateWorkspace = vi.fn((id: string) => {
+  if (storeState.activeWorkspaceId === id) return
+  storeState.activeWorkspaceId = id
+  storeState.currentWorkspace = null
+  storeState.units = []
+  storeState.selectedUnitIds = []
+  storeState.loading = true
+})
 
 vi.mock('@/stores/workspace', () => ({
   useWorkspaceStore: () => storeState,
@@ -106,8 +114,9 @@ function doMount() {
         WorkspaceReportTab: { template: '<div data-test="report-tab">report</div>' },
         TradingWorkspaceUnitsTab: { template: '<div data-test="trading-units-tab">trading units</div>' },
         WorkspaceUnitsTab: {
+          props: ['workspaceId'],
           emits: ['switch-tab'],
-          template: '<button data-test="units-tab" @click="$emit(\'switch-tab\', \'optimization\', \'unit-1\')">units</button>',
+          template: '<button data-test="units-tab" :data-workspace-id="workspaceId" @click="$emit(\'switch-tab\', \'optimization\', \'unit-1\')">units</button>',
         },
       },
     },
@@ -118,10 +127,13 @@ describe('WorkspaceDetailPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    fetchWorkspace.mockReset().mockResolvedValue(undefined)
+    fetchUnits.mockReset().mockResolvedValue(undefined)
     route.params.id = 'workspace-1'
     route.meta.workspaceType = 'research'
     storeState = {
       loading: false,
+      activeWorkspaceId: 'workspace-1',
       currentWorkspace: buildWorkspace(),
       units: [
         buildUnit('unit-1', 'running'),
@@ -130,6 +142,7 @@ describe('WorkspaceDetailPage', () => {
       ],
       fetchWorkspace,
       fetchUnits,
+      activateWorkspace,
     }
   })
 
@@ -138,6 +151,30 @@ describe('WorkspaceDetailPage', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(fetchWorkspace).toHaveBeenCalledWith('workspace-1')
     expect(fetchUnits).toHaveBeenCalledWith('workspace-1')
+  })
+
+  it('keeps a reused route component and its unit actions bound to the new workspace id', async () => {
+    fetchWorkspace.mockImplementation(async (id: string) => {
+      storeState.currentWorkspace = buildWorkspace({ id, name: 'Beta Workspace' })
+      storeState.loading = false
+    })
+    fetchUnits.mockImplementation(async (id: string) => {
+      storeState.units = [buildUnit('unit-b', 'idle', { workspace_id: id })]
+      storeState.loading = false
+    })
+
+    const wrapper = doMount()
+    const vm = wrapper.vm
+    route.params.id = 'workspace-2'
+    await flushPromises()
+
+    expect(wrapper.vm).toBe(vm)
+    expect(activateWorkspace).toHaveBeenCalledWith('workspace-2')
+    expect(fetchWorkspace).toHaveBeenCalledWith('workspace-2')
+    expect(fetchUnits).toHaveBeenCalledWith('workspace-2')
+    expect(wrapper.text()).toContain('Beta Workspace')
+    expect(wrapper.text()).not.toContain('Alpha Research')
+    expect(wrapper.get('[data-test="units-tab"]').attributes('data-workspace-id')).toBe('workspace-2')
   })
 
   it('renders the research workspace overview and metrics', () => {

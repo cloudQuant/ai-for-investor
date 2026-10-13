@@ -1,0 +1,302 @@
+{
+  "state": "PASS_COMPOSITE_WITH_EXPLICIT_SKIPS",
+  "reviewed_at": "2026-10-12T15:16:53.816749+00:00",
+  "original_run": "backend-full-v3-complete-parent-review.json",
+  "original_run_state": "FAIL_WITH_COMPLETE_EXECUTION",
+  "original_counts": {
+    "passed": 7853,
+    "skipped": 130,
+    "failed": 25
+  },
+  "original_console_skips": 131,
+  "collection_skip_extra": 1,
+  "performance_deselected": 24,
+  "original_not_run": 0,
+  "failure_count": 25,
+  "resolved_failure_count": 25,
+  "unresolved_failures": [],
+  "failure_mapping": [
+    {
+      "original_nodeid": "market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_timeout_kills_and_reaps_descendants_before_return",
+      "original_status": "failed",
+      "rerun_junit": "backend-final-delta-parent.xml",
+      "rerun_classname": "market_data_platform.test_akshare_runner_provider",
+      "rerun_name": "test_akshare_runner_timeout_kills_and_reaps_descendants_before_return",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "market_data_platform/test_openbb_provider.py::test_openbb_runner_directories_reject_checkout_ancestors_and_descendants[OPENBB_RUNNER_HOME]",
+      "original_status": "failed",
+      "rerun_junit": "backend-final-delta-parent.xml",
+      "rerun_classname": "market_data_platform.test_openbb_provider",
+      "rerun_name": "test_openbb_runner_directories_reject_checkout_ancestors_and_descendants[OPENBB_RUNNER_HOME]",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "market_data_platform/test_openbb_provider.py::test_openbb_runner_directories_reject_checkout_ancestors_and_descendants[OPENBB_RUNNER_WORKDIR]",
+      "original_status": "failed",
+      "rerun_junit": "backend-final-delta-parent.xml",
+      "rerun_classname": "market_data_platform.test_openbb_provider",
+      "rerun_name": "test_openbb_runner_directories_reject_checkout_ancestors_and_descendants[OPENBB_RUNNER_WORKDIR]",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "market_data_platform/test_openbb_provider.py::test_openbb_subprocess_provider_rejects_a_runner_script_inside_the_checkout",
+      "original_status": "failed",
+      "rerun_junit": "backend-final-delta-parent.xml",
+      "rerun_classname": "market_data_platform.test_openbb_provider",
+      "rerun_name": "test_openbb_subprocess_provider_rejects_a_runner_script_inside_the_checkout",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "market_data_platform/test_openbb_provider.py::test_openbb_subprocess_provider_copied_runner_blocks_unattested_artifact",
+      "original_status": "failed",
+      "rerun_junit": "backend-final-delta-parent.xml",
+      "rerun_classname": "market_data_platform.test_openbb_provider",
+      "rerun_name": "test_openbb_subprocess_provider_copied_runner_blocks_unattested_artifact",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_ctp_certification_workspaces.py::test_workspace_reports_are_gitignored[workspace0]",
+      "original_status": "failed",
+      "rerun_junit": "docx-final-dev-parent-ctp-workspaces.xml",
+      "rerun_classname": "test_ctp_certification_workspaces",
+      "rerun_name": "test_workspace_reports_are_gitignored[workspace0]",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_ctp_certification_workspaces.py::test_workspace_reports_are_gitignored[workspace1]",
+      "original_status": "failed",
+      "rerun_junit": "docx-final-dev-parent-ctp-workspaces.xml",
+      "rerun_classname": "test_ctp_certification_workspaces",
+      "rerun_name": "test_workspace_reports_are_gitignored[workspace1]",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_ctp_certification_workspaces.py::test_hongyuan_docx_report_uses_its_workspace_paths",
+      "original_status": "failed",
+      "rerun_junit": "docx-final-dev-parent-ctp-workspaces.xml",
+      "rerun_classname": "test_ctp_certification_workspaces",
+      "rerun_name": "test_hongyuan_docx_report_uses_its_workspace_paths",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_alembic_evidence_uses_the_sealed_iteration197_checkout_tip",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_alembic_evidence_uses_the_sealed_iteration197_checkout_tip",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_offline_case_uses_child_socket_audit_and_required_junit_evidence",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_offline_case_uses_child_socket_audit_and_required_junit_evidence",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_ac17_offline_driver_binds_each_asset_to_runner_and_exact_source_boundary",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_ac17_offline_driver_binds_each_asset_to_runner_and_exact_source_boundary",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_ac36_offline_is_not_run_without_research_or_b2_fixture_evidence",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_ac36_offline_is_not_run_without_research_or_b2_fixture_evidence",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_offline_zero_exit_without_junit_is_fail_closed",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_offline_zero_exit_without_junit_is_fail_closed",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_offline_network_audit_attempt_is_fail_even_with_passing_junit",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_offline_network_audit_attempt_is_fail_even_with_passing_junit",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_offline_command_failure_is_fail_after_valid_junit",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_offline_command_failure_is_fail_after_valid_junit",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_dirty_candidate_requires_explicit_allowlist_and_redacts_sensitive_paths",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_dirty_candidate_requires_explicit_allowlist_and_redacts_sensitive_paths",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_live_approved_environment_still_requires_a_bound_source_manifest",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_live_approved_environment_still_requires_a_bound_source_manifest",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_live_source_manifest_must_cover_the_exact_case_asset_slice",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_live_source_manifest_must_cover_the_exact_case_asset_slice",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_iteration197_acceptance_runner.py::test_live_valid_approval_never_becomes_pass_without_a_reviewed_case_driver",
+      "original_status": "failed",
+      "rerun_junit": "iteration197-sealed-fixture-parent.xml",
+      "rerun_classname": "test_iteration197_acceptance_runner",
+      "rerun_name": "test_live_valid_approval_never_becomes_pass_without_a_reviewed_case_driver",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_main_lifespan_and_websocket.py::test_main_websocket_rejects_query_token_fallback",
+      "original_status": "failed",
+      "rerun_junit": "websocket-fixture-final-parent.xml",
+      "rerun_classname": "test_main_lifespan_and_websocket",
+      "rerun_name": "test_main_websocket_rejects_query_token_fallback",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_main_lifespan_and_websocket.py::test_data_topics_websocket_streams_single_topic_update",
+      "original_status": "failed",
+      "rerun_junit": "websocket-fixture-final-parent.xml",
+      "rerun_classname": "test_main_lifespan_and_websocket",
+      "rerun_name": "test_data_topics_websocket_streams_single_topic_update",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_main_lifespan_and_websocket.py::test_data_topics_websocket_pattern_route_receives_matching_update",
+      "original_status": "failed",
+      "rerun_junit": "websocket-fixture-final-parent.xml",
+      "rerun_classname": "test_main_lifespan_and_websocket",
+      "rerun_name": "test_data_topics_websocket_pattern_route_receives_matching_update",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_service_edge_cases_113.py::test_param_optimization_service_missing_branches",
+      "original_status": "failed",
+      "rerun_junit": "service-edge-fixture-parent.xml",
+      "rerun_classname": "test_service_edge_cases_113",
+      "rerun_name": "test_param_optimization_service_missing_branches",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_workspace_json_consumers.py::test_optimization_config_merge_preserves_valid_nested_json_and_replaces_run_fields",
+      "original_status": "failed",
+      "rerun_junit": "workspace-json-fixture-parent.xml",
+      "rerun_classname": "test_workspace_json_consumers",
+      "rerun_name": "test_optimization_config_merge_preserves_valid_nested_json_and_replaces_run_fields",
+      "final_status": "passed"
+    },
+    {
+      "original_nodeid": "test_workspace_json_consumers.py::test_optimization_config_merge_discards_non_mapping_or_non_json_state",
+      "original_status": "failed",
+      "rerun_junit": "workspace-json-fixture-parent.xml",
+      "rerun_classname": "test_workspace_json_consumers",
+      "rerun_name": "test_optimization_config_merge_discards_non_mapping_or_non_json_state",
+      "final_status": "passed"
+    }
+  ],
+  "whole_file_reruns": [
+    {
+      "junit": "backend-final-delta-parent.xml",
+      "sha256": "dd6b9902bc51de04a2045700ef365577cf9c4bde4c6d3c618e1a57d8e5536a97",
+      "counts": {
+        "passed": 451,
+        "failed": 0,
+        "skipped": 0
+      },
+      "complete_files": [
+        "market_data_platform/test_akshare_runner_provider.py",
+        "market_data_platform/test_openbb_provider.py"
+      ]
+    },
+    {
+      "junit": "docx-final-dev-parent-ctp-workspaces.xml",
+      "sha256": "8cc50f0502f34af45e7f97da07c4b258d1bcbb522817ad2f94d19c772dca6812",
+      "counts": {
+        "passed": 55,
+        "failed": 0,
+        "skipped": 0
+      },
+      "complete_files": [
+        "test_ctp_certification_workspaces.py"
+      ]
+    },
+    {
+      "junit": "iteration197-sealed-fixture-parent.xml",
+      "sha256": "76e2991e5fb50b297ddef3906779144a0e975e2d32ad32d0bf0ec7b9cb5d6009",
+      "counts": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      },
+      "complete_files": [
+        "test_iteration197_acceptance_runner.py"
+      ]
+    },
+    {
+      "junit": "websocket-fixture-final-parent.xml",
+      "sha256": "b642629d29941db36f82b59fed2d1cb9d1bfdec211616088e1584b2c0cdbb732",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 1
+      },
+      "complete_files": [
+        "test_main_lifespan_and_websocket.py"
+      ]
+    },
+    {
+      "junit": "service-edge-fixture-parent.xml",
+      "sha256": "bb60f39af81842d1d953f1a5b414f1c212f36b4b775109ee7c5cb051d91a9635",
+      "counts": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      },
+      "complete_files": [
+        "test_service_edge_cases_113.py"
+      ]
+    },
+    {
+      "junit": "workspace-json-fixture-parent.xml",
+      "sha256": "b7d2fa2839be988b1ad7e3d8935327eee0b0058a2470c0206fe54414528d1fc8",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      "complete_files": [
+        "test_workspace_json_consumers.py"
+      ]
+    }
+  ],
+  "source_delta": "full-v3-final-source-delta-parent.json",
+  "source_changes": 12,
+  "final_source_manifest": "backend-final-source-manifest-parent.json",
+  "final_source_manifest_sha256": "940b9ba55ee06df4c4c13dcc8dbb564358e0b93323da28049555f470dd281359",
+  "dev_lock": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+  "dependency_validation": "docx-final-dev-parent-review.json",
+  "boundary": "Composite acceptance of original completed inventory plus independently rerun complete affected files on final source. This does not claim a single final all-green full-suite run. Original failures, 130 selected skips, one collection skip, 24 excluded performance cases and deferred THS files remain in original records."
+}

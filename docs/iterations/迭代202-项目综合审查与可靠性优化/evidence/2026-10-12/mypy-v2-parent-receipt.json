@@ -1,0 +1,27 @@
+[
+  {
+    "check": "mypy-app-v2-parent",
+    "command": [
+      "/Users/yunjinqi/opt/anaconda3/bin/python",
+      "-m",
+      "mypy",
+      "app",
+      "--show-error-codes"
+    ],
+    "started_at": "2026-10-12T08:00:06.785120+00:00",
+    "finished_at": "2026-10-12T09:15:05.962632+00:00",
+    "elapsed_seconds": 4499.03,
+    "exit_code": 0
+  },
+  {
+    "check": "mypy-ratchet-v2-parent",
+    "command": [
+      "/Users/yunjinqi/opt/anaconda3/bin/python",
+      "/Users/yunjinqi/Documents/new_projects/ai-for-investor/scripts/ci/mypy_ratchet.py"
+    ],
+    "started_at": "2026-10-12T09:15:05.972071+00:00",
+    "finished_at": "2026-10-12T09:15:53.918572+00:00",
+    "elapsed_seconds": 47.95,
+    "exit_code": 0
+  }
+]

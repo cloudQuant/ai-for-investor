@@ -74,6 +74,16 @@ const baseUnit = {
   last_optimization_task_id: null,
 } as unknown as StrategyUnit
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('useWorkspaceStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -109,6 +119,64 @@ describe('useWorkspaceStore', () => {
       const store = useWorkspaceStore()
       await store.fetchWorkspace('ws-1')
       expect(store.currentWorkspace).toEqual(baseWs)
+    })
+
+    it('keeps detail, units, selection, and loading bound to the active workspace', async () => {
+      const detailA = deferred<Workspace>()
+      const detailB = deferred<Workspace>()
+      const unitsA = deferred<{ items: StrategyUnit[]; total: number }>()
+      const unitsB = deferred<{ items: StrategyUnit[]; total: number }>()
+      vi.mocked(workspaceApi.get).mockImplementation((id: string) => (
+        (id === 'workspace-a' ? detailA.promise : detailB.promise) as never
+      ))
+      vi.mocked(workspaceApi.listUnits).mockImplementation((id: string) => (
+        (id === 'workspace-a' ? unitsA.promise : unitsB.promise) as never
+      ))
+
+      const store = useWorkspaceStore()
+      store.activateWorkspace('workspace-a')
+      const detailARequest = store.fetchWorkspace('workspace-a')
+      const unitsARequest = store.fetchUnits('workspace-a')
+      store.units = [{ ...baseUnit, id: 'unit-a', workspace_id: 'workspace-a' }]
+      store.setSelectedUnitIds(['unit-a'])
+
+      store.activateWorkspace('workspace-b')
+      expect(store.currentWorkspace).toBeNull()
+      expect(store.units).toEqual([])
+      expect(store.selectedUnitIds).toEqual([])
+      const detailBRequest = store.fetchWorkspace('workspace-b')
+      const unitsBRequest = store.fetchUnits('workspace-b')
+
+      detailB.resolve({ ...baseWs, id: 'workspace-b', name: 'Beta' })
+      await detailBRequest
+      expect(store.currentWorkspace?.name).toBe('Beta')
+      expect(store.loading).toBe(true)
+
+      detailA.resolve({ ...baseWs, id: 'workspace-a', name: 'Alpha' })
+      unitsA.resolve({
+        items: [{ ...baseUnit, id: 'unit-a', workspace_id: 'workspace-a' }],
+        total: 1,
+      })
+      await Promise.all([detailARequest, unitsARequest])
+      expect(store.currentWorkspace?.id).toBe('workspace-b')
+      expect(store.units).toEqual([])
+      expect(store.loading).toBe(true)
+
+      unitsB.resolve({
+        items: [{ ...baseUnit, id: 'unit-b', workspace_id: 'workspace-b' }],
+        total: 1,
+      })
+      await unitsBRequest
+      expect(store.units.map(unit => unit.id)).toEqual(['unit-b'])
+      expect(store.loading).toBe(false)
+
+      store.setSelectedUnitIds(['unit-a', 'unit-b'])
+      vi.mocked(workspaceApi.runUnits).mockResolvedValue({ results: [] } as never)
+      await store.runSelectedUnits('workspace-a')
+      expect(workspaceApi.runUnits).not.toHaveBeenCalled()
+      await store.runSelectedUnits('workspace-b')
+      expect(workspaceApi.runUnits).toHaveBeenCalledWith('workspace-b', ['unit-b'], false)
+      store.stopPolling()
     })
 
     it('createWorkspace creates and returns the new workspace', async () => {
@@ -225,6 +293,7 @@ describe('useWorkspaceStore', () => {
   describe('Selection', () => {
     it('setSelectedUnitIds replaces the array', () => {
       const store = useWorkspaceStore()
+      store.units = [baseUnit, { ...baseUnit, id: 'u-2' }]
       store.setSelectedUnitIds(['u-1', 'u-2'])
       expect(store.selectedUnitIds).toEqual(['u-1', 'u-2'])
     })
@@ -241,6 +310,7 @@ describe('useWorkspaceStore', () => {
     it('waits for an in-flight status request before scheduling the next poll', async () => {
       vi.useFakeTimers()
       const store = useWorkspaceStore()
+      store.activateWorkspace('ws-1')
       store.units = [{ ...baseUnit, run_status: 'running' }]
 
       let resolveFirstPoll: ((value: any) => void) | undefined
@@ -266,6 +336,7 @@ describe('useWorkspaceStore', () => {
     it('stops after a successful terminal-status refresh', async () => {
       vi.useFakeTimers()
       const store = useWorkspaceStore()
+      store.activateWorkspace('ws-1')
       store.units = [{ ...baseUnit, run_status: 'queued' }]
       vi.mocked(workspaceApi.getUnitsStatus).mockResolvedValue([
         { id: 'u-1', run_status: 'failed' },

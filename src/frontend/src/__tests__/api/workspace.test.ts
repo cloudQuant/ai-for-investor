@@ -53,7 +53,12 @@ describe('workspaceApi', () => {
     await workspaceApi.getTradingPositions('ws-1', ['unit-1', 'unit-2'])
     await workspaceApi.getTradingDailySummary('ws-1', { unit_id: 'unit-1', start_date: '2026-01-01', end_date: '2026-01-31' })
 
-    await workspaceApi.submitOptimization('ws-1', { unit_id: 'unit-1', param_ranges: { fast: { start: 5, end: 10, step: 1 } } })
+    await workspaceApi.submitOptimization('ws-1', {
+      unit_id: 'unit-1',
+      param_ranges: { fast: { start: 5, end: 10, step: 1 } },
+      objective: 'sharpe_ratio',
+      direction: 'maximize',
+    })
     await workspaceApi.getOptimizationProgress('ws-1', 'unit-1')
     await workspaceApi.getOptimizationResults('ws-1', 'unit-1')
     await workspaceApi.getOptimizationResultDetail('ws-1', 'unit-1', 0)

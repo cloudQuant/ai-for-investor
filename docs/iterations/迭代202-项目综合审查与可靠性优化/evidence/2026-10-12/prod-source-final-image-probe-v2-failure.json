@@ -1,0 +1,7 @@
+{
+  "state": "INCOMPLETE_HARNESS_TIMEOUT",
+  "docker_client_status": null,
+  "watchdog_ms": 60000,
+  "cause": "Combined image source/pin/pip probe did not return within 60 seconds. No phase output was captured; no product failure is inferred.",
+  "followup": "Named read-only image probe uses explicit input file, phase progress and bounded 180-second outer watchdog. v5 runtime container completed successfully before retry."
+}

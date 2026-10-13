@@ -4827,10 +4827,26 @@ async def test_build_positions_response_values_raw_ctp_snapshot_aliases(monkeypa
         raise AssertionError("hydrate_units should not run when hydrate=False")
 
     monkeypatch.setattr(service, "hydrate_units", fail_hydrate)
+    original_open_size = service._position_row_open_size
+    original_direction = service._position_row_direction
+    method_calls = {"open_size": 0, "direction": 0}
+
+    def track_open_size(row):
+        method_calls["open_size"] += 1
+        return original_open_size(row)
+
+    def track_direction(row):
+        method_calls["direction"] += 1
+        return original_direction(row)
+
+    monkeypatch.setattr(service, "_position_row_open_size", track_open_size)
+    monkeypatch.setattr(service, "_position_row_direction", track_direction)
 
     result = await service.build_positions_response([unit], "user-1", hydrate=False)
     row = result.positions[0]
 
+    assert method_calls["open_size"] > 0
+    assert method_calls["direction"] > 0
     assert row.symbol == "IF2609"
     assert row.data_name == "IF2609"
     assert row.long_position == 1.0
@@ -4847,6 +4863,78 @@ async def test_build_positions_response_values_raw_ctp_snapshot_aliases(monkeypa
     assert row.valuation_status == "confirmed"
     assert result.total_long_value == 1_500_300.0
     assert result.total_pnl == pytest.approx(265.5)
+
+
+@pytest.mark.asyncio
+async def test_build_positions_response_normalizes_directional_quantity_aliases(monkeypatch):
+    service = TradingWorkspaceService()
+    unit = SimpleNamespace(
+        id="unit-directional-aliases",
+        strategy_name="Directional Alias Unit",
+        strategy_id="simulate/gateway_dual_ma",
+        symbol="IF2609",
+        symbol_name="沪深300",
+        trading_mode="live",
+        trading_snapshot={
+            "positions": [
+                {
+                    "data_name": "IF2609",
+                    "long_position": 2,
+                    "longPosition": 9,
+                    "short_position": 3,
+                    "shortPosition": 8,
+                    "market_value": 100.0,
+                    "pnl": 5.0,
+                    "position_source": "gateway",
+                }
+            ],
+            "position_source": "gateway",
+            "long_position": 0.0,
+            "short_position": 0.0,
+            "position_pnl": 0.0,
+            "long_market_value": 0.0,
+            "short_market_value": 0.0,
+        },
+    )
+
+    async def fail_hydrate(_units, _user_id):
+        raise AssertionError("hydrate_units should not run when hydrate=False")
+
+    monkeypatch.setattr(service, "hydrate_units", fail_hydrate)
+    monkeypatch.setattr(service, "_position_row_needs_response_valuation", lambda _row: False)
+    monkeypatch.setattr(
+        service,
+        "_position_row_needs_asset_spec_revaluation",
+        lambda _unit, _row: False,
+    )
+    original_first_row_number = service._first_row_number
+    directional_lookups: list[str] = []
+
+    def track_directional_first_row_number(row: dict[str, Any], *keys: str) -> float | None:
+        value = original_first_row_number(row, *keys)
+        if keys and keys[0] == "long_position":
+            directional_lookups.append("long")
+            return (value or 0.0) + 2.0
+        if keys and keys[0] == "short_position":
+            directional_lookups.append("short")
+            return (value or 0.0) + 6.0
+        return value
+
+    monkeypatch.setattr(service, "_first_row_number", track_directional_first_row_number)
+
+    result = await service.build_positions_response([unit], "user-1", hydrate=False)
+    row = result.positions[0]
+
+    assert directional_lookups == ["long", "short"]
+    assert row.long_position == pytest.approx(4.0)
+    assert row.short_position == pytest.approx(9.0)
+    assert row.market_value == pytest.approx(100.0)
+    assert row.long_market_value == pytest.approx(30.77)
+    assert row.short_market_value == pytest.approx(69.23)
+    assert row.position_pnl == pytest.approx(5.0)
+    assert result.total_long_value == pytest.approx(30.77)
+    assert result.total_short_value == pytest.approx(69.23)
+    assert result.total_pnl == pytest.approx(5.0)
 
 
 @pytest.mark.asyncio
@@ -6568,3 +6656,118 @@ async def test_daily_summary_counts_trades_once_per_day(monkeypatch):
     assert result.summaries[0].daily_pnl == 120.0
     assert result.summaries[0].cumulative_pnl == 120.0
     assert result.summaries[0].trade_count == 2
+
+
+def test_contract_spec_facade_preserves_local_lookup_monkeypatch(monkeypatch):
+    unit = _make_basic_trading_unit()
+    queried_symbols: list[str] = []
+
+    def fake_local_asset_spec(symbol: str) -> dict[str, Any]:
+        queried_symbols.append(symbol)
+        return {"symbol": symbol, "multiplier": 25, "source": "test_local_spec"}
+
+    monkeypatch.setattr(
+        trading_workspace_service_module,
+        "query_local_asset_spec",
+        fake_local_asset_spec,
+    )
+
+    spec = TradingWorkspaceService._contract_spec(
+        unit,
+        "BTCUSDT",
+        None,
+        {"pnl": 10, "avg_price": 100, "current_price": 101},
+    )
+
+    assert queried_symbols == ["BTCUSDT"]
+    assert spec.has_multiplier
+    assert spec.multiplier == 25
+
+
+@pytest.mark.asyncio
+async def test_start_units_fails_closed_before_manager_mutation_when_runtime_sync_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unit = SimpleNamespace(
+        id="unit-runtime-sync-failure",
+        workspace_id="ws-runtime-sync-failure",
+        group_name="failure boundary",
+        strategy_id="simulate/gateway_dual_ma",
+        strategy_name="Runtime Sync Failure",
+        symbol="IF2609",
+        symbol_name="沪深300",
+        timeframe="1m",
+        timeframe_n=1,
+        category="future",
+        data_config={},
+        unit_settings={},
+        params={},
+        optimization_config={},
+        gateway_config={},
+        trading_mode="paper",
+        lock_running=False,
+        lock_trading=False,
+        trading_instance_id=None,
+        run_status="idle",
+        run_count=0,
+        trading_snapshot={},
+        metrics_snapshot={},
+        bar_count=None,
+        last_run_time=None,
+    )
+
+    class NoopRiskGate:
+        def assert_trading_unit_pre_run(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.mutations: list[str] = []
+
+        def add_instance(self, *_args: object, **_kwargs: object) -> dict[str, str]:
+            self.mutations.append("add_instance")
+            return {"id": "unexpected-instance"}
+
+        def remove_instance(self, *_args: object, **_kwargs: object) -> None:
+            self.mutations.append("remove_instance")
+
+        async def start_instance(self, *_args: object, **_kwargs: object) -> dict[str, str]:
+            self.mutations.append("start_instance")
+            return {"status": "running"}
+
+    manager = FakeManager()
+    sync_attempts: list[str] = []
+
+    def fail_runtime_sync(*_args: object, **_kwargs: object) -> None:
+        sync_attempts.append("sync")
+        raise RuntimeError("runtime materialization failed")
+
+    monkeypatch.setattr(trading_workspace_service_module, "RiskGateService", NoopRiskGate)
+    monkeypatch.setattr(
+        trading_workspace_service_module, "get_live_trading_manager", lambda: manager
+    )
+    monkeypatch.setattr(
+        trading_workspace_service_module,
+        "query_local_asset_spec",
+        lambda _symbol: {},
+    )
+    monkeypatch.setattr(
+        workspace_unit_runtime,
+        "sync_trading_unit_runtime",
+        fail_runtime_sync,
+    )
+
+    results = await TradingWorkspaceService().start_units([unit], user_id="user-1")
+
+    assert results == [
+        {
+            "unit_id": unit.id,
+            "task_id": None,
+            "status": "failed",
+            "error": "runtime materialization failed",
+        }
+    ]
+    assert sync_attempts == ["sync"]
+    assert manager.mutations == []
+    assert unit.run_status == "failed"
+    assert unit.trading_snapshot["error"] == "runtime materialization failed"

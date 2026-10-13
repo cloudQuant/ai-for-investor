@@ -1,0 +1,992 @@
+{
+  "captured_at": "2026-10-12T08:57:55.696402+00:00",
+  "base_git_sha": "50b6a54baa6a7d9424bc3b3664c399c297908852",
+  "purpose": "Current dirty implementation, configuration, and test files. This manifest identifies the working tree; it is not a test PASS.",
+  "files": [
+    {
+      "path": "config/requirements-dev.lock",
+      "sha256": "6b364dec1106a567294881e16dc626ba52c01e5678a5d2913bb7078258e6a2cb",
+      "bytes": 13193
+    },
+    {
+      "path": "config/requirements-prod.lock",
+      "sha256": "c5e630c2ecf3166730203ecd9a648295ce6d22b7a0753e19cb6c043fadb78702",
+      "bytes": 9164
+    },
+    {
+      "path": "docker/backend.dev.Dockerfile",
+      "sha256": "fc15b77aa62ae90c244edef222bf5205ce2d3ec08b89b5fd7a5049576b4e955f",
+      "bytes": 1850
+    },
+    {
+      "path": "docker/compose/dev.yml",
+      "sha256": "3c805be298b8f43646354175f401164663bc935bbc3d6b967908a1c55bab48aa",
+      "bytes": 5410
+    },
+    {
+      "path": "docker/compose/local.yml",
+      "sha256": "be632edf401cccaf6c6c0fb0fff89344da8dc148c3a884c24f26d117d50b6198",
+      "bytes": 3145
+    },
+    {
+      "path": "docker/compose/prod.yml",
+      "sha256": "2c8f1c1adc77e273d39375544a9e3f3ae41ea822b37ffaac50d376ad7612eba2",
+      "bytes": 7355
+    },
+    {
+      "path": "docker/entrypoint-certbot-renew.sh",
+      "sha256": "527eccb448e4a4eea91f449a7604d53d7c06f77546b69f5939ac028200b22d32",
+      "bytes": 450
+    },
+    {
+      "path": "docker/entrypoint-dev.sh",
+      "sha256": "160a8f5b39f1b38b67e5feebfc1bd9a40f923f772b146bf8547875d035c56052",
+      "bytes": 2488
+    },
+    {
+      "path": "docker/nginx-prod-entrypoint.sh",
+      "sha256": "851e30796ebe3857883b6534fc0a1af83128bd57d046ac8bd25bc401701631ef",
+      "bytes": 4193
+    },
+    {
+      "path": "docker/nginx.prod.conf",
+      "sha256": "4e5094dd8f5de41040fedae73e88b187a99d88109508a481214f552487135ad3",
+      "bytes": 334
+    },
+    {
+      "path": "docker/nginx.prod.http.conf.template",
+      "sha256": "f8064ebb1295ba4f8046f865ab7b455827397a7ab13d3077d610613ecc61e306",
+      "bytes": 196
+    },
+    {
+      "path": "docker/nginx.prod.locations.conf",
+      "sha256": "4f5e527fd9c9330d37e77259a112ba89a0ac6c0fe9a3d128872c58edd82c0a5b",
+      "bytes": 1628
+    },
+    {
+      "path": "docker/nginx.prod.tls.conf.template",
+      "sha256": "9451530158c754fcdf46d6762d6cabec59e0d90b221ab4fd0bbd9fb0616f4d50",
+      "bytes": 678
+    },
+    {
+      "path": "scripts/ops/certbot-init.sh",
+      "sha256": "b48ab2172caf2ee224782da92d44b860f436499009ac48db597fbfc2df4fd742",
+      "bytes": 11008
+    },
+    {
+      "path": "scripts/ops/certbot-renew.sh",
+      "sha256": "e4e1ddbbd18869035ac3d4fbc703412346cdb0f4d52c4269002bbbdb756dbed1",
+      "bytes": 1390
+    },
+    {
+      "path": "scripts/ops/docker_bootstrap_admin.sh",
+      "sha256": "8e194aa74ce3806c76c0d3598a5bce6498e415ba7f2f9272dff97f17010c33d0",
+      "bytes": 663
+    },
+    {
+      "path": "scripts/ops/docker_deploy.sh",
+      "sha256": "cf0577587de915c978ae74347ba038849ed3fb6fd8c5eee64df6bc81c75fdec4",
+      "bytes": 20511
+    },
+    {
+      "path": "scripts/ops/docker_mysql_backup.sh",
+      "sha256": "9285b3e71aaf5db22a1512f1af03f86d1efe05688ce92d5065c4ed9ca7e480d3",
+      "bytes": 1853
+    },
+    {
+      "path": "scripts/ops/docker_mysql_restore.sh",
+      "sha256": "dcef257429497a805f004b8a41787b3ea753d59b6f95b345311302c8b597666f",
+      "bytes": 3146
+    },
+    {
+      "path": "scripts/ops/generate_lockfiles.sh",
+      "sha256": "72875e7c410a5383707325655594fee6030ee6681f9285e3bfa3241d2043407e",
+      "bytes": 2505
+    },
+    {
+      "path": "scripts/ops/test_tls_bootstrap_pebble.sh",
+      "sha256": "7831ff8b05f9592b7068271814a06592a4d086d42ab6f54a6b741a417cec3145",
+      "bytes": 31923
+    },
+    {
+      "path": "src/backend/Dockerfile",
+      "sha256": "ff234814a1391386f8c0a4f55a93ac854bac7158d5d5f267b5d174e26b222aec",
+      "bytes": 2559
+    },
+    {
+      "path": "src/backend/alembic/versions/20261012_optimization_objective_direction.py",
+      "sha256": "4d5ccf0425a54349e42146ec7ee2fbf8c59315f6e3529eae1de288b9b8a03534",
+      "bytes": 1851
+    },
+    {
+      "path": "src/backend/app/api/optimization_api.py",
+      "sha256": "b7521a35c743df62c03174ada0f6b21a17fe1fd03553ead59fbec41fe10cfd97",
+      "bytes": 11968
+    },
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "sha256": "2738374021e592e2bda250044ab8dccd89ef36bd5341b3476192641ec9e87be7",
+      "bytes": 82751
+    },
+    {
+      "path": "src/backend/app/api/portfolio/asset_spec_adapter.py",
+      "sha256": "490f07abb46126bea6a06b18ae26117926afd92a1e8a7a783cbdd1a896aad894",
+      "bytes": 14559
+    },
+    {
+      "path": "src/backend/app/api/portfolio/instance_resolution.py",
+      "sha256": "03ea8849ccd0ad7e9fa0be200d3e7262cfefd496db260dc54d0551da3823ce85",
+      "bytes": 12244
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_common.py",
+      "sha256": "729f8fa90d75d4141b5e829e4cd0326973dbade3e19b086b4eb71dd0d0896630",
+      "bytes": 5393
+    },
+    {
+      "path": "src/backend/app/api/portfolio/position_aggregation.py",
+      "sha256": "8b5cc073abf3f005fbaa0318c7025c3c5666b50c13228feb830f10360f1f1e01",
+      "bytes": 15750
+    },
+    {
+      "path": "src/backend/app/config.py",
+      "sha256": "8b1786ce26e86ae59613174cbaea88062b525f95312dca76699a4dab849e9b97",
+      "bytes": 56879
+    },
+    {
+      "path": "src/backend/app/config_parsing.py",
+      "sha256": "986b19811a9229531c915fe7e71de9e24699104707d6de92622c1fe80628a5f1",
+      "bytes": 2066
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/stocks/weekly/stock_rank_cxd_ths.py",
+      "sha256": "c6ec93d10cdb0632bc3214463420ddfea0e2d4697ecb66b4d37f4e5208642575",
+      "bytes": 6176
+    },
+    {
+      "path": "src/backend/app/db/bootstrap_admin.py",
+      "sha256": "13d452d40f65cd329092c7c11aed029afd7b1341f07b5834cbbe8bad9ee16eb9",
+      "bytes": 447
+    },
+    {
+      "path": "src/backend/app/db/database.py",
+      "sha256": "a055dabad23dd452f73c5c6d65900f0e0a7ad3f1762e5fcab773852f7a18d8f7",
+      "bytes": 32582
+    },
+    {
+      "path": "src/backend/app/db/persistence_boundaries.py",
+      "sha256": "25a4f9bc128d1a63204334b1733ded5ee6d0ea58c31009beb44bf7c7c754fe63",
+      "bytes": 2172
+    },
+    {
+      "path": "src/backend/app/db/schema_readiness.py",
+      "sha256": "1099e07b6d74194a856273d9f707cf1ea61c74ce8b5d2c388746fe8f77e2d701",
+      "bytes": 1851
+    },
+    {
+      "path": "src/backend/app/middleware/metrics.py",
+      "sha256": "c13009747841d55db45fbe9f021156980ef0c7df6edc42167781b464016aad1e",
+      "bytes": 29818
+    },
+    {
+      "path": "src/backend/app/models/asset_research.py",
+      "sha256": "b41a65582a90c7254821d526ae139561a571f82b44ddd0df42493d5a230eb252",
+      "bytes": 48539
+    },
+    {
+      "path": "src/backend/app/models/optimization.py",
+      "sha256": "49546916a58730c1fcc2f47c06400f0d7218a03ea66cada845a1643682b5ad6d",
+      "bytes": 2341
+    },
+    {
+      "path": "src/backend/app/schemas/workspace.py",
+      "sha256": "91a73dff02fbb2f136b2aa34023c51d500bf31fef59caf62e8539b6c5455d16f",
+      "bytes": 11542
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_binding.py",
+      "sha256": "153a89df5d2d907298299d5f477be6fe5311f457014c775071ef48b43b0b112f",
+      "bytes": 14425
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_lifecycle.py",
+      "sha256": "25ff2846825344a0834a2a22f8e3d54457b61c2d9367e9104e2b53b431e8bce9",
+      "bytes": 16676
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_manager.py",
+      "sha256": "ecda12c15472ff77f1da176074dada81fd1095925d077c7c9441ed20651431d4",
+      "bytes": 19503
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_projection.py",
+      "sha256": "5a157240e0c565868cce3d5855e1a4e4eec286bacafbb93fc5c27b0562dbfe5c",
+      "bytes": 33380
+    },
+    {
+      "path": "src/backend/app/services/asset_research/orchestrator.py",
+      "sha256": "5e34e7b67fb9645edd896bb2d7919f8dfb616b2cf06b5543e720920f46900f45",
+      "bytes": 132598
+    },
+    {
+      "path": "src/backend/app/services/asset_research/task_leases.py",
+      "sha256": "05207847770d4dc18624dad4b7a04045dd7ce036a168ea4f44d04c934de2efac",
+      "bytes": 3642
+    },
+    {
+      "path": "src/backend/app/services/asset_research/task_runner.py",
+      "sha256": "0b103e4e14ffe642585e6fc4c316ee23bf16990550da044d80937123433734f3",
+      "bytes": 21769
+    },
+    {
+      "path": "src/backend/app/services/market_data/cffex_settlement_collector.py",
+      "sha256": "0b180622ba08ce60e4e08b5253ce08a1d00e5a94264820e33ab8a7c6fbab3d7b",
+      "bytes": 58314
+    },
+    {
+      "path": "src/backend/app/services/market_data/persisted_fetch_boundary.py",
+      "sha256": "24e936c361d18d0a21b605fbbfe2a4d4cd5a97b126eb423d82cbb4226d44fc8a",
+      "bytes": 3076
+    },
+    {
+      "path": "src/backend/app/services/market_data/publication.py",
+      "sha256": "4a2eddd3ea584b100c9e5fcbd163546fa00dc7da754c61e5f4d594c0e2768189",
+      "bytes": 50104
+    },
+    {
+      "path": "src/backend/app/services/market_data/stock_valuation_collector.py",
+      "sha256": "68c684f13554cec53ea42121e49749bc3f4f11b244e4541725440baf7e1c4e13",
+      "bytes": 47785
+    },
+    {
+      "path": "src/backend/app/services/market_data/store.py",
+      "sha256": "06a03e80b13290c7e7f65e44a165a8b52d0ab71e17eadbf28f7851e6c7b8c3be",
+      "bytes": 68229
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_calendar.py",
+      "sha256": "100e5df78bf79b209e24d7d4888bb023322f8545f8d4b221d8242eb04d7fd7a0",
+      "bytes": 33436
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_calendar_grid.py",
+      "sha256": "0613f0684dc7e9a6889d910ad0dd58db0329b5d6ef3f78a4839797518b59e342",
+      "bytes": 5585
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_evidence.py",
+      "sha256": "0daf16427baab58aa339d41f75e27fd8ecd78158d1edfdce77d7b8df9b06799e",
+      "bytes": 35896
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_evidence_receipts.py",
+      "sha256": "745e4387afbe7c1193f971ed6b61d76de7b5fa29dc9380ca155926e74c86e8c4",
+      "bytes": 31230
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_persistence.py",
+      "sha256": "c1082c487fe97fd4f73bb49a624ecdff1890fced02c72b9853c863058f776141",
+      "bytes": 32289
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_persistence_validation.py",
+      "sha256": "683c89b9f52d367113644041b164ab82e030af9f3e0667a8204a9424ef946fd2",
+      "bytes": 12151
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_projection.py",
+      "sha256": "264278aff441a88840cf1ef693edc2a2cebb038b4dc226d28178371fa9b9cb38",
+      "bytes": 32500
+    },
+    {
+      "path": "src/backend/app/services/market_instrument.py",
+      "sha256": "5af1f5e5f7d9b8f20a19c95736687fe3629c53a27ad553e1d13915a3b0da4498",
+      "bytes": 37755
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_adapter.py",
+      "sha256": "be453f9d47496d9880f343db339052b58108d254d88668878e545aea04a6c06e",
+      "bytes": 36268
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_catalog.py",
+      "sha256": "320957a90acbaa3c1e7012bff8c2d4a19c19cb8dfbc75303d90ab4a8bd916560",
+      "bytes": 17676
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_dynamic_data.py",
+      "sha256": "2a5e18abe865310cc7e69781c8e0e8fba9c1977eb412fb6d9ac8e0882ef3979d",
+      "bytes": 18489
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_projection.py",
+      "sha256": "5c99d302bdef6657e0301a0229bd12ee607d57addf403f53f646183a356888d2",
+      "bytes": 14324
+    },
+    {
+      "path": "src/backend/app/services/optimization/execution_manager.py",
+      "sha256": "13242ea6ac72cb9a355deb50de6f99fd2cc52d9388ff22b18a826aff14e314ca",
+      "bytes": 4364
+    },
+    {
+      "path": "src/backend/app/services/optimization/submission.py",
+      "sha256": "8bc3354fc93a5a527f5b698fcab477d621adeecd5ab76570977e92c29083055f",
+      "bytes": 11089
+    },
+    {
+      "path": "src/backend/app/services/optimization/task_gateway.py",
+      "sha256": "b8ff9a2ebae36e91ed96f5a9ede7db9657a8f351ac52149084148b84beda2d75",
+      "bytes": 5165
+    },
+    {
+      "path": "src/backend/app/services/optimization/task_state.py",
+      "sha256": "ff420f9b49e223cc99f9b1979322e359bf0c193f22a7fd6654df738d03289089",
+      "bytes": 18981
+    },
+    {
+      "path": "src/backend/app/services/optimization/thread_runner.py",
+      "sha256": "fe3c61a7e750fcb8fc29f65a7b484c8d0c3024c1c088e4e391972bb16d1aaeb6",
+      "bytes": 19751
+    },
+    {
+      "path": "src/backend/app/services/optimization/trial_runner.py",
+      "sha256": "87df2e5f572df5a95339cd7ad479151212a1c6a7e8e9fa8d944408405799916c",
+      "bytes": 16816
+    },
+    {
+      "path": "src/backend/app/services/param_optimization_service.py",
+      "sha256": "6783fe73fc3c5df818d0edb5207a7e30ded31e8de99fafec41156d31cc2933e4",
+      "bytes": 27442
+    },
+    {
+      "path": "src/backend/app/services/position_valuation.py",
+      "sha256": "16697adcf847b457408ce9371499542b61c026afcfcc5e22070eeaa54ceb92c2",
+      "bytes": 43248
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_finalize.py",
+      "sha256": "3b9a5014d0e4947f99549be10cc12ff290e0fb1f4d9a5302943ff6b7d40ff14d",
+      "bytes": 93198
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_contract_specs.py",
+      "sha256": "f10f8af10dbd733bb872487c4011ada71151b18db95c4fa219dd7203d0bd12ae",
+      "bytes": 14112
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_position_normalization.py",
+      "sha256": "1390b7a0f7acdde1e2dfebd7cd0e4c7080cf60ce8fd1a840ba0b61792d7a47d0",
+      "bytes": 16526
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "sha256": "93c156cbe8326f60b316dfd713afda7a0c844bec4a38c9731de502504c9aff1a",
+      "bytes": 79162
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_snapshot.py",
+      "sha256": "c800d72636fea86aa6061ddc6f3f2a3fbdd4cf6e97a79e86a4c862e245804d9e",
+      "bytes": 16271
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_startup.py",
+      "sha256": "d3d3c0bcc442c4ffb34a70083f277d850020bbc96f1e4a3fe1864c8316ab1ddd",
+      "bytes": 17612
+    },
+    {
+      "path": "src/backend/app/services/valuation_numeric.py",
+      "sha256": "74eb25300c125b265b300c36e9713570bcb8fcafa79ecf3f7db466c44c012ee9",
+      "bytes": 8965
+    },
+    {
+      "path": "src/backend/app/services/valuation_position.py",
+      "sha256": "d10dab185dfd0fe2925e77dbc6367fef0a3666f65169b08f7024e046ff2d3ad3",
+      "bytes": 11063
+    },
+    {
+      "path": "src/backend/app/services/valuation_prices.py",
+      "sha256": "162d5778b0af12885482148f208e4258eb98f25fc959ceaa7defe36c2cafa5ea",
+      "bytes": 22813
+    },
+    {
+      "path": "src/backend/app/services/valuation_projection.py",
+      "sha256": "7389ee035f92ee105a94263bc77018c5072b1897eeeeed4c2a3fe97e4f7738a1",
+      "bytes": 1401
+    },
+    {
+      "path": "src/backend/app/services/valuation_types.py",
+      "sha256": "e71763164cfec97df5f32b1aeec098e57483711105002ad53caf170e62c3da83",
+      "bytes": 1422
+    },
+    {
+      "path": "src/backend/app/services/workspace/optimization.py",
+      "sha256": "6f6dab323770c042e91c4cdcc17c85d5d5249a30e9c402cb16950de613aa6503",
+      "bytes": 21903
+    },
+    {
+      "path": "src/backend/app/startup/database.py",
+      "sha256": "cddfd96ba049b5284bf340180a35e88b24cd5e4e34409fde226511d7c352ccd2",
+      "bytes": 1035
+    },
+    {
+      "path": "src/backend/app/utils/security.py",
+      "sha256": "291a1cda699f4c73e01b32182f8ba7e8e080bc9ef1c872ebcbe618f8071076f1",
+      "bytes": 6053
+    },
+    {
+      "path": "src/backend/pyproject.toml",
+      "sha256": "3dbbfc94592e8c7933593e83c2d37de15abee21388f55b0d6981d4cab50fa0e9",
+      "bytes": 5606
+    },
+    {
+      "path": "src/backend/tests/asset_research/test_metrics.py",
+      "sha256": "23c17648653689fa118ab6b35cffb448d4721347c5f778c8b86d6d5ebdc3d1fc",
+      "bytes": 6714
+    },
+    {
+      "path": "src/backend/tests/asset_research/test_migration.py",
+      "sha256": "a037787266cd9ce8fbc29bdf1132ac37237437e58f7cbdcd06fbfc2e793cec48",
+      "bytes": 47686
+    },
+    {
+      "path": "src/backend/tests/asset_research/test_task_lifecycle.py",
+      "sha256": "1dcaf8faa764e2c27198b87e90045c6aea8f57ebcabe13cfe8cc304bde17fff2",
+      "bytes": 20395
+    },
+    {
+      "path": "src/backend/tests/asset_research/test_task_runner.py",
+      "sha256": "a70a3dce0b0110c8eecd6d7003d70cddd976fa45496e2e3b054519d62dc20ec8",
+      "bytes": 24070
+    },
+    {
+      "path": "src/backend/tests/asset_research/test_task_runner_supported_db.py",
+      "sha256": "a5cd1450f3faf13484c047a9b56d60a8b61c8113277889b25f11ebbba724994a",
+      "bytes": 17305
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_catalog.py",
+      "sha256": "094dcac0c4fac58f2aa5b2eebd5fec8f604d2bc20479b2d236f8f7d78826942e",
+      "bytes": 25502
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_deferred_publication_migration.py",
+      "sha256": "26cb359db417768101ceba2493d44b82f12c5f2550dd7e7a9fb5b4d05f1fda15",
+      "bytes": 9613
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_iteration201_shared_boundaries.py",
+      "sha256": "6aa9ca51e9d76cbb11bd32c474586c8ebdb20c2b97fb591c5e12e69da580adef",
+      "bytes": 4942
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_multi_record_evidence_migration.py",
+      "sha256": "8ed43e5b90784acf469ae0ade09a46d0d9ec93a27d803cd0c0370891bf1a6e52",
+      "bytes": 10922
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_multi_record_migration.py",
+      "sha256": "0319643e96fef31ef9932139691563451f11cb8dcb39005f8647c6db9a2ad7eb",
+      "bytes": 27681
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_opendata_provider.py",
+      "sha256": "6c7021521bdd87e11a67996ee0f209c88bf57e47558538a708c5d57c1b6126c8",
+      "bytes": 13573
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_storage_models.py",
+      "sha256": "c9d584c4d78b4fd434b61ed8db84520c96b57d946e52c420777db4a1c04fd167",
+      "bytes": 126484
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_store_extracted_boundaries.py",
+      "sha256": "f6fae6454c238aa6ee939d3a45340676ce355116407f50b284ba5b493d3c2928",
+      "bytes": 2635
+    },
+    {
+      "path": "src/backend/tests/test_ai_research_approval_migration.py",
+      "sha256": "1d3e1f93b1b966ce779e2966e508c3bef73a770760e47b27a7ba6220e0f22df6",
+      "bytes": 87346
+    },
+    {
+      "path": "src/backend/tests/test_ai_research_holdout_execution_migration.py",
+      "sha256": "25b1d06f4d2a7bc961937257a41ce549809cb45ee3a8ce39da820319925c47e9",
+      "bytes": 9578
+    },
+    {
+      "path": "src/backend/tests/test_ai_research_v2_migration.py",
+      "sha256": "12e1fb1a38de5f1118cf503534889f3678d8570c223c89ea3e427372497a08a8",
+      "bytes": 132239
+    },
+    {
+      "path": "src/backend/tests/test_ai_strategy_research_task_manager_boundaries.py",
+      "sha256": "2fce1ed428d87cac7cda1bc2ba19ec36ffe1dfb59864fadb7f0202dd3197e223",
+      "bytes": 3264
+    },
+    {
+      "path": "src/backend/tests/test_config.py",
+      "sha256": "71cab2b1b25ef7315e9578c69a58cc409ca58cacdf32fa8672398442a47bccc4",
+      "bytes": 9922
+    },
+    {
+      "path": "src/backend/tests/test_db.py",
+      "sha256": "d3e041adc0bec9b9201f5f4a2bda8444c4eef7787d99b62d4ef9ec3b0b442b93",
+      "bytes": 22876
+    },
+    {
+      "path": "src/backend/tests/test_iteration202_auth_boundaries.py",
+      "sha256": "fe682bdbb171cba4fe2a6f0dcda403527972daf22c1ff0dc316a14939e409e44",
+      "bytes": 12345
+    },
+    {
+      "path": "src/backend/tests/test_iteration202_deployment_database.py",
+      "sha256": "55213fac98da337ddf3dc119a5007d8448d015d4f7fb5f1969dbb19b62adf44c",
+      "bytes": 10578
+    },
+    {
+      "path": "src/backend/tests/test_iteration202_optimization_lifecycle.py",
+      "sha256": "a8cc602b434d077977ce36a2ff27ef45d52237c18da9af54a0b3f4d64a061329",
+      "bytes": 30058
+    },
+    {
+      "path": "src/backend/tests/test_market_instrument_freshness.py",
+      "sha256": "6c243890f94a34d2c1e55b3667ca161d16822483a4aae215e02c1675346cca1d",
+      "bytes": 7720
+    },
+    {
+      "path": "src/backend/tests/test_market_instrument_type_boundaries.py",
+      "sha256": "f5ec49f72bd6e23cb2407dbc86c502e4c5636643dc721b4db59ee1a795b09f17",
+      "bytes": 3590
+    },
+    {
+      "path": "src/backend/tests/test_optimization_api.py",
+      "sha256": "e479297384b7a83eeb401fad94cd5fb54f3532deb2f90da58aa54b617d839bc0",
+      "bytes": 35527
+    },
+    {
+      "path": "src/backend/tests/test_optimization_helpers.py",
+      "sha256": "d459a36fa51c71af897708bbd0503230f20ff18e9b9fb868627208d57591c9d8",
+      "bytes": 18125
+    },
+    {
+      "path": "src/backend/tests/test_optimization_service.py",
+      "sha256": "d42e08ad279a09c93499740b77bade2113cd9d097fe1fb4554a655fc47f2ecb9",
+      "bytes": 35416
+    },
+    {
+      "path": "src/backend/tests/test_optimization_submission.py",
+      "sha256": "183c7e705561b6f3a8e73ffcc7d03d49c1da10a629ef15a3eaf59a1a71badd49",
+      "bytes": 12850
+    },
+    {
+      "path": "src/backend/tests/test_optimization_task_state.py",
+      "sha256": "945a2a48b2352ca514aa2f6e39245ed2511c6092f1af44da90a52fec06922d0e",
+      "bytes": 21280
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_boundaries.py",
+      "sha256": "240c9403ab5a7e3f0e62953b0852bc7ad5d054098678037ed1db80e3ffd2c8ae",
+      "bytes": 1871
+    },
+    {
+      "path": "src/backend/tests/test_position_valuation.py",
+      "sha256": "808f732149410d537f9ab6d953b90d47d73e5dcfc98b116cb1a15cb1acb66ab9",
+      "bytes": 3514
+    },
+    {
+      "path": "src/backend/tests/test_trading_workspace_service.py",
+      "sha256": "8a7e6bb4e93515a17c1eb04043cf63f6ecbe1e93665de07c4de37e8e73264e7c",
+      "bytes": 217623
+    },
+    {
+      "path": "src/frontend/Dockerfile",
+      "sha256": "ecb9f0b78b877229138442169e7077286ab895f2c4937acda644b9dd0b2b050f",
+      "bytes": 835
+    },
+    {
+      "path": "src/frontend/e2e/iteration202.config.ts",
+      "sha256": "c674cfe089f51d18e5e56338504eb7e2f179fd53204fa61e2503eb31a5111d15",
+      "bytes": 1090
+    },
+    {
+      "path": "src/frontend/e2e/tailwind4.config.ts",
+      "sha256": "c449f33bb2274cf60ead54602f5fa86b9bad588ace552054c22f1f012ae089ff",
+      "bytes": 1316
+    },
+    {
+      "path": "src/frontend/e2e/tailwind4/style-regression.spec.ts",
+      "sha256": "9663bb92c242b4d647f8464cc1bfb7d019959bbe97c971f6cf1123772932f4a0",
+      "bytes": 14775
+    },
+    {
+      "path": "src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+      "sha256": "d9d409b20adda671b348e5a1d5c6aa514a4464c29db58522eb885480adc4a49e",
+      "bytes": 23139
+    },
+    {
+      "path": "src/frontend/eslint.config.js",
+      "sha256": "d09bb80c3203a137df9b5e0a1e39b74b9c612a28a09d08418d5e843ae2ca5bc5",
+      "bytes": 2152
+    },
+    {
+      "path": "src/frontend/package-lock.json",
+      "sha256": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e",
+      "bytes": 266788
+    },
+    {
+      "path": "src/frontend/package.json",
+      "sha256": "ca90257d5665487b99c9d526f453a6e35b0cbdc51e73b93ef8d109ac27757857",
+      "bytes": 2420
+    },
+    {
+      "path": "src/frontend/postcss.config.js",
+      "sha256": "3fc8d1c13ad963bbf7da04d59024d38cc2ad14563b36afd71bc8b43c7148dd25",
+      "bytes": 69
+    },
+    {
+      "path": "src/frontend/src/__tests__/api/index.test.ts",
+      "sha256": "81ea4f425877f23c23078eab838c22bc42c8705822f151e25cd645cbd451fbb0",
+      "bytes": 21024
+    },
+    {
+      "path": "src/frontend/src/__tests__/api/workspace.test.ts",
+      "sha256": "ee7e20fea983671f1aa3590f2596851efd3dbeb9e1a641bc953ac95e273bcb71",
+      "bytes": 5292
+    },
+    {
+      "path": "src/frontend/src/__tests__/components/workspace/BatchOptimizationConfigDialog.test.ts",
+      "sha256": "07bd8ed6b554f304b51fba98eb3fc152e6927f0fa03c150cef06a59c8f843af7",
+      "bytes": 3679
+    },
+    {
+      "path": "src/frontend/src/__tests__/components/workspace/OptimizationConfigDialog.test.ts",
+      "sha256": "32558f1a60a961585a3202138a495d8d5d308c97ec6df351eb427e399f6add23",
+      "bytes": 3954
+    },
+    {
+      "path": "src/frontend/src/__tests__/components/workspace/WorkspaceOptimizationTab.test.ts",
+      "sha256": "daa4634edd6054af32666273bd12f7e7fee0d1352f8f15cbbe76d043a558ddf0",
+      "bytes": 8908
+    },
+    {
+      "path": "src/frontend/src/__tests__/components/workspace/WorkspaceUnitsTab.test.ts",
+      "sha256": "414d02b340247ef508ebdf576c854ac3fb54a3ce6f9942c11dd3cba6b28f7e17",
+      "bytes": 8001
+    },
+    {
+      "path": "src/frontend/src/__tests__/stores/auth.test.ts",
+      "sha256": "fc1cd466b44e560db1aecc62f4d653ac56ff19c2d4ebed7d10ec69296983aa1a",
+      "bytes": 13076
+    },
+    {
+      "path": "src/frontend/src/__tests__/stores/persistence.test.ts",
+      "sha256": "df63652cedde8c5cf1161275ed544e4f499a0977f1e3dd715081ca1aa9ee6b0a",
+      "bytes": 5847
+    },
+    {
+      "path": "src/frontend/src/__tests__/stores/workspace.test.ts",
+      "sha256": "371e5f1e137d4ab6ee7a64ef7ffd6e060e7aea23c20460b90b17c8aad21e5e1a",
+      "bytes": 13545
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/LoginPage.test.ts",
+      "sha256": "966cd38da55c1ce9fef0a7176ac3a898b080621476bc928904a67dc7b3c91105",
+      "bytes": 3247
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/strategy/StrategyCollaborators.test.ts",
+      "sha256": "2578f0b1eaa0a749f00b208d612d88bec6e3cb5805c487d41d57cc3e25ce49fe",
+      "bytes": 9028
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/workspace/WorkspaceDetailPage.test.ts",
+      "sha256": "1a7eb137d057272b5e7146af5bfc98b1cf491477f8c63fae0847b594d0d08737",
+      "bytes": 8304
+    },
+    {
+      "path": "src/frontend/src/api/index.ts",
+      "sha256": "90ac8cdc2174a508b1b9cf124b6a011a0a0d42560e1b66ea6e29643153a85411",
+      "bytes": 10325
+    },
+    {
+      "path": "src/frontend/src/components/backtest/BacktestHistoryTable.vue",
+      "sha256": "c1ed95a8b7685c2bf943e690ae43548423f0b47eb6e7554481635caebef5918c",
+      "bytes": 5746
+    },
+    {
+      "path": "src/frontend/src/components/charts/DrawdownChart.vue",
+      "sha256": "9744004e46700218f45a160fa5a6edcac29472827a45ef66bddfad538d1c34a7",
+      "bytes": 3600
+    },
+    {
+      "path": "src/frontend/src/components/charts/ReturnHeatmap.vue",
+      "sha256": "50917c9374c1335e144a5d00e2350bc0d2cde1417f62ebabf142554160af9863",
+      "bytes": 3482
+    },
+    {
+      "path": "src/frontend/src/components/charts/TradeRecordsTable.vue",
+      "sha256": "66b43a6d21b4d082aa6f3e7c6d89142501a1aa3df77f801077ffec0590941fb1",
+      "bytes": 8800
+    },
+    {
+      "path": "src/frontend/src/components/charts/TradeSignalChart.vue",
+      "sha256": "f49b24a8d8e205dc0a1291d0ff049a1b64b5d474d5e5d74f49066a20ea5519d8",
+      "bytes": 14971
+    },
+    {
+      "path": "src/frontend/src/components/workspace/BatchOptimizationConfigDialog.vue",
+      "sha256": "7298cd3e09ea6998d90bcecf95798514824127497a24dfce0d9a2ecf817d4c83",
+      "bytes": 10338
+    },
+    {
+      "path": "src/frontend/src/components/workspace/OptimizationConfigDialog.vue",
+      "sha256": "061a6a0407a3b2299458359c87d7e639529041dad23bebc679f5cbd9690ceb21",
+      "bytes": 14880
+    },
+    {
+      "path": "src/frontend/src/components/workspace/PositionManagerDialog.vue",
+      "sha256": "1c7886db7dac37701dc67369500ba856def1aa4918c58260a9a767183bcf91ac",
+      "bytes": 13609
+    },
+    {
+      "path": "src/frontend/src/components/workspace/TradingUnitDetailDialog.vue",
+      "sha256": "4d08cdd24fa2b091144a12043fa9b4679c165faaa8a0799dc6da21821690229f",
+      "bytes": 9721
+    },
+    {
+      "path": "src/frontend/src/components/workspace/UnitTable.vue",
+      "sha256": "3381e2da6f0a1332cd8868b8ac6cc4921721bb56ca3d21a00074c126d70322a7",
+      "bytes": 13945
+    },
+    {
+      "path": "src/frontend/src/components/workspace/WorkspaceOptimizationTab.vue",
+      "sha256": "5b0b9bab4d7ab6ff8577c755ceae9860900f00d5757bad2c417ee5b02fea88c7",
+      "bytes": 20383
+    },
+    {
+      "path": "src/frontend/src/components/workspace/WorkspaceUnitsTab.vue",
+      "sha256": "e0b3341b91bbdd512e10666f9a32a701adaba00ecb5cde889cb3c61d22660aa9",
+      "bytes": 25013
+    },
+    {
+      "path": "src/frontend/src/components/workspace/optimization/optimizationObjective.ts",
+      "sha256": "fab0e1da346a346241fc2da05afb8ef8da124bf378fc94a36d1ca0a2490f7cd0",
+      "bytes": 1642
+    },
+    {
+      "path": "src/frontend/src/components/workspace/optimization/useWorkspaceOptimizationTab.ts",
+      "sha256": "a348f5da38e5e0cfbfc65de4d4cd3153ace5252d9a3c1993cdd3606b1c705721",
+      "bytes": 33523
+    },
+    {
+      "path": "src/frontend/src/components/workspace/units/useWorkspaceUnitsTab.ts",
+      "sha256": "2b01f3a51faf618c2579ea9a5f1a57cd8171860089ad0d98d4ed534812cb745d",
+      "bytes": 30182
+    },
+    {
+      "path": "src/frontend/src/i18n/locales/en-US.ts",
+      "sha256": "7526df7c7053cd8692e3a30c596b310e18e15e8bb21366daa0157b454f710f1c",
+      "bytes": 237929
+    },
+    {
+      "path": "src/frontend/src/i18n/locales/zh-CN.ts",
+      "sha256": "fe089a44171fdb669bc83b66824a2d48f64a7c656e63db4a568f9d91850fca21",
+      "bytes": 230772
+    },
+    {
+      "path": "src/frontend/src/stores/__tests__/auth.spec.ts",
+      "sha256": "5ab011b93279b040ec3ac21de6db8a22c6e77c0be1488da63d41a4edc7e25e36",
+      "bytes": 5913
+    },
+    {
+      "path": "src/frontend/src/stores/auth.ts",
+      "sha256": "4888e5d4fa9d06de04e3396ee92d4e44a16dba236d9d09d6a3a5f96d95ab94a0",
+      "bytes": 6908
+    },
+    {
+      "path": "src/frontend/src/stores/workspace.ts",
+      "sha256": "9c64fa6171d4917aa5a024db04b8fc5e7893255b658792495e78d25717da87cc",
+      "bytes": 23623
+    },
+    {
+      "path": "src/frontend/src/style.css",
+      "sha256": "fab022cb1c77f026f64483065131647af225568cbcccc004a80c61ee41136e6e",
+      "bytes": 14283
+    },
+    {
+      "path": "src/frontend/src/types/workspace.ts",
+      "sha256": "0b7293b7b01522e71807cf09f81d9f4f1299d8ca5d3c94fbb94bd57297b40dda",
+      "bytes": 16428
+    },
+    {
+      "path": "src/frontend/src/utils/newsArticleFormat.ts",
+      "sha256": "34073e64a7a49ababd1519866d91809ef97ad9f129ba69d53f2122d7d8620f2c",
+      "bytes": 279
+    },
+    {
+      "path": "src/frontend/src/utils/quoteFormat.ts",
+      "sha256": "436db33a796b9b9bf794749da486c00ba6822d42bd69a8f2e36b4afa64a293ca",
+      "bytes": 2316
+    },
+    {
+      "path": "src/frontend/src/utils/tokenRef.ts",
+      "sha256": "20935e305f5c3372b08cbda547fe4736545236da15887e6160e8e4ecb303d24d",
+      "bytes": 972
+    },
+    {
+      "path": "src/frontend/src/views/BacktestPage.vue",
+      "sha256": "e9506b288adff1ffde441ee6f41f016e36ea3ef1196231a4ece87154415e86b1",
+      "bytes": 23737
+    },
+    {
+      "path": "src/frontend/src/views/DataPage.vue",
+      "sha256": "1530fcd08b8c523f881e13594eb7447e97314a0cf798f256ea4b9b4a8ff3c381",
+      "bytes": 29368
+    },
+    {
+      "path": "src/frontend/src/views/GatewayStatusPage.vue",
+      "sha256": "84aa03d39719d6b186c77d0517206873aff7d1bbb81e5aa3ad3bb2a7fc577cf0",
+      "bytes": 15834
+    },
+    {
+      "path": "src/frontend/src/views/LoginPage.vue",
+      "sha256": "567afe78df77ec7a448978aeb42e44b551da39cd86518aca3fe0e79660868b43",
+      "bytes": 4983
+    },
+    {
+      "path": "src/frontend/src/views/NewsIntelligencePage.vue",
+      "sha256": "e4b6a937927ed7c7f6eeca7d42e3e84713bac5343a10984f8ea84011931390f0",
+      "bytes": 38958
+    },
+    {
+      "path": "src/frontend/src/views/PortfolioPage.vue",
+      "sha256": "397edcb9c4c4a76a060bd7f7aeb283f4def0456987101ea36f06567dac113e67",
+      "bytes": 58013
+    },
+    {
+      "path": "src/frontend/src/views/PromptTemplatesPage.vue",
+      "sha256": "a1f1717797bde77b15013219242f3ae754339653defc2e3aaaf6458918ee64be",
+      "bytes": 25868
+    },
+    {
+      "path": "src/frontend/src/views/QuotePage.vue",
+      "sha256": "13c61d5bd810ef38bd4f7cac3afd95600cd7d84fb8a0e00537d1d606994a9460",
+      "bytes": 63258
+    },
+    {
+      "path": "src/frontend/src/views/RiskControlPage.vue",
+      "sha256": "23211a284310d6ecd043b48a516c510a08478dc453b43d6dbc0e09fe00e85abd",
+      "bytes": 4320
+    },
+    {
+      "path": "src/frontend/src/views/StrategyPage.vue",
+      "sha256": "889c140085deba6931c05e76711b71892e1dac40bcdbc43a182021892e4ab1af",
+      "bytes": 135251
+    },
+    {
+      "path": "src/frontend/src/views/config/AIProviderConfigPage.vue",
+      "sha256": "83487a57cf379cb7ce7d0ef9a550b887f9d64515273587f1efbc73146e0a73fd",
+      "bytes": 31656
+    },
+    {
+      "path": "src/frontend/src/views/data/AirflowDagsPage.vue",
+      "sha256": "7dbbe88d2cbef5fbf2d06c14f5b03cc0e902ce2829db3fc466a0fa849b980170",
+      "bytes": 23271
+    },
+    {
+      "path": "src/frontend/src/views/data/DataExecutionsPage.vue",
+      "sha256": "d320ae1d930d12f0740cb75e78b636b4efdc3d44141364497a03ea38e620e7ac",
+      "bytes": 23972
+    },
+    {
+      "path": "src/frontend/src/views/data/DataGovernancePage.vue",
+      "sha256": "3826b01817c060c6161996cd73fffca7338d33a2c57bca6992766242cbacd245",
+      "bytes": 28730
+    },
+    {
+      "path": "src/frontend/src/views/data/DataInterfacesPage.vue",
+      "sha256": "ac093fcbbd29b69d22fcc83531da390ae950edc6a051bea4f538445958fb6b20",
+      "bytes": 32341
+    },
+    {
+      "path": "src/frontend/src/views/data/DataScriptsPage.vue",
+      "sha256": "88d86a7a13f882629a9ed1ea60ba70211280b9517020d0a8a5207d5c3922a8ec",
+      "bytes": 35618
+    },
+    {
+      "path": "src/frontend/src/views/data/DataTablesPage.vue",
+      "sha256": "5e9eec3561b895bb25edc396d21bdc327705f96b159b09a6d47ac9079a0f4411",
+      "bytes": 16590
+    },
+    {
+      "path": "src/frontend/src/views/data/DataTasksPage.vue",
+      "sha256": "476060dfa7f3c032721122670c361184dd93300638edfd0d07a5604f469df9d5",
+      "bytes": 27317
+    },
+    {
+      "path": "src/frontend/src/views/data/components/DataSyncDatabaseTables.vue",
+      "sha256": "3fb90241165b29c83ecdad3dfc0500b351cc69e6e2b6be70d102c138c8258354",
+      "bytes": 8041
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchValueAdapters.ts",
+      "sha256": "586d04a9e6c0e40f435768b6ba03bb94f244e480bba6cea536d824684ccb454b",
+      "bytes": 2049
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchMarketData.ts",
+      "sha256": "c3d4a6d393acb14614ac274d6fa67bfca707becb1d3087f7e2adcaf949db4589",
+      "bytes": 33466
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRunRecordAdapters.ts",
+      "sha256": "a2ee526b45c7c75b834013b289e8dc26b221d0539db33a05c847db08b46ac55a",
+      "bytes": 30736
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRuntimeOperations.ts",
+      "sha256": "b3d7ec0ef939bd460286c70b9e9eaeaa3bcca1fb830773e6c00987191f85b731",
+      "bytes": 25050
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRuntimeProjections.ts",
+      "sha256": "08dae69a13fa1465f603fa2956924ae6c19c232da1b7bbe03adea273460ae871",
+      "bytes": 21044
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPage.ts",
+      "sha256": "feeb59842cdf3955172f74a245521c1f88d6334989ef401c440a7bf285dc56db",
+      "bytes": 234521
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPageDialogs.ts",
+      "sha256": "eb87a8cff4c462bcbc7436f95c17ac3da10f628eff0b1d147893a92910dd0788",
+      "bytes": 4398
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPageViewState.ts",
+      "sha256": "77c3b151a5f31a48ee200ea3525b96e74dec11f35c6190384e183a3f825d8137",
+      "bytes": 2577
+    },
+    {
+      "path": "src/frontend/src/views/workspace/WorkspaceDetailPage.vue",
+      "sha256": "8ff5ee7bfe74666234c1502ff4d59731bd547b4f0d5d2fd96c879e4c6bc3748a",
+      "bytes": 30894
+    },
+    {
+      "path": "src/frontend/src/views/workspace/WorkspaceListPage.vue",
+      "sha256": "fb91aba100fff8925865c675a6e2b1df3aa32c0d6473ce1d576d8227ef2d29ee",
+      "bytes": 30084
+    },
+    {
+      "path": "src/frontend/src/views/workspace/useWorkspaceDetailResources.ts",
+      "sha256": "c621623d0789db6953b993b993cc99833d8dfa049de8cd6b95d1b144f7c7515d",
+      "bytes": 921
+    },
+    {
+      "path": "src/frontend/src/views/workspace/workspaceDetailFormatters.ts",
+      "sha256": "f78e08f788f24941ac929358a68f1635c4f05b3bafda64ca5f237602bb4971c6",
+      "bytes": 719
+    }
+  ]
+}

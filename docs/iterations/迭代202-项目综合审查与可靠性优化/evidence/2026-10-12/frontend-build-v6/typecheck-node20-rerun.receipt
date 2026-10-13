@@ -1,0 +1,6 @@
+typecheck_start_utc=2026-10-12T11:32:54Z
+command=npm run typecheck
+v20.20.2
+11.6.2
+typecheck_end_utc=2026-10-12T11:35:45Z
+exit_code=0

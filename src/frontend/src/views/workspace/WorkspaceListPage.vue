@@ -297,7 +297,7 @@
               {{ row.completed_count }}
             </template>
           </el-table-column>
-          <el-table-column
+          <!-- @vue-generic {Workspace} --><el-table-column
             v-if="isTradingWorkspace"
             :label="t('workspace.tradingReadiness')"
             min-width="150"
@@ -327,7 +327,7 @@
               {{ formatTime(row.updated_at) }}
             </template>
           </el-table-column>
-          <el-table-column
+          <!-- @vue-generic {Workspace} --><el-table-column
             :label="t('workspace.action')"
             width="120"
             fixed="right"

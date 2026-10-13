@@ -10,6 +10,7 @@ from app.services.optimization.execution_manager import (
 from app.services.optimization.task_state import (
     build_runtime_task_from_db_task,
     get_runtime_task,
+    mark_runtime_task_cancelled,
     update_runtime_task,
 )
 
@@ -47,6 +48,8 @@ def load_optimization_task_state(
                 return None
         except Exception as e:
             logger.debug("DB task lookup failed: %s", e)
+            if user_id is not None:
+                return None
 
     return runtime_task
 
@@ -89,18 +92,22 @@ def cancel_optimization_task(
             mgr = get_manager()
             db_cancelled = run_async(mgr.set_cancelled(task_id, user_id))
             if db_cancelled:
-                update_task(task_id, status=TaskStatus.CANCELLED.value)
-                return True
+                runtime_task = mark_runtime_task_cancelled(task_id)
+                return (
+                    runtime_task is None or runtime_task.get("status") == TaskStatus.CANCELLED.value
+                )
             if user_id is not None:
                 return False
         except Exception as e:
             logger.debug("DB cancel failed: %s", e)
+            if user_id is not None:
+                return False
 
     task = get_task(task_id)
     if not task:
         return False
-    update_task(task_id, status=TaskStatus.CANCELLED.value)
-    return True
+    updated_task = update_task(task_id, status=TaskStatus.CANCELLED.value)
+    return bool(updated_task and updated_task.get("status") == TaskStatus.CANCELLED.value)
 
 
 def persist_optimization_task(

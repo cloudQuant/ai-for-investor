@@ -1,0 +1,14 @@
+[2m[WebServer] [22m(node:8476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 7 tests using 1 worker
+
+  ✓  1 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:436:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry (17.2s)
+  ✓  2 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:484:1 › AC-D09: a real startup 401 clears the expired identity and returns to the login form (586ms)
+  ✓  3 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:508:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B (1.9s)
+  ✓  4 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:564:1 › AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state (3.1s)
+  ✓  5 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:613:1 › AC-D10: logout clears A workspace data before B opens the same workspace route (2.1s)
+  ✓  6 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:714:1 › AC-D11: late A detail and units cannot replace B during same-route workspace navigation (809ms)
+  ✓  7 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:789:1 › AC-D11: B detail and units remain active when they finish before late A responses (846ms)
+
+  7 passed (31.8s)

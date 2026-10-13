@@ -1,0 +1,476 @@
+
+ RUN  v4.1.11 /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
+
+ ❯ src/__tests__/views/StrategyPage.test.ts (158 tests | 3 failed) 259695ms
+     ✓ mounts without error  338ms
+     ✓ mounts the AI research timeline without unresolved-component warnings 86ms
+     ✓ shows strategy library and my strategies under strategy management  456ms
+     ✓ hides strategy management tabs from investment strategy research 84ms
+     ✓ restores an AI research run from route query on mount 194ms
+     ✓ getCategoryLabel returns correct labels 245ms
+     ✓ getCategoryType returns correct types 140ms
+     ✓ stripStrategyMeta strips after pipe 3ms
+     ✓ getStrategyParamCount returns param count 3ms
+     ✓ filteredTemplates returns all when no filter 228ms
+     ✓ filteredTemplates filters by category 181ms
+     ✓ filteredTemplates filters by keyword 83ms
+     ✓ openTemplateDetail loads readme 165ms
+     ✓ goBacktest navigates 109ms
+     ✓ showCreateDialog resets form 89ms
+     ✓ editStrategy populates form 140ms
+     ✓ viewStrategy sets current strategy 118ms
+     ✓ useTemplate populates form from template 190ms
+     ✓ shows latest running AI research diagnostics in task progress 133ms
+     ✓ shows the running best AI research iteration when the latest iteration regresses 91ms
+     ✓ generates an AI research objective from current controls and submits it  1317ms
+     ✓ clearly states that legacy workflow choices only shape the prompt and display  763ms
+     ✓ opens a choice dialog and keeps the deterministic target when the default option is chosen  480ms
+     ✓ uses the model only after the user explicitly selects objective optimization  652ms
+     ✓ falls back to the deterministic target when model optimization is unavailable  455ms
+     ✓ auto-generates the AI research objective when running with an empty prompt 131ms
+     ✓ treats bare SA futures symbols as futures in generated AI research prompts 236ms
+     ✓ requires a prompt when AI research is set to prompt workflow mode  720ms
+     ✓ runs AI research loop from form input  2081ms
+     ✓ activates and deactivates a prepared live handoff from history through server routes  460ms
+     ✓ renders automatic improvement from a failed first iteration to a passing second iteration  320ms
+     ✓ blocks AI research start when gateway config contains redacted credentials 91ms
+     ✓ blocks AI research start when required out-of-sample dates are missing 59ms
+     ✓ shows configuration feedback when AI research request is invalid  396ms
+     ✓ warns and keeps continuation available when AI research misses target  895ms
+     ✓ shows iteration progress regression details 226ms
+     ✓ shows initial paper monitoring review from completed AI research run 201ms
+     ✓ shows paper review status and actions even when monitoring evaluations are missing 80ms
+     ✓ shows paper trading start failure as retryable current result 154ms
+     ✓ runs AI research through async task polling when task API is available 75ms
+     ✓ keeps submitted async continuation runtime context when later task payload is sparse 61ms
+     ✓ shows live trading preparation from completed async task summary 59ms
+     ✓ restores live trading preparation from task pipeline summary when history lookup fails 136ms
+     ✓ shows live handoff approval actions from async task result 180ms
+     ✓ shows timeout-cancelled backtest from async task summary 73ms
+     ✓ restores cancelled async task result from persisted run history 161ms
+     ✓ restores completed async task result from persisted run history when result is missing 139ms
+     ✓ restores paper trading context from run history without iteration snapshots 66ms
+     ✓ keeps polling long async AI research tasks beyond the old fixed attempt cap 159ms
+     ✓ restores completed async AI research result from task summary when history lookup fails 119ms
+     ✓ continues research from current result when paper review fails  560ms
+     ✓ continues research from current result when live candidate review expires  472ms
+     ✓ restores an active AI research task on mount 198ms
+     ✓ restores a recently completed AI research task when no active task exists 223ms
+     ✓ restores the best iteration from task summary when the latest iteration is not best  489ms
+     ✓ restores a recently cancelled AI research task when no active task exists 197ms
+     ✓ restores an interrupted AI research task snapshot and allows continuation  339ms
+     ✓ restarts an interrupted AI research task when no strategy snapshot exists 169ms
+     ✓ cancels a running AI research task 156ms
+     ✓ restores cancelled AI research record after task cancellation 237ms
+     ✓ uses AI research run history to refill the form 88ms
+     ✓ restores only a valid task-snapshot asset intent and uses it in the research prompt 81ms
+     ✓ selects AI research history records into result and task progress panels 139ms
+     ✓ refills gateway config from paper handoff when iteration snapshot is missing 98ms
+     ✓ does not refill gateway config from redacted paper handoff credentials 152ms
+     ✓ continues AI research from a strategy snapshot when best strategy id is missing 250ms
+     ✓ continues AI research run records through the server endpoint when available 143ms
+     ✓ uses the highest quality strategy snapshot when best iteration is missing 85ms
+     ✓ runs AI research continuation from selected history record 109ms
+     ✓ continues AI research from a cancelled run with completed iterations 264ms
+     ✓ shows expired live candidate records as requiring paper review 127ms
+     ✓ continues AI research from a saved draft after backtest submission failed 251ms
+     ✓ marks continuation as paper-review feedback when previous paper review failed 113ms
+     ✓ starts paper trading from an achieved history record 97ms
+     ✓ restarts paper trading from history when the previous paper unit is missing 68ms
+     ✓ keeps a usable local paper state when history refresh fails after restart 81ms
+     ✓ uses returned run record when paper start response already contains live handoff 195ms
+     ✓ syncs current result when refreshed run record starts paper trading 206ms
+     ✓ refreshes run record when starting paper trading from history fails 259ms
+     ✓ marks paper trading as failed when start response is not started 119ms
+     ✓ reviews paper trading from an achieved history record 136ms
+     ✓ uses live handoff embedded in paper review without rebuilding it 130ms
+     ✓ locks paper review and handoff rebuild actions after live handoff approval 130ms
+     ✓ blocks live preparation when live gateway config contains redacted credentials  2261ms
+     ✓ shows persisted paper trading review from run history after reload  7443ms
+     ✓ continues research directly from a failed paper review record  4184ms
+     × continues research directly from a rejected live handoff record 20824ms
+     ✓ auto-refreshes monitored AI research history with paper review progress  1493ms
+     ✓ debounces data precheck and ignores an older result after asset changes  1906ms
+     ✓ keeps the Iteration 197 sidecar legacy-only when server capability disables it despite stale browser flags  2206ms
+     × uses enabled server capability despite stale browser flags and keeps cache filling separately authorized 18245ms
+     ✓ allows explicitly authorized cache fill while the backtest bridge is disabled  3206ms
+     ✓ keeps the full submitted request snapshot when capability resolution is delayed  2272ms
+     ✓ removes bridge intent when a fresh submit-time capability revokes it  4132ms
+     ✓ binds each concurrent submission to its own fresh capability response  822ms
+     ✓ captures the full request before mandate confirmation yields  4968ms
+     ✓ freezes a record continuation before a delayed mandate load can observe form edits  594ms
+     ✓ requires a new mandate when a captured quality constraint changes 268ms
+     ✓ requires a fresh mandate after the confirmed market-data asset intent changes  334ms
+     ✓ requires a new mandate when an explicit prompt switches to the auto workflow  489ms
+     ✓ does not case-fold a market identifier when matching a confirmed mandate  526ms
+     ✓ keeps a confirmed auto mandate for a persisted blank-auto run continuation  5833ms
+     ✓ keeps a confirmed auto mandate for a persisted blank-auto task continuation  1189ms
+     ✓ does not infer auto provenance from a legacy task without explicit-field metadata  516ms
+     ✓ uses the legacy precheck when the server capability request fails  1847ms
+     ✓ sends only the exact classified asset type as Iteration 197 bridge intent for 000001.SZ  2173ms
+     ✓ sends only the exact classified asset type as Iteration 197 bridge intent for RB0  705ms
+     ✓ sends only the exact classified asset type as Iteration 197 bridge intent for BTCUSDT  3645ms
+     ✓ sends an explicit stock asset intent without guessing a different family  2028ms
+     ✓ sends an explicit futures asset intent without guessing a different family  506ms
+     ✓ sends an explicit bond asset intent without guessing a different family 223ms
+     ✓ sends an explicit fund asset intent without guessing a different family  1325ms
+     ✓ sends an explicit option asset intent without guessing a different family  9163ms
+     ✓ sends an explicit fx asset intent without guessing a different family  4617ms
+     ✓ sends an explicit crypto asset intent without guessing a different family  2509ms
+     ✓ uses the selected asset type for the legacy precheck  770ms
+     ✓ preserves the existing run path without Iteration 197 bridge intent when the server disables v2 203ms
+     ✓ preserves the existing run path without Iteration 197 bridge intent when the server disables the strategy bridge 253ms
+     ✓ blocks a bridge-enabled run when the symbol has no strict local data contract 127ms
+     ✓ adds strict local-only market-data evidence without replacing the Iteration 196 precheck 136ms
+     ✓ keeps an interactive precheck strict-local and reserves cache filling for the explicit action  789ms
+     ✓ fills the exact local-first cache and strictly rereads it without rewriting the legacy precheck  455ms
+     ✓ aborts a cache-fill snapshot when the form changes while its contract is pending  816ms
+     ✓ does not reuse a strict-local contract across case-distinct exact symbols  634ms
+     ✓ uses crypto.range for crypto daily research bars and fails closed with a 1d envelope  347ms
+     ✓ uses crypto.range for crypto daily research bars and fails closed with a 1d envelope  1809ms
+     ✓ uses crypto.range for crypto weekly research bars and fails closed with a 1w envelope  6613ms
+     ✓ uses crypto.range for crypto weekly research bars and fails closed with a 1w envelope  7164ms
+     ✓ uses crypto.range for crypto monthly research bars and fails closed with a 1mo envelope  2105ms
+     × uses crypto.range for crypto monthly research bars and fails closed with a 1mo envelope 45414ms
+     ✓ rejects a stale or mixed-deployment v2 response with a mismatched family binding  3599ms
+     ✓ rejects a stale or mixed-deployment v2 response with a mismatched semantic data kind  2191ms
+     ✓ does not query v2 when the sidecar contract has a different family  10751ms
+     ✓ does not query v2 when the sidecar contract has a different family contract version  5185ms
+     ✓ does not mark incomplete strict local coverage as a successful precheck  1938ms
+     ✓ hard-blocks an AI research run when strict local market-data coverage is incomplete  752ms
+     ✓ hard-blocks a classified new research run when its strict v2 contract is unavailable  950ms
+     ✓ hard-blocks a classified new research run when its strict v2 contract returns a legacy fallback error  2374ms
+     ✓ blocks a new research run when a forced capability refresh fails after a prior enabled authorization  3874ms
+     ✓ keeps an earlier enabled action blocked when a later action disables the bridge before its refresh fails  4211ms
+     ✓ blocks a previously disabled action when a concurrent refresh establishes the strict gate before it fails  3574ms
+     ✓ strictly re-reads frozen local data before a run-record continuation executes  9982ms
+     ✓ hard-blocks a run-record continuation when strict local coverage is incomplete  2773ms
+     ✓ hard-blocks a task continuation when strict local coverage is incomplete  1194ms
+     ✓ keeps a v2 execution failure after contract issuance out of the legacy fallback path  1017ms
+     ✓ hard-blocks a new research action when its strict local query fails after contract issuance  1485ms
+     ✓ keeps displayed research output isolated when plans share the same asset and timeframe  983ms
+     ✓ defaults to the rebar plan and switches to the latest output in each plan workspace  327ms
+     ✓ keeps a plan result scoped to its asset when its workspace has historical mixed runs 291ms
+     ✓ binds an empty plan to the research workspace created by its first completed run 177ms
+     ✓ clears the previous result and shows active plan progress while AI research runs  442ms
+     ✓ renders structured metric and gate deltas for a version comparison 102ms
+     ✓ saveStrategy warns when name/code empty 126ms
+     ✓ saveStrategy creates new strategy 123ms
+     ✓ saveStrategy updates existing strategy 106ms
+     ✓ deleteStrategy calls store 203ms
+     ✓ paramTableData returns entries from detail template 95ms
+     ✓ paramTableData returns empty when no detail 293ms
+ ❯ src/__tests__/views/DataPage.test.ts (62 tests | 3 failed) 98520ms
+     ✓ keeps lifecycle and user queries off legacy online refresh when the server capability is disabled  2057ms
+     ✓ never turns an unavailable v2 contract into a legacy online refresh 229ms
+     ✓ uses the server capability even when the browser rollout variable is stale  648ms
+     ✓ renders only public v2 response provenance identifiers in the market status  326ms
+     ✓ keeps a schema-valid public canonical identity visible without accepting controls 150ms
+     ✓ does not fall back to legacy data after a v2 contract probe denies data-read access  445ms
+     ✓ uses a single snapshot column on compact viewports 211ms
+     ✓ renders snapshot values in self-contained metric cards  436ms
+     ✓ orders historical table rows from newest to oldest without changing chart source order  468ms
+     ✓ renders one historical data tab per supported asset type 279ms
+     ✓ rejects a legacy bridge contract whose product family differs from the current page 146ms
+     ✓ rejects a legacy bridge contract without an exact canonical-identity echo 114ms
+     ✓ does not reuse a v2 contract across case-distinct exact market symbols  981ms
+     ✓ uses a server-proven contract for the initial local-only query without legacy lookup  822ms
+     ✓ fails closed when an initial local-only response claims a provider receipt 181ms
+     ✓ keeps route-tab lifecycle reads local-only after the initial page load  1190ms
+     ✓ fails closed when the unbundled crypto realtime family is unconfigured 271ms
+     ✓ fails closed when a pass v2 bar omits a contract-required field 184ms
+     ✓ uses a server-advertised family bundle even when the browser bundle variable is stale  552ms
+     ✓ renders all seven asset tabs as unconfigured from a valid bundle without a legacy lookup  3011ms
+     ✓ does not select a different ready family when the asset realtime family is unconfigured  2271ms
+     ✓ does not label incomplete local-first coverage as a local cache hit when online fill is disabled  4193ms
+     ✓ keeps persisted provider receipts with incomplete coverage out of the success state  4788ms
+     ✓ uses an explicitly selected ready reference series contract and renders only its declared fields  1490ms
+     ✓ renders fund NAV only from the declared market.fund_nav reference fields  1464ms
+     ✓ clears prior family facts from the select model update before a new family can be queried  1856ms
+     ✓ fails closed when the selected reference series contract does not match its bundle declaration  759ms
+     ✓ fails closed when a reference response omits a contract-required field  832ms
+     ✓ invalidates an in-flight family response when the selected family changes  1431ms
+     ✓ drops the initial lookup when every request selector changes during capability resolution  619ms
+     ✓ treats a cleared date range as an omitted legacy window  1468ms
+     ✓ rejects a cleared date range through the v2 window guard without falling back  1798ms
+     × drops an in-flight response when its symbol, period, or date window changes 12841ms
+     ✓ does not retarget a selected reference series to realtime or legacy when its bundle fails  8725ms
+     × keeps K-line rendering for an explicitly selected ready bars family 15953ms
+     × renders mocked future-ready control-plane shapes without manufacturing facts for unconfigured families 14852ms
+     ✓ renders a mocked future-ready snapshot presentation without recasting it as bars  1854ms
+     ✓ uses translated label keys for B1 cadence choices and ships English labels  813ms
+     ✓ ships English generic-observation and read-state copy through data-management keys 11ms
+     ✓ keeps a mocked ready B2 report family unselectable and does not issue a query  1058ms
+     ✓ clears previous family provenance immediately when the selected family changes  929ms
+     ✓ constrains weekly and monthly selection to the declared daily cadence for futures, bonds, options, and FX  1258ms
+     ✓ preserves an existing result when a bundle rejects the selected period  802ms
+     ✓ rejects a bundle-selected contract whose declared family axes do not match 283ms
+     ✓ rejects a first family-bound response whose echoed binding differs from the request  695ms
+     ✓ rejects a later cursor page whose echoed family binding differs from the first request  313ms
+     ✓ does not fall back to legacy data after a valid bundle has issued a bars family  382ms
+     ✓ does not use legacy data when a valid bundle cannot resolve its exact bars contract 109ms
+     ✓ keeps the existing bars path when the optional bundle endpoint is unavailable 108ms
+     ✓ does not fall back to legacy data after a valid v2 contract returns a write failure 104ms
+     ✓ uses the v2 refresh mode after a contract has been issued 57ms
+     ✓ aggregates every v2 cursor page before rendering more than 500 historical observations 227ms
+     ✓ aborts a v2 cursor lifecycle when the selected family changes after the first page resolves  435ms
+     ✓ aborts an active v2 market query when the page unmounts 18ms
+     ✓ remembers successful queries independently for each asset type 95ms
+     ✓ restores only the saved selection for the asset type being opened 88ms
+     ✓ shows a stock-specific valuation and liquidity panel 50ms
+     ✓ shows futures contract controls instead of stock valuation fields 154ms
+     ✓ uses crypto position columns when crypto history has no ohlc prices 119ms
+     ✓ uses the options tab as its own historical asset query 54ms
+     ✓ queries only the selected tab asset when switching tabs 188ms
+     ✓ uses local-first rather than refresh when the standard query button is pressed 78ms
+ ✓ src/__tests__/composables/useAiResearchV2.test.ts (41 tests) 118ms
+ ✓ src/__tests__/composables/useAiResearchApproval.test.ts (88 tests) 277ms
+ ✓ src/__tests__/views/AIChatPage.test.ts (24 tests) 1871ms
+ ✓ src/__tests__/api/marketData.test.ts (25 tests) 24ms
+ ✓ src/__tests__/components/aiResearch/TrustedResearchWorkbench.test.ts (18 tests) 1175ms
+     ✓ starts with an explicit draft action instead of an implicit confirmation action  339ms
+ ✓ src/__tests__/views/AssetAnalysisPage.test.ts (12 tests) 1037ms
+ ✓ src/__tests__/api/index.test.ts (40 tests) 44ms
+ ✓ src/__tests__/router/index.test.ts (49 tests) 36ms
+ ✓ src/__tests__/composables/useBacktestRuntime.test.ts (29 tests) 290ms
+ ✓ src/__tests__/views/ScannerPage.test.ts (7 tests) 437ms
+ ✓ src/__tests__/views/BacktestResultPage.test.ts (10 tests) 381ms
+ ✓ src/__tests__/views/PortfolioPage.test.ts (24 tests) 538ms
+ ✓ src/__tests__/components/aiResearch/ApprovalPanel.test.ts (22 tests) 1033ms
+ ✓ src/__tests__/components/common/AppLayout.test.ts (25 tests) 1265ms
+       ✓ 应该渲染侧边栏  706ms
+ ✓ src/__tests__/stores/kbChat.test.ts (13 tests) 20ms
+ ✓ src/__tests__/stores/knowledgeBase.test.ts (16 tests) 27ms
+ ✓ src/__tests__/stores/workspace.test.ts (21 tests) 68ms
+ ✓ src/__tests__/api/strategy.test.ts (33 tests) 15ms
+ ✓ src/__tests__/stores/auth.test.ts (19 tests) 25ms
+ ✓ src/__tests__/components/aiResearch/EvidencePanel.test.ts (18 tests) 270ms
+ ✓ src/__tests__/types/aiResearchApproval.test.ts (34 tests) 40ms
+ ✓ src/__tests__/api/iteration170.test.ts (5 tests) 19ms
+ ✓ src/__tests__/api/retry-interceptor.test.ts (32 tests) 31ms
+ ✓ src/__tests__/utils/auditTracker.test.ts (20 tests) 54ms
+ ✓ src/__tests__/views/NewsIntelligencePage.test.ts (5 tests) 274ms
+ ✓ src/__tests__/views/QuotePage.test.ts (2 tests) 1600ms
+     ✓ loads quotes and covers symbol, sort, column, format, and chart helpers  933ms
+     ✓ shows a querying status before the initial quote content is available  665ms
+ ✓ src/__tests__/utils/markdown-sanitizer.test.ts (27 tests) 565ms
+ ✓ src/__tests__/views/strategy/StrategyCollaborators.test.ts (5 tests) 20ms
+ ✓ src/__tests__/components/workspace/WorkspaceOptimizationTab.test.ts (13 tests) 788ms
+ ✓ src/__tests__/views/workspace/WorkspaceDetailPage.test.ts (6 tests) 150ms
+ ✓ src/__tests__/composables/useUnitTableRendering.test.ts (49 tests) 32ms
+ ✓ src/__tests__/components/workspace/WorkspaceUnitsTab.test.ts (14 tests) 922ms
+ ✓ src/__tests__/utils/exportUtils.test.ts (23 tests) 47ms
+ ✓ src/__tests__/views/BacktestPage.test.ts (13 tests) 307ms
+ ✓ src/__tests__/composables/useInstanceActions.test.ts (17 tests) 32ms
+ ✓ src/__tests__/views/SettingsPage.test.ts (11 tests) 655ms
+ ✓ src/__tests__/views/StockAnalysisPage.test.ts (5 tests) 1288ms
+     ✓ restores the latest completed report and its export actions on mount  594ms
+ ✓ src/__tests__/components/common/logViewerHelpers.test.ts (25 tests) 16ms
+ ✓ src/__tests__/composables/useStrategyDraftWorkspaceExecution.test.ts (4 tests) 58ms
+ ✓ src/__tests__/api/akshare.test.ts (6 tests) 17ms
+ ✓ src/__tests__/views/workspace/WorkspaceListPage.test.ts (14 tests) 322ms
+ ✓ src/__tests__/views/AIProviderConfigPage.test.ts (4 tests) 964ms
+     ✓ loads provider list without exposing saved keys  569ms
+ ✓ src/__tests__/api/strategyApproval.test.ts (13 tests) 34ms
+ ✓ src/__tests__/stores/theme.test.ts (13 tests) 152ms
+ ✓ src/__tests__/composables/useAssetAnalysisTask.test.ts (5 tests) 117ms
+ ✓ src/__tests__/views/data/DataGovernancePage.test.ts (4 tests) 513ms
+ ✓ src/__tests__/components/charts/MetricCard.test.ts (21 tests) 263ms
+ ✓ src/__tests__/components/ErrorBoundary.test.ts (7 tests) 250ms
+ ✓ src/__tests__/views/AITradingPage.test.ts (3 tests) 169ms
+ ✓ src/__tests__/views/data/DataSyncPage.test.ts (3 tests) 601ms
+     ✓ loads config, database state and sync history on mount  337ms
+ ✓ src/__tests__/views/BrokerProfilesPage.test.ts (4 tests) 197ms
+ ✓ src/views/__tests__/BacktestPage.spec.ts (6 tests) 232ms
+ ✓ src/stores/__tests__/auth.spec.ts (9 tests) 21ms
+ ✓ src/__tests__/stores/persistence.test.ts (12 tests) 13ms
+ ✓ src/__tests__/utils.test.ts (22 tests) 45ms
+ ✓ src/__tests__/views/data/DataInterfacesPage.test.ts (9 tests) 305ms
+ ✓ src/__tests__/views/data/AirflowDagsPage.test.ts (4 tests) 608ms
+     ✓ shows APScheduler fallback when Airflow is not connected  396ms
+ ✓ src/__tests__/components/common/MonacoEditor.test.ts (12 tests) 80ms
+ ✓ src/__tests__/components/workspace/CreateUnitDialog.test.ts (11 tests) 735ms
+ ✓ src/stores/__tests__/backtest.spec.ts (10 tests) 231ms
+ ✓ src/__tests__/views/GatewayStatusPage.test.ts (5 tests) 337ms
+ ✓ src/__tests__/components/aichat/StockAnalysisTaskCard.test.ts (3 tests) 46ms
+ ✓ src/__tests__/api/workspace.test.ts (2 tests) 8ms
+ ✓ src/views/__tests__/StrategyPage.spec.ts (7 tests) 611ms
+ ✓ src/__tests__/views/data/DataTasksPage.test.ts (10 tests) 347ms
+ ✓ src/__tests__/components/workspace/tradingUnitTransfer.test.ts (10 tests) 12ms
+ ✓ src/__tests__/views/PromptTemplatesPage.test.ts (4 tests) 159ms
+ ✓ src/__tests__/components/OverfittingPanel.test.ts (5 tests) 83ms
+ ✓ src/__tests__/api/airflow.test.ts (11 tests) 25ms
+ ✓ src/__tests__/api/quote.test.ts (11 tests) 13ms
+ ✓ src/__tests__/api/small-clients.test.ts (6 tests) 22ms
+ ✓ src/__tests__/views/AIObservabilityPage.test.ts (3 tests) 142ms
+ ✓ src/__tests__/views/PortfolioLedgerPage.test.ts (2 tests) 62ms
+ ✓ src/__tests__/api/knowledgeBase.test.ts (9 tests) 15ms
+ ✓ src/__tests__/api/quantResearch.test.ts (12 tests) 7ms
+ ✓ src/__tests__/views/data/DataScriptsPage.test.ts (9 tests) 143ms
+ ✓ src/__tests__/components/workspace/TradingPositionDialog.test.ts (3 tests) 41ms
+ ✓ src/__tests__/components/workspace/WorkspaceReportTab.test.ts (11 tests) 284ms
+ ✓ src/__tests__/views/data/DataExecutionsPage.test.ts (4 tests) 105ms
+ ✓ src/__tests__/components/charts/TradeSignalChart.test.ts (15 tests) 103ms
+ ✓ src/__tests__/api/aiObservability.test.ts (10 tests) 7ms
+ ✓ src/__tests__/stores/strategy.test.ts (9 tests) 10ms
+ ✓ src/__tests__/api/stockAnalysis.test.ts (3 tests) 9ms
+ ✓ src/__tests__/composables/useOverfittingRuntime.test.ts (3 tests) 56ms
+ ✓ src/__tests__/api/liveTrading.test.ts (12 tests) 6ms
+ ✓ src/__tests__/views/data/DataScriptDetailPage.test.ts (3 tests) 57ms
+ ✓ src/__tests__/components/workspace/OptimizationConfigDialog.test.ts (7 tests) 89ms
+ ✓ src/__tests__/components/charts/EquityCurve.test.ts (9 tests) 72ms
+ ✓ src/__tests__/composables/useAutoTradingControls.test.ts (7 tests) 65ms
+ ✓ src/__tests__/views/KnowledgeBasePage.test.ts (3 tests) 198ms
+ ✓ src/__tests__/components/charts/PerformancePanel.test.ts (6 tests) 65ms
+ ✓ src/i18n/__tests__/i18n-index.test.ts (9 tests) 533ms
+ ✓ src/__tests__/components/workspace/BatchOptimizationConfigDialog.test.ts (7 tests) 101ms
+ ✓ src/__tests__/navigation/capabilities.test.ts (1 test) 6ms
+ ✓ src/__tests__/api/backtest.test.ts (9 tests) 5ms
+ ✓ src/__tests__/api/aiTrading.test.ts (7 tests) 29ms
+ ✓ src/__tests__/components/workspace/createTimedAsyncComponent.test.ts (3 tests) 41ms
+ ✓ src/__tests__/api/kbChat.test.ts (5 tests) 16ms
+ ✓ src/__tests__/views/Dashboard.test.ts (7 tests) 102ms
+ ✓ src/__tests__/views/KnowledgeBaseDocumentPage.test.ts (3 tests) 106ms
+ ✓ src/__tests__/components/workspace/AutoTradingConfigDialog.test.ts (6 tests) 90ms
+ ✓ src/__tests__/stores/simulation.test.ts (8 tests) 7ms
+ ✓ src/__tests__/api/assetResearch.test.ts (1 test) 9ms
+ ✓ src/__tests__/views/LoginPage.test.ts (4 tests) 66ms
+ ✓ src/__tests__/stores/backtest.test.ts (5 tests) 6ms
+ ✓ src/__tests__/api/portfolio.test.ts (10 tests) 5ms
+ ✓ src/components/__tests__/LanguageSwitcher.test.ts (6 tests) 42ms
+ ✓ src/__tests__/composables/useAIChatRendering.test.ts (4 tests) 3ms
+ ✓ src/__tests__/utils/session.test.ts (8 tests) 4ms
+ ✓ src/__tests__/components/workspace/PositionManagerDialog.test.ts (2 tests) 28ms
+ ✓ src/__tests__/views/PaperTradingDetailPage.test.ts (2 tests) 66ms
+ ✓ src/__tests__/components/common/LogViewer.test.ts (6 tests) 63ms
+ ✓ src/__tests__/types/aiResearchV2.test.ts (15 tests) 4ms
+ ✓ src/__tests__/components/workspace/DataSourceDialog.test.ts (5 tests) 70ms
+ ✓ src/__tests__/api/simulation.test.ts (2 tests) 5ms
+ ✓ src/__tests__/views/DataTopicsPage.test.ts (2 tests) 72ms
+ ✓ src/__tests__/contracts/aiResearchApprovalErrorCatalog.test.ts (3 tests) 166ms
+ ✓ src/__tests__/components/charts/ReturnHeatmap.test.ts (8 tests) 31ms
+ ✓ src/__tests__/composables/aiResearchApprovalHash.test.ts (4 tests) 15ms
+ ✓ src/__tests__/api/analytics.test.ts (6 tests) 5ms
+ ✓ src/__tests__/router.test.ts (5 tests) 6ms
+ ✓ src/__tests__/views/RegisterPage.test.ts (4 tests) 62ms
+ ✓ src/__tests__/components/workspace/UnitSettingsDialog.test.ts (5 tests) 81ms
+ ✓ src/__tests__/components/StrategyExplanationCard.test.ts (1 test) 27ms
+ ✓ src/__tests__/components/asset-research/AssetResearchPanels.test.ts (3 tests) 18ms
+ ✓ src/__tests__/composables/useAsyncModule.test.ts (3 tests) 27ms
+ ✓ src/i18n/__tests__/locale-completeness.test.ts (18 tests) 262ms
+ ✓ src/__tests__/components/aiResearch/TaskObservabilityPanels.test.ts (2 tests) 120ms
+ ✓ src/__tests__/views/RiskControlPage.test.ts (1 test) 40ms
+ ✓ src/__tests__/views/OptionsChainPage.test.ts (1 test) 87ms
+ ✓ src/__tests__/components/strategy/StrategyTemplateCard.test.ts (3 tests) 55ms
+ ✓ src/__tests__/styles/designSystem.test.ts (2 tests) 5ms
+ ✓ src/__tests__/components/workspace/UnitTable.test.ts (4 tests) 82ms
+ ✓ src/__tests__/components/aichat/StockAnalysisReportCard.test.ts (1 test) 53ms
+ ✓ src/__tests__/components/aichat/ChatMessageBubble.test.ts (2 tests) 130ms
+ ✓ src/__tests__/api/promptTemplates.test.ts (4 tests) 15ms
+ ✓ src/__tests__/views/QuantToolsPage.test.ts (1 test) 58ms
+ ✓ src/__tests__/utils/quoteFormat.test.ts (6 tests) 4ms
+ ✓ src/__tests__/components/strategy/StrategyDetailDialog.test.ts (1 test) 92ms
+ ✓ src/__tests__/components/StrategyScoreCard.test.ts (1 test) 46ms
+ ✓ src/__tests__/api/auth.test.ts (3 tests) 6ms
+ ✓ src/__tests__/views/data/DataLayout.test.ts (2 tests) 28ms
+ ✓ src/__tests__/components/common/ThemeToggle.test.ts (3 tests) 48ms
+ ✓ src/__tests__/utils/chartTheme.test.ts (2 tests) 11ms
+ ✓ src/__tests__/components/research/ResearchWorkflowGuide.test.ts (1 test) 23ms
+ ✓ src/__tests__/navigation/routes.test.ts (3 tests) 3ms
+ ✓ src/__tests__/composables/useChartResize.test.ts (1 test) 13ms
+ ✓ src/__tests__/components/strategy/StrategyEditDialog.test.ts (1 test) 51ms
+ ✓ src/__tests__/components/charts/DrawdownChart.test.ts (2 tests) 24ms
+ ✓ src/__tests__/components/common/ResponsiveDataGrid.test.ts (1 test) 31ms
+ ✓ src/__tests__/components/common/ThemeSwitcher.test.ts (1 test) 29ms
+ ✓ src/__tests__/App.test.ts (1 test) 23ms
+ ✓ src/__tests__/components/charts/KlineChart.test.ts (2 tests) 13ms
+ ✓ src/__tests__/components/common/DataTableSkeleton.test.ts (1 test) 27ms
+ ✓ src/__tests__/components/charts/TradeRecordsTable.test.ts (1 test) 33ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/views/DataPage.test.ts > DataPage > drops an in-flight response when its symbol, period, or date window changes
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/views/DataPage.test.ts:1959:3
+    1957|   })
+    1958|
+    1959|   it('drops an in-flight response when its symbol, period, or date win…
+       |   ^
+    1960|     vi.stubEnv('VITE_MARKET_DATA_QUERY_BUNDLE_ENABLED', 'true')
+    1961|     apiMocks.getQueryBundle.mockResolvedValue(createQueryBundleFixture…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/__tests__/views/DataPage.test.ts > DataPage > keeps K-line rendering for an explicitly selected ready bars family
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/views/DataPage.test.ts:2035:3
+    2033|   })
+    2034|
+    2035|   it('keeps K-line rendering for an explicitly selected ready bars fam…
+       |   ^
+    2036|     vi.stubEnv('VITE_MARKET_DATA_QUERY_BUNDLE_ENABLED', 'true')
+    2037|     const stockBundle = createQueryBundleFixture('stock', { 'stock.rea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/__tests__/views/DataPage.test.ts > DataPage > renders mocked future-ready control-plane shapes without manufacturing facts for unconfigured families
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/views/DataPage.test.ts:2145:3
+    2143|   })
+    2144|
+    2145|   it('renders mocked future-ready control-plane shapes without manufac…
+       |   ^
+    2146|     // The synthetic ready snapshot below is only a browser presentati…
+    2147|     // fixture. It is not a claim that the current backend has issued …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  src/__tests__/views/StrategyPage.test.ts > StrategyPage > continues research directly from a rejected live handoff record
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/views/StrategyPage.test.ts:8106:3
+    8104|   })
+    8105|
+    8106|   it('continues research directly from a rejected live handoff record'…
+       |   ^
+    8107|     const { strategyApi } = await import('@/api/strategy')
+    8108|     const wrapper = doMount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  src/__tests__/views/StrategyPage.test.ts > StrategyPage > uses enabled server capability despite stale browser flags and keeps cache filling separately authorized
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/views/StrategyPage.test.ts:8507:3
+    8505|   })
+    8506|
+    8507|   it('uses enabled server capability despite stale browser flags and k…
+       |   ^
+    8508|     vi.stubEnv('VITE_MARKET_DATA_QUERY_V2_ENABLED', 'false')
+    8509|     vi.stubEnv('VITE_MARKET_DATA_STRATEGY_BRIDGE_ENABLED', 'false')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  src/__tests__/views/StrategyPage.test.ts > StrategyPage > uses crypto.range for crypto monthly research bars and fails closed with a 1mo envelope
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/views/StrategyPage.test.ts:9769:4
+    9767|     ['monthly', '1mo', 'FastAPI detail', { detail: { code: 'DATA_FAMIL…
+    9768|     ['monthly', '1mo', 'normalized details', { details: { code: 'DATA_…
+    9769|   ])('uses crypto.range for crypto %s research bars and fails closed w…
+       |    ^
+    9770|     period,
+    9771|     timeframe,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed | 155 passed (157)
+      Tests  6 failed | 1715 passed (1721)
+   Start at  20:25:38
+   Duration  583.58s (transform 36.07s, setup 33.72s, import 57.88s, tests 386.46s, environment 65.09s)
+
+JSON report written to /tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v9-parent-vitest-results.json

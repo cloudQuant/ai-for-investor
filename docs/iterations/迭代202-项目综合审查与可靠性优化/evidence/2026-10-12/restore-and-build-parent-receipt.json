@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-10-12T09:31:05.135313+00:00",
+  "mysql_restore": "PASS; both source script hashes still match; first attempt was a fixture readiness failure, preserved separately",
+  "frontend_build": "PASS",
+  "frontend_bundle": "FAIL: entry closure 746409, login closure 750286 bytes (655360 limit); largest initial JS 648842 (552960 limit)",
+  "frontend_ci_helpers": "PASS",
+  "artifacts": [
+    {
+      "path": "mysql-restore-parent-receipt-20261012T091939Z-50253-5c7457.json",
+      "sha256": "774f0575135c5bcb9d9c37f2683c21ecaf9788d8a222775aa897b0dd02e3a1f8"
+    },
+    {
+      "path": "mysql-restore-parent-log-20261012T091939Z-50253-5c7457.jsonl",
+      "sha256": "de240e2dcf658b6b71db4c9fa37eba0f2611e8b3cc30570de8c2d1819e997fda"
+    },
+    {
+      "path": "mysql-restore-parent-receipt-20261012T092618Z-56545-6aa6e8.json",
+      "sha256": "21503c1bb3e368f756d113d6121058f7fe6fbefc2086560c172168f506e73a30"
+    },
+    {
+      "path": "mysql-restore-parent-log-20261012T092618Z-56545-6aa6e8.jsonl",
+      "sha256": "027422186eed41c1468b4f2c2266c47115d43ef66cba282d8f0e3e2a6eca8cfb"
+    },
+    {
+      "path": "mysql-restore-parent-harness.py",
+      "sha256": "1a99a052a6fc3ea108749f5c8fb8bc5f46d9e95e7ea9ffd9aef1f736fae8a6ba"
+    },
+    {
+      "path": "frontend-build-v3-parent.txt",
+      "sha256": "dd6d04ceec6a471f368c5e70eb8770c2ac6a19fd40520c88cc393a0714728d45"
+    },
+    {
+      "path": "frontend-bundle-diagnostic-parent.txt",
+      "sha256": "df021733f06a4cfdfa3f459068fdec3dd5daacb0548051cd2f18e53f1ca6d53e"
+    },
+    {
+      "path": "frontend-ci-helpers-v3-parent.txt",
+      "sha256": "3e2ec8ccb5293d1e9bb9e5a5c7e0bb2137cb2662bcfd25540e2266552a7dfdcd"
+    },
+    {
+      "path": "frontend-v3-parent-receipt.json",
+      "sha256": "e10ee30ea64e7b08bfd9da06c6c6259f8cc4c3d88f3aadeac691e9e01c90d8af"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "started_at": "2026-10-12T11:31:44.446Z",
+  "compose_source_sha256": "b5f8bb5009d3be659c0a0e0e0452be154aa300fec4a342f64cb26ee838f1eae8",
+  "effective_backend": {
+    "image": "iter202-d12-backend-logdir:20261012-final",
+    "init": true,
+    "healthcheck": {
+      "test": [
+        "CMD",
+        "curl",
+        "-f",
+        "http://localhost:8000/api/v1/health"
+      ],
+      "timeout": "5s",
+      "interval": "10s",
+      "retries": 5,
+      "start_period": "3m0s"
+    },
+    "depends_on": {
+      "migrate": {
+        "condition": "service_completed_successfully",
+        "required": true
+      }
+    },
+    "ports": [
+      {
+        "mode": "ingress",
+        "host_ip": "127.0.0.1",
+        "target": 8000,
+        "published": "59236",
+        "protocol": "tcp"
+      }
+    ]
+  },
+  "stages": [
+    {
+      "command": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-d12",
+        "--env-file",
+        "/tmp/iter202-d12-compose.env",
+        "-f",
+        "docker/docker-compose.yml",
+        "-f",
+        "docker/compose/dev.yml",
+        "-f",
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/d12-acceptance-v2.override.yml",
+        "down",
+        "--volumes",
+        "--remove-orphans"
+      ],
+      "started_at": "2026-10-12T11:31:44.462Z",
+      "finished_at": "2026-10-12T11:31:49.213Z",
+      "elapsed_seconds": 4.751,
+      "exit_code": 0,
+      "log": "d12-clean-down-v3-init-parent.txt"
+    },
+    {
+      "command": [
+        "docker",
+        "compose",
+        "--project-directory",
+        "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+        "--project-name",
+        "iter202-d12",
+        "--env-file",
+        "/tmp/iter202-d12-compose.env",
+        "-f",
+        "docker/docker-compose.yml",
+        "-f",
+        "docker/compose/dev.yml",
+        "-f",
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/d12-acceptance-v2.override.yml",
+        "up",
+        "-d",
+        "--no-build",
+        "--wait",
+        "--wait-timeout",
+        "360",
+        "backend"
+      ],
+      "started_at": "2026-10-12T11:31:49.240Z",
+      "finished_at": "2026-10-12T11:35:14.429Z",
+      "elapsed_seconds": 205.189,
+      "exit_code": 0,
+      "log": "d12-clean-up-v3-init-parent.txt"
+    }
+  ],
+  "health_probe": {
+    "exit_code": 7,
+    "response": ""
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "state": "PASS",
+  "command": [
+    "/Users/yunjinqi/opt/anaconda3/bin/conda",
+    "run",
+    "--no-capture-output",
+    "-n",
+    "base",
+    "python",
+    "-m",
+    "pytest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-p",
+    "pytest_timeout",
+    "-o",
+    "timeout=180",
+    "-o",
+    "timeout_method=signal",
+    "-vv",
+    "tests/test_main_lifespan_and_websocket.py",
+    "--junitxml=/Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/websocket-fixture-final-parent.xml"
+  ],
+  "started_at": "2026-10-12T14:52:06.267Z",
+  "source_sha256": "93a3a1a9686b9cd044cae950601a5aa6a1b764833e55d343f01c332ab9244186",
+  "dev_lock": "a2d2c91b7c69ea02b74653f2d5ab11cdb14e482a05ddc71174e53f0a9e1fe42e",
+  "review": "Local explicit schema-creation fixture applies only to WebSocket tests against the ORM memory database; real startup/create_tables and all original protocol assertions remain; explicit lifespan and health fixtures unchanged; pytest rerun plugin disabled.",
+  "exit_code": 0,
+  "signal": null,
+  "finished_at": "2026-10-12T14:52:23.961Z",
+  "source_unchanged": true,
+  "log_sha256": "02e2ca491184adb726e4235642f8ab23eb525636991b709b336bd9f297b784b2"
+}

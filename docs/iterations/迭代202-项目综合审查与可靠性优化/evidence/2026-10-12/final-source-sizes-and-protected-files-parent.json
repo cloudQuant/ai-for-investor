@@ -1,0 +1,418 @@
+{
+  "checked_at": "2026-10-12T14:49:47.125Z",
+  "head": "50b6a54baa6a7d9424bc3b3664c399c297908852",
+  "protected_files": [
+    {
+      "path": "README.md",
+      "expected": "567e395a4cab245e1f4bd537e031a30eea09b6d73f23c19bdd622cba18b3261f",
+      "observed": "567e395a4cab245e1f4bd537e031a30eea09b6d73f23c19bdd622cba18b3261f",
+      "unchanged": true
+    },
+    {
+      "path": "README.en.md",
+      "expected": "4ed5d90ae00539f96f51372861afbb175b47065d3d0542027e26aad36d3f77fa",
+      "observed": "4ed5d90ae00539f96f51372861afbb175b47065d3d0542027e26aad36d3f77fa",
+      "unchanged": true
+    },
+    {
+      "path": "DISCLAIMER.md",
+      "expected": "fd420a6dffaf498f7c6dae6a3c22a8b1cb87e5e5dc950bf8d53c517298083f49",
+      "observed": "fd420a6dffaf498f7c6dae6a3c22a8b1cb87e5e5dc950bf8d53c517298083f49",
+      "unchanged": true
+    },
+    {
+      "path": "LICENSE-REVIEW.md",
+      "expected": "e71620f9c4910a7587f524649f759248ea7f0e29d2d58eb44a0c340e277e8919",
+      "observed": "e71620f9c4910a7587f524649f759248ea7f0e29d2d58eb44a0c340e277e8919",
+      "unchanged": true
+    },
+    {
+      "path": "LICENSE-SCOPE-DRAFT.md",
+      "expected": "2d8c1bd505bc92f90b0bc67eecd15d568298295a939e76f316311b0152f2d4c1",
+      "observed": "2d8c1bd505bc92f90b0bc67eecd15d568298295a939e76f316311b0152f2d4c1",
+      "unchanged": true
+    },
+    {
+      "path": "LICENSE-SOURCE-AVAILABLE-DRAFT.md",
+      "expected": "dd02817f393232f5cbeb833e417ddaa89142e1ee3a10360b0c690ccdbcc41f44",
+      "observed": "dd02817f393232f5cbeb833e417ddaa89142e1ee3a10360b0c690ccdbcc41f44",
+      "unchanged": true
+    }
+  ],
+  "entry_sizes": [
+    {
+      "path": "src/backend/app/services/market_data/store.py",
+      "lines": 1703,
+      "max": 3900,
+      "sha256": "06a03e80b13290c7e7f65e44a165a8b52d0ab71e17eadbf28f7851e6c7b8c3be",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "lines": 1912,
+      "max": 2900,
+      "sha256": "f05dfa96741122d0aab66df0c46a8e7d022edfbdd7dabfea119a4c5b30d0d37b",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "lines": 2034,
+      "max": 2650,
+      "sha256": "541635078e32a2b3b1adc88d1fbbdd4202c07b95110772b701cfe5323091a02e",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_instrument.py",
+      "lines": 1246,
+      "max": 2150,
+      "sha256": "5af1f5e5f7d9b8f20a19c95736687fe3629c53a27ad553e1d13915a3b0da4498",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/position_valuation.py",
+      "lines": 1128,
+      "max": 2000,
+      "sha256": "16697adcf847b457408ce9371499542b61c026afcfcc5e22070eeaa54ceb92c2",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_manager.py",
+      "lines": 504,
+      "max": 1800,
+      "sha256": "ecda12c15472ff77f1da176074dada81fd1095925d077c7c9441ed20651431d4",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPage.ts",
+      "lines": 5272,
+      "max": 6500,
+      "sha256": "e83833e08f8a02cda749811dd28876961235a9b0eda3d34d01a8910786e3a3ad",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/cffex_settlement_collector.py",
+      "lines": 1334,
+      "max": 1335,
+      "sha256": "0b180622ba08ce60e4e08b5253ce08a1d00e5a94264820e33ab8a7c6fbab3d7b",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/stock_valuation_collector.py",
+      "lines": 1113,
+      "max": 1115,
+      "sha256": "68c684f13554cec53ea42121e49749bc3f4f11b244e4541725440baf7e1c4e13",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/publication.py",
+      "lines": 1109,
+      "max": 1115,
+      "sha256": "4a2eddd3ea584b100c9e5fcbd163546fa00dc7da754c61e5f4d594c0e2768189",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_finalize.py",
+      "lines": 2176,
+      "max": 2178,
+      "sha256": "3b9a5014d0e4947f99549be10cc12ff290e0fb1f4d9a5302943ff6b7d40ff14d",
+      "passed": true
+    }
+  ],
+  "new_files": [
+    {
+      "path": "src/backend/app/api/portfolio/asset_spec_adapter.py",
+      "lines": 456,
+      "sha256": "490f07abb46126bea6a06b18ae26117926afd92a1e8a7a783cbdd1a896aad894",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/api/portfolio/instance_resolution.py",
+      "lines": 368,
+      "sha256": "03ea8849ccd0ad7e9fa0be200d3e7262cfefd496db260dc54d0551da3823ce85",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_calculations.py",
+      "lines": 448,
+      "sha256": "ed72f70002daecef3a11f9670a90f6813ce0ac7ff552fb2ddd5334c0039004e0",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/api/portfolio/portfolio_common.py",
+      "lines": 186,
+      "sha256": "729f8fa90d75d4141b5e829e4cd0326973dbade3e19b086b4eb71dd0d0896630",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/api/portfolio/position_aggregation.py",
+      "lines": 464,
+      "sha256": "8b5cc073abf3f005fbaa0318c7025c3c5666b50c13228feb830f10360f1f1e01",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/config_parsing.py",
+      "lines": 50,
+      "sha256": "986b19811a9229531c915fe7e71de9e24699104707d6de92622c1fe80628a5f1",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/db/bootstrap_admin.py",
+      "lines": 19,
+      "sha256": "13d452d40f65cd329092c7c11aed029afd7b1341f07b5834cbbe8bad9ee16eb9",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/db/persistence_boundaries.py",
+      "lines": 62,
+      "sha256": "25a4f9bc128d1a63204334b1733ded5ee6d0ea58c31009beb44bf7c7c754fe63",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/db/schema_readiness.py",
+      "lines": 46,
+      "sha256": "1099e07b6d74194a856273d9f707cf1ea61c74ce8b5d2c388746fe8f77e2d701",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_binding.py",
+      "lines": 349,
+      "sha256": "153a89df5d2d907298299d5f477be6fe5311f457014c775071ef48b43b0b112f",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_lifecycle.py",
+      "lines": 456,
+      "sha256": "25ff2846825344a0834a2a22f8e3d54457b61c2d9367e9104e2b53b431e8bce9",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_task_projection.py",
+      "lines": 922,
+      "sha256": "5a157240e0c565868cce3d5855e1a4e4eec286bacafbb93fc5c27b0562dbfe5c",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/asset_research/task_leases.py",
+      "lines": 93,
+      "sha256": "05207847770d4dc18624dad4b7a04045dd7ce036a168ea4f44d04c934de2efac",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/persisted_fetch_boundary.py",
+      "lines": 96,
+      "sha256": "24e936c361d18d0a21b605fbbfe2a4d4cd5a97b126eb423d82cbb4226d44fc8a",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_calendar.py",
+      "lines": 882,
+      "sha256": "100e5df78bf79b209e24d7d4888bb023322f8545f8d4b221d8242eb04d7fd7a0",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_calendar_grid.py",
+      "lines": 154,
+      "sha256": "0613f0684dc7e9a6889d910ad0dd58db0329b5d6ef3f78a4839797518b59e342",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_evidence.py",
+      "lines": 909,
+      "sha256": "0daf16427baab58aa339d41f75e27fd8ecd78158d1edfdce77d7b8df9b06799e",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_evidence_receipts.py",
+      "lines": 761,
+      "sha256": "745e4387afbe7c1193f971ed6b61d76de7b5fa29dc9380ca155926e74c86e8c4",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_persistence.py",
+      "lines": 807,
+      "sha256": "c1082c487fe97fd4f73bb49a624ecdff1890fced02c72b9853c863058f776141",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_persistence_validation.py",
+      "lines": 281,
+      "sha256": "683c89b9f52d367113644041b164ab82e030af9f3e0667a8204a9424ef946fd2",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_data/store_projection.py",
+      "lines": 806,
+      "sha256": "264278aff441a88840cf1ef693edc2a2cebb038b4dc226d28178371fa9b9cb38",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_adapter.py",
+      "lines": 987,
+      "sha256": "be453f9d47496d9880f343db339052b58108d254d88668878e545aea04a6c06e",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_catalog.py",
+      "lines": 494,
+      "sha256": "320957a90acbaa3c1e7012bff8c2d4a19c19cb8dfbc75303d90ab4a8bd916560",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_dynamic_data.py",
+      "lines": 503,
+      "sha256": "2a5e18abe865310cc7e69781c8e0e8fba9c1977eb412fb6d9ac8e0882ef3979d",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_projection.py",
+      "lines": 399,
+      "sha256": "5c99d302bdef6657e0301a0229bd12ee607d57addf403f53f646183a356888d2",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_contract_specs.py",
+      "lines": 419,
+      "sha256": "f10f8af10dbd733bb872487c4011ada71151b18db95c4fa219dd7203d0bd12ae",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_position_normalization.py",
+      "lines": 480,
+      "sha256": "1a2c9f897a86ad2cb799efa26c2854d23bd3f9bc10b5359c814255c821ecc4a9",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_snapshot.py",
+      "lines": 368,
+      "sha256": "c800d72636fea86aa6061ddc6f3f2a3fbdd4cf6e97a79e86a4c862e245804d9e",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_startup.py",
+      "lines": 369,
+      "sha256": "d3d3c0bcc442c4ffb34a70083f277d850020bbc96f1e4a3fe1864c8316ab1ddd",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/valuation_numeric.py",
+      "lines": 362,
+      "sha256": "74eb25300c125b265b300c36e9713570bcb8fcafa79ecf3f7db466c44c012ee9",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/valuation_position.py",
+      "lines": 353,
+      "sha256": "d10dab185dfd0fe2925e77dbc6367fef0a3666f65169b08f7024e046ff2d3ad3",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/valuation_prices.py",
+      "lines": 741,
+      "sha256": "162d5778b0af12885482148f208e4258eb98f25fc959ceaa7defe36c2cafa5ea",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/valuation_projection.py",
+      "lines": 59,
+      "sha256": "7389ee035f92ee105a94263bc77018c5072b1897eeeeed4c2a3fe97e4f7738a1",
+      "passed": true
+    },
+    {
+      "path": "src/backend/app/services/valuation_types.py",
+      "lines": 41,
+      "sha256": "e71763164cfec97df5f32b1aeec098e57483711105002ad53caf170e62c3da83",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/components/workspace/optimization/optimizationObjective.ts",
+      "lines": 49,
+      "sha256": "fab0e1da346a346241fc2da05afb8ef8da124bf378fc94a36d1ca0a2490f7cd0",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/utils/newsArticleFormat.ts",
+      "lines": 6,
+      "sha256": "34073e64a7a49ababd1519866d91809ef97ad9f129ba69d53f2122d7d8620f2c",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchTaskTypes.ts",
+      "lines": 96,
+      "sha256": "d795ff5f9f4c0f5bcf700ec930b789e7cc302b5812c71daaf70b75c31751dc1b",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchValueAdapters.ts",
+      "lines": 64,
+      "sha256": "586d04a9e6c0e40f435768b6ba03bb94f244e480bba6cea536d824684ccb454b",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchMarketData.ts",
+      "lines": 813,
+      "sha256": "c3d4a6d393acb14614ac274d6fa67bfca707becb1d3087f7e2adcaf949db4589",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRunExecution.ts",
+      "lines": 311,
+      "sha256": "a895d13f0ffec29793e42489f931e093ed18f580474cc524af038c020cd3c5f3",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRunRecordAdapters.ts",
+      "lines": 709,
+      "sha256": "a2ee526b45c7c75b834013b289e8dc26b221d0539db33a05c847db08b46ac55a",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRuntimeOperations.ts",
+      "lines": 635,
+      "sha256": "b3d7ec0ef939bd460286c70b9e9eaeaa3bcca1fb830773e6c00987191f85b731",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRuntimeProjections.ts",
+      "lines": 552,
+      "sha256": "08dae69a13fa1465f603fa2956924ae6c19c232da1b7bbe03adea273460ae871",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchTaskLifecycle.ts",
+      "lines": 206,
+      "sha256": "ce2716b6412b6ec80c95df21c7c248e8a0c2ccf999daa210d462760bcd3b716c",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchTaskState.ts",
+      "lines": 393,
+      "sha256": "a14564e76aa64b5b33ea47901260834eea214714fbd01c87f668af0fd211f553",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPageDialogs.ts",
+      "lines": 169,
+      "sha256": "eb87a8cff4c462bcbc7436f95c17ac3da10f628eff0b1d147893a92910dd0788",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPageViewState.ts",
+      "lines": 93,
+      "sha256": "77c3b151a5f31a48ee200ea3525b96e74dec11f35c6190384e183a3f825d8137",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/workspace/useWorkspaceDetailResources.ts",
+      "lines": 34,
+      "sha256": "c621623d0789db6953b993b993cc99833d8dfa049de8cd6b95d1b144f7c7515d",
+      "passed": true
+    },
+    {
+      "path": "src/frontend/src/views/workspace/workspaceDetailFormatters.ts",
+      "lines": 23,
+      "sha256": "f78e08f788f24941ac929358a68f1635c4f05b3bafda64ca5f237602bb4971c6",
+      "passed": true
+    }
+  ],
+  "state": "PASS"
+}

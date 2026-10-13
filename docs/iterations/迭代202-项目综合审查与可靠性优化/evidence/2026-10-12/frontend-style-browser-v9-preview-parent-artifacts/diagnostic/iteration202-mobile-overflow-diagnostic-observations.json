@@ -1,0 +1,67 @@
+{
+  "runDate": "2026-10-12",
+  "runtime": "Node 20.20.2",
+  "browser": "Chromium 145.0.7632.6",
+  "playwright": "1.58.2",
+  "preview": "http://127.0.0.1:4187",
+  "viewportBeforeResize": { "width": 1280, "height": 720 },
+  "viewportAfterResize": { "width": 390, "height": 844 },
+  "screenshots": [
+    "/tmp/iter202-mobile-diag-login.png",
+    "/tmp/iter202-mobile-diag-workspace.png"
+  ],
+  "login": {
+    "afterThemeSelection": {
+      "documentScrollWidth": 1280,
+      "popperClass": "el-popper is-pure is-light el-tooltip el-dropdown__popper el-zoom-in-top-leave-active el-zoom-in-top-leave-to",
+      "popperRect": { "left": 1058, "right": 1256.59375, "width": 198.59375 },
+      "popperDisplay": "block"
+    },
+    "resizeSamples": [
+      { "index": 0, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 1, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 2, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 3, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 4, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 5, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 6, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 7, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 8, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 9, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1257, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 1058, "popperRight": 1256.59375 },
+      { "index": 10, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 390, "bodyScrollWidth": 390, "popperDisplay": "none", "popperLeft": 0, "popperRight": 0 },
+      { "index": 11, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 390, "bodyScrollWidth": 390, "popperDisplay": "none", "popperLeft": 0, "popperRight": 0 }
+    ],
+    "after450ms": { "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 390, "bodyScrollWidth": 390, "popperDisplay": "none" }
+  },
+  "workspace": {
+    "afterThemeSelection": {
+      "documentScrollWidth": 1280,
+      "popperClass": "el-popper is-pure is-light el-tooltip el-dropdown__popper el-zoom-in-top-leave-from el-zoom-in-top-leave-active",
+      "popperRect": { "left": 889, "right": 1087.59375, "width": 198.59375 },
+      "popperDisplay": "block"
+    },
+    "resizeSamples": [
+      { "index": 0, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 1, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 2, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 3, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 4, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 5, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 6, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 7, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 8, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 9, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 10, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 },
+      { "index": 11, "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 1088, "bodyScrollWidth": 390, "popperDisplay": "block", "popperLeft": 889, "popperRight": 1087.59375 }
+    ],
+    "after450ms": { "innerWidth": 390, "clientWidth": 390, "documentScrollWidth": 390, "bodyScrollWidth": 390, "popperDisplay": "none" }
+  },
+  "traceEvidence": {
+    "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/frontend-style-browser-v8-preview-parent-artifacts/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/trace.zip",
+    "setViewportTimeMs": 7208.258,
+    "scrollWidthEvaluateTimeMs": 7235.995,
+    "screenshotFrameTimeMs": 7236.67,
+    "screenshotFrameSize": { "width": 390, "height": 844 },
+    "rootCause": "The closing theme dropdown popper remains absolutely positioned at its desktop anchor during the leave transition. It extends documentElement.scrollWidth while body content remains 390px wide; after the popper is display:none, root scrollWidth is 390."
+  }
+}

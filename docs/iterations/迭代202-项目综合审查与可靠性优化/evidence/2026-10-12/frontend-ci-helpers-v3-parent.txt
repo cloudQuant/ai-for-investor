@@ -1,0 +1,116 @@
+TAP version 13
+# Subtest: check_bundle_size initial closure budgets
+    # Subtest: passes when vendor is included and initial assets fit every hard budget
+    ok 1 - passes when vendor is included and initial assets fit every hard budget
+      ---
+      duration_ms: 4306.639666
+      ...
+    # Subtest: fails the single-file budget for an oversized initial vendor chunk
+    ok 2 - fails the single-file budget for an oversized initial vendor chunk
+      ---
+      duration_ms: 7647.105916
+      ...
+    # Subtest: fails the aggregate route closure when individually safe JS chunks exceed 640 KiB together
+    ok 3 - fails the aggregate route closure when individually safe JS chunks exceed 640 KiB together
+      ---
+      duration_ms: 5472.162042
+      ...
+    # Subtest: preserves the existing direct entry gzip budget of 300 KB
+    ok 4 - preserves the existing direct entry gzip budget of 300 KB
+      ---
+      duration_ms: 8448.529041
+      ...
+    # Subtest: preserves the existing four initial JavaScript chunk limits
+    ok 5 - preserves the existing four initial JavaScript chunk limits
+      ---
+      duration_ms: 4164.675291
+      ...
+    1..5
+ok 1 - check_bundle_size initial closure budgets
+  ---
+  duration_ms: 30049.622875
+  type: 'suite'
+  ...
+# Subtest: frontend Node engine compatibility
+    # Subtest: covers the current runtime and every required locked dependency engine range
+    ok 1 - covers the current runtime and every required locked dependency engine range
+      ---
+      duration_ms: 700.367792
+      ...
+    # Subtest: rejects the previous broad Node range when locked dependencies need newer minors
+    ok 2 - rejects the previous broad Node range when locked dependencies need newer minors
+      ---
+      duration_ms: 8.481416
+      ...
+    # Subtest: rejects a runtime below the declared minimum
+    ok 3 - rejects a runtime below the declared minimum
+      ---
+      duration_ms: 9.527708
+      ...
+    # Subtest: rejects Node 25 because production does not support it
+    ok 4 - rejects Node 25 because production does not support it
+      ---
+      duration_ms: 139.474
+      ...
+    # Subtest: does not treat an optional native package as a universal runtime constraint
+    ok 5 - does not treat an optional native package as a universal runtime constraint
+      ---
+      duration_ms: 3.448209
+      ...
+    1..5
+ok 2 - frontend Node engine compatibility
+  ---
+  duration_ms: 871.907875
+  type: 'suite'
+  ...
+# Subtest: list_route_assets manifest handling
+    # Subtest: reports static first-load and dynamic delayed closures separately
+    ok 1 - reports static first-load and dynamic delayed closures separately
+      ---
+      duration_ms: 128.545583
+      ...
+    # Subtest: fails closed when the manifest is missing or malformed
+    ok 2 - fails closed when the manifest is missing or malformed
+      ---
+      duration_ms: 75.874959
+      ...
+    # Subtest: fails closed when the requested route cannot be resolved from the manifest
+    ok 3 - fails closed when the requested route cannot be resolved from the manifest
+      ---
+      duration_ms: 25.875125
+      ...
+    # Subtest: resolves an explicitly named Vite route chunk when manual chunking hides the source key
+    ok 4 - resolves an explicitly named Vite route chunk when manual chunking hides the source key
+      ---
+      duration_ms: 26.288333
+      ...
+    # Subtest: fails closed in the CLI when a manifest dependency points nowhere
+    ok 5 - fails closed in the CLI when a manifest dependency points nowhere
+      ---
+      duration_ms: 889.566792
+      ...
+    # Subtest: rejects an asset symlink that resolves outside the dist root
+    ok 6 - rejects an asset symlink that resolves outside the dist root
+      ---
+      duration_ms: 8.315
+      ...
+    # Subtest: uses the real dist root when the requested directory is a symlink
+    ok 7 - uses the real dist root when the requested directory is a symlink
+      ---
+      duration_ms: 7.551042
+      ...
+    1..7
+ok 3 - list_route_assets manifest handling
+  ---
+  duration_ms: 1248.418292
+  type: 'suite'
+  ...
+1..3
+# tests 17
+# suites 3
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 31064.647375

@@ -1,0 +1,25 @@
+Tailwind 4 browser regression result
+Date: 2026-10-12
+
+Command (Node 20.20.2, Playwright 1.58.2):
+  node_modules/.bin/playwright test --config e2e/tailwind4.config.ts
+Result: 6 passed, 0 failed, 0 skipped, 0 flaky; one worker; 133.98s.
+The final run had no pageerror, console-error, or failed-request diagnostics. It used the test-controlled UI and intercepted API requests; external origins were aborted.
+
+Browser engines/binaries:
+- Chromium 145.0.7632.6
+- Firefox 146.0.1
+- WebKit 26.0 (Playwright WebKit build)
+Each ran login and workspace cases. Coverage includes light/dark desktop, 390px mobile layouts, form interaction, default border/radius/shadow/ring, space-y/divide-y, Sass responsive classes, and hover shadow.
+
+Evidence:
+- Playwright JSON: /tmp/iteration202-tailwind4-compat/playwright-results.json
+- Traces: /tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-*/trace.zip
+- Screenshots: /tmp/iteration202-tailwind4-compat/screenshots/{chromium,firefox,webkit}-style-regression-*.png
+- V3/V4 offline CSS comparison: /tmp/iteration202-tailwind4-compat/css-diff-notes.txt
+- Key class declarations: /tmp/iteration202-tailwind4-compat/css-key-class-comparison.txt
+- V3 baseline output SHA-256 5fdc5538932fa997852d302e85b57f81624a9359e271e0de9d36ebda5d4048f9
+- V4 full-source offline output SHA-256 6689ad3cf95e261b045daadecfeeb4281a261b0b5717305125b01f014f655cd6
+- Sass mobile output matches V3 after removing only the sourceMappingURL trailer; normalized SHA-256 on both outputs is 5949873962d24e6c65aeddbe004a82d6e84a856e9137ee0b3627783bc7e109f6.
+
+Engine caveat: Playwright WebKit 26 returned black from getComputedStyle(input, '::placeholder') even for a standalone inline important gray rule. Therefore the WebKit case verifies the emitted placeholder rule through CSSOM; Chromium and Firefox also assert the resolved computed gray/opacity. A minimal standalone reproduction confirmed the WebKit CSSOM behavior. The project minimum support contract Safari 16.4 / Chrome 111 / Firefox 128 was not tested; current Playwright browser binaries do not establish those minimum-version results.

@@ -7,13 +7,11 @@ live trading manager/runtime while persisting state on workspace units.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import shutil
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import datetime
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -21,6 +19,10 @@ from typing import Any
 from app.models.workspace import StrategyUnit
 from app.schemas.trading import PositionManagerResponse, TradingDailySummaryResponse
 from app.schemas.workspace import UnitStatusResponse
+from app.services import trading_workspace_contract_specs as _contract_specs
+from app.services import trading_workspace_position_normalization as _position_normalization
+from app.services import trading_workspace_snapshot as _workspace_snapshot
+from app.services import trading_workspace_startup as _workspace_startup
 from app.services import workspace_unit_runtime
 from app.services.ai_research_provenance import (
     AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD,
@@ -39,7 +41,7 @@ from app.services.log_parser_service import (
     parse_log_dir,
     parse_position_log,
 )
-from app.services.position_valuation import EPSILON, contract_spec_for, value_position
+from app.services.position_valuation import EPSILON, PositionSpec, contract_spec_for, value_position
 from app.services.risk_gate_service import RiskGateService
 from app.services.trading_asset_info_service import (
     LONG_POSITION_FIELD_KEYS,
@@ -58,6 +60,88 @@ from app.services.workspace.units import (
 )
 
 logger = logging.getLogger(__name__)
+
+_ASSET_SPEC_CONTRACT_KEYS = _contract_specs._ASSET_SPEC_CONTRACT_KEYS
+_ASSET_SPEC_MARGIN_KEYS = _contract_specs._ASSET_SPEC_MARGIN_KEYS
+_ASSET_SPEC_FEE_KEYS = _contract_specs._ASSET_SPEC_FEE_KEYS
+_ASSET_SPEC_AUX_KEYS = _contract_specs._ASSET_SPEC_AUX_KEYS
+_json_safe_value = _contract_specs._json_safe_value
+_asset_spec_for_symbol = _contract_specs._asset_spec_for_symbol
+_metadata_from_config = _contract_specs._metadata_from_config
+_merge_asset_spec_aliases = _contract_specs._merge_asset_spec_aliases
+_combined_asset_spec_source = _contract_specs._combined_asset_spec_source
+_can_merge_asset_spec_value = _contract_specs._can_merge_asset_spec_value
+_is_asset_spec_core_key = _contract_specs._is_asset_spec_core_key
+_is_asset_spec_primary_source_key = _contract_specs._is_asset_spec_primary_source_key
+_asset_spec_has_any = _contract_specs._asset_spec_has_any
+_merge_asset_spec_update = _contract_specs._merge_asset_spec_update
+_append_symbol_candidate = _contract_specs._append_symbol_candidate
+_append_config_symbols = _contract_specs._append_config_symbols
+
+
+def _position_normalization_dependencies() -> (
+    _position_normalization.PositionNormalizationDependencies
+):
+    return _position_normalization.PositionNormalizationDependencies(
+        safe_float=_safe_float,
+        safe_iso_text=_safe_iso_text,
+        safe_int=_safe_int,
+        round_quantity=_round_quantity,
+        epsilon=EPSILON,
+        position_log_row_direction=TradingWorkspaceService._position_log_row_direction,
+        get_live_trading_manager=get_live_trading_manager,
+        normalize_gateway_position=normalize_gateway_position,
+        asset_spec_for_symbol=_asset_spec_for_symbol,
+        complete_asset_specs_from_local=_complete_asset_specs_from_local,
+        merge_unit_contract_metadata=_merge_unit_contract_metadata,
+        gateway_position_symbol=gateway_position_symbol,
+        signed_gateway_size=signed_gateway_size,
+        split_bidirectional_position_row=split_bidirectional_position_row,
+        safe_dict=_safe_dict,
+        is_server_owned_ai_research_unit=is_server_owned_ai_research_unit,
+    )
+
+
+def _snapshot_dependencies() -> _workspace_snapshot.SnapshotDependencies:
+    return _workspace_snapshot.SnapshotDependencies(
+        light_hydrate_preserve_keys=_LIGHT_HYDRATE_PRESERVE_KEYS,
+        safe_dict=_safe_dict,
+        safe_float=_safe_float,
+        safe_iso_text=_safe_iso_text,
+        instance_log_dir=_instance_log_dir,
+        parse_log_dir=parse_log_dir,
+        parse_position_log=parse_position_log,
+        parse_current_position=parse_current_position,
+        workspace_unit_dir=workspace_unit_runtime.unit_dir,
+        append_unique=_append_unique,
+        round_quantity=_round_quantity,
+        leverage_from_margin_rate=_leverage_from_margin_rate,
+        unique_text=_unique_text,
+        gateway_position_symbol=gateway_position_symbol,
+        split_bidirectional_position_row=split_bidirectional_position_row,
+        value_position=value_position,
+    )
+
+
+def _startup_dependencies() -> _workspace_startup.StartupDependencies:
+    return _workspace_startup.StartupDependencies(
+        get_live_trading_manager=get_live_trading_manager,
+        risk_gate_service_factory=RiskGateService,
+        logger=logger,
+        is_server_owned_ai_research_paper_runtime=is_server_owned_ai_research_paper_runtime,
+        is_server_owned_ai_research_live_handoff_unit=is_server_owned_ai_research_live_handoff_unit,
+        verify_ai_research_paper_runtime_anchor_for_unit=(
+            verify_ai_research_paper_runtime_anchor_for_unit
+        ),
+        issue_ai_research_paper_runtime_anchor=issue_ai_research_paper_runtime_anchor,
+        assert_ai_research_live_handoff_runtime_start_allowed=(
+            assert_ai_research_live_handoff_runtime_start_allowed
+        ),
+        paper_runtime_anchor_field=AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD,
+        sync_trading_unit_runtime=workspace_unit_runtime.sync_trading_unit_runtime,
+        clear_runtime_logs_before_start=_clear_runtime_logs_before_start,
+    )
+
 
 _LIGHT_HYDRATE_PRESERVE_KEYS = (
     "today_pnl",
@@ -114,102 +198,6 @@ _EXPLICIT_NET_PNL_FIELD_KEYS = (
     "positionPnlAfterFee",
 )
 _PNL_FIELD_KEYS = (*_EXPLICIT_NET_PNL_FIELD_KEYS, "position_pnl", "pnl")
-_ASSET_SPEC_CONTRACT_KEYS = frozenset(
-    {
-        "multiplier",
-        "mult",
-        "contract_size",
-        "trade_contract_size",
-        "contract_multiplier",
-        "ctVal",
-        "VolumeMultiple",
-        "CONTRACT_MULTIPLIER",
-    }
-)
-_ASSET_SPEC_MARGIN_KEYS = frozenset(
-    {
-        "margin",
-        "margin_rate",
-        "margin_ratio",
-        "leverage",
-        "margin_amount",
-        "initial_margin_per_lot",
-        "margin_initial",
-        "long_margin_rate",
-        "short_margin_rate",
-        "LongMarginRatio",
-        "ShortMarginRatio",
-        "LongMarginRatioByMoney",
-        "ShortMarginRatioByMoney",
-        "MARGIN_BUY",
-        "MARGIN_SELL",
-        "long_margin_amount",
-        "short_margin_amount",
-        "LongMarginRatioByVolume",
-        "ShortMarginRatioByVolume",
-        "MARGIN_PER_LOT",
-        "LONG_MARGIN_AMOUNT",
-        "SHORT_MARGIN_AMOUNT",
-    }
-)
-_ASSET_SPEC_FEE_KEYS = frozenset(
-    {
-        "commission",
-        "commission_rate",
-        "open_commission_rate",
-        "close_commission_rate",
-        "close_today_commission_rate",
-        "maker_commission_rate",
-        "taker_commission_rate",
-        "commission_amount",
-        "open_commission_amount",
-        "close_commission_amount",
-        "close_today_commission_amount",
-        "OpenRatioByMoney",
-        "CloseRatioByMoney",
-        "CloseTodayRatioByMoney",
-        "OpenRatioByVolume",
-        "CloseRatioByVolume",
-        "CloseTodayRatioByVolume",
-    }
-)
-_ASSET_SPEC_AUX_KEYS = frozenset(
-    {
-        "symbol",
-        "data_name",
-        "instrument",
-        "InstrumentID",
-        "exchange",
-        "exchange_id",
-        "asset_type",
-        "instType",
-        "contract_type",
-        "ctType",
-        "base_asset",
-        "baseCcy",
-        "quote_asset",
-        "quoteCcy",
-        "settle_currency",
-        "settleCcy",
-        "fee_currency",
-        "feeCcy",
-        "current_price",
-        "latest_price",
-        "last_price",
-        "mark_price",
-        "price_tick",
-        "tick_size",
-        "tickSz",
-        "min_order_size",
-        "min_qty",
-        "minSz",
-        "max_order_size",
-        "max_qty",
-        "maxLmtSz",
-        "order_size_step",
-        "lotSz",
-    }
-)
 _GROSS_PNL_FIELD_KEYS = (
     "gross_pnl",
     "position_unrealized_pnl",
@@ -328,18 +316,6 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     return result if isfinite(result) else default
 
 
-def _json_safe_value(value: Any) -> Any:
-    if isinstance(value, Decimal):
-        return float(value)
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    if isinstance(value, dict):
-        return {str(key): _json_safe_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe_value(item) for item in value]
-    return value
-
-
 def _safe_iso_text(value: Any) -> str | None:
     text = str(value or "").strip()
     return text or None
@@ -413,242 +389,22 @@ def _append_unique(target: list[str], *values: Any) -> None:
             seen.add(text)
 
 
-def _asset_spec_for_symbol(specs: dict[str, dict[str, Any]], symbol: str) -> dict[str, Any]:
-    for key in symbol_aliases(symbol):
-        item = specs.get(key)
-        if isinstance(item, dict):
-            return dict(item)
-    return {}
-
-
-def _metadata_from_config(config: dict[str, Any], symbol: str) -> dict[str, Any]:
-    for container_key in ("contract_metadata", "contracts", "contract_specs", "instrument_specs"):
-        container = config.get(container_key)
-        if not isinstance(container, dict):
-            continue
-        item = _asset_spec_for_symbol(
-            {str(key): value for key, value in container.items() if isinstance(value, dict)},
-            symbol,
-        )
-        if item:
-            return item
-    return {}
-
-
 def _merge_unit_contract_metadata(
     specs: dict[str, dict[str, Any]],
     unit: StrategyUnit,
     instance: Mapping[str, object] | None,
     symbols: list[str],
 ) -> dict[str, dict[str, Any]]:
-    completed = {str(key): dict(value) for key, value in specs.items() if isinstance(value, dict)}
-    instance_params = _safe_dict((instance or {}).get("params"))
-    configs = (
-        _safe_dict(getattr(unit, "params", None)),
-        _safe_dict(getattr(unit, "unit_settings", None)),
-        _safe_dict(getattr(unit, "data_config", None)),
-        _safe_dict(getattr(unit, "gateway_config", None)),
-        instance_params,
-        _safe_dict(instance_params.get("unit_settings")),
-        _safe_dict(instance_params.get("data_config")),
-        _safe_dict(instance_params.get("gateway")),
-        _safe_dict(instance_params.get("simulate")),
-        _safe_dict(instance_params.get("backtest")),
-        _safe_dict(instance_params.get("live")),
-    )
-    for symbol in symbols:
-        for config in configs:
-            metadata = _metadata_from_config(config, symbol)
-            if metadata:
-                _merge_asset_spec_aliases(completed, symbol, metadata)
-    return completed
-
-
-def _merge_asset_spec_aliases(
-    specs: dict[str, dict[str, Any]],
-    symbol: str,
-    spec: dict[str, Any],
-) -> None:
-    if not spec:
-        return
-    spec = _json_safe_value(spec)
-    existing = _asset_spec_for_symbol(specs, symbol)
-    merged = dict(existing)
-    core_contributed = False
-    primary_source_contributed = False
-    for key, value in spec.items():
-        if _can_merge_asset_spec_value(existing, key, value):
-            merged[key] = value
-            if _is_asset_spec_core_key(key):
-                core_contributed = True
-            if _is_asset_spec_primary_source_key(existing, key):
-                primary_source_contributed = True
-    existing_source = str(existing.get("source") or existing.get("asset_spec_source") or "").strip()
-    next_source = str(spec.get("source") or spec.get("asset_spec_source") or "").strip()
-    if existing_source and next_source and existing_source != next_source and core_contributed:
-        merged["source"] = _combined_asset_spec_source(existing_source, next_source)
-        merged["asset_spec_source"] = merged["source"]
-    elif next_source and not existing_source and primary_source_contributed:
-        merged["source"] = next_source
-        merged["asset_spec_source"] = next_source
-    for key in symbol_aliases(symbol):
-        specs[str(key)] = dict(merged)
-
-
-def _combined_asset_spec_source(*sources: str) -> str:
-    parts: list[str] = []
-    seen: set[str] = set()
-    for source in sources:
-        for part in str(source or "").split("+"):
-            text = part.strip()
-            if text and text not in seen:
-                parts.append(text)
-                seen.add(text)
-    return "+".join(parts)
-
-
-def _can_merge_asset_spec_value(existing: dict[str, Any], key: str, value: Any) -> bool:
-    if key in {"source", "asset_spec_source"} or value in (None, ""):
-        return False
-    if existing.get(key) not in (None, ""):
-        return False
-    if key in _ASSET_SPEC_CONTRACT_KEYS:
-        return not _asset_spec_has_any(existing, _ASSET_SPEC_CONTRACT_KEYS)
-    if key in _ASSET_SPEC_MARGIN_KEYS:
-        return not _asset_spec_has_any(existing, _ASSET_SPEC_MARGIN_KEYS)
-    if key in _ASSET_SPEC_FEE_KEYS:
-        return not _asset_spec_has_any(existing, _ASSET_SPEC_FEE_KEYS)
-    return key in _ASSET_SPEC_AUX_KEYS
-
-
-def _is_asset_spec_core_key(key: str) -> bool:
-    return (
-        key in _ASSET_SPEC_CONTRACT_KEYS
-        or key in _ASSET_SPEC_MARGIN_KEYS
-        or key in _ASSET_SPEC_FEE_KEYS
-    )
-
-
-def _is_asset_spec_primary_source_key(existing: dict[str, Any], key: str) -> bool:
-    if key in _ASSET_SPEC_CONTRACT_KEYS or key in _ASSET_SPEC_MARGIN_KEYS:
-        return True
-    if key in _ASSET_SPEC_FEE_KEYS:
-        return not (
-            _asset_spec_has_any(existing, _ASSET_SPEC_CONTRACT_KEYS)
-            or _asset_spec_has_any(existing, _ASSET_SPEC_MARGIN_KEYS)
-        )
-    return key in _ASSET_SPEC_AUX_KEYS and not existing
-
-
-def _asset_spec_has_any(spec: dict[str, Any], keys: frozenset[str]) -> bool:
-    return any(spec.get(key) not in (None, "") for key in keys)
-
-
-def _merge_asset_spec_update(
-    existing: dict[str, Any],
-    update: dict[str, Any],
-) -> dict[str, Any]:
-    update = _json_safe_value(update)
-    merged = dict(existing)
-    core_changed = False
-    primary_source_changed = False
-    for group in (
-        _ASSET_SPEC_CONTRACT_KEYS,
-        _ASSET_SPEC_MARGIN_KEYS,
-        _ASSET_SPEC_FEE_KEYS,
-    ):
-        group_items = {key: update.get(key) for key in group if update.get(key) not in (None, "")}
-        if not group_items:
-            continue
-        for key in group:
-            if key in merged:
-                merged.pop(key, None)
-                core_changed = True
-                if _is_asset_spec_primary_source_key(existing, key):
-                    primary_source_changed = True
-        for key, value in group_items.items():
-            if merged.get(key) != value:
-                merged[key] = value
-                core_changed = True
-                if _is_asset_spec_primary_source_key(existing, key):
-                    primary_source_changed = True
-    for key, value in update.items():
-        if key in {"source", "asset_spec_source"} or value in (None, ""):
-            continue
-        if (
-            key in _ASSET_SPEC_CONTRACT_KEYS
-            or key in _ASSET_SPEC_MARGIN_KEYS
-            or key in _ASSET_SPEC_FEE_KEYS
-        ):
-            continue
-        if key in _ASSET_SPEC_AUX_KEYS and merged.get(key) != value:
-            merged[key] = value
-
-    existing_source = str(existing.get("source") or existing.get("asset_spec_source") or "").strip()
-    next_source = str(update.get("source") or update.get("asset_spec_source") or "").strip()
-    if existing_source and next_source and existing_source != next_source and core_changed:
-        merged["source"] = _combined_asset_spec_source(existing_source, next_source)
-        merged["asset_spec_source"] = merged["source"]
-    elif next_source and not existing_source and primary_source_changed:
-        merged["source"] = next_source
-        merged["asset_spec_source"] = next_source
-    return merged
+    return _contract_specs._merge_unit_contract_metadata(specs, unit, instance, symbols)
 
 
 def _complete_asset_specs_from_local(
     specs: dict[str, dict[str, Any]],
     symbols: list[str],
 ) -> dict[str, dict[str, Any]]:
-    completed = {str(key): dict(value) for key, value in specs.items() if isinstance(value, dict)}
-    for symbol in symbols:
-        try:
-            local_spec = query_local_asset_spec(symbol)
-        except Exception:
-            local_spec = {}
-        if isinstance(local_spec, dict) and local_spec:
-            _merge_asset_spec_aliases(completed, symbol, local_spec)
-    return completed
-
-
-def _append_symbol_candidate(target: list[str], value: Any) -> None:
-    text = str(value or "").strip()
-    if text and text not in target:
-        target.append(text)
-
-
-def _append_config_symbols(target: list[str], config: dict[str, Any]) -> None:
-    for key in (
-        "symbol",
-        "data_name",
-        "instrument",
-        "InstrumentID",
-        "trade_symbol",
-        "contract_symbol",
-        "localSymbol",
-        "local_symbol",
-        "contractDesc",
-        "contract_desc",
-        "description",
-        "ticker",
-    ):
-        _append_symbol_candidate(target, config.get(key))
-    for key in ("symbols", "symbol_list", "instruments"):
-        values = config.get(key)
-        if isinstance(values, (list, tuple, set)):
-            for value in values:
-                _append_symbol_candidate(target, value)
-    for section_key in ("data_config", "data", "live", "gateway", "params"):
-        section = config.get(section_key)
-        if isinstance(section, dict):
-            _append_config_symbols(target, section)
-    for container_key in ("contract_metadata", "contracts", "contract_specs", "instrument_specs"):
-        container = config.get(container_key)
-        if not isinstance(container, dict):
-            continue
-        for key, item in container.items():
-            _append_symbol_candidate(target, key)
-            if isinstance(item, dict):
-                _append_config_symbols(target, item)
+    return _contract_specs.complete_asset_specs_from_local(
+        specs, symbols, query_local_asset_spec=query_local_asset_spec
+    )
 
 
 def _clear_runtime_logs_before_start(runtime_dir: Path) -> None:
@@ -764,12 +520,7 @@ class TradingWorkspaceService:
 
     @staticmethod
     def _normalize_trade_direction(value: Any, size: float) -> str:
-        text = str(value or "").strip().lower()
-        if text in {"buy", "long", "多", "多头"}:
-            return "long"
-        if text in {"sell", "short", "空", "空头"}:
-            return "short"
-        return "long" if size >= 0 else "short"
+        return _position_normalization.normalize_trade_direction(value, size)
 
     @classmethod
     def _normalize_trade_rows(
@@ -778,205 +529,41 @@ class TradingWorkspaceService:
         *,
         unit: StrategyUnit,
     ) -> list[dict[str, Any]]:
-        symbol = str(unit.symbol or unit.symbol_name or unit.strategy_name or "")
-        trades: list[dict[str, Any]] = []
-
-        for index, payload in enumerate(raw_trades):
-            if not isinstance(payload, dict):
-                continue
-
-            raw_size = _safe_float(payload.get("size"), 0.0)
-            size = abs(raw_size)
-            pnl = _safe_float(payload.get("pnl"), 0.0)
-            pnlcomm = _safe_float(payload.get("pnlcomm"), pnl)
-            price = _safe_float(payload.get("price"), 0.0)
-            value = _safe_float(payload.get("value"), 0.0)
-            commission = _safe_float(payload.get("commission"), 0.0)
-            row_id = str(payload.get("id") or payload.get("ref") or index + 1)
-
-            trades.append(
-                {
-                    "id": row_id,
-                    "datetime": _safe_iso_text(payload.get("datetime")),
-                    "dtopen": _safe_iso_text(payload.get("dtopen") or payload.get("open_time")),
-                    "dtclose": _safe_iso_text(
-                        payload.get("dtclose")
-                        or payload.get("close_time")
-                        or payload.get("datetime")
-                    ),
-                    "data_name": str(payload.get("data_name") or payload.get("symbol") or symbol),
-                    "direction": cls._normalize_trade_direction(payload.get("direction"), raw_size),
-                    "size": _round_quantity(size),
-                    "price": round(price, 4) if price else None,
-                    "value": round(value, 2) if value else None,
-                    "commission": round(commission, 4),
-                    "pnl": round(pnl, 2),
-                    "pnlcomm": round(pnlcomm, 2),
-                    "barlen": (
-                        _safe_int(payload.get("barlen"))
-                        if payload.get("barlen") is not None
-                        else None
-                    ),
-                }
-            )
-
-        return trades[-200:]
+        return _position_normalization.normalize_trade_rows(
+            cls, raw_trades, unit=unit, dependencies=_position_normalization_dependencies()
+        )
 
     @staticmethod
     def _position_log_row_direction(row: dict[str, Any], size: float) -> str:
-        for key in (
-            "direction",
-            "side",
-            "position_side",
-            "positionSide",
-            "PositionSide",
-            "positionIdx",
-            "position_idx",
-            "posSide",
-            "trade_action",
-            "position_type",
-            "type",
-            "PosiDirection",
-            "posi_direction",
-            "position_direction",
-        ):
-            value = row.get(key)
-            if value in (None, ""):
-                continue
-            text = str(value).strip().lower()
-            if text in {"long", "buy", "bought", "position_type_buy", "deal_type_buy"}:
-                return "long"
-            if text in {"short", "sell", "sold", "position_type_sell", "deal_type_sell"}:
-                return "short"
-            if text == "flat":
-                return "flat"
-            numeric_code = _safe_float(value, float("nan"))
-            code = int(numeric_code) if isfinite(numeric_code) else None
-            key_text = key.lower()
-            if key_text in {"trade_action", "position_type", "type"}:
-                if code == 0:
-                    return "long"
-                if code == 1:
-                    return "short"
-            if key_text in {"posidirection", "posi_direction", "position_direction"}:
-                if code == 2:
-                    return "long"
-                if code == 3:
-                    return "short"
-            if key_text in {"positionidx", "position_idx"}:
-                if code == 1:
-                    return "long"
-                if code == 2:
-                    return "short"
-        if abs(size) <= EPSILON:
-            return "flat"
-        return "short" if size < 0 else "long"
+        return _position_normalization.position_log_row_direction(
+            row, size, dependencies=_position_normalization_dependencies()
+        )
 
     @staticmethod
     def _latest_position_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        latest_by_key: dict[str, tuple[int, str, str, dict[str, Any]]] = {}
-        latest_flat_by_key: dict[str, tuple[int, str, str, dict[str, Any]]] = {}
-        latest_flat_by_symbol: dict[str, tuple[int, str, dict[str, Any]]] = {}
-        for index, row in enumerate(rows):
-            symbol = str(row.get("data_name") or row.get("symbol") or "").strip()
-            if not symbol:
-                continue
-            size = _safe_float(row.get("size"), 0.0)
-            direction = TradingWorkspaceService._position_log_row_direction(row, size)
-            timestamp = str(row.get("datetime") or row.get("dt") or "")
-            if abs(size) <= EPSILON:
-                if direction in {"long", "short"}:
-                    key = f"{symbol}:{direction}"
-                    current_flat_by_key = latest_flat_by_key.get(key)
-                    if current_flat_by_key is None or (timestamp, index) >= (
-                        current_flat_by_key[1],
-                        current_flat_by_key[0],
-                    ):
-                        latest_flat_by_key[key] = (index, timestamp, symbol, row)
-                    continue
-                current_flat_by_symbol = latest_flat_by_symbol.get(symbol)
-                if current_flat_by_symbol is None or (timestamp, index) >= (
-                    current_flat_by_symbol[1],
-                    current_flat_by_symbol[0],
-                ):
-                    latest_flat_by_symbol[symbol] = (index, timestamp, row)
-                continue
-            key = f"{symbol}:{direction}"
-            current_position_by_key = latest_by_key.get(key)
-            if current_position_by_key is None or (timestamp, index) >= (
-                current_position_by_key[1],
-                current_position_by_key[0],
-            ):
-                latest_by_key[key] = (index, timestamp, symbol, row)
-
-        latest_nonflat_by_symbol: dict[str, tuple[int, str]] = {}
-        for index, timestamp, symbol, _row in latest_by_key.values():
-            current_nonflat_by_symbol = latest_nonflat_by_symbol.get(symbol)
-            if current_nonflat_by_symbol is None or (timestamp, index) >= (
-                current_nonflat_by_symbol[1],
-                current_nonflat_by_symbol[0],
-            ):
-                latest_nonflat_by_symbol[symbol] = (index, timestamp)
-
-        selected: list[tuple[int, dict[str, Any]]] = []
-        for index, timestamp, symbol, row in latest_by_key.values():
-            direction = TradingWorkspaceService._position_log_row_direction(
-                row, _safe_float(row.get("size"), 0.0)
-            )
-            key = f"{symbol}:{direction}"
-            flat = latest_flat_by_symbol.get(symbol)
-            if flat is not None and (flat[1], flat[0]) >= (timestamp, index):
-                continue
-            directional_flat = latest_flat_by_key.get(key)
-            if directional_flat is not None and (directional_flat[1], directional_flat[0]) >= (
-                timestamp,
-                index,
-            ):
-                continue
-            selected.append((index, row))
-        for symbol, (index, timestamp, row) in latest_flat_by_symbol.items():
-            latest_nonflat_for_symbol = latest_nonflat_by_symbol.get(symbol)
-            if latest_nonflat_for_symbol is None or (timestamp, index) >= (
-                latest_nonflat_for_symbol[1],
-                latest_nonflat_for_symbol[0],
-            ):
-                selected.append((index, row))
-        for key, (index, timestamp, _symbol, row) in latest_flat_by_key.items():
-            latest_nonflat_for_key = latest_by_key.get(key)
-            if latest_nonflat_for_key is None or (timestamp, index) >= (
-                latest_nonflat_for_key[1],
-                latest_nonflat_for_key[0],
-            ):
-                selected.append((index, row))
-        return [row for _index, row in sorted(selected, key=lambda item: item[0])]
+        return _position_normalization.latest_position_rows(
+            rows, dependencies=_position_normalization_dependencies()
+        )
 
     @staticmethod
     def _position_updated_at(row: dict[str, Any]) -> str | None:
-        return _safe_iso_text(
-            row.get("updated_at") or row.get("log_time") or row.get("datetime") or row.get("dt")
+        return _position_normalization.position_updated_at(
+            row, dependencies=_position_normalization_dependencies()
         )
 
     @staticmethod
     def _position_data_time(row: dict[str, Any]) -> str | None:
-        return _safe_iso_text(row.get("data_time") or row.get("datetime") or row.get("dt"))
+        return _position_normalization.position_data_time(
+            row, dependencies=_position_normalization_dependencies()
+        )
 
     @classmethod
     def _latest_position_updated_at(cls, rows: list[dict[str, Any]]) -> str | None:
-        latest: str | None = None
-        for row in rows:
-            timestamp = cls._position_updated_at(row)
-            if timestamp and (latest is None or timestamp > latest):
-                latest = timestamp
-        return latest
+        return _position_normalization.latest_position_updated_at(cls, rows)
 
     @classmethod
     def _latest_position_data_time(cls, rows: list[dict[str, Any]]) -> str | None:
-        latest: str | None = None
-        for row in rows:
-            timestamp = cls._position_data_time(row)
-            if timestamp and (latest is None or timestamp > latest):
-                latest = timestamp
-        return latest
+        return _position_normalization.latest_position_data_time(cls, rows)
 
     @classmethod
     def _contract_spec(
@@ -985,34 +572,16 @@ class TradingWorkspaceService:
         symbol: str,
         instance: Mapping[str, object] | None = None,
         *extra_configs: dict[str, Any],
-    ):
-        instance_params = _safe_dict((instance or {}).get("params"))
-        configs = (
+    ) -> PositionSpec:
+        return _contract_specs.resolve_contract_spec(
+            cls,
+            unit,
+            symbol,
+            instance,
             *extra_configs,
-            _safe_dict(getattr(unit, "unit_settings", None)),
-            _safe_dict(getattr(unit, "params", None)),
-            _safe_dict(getattr(unit, "data_config", None)),
-            _safe_dict(getattr(unit, "gateway_config", None)),
-            instance_params,
-            _safe_dict(instance_params.get("unit_settings")),
-            _safe_dict(instance_params.get("data_config")),
-            _safe_dict(instance_params.get("gateway")),
-            _safe_dict(instance_params.get("simulate")),
-            _safe_dict(instance_params.get("backtest")),
-            _safe_dict(instance_params.get("live")),
+            contract_spec_for=contract_spec_for,
+            query_local_asset_spec=query_local_asset_spec,
         )
-        spec = contract_spec_for(symbol, *configs)
-        if cls._position_spec_has_asset_metadata(spec):
-            return spec
-        if not any(cls._config_can_use_local_asset_spec(config) for config in configs):
-            return spec
-        try:
-            local_spec = query_local_asset_spec(symbol)
-        except Exception:
-            local_spec = {}
-        if isinstance(local_spec, dict) and local_spec:
-            return contract_spec_for(symbol, local_spec, *configs)
-        return spec
 
     @staticmethod
     def _position_spec_has_asset_metadata(spec: Any) -> bool:
@@ -1476,103 +1045,9 @@ class TradingWorkspaceService:
         unit: StrategyUnit,
         instance: Mapping[str, object] | None,
     ) -> list[dict[str, Any]] | None:
-        instance_id = str((instance or {}).get("id") or unit.trading_instance_id or "").strip()
-        if not instance_id:
-            return None
-
-        try:
-            manager = get_live_trading_manager()
-        except Exception:
-            return None
-
-        has_gateway = getattr(manager, "has_instance_gateway", None)
-        if callable(has_gateway):
-            try:
-                if not has_gateway(instance_id):
-                    return None
-            except Exception:
-                return None
-
-        query_positions = getattr(manager, "query_instance_gateway_positions", None)
-        if not callable(query_positions):
-            return None
-        try:
-            raw_positions = query_positions(instance_id)
-        except Exception:
-            return None
-        if not isinstance(raw_positions, list):
-            return None
-
-        fallback_symbol = str(unit.symbol or unit.symbol_name or unit.strategy_name or "")
-        allowed_aliases = cls._unit_position_symbol_aliases(unit, instance)
-        matched_positions: list[dict[str, Any]] = []
-        symbols: list[str] = []
-        seen: set[str] = set()
-        for item in raw_positions:
-            if not isinstance(item, dict):
-                continue
-            row_symbol = gateway_position_symbol(item)
-            if allowed_aliases and not cls._position_symbol_matches(row_symbol, allowed_aliases):
-                continue
-            matched_positions.append(item)
-            symbol = row_symbol or fallback_symbol
-            if symbol and symbol not in seen:
-                symbols.append(symbol)
-                seen.add(symbol)
-        if fallback_symbol and fallback_symbol not in seen:
-            symbols.append(fallback_symbol)
-
-        asset_specs: dict[str, dict[str, Any]] = {}
-        query_specs = getattr(manager, "query_instance_asset_specs", None)
-        if callable(query_specs) and symbols and not is_server_owned_ai_research_unit(unit):
-            try:
-                raw_specs = query_specs(instance_id, symbols)
-            except Exception:
-                raw_specs = {}
-            if isinstance(raw_specs, dict):
-                asset_specs = {
-                    str(key): dict(value)
-                    for key, value in raw_specs.items()
-                    if isinstance(value, dict)
-                }
-        asset_specs = _merge_unit_contract_metadata(asset_specs, unit, instance, symbols)
-        asset_specs = _complete_asset_specs_from_local(asset_specs, symbols)
-        if asset_specs:
-            cls._sync_unit_contract_metadata_from_specs(unit, asset_specs)
-
-        recent_trades: list[dict[str, Any]] = []
-        query_trades = getattr(manager, "query_instance_gateway_trades", None)
-        if callable(query_trades) and symbols:
-            for symbol in symbols:
-                try:
-                    raw_trades = query_trades(instance_id, symbol=symbol, limit=500)
-                except TypeError:
-                    raw_trades = query_trades(instance_id)
-                except Exception:
-                    raw_trades = []
-                if isinstance(raw_trades, list):
-                    for item in raw_trades:
-                        if not isinstance(item, dict):
-                            continue
-                        trade = dict(item)
-                        trade.setdefault("__query_symbol", symbol)
-                        recent_trades.append(trade)
-
-        rows: list[dict[str, Any]] = []
-        for item in matched_positions:
-            for side_item in split_bidirectional_position_row(item):
-                if abs(signed_gateway_size(side_item)) <= EPSILON:
-                    continue
-                symbol = gateway_position_symbol(side_item, fallback_symbol)
-                rows.append(
-                    normalize_gateway_position(
-                        side_item,
-                        fallback_symbol=fallback_symbol,
-                        asset_spec=_asset_spec_for_symbol(asset_specs, symbol),
-                        recent_trades=recent_trades,
-                    )
-                )
-        return rows
+        return _position_normalization.gateway_position_rows(
+            cls, unit, instance, dependencies=_position_normalization_dependencies()
+        )
 
     @classmethod
     def _apply_position_rows_to_snapshot(
@@ -1582,129 +1057,14 @@ class TradingWorkspaceService:
         instance: Mapping[str, object] | None,
         positions: list[dict[str, Any]],
     ) -> float | None:
-        long_position = 0.0
-        short_position = 0.0
-        long_market_value = 0.0
-        short_market_value = 0.0
-        position_pnl = 0.0
-        detail_positions: list[dict[str, Any]] = []
-        latest_price: float | None = None
-        latest_position_updated_at: str | None = None
-        position_sources: list[str] = []
-        asset_spec_sources: list[str] = []
-        valuation_warnings = list(snapshot.get("valuation_warnings") or [])
-        fallback_position_source = str(snapshot.get("position_source") or "").strip() or None
-
-        fallback_symbol = str(unit.symbol or unit.symbol_name or unit.strategy_name or "")
-
-        for raw_item in positions:
-            for item in split_bidirectional_position_row(_safe_dict(raw_item)):
-                data_name = gateway_position_symbol(item, fallback_symbol)
-                spec = cls._contract_spec(
-                    unit,
-                    data_name,
-                    instance,
-                    cls._asset_spec_config_for_row(_safe_dict(item)),
-                )
-                position_source = cls._position_source_for_row(item, fallback_position_source)
-                if (
-                    str(fallback_position_source or "").strip().lower() in {"log", "snapshot"}
-                    and position_source.lower() == "gateway"
-                ):
-                    item = dict(item)
-                    item["force_recalculate_position_pnl"] = True
-                    position_source = str(fallback_position_source)
-                valuation_item = cls._position_row_for_valuation(
-                    _safe_dict(item),
-                    spec,
-                    position_source=position_source,
-                )
-                valued = value_position(valuation_item, spec=spec)
-                if valued is None:
-                    continue
-                asset_spec_source = cls._asset_spec_source_for_row(item, spec)
-                row_warnings = cls._position_valuation_warnings(
-                    unit,
-                    valuation_item,
-                    spec,
-                    position_source=position_source,
-                )
-                if valuation_item.get("recalculated_position_pnl"):
-                    row_warnings.append(
-                        "本地/快照持仓盈亏已按最新资产乘数、保证金和手续费设置重新计算"
-                    )
-                _append_unique(valuation_warnings, row_warnings)
-                position_sources.append(position_source)
-                if asset_spec_source:
-                    asset_spec_sources.append(asset_spec_source)
-
-                if valued.size > 0:
-                    long_position += abs(valued.size)
-                    long_market_value += valued.market_value
-                else:
-                    short_position += abs(valued.size)
-                    short_market_value += valued.market_value
-
-                position_pnl += valued.pnl
-                latest_price = valued.current_price
-                position_updated_at = cls._position_updated_at(item)
-                position_data_time = cls._position_data_time(item)
-                if position_updated_at and (
-                    latest_position_updated_at is None
-                    or position_updated_at > latest_position_updated_at
-                ):
-                    latest_position_updated_at = position_updated_at
-                detail_positions.append(
-                    {
-                        "data_name": valued.data_name or data_name,
-                        "direction": valued.direction,
-                        "size": _round_quantity(abs(valued.size)),
-                        "price": round(valued.entry_price, 4) if valued.entry_price else None,
-                        "current_price": round(valued.current_price, 4)
-                        if valued.current_price
-                        else None,
-                        "market_value": round(valued.market_value, 2),
-                        "margin_value": round(valued.margin_value, 2),
-                        "multiplier": round(valued.multiplier, 8),
-                        "margin_rate": round(valued.margin_rate, 8),
-                        "leverage": _leverage_from_margin_rate(valued.margin_rate),
-                        "commission": round(valued.commission, 4),
-                        "commission_source": valuation_item.get("commission_source")
-                        or item.get("commission_source"),
-                        "commission_signed": True,
-                        "gross_pnl": round(valued.gross_pnl, 2),
-                        "pnl": round(valued.pnl, 2),
-                        "pnlcomm": round(valued.pnl, 2),
-                        "position_pnl": round(valued.pnl, 2),
-                        "updated_at": position_updated_at,
-                        "data_time": position_data_time,
-                        "source": position_source,
-                        "position_source": position_source,
-                        "asset_spec_source": asset_spec_source,
-                        "valuation_status": "estimated" if row_warnings else "confirmed",
-                        "valuation_warnings": row_warnings,
-                    }
-                )
-        snapshot["positions"] = detail_positions
-        if not position_sources and fallback_position_source:
-            position_sources.append(fallback_position_source)
-        snapshot["position_source"] = _unique_text(position_sources)
-        snapshot["asset_spec_source"] = _unique_text(asset_spec_sources)
-        snapshot["valuation_warnings"] = valuation_warnings
-        if valuation_warnings:
-            snapshot["valuation_status"] = "estimated"
-        elif snapshot.get("position_source") == "gateway":
-            snapshot["valuation_status"] = "confirmed"
-        else:
-            snapshot["valuation_status"] = "empty" if not detail_positions else "estimated"
-        if latest_position_updated_at:
-            snapshot["updated_at"] = latest_position_updated_at
-        snapshot["long_position"] = _round_quantity(long_position)
-        snapshot["short_position"] = _round_quantity(short_position)
-        snapshot["long_market_value"] = round(long_market_value, 2)
-        snapshot["short_market_value"] = round(short_market_value, 2)
-        snapshot["position_pnl"] = round(position_pnl, 2)
-        return latest_price
+        return _workspace_snapshot.apply_position_rows_to_snapshot(
+            cls,
+            snapshot,
+            unit,
+            instance,
+            positions,
+            dependencies=_snapshot_dependencies(),
+        )
 
     @classmethod
     def _build_instance_params(cls, unit: StrategyUnit) -> dict[str, Any]:
@@ -1786,152 +1146,14 @@ class TradingWorkspaceService:
         full_log: bool = True,
         include_gateway_positions: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any], int | None, float | None]:
-        instance_status = str((instance or {}).get("status") or "stopped").strip().lower()
-        error = str((instance or {}).get("error") or "").strip() or None
-        snapshot = cls.default_snapshot(
-            unit=unit,
-            instance_status="error" if error else (instance_status or "idle"),
-            error=error,
+        return _workspace_snapshot.build_snapshot(
+            cls,
+            unit,
+            instance,
+            full_log=full_log,
+            include_gateway_positions=include_gateway_positions,
+            dependencies=_snapshot_dependencies(),
         )
-        if not full_log:
-            current_snapshot = _safe_dict(getattr(unit, "trading_snapshot", None))
-            for key in _LIGHT_HYDRATE_PRESERVE_KEYS:
-                if key in current_snapshot:
-                    snapshot[key] = current_snapshot[key]
-        snapshot["instance_id"] = (instance or {}).get("id") or unit.trading_instance_id
-        snapshot["started_at"] = _safe_iso_text((instance or {}).get("started_at"))
-        snapshot["stopped_at"] = _safe_iso_text((instance or {}).get("stopped_at"))
-
-        metrics_snapshot: dict[str, Any] = {}
-        bar_count: int | None = None
-        elapsed_seconds: float | None = None
-        latest_price: float | None = None
-
-        log_result: dict[str, Any] | None = None
-        position_rows: list[dict[str, Any]] = []
-        position_rows_source = "none"
-        log_dir = _instance_log_dir(instance)
-        if log_dir is None:
-            # The live-trading manager is process-local and is empty after an
-            # API-server restart. Workspace runtimes persist their logs under
-            # the unit directory, so use that durable source for historical
-            # position and trade recovery.
-            workspace_id = str(getattr(unit, "workspace_id", "") or "").strip()
-            unit_id = str(getattr(unit, "id", "") or "").strip()
-            if workspace_id and unit_id:
-                persisted_log_dir = workspace_unit_runtime.unit_dir(workspace_id, unit_id) / "logs"
-                if persisted_log_dir.is_dir():
-                    log_dir = persisted_log_dir
-        if log_dir and log_dir.is_dir():
-            log_result = parse_log_dir(log_dir) if full_log else None
-            position_rows = cls._latest_position_rows(parse_position_log(log_dir))
-            if position_rows:
-                position_rows_source = "log"
-            if not position_rows:
-                position_rows = parse_current_position(log_dir)
-                if position_rows:
-                    position_rows_source = "snapshot"
-
-        # Paper workspaces must display their own simulated state.  Their shared
-        # market-data gateway is not an account for each strategy unit, and a
-        # gateway request per unit makes the portfolio/risk page unresponsive.
-        # Explicitly configured live units retain the broker-confirmed path.
-        is_explicit_paper = str(getattr(unit, "trading_mode", "")).strip().lower() == "paper"
-        gateway_position_rows = (
-            None
-            if is_explicit_paper or not include_gateway_positions
-            else cls._gateway_position_rows(unit, instance)
-        )
-        if gateway_position_rows is not None:
-            position_rows = gateway_position_rows
-            position_rows_source = "gateway"
-        elif (
-            cls.normalize_trading_mode(getattr(unit, "trading_mode", None)) == "live"
-            and instance_status == "running"
-        ):
-            snapshot["valuation_status"] = "stale_fallback"
-            _append_unique(
-                snapshot["valuation_warnings"],
-                "运行中的实盘单元未能从交易所网关确认当前持仓，当前盈亏可能来自过期日志/快照",
-            )
-
-        if position_rows or gateway_position_rows is not None:
-            snapshot["position_source"] = position_rows_source
-            latest_price = cls._apply_position_rows_to_snapshot(
-                snapshot,
-                unit,
-                instance,
-                position_rows,
-            )
-
-        if log_result:
-            snapshot["trades"] = cls._normalize_trade_rows(
-                list(log_result.get("trades") or []),
-                unit=unit,
-            )
-
-            kline = log_result.get("kline") or {}
-            dates = list(kline.get("dates") or [])
-            ohlc = list(kline.get("ohlc") or [])
-            if dates:
-                snapshot["trading_day"] = str(dates[-1])[:10]
-                bar_count = len(dates)
-            if len(ohlc) >= 1:
-                last_close = _safe_float((ohlc[-1] or [None, None])[1], default=0.0)
-                if last_close > 0:
-                    snapshot["latest_price"] = round(last_close, 4)
-                if len(ohlc) >= 2:
-                    prev_close = _safe_float((ohlc[-2] or [None, None])[1], default=0.0)
-                    if prev_close > 0 and last_close > 0:
-                        snapshot["change_pct"] = round(
-                            (last_close - prev_close) / prev_close * 100, 2
-                        )
-
-            equity_curve = list(log_result.get("equity_curve") or [])
-            initial_cash = _safe_float(log_result.get("initial_cash"), 0.0)
-            final_value = _safe_float(log_result.get("final_value"), 0.0)
-            if len(equity_curve) >= 2:
-                snapshot["today_pnl"] = round(equity_curve[-1] - equity_curve[-2], 2)
-            snapshot["cumulative_pnl"] = round(final_value - initial_cash, 2)
-            snapshot["max_drawdown_rate"] = round(_safe_float(log_result.get("max_drawdown")), 2)
-            total_market_value = _safe_float(snapshot.get("long_market_value")) + _safe_float(
-                snapshot.get("short_market_value")
-            )
-            if final_value > 0 and total_market_value > 0:
-                snapshot["leverage"] = round(total_market_value / final_value, 4)
-            if snapshot.get("latest_price") is None and latest_price is not None:
-                snapshot["latest_price"] = round(latest_price, 4)
-
-            metrics_snapshot = {
-                "total_return": log_result.get("total_return"),
-                "annual_return": log_result.get("annual_return"),
-                "sharpe_ratio": log_result.get("sharpe_ratio"),
-                "max_drawdown": log_result.get("max_drawdown"),
-                "win_rate": log_result.get("win_rate"),
-                "total_trades": log_result.get("total_trades"),
-                "profitable_trades": log_result.get("profitable_trades"),
-                "losing_trades": log_result.get("losing_trades"),
-                "initial_cash": initial_cash,
-                "final_value": final_value,
-                "net_value": round(final_value / initial_cash, 6) if initial_cash > 0 else None,
-                "net_profit": round(final_value - initial_cash, 2),
-                "max_leverage": snapshot.get("leverage"),
-                "trading_days": len(equity_curve),
-            }
-
-        if snapshot.get("latest_price") is None and latest_price is not None:
-            snapshot["latest_price"] = round(latest_price, 4)
-
-        started_at = snapshot.get("started_at")
-        if started_at and snapshot.get("instance_status") == "running":
-            try:
-                started_dt = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                elapsed_seconds = None
-            else:
-                elapsed_seconds = round((datetime.now() - started_dt).total_seconds(), 2)
-
-        return snapshot, metrics_snapshot, bar_count, elapsed_seconds
 
     async def hydrate_units(
         self,
@@ -2138,287 +1360,17 @@ class TradingWorkspaceService:
         allow_server_owned_ai_research_live_handoff_start: bool = False,
         live_handoff_pre_start_validator: Callable[[], Awaitable[None]] | None = None,
     ) -> list[dict[str, Any]]:
-        manager = get_live_trading_manager()
-        risk_gate_service = RiskGateService()
-        results: list[dict[str, Any]] = []
-        normalized_workspace_settings = dict(workspace_settings or {})
-        gateway_failures: dict[str, str] = {}
-
-        for unit in units:
-            gateway_startup_key = self._gateway_startup_key(unit)
-            try:
-                if unit.lock_running:
-                    raise ValueError("该策略单元已锁定运行")
-                if unit.lock_trading:
-                    raise ValueError("该策略单元已锁定交易")
-                if not str(unit.strategy_id or "").strip():
-                    raise ValueError("策略单元缺少策略模板")
-                server_attested_paper_runtime = is_server_owned_ai_research_paper_runtime(unit)
-                server_attested_live_handoff = is_server_owned_ai_research_live_handoff_unit(unit)
-                server_attested_paper_runtime_digest: str | None = None
-                live_handoff_activation_token: str | None = None
-                paper_runtime_anchor: dict[str, Any] | None = None
-                # This is a pure, local preflight.  Run it before consuming a
-                # server-only live-handoff capability or touching a manager so
-                # an objectively unsafe unit is stopped at the first boundary.
-                # Provenance/activation checks below still run before any
-                # materialization or runtime side effect.
-                risk_gate_service.assert_trading_unit_pre_run(
-                    unit,
-                    workspace_settings=normalized_workspace_settings,
-                )
-                if server_attested_paper_runtime:
-                    unit_settings = (
-                        dict(unit.unit_settings or {})
-                        if isinstance(unit.unit_settings, dict)
-                        else {}
-                    )
-                    raw_paper_runtime_anchor = unit_settings.get(
-                        AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD
-                    )
-                    if isinstance(raw_paper_runtime_anchor, dict):
-                        paper_runtime_anchor = raw_paper_runtime_anchor
-                    if not verify_ai_research_paper_runtime_anchor_for_unit(
-                        paper_runtime_anchor,
-                        user_id=user_id,
-                        paper_workspace_id=str(unit.workspace_id),
-                        paper_unit_id=str(unit.id),
-                        unit=unit,
-                        workspace_settings=normalized_workspace_settings,
-                        require_runtime_snapshot=False,
-                    ):
-                        raise ValueError("AI_RESEARCH_PAPER_RUNTIME_PROVENANCE_INVALID")
-                if server_attested_live_handoff:
-                    if not allow_server_owned_ai_research_live_handoff_start:
-                        raise ValueError("AI_RESEARCH_LIVE_HANDOFF_SERVER_ACTIVATION_REQUIRED")
-                    await assert_ai_research_live_handoff_runtime_start_allowed(unit, user_id)
-                    live_handoff_activation_token = (
-                        manager.new_live_handoff_runtime_activation_token()
-                    )
-
-                instance = None
-                self._refresh_unit_asset_specs_from_local(unit, None)
-                runtime_dir = await asyncio.to_thread(
-                    workspace_unit_runtime.sync_trading_unit_runtime,
-                    unit,
-                    normalized_workspace_settings,
-                )
-                if server_attested_paper_runtime:
-                    # The pre-sync check authorizes only the original expected
-                    # template/config. A strategy or workspace mutation can
-                    # race the public preflight before this directory copy, so
-                    # re-check the old signed expected digest after sync and
-                    # compare it to the actual isolated files before granting
-                    # the one-start manager capability.
-                    if not verify_ai_research_paper_runtime_anchor_for_unit(
-                        paper_runtime_anchor,
-                        user_id=user_id,
-                        paper_workspace_id=str(unit.workspace_id),
-                        paper_unit_id=str(unit.id),
-                        unit=unit,
-                        workspace_settings=normalized_workspace_settings,
-                        require_runtime_snapshot=False,
-                    ):
-                        raise ValueError("AI_RESEARCH_PAPER_RUNTIME_PROVENANCE_INVALID")
-                    assert isinstance(paper_runtime_anchor, dict)
-                    expected_runtime_digest = paper_runtime_anchor.get("runtime_digest")
-                    refreshed_anchor = issue_ai_research_paper_runtime_anchor(
-                        user_id=user_id,
-                        research_workspace_id=str(
-                            paper_runtime_anchor.get("research_workspace_id") or ""
-                        ),
-                        paper_workspace_id=str(unit.workspace_id),
-                        paper_unit_id=str(unit.id),
-                        run_id=str(paper_runtime_anchor.get("run_id") or ""),
-                        unit=unit,
-                        workspace_settings=normalized_workspace_settings,
-                        include_runtime_snapshot=True,
-                        runtime_digest_override=(
-                            expected_runtime_digest
-                            if isinstance(expected_runtime_digest, str)
-                            else None
-                        ),
-                    )
-                    if (
-                        refreshed_anchor is None
-                        or refreshed_anchor.get("runtime_snapshot_digest")
-                        != expected_runtime_digest
-                    ):
-                        raise ValueError("AI_RESEARCH_PAPER_RUNTIME_MATERIALIZATION_MISMATCH")
-                    unit.unit_settings = {
-                        **unit_settings,
-                        AI_RESEARCH_PAPER_RUNTIME_ANCHOR_FIELD: refreshed_anchor,
-                    }
-                    server_attested_paper_runtime_digest = str(
-                        refreshed_anchor["runtime_snapshot_digest"]
-                    )
-                if unit.trading_instance_id:
-                    # Instance-store access may scan runtime directories and
-                    # strategy templates.  During a batch launch that work is
-                    # repeated for every unit, so keep it off the ASGI event
-                    # loop just like the generated runtime files above.
-                    instance = await asyncio.to_thread(
-                        manager.get_instance,
-                        unit.trading_instance_id,
-                        user_id=user_id,
-                    )
-                    if instance is not None:
-                        existing_runtime_dir = str(instance.get("runtime_dir") or "").strip()
-                        if existing_runtime_dir != str(runtime_dir):
-                            await asyncio.to_thread(
-                                manager.remove_instance,
-                                unit.trading_instance_id,
-                                user_id=user_id,
-                            )
-                            unit.trading_instance_id = None
-                            instance = None
-                if instance is None:
-                    # Keep the long-standing ordinary manager contract intact.
-                    # The owner/capability kwargs are required only where the
-                    # AI-research provenance boundary actually consumes them.
-                    add_instance_kwargs: dict[str, Any] = {
-                        # ``add_instance`` has always been owner-scoped; keep
-                        # that existing contract for ordinary workspace starts.
-                        "user_id": user_id,
-                        "runtime_dir": str(runtime_dir),
-                    }
-                    if server_attested_paper_runtime and server_attested_paper_runtime_digest:
-                        add_instance_kwargs["server_attested_paper_runtime_digest"] = (
-                            server_attested_paper_runtime_digest
-                        )
-                    # Keep the new server-only live-handoff capability opt-in
-                    # for manager implementations.  Paper and ordinary
-                    # workspace starts must retain compatibility with the
-                    # existing manager contract; a real activation always
-                    # supplies a non-empty one-shot token below.
-                    if live_handoff_activation_token:
-                        add_instance_kwargs["server_attested_live_handoff_activation_token"] = (
-                            live_handoff_activation_token
-                        )
-                    created = await asyncio.to_thread(
-                        manager.add_instance,
-                        str(unit.strategy_id),
-                        self._build_instance_params(unit),
-                        **add_instance_kwargs,
-                    )
-                    unit.trading_instance_id = str(created.get("id") or "")
-                    attest_managed_runtime = getattr(
-                        manager,
-                        "attest_managed_workspace_runtime_start",
-                        None,
-                    )
-                    if callable(attest_managed_runtime) and not server_attested_live_handoff:
-                        attest_managed_runtime(unit.trading_instance_id)
-                    instance = await asyncio.to_thread(
-                        manager.get_instance,
-                        unit.trading_instance_id,
-                        user_id=user_id,
-                    )
-
-                already_running = False
-                started: Mapping[str, object]
-                if instance is not None and str(instance.get("status") or "").lower() == "running":
-                    started = instance
-                    already_running = True
-                else:
-                    known_gateway_failure = (
-                        gateway_failures.get(gateway_startup_key)
-                        if gateway_startup_key is not None
-                        else None
-                    )
-                    if known_gateway_failure:
-                        raise ValueError(
-                            "同一网关配置已启动失败，跳过重复连接: " + known_gateway_failure
-                        )
-                    await asyncio.to_thread(_clear_runtime_logs_before_start, runtime_dir)
-                    if server_attested_paper_runtime:
-                        assert server_attested_paper_runtime_digest is not None
-                        manager.attest_paper_runtime_start(
-                            str(unit.trading_instance_id),
-                            server_attested_paper_runtime_digest,
-                        )
-                    if server_attested_live_handoff:
-                        assert live_handoff_activation_token is not None
-                        if live_handoff_pre_start_validator is None:
-                            raise ValueError("AI_RESEARCH_LIVE_HANDOFF_SERVER_ACTIVATION_REQUIRED")
-                        # Run this after isolated runtime materialization and
-                        # immediately before the manager launch boundary.  It
-                        # lets the research service re-observe the paper
-                        # runtime's signed launch/metrics receipt after all
-                        # slow file and gateway work, closing the final
-                        # approval-to-spawn interval.
-                        await live_handoff_pre_start_validator()
-                        manager.attest_live_handoff_runtime_start(
-                            str(unit.trading_instance_id),
-                            live_handoff_activation_token,
-                        )
-                    try:
-                        start_instance_kwargs: dict[str, Any] = {}
-                        if server_attested_paper_runtime or server_attested_live_handoff:
-                            start_instance_kwargs["user_id"] = user_id
-                        if live_handoff_activation_token:
-                            start_instance_kwargs[
-                                "server_attested_live_handoff_activation_token"
-                            ] = live_handoff_activation_token
-                        started = await manager.start_instance(
-                            str(unit.trading_instance_id),
-                            **start_instance_kwargs,
-                        )
-                    except ValueError as exc:
-                        if str(exc) != "Strategy is already running":
-                            raise
-                        refreshed = await asyncio.to_thread(
-                            manager.get_instance, str(unit.trading_instance_id), user_id=user_id
-                        )
-                        if not refreshed or str(refreshed.get("status") or "").lower() != "running":
-                            raise
-                        started = refreshed
-                        already_running = True
-
-                self._sync_unit_contract_metadata_from_instance(unit, started)
-                if self.normalize_trading_mode(unit.trading_mode) == "live":
-                    self._refresh_unit_asset_specs_from_manager(manager, unit, started)
-                unit.run_status = "running"
-                if not already_running:
-                    unit.run_count = int(unit.run_count or 0) + 1
-                snapshot, metrics_snapshot, bar_count, elapsed_seconds = self._build_snapshot(
-                    unit, started, full_log=False
-                )
-                unit.trading_snapshot = snapshot
-                if metrics_snapshot:
-                    unit.metrics_snapshot = metrics_snapshot
-                if bar_count is not None:
-                    unit.bar_count = bar_count
-                if elapsed_seconds is not None:
-                    unit.last_run_time = elapsed_seconds
-                results.append(
-                    {
-                        "unit_id": unit.id,
-                        "task_id": unit.trading_instance_id,
-                        "status": "running",
-                        "already_running": already_running,
-                    }
-                )
-            except Exception as exc:
-                logger.exception("Trading unit %s start failed", unit.id)
-                if gateway_startup_key and self._is_gateway_startup_failure(exc):
-                    gateway_failures[gateway_startup_key] = str(exc)
-                unit.run_status = "failed"
-                unit.trading_snapshot = self.default_snapshot(
-                    unit=unit,
-                    instance_status="error",
-                    error=str(exc),
-                )
-                results.append(
-                    {
-                        "unit_id": unit.id,
-                        "task_id": None,
-                        "status": "failed",
-                        "error": str(exc),
-                    }
-                )
-
-        return results
+        return await _workspace_startup.start_units(
+            self,
+            units,
+            user_id,
+            workspace_settings,
+            allow_server_owned_ai_research_live_handoff_start=(
+                allow_server_owned_ai_research_live_handoff_start
+            ),
+            live_handoff_pre_start_validator=live_handoff_pre_start_validator,
+            dependencies=_startup_dependencies(),
+        )
 
     async def stop_units(
         self,
@@ -2567,11 +1519,9 @@ class TradingWorkspaceService:
 
     @staticmethod
     def _position_row_direction(row: dict[str, Any]) -> str:
-        direction = str(row.get("direction") or row.get("side") or "").strip().lower()
-        if direction in {"short", "sell", "sold"}:
-            return "short"
-        raw_size = _safe_float(row.get("size"))
-        return "short" if raw_size < 0 else "long"
+        return _position_normalization.position_row_direction(
+            row, dependencies=_position_normalization_dependencies()
+        )
 
     @staticmethod
     def _first_row_number(row: dict[str, Any], *keys: str) -> float | None:
@@ -2584,15 +1534,9 @@ class TradingWorkspaceService:
 
     @classmethod
     def _position_row_open_size(cls, row: dict[str, Any]) -> float:
-        size_value = row.get("size")
-        size = abs(_safe_float(size_value))
-        if size > EPSILON:
-            return size
-        if size_value not in (None, ""):
-            return 0.0
-        long_position = cls._first_row_number(row, *LONG_POSITION_FIELD_KEYS)
-        short_position = cls._first_row_number(row, *SHORT_POSITION_FIELD_KEYS)
-        return max(long_position or 0.0, 0.0) + max(short_position or 0.0, 0.0)
+        return _position_normalization.position_row_open_size(
+            cls, row, dependencies=_position_normalization_dependencies()
+        )
 
     @classmethod
     def _position_row_needs_response_valuation(cls, row: dict[str, Any]) -> bool:
@@ -2798,13 +1742,14 @@ class TradingWorkspaceService:
                 row_pnl_values: list[float] = []
                 for row in active_position_rows:
                     size = abs(_safe_float(row.get("size")))
-                    long_size = self._first_row_number(row, *LONG_POSITION_FIELD_KEYS)
-                    short_size = self._first_row_number(row, *SHORT_POSITION_FIELD_KEYS)
-                    if size <= EPSILON and (
-                        (long_size or 0.0) > EPSILON or (short_size or 0.0) > EPSILON
-                    ):
-                        row_long = max(long_size or 0.0, 0.0)
-                        row_short = max(short_size or 0.0, 0.0)
+                    directional_sizes = _position_normalization.position_row_directional_sizes(
+                        row,
+                        size,
+                        first_row_number=self._first_row_number,
+                        dependencies=_position_normalization_dependencies(),
+                    )
+                    if directional_sizes is not None:
+                        row_long, row_short = directional_sizes
                         derived_long_position += row_long
                         derived_short_position += row_short
                         row_market_value = self._first_row_number(row, "market_value")

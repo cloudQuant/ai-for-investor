@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.8, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 27 items
+
+tests/test_iteration202_auth_boundaries.py ............                  [ 44%]
+tests/test_auth.py ...............                                       [100%]
+
+=============================== warnings summary ===============================
+tests/test_iteration202_auth_boundaries.py:10
+  /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/test_iteration202_auth_boundaries.py:10: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient
+
+test_auth.py::TestRegister::test_register_short_password
+test_auth.py::TestRegister::test_register_invalid_email
+test_auth.py::TestChangePassword::test_change_password_short_new
+  /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/app/middleware/exception_handling.py:315: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await handle_request_validation_error(request, exc)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 27 passed, 4 warnings in 368.31s (0:06:08) ==================

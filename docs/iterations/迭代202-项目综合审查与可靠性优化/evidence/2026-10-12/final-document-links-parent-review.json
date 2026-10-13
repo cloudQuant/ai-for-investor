@@ -1,0 +1,81 @@
+{
+  "checked_at": "2026-10-12T15:38:20.598057+00:00",
+  "files": 18,
+  "links": 198,
+  "missing": [],
+  "state": "PASS",
+  "documents": [
+    {
+      "path": "docs/iterations/README.md",
+      "sha256": "be6880648d7c738f56851f5b42161a83e8e2ed4283b92a2f80f34ce55a08e0f7"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/ACCEPTANCE.md",
+      "sha256": "53464c0139aa159cc6d5a6f99eab549ea111d0e3f67b326612496a065664d99c"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/DESIGN.md",
+      "sha256": "5c9231caff18cea6fee55a0f7d3c0a50f4c44a9f71301123426428c5018a2a53"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/IMPLEMENTATION_PLAN.md",
+      "sha256": "27e6b3bda24ba6225500a36c56ff2937ed18801c249fdd8cf15fd55744d32fee"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/QUALITY_DEBT_REGISTER.md",
+      "sha256": "fde65167f170d8e6d9eab69a0908c6d1905ad0735f505d5ef08354e410ef48c1"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/README.md",
+      "sha256": "2201fd678ee588ec4dc54b67eba66f3232d787de259f04d33bedecd05dc7413d"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/REQUIREMENTS.md",
+      "sha256": "dc737d8ec41d4af3af9fefdce7777b188c80059bf0751f1c792d536b4a9ca7b3"
+    },
+    {
+      "path": "docs/iterations/迭代200-代码质量门禁修复与可复现开发环境/SOURCE_SIZE_DISPOSITION.md",
+      "sha256": "3ac17cfdeaf795022746476394b18708d4c319f351d4e67a75b84808c52ea03e"
+    },
+    {
+      "path": "docs/iterations/迭代201-核心编排器职责拆分/ACCEPTANCE.md",
+      "sha256": "1339c7a0631d5e9f22602a9ba69319b9fbeb06260ba98a5def3c063d623c4e78"
+    },
+    {
+      "path": "docs/iterations/迭代201-核心编排器职责拆分/IMPLEMENTATION_PLAN.md",
+      "sha256": "f3322daa1f7f55100b1088e4cb6f1c4928d55e61aeb2eb3ab6305b267fa9a6b7"
+    },
+    {
+      "path": "docs/iterations/迭代201-核心编排器职责拆分/README.md",
+      "sha256": "7a239da9f6451e230835d71288c117b9a0f886a38457d962e036e00466a428fb"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/ACCEPTANCE.md",
+      "sha256": "2f2793557353592e0d742dc6cfebe2cb01a626ff42a0dcf8d5010bc94638262d"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/AUDIT.md",
+      "sha256": "ddbd4fd4382bfa85718e64d0de615a244d829ae8b4087d7f9a01ab7b6718c310"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/DEPLOYMENT_RUNBOOK.md",
+      "sha256": "4e02e1d2f7d8add1d36b988358371a13e388da515f6b894d12640497a30572cf"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/EXECUTION_STATUS.md",
+      "sha256": "dcdf78bae6f8501af1c6bcf82fafa6a7f45abb1c66c387345f4bb0a5f12a4a96"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/FINAL_ACCEPTANCE.md",
+      "sha256": "986d71d3e75cb652bd962c8c98a26f629e708a42dd6bb3f3d7be5abc904e77ff"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/IMPLEMENTATION_PLAN.md",
+      "sha256": "a74f9f5391f8f7ac569d991b1213f42e5aa03aea9ed54f54676589a877b29a51"
+    },
+    {
+      "path": "docs/iterations/迭代202-项目综合审查与可靠性优化/README.md",
+      "sha256": "ea9db2919e9429b2669e46b75c70575a5a05418395cb15a2d9be3bbaaa0f792e"
+    }
+  ]
+}

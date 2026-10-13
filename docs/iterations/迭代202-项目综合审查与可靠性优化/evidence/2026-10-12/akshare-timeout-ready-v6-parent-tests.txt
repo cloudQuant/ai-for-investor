@@ -1,0 +1,46 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 32 items
+
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_provider_exposes_no_in_process_source_or_receipt_seam PASSED [  3%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_runner_endpoint_allowlist_matches_static_provider_contracts PASSED [  6%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_runner_cleanup_preserves_cancelled_error_policy[False] PASSED [  9%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_runner_cleanup_preserves_cancelled_error_policy[True] PASSED [ 12%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_process_receipt_reuses_parent_normalization PASSED [ 15%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_isolated_akshare_runner_accepts_only_preparsed_execution PASSED [ 18%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_isolated_akshare_runner_echoes_verified_envelope_on_source_error PASSED [ 21%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_unconfigured_akshare_runner_fails_closed_before_spawn PASSED [ 25%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_query_provider_factory_uses_the_fail_closed_runner_configuration PASSED [ 28%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_environment_never_forwards_application_secrets PASSED [ 31%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_invalid_akshare_runner_command_fails_closed_before_spawn PASSED [ 34%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_missing_process_group_capability_fails_closed_before_spawn PASSED [ 37%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_route_rejection_happens_before_runner_spawn PASSED [ 40%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_bounds_every_output_pipe[stdout] PASSED [ 43%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_bounds_every_output_pipe[stderr] PASSED [ 46%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["protocol_version"] = "other"-AKSHARE_RUNNER_PROTOCOL_MISMATCH] PASSED [ 50%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["request"]["provider_symbol"] = "SUBSTITUTED"-AKSHARE_RUNNER_PROTOCOL_MISMATCH] PASSED [ 53%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["execution"]["endpoint"] = "forex_hist_em"-AKSHARE_RUNNER_PROTOCOL_MISMATCH] PASSED [ 56%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["source_revision"] = "akshare-substituted:stock_zh_a_hist"-AKSHARE_RUNNER_SOURCE_REVISION_MISMATCH] PASSED [ 59%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["response_rows"] = {"not": "a-list"}-AKSHARE_RUNNER_INVALID_RESPONSE] PASSED [ 62%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["unexpected"] = "unreviewed"-AKSHARE_RUNNER_INVALID_RESPONSE] PASSED [ 65%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_rejects_protocol_echo_and_result_tampering[result["response_rows"][0]["\u80a1\u7968\u4ee3\u7801"] = "000002"-AKSHARE_IDENTITY_MISMATCH] PASSED [ 68%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_authenticates_an_error_receipt_before_propagating_it PASSED [ 71%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_isolated_runner_rejects_an_independent_akshare_revision_mismatch PASSED [ 75%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_runner_cleanup_orders_group_kill_before_direct_child_reap PASSED [ 78%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_success_reaps_descendants_before_return PASSED [ 81%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_permission_denied_cleanup_fails_closed_after_confirmation PASSED [ 84%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_timeout_kills_and_reaps_descendants_before_return PASSED [ 87%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_cancellation_kills_and_reaps_descendants_before_propagation PASSED [ 90%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_double_cancellation_waits_for_kill_reap_and_drain PASSED [ 93%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_command_shape_rejects_extra_flags_and_relative_paths PASSED [ 96%]
+tests/market_data_platform/test_akshare_runner_provider.py::test_akshare_runner_protocol_constant_is_versioned PASSED [100%]
+
+--------- generated xml file: /tmp/akshare-timeout-ready-v6-parent.xml ---------
+======================== 32 passed in 263.36s (0:04:23) ========================

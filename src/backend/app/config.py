@@ -2,7 +2,6 @@
 Configuration management - Load configuration from environment variables.
 """
 
-import json
 import os
 import re
 from pathlib import Path
@@ -12,6 +11,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.ai_provider_registry import get_default_provider_registry
+from app.config_parsing import parse_ai_providers, parse_strategy_score_weights
 from app.services.market_data.openbb_runtime import SUPPORTED_OPENBB_RUNNER_PROVIDERS
 
 _DEFAULT_SECRETS = frozenset(
@@ -170,6 +170,15 @@ class Settings(BaseSettings):
             "fail-closed by default and additionally requires a durable capability ledger "
             "attestation, an active provider registry row, and a source authorization grant; "
             "this flag only removes THS routes from the assembled policy."
+        ),
+    )
+    MARKET_DATA_OPENDATA_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "叠加 kill-switch for the opendata (self-hosted data platform) provider route. "
+            "opendata routing is fail-closed by default and additionally requires a durable "
+            "capability ledger attestation, an active provider registry row, and a source "
+            "authorization grant; this flag only removes the route from the assembled policy."
         ),
     )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
@@ -1249,22 +1258,7 @@ class Settings(BaseSettings):
     @field_validator("AI_PROVIDERS", mode="before")
     @classmethod
     def validate_ai_providers(cls, v: object) -> dict[str, dict[str, Any]]:
-        if isinstance(v, dict):
-            return {str(key): dict(value) for key, value in v.items() if isinstance(value, dict)}
-        if isinstance(v, str):
-            text = v.strip()
-            if not text:
-                raise ValueError("AI_PROVIDERS cannot be empty")
-            try:
-                data = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise ValueError("AI_PROVIDERS must be valid JSON") from exc
-            if not isinstance(data, dict):
-                raise ValueError("AI_PROVIDERS must decode to an object")
-            return {str(key): dict(value) for key, value in data.items() if isinstance(value, dict)}
-        if v is None:
-            raise ValueError("AI_PROVIDERS cannot be null")
-        raise ValueError("AI_PROVIDERS must be a dict or JSON string")
+        return parse_ai_providers(v)
 
     @field_validator("JWT_EXPIRE_MINUTES")
     @classmethod
@@ -1298,22 +1292,7 @@ class Settings(BaseSettings):
     @classmethod
     def validate_strategy_score_weights(cls, v: object) -> dict[str, float]:
         """Validate strategy score weights from dict or JSON string."""
-        if isinstance(v, dict):
-            return {str(key): float(value) for key, value in v.items()}
-        if isinstance(v, str):
-            text = v.strip()
-            if not text:
-                raise ValueError("STRATEGY_SCORE_WEIGHTS cannot be empty")
-            try:
-                data = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise ValueError("STRATEGY_SCORE_WEIGHTS must be valid JSON") from exc
-            if not isinstance(data, dict):
-                raise ValueError("STRATEGY_SCORE_WEIGHTS must decode to an object")
-            return {str(key): float(value) for key, value in data.items()}
-        if v is None:
-            raise ValueError("STRATEGY_SCORE_WEIGHTS cannot be null")
-        raise ValueError("STRATEGY_SCORE_WEIGHTS must be a dict or JSON string")
+        return parse_strategy_score_weights(v)
 
 
 # Use simple cache to avoid lru_cache issues in pydantic-settings v2

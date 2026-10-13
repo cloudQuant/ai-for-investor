@@ -1,0 +1,16 @@
+[
+  {
+    "database": "MYSQL",
+    "exit_code": 0,
+    "elapsed_seconds": 262.56,
+    "case": "tests/asset_research/test_task_runner_supported_db.py::test_supported_db_task_leases_do_not_expire_while_waiting_for_capacity",
+    "log": "/tmp/ai-investor-iter200-202-20261012.afLb99/mysql-lease-v2-parent.txt"
+  },
+  {
+    "database": "POSTGRES",
+    "exit_code": 0,
+    "elapsed_seconds": 170.14,
+    "case": "tests/asset_research/test_task_runner_supported_db.py::test_supported_db_task_leases_do_not_expire_while_waiting_for_capacity",
+    "log": "/tmp/ai-investor-iter200-202-20261012.afLb99/postgres-lease-v2-parent.txt"
+  }
+]

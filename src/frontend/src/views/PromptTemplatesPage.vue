@@ -261,7 +261,7 @@
                 {{ formatDateTime(row.created_at) }}
               </template>
             </el-table-column>
-            <el-table-column
+            <!-- @vue-generic {PromptTemplate} --><el-table-column
               :label="t('common.action')"
               fixed="right"
               width="190"

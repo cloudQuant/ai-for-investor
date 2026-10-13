@@ -18,28 +18,46 @@
       </el-form-item>
 
       <el-row :gutter="20">
-        <el-col :span="12">
-          <el-form-item :label="t('workspaceDialogs.optTarget')">
+        <el-col :span="8">
+          <el-form-item :label="t('optimization.objectiveLabel')">
             <el-select
               v-model="form.objective"
               style="width: 100%"
+              @change="form.direction = defaultOptimizationDirection(form.objective)"
             >
               <el-option
-                :label="t('workspaceDialogs.optGoalMaxSharpe')"
-                value="sharpe_max"
+                :label="t('optimization.sharpe')"
+                value="sharpe_ratio"
               />
               <el-option
-                :label="t('workspaceDialogs.optGoalMaxReturn')"
-                value="max_return"
+                :label="t('optimization.totalReturn')"
+                value="total_return"
               />
               <el-option
-                :label="t('workspaceDialogs.optGoalMinDrawdown')"
-                value="min_drawdown"
+                :label="t('optimization.maxDrawdown')"
+                value="max_drawdown"
               />
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+        <el-col :span="8">
+          <el-form-item :label="t('optimization.directionLabel')">
+            <el-select
+              v-model="form.direction"
+              style="width: 100%"
+            >
+              <el-option
+                :label="t('optimization.maximize')"
+                value="maximize"
+              />
+              <el-option
+                :label="t('optimization.minimize')"
+                value="minimize"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
           <el-form-item :label="t('workspaceDialogs.optGoalDisplay')">
             <el-input-number
               v-model="form.max_display"
@@ -229,6 +247,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { workspaceApi } from '@/api/workspace'
 import { getErrorMessage } from '@/api/index'
 import type { StrategyUnit } from '@/types/workspace'
+import { defaultOptimizationDirection, resolveOptimizationTarget } from './optimization/optimizationObjective'
 
 const { t } = useI18n()
 
@@ -258,7 +277,8 @@ const saving = ref(false)
 const submitting = ref(false)
 
 const form = ref({
-  objective: 'sharpe_max',
+  objective: 'sharpe_ratio' as 'sharpe_ratio' | 'total_return' | 'max_drawdown',
+  direction: 'maximize' as 'maximize' | 'minimize',
   max_display: 5000,
   initial_cash_wan: 100,
   calculation_method: 'geometric' as 'geometric' | 'arithmetic',
@@ -268,7 +288,11 @@ const form = ref({
 function initForm() {
   if (!props.unit) return
   const oc = props.unit.optimization_config || {}
-  form.value.objective = (oc.objective as string) || 'sharpe_max'
+  form.value.objective = 'sharpe_ratio'
+  form.value.direction = 'maximize'
+  const target = resolveOptimizationTarget(oc.objective, oc.direction)
+  form.value.objective = target.objective
+  form.value.direction = target.direction
   form.value.max_display = (oc.max_display as number) || 5000
   form.value.initial_cash_wan = (oc.initial_cash_wan as number) || 100
   form.value.calculation_method = ((oc.calculation_method as string) || 'geometric') as 'geometric' | 'arithmetic'
@@ -353,6 +377,7 @@ async function handleSave() {
       optimization_config: {
         ...existingOc,
         objective: form.value.objective,
+        direction: form.value.direction,
         max_display: form.value.max_display,
         initial_cash_wan: form.value.initial_cash_wan,
         calculation_method: form.value.calculation_method,
@@ -405,6 +430,7 @@ async function handleSubmitOptimization() {
       optimization_config: {
         ...existingOc,
         objective: form.value.objective,
+        direction: form.value.direction,
         max_display: form.value.max_display,
         initial_cash_wan: form.value.initial_cash_wan,
         calculation_method: form.value.calculation_method,
@@ -425,6 +451,8 @@ async function handleSubmitOptimization() {
     const result = await workspaceApi.submitOptimization(props.workspaceId, {
       unit_id: unitId,
       param_ranges: paramRanges,
+      objective: form.value.objective,
+      direction: form.value.direction,
       n_workers: nWorkers,
       mode,
       timeout,

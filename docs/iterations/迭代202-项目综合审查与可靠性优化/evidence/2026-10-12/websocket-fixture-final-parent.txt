@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.8, pytest-9.0.3, pluggy-1.6.0 -- /Users/yunjinqi/opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 6 items
+
+tests/test_main_lifespan_and_websocket.py::test_lifespan_runs_startup_and_shutdown PASSED [ 16%]
+tests/test_main_lifespan_and_websocket.py::test_main_websocket_ping_pong_and_disconnect SKIPPED [ 33%]
+tests/test_main_lifespan_and_websocket.py::test_main_websocket_rejects_query_token_fallback PASSED [ 50%]
+tests/test_main_lifespan_and_websocket.py::test_data_topics_websocket_streams_single_topic_update PASSED [ 66%]
+tests/test_main_lifespan_and_websocket.py::test_data_topics_websocket_pattern_route_receives_matching_update PASSED [ 83%]
+tests/test_main_lifespan_and_websocket.py::test_health_check_connected_branch PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/test_main_lifespan_and_websocket.py:6
+  /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/backend/tests/test_main_lifespan_and_websocket.py:6: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /Users/yunjinqi/Documents/new_projects/ai-for-investor/docs/iterations/迭代202-项目综合审查与可靠性优化/evidence/2026-10-12/websocket-fixture-final-parent.xml -
+=================== 5 passed, 1 skipped, 1 warning in 3.97s ====================

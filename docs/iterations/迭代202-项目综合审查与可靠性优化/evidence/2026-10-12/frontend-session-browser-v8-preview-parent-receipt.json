@@ -1,0 +1,50 @@
+{
+  "started_at": "2026-10-12T12:08:04.618Z",
+  "finished_at": "2026-10-12T12:09:02.714Z",
+  "elapsed_seconds": 58.096,
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "command": [
+    "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config=e2e/iteration202.config.ts"
+  ],
+  "exit_code": 0,
+  "signal": null,
+  "dist_unchanged": true,
+  "dist_manifest_sha256": "2eae7ca5d9187ba743f5cb10969f5e0936abd53b7ad6e5d259748422e6752094",
+  "sources": [
+    {
+      "path": "vite.config.ts",
+      "sha256": "2d39d0b74b62dd2039b194eeff9821c484b5ca7db38f016dc56f7231ab65ca6e"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e"
+    },
+    {
+      "path": "e2e/iteration202.config.ts",
+      "sha256": "93f5cfb20313780431c525baee52f0b25d011dc3548433efdbc207257f521ac4"
+    },
+    {
+      "path": "e2e/tailwind4.config.ts",
+      "sha256": "09d29f1dec8f06bd32a14bbb20f5705284ec5b336c477f729752540e15b3128b"
+    },
+    {
+      "path": "e2e/tests/iteration202-session-workspace.spec.ts",
+      "sha256": "0d119f3324d62903928452bc716d07197230bf58c35a3f488ad184eac160a01f"
+    },
+    {
+      "path": "e2e/tailwind4/style-regression.spec.ts",
+      "sha256": "d3e9857c8ae4e8f2828323cb74645caeca82de51b1d975e508eb1843795eb556"
+    }
+  ],
+  "artifact_directory": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202",
+  "environment": {
+    "node": "v20.20.2",
+    "workers": 1,
+    "retries": 0,
+    "served": "vite preview of frozen production dist",
+    "real_backend": false
+  }
+}

@@ -140,11 +140,11 @@ class TestDatabaseInitialization:
 
     async def test_ensure_database_ready_creates_schema_when_enabled(self, monkeypatch):
         create_tables_mock = AsyncMock()
-        verify_connection_mock = AsyncMock()
+        verify_schema_mock = AsyncMock()
         create_default_admin_mock = AsyncMock()
 
         monkeypatch.setattr("app.db.database.create_tables", create_tables_mock)
-        monkeypatch.setattr("app.db.database.verify_database_connection", verify_connection_mock)
+        monkeypatch.setattr("app.db.database.verify_database_schema", verify_schema_mock)
         monkeypatch.setattr("app.db.database.create_default_admin", create_default_admin_mock)
         monkeypatch.setattr(
             "app.db.database.settings",
@@ -158,16 +158,20 @@ class TestDatabaseInitialization:
         await ensure_database_ready()
 
         assert create_tables_mock.await_count == 1
-        assert verify_connection_mock.await_count == 0
+        assert verify_schema_mock.await_count == 0
         assert create_default_admin_mock.await_count == 0
 
-    async def test_ensure_database_ready_only_verifies_connection_when_disabled(self, monkeypatch):
+    async def test_ensure_database_ready_checks_revision_without_schema_ddl_when_disabled(
+        self, monkeypatch
+    ):
         create_tables_mock = AsyncMock()
-        verify_connection_mock = AsyncMock()
+        verify_schema_mock = AsyncMock()
+        compatibility_mock = AsyncMock()
         create_default_admin_mock = AsyncMock()
 
         monkeypatch.setattr("app.db.database.create_tables", create_tables_mock)
-        monkeypatch.setattr("app.db.database.verify_database_connection", verify_connection_mock)
+        monkeypatch.setattr("app.db.database.verify_database_schema", verify_schema_mock)
+        monkeypatch.setattr("app.db.database.ensure_schema_compatibility", compatibility_mock)
         monkeypatch.setattr("app.db.database.create_default_admin", create_default_admin_mock)
         monkeypatch.setattr(
             "app.db.database.settings",
@@ -181,16 +185,17 @@ class TestDatabaseInitialization:
         await ensure_database_ready()
 
         assert create_tables_mock.await_count == 0
-        assert verify_connection_mock.await_count == 1
+        assert verify_schema_mock.await_count == 1
+        assert compatibility_mock.await_count == 0
         assert create_default_admin_mock.await_count == 0
 
-    async def test_ensure_database_ready_creates_default_admin_when_enabled(self, monkeypatch):
+    async def test_ensure_database_ready_never_bootstraps_admin_at_startup(self, monkeypatch):
         create_tables_mock = AsyncMock()
-        verify_connection_mock = AsyncMock()
+        verify_schema_mock = AsyncMock()
         create_default_admin_mock = AsyncMock()
 
         monkeypatch.setattr("app.db.database.create_tables", create_tables_mock)
-        monkeypatch.setattr("app.db.database.verify_database_connection", verify_connection_mock)
+        monkeypatch.setattr("app.db.database.verify_database_schema", verify_schema_mock)
         monkeypatch.setattr("app.db.database.create_default_admin", create_default_admin_mock)
         monkeypatch.setattr(
             "app.db.database.settings",
@@ -204,8 +209,8 @@ class TestDatabaseInitialization:
         await ensure_database_ready()
 
         assert create_tables_mock.await_count == 1
-        assert verify_connection_mock.await_count == 0
-        assert create_default_admin_mock.await_count == 1
+        assert verify_schema_mock.await_count == 0
+        assert create_default_admin_mock.await_count == 0
 
     async def test_ensure_schema_compatibility_upgrades_legacy_workspace_tables(self):
         async with engine.begin() as conn:

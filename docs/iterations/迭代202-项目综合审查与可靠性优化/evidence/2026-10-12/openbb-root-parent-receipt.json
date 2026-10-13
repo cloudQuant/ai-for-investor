@@ -1,0 +1,39 @@
+{
+  "started_at": "2026-10-12T12:37:29Z",
+  "finished_at": "2026-10-12T12:38:28Z",
+  "exit_code": 0,
+  "verdict": "PASS",
+  "junit_suite": "<testsuite name=\"pytest\" errors=\"0\" failures=\"0\" skipped=\"0\" tests=\"5\" time=\"11.091\" timestamp=\"2026-10-12T12:38:06.548945+00:00\" hostname=\"1413c9c811d3\">",
+  "environment": {
+    "container": "iter202-openbb-root-parent",
+    "image": "sha256:52470c079926ff74c31525cb35e099fe61fa50415eb1189f116291a91972050c",
+    "network": "none",
+    "init": true,
+    "git_metadata": "absent; no fake .git created"
+  },
+  "test_sha256": "c2eae3c5b736a9e3a4d6739d61d71a82215248142c53c50b1c35f92ecde776f0",
+  "command": "python -m pytest -p pytest_asyncio.plugin -p pytest_timeout -o timeout=180 -o timeout_method=signal -vv --maxfail=0 tests/market_data_platform/test_openbb_provider.py -k \"checkout_ancestors_and_descendants or runner_script_inside_the_checkout or copied_runner_blocks_unattested_artifact or no_git_parent_of_the_application_cwd\" --junitxml=/tmp/openbb-root-parent.xml",
+  "review": "Four previous StopIteration cases and the existing no-git fallback case passed. Test root now resolves from actual runner/provider source files; production path-overlap rejection and isolated artifact assertions unchanged. Earlier full-v3 failures remain in original logs.",
+  "files": [
+    {
+      "path": "openbb-root-parent.txt",
+      "sha256": "eca977581ebdbb1b841b8559179b69197b4163a064347c68a18c1ad96d31e082"
+    },
+    {
+      "path": "openbb-root-parent.xml",
+      "sha256": "231bf928bc529e7ae7ec698f17580a31e46efe03182a7a278edcc5fa0ea26396"
+    },
+    {
+      "path": "openbb-root-started.txt",
+      "sha256": "773ddcf01cec3e7fdee458fb63c896124cf0488cc3147582bb89efc803fced33"
+    },
+    {
+      "path": "openbb-root-finished.txt",
+      "sha256": "e0f5810727f900dfe2c363910917ade8992a87d179d03cc6e5eaba68286060af"
+    },
+    {
+      "path": "openbb-root-exit-code.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    }
+  ]
+}

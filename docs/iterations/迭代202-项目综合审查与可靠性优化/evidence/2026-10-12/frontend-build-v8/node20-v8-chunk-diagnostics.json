@@ -1,0 +1,1897 @@
+{
+  "chunkCount": 102,
+  "staticCycles": [],
+  "chunks": [
+    {
+      "fileName": "assets/AIChatPage-iXs8xT4m.js",
+      "name": "AIChatPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AIChatPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/markdown-sanitizer-CgL9J455.js",
+        "assets/el-progress-CHKxdk54.js",
+        "assets/stockAnalysis-CIRH8jZg.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/aiObservability-DBYHv7q0.js",
+        "assets/knowledgeBase-CNyUIWwT.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/knowledgeBase-Dha26dIB.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/aiObservability-DBYHv7q0.js",
+      "name": "aiObservability",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/AIObservabilityPage-vBrItGGs.js",
+      "name": "AIObservabilityPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AIObservabilityPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/aiObservability-DBYHv7q0.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/AIProviderConfigPage-tn09SN91.js",
+      "name": "AIProviderConfigPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/config/AIProviderConfigPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-popconfirm-CRiGYIwy.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/aiObservability-DBYHv7q0.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/AirflowDagsPage-BPltUy60.js",
+      "name": "AirflowDagsPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/AirflowDagsPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/AITradingPage-BEo1ttLS.js",
+      "name": "AITradingPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AITradingPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/akshare-C_WVFdXy.js",
+      "name": "akshare",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/AppLayout-CQFLQjfq.js",
+      "name": "AppLayout",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/AppLayout.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-avatar-X0Zktu2l.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/index-DSvbeNe2.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/application-vendor-C-uW_6-k.js",
+      "name": "application-vendor",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [],
+      "dynamicImports": [
+        "assets/LoginPage-BzlS-z9R.js",
+        "assets/RegisterPage-CFa2mhkN.js",
+        "assets/AppLayout-CQFLQjfq.js",
+        "assets/DashboardPage-DNC6gwxS.js",
+        "assets/StrategyPage-BDEQ3_VR.js",
+        "assets/StockAnalysisPage-D12OFfsQ.js",
+        "assets/AssetAnalysisPage-By5uu3T8.js",
+        "assets/StrategyPage-BDEQ3_VR.js",
+        "assets/WorkspaceListPage-BjORfYpK.js",
+        "assets/WorkspaceDetailPage-Bz4t76FF.js",
+        "assets/BacktestPage-CpVF5GYt.js",
+        "assets/BacktestResultPage-D9WpOq6b.js",
+        "assets/AIChatPage-iXs8xT4m.js",
+        "assets/KnowledgeBasePage-CN4DcU95.js",
+        "assets/KnowledgeBasePage-CN4DcU95.js",
+        "assets/KnowledgeBaseDocumentPage-CD1DlWan.js",
+        "assets/ConfigDataLayout-BAbsyLRU.js",
+        "assets/DataScriptsPage-Y8u0mwxn.js",
+        "assets/DataScriptDetailPage-DKHhZ8rw.js",
+        "assets/DataTasksPage-BOTaeTmo.js",
+        "assets/DataExecutionsPage-BEfsJ4VY.js",
+        "assets/DataSyncPage-MB7YRNwu.js",
+        "assets/DataInterfacesPage-C_HXYqrH.js",
+        "assets/DataGovernancePage-CHHluwMZ.js",
+        "assets/AirflowDagsPage-BPltUy60.js",
+        "assets/ConfigAILayout-CVpmZgPR.js",
+        "assets/AIProviderConfigPage-tn09SN91.js",
+        "assets/PromptTemplatesPage-D3z1EH7b.js",
+        "assets/AIObservabilityPage-vBrItGGs.js",
+        "assets/GatewayStatusPage-DoFkMZNo.js",
+        "assets/AITradingPage-BEo1ttLS.js",
+        "assets/WorkspaceListPage-BjORfYpK.js",
+        "assets/WorkspaceDetailPage-Bz4t76FF.js",
+        "assets/BacktestPage-CpVF5GYt.js",
+        "assets/BacktestResultPage-D9WpOq6b.js",
+        "assets/PaperTradingDetailPage-1bvR15cj.js",
+        "assets/RiskControlPage-CAB4X6VJ.js",
+        "assets/DataLayout-CPTIEJxg.js",
+        "assets/DataMarketPage-DbJYW5LN.js",
+        "assets/QuotePage-CRLr4_gg.js",
+        "assets/NewsIntelligencePage-BPIuJeQq.js",
+        "assets/ScannerPage-CN4mm1KB.js",
+        "assets/DataTablesPage-BSYHC0i8.js",
+        "assets/DataTableDetailPage-B6KMv9aX.js",
+        "assets/DataTopicsPage-Cw5U3vts.js",
+        "assets/QuotePage-CRLr4_gg.js",
+        "assets/WorkspaceListPage-BjORfYpK.js",
+        "assets/WorkspaceListPage-BjORfYpK.js",
+        "assets/AITradingPage-BEo1ttLS.js",
+        "assets/WorkspaceDetailPage-Bz4t76FF.js",
+        "assets/PortfolioPage-BMHqRYS-.js",
+        "assets/PortfolioPage-BMHqRYS-.js",
+        "assets/NewsIntelligencePage-BPIuJeQq.js",
+        "assets/ScannerPage-CN4mm1KB.js",
+        "assets/KnowledgeBasePage-CN4DcU95.js",
+        "assets/KnowledgeBaseDocumentPage-CD1DlWan.js",
+        "assets/SettingsPage-BJRCz8yf.js",
+        "assets/SettingsPage-BJRCz8yf.js"
+      ]
+    },
+    {
+      "fileName": "assets/AssetAnalysisPage-By5uu3T8.js",
+      "name": "AssetAnalysisPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/investment/AssetAnalysisPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/auth-B_rwbs8d.js",
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-progress-CHKxdk54.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/knowledgeBase-Dha26dIB.js",
+        "assets/markdown-sanitizer-CgL9J455.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/auth-B_rwbs8d.js",
+      "name": "auth",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/BacktestPage-CpVF5GYt.js",
+      "name": "BacktestPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/BacktestPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-progress-CHKxdk54.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/EquityCurve.vue_vue_type_script_setup_true_lang-B1B_9A6L.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/strategy-DohDA3us.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/echarts-B2-p6CzC.js",
+        "assets/tslib.es6-BDyQ-Jie.js",
+        "assets/chartColors-fOjwj2fb.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/BacktestResultPage-D9WpOq6b.js",
+      "name": "BacktestResultPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/BacktestResultPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/ResearchWorkflowGuide-C02vBaRm.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/EquityCurve.vue_vue_type_script_setup_true_lang-B1B_9A6L.js",
+        "assets/chartColors-fOjwj2fb.js",
+        "assets/echarts-B2-p6CzC.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/tslib.es6-BDyQ-Jie.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/chartColors-fOjwj2fb.js",
+      "name": "chartColors",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/ConfigAILayout-CVpmZgPR.js",
+      "name": "ConfigAILayout",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/config/ConfigAILayout.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/ConfigDataLayout-BAbsyLRU.js",
+      "name": "ConfigDataLayout",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/config/ConfigDataLayout.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DashboardPage-DNC6gwxS.js",
+      "name": "DashboardPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/DashboardPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataExecutionsPage-BEfsJ4VY.js",
+      "name": "DataExecutionsPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataExecutionsPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-pagination-D5MO-rrs.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataGovernancePage-CHHluwMZ.js",
+      "name": "DataGovernancePage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataGovernancePage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataInterfacesPage-C_HXYqrH.js",
+      "name": "DataInterfacesPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataInterfacesPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/el-pagination-D5MO-rrs.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataLayout-CPTIEJxg.js",
+      "name": "DataLayout",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataLayout.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataMarketPage-DbJYW5LN.js",
+      "name": "DataMarketPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataMarketPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-collapse-item-jJ3QwKUT.js",
+        "assets/el-date-picker-CiezVDdP.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/echarts-B2-p6CzC.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/marketData-BVEo_ALI.js",
+        "assets/chartColors-fOjwj2fb.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DSvbeNe2.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/tslib.es6-BDyQ-Jie.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataScriptDetailPage-DKHhZ8rw.js",
+      "name": "DataScriptDetailPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataScriptDetailPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/utils-B0_-HJ2b.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataScriptsPage-Y8u0mwxn.js",
+      "name": "DataScriptsPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataScriptsPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-pagination-D5MO-rrs.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/DataTableSkeleton-ChQK9GSh.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataSyncPage-MB7YRNwu.js",
+      "name": "DataSyncPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataSyncPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-progress-CHKxdk54.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataTableDetailPage-B6KMv9aX.js",
+      "name": "DataTableDetailPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataTableDetailPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/el-pagination-D5MO-rrs.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataTableSkeleton-ChQK9GSh.js",
+      "name": "DataTableSkeleton",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataTablesPage-BSYHC0i8.js",
+      "name": "DataTablesPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataTablesPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-pagination-D5MO-rrs.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataTasksPage-BOTaeTmo.js",
+      "name": "DataTasksPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataTasksPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-pagination-D5MO-rrs.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/akshare-C_WVFdXy.js",
+        "assets/utils-B0_-HJ2b.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/DataTopicsPage-Cw5U3vts.js",
+      "name": "DataTopicsPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataTopicsPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/dayjs.min-DiI28EGj.js",
+      "name": "dayjs.min",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/echarts-B2-p6CzC.js",
+      "name": "echarts",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/tslib.es6-BDyQ-Jie.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-alert-ZPfsvJnr.js",
+      "name": "el-alert",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-avatar-X0Zktu2l.js",
+      "name": "el-avatar",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-card-DslCS6AL.js",
+      "name": "el-card",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-checkbox-group-CaNsn8Z4.js",
+      "name": "el-checkbox-group",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-checkbox-wxZXZu-d.js",
+      "name": "el-checkbox",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-col-C9yQGVB-.js",
+      "name": "el-col",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-collapse-item-jJ3QwKUT.js",
+      "name": "el-collapse-item",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-DSvbeNe2.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-date-picker-CiezVDdP.js",
+      "name": "el-date-picker",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-dialog-CUBc9M9-.js",
+      "name": "el-dialog",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/index-ZNhYGCGR.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-divider-B1jhSjXS.js",
+      "name": "el-divider",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-drawer-H7FNE_mv.js",
+      "name": "el-drawer",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/el-overlay-DF4kYKac.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-empty-CB3bySeQ.js",
+      "name": "el-empty",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-input-number-CcqsuqPe.js",
+      "name": "el-input-number",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-loading--FaQypi3.js",
+      "name": "el-loading",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-overlay-DF4kYKac.js",
+      "name": "el-overlay",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/auth-B_rwbs8d.js",
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-DT0IRcDr.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-pagination-D5MO-rrs.js",
+      "name": "el-pagination",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-select-AUHW5__g.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-popconfirm-CRiGYIwy.js",
+      "name": "el-popconfirm",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-progress-CHKxdk54.js",
+      "name": "el-progress",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-radio-button-m5UW8VF5.js",
+      "name": "el-radio-button",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-radio-group-B_JNHEPF.js",
+      "name": "el-radio-group",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-select-AUHW5__g.js",
+      "name": "el-select",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-switch-DGE73Ng7.js",
+      "name": "el-switch",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-tab-pane-BDzPvixg.js",
+      "name": "el-tab-pane",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-table-column-CXVD_AJ4.js",
+      "name": "el-table-column",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-tag-CNepoog7.js",
+      "name": "el-tag",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/el-tooltip-l0sNRNKZ.js",
+      "name": "el-tooltip",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/EquityCurve.vue_vue_type_script_setup_true_lang-B1B_9A6L.js",
+      "name": "EquityCurve.vue_vue_type_script_setup_true_lang",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/echarts-B2-p6CzC.js",
+        "assets/chartColors-fOjwj2fb.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/GatewayStatusPage-DoFkMZNo.js",
+      "name": "GatewayStatusPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/GatewayStatusPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-radio-group-B_JNHEPF.js",
+        "assets/el-popconfirm-CRiGYIwy.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-radio-button-m5UW8VF5.js",
+        "assets/el-collapse-item-jJ3QwKUT.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/liveTrading-BT0izC7T.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DSvbeNe2.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-B4VR7z3r.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-BADt6SSP.js",
+      "name": "index",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/index.html",
+      "isEntry": true,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ]
+    },
+    {
+      "fileName": "assets/index-CDuNTeJ2.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-Cxl5Euwg.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-DSvbeNe2.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-DT0IRcDr.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-DXcC4l2p.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/index-ZNhYGCGR.js",
+      "name": "index",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/knowledgeBase-CNyUIWwT.js",
+      "name": "knowledgeBase",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/knowledgeBase-Dha26dIB.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/knowledgeBase-Dha26dIB.js",
+      "name": "knowledgeBase",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/KnowledgeBaseDocumentPage-CD1DlWan.js",
+      "name": "KnowledgeBaseDocumentPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/KnowledgeBaseDocumentPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/knowledgeBase-Dha26dIB.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/vnode-Dsr1M6D7.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/KnowledgeBasePage-CN4DcU95.js",
+      "name": "KnowledgeBasePage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/KnowledgeBasePage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/knowledgeBase-CNyUIWwT.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/knowledgeBase-Dha26dIB.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-ZNhYGCGR.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/liveTrading-BT0izC7T.js",
+      "name": "liveTrading",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/LoginPage-BzlS-z9R.js",
+      "name": "LoginPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/LoginPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/auth-B_rwbs8d.js",
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/markdown-sanitizer-CgL9J455.js",
+      "name": "markdown-sanitizer",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/marketData-BVEo_ALI.js",
+      "name": "marketData",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/marketIntel-BVTZK3AT.js",
+      "name": "marketIntel",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/monaco-editor-CKG7zDhx.js",
+      "name": "monaco-editor",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/monaco-editor/esm/vs/index.js",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/NewsIntelligencePage-BPIuJeQq.js",
+      "name": "NewsIntelligencePage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/NewsIntelligencePage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/marketIntel-BVTZK3AT.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/paperRuntime-BG-Fp8Fj.js",
+      "name": "paperRuntime",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/PaperTradingDetailPage-1bvR15cj.js",
+      "name": "PaperTradingDetailPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/PaperTradingDetailPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-col-C9yQGVB-.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/paperRuntime-BG-Fp8Fj.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/PortfolioPage-BMHqRYS-.js",
+      "name": "PortfolioPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/PortfolioPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/chartColors-fOjwj2fb.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": [
+        "assets/echarts-B2-p6CzC.js"
+      ]
+    },
+    {
+      "fileName": "assets/PromptTemplatesPage-D3z1EH7b.js",
+      "name": "PromptTemplatesPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/PromptTemplatesPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/QuotePage-CRLr4_gg.js",
+      "name": "QuotePage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/QuotePage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-radio-group-B_JNHEPF.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-divider-B1jhSjXS.js",
+        "assets/el-drawer-H7FNE_mv.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-popconfirm-CRiGYIwy.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-radio-button-m5UW8VF5.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/echarts-B2-p6CzC.js",
+        "assets/ResponsiveDataGrid-Bp7nooJ6.js",
+        "assets/DataTableSkeleton-ChQK9GSh.js",
+        "assets/chartColors-fOjwj2fb.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/tslib.es6-BDyQ-Jie.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/RegisterPage-CFa2mhkN.js",
+      "name": "RegisterPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/RegisterPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/auth-B_rwbs8d.js",
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/dayjs.min-DiI28EGj.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/ResearchWorkflowGuide-C02vBaRm.js",
+      "name": "ResearchWorkflowGuide",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/ResponsiveDataGrid-Bp7nooJ6.js",
+      "name": "ResponsiveDataGrid",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/RiskControlPage-CAB4X6VJ.js",
+      "name": "RiskControlPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/RiskControlPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/auth-B_rwbs8d.js",
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/paperRuntime-BG-Fp8Fj.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/ScannerPage-CN4mm1KB.js",
+      "name": "ScannerPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/ScannerPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/marketIntel-BVTZK3AT.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/scroll-DQmXhdtQ.js",
+      "name": "scroll",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/SettingsPage-BJRCz8yf.js",
+      "name": "SettingsPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/SettingsPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-avatar-X0Zktu2l.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/aiObservability-DBYHv7q0.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/stockAnalysis-CIRH8jZg.js",
+      "name": "stockAnalysis",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/StockAnalysisPage-D12OFfsQ.js",
+      "name": "StockAnalysisPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/investment/StockAnalysisPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-date-picker-CiezVDdP.js",
+        "assets/el-progress-CHKxdk54.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-checkbox-group-CaNsn8Z4.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/aiObservability-DBYHv7q0.js",
+        "assets/markdown-sanitizer-CgL9J455.js",
+        "assets/stockAnalysis-CIRH8jZg.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DXcC4l2p.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/strategy-DohDA3us.js",
+      "name": "strategy",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/StrategyPage-BDEQ3_VR.js",
+      "name": "StrategyPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/StrategyPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-radio-group-B_JNHEPF.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-divider-B1jhSjXS.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/el-loading--FaQypi3.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-checkbox-group-CaNsn8Z4.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-radio-button-m5UW8VF5.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/strategy-DohDA3us.js",
+        "assets/markdown-sanitizer-CgL9J455.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/marketData-BVEo_ALI.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/validator-CjQEmA50.js"
+      ],
+      "dynamicImports": [
+        "assets/monaco-editor-CKG7zDhx.js"
+      ]
+    },
+    {
+      "fileName": "assets/tslib.es6-BDyQ-Jie.js",
+      "name": "tslib.es6",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/utils-B0_-HJ2b.js",
+      "name": "utils",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/validator-CjQEmA50.js",
+      "name": "validator",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/vnode-Dsr1M6D7.js",
+      "name": "vnode",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": false,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/WorkspaceDetailPage-Bz4t76FF.js",
+      "name": "WorkspaceDetailPage",
+      "facadeModuleId": null,
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-date-picker-CiezVDdP.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-col-C9yQGVB-.js",
+        "assets/el-divider-B1jhSjXS.js",
+        "assets/el-radio-group-B_JNHEPF.js",
+        "assets/liveTrading-BT0izC7T.js",
+        "assets/ResponsiveDataGrid-Bp7nooJ6.js",
+        "assets/el-checkbox-group-CaNsn8Z4.js",
+        "assets/el-progress-CHKxdk54.js"
+      ],
+      "dynamicImports": [
+        "assets/WorkspaceOptimizationTab-DAR5hpdm.js"
+      ]
+    },
+    {
+      "fileName": "assets/WorkspaceListPage-BjORfYpK.js",
+      "name": "WorkspaceListPage",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/workspace/WorkspaceListPage.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/el-radio-group-B_JNHEPF.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-radio-button-m5UW8VF5.js",
+        "assets/ResearchWorkflowGuide-C02vBaRm.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/scroll-DQmXhdtQ.js"
+      ],
+      "dynamicImports": []
+    },
+    {
+      "fileName": "assets/WorkspaceOptimizationTab-DAR5hpdm.js",
+      "name": "WorkspaceOptimizationTab",
+      "facadeModuleId": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/workspace/WorkspaceOptimizationTab.vue",
+      "isEntry": false,
+      "isDynamicEntry": true,
+      "imports": [
+        "assets/application-vendor-C-uW_6-k.js",
+        "assets/auth-B_rwbs8d.js",
+        "assets/el-select-AUHW5__g.js",
+        "assets/el-card-DslCS6AL.js",
+        "assets/el-checkbox-wxZXZu-d.js",
+        "assets/el-radio-group-B_JNHEPF.js",
+        "assets/el-date-picker-CiezVDdP.js",
+        "assets/el-dialog-CUBc9M9-.js",
+        "assets/el-empty-CB3bySeQ.js",
+        "assets/el-input-number-CcqsuqPe.js",
+        "assets/el-progress-CHKxdk54.js",
+        "assets/el-table-column-CXVD_AJ4.js",
+        "assets/dayjs.min-DiI28EGj.js",
+        "assets/el-tooltip-l0sNRNKZ.js",
+        "assets/el-tag-CNepoog7.js",
+        "assets/el-radio-button-m5UW8VF5.js",
+        "assets/el-checkbox-group-CaNsn8Z4.js",
+        "assets/el-overlay-DF4kYKac.js",
+        "assets/index-CDuNTeJ2.js",
+        "assets/WorkspaceDetailPage-Bz4t76FF.js",
+        "assets/vnode-Dsr1M6D7.js",
+        "assets/index-B4VR7z3r.js",
+        "assets/index-Cxl5Euwg.js",
+        "assets/scroll-DQmXhdtQ.js",
+        "assets/index-DXcC4l2p.js",
+        "assets/index-DT0IRcDr.js",
+        "assets/index-ZNhYGCGR.js",
+        "assets/validator-CjQEmA50.js",
+        "assets/el-tab-pane-BDzPvixg.js",
+        "assets/el-alert-ZPfsvJnr.js",
+        "assets/el-switch-DGE73Ng7.js",
+        "assets/el-col-C9yQGVB-.js",
+        "assets/el-divider-B1jhSjXS.js",
+        "assets/liveTrading-BT0izC7T.js",
+        "assets/ResponsiveDataGrid-Bp7nooJ6.js"
+      ],
+      "dynamicImports": []
+    }
+  ]
+}

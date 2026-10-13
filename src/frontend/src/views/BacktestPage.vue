@@ -124,10 +124,11 @@
               >
                 <el-input-number
                   v-if="typeof val === 'number'"
-                  v-model="dynamicParams[key]"
+                  :model-value="val"
                   :step="Number.isInteger(val) ? 1 : 0.01"
                   :precision="Number.isInteger(val) ? 0 : 4"
                   class="backtest-field"
+                  @update:model-value="updateNumericParam(key, $event)"
                 />
                 <el-input
                   v-else
@@ -285,7 +286,11 @@ const strategyStore = useStrategyStore()
 const configLoading = ref(false)
 const currentResult = ref<BacktestResult | null>(null)
 const strategyConfig = ref<StrategyConfig | null>(null)
-const dynamicParams = reactive<Record<string, number | string>>({})
+const dynamicParams = reactive<Record<string, number | string | undefined>>({})
+
+function updateNumericParam(key: string, value: number | undefined) {
+  dynamicParams[key] = value
+}
 
 const {
   loading,
@@ -412,6 +417,11 @@ async function runBacktest() {
   loading.value = true
   progressInfo.value = { progress: 0, message: t('backtestPg.msgSubmitProgress') }
   try {
+    const params: Record<string, number | string> = {}
+    for (const [key, value] of Object.entries(dynamicParams)) {
+      if (value !== undefined) params[key] = value
+    }
+
     const response = await backtestStore.runBacktest({
       strategy_id: form.strategy_id,
       symbol: strategyConfig.value?.data?.symbol || '',
@@ -419,7 +429,7 @@ async function runBacktest() {
       end_date: dayjs().format('YYYY-MM-DDTHH:mm:ss'),
       initial_cash: strategyConfig.value?.backtest?.initial_cash ?? 100000,
       commission: strategyConfig.value?.backtest?.commission ?? 0.001,
-      params: { ...dynamicParams },
+      params,
     })
 
     ElMessage.success(t('backtestPg.msgSubmitted'))

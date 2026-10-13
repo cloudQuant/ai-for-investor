@@ -1,0 +1,24 @@
+{
+  "uid": 1000,
+  "python": "3.12.15",
+  "app_files_checked": 1777,
+  "app_source_mismatches": [],
+  "prod_lock_sha256": "b3e165273f2f7eef37d2cfef25d6466b379abd7d681375b020e57966d2efbb6b",
+  "registry_pins_checked": 123,
+  "registry_pin_mismatches": [],
+  "pip_check_exit": 0,
+  "pip_check_stdout": "No broken requirements found.",
+  "pip_check_stderr": "",
+  "backtrader_commit": "04adc08c2deb02cbf240efbd495e5eee68b375d8",
+  "image_pyproject_sha256": "f54f90241ee84791c58cd4f27496e9ec3383143188815772bcc25fbdece1de4a",
+  "only_pyproject_delta_is_current_dev_python_docx": true,
+  "verdict": "PASS",
+  "reviewed_at": "2026-10-12T15:32:59.435Z",
+  "image": "sha256:ad00640ed6c2b51761b5b9e6d7b70030ecd809a868b3b301aa36c6bfd19732f2",
+  "receipt": "prod-source-final-image-probe-v3-receipt.json",
+  "probe_log_sha256": "30414532e28bd72d7b14d39c4ac7ec4005f26c80ab49dde22f99c68cf1f75295",
+  "prior_attempts": [
+    "prod-source-final-image-probe-v1-failure.json",
+    "prod-source-final-image-probe-v2-failure.json"
+  ]
+}

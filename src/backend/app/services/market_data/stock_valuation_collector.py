@@ -30,6 +30,14 @@ from decimal import Decimal
 from types import MappingProxyType
 
 from app.services.market_data.access import MarketDataSourceAuthorization
+from app.services.market_data.persisted_fetch_boundary import (
+    PersistedProviderFetchBoundaryError,
+    await_task_after_cancellation,
+    persist_provider_fetch,
+    require_lower_sha256,
+    utc_now,
+    utc_parser,
+)
 from app.services.market_data.providers import (
     MarketDataProviderRequest,
     ProviderFetchResult,
@@ -244,7 +252,7 @@ class StockValuationCollector:
         if not isinstance(store, MarketDataStore):
             raise TypeError("store must be a MarketDataStore")
         self._store = store
-        self._clock = clock or _utc_now
+        self._clock = clock or utc_now
 
     async def publish_captured_batch(
         self,
@@ -293,25 +301,30 @@ class StockValuationCollector:
                 # the critical section so cancellation cannot erase knowledge
                 # of a receipt that became durable just before the interrupt.
                 persistence_task = asyncio.create_task(
-                    _persist_visible_provider_result(
-                        store=self._store,
-                        context=target.context,
-                        result=result,
-                        received_at=local_received_at,
-                        source_authorization=target.source_authorization,
+                    persist_provider_fetch(
+                        self._store.persist_provider_result(
+                            target.context,
+                            result,
+                            received_at=local_received_at,
+                            source_authorization=target.source_authorization,
+                        )
                     )
                 )
                 try:
                     persisted = await asyncio.shield(persistence_task)
                 except asyncio.CancelledError as cancellation:
                     try:
-                        persisted = await _await_persistence_after_cancellation(persistence_task)
+                        persisted = await await_task_after_cancellation(persistence_task)
                     except BaseException as persistence_error:
                         raise cancellation from persistence_error
                     persisted_fetches.append(persisted)
                     raise StockValuationCollectorPartialPublishCancelledError(
                         persisted_fetches
                     ) from cancellation
+                except PersistedProviderFetchBoundaryError as exc:
+                    raise StockValuationCollectorError(
+                        "STOCK_VALUATION_PERSISTENCE_DEFERRED"
+                    ) from exc
                 persisted_fetches.append(persisted)
         except StockValuationCollectorPartialPublishCancelledError:
             raise
@@ -976,16 +989,10 @@ def _require_text(value: object, *, field_name: str, maximum: int) -> str:
 
 
 def _require_lower_sha256(value: object, *, code: str) -> str:
-    """Return one exact lower-case SHA-256 digest without exposing the source value."""
-    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
-        raise StockValuationCollectorError(code)
-    return value
+    return require_lower_sha256(value, code=code, error_type=StockValuationCollectorError)
 
 
-def _as_utc(value: datetime, *, field_name: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-        raise StockValuationCollectorError("STOCK_VALUATION_INPUT_INVALID")
-    return value.astimezone(UTC)
+_as_utc = utc_parser(StockValuationCollectorError, "STOCK_VALUATION_INPUT_INVALID")
 
 
 def _assert_no_sensitive_payload_keys(value: object) -> None:
@@ -1080,42 +1087,6 @@ def _json_safe(value: object, *, depth: int = 0) -> object:
             raise StockValuationCollectorError("STOCK_VALUATION_SOURCE_PAYLOAD_INVALID")
         return _json_safe(scalar, depth=depth + 1)
     raise StockValuationCollectorError("STOCK_VALUATION_SOURCE_PAYLOAD_INVALID")
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
-
-
-async def _persist_visible_provider_result(
-    *,
-    store: MarketDataStore,
-    context: ResolvedMarketDataQueryContext,
-    result: ProviderFetchResult,
-    received_at: datetime,
-    source_authorization: MarketDataSourceAuthorization,
-) -> PersistedProviderFetch:
-    """Persist one target and reject receipts that are not yet query-visible."""
-    receipt = await store.persist_provider_result(
-        context,
-        result,
-        received_at=received_at,
-        source_authorization=source_authorization,
-    )
-    if not isinstance(receipt, PersistedProviderFetch):
-        raise StockValuationCollectorError("STOCK_VALUATION_PERSISTENCE_DEFERRED")
-    return receipt
-
-
-async def _await_persistence_after_cancellation(
-    persistence_task: asyncio.Task[PersistedProviderFetch],
-) -> PersistedProviderFetch:
-    """Finish one shielded write before exposing cancellation and its durable prefix."""
-    while True:
-        try:
-            return await asyncio.shield(persistence_task)
-        except asyncio.CancelledError:
-            if persistence_task.done():
-                return persistence_task.result()
 
 
 __all__ = [

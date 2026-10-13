@@ -25,7 +25,8 @@ _SHARED_SOURCE_PAYLOADS_REVISION = "20260910_market_data_shared_source_payloads"
 _CAPABILITY_LEDGER_REVISION = "20260910_market_data_capability_ledger"
 _DEFERRED_PUBLICATIONS_REVISION = "20260911_market_data_deferred_publications"
 _SEMANTIC_RECORD_KEYS_REVISION = "20260911_market_data_semantic_record_keys"
-_INTEGRATED_HEAD = "20260911_market_data_b2_completeness_evidence"
+_B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
+_INTEGRATED_HEAD = "20261012_optimization_objective_direction"
 _LEGACY_HEAD = "20260805_asset_research_outcome_reliability"
 _TABLES = {
     "asset_instruments",
@@ -125,6 +126,7 @@ def test_asset_research_graph_has_one_integrated_head() -> None:
     capability_ledger_revision = script.get_revision(_CAPABILITY_LEDGER_REVISION)
     deferred_publications_revision = script.get_revision(_DEFERRED_PUBLICATIONS_REVISION)
     semantic_record_keys_revision = script.get_revision(_SEMANTIC_RECORD_KEYS_REVISION)
+    b2_evidence_revision = script.get_revision(_B2_COMPLETENESS_EVIDENCE_REVISION)
     integrated_head = script.get_revision(_INTEGRATED_HEAD)
 
     assert merge_revision is not None
@@ -141,8 +143,10 @@ def test_asset_research_graph_has_one_integrated_head() -> None:
     assert deferred_publications_revision.down_revision == _CAPABILITY_LEDGER_REVISION
     assert semantic_record_keys_revision is not None
     assert semantic_record_keys_revision.down_revision == _DEFERRED_PUBLICATIONS_REVISION
+    assert b2_evidence_revision is not None
+    assert b2_evidence_revision.down_revision == _SEMANTIC_RECORD_KEYS_REVISION
     assert integrated_head is not None
-    assert integrated_head.down_revision == _SEMANTIC_RECORD_KEYS_REVISION
+    assert integrated_head.down_revision == _B2_COMPLETENESS_EVIDENCE_REVISION
     assert script.get_heads() == [_INTEGRATED_HEAD]
 
 

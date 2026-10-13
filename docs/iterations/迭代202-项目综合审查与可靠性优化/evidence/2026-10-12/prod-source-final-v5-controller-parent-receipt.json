@@ -1,0 +1,13 @@
+{
+  "state": "PASS",
+  "started_at": "2026-10-12T15:20:39.263Z",
+  "pid": 41805,
+  "harness_sha256": "fdd20ca19a58194f57c5ef5f72f84917be819cab93f5a04e9a947c5828f8ff4d",
+  "image": "sha256:ad00640ed6c2b51761b5b9e6d7b70030ecd809a868b3b301aa36c6bfd19732f2|linux|arm64",
+  "build_receipt": "prod-source-final-build-parent-receipt.json",
+  "runtime_started_at": "2026-10-12T15:25:12.091Z",
+  "child_pid": 43804,
+  "signal": null,
+  "exit_code": 0,
+  "finished_at": "2026-10-12T15:30:40.535Z"
+}

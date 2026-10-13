@@ -24,10 +24,25 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult, Result, func, or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.persistence_boundaries import (
+    cursor_rowcount as _cursor_rowcount,
+)
+from app.db.persistence_boundaries import (
+    is_fetch_lease_handle as _is_fetch_lease_handle,
+)
+from app.db.persistence_boundaries import (
+    is_lower_hex_sha256 as _is_sha256,
+)
+from app.db.persistence_boundaries import (
+    is_positive_integer,
+)
+from app.db.persistence_boundaries import (
+    stored_utc as _stored_utc,
+)
 from app.models.market_data_platform import (
     MdB2CompletenessManifestEntry,
     MdB2CompletenessReceipt,
@@ -725,7 +740,7 @@ class MarketDataPublicationManager:
                 raise MarketDataPublicationError("PUBLICATION_DEFERRED_HOLD_INTEGRITY")
             if (
                 publication.published_at is None
-                or not _is_visibility_sequence(publication.visibility_sequence)
+                or not is_positive_integer(publication.visibility_sequence)
                 or hold.promoted_at is None
                 or not _is_sha256(hold.promotion_evidence_sha256)
             ):
@@ -860,7 +875,7 @@ class MarketDataPublicationManager:
             lease_key_sha256, fence_token = snapshots[row.entity_id]
             if lease_key_sha256 is None and fence_token is None:
                 continue
-            if not _is_sha256(lease_key_sha256) or not _is_positive_fence_token(fence_token):
+            if not _is_sha256(lease_key_sha256) or not is_positive_integer(fence_token):
                 raise MarketDataPublicationError("PUBLICATION_FETCH_LEASE_BINDING_INTEGRITY")
             generations.append((row.id, lease_key_sha256, fence_token))
         return tuple(generations)
@@ -890,7 +905,7 @@ class MarketDataPublicationManager:
                     raise MarketDataPublicationError("PUBLICATION_VISIBILITY_INTEGRITY")
                 pending_rows.append(row)
                 continue
-            if not _is_visibility_sequence(row.visibility_sequence):
+            if not is_positive_integer(row.visibility_sequence):
                 raise MarketDataPublicationError("PUBLICATION_VISIBILITY_INTEGRITY")
             existing_times.append(_stored_utc(row.published_at))
         pending_ids = tuple(row.id for row in pending_rows)
@@ -914,7 +929,7 @@ class MarketDataPublicationManager:
         if prior_visible_at is not None and published_at < prior_visible_at:
             published_at = prior_visible_at
         first_sequence = allocator.next_visibility_sequence
-        if not _is_visibility_sequence(first_sequence):
+        if not is_positive_integer(first_sequence):
             raise MarketDataPublicationError("PUBLICATION_VISIBILITY_ALLOCATOR_INTEGRITY")
         ordered_pending = tuple(sorted(pending_rows, key=lambda row: row.id))
         allocator.next_visibility_sequence = first_sequence + len(ordered_pending)
@@ -982,7 +997,7 @@ class MarketDataPublicationManager:
                 )
         except IntegrityError as exc:
             raise MarketDataPublicationError("PUBLICATION_VISIBILITY_ALLOCATOR_CONFLICT") from exc
-        if allocator is None or not _is_visibility_sequence(allocator.next_visibility_sequence):
+        if allocator is None or not is_positive_integer(allocator.next_visibility_sequence):
             raise MarketDataPublicationError("PUBLICATION_VISIBILITY_ALLOCATOR_INTEGRITY")
 
         max_sequence = await self._db.scalar(
@@ -1092,43 +1107,3 @@ class MarketDataPublicationManager:
                 )
         except (B2CompletenessEvidenceError, TypeError, ValueError) as exc:
             raise MarketDataPublicationError("PUBLICATION_ENTITY_INTEGRITY") from exc
-
-
-def _is_sha256(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
-
-
-def _is_positive_fence_token(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
-
-
-def _is_fetch_lease_handle(value: object) -> bool:
-    """Avoid importing the lease manager into identity/publication import paths."""
-    return (
-        _is_sha256(getattr(value, "lease_key_sha256", None))
-        and _is_positive_fence_token(getattr(value, "fence_token", None))
-        and isinstance(getattr(value, "owner_token", None), str)
-        and bool(getattr(value, "owner_token", "").strip())
-    )
-
-
-def _is_visibility_sequence(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
-
-
-def _cursor_rowcount(result: Result[tuple[object, ...]]) -> int:
-    """Return the DML rowcount of a cursor-backed result (0 when unavailable)."""
-    if isinstance(result, CursorResult):
-        return result.rowcount or 0
-    return 0
-
-
-def _stored_utc(value: datetime) -> datetime:
-    """Normalize a UTC timestamp read back from a portable database column."""
-    if value.tzinfo is None or value.utcoffset() is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)

@@ -1,0 +1,24 @@
+Tailwind 3 to 4 offline CSS comparison
+
+Baseline (captured before style.css edits):
+- /tmp/iteration202-tailwind4-compat/baseline-manifest.json
+- Tailwind 3.4.19, Sass 1.99.0, PostCSS 8.5.18; Node v25.1.0
+- CSS: /tmp/iteration202-tailwind4-compat/tailwind-v3-baseline.css (38073 bytes, SHA-256 5fdc5538932fa997852d302e85b57f81624a9359e271e0de9d36ebda5d4048f9)
+
+Current Tailwind 4 full-project offline compile:
+- /tmp/iteration202-tailwind4-compat/v4-project-manifest.json
+- Node 20.20.2, Tailwind/@tailwindcss/postcss 4.3.3, Sass 1.99.0
+- CSS: /tmp/iteration202-tailwind4-compat/tailwind-v4-project.css (62036 bytes, SHA-256 6689ad3cf95e261b045daadecfeeb4281a261b0b5717305125b01f014f655cd6)
+- This pass compiled src/styles/mobile.scss with Sass and inlined it before Tailwind, then scanned the full src tree from src/frontend. It is an offline full-source PostCSS compile, separate from the actual Vite browser run.
+
+Mobile Sass comparison:
+- v3 capture: /tmp/iteration202-tailwind4-compat/mobile.v3.css (5579 bytes)
+- v4 Sass: /tmp/iteration202-tailwind4-compat/mobile.v4.css (5535 bytes)
+- After stripping the v3-only sourceMappingURL trailer: identical; normalized SHA-256 v3=5949873962d24e6c65aeddbe004a82d6e84a856e9137ee0b3627783bc7e109f6, v4=5949873962d24e6c65aeddbe004a82d6e84a856e9137ee0b3627783bc7e109f6.
+- The only raw difference is the old Sass source-map trailer; layout rules and 768px/992px media breakpoints match.
+
+Key class declarations are recorded in css-key-class-comparison.txt. The versioned changes are: border-color and dark color utilities use v4 CSS variables instead of v3 rgba literals, while tokens resolve to the same slate/gray colors; v4 border utilities also set border-style via --tw-border-style, with the preflight's solid default. rounded/rounded-t retain 4px; rounded-lg/rounded-xl get explicit v3 8px/12px compatibility declarations after v4's radius tokens. v4 shadow/ring composition adds inset variables; the compatibility layer restores the existing v3 shadow values for shadow, shadow-sm, shadow-xl and hover:shadow-md. v4 space-y and divide-y target :not(:last-child) and reverse logical sides; explicit compatibility selectors restore the current v3 sibling margin/border-top behavior for the used space-y sizes and divide-y. Placeholder, default border and cursor preflight semantics are explicitly restored.
+
+Class selector inventory: v3 has 389 selectors; v4 has 380. The nine v3-only selectors are scanner false positives in this source tree, not active template classes: bg-amber-800/50 occurs only as dark:bg-amber-800/50 (which v4 retains); bg-rose-50, border-slate-100, and text-rose-700 only occur in :deep CSS selectors; capitalize/sticky/underline occur as JS/CSS identifiers or declarations; !table and !visible have no matching source class use.
+
+Browser comparison is pending serial execution after the other frontend E2E lane stops Vite. Supported minimum contract Safari 16.4 / Chrome 111 / Firefox 128 will remain unverified by the current Playwright browser binaries.

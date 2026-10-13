@@ -49,6 +49,13 @@ THS_MILLIS_TIMESTAMP_NORMALIZER_ID = "ths.millis-timestamp-normalizer-v1"
 THS_CLOSED_WINDOW_SEMANTICS = "ths-closed-window-v1"
 THS_STATIC_ENDPOINT_RESOLVER_ID = "ths.static-endpoint-v1"
 
+# opendata（自建数据中台 REST）契约标识。该 provider 复用平台的日期归一化与
+# 半开窗口语义（``trade_date`` 为 date-only，与 AkShare 一致），但请求变换与
+# 端点解析是独立审查的控制面，故各自登记。
+OPENDATA_PROVIDER_CONTRACT_VERSION = "opendata-provider-contract-v1"
+OPENDATA_STATIC_ENDPOINT_RESOLVER_ID = "opendata.static-endpoint-v1"
+OPENDATA_HISTORICAL_KLINE_REQUEST_TRANSFORM_ID = "opendata.historical-kline-request-v1"
+
 
 class ProviderContractError(RuntimeError):
     """Stable failure emitted while selecting or transforming a contract."""
@@ -324,10 +331,16 @@ class ProviderContract:
             and len(self.endpoints) != 1
         ):
             raise ValueError("THS static endpoint contracts require exactly one endpoint")
+        if (
+            self.endpoint_resolver_id == OPENDATA_STATIC_ENDPOINT_RESOLVER_ID
+            and len(self.endpoints) != 1
+        ):
+            raise ValueError("opendata static endpoint contracts require exactly one endpoint")
         if self.endpoint_resolver_id not in {
             "akshare.static-endpoint-v1",
             "akshare.cffex-option-prefix-v1",
             THS_STATIC_ENDPOINT_RESOLVER_ID,
+            OPENDATA_STATIC_ENDPOINT_RESOLVER_ID,
         }:
             raise ValueError("endpoint_resolver_id is unsupported")
         if self.request_transform_id not in {
@@ -337,6 +350,7 @@ class ProviderContract:
             "ths.historical-kline-request-v1",
             "ths.financials-request-v1",
             "ths.symbol-only-request-v1",
+            OPENDATA_HISTORICAL_KLINE_REQUEST_TRANSFORM_ID,
         }:
             raise ValueError("request_transform_id is unsupported")
         if self.normalizer_id not in {AKSHARE_ROW_NORMALIZER_ID}:

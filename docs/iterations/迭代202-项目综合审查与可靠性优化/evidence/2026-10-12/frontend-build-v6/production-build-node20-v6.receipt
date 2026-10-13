@@ -1,0 +1,10 @@
+build_start_utc=2026-10-12T11:38:04Z
+command=npm run build -- --config ./.codex-vite-chunk-diagnostics.config.ts
+v20.20.2
+11.6.2
+production_config_sha256 690347e9f7247becbe3754b8bfb0622e11c464b6cf4dea76762faf6655b8dde4  vite.config.ts
+diagnostic_wrapper_sha256 344c010d51e64e64b69156bf0646e41236ba602a50753c8e74619f0385a155f0  .codex-vite-chunk-diagnostics.config.ts
+source_hashes=/tmp/ai-for-investor-iteration201-bundle/node20-v6-source-hashes.txt
+build_end_utc=2026-10-12T11:48:03Z
+exit_code=0
+elapsed_seconds=599

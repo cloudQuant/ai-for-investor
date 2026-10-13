@@ -6,6 +6,19 @@ import pytest
 from starlette.testclient import TestClient
 
 
+@pytest.fixture
+def enable_schema_creation_for_websocket_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the real create-tables startup path for the unstamped test database."""
+    import app.db.database as database_module
+    import app.main as main_module
+    from app.config import get_settings
+
+    settings = get_settings()
+    assert main_module.settings is settings
+    assert database_module.settings is settings
+    monkeypatch.setattr(settings, "DB_AUTO_CREATE_SCHEMA", True)
+
+
 @pytest.mark.asyncio
 async def test_lifespan_runs_startup_and_shutdown(monkeypatch):
     import app.main as main_module
@@ -53,7 +66,10 @@ async def test_lifespan_runs_startup_and_shutdown(monkeypatch):
 
 
 @pytest.mark.skip(reason="Complex integration test with timing issues")
-def test_main_websocket_ping_pong_and_disconnect(monkeypatch):
+def test_main_websocket_ping_pong_and_disconnect(
+    monkeypatch,
+    enable_schema_creation_for_websocket_tests,
+):
     from app.main import app
 
     with TestClient(app) as client:
@@ -99,7 +115,10 @@ def test_main_websocket_ping_pong_and_disconnect(monkeypatch):
             assert pong["type"] == "pong"
 
 
-def test_main_websocket_rejects_query_token_fallback(monkeypatch):
+def test_main_websocket_rejects_query_token_fallback(
+    monkeypatch,
+    enable_schema_creation_for_websocket_tests,
+):
     from starlette.websockets import WebSocketDisconnect
 
     from app.main import app
@@ -143,7 +162,10 @@ def test_main_websocket_rejects_query_token_fallback(monkeypatch):
 
 
 @pytest.mark.flaky(reruns=3, reruns_delay=1)
-def test_data_topics_websocket_streams_single_topic_update(monkeypatch):
+def test_data_topics_websocket_streams_single_topic_update(
+    monkeypatch,
+    enable_schema_creation_for_websocket_tests,
+):
     import app.services.data_topic_hub as data_topic_module
     import app.services.ws_gateway as ws_gateway_module
     from app.main import app
@@ -189,7 +211,10 @@ def test_data_topics_websocket_streams_single_topic_update(monkeypatch):
             assert update["value"] == {"price": 101}
 
 
-def test_data_topics_websocket_pattern_route_receives_matching_update(monkeypatch):
+def test_data_topics_websocket_pattern_route_receives_matching_update(
+    monkeypatch,
+    enable_schema_creation_for_websocket_tests,
+):
     import app.services.data_topic_hub as data_topic_module
     import app.services.ws_gateway as ws_gateway_module
     from app.main import app

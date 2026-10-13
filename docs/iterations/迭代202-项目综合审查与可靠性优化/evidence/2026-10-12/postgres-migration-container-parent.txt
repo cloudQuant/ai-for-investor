@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /opt/workspace/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 600.0s
+timeout method: thread
+timeout func_only: False
+collected 1 item
+
+tests/test_iteration202_deployment_database.py .                         [100%]
+
+========================= 1 passed in 66.60s (0:01:06) =========================

@@ -11,10 +11,12 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: vi.fn().mockResolvedValue('confirm') },
 }))
 
+const optimizationMocks = vi.hoisted(() => ({
+  submitOptimization: vi.fn().mockResolvedValue({ task_id: 't-1', total_combinations: 2 }),
+}))
+
 vi.mock('@/api/workspace', () => ({
-  workspaceApi: {
-    submitUnitOptimization: vi.fn().mockResolvedValue({ task_id: 't-1' }),
-  },
+  workspaceApi: optimizationMocks,
 }))
 
 vi.mock('@/api/index', () => ({
@@ -22,11 +24,16 @@ vi.mock('@/api/index', () => ({
   getErrorMessage: (_e: unknown, fallback: string) => fallback,
 }))
 
-vi.mock('@/stores/workspace', () => ({
-  useWorkspaceStore: () => ({ updateUnit: vi.fn().mockResolvedValue(undefined) }),
+const workspaceStore = vi.hoisted(() => ({
+  units: [] as any[],
+  updateUnit: vi.fn().mockResolvedValue(undefined),
+  pollStatus: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('@/stores/workspace', () => ({ useWorkspaceStore: () => workspaceStore }))
+
 import OptimizationConfigDialog from '@/components/workspace/OptimizationConfigDialog.vue'
+import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
 
 const unit = {
@@ -45,6 +52,7 @@ function doMount(props: Record<string, unknown> = {}) {
 describe('OptimizationConfigDialog', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    workspaceStore.units = []
     vi.clearAllMocks()
   })
 
@@ -91,6 +99,29 @@ describe('OptimizationConfigDialog', () => {
       unit: { id: 'u-2', optimization_config: { objective: 'max_return' }, params: {} },
     }).vm as any
     vm.initForm()
-    expect(vm.form.objective).toBe('max_return')
+    expect(vm.form.objective).toBe('total_return')
+    expect(vm.form.direction).toBe('maximize')
+  })
+
+  it('submits the selected canonical objective and direction', async () => {
+    const vm = doMount().vm as any
+    vm.form.objective = 'total_return'
+    vm.form.direction = 'minimize'
+    vm.form.param_layers = [{
+      param_name: 'fast',
+      current_value: 5,
+      opt_type: 'equal_diff',
+      start: 1,
+      end: 2,
+      step: 1,
+    }]
+
+    await vm.handleSubmitOptimization()
+
+    expect(workspaceApi.submitOptimization).toHaveBeenCalledWith('ws-1', expect.objectContaining({
+      unit_id: 'u-1',
+      objective: 'total_return',
+      direction: 'minimize',
+    }))
   })
 })

@@ -1,0 +1,432 @@
+{
+  "config": {
+    "configFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/iteration202.config.ts",
+    "rootDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-fixture",
+        "name": "chromium-fixture",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "iteration202-session-workspace.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+      "command": "node_modules/.bin/vite preview --host 127.0.0.1 --port 4177 --strictPort",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 120000,
+      "env": {
+        "VITE_API_TARGET": "http://127.0.0.1:4178"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "iteration202-session-workspace.spec.ts",
+      "file": "iteration202-session-workspace.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "AC-D09: retains credentials through 503 and network failures, then confirms identity on retry",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 67015,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('identity-retry-panel')\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 60000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('identity-retry-panel')\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('identity-retry-panel')\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 60000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('identity-retry-panel')\u001b[22m\n\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:461:58",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                      "column": 58,
+                      "line": 461
+                    },
+                    "snippet": "  459 |\n  460 |   await page.goto('/research/workspaces')\n> 461 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })\n      |                                                          ^\n  462 |   expect(meCalls).toBe(4)\n  463 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)\n  464 |   expect(workspaceRequests).toEqual([])"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                        "column": 58,
+                        "line": 461
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('identity-retry-panel')\nExpected: visible\nTimeout: 60000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 60000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('identity-retry-panel')\u001b[22m\n\n\n  459 |\n  460 |   await page.goto('/research/workspaces')\n> 461 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })\n      |                                                          ^\n  462 |   expect(meCalls).toBe(4)\n  463 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)\n  464 |   expect(workspaceRequests).toEqual([])\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:461:58"
+                    },
+                    {
+                      "location": {
+                        "file": "http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js",
+                        "column": 10817,
+                        "line": 13
+                      },
+                      "message": "Error: AC-D09: retains credentials through 503 and network failures, then confirms identity on retry emitted browser runtime diagnostics:\npageerror: ReferenceError: Cannot access 'de' before initialization\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"message\": \"ReferenceError: Cannot access 'de' before initialization\u001b[39m\n\u001b[31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\u001b[39m\n\u001b[31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\",\u001b[39m\n\u001b[31m+     \"source\": \"pageerror\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n    at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T11:01:44.573Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                    "column": 58,
+                    "line": 461
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-80b65c2f9a57275824b8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 436,
+          "column": 1
+        },
+        {
+          "title": "AC-D09: a real startup 401 clears the expired identity and returns to the login form",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 35224,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('login-submit')\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('login-submit')\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('login-submit')\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('login-submit')\u001b[22m\n\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:501:50",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                      "column": 50,
+                      "line": 501
+                    },
+                    "snippet": "  499 |\n  500 |   await page.goto('/research/workspaces')\n> 501 |   await expect(page.getByTestId('login-submit')).toBeVisible()\n      |                                                  ^\n  502 |   await expect(page.getByTestId('identity-retry-panel')).toHaveCount(0)\n  503 |   expect(await tokenInSessionStorage(page)).toBeNull()\n  504 |   expect(await expiredEventCount(page)).toBe(1)"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                        "column": 50,
+                        "line": 501
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('login-submit')\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('login-submit')\u001b[22m\n\n\n  499 |\n  500 |   await page.goto('/research/workspaces')\n> 501 |   await expect(page.getByTestId('login-submit')).toBeVisible()\n      |                                                  ^\n  502 |   await expect(page.getByTestId('identity-retry-panel')).toHaveCount(0)\n  503 |   expect(await tokenInSessionStorage(page)).toBeNull()\n  504 |   expect(await expiredEventCount(page)).toBe(1)\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:501:50"
+                    },
+                    {
+                      "location": {
+                        "file": "http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js",
+                        "column": 10817,
+                        "line": 13
+                      },
+                      "message": "Error: AC-D09: a real startup 401 clears the expired identity and returns to the login form emitted browser runtime diagnostics:\npageerror: ReferenceError: Cannot access 'de' before initialization\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"message\": \"ReferenceError: Cannot access 'de' before initialization\u001b[39m\n\u001b[31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\u001b[39m\n\u001b[31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\",\u001b[39m\n\u001b[31m+     \"source\": \"pageerror\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n    at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T11:03:13.743Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts",
+                    "column": 50,
+                    "line": 501
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-7accd1a8cd5d86181968",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 484,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: a late A 401 cannot log out B, while B own 401 still expires B",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "timedOut",
+                  "duration": 124377,
+                  "error": {
+                    "message": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m",
+                    "stack": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m"
+                  },
+                  "errors": [
+                    {
+                      "message": "\u001b[31mTest timeout of 120000ms exceeded.\u001b[39m"
+                    },
+                    {
+                      "location": {
+                        "file": "http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js",
+                        "column": 10817,
+                        "line": 13
+                      },
+                      "message": "Error: AC-D10: a late A 401 cannot log out B, while B own 401 still expires B emitted browser runtime diagnostics:\npageerror: ReferenceError: Cannot access 'de' before initialization\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"message\": \"ReferenceError: Cannot access 'de' before initialization\u001b[39m\n\u001b[31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\u001b[39m\n\u001b[31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\",\u001b[39m\n\u001b[31m+     \"source\": \"pageerror\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n    at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T11:04:21.859Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-a32ca5abd91f127ca658",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 508,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "interrupted",
+                  "duration": 68461,
+                  "error": {
+                    "message": "Error: AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state emitted browser runtime diagnostics:\npageerror: ReferenceError: Cannot access 'de' before initialization\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"message\": \"ReferenceError: Cannot access 'de' before initialization\u001b[39m\n\u001b[31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\u001b[39m\n\u001b[31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\",\u001b[39m\n\u001b[31m+     \"source\": \"pageerror\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+                    "stack": "Error: AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state emitted browser runtime diagnostics:\npageerror: ReferenceError: Cannot access 'de' before initialization\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"message\": \"ReferenceError: Cannot access 'de' before initialization\u001b[39m\n\u001b[31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\u001b[39m\n\u001b[31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\",\u001b[39m\n\u001b[31m+     \"source\": \"pageerror\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n    at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3",
+                    "location": {
+                      "file": "http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js",
+                      "column": 10817,
+                      "line": 13
+                    }
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js",
+                        "column": 10817,
+                        "line": 13
+                      },
+                      "message": "Error: AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state emitted browser runtime diagnostics:\npageerror: ReferenceError: Cannot access 'de' before initialization\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"message\": \"ReferenceError: Cannot access 'de' before initialization\u001b[39m\n\u001b[31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\u001b[39m\n\u001b[31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\",\u001b[39m\n\u001b[31m+     \"source\": \"pageerror\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)\n    at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666\n    at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T11:07:02.216Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/test-failed-1.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e-results/iteration202/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js",
+                    "column": 10817,
+                    "line": 13
+                  }
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-c5d5bcd4bcc6aae76da3",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 564,
+          "column": 1
+        },
+        {
+          "title": "AC-D10: logout clears A workspace data before B opens the same workspace route",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-6bada4faaca24595d2f8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 613,
+          "column": 1
+        },
+        {
+          "title": "AC-D11: late A detail and units cannot replace B during same-route workspace navigation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-6b78327f36035e4019b2",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 714,
+          "column": 1
+        },
+        {
+          "title": "AC-D11: B detail and units remain active when they finish before late A responses",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-fixture",
+              "projectName": "chromium-fixture",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "ccfe31bd83c0ff2fd29f-82e20585f3d768a15de8",
+          "file": "iteration202-session-workspace.spec.ts",
+          "line": 789,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-12T11:01:26.835Z",
+    "duration": 428366.395,
+    "expected": 0,
+    "skipped": 4,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

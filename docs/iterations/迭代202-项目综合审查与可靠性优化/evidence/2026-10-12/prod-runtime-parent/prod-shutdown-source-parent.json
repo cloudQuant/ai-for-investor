@@ -1,0 +1,20 @@
+{
+  "versions": {
+    "gunicorn": "26.0.0",
+    "uvicorn": "0.47.0"
+  },
+  "sources": {
+    "uvicorn.Server.serve": {
+      "source_sha256": "112ef41af52167e35ebf82b8570d4aec9e64bdc952ed3905abb562fad5320ee5",
+      "source": "    async def serve(self, sockets: list[socket.socket] | None = None) -> None:\n        with self.capture_signals():\n            await self._serve(sockets)\n"
+    },
+    "uvicorn.Server._serve": {
+      "source_sha256": "4fb22efe2acde665626ad7a6348c7446137c355f4c6e9447a27d709dc90253f5",
+      "source": "    async def _serve(self, sockets: list[socket.socket] | None = None) -> None:\n        process_id = os.getpid()\n\n        config = self.config\n        if not config.loaded:\n            config.load()\n\n        self.lifespan = config.lifespan_class(config)\n\n        message = \"Started server process [%d]\"\n        color_message = \"Started server process [\" + click.style(\"%d\", fg=\"cyan\") + \"]\"\n        logger.info(message, process_id, extra={\"color_message\": color_message})\n\n        await self.startup(sockets=sockets)\n        if not self.should_exit:\n            await self.main_loop()\n        if self.started:\n            await self.shutdown(sockets=sockets)\n\n            message = \"Finished server process [%d]\"\n            color_message = \"Finished server process [\" + click.style(\"%d\", fg=\"cyan\") + \"]\"\n            logger.info(message, process_id, extra={\"color_message\": color_message})\n"
+    },
+    "gunicorn.Arbiter.stop": {
+      "source_sha256": "7138b6afd9c46ae09aa8fa106abed2b3fd1b6213f077f3e0f565401595f99af9",
+      "source": "    def stop(self, graceful=True):\n        \"\"\"\\\n        Stop workers\n\n        :attr graceful: boolean, If True (the default) workers will be\n        killed gracefully  (ie. trying to wait for the current connection)\n        \"\"\"\n        unlink = (\n            self.reexec_pid == self.master_pid == 0\n            and not self.systemd\n            and not self.cfg.reuse_port\n        )\n        sock.close_sockets(self.LISTENERS, unlink)\n\n        self.LISTENERS = []\n        sig = signal.SIGTERM\n        if not graceful:\n            sig = signal.SIGQUIT\n        limit = time.time() + self.cfg.graceful_timeout\n\n        # Stop dirty arbiter\n        if self.dirty_arbiter_pid:\n            self.kill_dirty_arbiter(sig)\n\n        # instruct the workers to exit\n        self.kill_workers(sig)\n        # wait until the graceful timeout\n        quick_shutdown = not graceful\n        while (self.WORKERS or self.dirty_arbiter_pid) and time.time() < limit:\n            # Check for SIGINT/SIGQUIT to trigger quick shutdown\n            if not quick_shutdown:\n                try:\n                    pending_sig = self.SIG_QUEUE.get_nowait()\n                    if pending_sig in (signal.SIGINT, signal.SIGQUIT):\n                        self.log.info(\"Quick shutdown requested\")\n                        quick_shutdown = True\n                        self.kill_workers(signal.SIGQUIT)\n                        if self.dirty_arbiter_pid:\n                            self.kill_dirty_arbiter(signal.SIGQUIT)\n                        # Give workers a short time to exit cleanly\n                        limit = time.time() + 2.0\n                except Exception:\n                    pass\n            self.reap_workers()\n            self.reap_dirty_arbiter()\n            time.sleep(0.1)\n\n        self.kill_workers(signal.SIGKILL)\n        if self.dirty_arbiter_pid:\n            self.kill_dirty_arbiter(signal.SIGKILL)\n        # Final reap to clean up any remaining zombies\n        self.reap_workers()\n        self.reap_dirty_arbiter()\n"
+    }
+  }
+}

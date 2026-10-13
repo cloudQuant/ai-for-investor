@@ -1,0 +1,626 @@
+{
+  "config": {
+    "configFile": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4.config.ts",
+    "rootDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/tmp/iteration202-tailwind4-compat/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-style-regression",
+        "name": "chromium-style-regression",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+        "testIgnore": [],
+        "testMatch": [
+          "style-regression.spec.ts"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/tmp/iteration202-tailwind4-compat/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox-style-regression",
+        "name": "firefox-style-regression",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+        "testIgnore": [],
+        "testMatch": [
+          "style-regression.spec.ts"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/tmp/iteration202-tailwind4-compat/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-style-regression",
+        "name": "webkit-style-regression",
+        "testDir": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4",
+        "testIgnore": [],
+        "testMatch": [
+          "style-regression.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/tmp/iteration202-tailwind4-compat/playwright-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+      "command": "node_modules/.bin/vite preview --host 127.0.0.1 --port 4187 --strictPort",
+      "url": "http://127.0.0.1:4187",
+      "reuseExistingServer": false,
+      "timeout": 120000,
+      "env": {
+        "VITE_API_TARGET": "http://127.0.0.1:4188"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "style-regression.spec.ts",
+      "file": "style-regression.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "login form keeps light and dark visual states on desktop and mobile",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-style-regression",
+              "projectName": "chromium-style-regression",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 2058,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1257\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1257\u001b[39m\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                      "column": 75,
+                      "line": 236
+                    },
+                    "snippet": "  234 |   await page.setViewportSize({ width: 390, height: 844 })\n  235 |   await expect(loginForm).toBeVisible()\n> 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')\n  238 | })\n  239 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                        "column": 75,
+                        "line": 236
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1257\u001b[39m\n\n  234 |   await page.setViewportSize({ width: 390, height: 844 })\n  235 |   await expect(loginForm).toBeVisible()\n> 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')\n  238 | })\n  239 |\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:07.332Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                    "column": 75,
+                    "line": 236
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-d2ba0653b3d2a44e97c8",
+          "file": "style-regression.spec.ts",
+          "line": 199,
+          "column": 1
+        },
+        {
+          "title": "register form renders all four input prefix icons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-style-regression",
+              "projectName": "chromium-style-regression",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 879,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:11.404Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-register--c9bb9-all-four-input-prefix-icons-chromium-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-fe4ed1b0f38a52918e07",
+          "file": "style-regression.spec.ts",
+          "line": 240,
+          "column": 1
+        },
+        {
+          "title": "workspace layout, create form, utility compatibility and dark theme remain usable",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-style-regression",
+              "projectName": "chromium-style-regression",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 2688,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1088\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1088\u001b[39m\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:403:75",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                      "column": 75,
+                      "line": 403
+                    },
+                    "snippet": "  401 |\n  402 |   await page.setViewportSize({ width: 390, height: 844 })\n> 403 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  404 |   const mobileSassStyles = await readResponsiveSassStyles(page)\n  405 |   expect(mobileSassStyles).toMatchObject({\n  406 |     pagePadding: '12px',"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                        "column": 75,
+                        "line": 403
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1088\u001b[39m\n\n  401 |\n  402 |   await page.setViewportSize({ width: 390, height: 844 })\n> 403 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  404 |   const mobileSassStyles = await readResponsiveSassStyles(page)\n  405 |   expect(mobileSassStyles).toMatchObject({\n  406 |     pagePadding: '12px',\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:403:75"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:12.836Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-chromium-style-regression/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-chromium-style-regression/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                    "column": 75,
+                    "line": 403
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-6cba536b183a774def44",
+          "file": "style-regression.spec.ts",
+          "line": 248,
+          "column": 1
+        },
+        {
+          "title": "login form keeps light and dark visual states on desktop and mobile",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox-style-regression",
+              "projectName": "firefox-style-regression",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 4860,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1257\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1257\u001b[39m\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                      "column": 75,
+                      "line": 236
+                    },
+                    "snippet": "  234 |   await page.setViewportSize({ width: 390, height: 844 })\n  235 |   await expect(loginForm).toBeVisible()\n> 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')\n  238 | })\n  239 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                        "column": 75,
+                        "line": 236
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1257\u001b[39m\n\n  234 |   await page.setViewportSize({ width: 390, height: 844 })\n  235 |   await expect(loginForm).toBeVisible()\n> 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')\n  238 | })\n  239 |\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:17.765Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-firefox-style-regression/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-firefox-style-regression/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                    "column": 75,
+                    "line": 236
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-e6bd6a7cac68f5aed0bb",
+          "file": "style-regression.spec.ts",
+          "line": 199,
+          "column": 1
+        },
+        {
+          "title": "register form renders all four input prefix icons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox-style-regression",
+              "projectName": "firefox-style-regression",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3578,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:28.116Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-register--c9bb9-all-four-input-prefix-icons-firefox-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-f68de8a82359a09ad9b5",
+          "file": "style-regression.spec.ts",
+          "line": 240,
+          "column": 1
+        },
+        {
+          "title": "workspace layout, create form, utility compatibility and dark theme remain usable",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox-style-regression",
+              "projectName": "firefox-style-regression",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8527,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:33.586Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-firefox-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-8e4d95218c5fd43ef9ee",
+          "file": "style-regression.spec.ts",
+          "line": 248,
+          "column": 1
+        },
+        {
+          "title": "login form keeps light and dark visual states on desktop and mobile",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-style-regression",
+              "projectName": "webkit-style-regression",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 7535,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1256\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1256\u001b[39m\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                      "column": 75,
+                      "line": 236
+                    },
+                    "snippet": "  234 |   await page.setViewportSize({ width: 390, height: 844 })\n  235 |   await expect(loginForm).toBeVisible()\n> 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')\n  238 | })\n  239 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                        "column": 75,
+                        "line": 236
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1256\u001b[39m\n\n  234 |   await page.setViewportSize({ width: 390, height: 844 })\n  235 |   await expect(loginForm).toBeVisible()\n> 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')\n  238 | })\n  239 |\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:46.589Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-webkit-style-regression/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-webkit-style-regression/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                    "column": 75,
+                    "line": 236
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-2407f826625732f9f0a6",
+          "file": "style-regression.spec.ts",
+          "line": 199,
+          "column": 1
+        },
+        {
+          "title": "register form renders all four input prefix icons",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-style-regression",
+              "projectName": "webkit-style-regression",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1453,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:09:59.182Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-register--c9bb9-all-four-input-prefix-icons-webkit-style-regression/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-391364f9e96f2aac868b",
+          "file": "style-regression.spec.ts",
+          "line": 240,
+          "column": 1
+        },
+        {
+          "title": "workspace layout, create form, utility compatibility and dark theme remain usable",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-style-regression",
+              "projectName": "webkit-style-regression",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 2592,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1087\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1087\u001b[39m\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:403:75",
+                    "location": {
+                      "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                      "column": 75,
+                      "line": 403
+                    },
+                    "snippet": "  401 |\n  402 |   await page.setViewportSize({ width: 390, height: 844 })\n> 403 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  404 |   const mobileSassStyles = await readResponsiveSassStyles(page)\n  405 |   expect(mobileSassStyles).toMatchObject({\n  406 |     pagePadding: '12px',"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                        "column": 75,
+                        "line": 403
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m390\u001b[39m\nReceived:    \u001b[31m1087\u001b[39m\n\n  401 |\n  402 |   await page.setViewportSize({ width: 390, height: 844 })\n> 403 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)\n      |                                                                           ^\n  404 |   const mobileSassStyles = await readResponsiveSassStyles(page)\n  405 |   expect(mobileSassStyles).toMatchObject({\n  406 |     pagePadding: '12px',\n    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:403:75"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-12T12:10:00.961Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-webkit-style-regression/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-webkit-style-regression/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts",
+                    "column": 75,
+                    "line": 403
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "dbf3718fe2bf63e5c245-dde9d56bcb243e30f8cd",
+          "file": "style-regression.spec.ts",
+          "line": 248,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-12T12:09:04.324Z",
+    "duration": 59357.074,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 5,
+    "flaky": 0
+  }
+}

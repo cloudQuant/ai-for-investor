@@ -462,6 +462,7 @@
                 v-for="col in visibleColumns"
                 :key="col.prop"
               >
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-if="col.prop === 'symbol'"
                   prop="symbol"
@@ -493,6 +494,7 @@
                   width="90"
                   show-overflow-tooltip
                 />
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-else-if="col.prop === 'last_price'"
                   prop="last_price"
@@ -502,9 +504,10 @@
                   align="right"
                 >
                   <template #default="{ row }">
-                    <span :class="priceClass(row)">{{ fmtPrice(row.last_price, row) }}</span>
+                    <span :class="priceClass(row)">{{ formatQuoteTickPrice(row.last_price, row) }}</span>
                   </template>
                 </el-table-column>
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-else-if="col.prop === 'change'"
                   prop="change"
@@ -553,6 +556,7 @@
                     {{ fmtVol(row[col.prop]) }}
                   </template>
                 </el-table-column>
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-else
                   :prop="col.prop"
@@ -562,7 +566,7 @@
                   align="right"
                 >
                   <template #default="{ row }">
-                    {{ fmtPrice(row[col.prop], row) }}
+                    {{ formatQuoteTickPrice(getQuoteNumericValue(row, col.prop), row) }}
                   </template>
                 </el-table-column>
               </template>
@@ -588,6 +592,7 @@
                   </el-tooltip>
                 </template>
               </el-table-column>
+              <!-- @vue-generic {QuoteTick} -->
               <el-table-column
                 :label="t('quote.colRemoveSubscription')"
                 width="64"
@@ -638,7 +643,7 @@
                       <strong>{{ row.symbol }}</strong>
                       <span>{{ quoteOriginText(row) || row.name || row.category || '--' }}</span>
                     </span>
-                    <span :class="priceClass(row)">{{ fmtPrice(row.last_price, row) }}</span>
+                    <span :class="priceClass(row)">{{ formatQuoteTickPrice(row.last_price, row) }}</span>
                   </button>
 
                   <dl class="quote-mobile-card__metrics">
@@ -949,7 +954,7 @@ import { useQuoteStore } from '@/stores/quote'
 import type { DataSourceInfo, QuoteTick } from '@/api/quote'
 import ResponsiveDataGrid from '@/components/common/ResponsiveDataGrid.vue'
 import DataTableSkeleton from '@/components/common/DataTableSkeleton.vue'
-import { formatQuoteChange, formatQuotePrice } from '@/utils/quoteFormat'
+import { formatQuoteChange, formatQuoteTickPrice, getQuoteNumericValue } from '@/utils/quoteFormat'
 import { CANDLE_DOWN_COLOR, CANDLE_ITEM_STYLE, CANDLE_UP_COLOR } from '@/constants/chartColors'
 
 const { t } = useI18n()
@@ -1110,8 +1115,8 @@ const tableSortProp = computed<Sort | undefined>(() => {
   return { prop: store.sortField, order: store.sortOrder === 'asc' ? 'ascending' : 'descending' }
 })
 
-function handleSortChange({ prop, order }: { prop: string; order: string | null }) {
-  if (!order) {
+function handleSortChange({ prop, order }: { prop: string | null; order: Sort['order'] | null }) {
+  if (!order || !prop) {
     store.sortField = ''
     store.sortOrder = 'asc'
   } else {
@@ -1212,13 +1217,6 @@ watch(showColumnDialog, (v) => {
 })
 
 // ---- formatting helpers ----
-function fmtPrice(v: number | null, row?: QuoteTick): string {
-  return formatQuotePrice(v, {
-    source: row?.source,
-    symbol: row?.symbol,
-  })
-}
-
 function fmtChange(v: number | null, row?: QuoteTick): string {
   return formatQuoteChange(v, {
     source: row?.source,

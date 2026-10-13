@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { workspaceApi } from '@/api/workspace'
 import * as sessionUtils from '@/utils/session'
+import { setToken } from '@/utils/tokenRef'
 
 // Mock the auth API
 vi.mock('@/api/auth', () => ({
@@ -35,6 +38,13 @@ vi.mock('@/api/strategy', () => ({
   },
 }))
 
+vi.mock('@/api/workspace', () => ({
+  workspaceApi: {
+    get: vi.fn(),
+    listUnits: vi.fn(),
+  },
+}))
+
 // Mock session utils
 vi.mock('@/utils/session', () => ({
   getAccessToken: vi.fn(() => null),
@@ -46,7 +56,18 @@ describe('useAuthStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    setToken(null)
   })
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (reason?: unknown) => void
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise
+      reject = rejectPromise
+    })
+    return { promise, resolve, reject }
+  }
 
   it('should start unauthenticated', () => {
     const store = useAuthStore()
@@ -71,12 +92,24 @@ describe('useAuthStore', () => {
 
   it('should logout and clear state', async () => {
     const store = useAuthStore()
+    const workspaceStore = useWorkspaceStore()
     await store.login({ username: 'testuser', password: 'password123' })
+    workspaceStore.workspaces = [{ id: 'shared' } as never]
+    workspaceStore.currentWorkspace = { id: 'shared' } as never
+    workspaceStore.units = [{ id: 'unit-shared', workspace_id: 'shared' } as never]
+    workspaceStore.selectedUnitIds = ['unit-shared']
+    workspaceStore.activeWorkspaceId = 'shared'
     store.logout()
     expect(store.token).toBeNull()
     expect(store.user).toBeNull()
     expect(store.isAuthenticated).toBe(false)
     expect(sessionUtils.clearAccessToken).toHaveBeenCalled()
+    expect(workspaceStore.workspaces).toEqual([])
+    expect(workspaceStore.currentWorkspace).toBeNull()
+    expect(workspaceStore.units).toEqual([])
+    expect(workspaceStore.selectedUnitIds).toEqual([])
+    expect(workspaceStore.activeWorkspaceId).toBeNull()
+    expect(workspaceStore.loading).toBe(false)
   })
 
   it('should register without setting token', async () => {
@@ -93,17 +126,163 @@ describe('useAuthStore', () => {
     expect(authApi.getMe).not.toHaveBeenCalled()
   })
 
-  it('fetchUser logs out on API error', async () => {
+  it.each([
+    ['503 response', { response: { status: 503 } }],
+    ['network error', new Error('network unavailable')],
+  ])('keeps credentials and pending identity after a transient %s', async (_label, error) => {
     const { authApi } = await import('@/api/auth')
     const store = useAuthStore()
-    await store.login({ username: 'testuser', password: 'password123' })
-    expect(store.token).toBe('mock-token')
+    store.token = 'valid-token'
+    const getMeRequest = deferred<any>()
+    vi.mocked(authApi.getMe).mockReturnValueOnce(getMeRequest.promise)
 
-    // Now make getMe fail and trigger fetchUser explicitly
-    vi.mocked(authApi.getMe).mockRejectedValueOnce(new Error('expired'))
-    await store.fetchUser()
+    const pendingFetch = store.fetchUser()
+    expect(store.identityStatus).toBe('loading')
+    getMeRequest.reject(error)
+    expect(await pendingFetch).toBe(false)
+
+    expect(store.token).toBe('valid-token')
+    expect(store.user).toBeNull()
+    expect(store.identityStatus).toBe('retryable_error')
+    expect(store.identityError).toBeTruthy()
+    expect(store.isAuthenticated).toBe(false)
+    expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('confirms identity on retry without submitting another login', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    const loginError = { response: { status: 503 } }
+    vi.mocked(authApi.getMe).mockRejectedValueOnce(loginError)
+
+    await expect(store.login({ username: 'testuser', password: 'password123' }))
+      .rejects.toBe(loginError)
+    expect(store.token).toBe('mock-token')
+    expect(store.identityStatus).toBe('retryable_error')
+    expect(store.isAuthenticated).toBe(false)
+
+    vi.mocked(authApi.getMe).mockResolvedValueOnce({
+      id: '1', username: 'testuser', email: 'test@test.com', is_active: true,
+      created_at: '2024-01-01T00:00:00',
+    })
+    expect(await store.fetchUser()).toBe(true)
+    expect(store.identityStatus).toBe('confirmed')
+    expect(store.isAuthenticated).toBe(true)
+    expect(authApi.login).toHaveBeenCalledTimes(1)
+  })
+
+  it('logs out when getMe returns a real 401', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    store.token = 'expired-token'
+    vi.mocked(authApi.getMe).mockRejectedValueOnce({ response: { status: 401 } })
+
+    expect(await store.fetchUser()).toBe(false)
     expect(store.token).toBeNull()
     expect(store.user).toBeNull()
+    expect(store.identityStatus).toBe('anonymous')
+    expect(sessionUtils.clearAccessToken).toHaveBeenCalled()
+  })
+
+  it.each(['late 401', 'late success'])('does not let an old session A response replace login B (%s)', async (responseKind) => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    const oldResponse = deferred<any>()
+    vi.mocked(authApi.getMe)
+      .mockReturnValueOnce(oldResponse.promise)
+      .mockResolvedValueOnce({
+        id: '2', username: 'user-b', email: 'b@test.com', is_active: true,
+        created_at: '2024-01-01T00:00:00',
+      })
+    store.token = 'token-a'
+    const requestA = store.fetchUser()
+
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      access_token: 'token-b', token_type: 'bearer', expires_in: 86400,
+    })
+    await store.login({ username: 'user-b', password: 'password123' })
+    expect(store.token).toBe('token-b')
+    expect(store.user?.username).toBe('user-b')
+
+    if (responseKind === 'late 401') {
+      oldResponse.reject({ response: { status: 401 } })
+    } else {
+      oldResponse.resolve({
+        id: '1', username: 'user-a', email: 'a@test.com', is_active: true,
+        created_at: '2024-01-01T00:00:00',
+      })
+    }
+    await requestA
+
+    expect(store.token).toBe('token-b')
+    expect(store.user?.username).toBe('user-b')
+    expect(store.isAuthenticated).toBe(true)
+    expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('clears workspace A as soon as login B starts identity confirmation', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    const workspaceStore = useWorkspaceStore()
+    const detailA = deferred<any>()
+    const unitsA = deferred<any>()
+    const identityB = deferred<any>()
+
+    store.token = 'token-a'
+    store.user = {
+      id: 'user-a', username: 'user-a', email: 'a@test.com', is_active: true,
+      created_at: '2024-01-01T00:00:00',
+    }
+    store.identityStatus = 'confirmed'
+    setToken('token-a')
+    workspaceStore.activateWorkspace('shared')
+    workspaceStore.workspaces = [{ id: 'shared' } as never]
+    workspaceStore.currentWorkspace = { id: 'shared', name: 'Workspace A' } as never
+    workspaceStore.units = [{ id: 'unit-a', workspace_id: 'shared' } as never]
+    workspaceStore.setSelectedUnitIds(['unit-a'])
+
+    vi.mocked(workspaceApi.get).mockReturnValueOnce(detailA.promise as never)
+    vi.mocked(workspaceApi.listUnits).mockReturnValueOnce(unitsA.promise as never)
+    const detailRequestA = workspaceStore.fetchWorkspace('shared')
+    const unitsRequestA = workspaceStore.fetchUnits('shared')
+
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      access_token: 'token-b', token_type: 'bearer', expires_in: 86400,
+    })
+    vi.mocked(authApi.getMe).mockReturnValueOnce(identityB.promise)
+    const loginB = store.login({ username: 'user-b', password: 'password123' })
+    await Promise.resolve()
+
+    expect(authApi.getMe).toHaveBeenCalledTimes(1)
+    expect(store.token).toBe('token-b')
+    expect(store.identityStatus).toBe('loading')
+    expect(store.user).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
+    expect(workspaceStore.workspaces).toEqual([])
+    expect(workspaceStore.currentWorkspace).toBeNull()
+    expect(workspaceStore.units).toEqual([])
+    expect(workspaceStore.selectedUnitIds).toEqual([])
+    expect(workspaceStore.activeWorkspaceId).toBeNull()
+    expect(workspaceStore.loading).toBe(false)
+
+    detailA.resolve({ id: 'shared', name: 'Late workspace A' })
+    unitsA.resolve({
+      items: [{ id: 'unit-a', workspace_id: 'shared' }],
+      total: 1,
+    })
+    await Promise.all([detailRequestA, unitsRequestA])
+    expect(workspaceStore.currentWorkspace).toBeNull()
+    expect(workspaceStore.units).toEqual([])
+
+    identityB.resolve({
+      id: 'user-b', username: 'user-b', email: 'b@test.com', is_active: true,
+      created_at: '2024-01-01T00:00:00',
+    })
+    await loginB
+    expect(store.user?.username).toBe('user-b')
+    expect(store.isAuthenticated).toBe(true)
+    expect(workspaceStore.currentWorkspace).toBeNull()
+    expect(workspaceStore.units).toEqual([])
   })
 
   it('initialize is a no-op when already initialized', async () => {
@@ -125,8 +304,28 @@ describe('useAuthStore', () => {
     await store.initialize()
 
     expect(store.token).toBe('session-token')
+    expect(store.user).not.toBeNull()
     expect(authApi.getMe).toHaveBeenCalled()
     expect(store.initialized).toBe(true)
+  })
+
+  it('keeps a persisted token but remains unauthenticated when startup identity validation is transiently unavailable', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    const profileRequest = deferred<any>()
+    store.token = 'persisted-token'
+    vi.mocked(authApi.getMe).mockReturnValueOnce(profileRequest.promise)
+
+    const initialization = store.initialize()
+    expect(store.isAuthenticated).toBe(false)
+    profileRequest.reject({ response: { status: 503 } })
+    await initialization
+
+    expect(store.token).toBe('persisted-token')
+    expect(store.identityStatus).toBe('retryable_error')
+    expect(store.initialized).toBe(true)
+    expect(store.isAuthenticated).toBe(false)
+    expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
   })
 
   it('initialize without a session token does nothing extra', async () => {

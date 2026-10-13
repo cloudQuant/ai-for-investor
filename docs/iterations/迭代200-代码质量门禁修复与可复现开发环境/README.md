@@ -1,9 +1,11 @@
 # 迭代 200：代码质量门禁修复与可复现开发环境
 
-> 状态：本轮本地代码质量门禁已收口：canonical dev lock Mypy 为 0 errors / 630 source files、ratchet 为 0→0，本地非性能后端回归为 7,864 passed / 123 skipped / 24 deselected；Python/npm registry audit、warning-free 前端 lint、manifest bundle 预算和源码尺寸棘轮均通过。七个结构性巨型编排器已明确转入迭代 201。CI workflow、浏览器 e2e/网络节流、真实数据库、行情、供应商、交易和共享 Redis 滚动发布验收仍未运行，不构成发布批准。
+> 2026-10-12 最终复验：**PASS / ACCEPTED_LOCAL**。canonical dev lock 的 172 个 registry pin 同步、Mypy 667 文件零错误/ratchet 0、Ruff/format、尺寸棘轮和依赖审计通过。Node 20.20.2 / 24.19.0 各 1,726 项、类型、零 warning lint、build、原 bundle gate 通过；同一最终产物会话/工作区 7 项及三浏览器样式 9 项通过。后端原完整批次 7,853 passed / 25 failed / 131 skipped，25 个失败均经完整相关文件复验通过，并以源码清单绑定最终代码；不将原批次改写为零失败。详见[最终验收汇总](../迭代202-项目综合审查与可靠性优化/FINAL_ACCEPTANCE.md)。
+
+> T69 历史状态（2026-09-22）：当时本地代码质量门禁已收口：canonical dev lock Mypy 为 0 errors / 630 source files、ratchet 为 0→0，本地非性能后端回归为 7,864 passed / 123 skipped / 24 deselected；Python/npm registry audit、warning-free 前端 lint、manifest bundle 预算和源码尺寸棘轮均通过。七个结构性巨型编排器已明确转入迭代 201。CI workflow、浏览器 e2e/网络节流、真实数据库、行情、供应商、交易和共享 Redis 滚动发布验收仍未运行，不构成发布批准。
 > 编制日期：2026-09-20。
 
-> 历史说明：T1–T61 中的全量 Mypy 错误数及 `FAIL / NO-GO` 标签均是各批次当时的快照；T62–T64 的 0/625 同样是历史快照，不代表当前状态。当前本地门禁状态见 T69。
+> 历史说明：T1–T61 中的全量 Mypy 错误数及 `FAIL / NO-GO` 标签均是各批次当时的快照；T62–T64 的 0/625 同样是历史快照，不代表当前状态。本次最终门禁见上方 2026-10-12 复验及统一汇总；T69 仅为历史快照。
 
 ## 目标
 

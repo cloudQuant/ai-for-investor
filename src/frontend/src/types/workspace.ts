@@ -460,9 +460,14 @@ export interface ParamRangeSpec {
   type?: string
 }
 
+export type OptimizationObjective = 'sharpe_ratio' | 'total_return' | 'max_drawdown'
+export type OptimizationDirection = 'maximize' | 'minimize'
+
 export interface UnitOptimizationRequest {
   unit_id: string
   param_ranges: Record<string, ParamRangeSpec>
+  objective: OptimizationObjective
+  direction: OptimizationDirection
   n_workers?: number
   mode?: string
   timeout?: number
@@ -506,6 +511,8 @@ export interface OptimizationProgressResponse {
 
 export interface OptimizationResultRow {
   params?: Record<string, number | string>
+  result_index?: number
+  trial_index?: number | null
   [key: string]: unknown
 }
 
@@ -516,7 +523,9 @@ export interface OptimizationResultsResponse {
   completed: number
   failed: number
   param_names: string[]
-  objective?: string
+  objective?: OptimizationObjective | null
+  direction?: OptimizationDirection | null
+  tie_break?: string | null
   best?: OptimizationResultRow | null
   rows?: OptimizationResultRow[]
   results?: OptimizationResultRow[]

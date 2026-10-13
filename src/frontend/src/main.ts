@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import router from './router'
@@ -61,11 +60,6 @@ async function bootstrap() {
     // 防止某些浏览器在控制台显示默认错误
     // event.preventDefault()
   })
-
-  // 注册Element Plus图标
-  for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-    app.component(key, component)
-  }
 
   app.use(pinia)
   app.use(i18n)

@@ -1,0 +1,93 @@
+{
+  "verdict": "PASS",
+  "reviewed_at": "2026-10-12T15:32:59.786Z",
+  "build_receipt": "prod-source-final-build-parent-receipt.json",
+  "image": "sha256:ad00640ed6c2b51761b5b9e6d7b70030ecd809a868b3b301aa36c6bfd19732f2",
+  "container": "46cc83b7614c2db9b2c848aeec65ec0c22bc4823c0f08cca4052fa77d52a8911",
+  "controller": "prod-source-final-v5-controller-parent-receipt.json",
+  "image_source_review": "prod-source-final-image-parent-review.json",
+  "init_master_workers": {
+    "init": 1,
+    "master": 6,
+    "workers": [
+      7,
+      8
+    ]
+  },
+  "runtime_permissions": {
+    "database": "iter202_dev_d12",
+    "runtime_role": "iter202_prod_runtime_v5_d479181138ffede0",
+    "login": true,
+    "superuser": false,
+    "create_database": false,
+    "create_role": false,
+    "replication": false,
+    "bypass_rls": false,
+    "database_connect": true,
+    "database_create": false,
+    "schema_usage": true,
+    "schema_create": false,
+    "tables_dml": true,
+    "tables_checked": 154,
+    "sequences_usage_select": true,
+    "sequences_checked": 7
+  },
+  "independent_http_status": 200,
+  "database_health": "healthy",
+  "shutdown": {
+    "status": "exited",
+    "exit_code": "0",
+    "oom_killed": "false",
+    "master_pid": 6,
+    "master_term_signal_pids": [
+      6
+    ],
+    "application_shutdown_complete_pids": [
+      7,
+      8
+    ],
+    "finished_server_process_pids": [
+      7,
+      8
+    ],
+    "master_shutdown_pids": [
+      6
+    ],
+    "expected_worker_pids": [
+      7,
+      8
+    ],
+    "forced_kill_or_timeout_marker": false
+  },
+  "schema_fingerprint_before": "e03443bccdb970ffb4594960829a889aa6e33f53aeb5cfa896060cf34fb97f3a",
+  "schema_fingerprint_after": "e03443bccdb970ffb4594960829a889aa6e33f53aeb5cfa896060cf34fb97f3a",
+  "elapsed_ms": 327712,
+  "artifacts": [
+    {
+      "name": "prod-init-runtime-v5-parent.receipt.md",
+      "sha256": "d3f49765098665cc14a1f9439772455f76c7dc9f4dea6671fcfad7f4aa0fecdc"
+    },
+    {
+      "name": "prod-init-runtime-v5-parent.filtered.log",
+      "sha256": "e782d31da5bfaf3ecf89fe5522072ca0fb2c6a142ca7ada8a3a3460b4ed9227a"
+    },
+    {
+      "name": "prod-init-runtime-v5-parent.cjs",
+      "sha256": "fdd20ca19a58194f57c5ef5f72f84917be819cab93f5a04e9a947c5828f8ff4d"
+    },
+    {
+      "name": "prod-source-final-v5-markers.log",
+      "sha256": "26cd56beeb3584798943b197ab324752a70fa8e84c33ae40b0c650d737306a1b"
+    },
+    {
+      "name": "prod-source-final-v5-controller-parent.cjs",
+      "sha256": "9b69fa89a313db8d0b9c93633a94b7555cf381518eefbf1a4bb10c124311f142"
+    }
+  ],
+  "redaction": {
+    "exact_secret_values_checked": 8,
+    "leaks": 0,
+    "env_files_not_archived": true
+  },
+  "boundary": "One isolated production runtime on internal PostgreSQL fixture, no host ports or mounts; two workers, DB auto-create/admin flags false. Acceptance-only Docker health retries=5 and startup watchdog=900s; application Gunicorn 300s/graceful 30s unchanged. Actual docker stop grace=35s; no production deployment. Original harness/probe failures retained."
+}

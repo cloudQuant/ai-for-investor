@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import sys
 import types
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -384,6 +385,7 @@ async def test_param_optimization_service_missing_branches(tmp_path: Path, monke
 
     monkeypatch.setattr(p.shutil, "copytree", _copytree)
     monkeypatch.setattr(p.subprocess, "run", MagicMock(side_effect=RuntimeError("boom")))
+    real_rmtree = p.shutil.rmtree
     monkeypatch.setattr(p.shutil, "rmtree", MagicMock(side_effect=RuntimeError("rm boom")))
     out = p._run_single_trial("sdir", {"p": 1}, 0, str(base))
     assert out["success"] is False
@@ -392,6 +394,11 @@ async def test_param_optimization_service_missing_branches(tmp_path: Path, monke
     t = {"status": "cancelled", "failed": 0}
     monkeypatch.setattr(p, "_get_task", lambda _tid: t)
     monkeypatch.setattr(p, "_update_task", lambda *a, **k: None)
+    monkeypatch.setattr(p, "_is_optimization_cancelled", lambda _tid, _persist: True)
+    monkeypatch.setattr(p.shutil, "rmtree", real_rmtree)
+    pre_cancel_dir = tmp_path / "pre-cancel-runner"
+    pre_cancel_dir.mkdir()
+    monkeypatch.setattr(p, "tempfile", SimpleNamespace(mkdtemp=lambda prefix: str(pre_cancel_dir)))
 
     class DummyExecutor:
         def __enter__(self):
@@ -404,50 +411,91 @@ async def test_param_optimization_service_missing_branches(tmp_path: Path, monke
             raise AssertionError("should not submit")
 
     monkeypatch.setattr(p, "ProcessPoolExecutor", lambda max_workers: DummyExecutor())
-    monkeypatch.setattr(p, "as_completed", lambda futures: [])
-    p._run_optimization_thread("tid", "sdir", [{"p": 1}], 1)
+    p._run_optimization_thread("tid", "sdir", [{"p": 1}], 1, persist_to_db=False)
 
-    # cancelled during as_completed: cancel pending futures (lines 349-351)
+    # Cancellation arriving at the first collection poll cancels the pending
+    # future, does not collect its result, and prevents dispatch of later trials.
+    task_state = {"status": "running", "failed": 0}
+    monkeypatch.setattr(p, "_get_task", lambda _tid: task_state)
+    monkeypatch.setattr(
+        p,
+        "_is_optimization_cancelled",
+        lambda _tid, _persist: task_state["status"] == "cancelled",
+    )
+
     class DummyFuture:
         def __init__(self):
-            self.cancel = MagicMock()
+            self.cancel_calls = 0
+            self.result_calls = 0
+            self._cancelled = False
+
+        def cancel(self):
+            self.cancel_calls += 1
+            self._cancelled = True
+            return True
+
+        def cancelled(self):
+            return self._cancelled
 
         def result(self, timeout=None):
+            self.result_calls += 1
             return {"success": True, "params": {"p": 1}, "metrics": {"annual_return": 1.0}}
 
     futures_created = []
+    submitted_params = []
 
     class DummyExecutor2(DummyExecutor):
         def submit(self, fn, *args, **kwargs):
+            submitted_params.append(args[1])
             fut = DummyFuture()
             futures_created.append(fut)
             return fut
 
-    # Return running during submission checks, then cancelled when collecting results.
-    call_count = {"n": 0}
+    collection_calls = []
 
-    def _get_task_cancel_on_collect(_tid):
-        call_count["n"] += 1
-        # First two calls happen in the submission loop for a 2-item grid.
-        if call_count["n"] <= 2:
-            return {"status": "running", "failed": 0}
-        return {"status": "cancelled", "failed": 0}
+    def _as_completed_with_timeout(futures, timeout=None):
+        pending = tuple(futures)
+        collection_calls.append((pending, timeout))
+        assert timeout is not None and timeout > 0
+        if len(collection_calls) == 1:
+            assert pending == tuple(futures_created)
+            assert submitted_params == [{"p": 1}]
+            task_state["status"] = "cancelled"
+            raise FuturesTimeoutError
+        assert all(future.cancelled() for future in pending)
+        return iter(pending)
 
-    monkeypatch.setattr(p, "_get_task", _get_task_cancel_on_collect)
     monkeypatch.setattr(p, "ProcessPoolExecutor", lambda max_workers: DummyExecutor2())
-    monkeypatch.setattr(p, "as_completed", lambda futures: list(futures)[:1])
+    monkeypatch.setattr(p, "as_completed", _as_completed_with_timeout)
+    cancel_dir = tmp_path / "cancel-during-collection"
+    cancel_dir.mkdir()
+    monkeypatch.setattr(p, "tempfile", SimpleNamespace(mkdtemp=lambda prefix: str(cancel_dir)))
 
-    p._run_optimization_thread("tid2", "sdir", [{"p": 1}, {"p": 2}], 1)
-    assert any(f.cancel.call_count > 0 for f in futures_created)
+    p._run_optimization_thread(
+        "tid2", "sdir", [{"p": 1}, {"p": 2}, {"p": 3}], 1, persist_to_db=False
+    )
+    assert submitted_params == [{"p": 1}]
+    assert len(futures_created) == 1
+    assert futures_created[0].cancel_calls == 1
+    assert futures_created[0].result_calls == 0
+    assert len(collection_calls) == 2
 
     # Exception path (lines 374-376) + finally rmtree exception (lines 380-381)
-    def _boom_executor(_max_workers):
+    executor_factory_calls = []
+
+    def _boom_executor(max_workers):
+        executor_factory_calls.append(max_workers)
         raise RuntimeError("executor boom")
 
     monkeypatch.setattr(p, "ProcessPoolExecutor", _boom_executor)
-    monkeypatch.setattr(p, "tempfile", SimpleNamespace(mkdtemp=lambda prefix: str(tmp_path / "tb")))
-    monkeypatch.setattr(p.shutil, "rmtree", MagicMock(side_effect=RuntimeError("rmtree boom")))
-    p._run_optimization_thread("tid3", "sdir", [{"p": 1}], 1)
+    error_dir = tmp_path / "tb"
+    error_dir.mkdir()
+    monkeypatch.setattr(p, "tempfile", SimpleNamespace(mkdtemp=lambda prefix: str(error_dir)))
+    cleanup_failure = MagicMock(side_effect=RuntimeError("rmtree boom"))
+    monkeypatch.setattr(p.shutil, "rmtree", cleanup_failure)
+    p._run_optimization_thread("tid3", "sdir", [{"p": 1}], 1, persist_to_db=False)
+    assert executor_factory_calls == [1]
+    cleanup_failure.assert_called_once_with(str(error_dir))
 
 
 @pytest.mark.asyncio

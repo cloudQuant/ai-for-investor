@@ -1,0 +1,148 @@
+{
+  "started_at": "2026-10-12T14:21:05.245Z",
+  "pid": 97187,
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "source_manifest": "frontend-final-v14-matrix-parent-source-manifest.json",
+  "source_manifest_sha256": "0b928fd72bef3e8c33c1600adc3ef72086e3c35eb4062952f802ece439bd652e",
+  "runtimes": [
+    {
+      "label": "node20",
+      "node": "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+      "version": "v20.20.2"
+    },
+    {
+      "label": "node24",
+      "node": "/Users/yunjinqi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "version": "v24.19.0"
+    }
+  ],
+  "steps": [
+    {
+      "label": "node20-typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "started_at": "2026-10-12T14:21:05.370Z",
+      "state": "PASS",
+      "log": "frontend-final-v14-matrix-parent-node20-typecheck.txt",
+      "pid": 97204,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:21:20.072Z",
+      "elapsed_seconds": 14.702,
+      "log_sha256": "d80faa434b9b4945bfeb6eee26948bf5394595eb192745c84d475f965dab3fd6"
+    },
+    {
+      "label": "node20-vite-typecheck",
+      "command": [
+        "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "tsconfig.node.json",
+        "--noEmit",
+        "--tsBuildInfoFile",
+        "/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v14-matrix-parent-node20.tsbuildinfo"
+      ],
+      "started_at": "2026-10-12T14:21:20.073Z",
+      "state": "PASS",
+      "log": "frontend-final-v14-matrix-parent-node20-vite-typecheck.txt",
+      "pid": 97317,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:21:21.270Z",
+      "elapsed_seconds": 1.197,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "node20-lint",
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "started_at": "2026-10-12T14:21:21.271Z",
+      "state": "PASS",
+      "log": "frontend-final-v14-matrix-parent-node20-lint.txt",
+      "pid": 97335,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:21:29.303Z",
+      "elapsed_seconds": 8.032,
+      "log_sha256": "73878867f16852f02fc3cad2583e1e9a4ae1d4d0fd710852e7a5333aa19697b0"
+    },
+    {
+      "label": "node20-vitest",
+      "command": [
+        "/Users/yunjinqi/.npm/_npx/185e25162edaacfb/node_modules/node/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=1",
+        "--no-file-parallelism",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/tmp/ai-investor-iter200-202-20261012.afLb99/frontend-final-v14-matrix-parent-node20-vitest-results.json"
+      ],
+      "started_at": "2026-10-12T14:21:29.304Z",
+      "state": "PASS",
+      "log": "frontend-final-v14-matrix-parent-node20-vitest.txt",
+      "pid": 97418,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:22:44.703Z",
+      "elapsed_seconds": 75.399,
+      "log_sha256": "dcd0f6b36f883f1b89f0292f3c45faf17143e40ea7ab85a611608342e65c5470"
+    },
+    {
+      "label": "node20-build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-10-12T14:22:44.705Z",
+      "state": "PASS",
+      "log": "frontend-final-v14-matrix-parent-node20-build.txt",
+      "pid": 98191,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:23:17.224Z",
+      "elapsed_seconds": 32.519,
+      "log_sha256": "eeb67a34ad0f71dd0b46f45d1a1a5dfb597be6ccf3dab1b1d214226677f9d8b6"
+    },
+    {
+      "label": "node20-bundle",
+      "command": [
+        "bash",
+        "../../scripts/ci/check_bundle_size.sh",
+        "dist"
+      ],
+      "started_at": "2026-10-12T14:23:17.225Z",
+      "state": "PASS",
+      "log": "frontend-final-v14-matrix-parent-node20-bundle.txt",
+      "pid": 98610,
+      "exit_code": 0,
+      "signal": null,
+      "finished_at": "2026-10-12T14:23:19.482Z",
+      "elapsed_seconds": 2.257,
+      "log_sha256": "5ef5ef0fcbceb535c95a886baaace2cffd601f78b31de4b7e29a4c707b9c97b3"
+    },
+    {
+      "label": "node24-typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "started_at": "2026-10-12T14:23:19.501Z",
+      "state": "INTERRUPTED",
+      "log": "frontend-final-v14-matrix-parent-node24-typecheck.txt",
+      "pid": 207,
+      "exit_code": null,
+      "reason": "Primary stopped the verified matrix process group for confirmed continuation-state regression"
+    }
+  ],
+  "state": "INCOMPLETE_INTERRUPTED_FOR_CONFIRMED_CODE_FIX",
+  "interruption_evidence": "frontend-final-v14-primary-interruption.json"
+}

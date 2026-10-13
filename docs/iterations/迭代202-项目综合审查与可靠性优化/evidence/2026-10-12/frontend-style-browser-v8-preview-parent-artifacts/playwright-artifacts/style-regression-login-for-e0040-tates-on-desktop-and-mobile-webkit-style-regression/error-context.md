@@ -1,0 +1,58 @@
+# Page snapshot
+
+```yaml
+- main [ref=e4]:
+  - generic [ref=e5]:
+    - 'button "当前主题: 黑曜" [active] [ref=e7] [cursor=pointer]':
+      - generic [ref=e9]: 🌙
+    - button "语言" [ref=e11] [cursor=pointer]:
+      - img [ref=e13]
+      - generic [ref=e15]: 中文
+  - generic [ref=e16]:
+    - region "登录 ai-for-investor" [ref=e17]:
+      - generic [ref=e18]:
+        - img [ref=e21]
+        - generic [ref=e23]: ai-for-investor
+      - generic [ref=e24]:
+        - paragraph [ref=e25]: 安全访问
+        - heading "登录 ai-for-investor" [level=1] [ref=e26]
+        - paragraph [ref=e27]: 进入你的策略研究、回测和交易工作台。
+      - form "登录" [ref=e28]:
+        - generic [ref=e32]:
+          - img [ref=e35]
+          - textbox "用户名" [ref=e37]: preview-user
+        - generic [ref=e41]:
+          - img [ref=e44]
+          - textbox "密码" [ref=e47]: preview-password
+          - img [ref=e50] [cursor=pointer]
+        - button "登录" [ref=e55] [cursor=pointer]:
+          - generic [ref=e56]: 登录
+      - generic [ref=e57]:
+        - text: 还没有账号？
+        - link "立即注册" [ref=e58]:
+          - /url: /register
+    - complementary "ai-for-investor 工作台预览" [ref=e59]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - paragraph [ref=e63]: 实时工作台
+            - heading "策略与行情状态" [level=2] [ref=e64]
+          - img [ref=e67]
+        - generic [ref=e69]:
+          - generic [ref=e70]:
+            - generic [ref=e71]: 信号
+            - strong [ref=e72]: "18"
+          - generic [ref=e73]:
+            - generic [ref=e74]: 延迟
+            - strong [ref=e75]: 21ms
+          - generic [ref=e76]:
+            - generic [ref=e77]: 风险
+            - strong [ref=e78]: 正常
+        - generic [ref=e88]:
+          - generic [ref=e89]:
+            - img [ref=e91]
+            - text: 访问受保护
+          - generic [ref=e94]:
+            - img [ref=e96]
+            - text: 数据已同步
+```

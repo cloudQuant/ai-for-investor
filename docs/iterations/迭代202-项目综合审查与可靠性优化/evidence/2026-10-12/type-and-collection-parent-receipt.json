@@ -1,0 +1,44 @@
+{
+  "captured_at": "2026-10-12T09:18:01.670926+00:00",
+  "mypy": "PASS with canonical-v2 installed dev dependencies; dependency metadata closure is in progress",
+  "backend_collection": "FAIL because ps was absent; procps now installed only in test container and network restored to none",
+  "frontend_full": "INCOMPLETE, 18 StrategyPage failures before exit 143; signal origin unknown",
+  "artifacts": [
+    {
+      "path": "mypy-app-v2-parent.txt",
+      "sha256": "fced8361a31d037637a7a451731a0cd22c18e1b30534c7dd1df2119175b1625e"
+    },
+    {
+      "path": "mypy-ratchet-v2-parent.txt",
+      "sha256": "50501ef26bdf09f04f9f63d6601ef33e014663ca7b5a9d761989180a2e3d0470"
+    },
+    {
+      "path": "mypy-v2-parent-receipt.json",
+      "sha256": "f4b83adfaa2bd792a0895e3d1e1415e033492791e5f5952143010b446f5a661d"
+    },
+    {
+      "path": "backend-collection-linux-parent.txt",
+      "sha256": "0728f7db4a3be718ed89aa19cea2c4f1ca9be3fa6a1ded2414692c96ab91a93b"
+    },
+    {
+      "path": "test-container-procps-v2-receipt.json",
+      "sha256": "82658532126271a7bd50cceb9d9cec8612aa35b1de5199c68a1f57de174777e0"
+    },
+    {
+      "path": "test-container-procps-install-v2.txt",
+      "sha256": "3c8cbb5739999f7336849eb1f92ed8e12c715cb8e972a481557d16d2456edc97"
+    },
+    {
+      "path": "test-container-posix-probe-v2.txt",
+      "sha256": "ebdef2e050005e0a21486abac24df8c0077a26b104a92525722996d7c78a045d"
+    },
+    {
+      "path": "frontend-vitest-v3-parent.txt",
+      "sha256": "b78a6dda13786728a246ea915d1fe9bc09af755b31a7d910c016cb3a2a3b61e6"
+    },
+    {
+      "path": "frontend-v3-parent-receipt.json",
+      "sha256": "9f41323fbd89459bfb225dbc08c6b3167ab3fa9230e0de7a13fbc78bc5f4db44"
+    }
+  ]
+}

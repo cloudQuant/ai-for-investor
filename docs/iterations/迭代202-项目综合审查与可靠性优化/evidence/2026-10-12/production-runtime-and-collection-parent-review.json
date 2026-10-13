@@ -1,0 +1,37 @@
+{
+  "captured_at": "2026-10-12T10:07:30.889112+00:00",
+  "production_runtime": {
+    "worker_result": "PASS",
+    "parent_review": "Read full runtime output and independently inspected local image ID/platform/user",
+    "image": "sha256:c9784fc205759f19e74dc92f725009bba53b2263d8fd98e51dba65d25d4e4092",
+    "platform": "linux/arm64",
+    "user": "appuser",
+    "python": "3.12.15",
+    "application_import": "PASS",
+    "scope": "Import/metadata/pip consistency/Alembic head only; not live deployment acceptance"
+  },
+  "collection": "7995 non-performance tests selected; THS excluded by user scope; exit 0",
+  "zip_first_attempt": "FAIL from one-shot gate fixture cleanup; not a product-code failure; current revised tests pending",
+  "artifacts": [
+    {
+      "path": "backend-collection-v2-linux-parent.txt",
+      "sha256": "5cde37d4dc3eb14d706dbf748c2c5b97a68bef017842a499108d4df7263afc51"
+    },
+    {
+      "path": "backend-collection-v2-linux-parent-receipt.json",
+      "sha256": "392e4569aef5530839b9dfe85184c91f8fac10b4222f9984e7eb29db5cbb5056"
+    },
+    {
+      "path": "optimization-zip-linux-parent.txt",
+      "sha256": "da2e3b5bb220dce23289b2ff3476800a10169350ee59a07ed1077a393fe22eb0"
+    },
+    {
+      "path": "optimization-zip-linux-parent-receipt.json",
+      "sha256": "e4fe7562de24cd402618d407d313dc1035342a7342eabcb96d7cfb8c87aed795"
+    },
+    {
+      "path": "iter202-prod-runtime-final-receipt.log",
+      "sha256": "8398c90f7197dfa8888355e373b7174c7be2ed8a5ad6edd67fcbf4eb3da8e73e"
+    }
+  ]
+}

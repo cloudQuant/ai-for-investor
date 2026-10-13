@@ -17,7 +17,8 @@ from alembic import command
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PREVIOUS_REVISION = "20260910_market_data_capability_ledger"
 REVISION = "20260911_market_data_deferred_publications"
-INTEGRATED_HEAD_REVISION = "20260911_market_data_b2_completeness_evidence"
+PRE_OPTIMIZATION_HEAD_REVISION = "20260911_market_data_b2_completeness_evidence"
+INTEGRATED_HEAD_REVISION = "20261012_optimization_objective_direction"
 TABLE = "md_publication_release_holds"
 UTC = timezone.utc
 NOW = datetime(2026, 9, 11, 12, tzinfo=UTC)
@@ -61,8 +62,11 @@ def test_deferred_publication_revision_is_an_ancestor_of_the_single_alembic_head
     script = ScriptDirectory.from_config(_config(tmp_path / "head.sqlite3"))
 
     revision = script.get_revision(REVISION)
+    integrated_head = script.get_revision(INTEGRATED_HEAD_REVISION)
     assert revision is not None
     assert revision.down_revision == PREVIOUS_REVISION
+    assert integrated_head is not None
+    assert integrated_head.down_revision == PRE_OPTIMIZATION_HEAD_REVISION
     assert script.get_heads() == [INTEGRATED_HEAD_REVISION]
 
 
