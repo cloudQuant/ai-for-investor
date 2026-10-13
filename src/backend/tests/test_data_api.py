@@ -187,7 +187,8 @@ class TestDataAPIRoutes:
     """Route registration is part of the legacy compatibility boundary."""
 
     async def test_kline_endpoint_remains_registered(self) -> None:
-        from app.api.data import router
+        from app.main import app
 
-        routes = [route.path for route in router.routes]
-        assert "/kline" in routes
+        paths = app.openapi()["paths"]
+        assert "/api/v1/data/kline" in paths
+        assert "get" in paths["/api/v1/data/kline"]

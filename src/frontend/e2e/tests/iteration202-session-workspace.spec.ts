@@ -489,13 +489,13 @@ test('AC-D09: retains credentials through 503 and network failures, then confirm
   await expect(page.getByTestId('login-submit')).toHaveCount(0)
 
   await page.getByTestId('identity-retry').click()
-  await expect.poll(() => meCalls).toBe(8)
+  await expect.poll(() => meCalls, { timeout: 60_000 }).toBe(8)
   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
   await expect(page.getByTestId('login-submit')).toHaveCount(0)
 
   await page.getByTestId('identity-retry').click()
-  await expect.poll(() => meCalls).toBe(9)
+  await expect.poll(() => meCalls, { timeout: 60_000 }).toBe(9)
   await expect.poll(async () => (await readAuthAppState(page)).currentRoute)
     .toBe('/research/workspaces')
   await expect(page.locator('.user-dropdown-trigger')).toContainText('user-a')

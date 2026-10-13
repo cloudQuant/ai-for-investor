@@ -735,9 +735,17 @@ class TestStrategyPreflight:
         ):
             StrategySandbox.validate_strategy_code(VALID_STRATEGY, timeout=1)
 
-        assert any(
-            "could not be stopped" in note for note in getattr(exc_info.value, "__notes__", [])
-        )
+        cleanup_message = "Isolated strategy validator process could not be stopped"
+        if callable(getattr(exc_info.value, "add_note", None)):
+            notes = getattr(exc_info.value, "__notes__", [])
+            assert any(cleanup_message in note for note in notes)
+        else:
+            # Python 3.10 has no BaseException.add_note; the compatibility
+            # path keeps the cleanup failure on the raised error and chains
+            # the original timeout as its cause.
+            assert cleanup_message in str(exc_info.value)
+            assert exc_info.value.__cause__ is not None
+            assert "Strategy validator bootstrap timed out" in str(exc_info.value.__cause__)
 
     def test_validation_closes_pipe_when_process_construction_fails(self):
         class FakeEndpoint:
