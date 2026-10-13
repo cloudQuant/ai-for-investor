@@ -1,6 +1,6 @@
 /** Optimization state, persistence, and chart behavior for a workspace. */
 
-import { computed, onMounted, ref, watch, type CSSProperties } from 'vue'
+import { computed, onMounted, onUnmounted, ref, toRaw, watch, type CSSProperties } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -27,6 +27,7 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
   const store = useWorkspaceStore()
   const router = useRouter()
   const units = computed(() => store.units)
+  let disposed = false
 
   const selectedUnitId = ref('')
   const loading = ref(false)
@@ -280,6 +281,7 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
     if (!store.units.length) {
       await store.fetchUnits(props.workspaceId)
     }
+    if (disposed) return
     // Auto-select initial unit if provided
     if (props.initialUnitId) {
       selectedUnitId.value = props.initialUnitId
@@ -357,13 +359,32 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
 
   // --- Auto-polling for optimization progress (Bug-8 fix) ---
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  const backtestPollTimeouts = new Map<
+    ReturnType<typeof setInterval>,
+    ReturnType<typeof setTimeout>
+  >()
+
+  function stopBacktestPolling(pollId: ReturnType<typeof setInterval>) {
+    clearInterval(pollId)
+    const timeoutId = backtestPollTimeouts.get(pollId)
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+    backtestPollTimeouts.delete(pollId)
+  }
+
+  function stopAllBacktestPolling() {
+    for (const pollId of backtestPollTimeouts.keys()) {
+      stopBacktestPolling(pollId)
+    }
+  }
 
   function startPolling() {
+    if (disposed) return
     stopPolling()
     pollTimer = setInterval(async () => {
-      if (!selectedUnitId.value) return
+      if (disposed || !selectedUnitId.value) return
       try {
         const progress = await workspaceApi.getOptimizationProgress(props.workspaceId, selectedUnitId.value).catch(() => null)
+        if (disposed) return
         if (progress) {
           optimizationStatus.value = (progress.status as string) || ''
           total.value = (progress.total as number) || 0
@@ -380,18 +401,25 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
   }
 
   function stopPolling() {
-    if (pollTimer) {
+    if (pollTimer !== null) {
       clearInterval(pollTimer)
       pollTimer = null
     }
   }
 
   watch(optimizationStatus, (val) => {
+    if (disposed) return
     if (val === 'running') {
       startPolling()
     } else {
       stopPolling()
     }
+  })
+
+  onUnmounted(() => {
+    disposed = true
+    stopPolling()
+    stopAllBacktestPolling()
   })
 
   // --- Open / Save ---
@@ -615,19 +643,23 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
           ...params,
         },
       })
+      if (disposed) return
       // 2. Run the unit
       const res = await workspaceApi.runUnits(props.workspaceId, [unit.id], false)
+      if (disposed) return
       const result = res.results?.[0]
       if (result?.task_id) {
         pollStarted = true
         ElMessage.success(t('optimization.backtestSubmitted') + '，' + t('optimization.waitingNavigate'))
         // 3. Poll until done, then navigate
         const pollId = setInterval(async () => {
+          if (disposed) return
           try {
             const statuses = await workspaceApi.getUnitsStatus(props.workspaceId)
+            if (disposed) return
             const s = statuses.find(x => x.id === unit.id)
             if (s && (s.run_status === 'completed' || s.run_status === 'failed')) {
-              clearInterval(pollId)
+              stopBacktestPolling(pollId)
               runningRow.value = null
               if (s.run_status === 'completed' && s.last_task_id) {
                 router.push({
@@ -646,14 +678,20 @@ export function useWorkspaceOptimizationTab(props: WorkspaceOptimizationTabProps
           } catch { /* ignore */ }
         }, 2000)
         // Safety timeout: stop polling after 10 minutes
-        setTimeout(() => { clearInterval(pollId); runningRow.value = null }, 600000)
+        const timeoutId = setTimeout(() => {
+          stopBacktestPolling(pollId)
+          if (!disposed) runningRow.value = null
+        }, 600000)
+        backtestPollTimeouts.set(pollId, timeoutId)
       } else {
         ElMessage.warning(t('optimization.backtestNoTask'))
       }
     } catch (e: unknown) {
       ElMessage.error(getErrorMessage(e, t('optimization.submitBacktestFailed')))
     } finally {
-      if (!pollStarted && runningRow.value === row) runningRow.value = null
+      if (!disposed && !pollStarted && runningRow.value && toRaw(runningRow.value) === toRaw(row)) {
+        runningRow.value = null
+      }
     }
   }
 

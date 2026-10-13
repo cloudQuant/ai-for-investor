@@ -1,6 +1,5 @@
 import { expect, test, type Page, type Request, type Route } from '@playwright/test'
 
-const APP_ORIGIN = 'http://127.0.0.1:4177'
 const TOKEN_A = 'iteration202-fixture-token-a'
 const TOKEN_B = 'iteration202-fixture-token-b'
 
@@ -19,6 +18,28 @@ type XhrResponseBarrierOptions = {
 type RuntimeDiagnostic = { source: string; message: string }
 
 const runtimeDiagnosticsByPage = new WeakMap<Page, RuntimeDiagnostic[]>()
+
+function getFixtureAppOrigin(): URL {
+  const configuredBaseURL = test.info().project.use.baseURL
+  if (typeof configuredBaseURL !== 'string' || configuredBaseURL.trim() === '') {
+    throw new Error('The current Playwright project must configure an absolute HTTP(S) baseURL.')
+  }
+
+  let appOrigin: URL
+  try {
+    appOrigin = new URL(configuredBaseURL)
+  } catch {
+    throw new Error('The current Playwright project baseURL must be an absolute HTTP(S) URL.')
+  }
+
+  const hostname = appOrigin.hostname.replace(/^\[|\]$/g, '')
+  const isLoopbackHost = ['127.0.0.1', 'localhost', '::1'].includes(hostname)
+  if (!['http:', 'https:'].includes(appOrigin.protocol) || !isLoopbackHost) {
+    throw new Error('The fixture API may only run against an HTTP(S) loopback baseURL.')
+  }
+
+  return new URL(appOrigin.origin)
+}
 
 function collectRuntimeDiagnostics(page: Page): void {
   const diagnostics: RuntimeDiagnostic[] = []
@@ -209,12 +230,13 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 async function installFixtureApi(page: Page, handler: ApiHandler): Promise<void> {
+  const appOrigin = getFixtureAppOrigin()
   collectRuntimeDiagnostics(page)
   await page.route('**/*', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
 
-    if (url.origin !== APP_ORIGIN) {
+    if (url.origin !== appOrigin.origin) {
       await route.abort()
       return
     }
@@ -229,7 +251,9 @@ async function installFixtureApi(page: Page, handler: ApiHandler): Promise<void>
 
   // The fixture pages make no websocket calls. Closing local sockets prevents
   // Vite HMR messages from reloading the application during a controlled race.
-  await page.routeWebSocket(`${APP_ORIGIN.replace('http', 'ws')}/**`, (socket) => {
+  const webSocketOrigin = new URL(appOrigin)
+  webSocketOrigin.protocol = appOrigin.protocol === 'https:' ? 'wss:' : 'ws:'
+  await page.routeWebSocket(`${webSocketOrigin.origin}/**`, (socket) => {
     socket.close()
   })
 }

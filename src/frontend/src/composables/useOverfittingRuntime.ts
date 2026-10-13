@@ -197,6 +197,9 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
     while (attempts < POLL_MAX_ATTEMPTS && loading.value && !signal.aborted) {
       try {
         const result = await strategyApi.getOverfittingTask(taskId)
+        if (signal.aborted) {
+          return
+        }
         if (result.status === 'completed') {
           finishWithResult(result)
           return

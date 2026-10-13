@@ -523,4 +523,98 @@ describe('ScannerPage', () => {
     await flushPromises()
     expect(apiMocks.deleteScannerPlan).toHaveBeenCalledWith('plan-1')
   })
+
+  it('builds a live condition from enabled rules and displays an empty scan result', async () => {
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+
+    expect(wrapper.get('.scanner-active-condition strong').text())
+      .toBe('indicator >= 0.5 and news_sentiment >= 0.4')
+
+    const editPlanButton = wrapper.findAll('.scanner-plan-actions button')
+      .find((button) => button.text().includes('编辑方案'))
+    expect(editPlanButton).toBeDefined()
+    await editPlanButton!.trigger('click')
+    await flushPromises()
+
+    await wrapper.get('.scanner-indicator-footer button').trigger('click')
+    expect(wrapper.findAll('.scanner-indicator-rule')).toHaveLength(3)
+    await wrapper.get('.scanner-indicator-rule:last-child button').trigger('click')
+    expect(wrapper.findAll('.scanner-indicator-rule')).toHaveLength(2)
+
+    const enabledRuleInputs = wrapper.findAll('.scanner-indicator-rule input[type="checkbox"]')
+    expect(enabledRuleInputs).toHaveLength(2)
+    await enabledRuleInputs[0].setValue(false)
+    await enabledRuleInputs[1].setValue(false)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.scanner-active-condition strong').text()).toBe('price > 0')
+
+    const emptyResult: Record<string, unknown> = {
+      task_id: '',
+      status: 'completed',
+      matches: [],
+    }
+    apiMocks.runScanner.mockResolvedValueOnce(emptyResult)
+    await wrapper.get('.scanner-live-actions button').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.runScanner).toHaveBeenCalledWith({
+      universe_pool_id: 'hs300',
+      condition: 'price > 0',
+      lookback_days: 20,
+      timeframe: '1d',
+    })
+    expect(apiMocks.getScannerTask).not.toHaveBeenCalled()
+    expect(wrapper.get('.scanner-status-tag').text()).toBe('completed')
+    expect(wrapper.get('.scanner-empty-state').text()).toContain('暂无结果')
+    wrapper.unmount()
+  })
+
+  it('clears the scan loading state when the request fails', async () => {
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+    apiMocks.runScanner.mockRejectedValueOnce(new Error('scanner request failed'))
+
+    await expect((wrapper.vm as any).run()).rejects.toThrow('scanner request failed')
+    await flushPromises()
+
+    expect(apiMocks.runScanner).toHaveBeenCalledWith({
+      universe_pool_id: 'hs300',
+      condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
+      lookback_days: 20,
+      timeframe: '1d',
+    })
+    expect((wrapper.vm as any).loading).toBe(false)
+    expect(wrapper.get('.scanner-match-board .scanner-row-count').text()).toContain('1 项结果')
+    expect(wrapper.find('.scanner-empty-state').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('saves a custom universe through its visible form and deduplicates symbols', async () => {
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+
+    const newPlanButton = wrapper.findAll('.scanner-plan-actions button')
+      .find((button) => button.text().includes('新建方案'))
+    expect(newPlanButton).toBeDefined()
+    await newPlanButton!.trigger('click')
+    await flushPromises()
+
+    await wrapper.get('.scanner-custom-grid input').setValue('我的观察池')
+    await wrapper.get('.scanner-custom-grid textarea').setValue('300750.SZ, 110000.SH\n300750.SZ')
+    await wrapper.get('.scanner-custom-actions button').trigger('click')
+    await flushPromises()
+
+    expect(apiMocks.saveCustomScannerUniversePool).toHaveBeenCalledWith({
+      name: '我的观察池',
+      description: '',
+      instruments: [
+        { symbol: '300750.SZ', name: '300750.SZ', asset_type: 'custom' },
+        { symbol: '110000.SH', name: '110000.SH', asset_type: 'custom' },
+      ],
+    })
+    expect((wrapper.vm as any).selectedPoolId).toBe('custom-watch')
+    expect((wrapper.vm as any).customPoolName).toBe('')
+    wrapper.unmount()
+  })
 })
