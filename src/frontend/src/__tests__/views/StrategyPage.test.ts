@@ -8390,14 +8390,19 @@ describe('StrategyPage', () => {
     let resolveFirst: ((value: any) => void) | undefined
     let resolveSecond: ((value: any) => void) | undefined
     let resolveCapabilities: ((value: ReturnType<typeof marketDataCapabilities>) => void) | undefined
-    // The capability request is intentionally held open: the debounced
-    // Iteration 196 precheck must still be sent for RB0/SA0 before this
-    // optional Iteration 197 sidecar decision arrives.
-    getCapabilities.mockImplementation(
-      () => new Promise(resolve => { resolveCapabilities = resolve })
-    )
-    runPrecheck
-      .mockImplementation((request: { symbol?: string }) => {
+    const wrapper = doMount()
+    try {
+      const vm = wrapper.vm as any
+      // Let mount-time capability and route restoration finish before
+      // installing deferred responses for the two user-edited snapshots.
+      // This keeps unrelated initial loads from becoming the last precheck
+      // call while preserving the delayed-sidecar scenario under test.
+      await flushPromises()
+      getCapabilities.mockImplementation(
+        () => new Promise(resolve => { resolveCapabilities = resolve })
+      )
+      runPrecheck.mockClear()
+      runPrecheck.mockImplementation((request: { symbol?: string }) => {
         if (request.symbol === 'RB0') {
           return new Promise(resolve => { resolveFirst = resolve })
         }
@@ -8417,9 +8422,6 @@ describe('StrategyPage', () => {
           gate_evaluations: [],
         })
       })
-    const wrapper = doMount()
-    try {
-      const vm = wrapper.vm as any
       vm.aiResearchForm.symbol = 'RB0'
       vm.aiResearchForm.timeframe = '1h'
       await nextTick()
@@ -10745,6 +10747,125 @@ describe('StrategyPage', () => {
     expect(vm.aiResearchResult?.run_id).toBe('a-share-run')
   })
 
+  it('creates, saves, and deletes configuration profiles while restoring loading state on failures', async () => {
+    const { strategyApi } = await import('@/api/strategy')
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const createProfile = vi.fn().mockResolvedValue({
+      id: 'profile-1',
+      name: '螺纹钢方案',
+      description: '初始说明',
+      config: { symbol: 'RB0' },
+    })
+    const updateProfile = vi.fn().mockResolvedValue({
+      id: 'profile-1',
+      name: '螺纹钢方案',
+      description: '更新说明',
+      config: { symbol: 'RB0', research_workspace_id: 'workspace-1' },
+    })
+    const deleteProfile = vi.fn().mockResolvedValue(undefined)
+    ;(strategyApi as any).createAIResearchConfigProfile = createProfile
+    ;(strategyApi as any).updateAIResearchConfigProfile = updateProfile
+    ;(strategyApi as any).deleteAIResearchConfigProfile = deleteProfile
+
+    try {
+      vm.aiResearchConfigProfileName = '  螺纹钢方案  '
+      vm.aiResearchConfigProfileDescription = '  初始说明  '
+      await vm.createAIResearchConfigProfile()
+
+      expect(createProfile).toHaveBeenCalledWith({
+        name: '螺纹钢方案',
+        description: '初始说明',
+        config: expect.objectContaining({ symbol: '000001.SZ' }),
+      })
+      expect(vm.aiResearchSelectedConfigProfileId).toBe('profile-1')
+      expect(vm.aiResearchConfigProfileSaving).toBe(false)
+
+      // An empty edited name retains the saved name; descriptions are trimmed.
+      vm.aiResearchConfigProfileName = '  '
+      vm.aiResearchConfigProfileDescription = '  更新说明  '
+      await vm.saveAIResearchConfigProfile()
+      expect(updateProfile).toHaveBeenCalledWith('profile-1', {
+        name: '螺纹钢方案',
+        description: '更新说明',
+        config: expect.objectContaining({ symbol: '000001.SZ' }),
+      })
+      expect(vm.aiResearchConfigProfiles[0].description).toBe('更新说明')
+
+      await vm.deleteAIResearchConfigProfile(vm.aiResearchConfigProfiles[0])
+      expect(deleteProfile).toHaveBeenCalledWith('profile-1')
+      expect(vm.aiResearchConfigProfiles).toEqual([])
+      expect(vm.aiResearchSelectedConfigProfileId).toBe('')
+      expect(vm.aiResearchConfigProfileDeletingId).toBe('')
+
+      createProfile.mockRejectedValueOnce(new Error('create failed'))
+      vm.aiResearchConfigProfileName = '失败方案'
+      await vm.createAIResearchConfigProfile()
+      expect(vm.aiResearchConfigProfileSaving).toBe(false)
+
+      deleteProfile.mockRejectedValueOnce(new Error('delete failed'))
+      const retainedProfile = {
+        id: 'profile-2', name: '保留方案', description: '', config: { symbol: 'RB0' },
+      }
+      vm.aiResearchConfigProfiles = [retainedProfile]
+      vm.aiResearchSelectedConfigProfileId = 'profile-2'
+      await vm.deleteAIResearchConfigProfile(retainedProfile)
+      expect(vm.aiResearchConfigProfiles).toEqual([retainedProfile])
+      expect(vm.aiResearchConfigProfileDeletingId).toBe('')
+    } finally {
+      delete (strategyApi as any).createAIResearchConfigProfile
+      delete (strategyApi as any).updateAIResearchConfigProfile
+      delete (strategyApi as any).deleteAIResearchConfigProfile
+      wrapper.unmount()
+    }
+  })
+
+  it('imports a selected YAML profile and ignores an empty file selection', async () => {
+    const { strategyApi } = await import('@/api/strategy')
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const importProfile = vi.fn().mockResolvedValue({
+      total: 1,
+      file_path: '/tmp/imported_profiles.yaml',
+      items: [{
+        id: 'imported-profile',
+        name: '导入方案',
+        description: '由 YAML 导入',
+        config: { symbol: 'RB0', timeframe: '1d', timeframe_n: 1 },
+      }],
+    })
+    ;(strategyApi as any).importAIResearchConfigProfileYaml = importProfile
+    try {
+      const emptyInput = document.createElement('input')
+      const emptyEvent = new Event('change')
+      Object.defineProperty(emptyEvent, 'target', { value: emptyInput })
+      await vm.importAIResearchConfigProfileFile(emptyEvent)
+      expect(importProfile).not.toHaveBeenCalled()
+
+      const input = document.createElement('input')
+      Object.defineProperty(input, 'files', {
+        configurable: true,
+        value: [new File(['name: 导入方案'], 'imported.yml', { type: 'text/yaml' })],
+      })
+      const importEvent = new Event('change')
+      Object.defineProperty(importEvent, 'target', { value: input })
+      await vm.importAIResearchConfigProfileFile(importEvent)
+
+      expect(importProfile).toHaveBeenCalledWith({
+        raw_yaml: 'name: 导入方案',
+        name: 'imported',
+      })
+      expect(vm.aiResearchConfigProfileFilePath).toBe('/tmp/imported_profiles.yaml')
+      expect(vm.aiResearchSelectedConfigProfileId).toBe('imported-profile')
+      expect(vm.aiResearchConfigProfileImporting).toBe(false)
+    } finally {
+      delete (strategyApi as any).importAIResearchConfigProfileYaml
+      wrapper.unmount()
+    }
+  })
+
   it('binds an empty plan to the research workspace created by its first completed run', async () => {
     const { strategyApi } = await import('@/api/strategy')
     const wrapper = doMount()
@@ -10887,6 +11008,253 @@ describe('StrategyPage', () => {
       expect.objectContaining({ scope: 'gate', label: '质量门控', left: 'failed', right: 'passed' }),
     ])
     wrapper.unmount()
+  })
+
+  it('matches saved research profiles against run parameters and quality gates', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const record = {
+      ...vm.aiResearchRuns[0],
+      symbol: 'RB0',
+      symbol_name: '螺纹钢主连',
+      timeframe: '1d',
+      timeframe_n: 1,
+      prompt: '趋势 研究',
+      workflow_mode: 'auto',
+      start_date: '2022-01-01',
+      end_date: '2025-12-31',
+      group_name: '期货趋势',
+      target_sharpe: 0.9,
+      min_total_trades: 4,
+      max_iterations: 5,
+      initial_cash: 500000,
+      commission: 0.0008,
+      annual_days: 252,
+      calc_method: 'sharpe',
+      weight_mode: 'equal',
+      quality_gates: {
+        max_drawdown_limit: 0.3,
+        min_total_return: 0.1,
+        min_annual_return: 0.05,
+        min_win_rate: 0.4,
+        out_of_sample_validation: true,
+        require_out_of_sample_validation: false,
+        out_of_sample_ratio: 0.25,
+        min_out_of_sample_sharpe: 0.6,
+        min_out_of_sample_trades: 3,
+        robustness_validation: true,
+        require_robustness_validation: false,
+        robustness_methods: ['walk_forward', 'monte_carlo'],
+        min_robustness_score: 70,
+        robustness_monte_carlo_iterations: 1000,
+      },
+    }
+    const config: Record<string, unknown> = {
+      symbol: 'RB0',
+      symbol_name: '螺纹钢主连',
+      timeframe: ' 1D ',
+      timeframe_n: 1,
+      prompt: '趋势\n 研究',
+      workflow_mode: 'auto',
+      start_date: '2022-01-01',
+      end_date: '2025-12-31',
+      group_name: '期货趋势',
+      target_sharpe: 0.9,
+      min_total_trades: 4,
+      max_iterations: 5,
+      initial_cash: 500000,
+      annual_days: 252,
+      calc_method: 'sharpe',
+      weight_mode: 'equal',
+      use_manual_commission: true,
+      commission: 0.0008,
+      use_max_drawdown_limit: true,
+      max_drawdown_limit: 0.3,
+      use_min_total_return: true,
+      min_total_return: 0.1,
+      use_min_annual_return: true,
+      min_annual_return: 0.05,
+      use_min_win_rate: true,
+      min_win_rate: 0.4,
+      out_of_sample_validation: true,
+      require_out_of_sample_validation: false,
+      out_of_sample_ratio_pct: 25,
+      use_min_out_of_sample_sharpe: true,
+      min_out_of_sample_sharpe: 0.6,
+      use_min_out_of_sample_trades: true,
+      min_out_of_sample_trades: 3,
+      robustness_validation: true,
+      require_robustness_validation: false,
+      robustness_methods: ['monte_carlo', 'walk_forward'],
+      min_robustness_score: 70,
+      robustness_monte_carlo_iterations: 1000,
+    }
+    const profile = { id: 'rb-profile', name: '螺纹钢研究', description: '', config }
+    const matches = (nextConfig: Record<string, unknown>) => (
+      vm.aiResearchRunMatchesConfigProfile(record, { ...profile, config: nextConfig })
+    )
+
+    expect(matches(config)).toBe(true)
+    expect(matches({ ...config, prompt: '趋势 研究' })).toBe(true)
+    const rawRatioConfig = { ...config }
+    delete rawRatioConfig.out_of_sample_ratio_pct
+    rawRatioConfig.out_of_sample_ratio = 0.25
+    expect(matches(rawRatioConfig)).toBe(true)
+    expect(matches({ ...config, use_manual_commission: false, commission: 0.001 })).toBe(true)
+    expect(matches({ ...config, use_min_win_rate: false })).toBe(false)
+
+    const mismatches: Array<[string, Record<string, unknown>]> = [
+      ['workspace', { ...config, research_workspace_id: 'other-workspace' }],
+      ['symbol', { ...config, symbol: 'IF2606' }],
+      ['timeframe', { ...config, timeframe: '1h' }],
+      ['timeframe multiplier', { ...config, timeframe_n: 2 }],
+      ['symbol name', { ...config, symbol_name: '其他品种' }],
+      ['prompt', { ...config, prompt: '反转策略' }],
+      ['workflow', { ...config, workflow_mode: 'prompt' }],
+      ['start date', { ...config, start_date: '2021-01-01' }],
+      ['end date', { ...config, end_date: '2024-12-31' }],
+      ['group', { ...config, group_name: '股票趋势' }],
+      ['target Sharpe', { ...config, target_sharpe: 1.1 }],
+      ['trade count', { ...config, min_total_trades: 5 }],
+      ['iterations', { ...config, max_iterations: 6 }],
+      ['initial cash', { ...config, initial_cash: 600000 }],
+      ['annualization days', { ...config, annual_days: 365 }],
+      ['calculation method', { ...config, calc_method: 'total_return' }],
+      ['weight mode', { ...config, weight_mode: 'risk_parity' }],
+      ['manual commission', { ...config, commission: 0.001 }],
+      ['drawdown gate', { ...config, max_drawdown_limit: 0.2 }],
+      ['total return gate', { ...config, min_total_return: 0.2 }],
+      ['annual return gate', { ...config, min_annual_return: 0.06 }],
+      ['win rate gate', { ...config, min_win_rate: 0.5 }],
+      ['out-of-sample validation', { ...config, out_of_sample_validation: false }],
+      ['required out-of-sample validation', { ...config, require_out_of_sample_validation: true }],
+      ['out-of-sample ratio', { ...config, out_of_sample_ratio_pct: 30 }],
+      ['out-of-sample Sharpe gate', { ...config, min_out_of_sample_sharpe: 0.7 }],
+      ['out-of-sample trade gate', { ...config, min_out_of_sample_trades: 4 }],
+      ['robustness validation', { ...config, robustness_validation: false }],
+      ['required robustness validation', { ...config, require_robustness_validation: true }],
+      ['robustness methods', { ...config, robustness_methods: ['bootstrap'] }],
+      ['robustness score', { ...config, min_robustness_score: 71 }],
+      ['Monte Carlo iterations', { ...config, robustness_monte_carlo_iterations: 2000 }],
+    ]
+    for (const [field, mismatch] of mismatches) {
+      expect(matches(mismatch), field).toBe(false)
+    }
+    expect(matches({})).toBe(false)
+    expect(matches({ ...config, research_workspace_id: record.research_workspace_id, prompt: 'unscoped details are ignored for a bound workspace' })).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('compares selected research versions and restores the comparison state on API errors', async () => {
+    const { strategyApi } = await import('@/api/strategy')
+    const { ElMessage } = await import('element-plus')
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const comparison = {
+      run_id: 'research-run',
+      left: { id: 'version-1' },
+      right: { id: 'version-2' },
+      metric_deltas: { sharpe_ratio: { left: 0.8, right: 1.2, delta: 0.4 } },
+      gate_deltas: {},
+      code_diff: '',
+      verdict: 'improved',
+      summary: '指标改善',
+    }
+    const compareVersions = vi.fn().mockResolvedValue(comparison)
+    ;(strategyApi as any).compareAIResearchVersions = compareVersions
+
+    try {
+      vm.aiResearchVersions = [
+        { id: 'version-1', backtest_metrics: { sharpe_ratio: 1.234, total_return: 0.15 } },
+        { id: 'version-2', backtest_metrics: { annual_return: 0.12, max_drawdown: 0.08, total_trades: 24 } },
+      ]
+      expect(vm.aiResearchVersionMetricKeys).toEqual([
+        'sharpe_ratio', 'total_return', 'annual_return', 'max_drawdown', 'total_trades',
+      ])
+      expect(vm.aiResearchVersionMetric(vm.aiResearchVersions[0], 'sharpe_ratio')).toBe('1.23')
+      expect(vm.aiResearchVersionMetricLabel('max_drawdown')).toBe('最大回撤')
+      expect(vm.aiResearchVersionMetricLabel('custom_metric')).toBe('custom_metric')
+      expect(vm.aiResearchVersionStatusTagType('passed')).toBe('success')
+      expect(vm.aiResearchVersionStatusTagType('failed')).toBe('warning')
+      expect(vm.aiResearchVersionStatusTagType('pending')).toBe('info')
+      expect(vm.aiResearchEventTagType('completed')).toBe('success')
+      expect(vm.aiResearchEventTagType('submitted')).toBe('success')
+      expect(vm.aiResearchEventTagType('running')).toBe('warning')
+      expect(vm.aiResearchEventTagType('failed')).toBe('danger')
+      expect(vm.aiResearchEventTagType('queued')).toBe('info')
+
+      vm.aiResearchSelectedVersionIds = ['version-1']
+      await vm.compareSelectedAIResearchVersions()
+      expect(compareVersions).not.toHaveBeenCalled()
+
+      vm.aiResearchSelectedVersionIds = ['version-1', 'version-2']
+      await vm.compareSelectedAIResearchVersions()
+      expect(compareVersions).toHaveBeenCalledWith('version-1', 'version-2')
+      expect(vm.aiResearchVersionCompare).toEqual(comparison)
+      expect(vm.aiResearchVersionCompareLoading).toBe(false)
+
+      compareVersions.mockRejectedValueOnce(new Error('comparison unavailable'))
+      await vm.compareSelectedAIResearchVersions()
+      expect(ElMessage.error).toHaveBeenCalled()
+      expect(vm.aiResearchVersionCompareLoading).toBe(false)
+
+      vm.openAIResearchConfigDialog()
+      expect(vm.aiResearchConfigDialogVisible).toBe(true)
+      vm.openAIResearchPromptGenerationDialog()
+      expect(vm.aiResearchPromptGenerationDialogVisible).toBe(true)
+      vm.aiResearchPromptGenerationLoading = true
+      vm.closeAIResearchPromptGenerationDialog()
+      expect(vm.aiResearchPromptGenerationDialogVisible).toBe(true)
+      vm.aiResearchPromptGenerationLoading = false
+      vm.closeAIResearchPromptGenerationDialog()
+      expect(vm.aiResearchPromptGenerationDialogVisible).toBe(false)
+    } finally {
+      delete (strategyApi as any).compareAIResearchVersions
+      wrapper.unmount()
+    }
+  })
+
+  it('enables task actions only for matching running or recoverable task states', async () => {
+    const { strategyApi } = await import('@/api/strategy')
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const cancelTask = vi.fn().mockResolvedValue(undefined)
+    const continueTask = vi.fn().mockResolvedValue(undefined)
+    ;(strategyApi as any).cancelAIResearchTask = cancelTask
+    ;(strategyApi as any).continueAIResearchTask = continueTask
+
+    try {
+      vm.aiResearchRunning = true
+      vm.aiResearchTaskId = 'task-running'
+      vm.aiResearchTaskStatus = 'running'
+      expect(vm.canCancelAIResearchTask).toBe(true)
+      expect(vm.canRetryAIResearchTask).toBe(false)
+
+      vm.aiResearchRunning = false
+      vm.aiResearchTaskStatus = 'failed'
+      vm.aiResearchTaskRequestSnapshot = { symbol: 'RB0', timeframe: '1d' }
+      vm.aiResearchTaskBestIteration = null
+      vm.aiResearchTaskLatestIteration = null
+      expect(vm.canCancelAIResearchTask).toBe(false)
+      expect(vm.canRetryAIResearchTask).toBe(true)
+      expect(vm.canContinueAIResearchTask).toBe(false)
+
+      vm.aiResearchTaskStatus = 'cancelled'
+      vm.aiResearchTaskBestIteration = { iteration: 1, symbol: 'RB0' }
+      expect(vm.canContinueAIResearchTask).toBe(true)
+      expect(vm.canRetryAIResearchTask).toBe(false)
+
+      vm.aiResearchTaskStatus = 'completed'
+      expect(vm.canContinueAIResearchTask).toBe(false)
+      expect(vm.canRetryAIResearchTask).toBe(false)
+    } finally {
+      delete (strategyApi as any).cancelAIResearchTask
+      delete (strategyApi as any).continueAIResearchTask
+      wrapper.unmount()
+    }
   })
 
   it('saveStrategy warns when name/code empty', async () => {

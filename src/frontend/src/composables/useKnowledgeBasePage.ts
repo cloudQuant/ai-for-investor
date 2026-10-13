@@ -183,20 +183,18 @@ export function useKnowledgeBasePage() {
 
     const rows: TreeRow[] = []
     const visited = new Set<string>()
-    const walk = (parentId: string | null, depth: number) => {
-      const children = byParent.get(parentId) ?? []
-      for (const child of children) {
-        if (visited.has(child.id)) continue
-        visited.add(child.id)
-        rows.push({ ...child, depth })
-        if (!child.is_folder || expandedFolderIds.value.has(child.id)) {
-          walk(child.id, depth + 1)
-        }
+    const visit = (child: KBDocumentItem, depth: number, visible: boolean) => {
+      if (visited.has(child.id)) return
+      visited.add(child.id)
+      if (visible) rows.push({ ...child, depth })
+      const childrenVisible = visible && (!child.is_folder || expandedFolderIds.value.has(child.id))
+      for (const descendant of byParent.get(child.id) ?? []) {
+        visit(descendant, depth + 1, childrenVisible)
       }
     }
-    walk(null, 0)
+    for (const root of byParent.get(null) ?? []) visit(root, 0, true)
     for (const doc of sortedDocuments.value) {
-      if (!visited.has(doc.id)) rows.push({ ...doc, depth: 0 })
+      if (!visited.has(doc.id)) visit(doc, 0, true)
     }
     return rows
   })

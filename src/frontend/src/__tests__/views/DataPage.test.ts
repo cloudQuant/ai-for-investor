@@ -3029,4 +3029,194 @@ describe('DataPage', () => {
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
     expect((wrapper.vm as any).marketDataPlatformStatus.path).toBe('local_first')
   })
+
+  it('keeps only the newest coverage response and reports refresh failures', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    apiMocks.listCoverage.mockClear()
+    vm.form.asset_type = 'futures'
+    vm.coverageTimeframe = '1h'
+    vm.coverageProvider = '  local_csv  '
+
+    let resolveFirst: ((response: { items: Array<{ id: string }> }) => void) | undefined
+    apiMocks.listCoverage
+      .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+      .mockResolvedValueOnce({ items: [{ id: 'newest' }] })
+    const firstRequest = vm.loadCoverageMatrix()
+    const secondRequest = vm.loadCoverageMatrix()
+    await secondRequest
+    resolveFirst?.({ items: [{ id: 'stale' }] })
+    await firstRequest
+
+    expect(apiMocks.listCoverage).toHaveBeenLastCalledWith({
+      asset_type: 'futures',
+      timeframe: '1h',
+      provider: 'local_csv',
+      limit: 200,
+    })
+    expect(vm.coverageRows).toEqual([{ id: 'newest' }])
+    expect(vm.coverageLoading).toBe(false)
+
+    apiMocks.refreshWarehouseCoverage.mockResolvedValueOnce({ items: [{ id: 'refreshed' }] })
+    await vm.refreshCoverageMatrix()
+    expect(vm.coverageRows).toEqual([{ id: 'refreshed' }])
+    expect(vm.coverageRefreshing).toBe(false)
+
+    apiMocks.refreshWarehouseCoverage.mockRejectedValueOnce(new Error('warehouse unavailable'))
+    await vm.refreshCoverageMatrix()
+    expect(vm.coverageError).toContain('失败')
+    expect(vm.coverageRefreshing).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('normalizes instrument searches, keeps the current symbol, and ignores stale options', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    apiMocks.listInstrumentOptions.mockClear()
+    vm.form.symbol = 'CUSTOM'
+
+    let resolveFirst: ((response: { items: Array<Record<string, unknown>> }) => void) | undefined
+    apiMocks.listInstrumentOptions
+      .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+      .mockResolvedValueOnce({
+        items: [{
+          asset_type: 'stock', symbol: '000002', name: '万科A', market: null,
+          source_table: null, latest_date: null, has_snapshot: false, has_history: false, history_rows: 0,
+        }],
+      })
+    const firstRequest = vm.loadInstrumentOptions(' old ')
+    const secondRequest = vm.loadInstrumentOptions('  new ')
+    await secondRequest
+    resolveFirst?.({ items: [{
+      asset_type: 'stock', symbol: 'STALE', name: '旧结果', market: null,
+      source_table: null, latest_date: null, has_snapshot: false, has_history: false, history_rows: 1,
+    }] })
+    await firstRequest
+
+    expect(apiMocks.listInstrumentOptions).toHaveBeenLastCalledWith({
+      asset_type: 'stock', search: 'new', limit: 80,
+    })
+    expect(vm.instrumentOptions.map((option: { symbol: string }) => option.symbol)).toEqual([
+      'CUSTOM', '000002',
+    ])
+    expect(vm.instrumentOptionsLoading).toBe(false)
+
+    vm.instrumentOptions = []
+    apiMocks.listInstrumentOptions.mockClear()
+    vm.handleInstrumentDropdownVisible(false)
+    expect(apiMocks.listInstrumentOptions).not.toHaveBeenCalled()
+    vm.handleInstrumentDropdownVisible(true)
+    await flushPromises()
+    expect(apiMocks.listInstrumentOptions).toHaveBeenCalledWith({
+      asset_type: 'stock', search: 'CUSTOM', limit: 80,
+    })
+
+    apiMocks.listInstrumentOptions.mockRejectedValueOnce(new Error('catalog unavailable'))
+    vm.searchInstrumentOptions('failure')
+    await flushPromises()
+    expect(vm.instrumentOptions.map((option: { symbol: string }) => option.symbol)).toEqual(['CUSTOM'])
+    wrapper.unmount()
+  })
+
+  it('merges related tables across partial failures and rejects stale lookup results', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    const table = (id: number, tableName: string) => ({
+      id,
+      table_name: tableName,
+      table_comment: '',
+      category: 'stocks',
+      script_id: 'stock_zh_a_hist',
+      row_count: id * 100,
+      last_update_time: null,
+      last_update_status: null,
+      data_start_date: null,
+      data_end_date: null,
+      symbol_raw: null,
+      symbol_normalized: null,
+      market: null,
+      asset_type: 'stock',
+      metadata: {},
+      created_at: '',
+      updated_at: '',
+    })
+    apiMocks.listTables.mockImplementation(({ search }: { search: string }) => {
+      if (search === '000001') return Promise.reject(new Error('one table search failed'))
+      if (search === 'stock_zh_a_hist') return Promise.resolve({ items: [table(1, 'stock_hist')] })
+      if (search === 'stock_zh_a_spot') return Promise.resolve({ items: [table(1, 'stock_hist'), table(2, 'stock_spot')] })
+      return Promise.resolve({ items: [] })
+    })
+    await vm.loadRelatedTables({ symbol: '000001' })
+
+    expect(vm.relatedTables.map((item: { id: number }) => item.id)).toEqual([2, 1])
+    expect(vm.relatedTablesError).toBe('')
+    expect(vm.relatedTablesLoading).toBe(false)
+    expect(vm.relatedTableScore(table(1, 'stock_hist'))).toBeGreaterThan(0)
+
+    let resolveStale: ((response: { items: Array<Record<string, unknown>> }) => void) | undefined
+    apiMocks.listTables.mockImplementation(({ search }: { search: string }) => {
+      if (search === '000002') return Promise.resolve({ items: [table(3, 'latest_table')] })
+      if (search === '000001') return new Promise(resolve => { resolveStale = resolve })
+      return Promise.resolve({ items: [] })
+    })
+    const staleRequest = vm.loadRelatedTables({ symbol: '000001' })
+    await vm.loadRelatedTables({ symbol: '000002' })
+    resolveStale?.({ items: [table(4, 'stale_table')] })
+    await staleRequest
+    expect(vm.relatedTables.map((item: { id: number }) => item.id)).toEqual([3])
+
+    apiMocks.listTables.mockRejectedValue(new Error('catalog unavailable'))
+    await vm.loadRelatedTables(null)
+    expect(vm.relatedTables).toEqual([])
+    expect(vm.relatedTablesError).toContain('失败')
+    wrapper.unmount()
+  })
+
+  it('formats coverage and observation values and builds return/liquidity chart data', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+
+    expect(vm.formatInstrumentHistoryStatus({ has_history: true, history_rows: 120 })).toBe('120')
+    expect(vm.formatInstrumentHistoryStatus({ has_history: false, history_rows: 120 })).toBe('0')
+    expect(vm.coverageStatusTagType('pass')).toBe('success')
+    expect(vm.coverageStatusTagType('failed')).toBe('danger')
+    expect(vm.coverageStatusTagType('warning')).toBe('warning')
+    expect(vm.coverageStatusTagType('not_available')).toBe('info')
+    expect(vm.coverageStatusLabel('pass')).toContain('通过')
+    expect(vm.coverageStatusLabel('custom_state')).toBe('custom_state')
+    expect(vm.formatCoverageRatio(0.25)).toBe('25.00%')
+    expect(vm.formatCoverageRatio('missing')).toBe('-')
+    expect(vm.coverageDateRange({ start_date: '2024-01-01', end_date: null })).toContain('2024-01-01')
+
+    const observation = {
+      fields: { close: 12.3456, accepted: false },
+      event_at: '2026-06-19T00:00:00Z',
+      quality: 'pass',
+      source_snapshot_id: 'snapshot-9',
+      revision_id: 'revision-4',
+      available_at: '2026-06-19T15:00:00Z',
+      committed_at: '2026-06-19T15:00:01Z',
+      revision_number: 2,
+    }
+    expect(vm.formatGenericObservationCell(observation, { key: 'close', source: 'field' })).toBe('12.3456')
+    expect(vm.formatGenericObservationCell(observation, { key: 'quality', source: 'metadata' })).toBe('pass')
+    expect(vm.formatGenericObservationValue(false)).toBe('false')
+    expect(vm.formatGenericObservationValue(Number.POSITIVE_INFINITY)).toBe('-')
+    expect(vm.formatGenericObservationValue({ source: 'market-api' })).toBe('{"source":"market-api"}')
+
+    vm.chartMode = 'return'
+    const returnChart = vm.buildMarketChartOption()
+    expect((returnChart.series as Array<{ data: unknown[] }>)[0].data).toEqual([0, 1.3])
+    expect((returnChart.series as Array<{ data: unknown[] }>)[1].data).toEqual([0, 0])
+
+    vm.chartMode = 'liquidity'
+    const liquidityChart = vm.buildMarketChartOption()
+    expect((liquidityChart.series as Array<{ data: unknown[] }>)).toHaveLength(3)
+    expect((liquidityChart.series as Array<{ data: unknown[] }>)[0].data).toEqual([1000, 1200])
+
+    const routerPush = vi.spyOn(vm.router, 'push').mockResolvedValue(undefined as never)
+    vm.goTableDetail(42)
+    expect(routerPush).toHaveBeenCalledWith({ name: 'DataTableDetail', params: { id: 42 } })
+    wrapper.unmount()
+  })
 })

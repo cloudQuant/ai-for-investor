@@ -111,12 +111,15 @@ function doMount() {
       stubs: {
         ...elStubs,
         WorkspaceDataSourceDialog: true,
-        WorkspaceReportTab: { template: '<div data-test="report-tab">report</div>' },
+        WorkspaceReportTab: {
+          props: ['workspaceId', 'active', 'initialUnitId', 'initialUnitIds'],
+          template: '<div data-test="report-tab" :data-workspace-id="workspaceId" :data-active="active" :data-initial-unit-id="initialUnitId" :data-initial-unit-ids="initialUnitIds.join(\',\')">report</div>',
+        },
         TradingWorkspaceUnitsTab: { template: '<div data-test="trading-units-tab">trading units</div>' },
         WorkspaceUnitsTab: {
           props: ['workspaceId'],
           emits: ['switch-tab'],
-          template: '<button data-test="units-tab" :data-workspace-id="workspaceId" @click="$emit(\'switch-tab\', \'optimization\', \'unit-1\')">units</button>',
+          template: '<div><button data-test="units-tab" :data-workspace-id="workspaceId" @click="$emit(\'switch-tab\', \'optimization\', \'unit-1\')">units</button><button data-test="units-report-multi" @click="$emit(\'switch-tab\', \'report\', \'unit-1\', [\'unit-1\', \'unit-3\'])">report multi</button><button data-test="units-report-single" @click="$emit(\'switch-tab\', \'report\', \'unit-2\')">report single</button><button data-test="units-report-all" @click="$emit(\'switch-tab\', \'report\')">report all</button></div>',
         },
       },
     },
@@ -254,5 +257,54 @@ describe('WorkspaceDetailPage', () => {
     storeState.units = []
     const wrapper = doMount()
     expect(wrapper.find('.workspace-detail-empty').exists()).toBe(true)
+  })
+
+  it('passes multi-unit report selection through from the units tab', async () => {
+    const wrapper = doMount()
+    await wrapper.get('[data-test="units-report-multi"]').trigger('click')
+    await flushPromises()
+
+    const reportTab = wrapper.get('[data-test="report-tab"]')
+    expect((wrapper.vm as any).activeTab).toBe('report')
+    expect(reportTab.attributes('data-workspace-id')).toBe('workspace-1')
+    expect(reportTab.attributes('data-initial-unit-id')).toBe('unit-1')
+    expect(reportTab.attributes('data-initial-unit-ids')).toBe('unit-1,unit-3')
+  })
+
+  it('falls back to a single selected unit and then to all units when opening reports', async () => {
+    const wrapper = doMount()
+    await wrapper.get('[data-test="units-report-single"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="report-tab"]').attributes('data-initial-unit-ids')).toBe('unit-2')
+
+    await wrapper.get('[data-test="units-report-all"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="report-tab"]').attributes('data-initial-unit-id')).toBe('unit-2')
+    expect(wrapper.get('[data-test="report-tab"]').attributes('data-initial-unit-ids')).toBe('')
+  })
+
+  it('shows data-source configuration for research workspaces but hides it for trading workspaces', () => {
+    const research = doMount()
+    expect(research.find('.workspace-detail-actions button').exists()).toBe(true)
+
+    storeState.currentWorkspace = buildWorkspace({ workspace_type: 'trading' })
+    route.meta.workspaceType = 'trading'
+    const trading = doMount()
+    expect(trading.find('.workspace-detail-actions button').exists()).toBe(false)
+    expect(trading.find('[data-test="trading-detail-ops"]').exists()).toBe(true)
+  })
+
+  it('does not show stale workspace data after the routed workspace has no lookup result', async () => {
+    fetchWorkspace.mockImplementation(async () => {
+      storeState.currentWorkspace = null
+      storeState.loading = false
+    })
+    route.params.id = 'workspace-2'
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect(fetchWorkspace).toHaveBeenCalledWith('workspace-2')
+    expect(wrapper.find('.workspace-detail-empty').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Alpha Research')
   })
 })

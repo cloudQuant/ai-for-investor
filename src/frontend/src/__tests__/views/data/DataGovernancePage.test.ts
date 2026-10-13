@@ -185,7 +185,8 @@ describe('DataGovernancePage', () => {
   })
 
   it('opens endpoint details and runs preview and job actions', async () => {
-    const vm = doMount().vm as unknown as {
+    const wrapper = doMount()
+    const vm = wrapper.vm as unknown as {
       openEndpoint: (endpoint: DataGovernanceEndpoint) => void
       previewParamsText: string
       previewEndpoint: () => Promise<void>
@@ -204,5 +205,112 @@ describe('DataGovernancePage', () => {
     expect(vm.previewResult?.rows).toHaveLength(1)
     expect(ElMessage.success).toHaveBeenCalledWith('dataPages.governancePreviewLoaded')
     expect(ElMessage.success).toHaveBeenCalledWith('dataPages.governanceJobCreated:job-1')
+    expect(wrapper.find('[data-test="governance-preview-result"]').exists()).toBe(true)
+  })
+
+  it('filters endpoints case-insensitively across available metadata', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+
+    vm.endpointSearch = '  CAPITAL_FLOW '
+
+    expect(vm.filteredEndpoints.map((item: DataGovernanceEndpoint) => item.id)).toEqual(['endpoint-2'])
+    vm.endpointSearch = 'missing'
+    expect(vm.filteredEndpoints).toEqual([])
+  })
+
+  it('clears loading and reports errors while loading a provider or bootstrapping', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedProviderId = 'akshare'
+    api.listEndpoints.mockRejectedValueOnce(new Error('provider endpoint unavailable'))
+
+    await vm.handleProviderChange()
+
+    expect(vm.loading).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.governanceLoadEndpointsFailed')
+
+    api.bootstrap.mockRejectedValueOnce(new Error('bootstrap unavailable'))
+    await vm.bootstrapAndLoad()
+    expect(vm.loading).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.governanceLoadFailed')
+  })
+
+  it('returns without calling preview or job APIs until an endpoint is selected', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+
+    await vm.previewEndpoint()
+    await vm.createIngestionJob()
+
+    expect(api.previewEndpoint).not.toHaveBeenCalled()
+    expect(api.createJob).not.toHaveBeenCalled()
+    expect(vm.previewLoading).toBe(false)
+    expect(vm.jobLoading).toBe(false)
+  })
+
+  it('reports preview and job failures and resets both action states', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+    vm.openEndpoint(fixtures.endpoints[0])
+    vm.previewParamsText = '{"symbol":"000001"}'
+    api.previewEndpoint.mockRejectedValueOnce(new Error('preview unavailable'))
+    api.createJob.mockRejectedValueOnce(new Error('queue unavailable'))
+
+    await vm.previewEndpoint()
+    await vm.createIngestionJob()
+
+    expect(api.previewEndpoint).toHaveBeenCalledWith('endpoint-1', { symbol: '000001' })
+    expect(api.createJob).toHaveBeenCalledWith('endpoint-1', { symbol: '000001' })
+    expect(vm.previewLoading).toBe(false)
+    expect(vm.jobLoading).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.governancePreviewFailed')
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.governanceJobFailed')
+  })
+
+  it('shows quality warnings returned with a partial preview response', async () => {
+    const wrapper = doMount()
+    const vm = wrapper.vm as any
+    await flushPromises()
+    vm.openEndpoint(fixtures.endpoints[0])
+    api.previewEndpoint.mockResolvedValueOnce({
+      ...fixtures.preview,
+      quality_warnings: ['missing close value'],
+    })
+
+    await vm.previewEndpoint()
+
+    expect(wrapper.find('[data-test="governance-preview-result"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('missing close value')
+    expect(vm.previewLoading).toBe(false)
+  })
+
+  it('formats missing metadata and toggles a selected provider back to all providers', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+
+    expect(vm.providerLabel('akshare')).toBe('AkShare')
+    expect(vm.providerLabel('unknown-provider')).toBe('unknown-provider')
+    expect(vm.formatCacheTtl(0)).toBe('dataPages.governanceNoCache')
+    expect(vm.formatCacheTtl(30)).toBe('30s')
+    expect(vm.formatCacheTtl(300)).toBe('5m')
+    expect(vm.formatCacheTtl(3600)).toBe('1h')
+    expect(vm.formatDateTime(null)).toBe('-')
+
+    vm.selectProvider('akshare')
+    await flushPromises()
+    expect(vm.selectedProviderId).toBe('akshare')
+    expect(api.listEndpoints).toHaveBeenLastCalledWith('akshare')
+    vm.selectProvider('akshare')
+    await flushPromises()
+    expect(vm.selectedProviderId).toBeUndefined()
+    expect(api.listEndpoints).toHaveBeenLastCalledWith(undefined)
+
+    vm.previewResult = fixtures.preview
+    vm.openEndpoint(fixtures.endpoints[1])
+    expect(vm.currentEndpoint.id).toBe('endpoint-2')
+    expect(vm.previewResult).toBeNull()
+    expect(vm.previewParamsText).toBe('{}')
   })
 })

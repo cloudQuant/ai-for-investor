@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import { useQuoteStore } from '@/stores/quote'
 import QuotePage from '@/views/QuotePage.vue'
 import { mountWithPlugins } from '@/test/mountWithPlugins'
@@ -60,6 +61,58 @@ vi.mock('@/api/quote', () => ({
 vi.mock('echarts', () => ({
   init: echartsInitMock,
 }))
+
+const PopconfirmStub = defineComponent({
+  name: 'QuotePopconfirmStub',
+  props: ['title'],
+  emits: ['confirm'],
+  setup(props, { slots, emit }) {
+    return () => h('div', { class: 'quote-popconfirm', 'data-title': props.title }, [
+      slots.reference?.(),
+      h('button', {
+        type: 'button',
+        'data-test': 'confirm-popconfirm',
+        onClick: () => emit('confirm'),
+      }, 'confirm'),
+    ])
+  },
+})
+
+const EmptyStateStub = defineComponent({
+  name: 'QuoteEmptyStateStub',
+  props: ['description'],
+  setup(props, { slots }) {
+    return () => h('div', { class: 'el-empty' }, [
+      slots.description?.() ?? String(props.description ?? ''),
+      slots.default?.(),
+    ])
+  },
+})
+
+const quotePageStubs = {
+  Search: true,
+  Refresh: true,
+  Plus: true,
+  Loading: true,
+  Delete: true,
+  Setting: true,
+  Filter: true,
+  Rank: true,
+  DataLine: true,
+  Connection: true,
+  WarningFilled: true,
+  'el-popover': { template: '<div class="el-popover"><slot name="reference" /><slot /></div>' },
+  'el-drawer': { template: '<div class="el-drawer"><slot /></div>' },
+  'el-popconfirm': PopconfirmStub,
+  'el-empty': EmptyStateStub,
+}
+
+function mountQuotePage(globalMocks: Record<string, unknown> = {}) {
+  return mountWithPlugins(QuotePage, {
+    customStubs: quotePageStubs,
+    global: { mocks: globalMocks },
+  })
+}
 
 describe('QuotePage', () => {
   beforeEach(() => {
@@ -319,6 +372,108 @@ describe('QuotePage', () => {
       ],
     })
     await flushPromises()
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['not_connected', '网关尚未连接'],
+    ['not_configured', '数据源尚未配置'],
+    ['unavailable', '上游暂不可用'],
+  ] as const)('shows the %s source state and avoids quote requests', async (status, statusMessage) => {
+    quoteApiMocks.listSources.mockResolvedValueOnce({
+      sources: [
+        {
+          source: `source-${status}`,
+          source_label: '测试数据源',
+          status,
+          status_message: statusMessage,
+          capabilities: [],
+        },
+      ],
+    })
+    const router = { push: vi.fn() }
+    const wrapper = mountQuotePage({ $router: router })
+
+    await flushPromises()
+
+    const stateCard = wrapper.get('.quote-state-card')
+    if (status === 'not_configured') {
+      expect(stateCard.text()).toContain('数据源未配置，请先完成相关配置')
+    } else {
+      expect(stateCard.text()).toContain(statusMessage)
+    }
+    expect(quoteApiMocks.getQuotes).not.toHaveBeenCalled()
+
+    if (status === 'not_connected') {
+      await stateCard.get('button').trigger('click')
+      expect(router.push).toHaveBeenCalledWith('/gateways')
+    } else {
+      await wrapper.get('.source-tab').trigger('click')
+      expect(messageMocks.warning).toHaveBeenCalledWith(statusMessage)
+      expect(quoteApiMocks.getQuotes).not.toHaveBeenCalled()
+    }
+
+    wrapper.unmount()
+  })
+
+  it('shows a quote fetch error and retries against the active source', async () => {
+    quoteApiMocks.getQuotes.mockRejectedValue(new Error('quote feed offline'))
+    const wrapper = mountQuotePage()
+
+    await flushPromises()
+    expect(wrapper.get('.quote-error-text').text()).toBe('quote feed offline')
+    expect(quoteApiMocks.getQuotes).toHaveBeenCalledWith('eastmoney')
+    const callsBeforeRetry = quoteApiMocks.getQuotes.mock.calls.length
+
+    quoteApiMocks.getQuotes.mockResolvedValue({
+      source: 'eastmoney',
+      source_label: '东方财富',
+      total: 0,
+      ticks: [],
+      fields: [],
+      update_time: null,
+      refresh_mode: 'polling',
+    })
+    const retry = wrapper.findAll('button').find((button) => button.text().includes('重试'))
+    expect(retry).toBeDefined()
+    await retry!.trigger('click')
+    await flushPromises()
+
+    expect(quoteApiMocks.getQuotes).toHaveBeenCalledTimes(callsBeforeRetry + 1)
+    expect(quoteApiMocks.getQuotes).toHaveBeenLastCalledWith('eastmoney')
+    expect(wrapper.find('.quote-error-text').exists()).toBe(false)
+    expect(wrapper.find('.quote-state-card').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows no search results after a symbol search request fails', async () => {
+    quoteApiMocks.searchSymbols.mockRejectedValueOnce(new Error('symbol search failed'))
+    const wrapper = mountQuotePage()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.showAddDialog = true
+    vm.addKeyword = 'unknown-symbol'
+    vm.handleAddSearch()
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(quoteApiMocks.searchSymbols).toHaveBeenCalledWith('eastmoney', 'unknown-symbol')
+    expect(wrapper.text()).toContain('未找到匹配品种')
+    wrapper.unmount()
+  })
+
+  it('removes a subscription through the visible confirmation action', async () => {
+    const wrapper = mountQuotePage()
+    await flushPromises()
+
+    const confirmActions = wrapper.findAll('[data-test="confirm-popconfirm"]')
+    expect(confirmActions).toHaveLength(1)
+    expect(confirmActions[0].element.parentElement?.getAttribute('data-title')).toBe('确定删除此订阅？')
+    await confirmActions[0].trigger('click')
+    await flushPromises()
+
+    expect(quoteApiMocks.removeSubscriptions).toHaveBeenCalledWith('eastmoney', ['RB2405'])
     wrapper.unmount()
   })
 })

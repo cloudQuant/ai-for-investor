@@ -1,10 +1,58 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { defineComponent, h } from 'vue'
+import { ElMessage } from 'element-plus'
 import PortfolioPage from '@/views/PortfolioPage.vue'
 import { portfolioApi } from '@/api/portfolio'
 import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
+
+const chartMock = vi.hoisted(() => {
+  const charts: Array<any> = []
+  const init = vi.fn((dom: HTMLElement) => {
+    const chart = {
+      getDom: () => dom,
+      setOption: vi.fn(),
+      resize: vi.fn(),
+      dispose: vi.fn(),
+    }
+    charts.push(chart)
+    return chart
+  })
+  return { charts, init }
+})
+
+vi.mock('echarts', () => ({ init: chartMock.init }))
+
+const rowAwareElTable = defineComponent({
+  inheritAttrs: false,
+  props: ['data'],
+  setup(props, { attrs, slots }) {
+    return () => h('div', { ...attrs, class: ['el-table', attrs.class] },
+      ((props.data || []) as unknown[]).map((row, rowIndex) => h(
+        'div',
+        { class: 'el-table-row', 'data-row-index': rowIndex },
+        (slots.default?.() || []).map((column: any) => {
+          const columnProps = column.props || {}
+          const renderCell = column.children?.default
+          const value = typeof renderCell === 'function'
+            ? renderCell({ row, $index: rowIndex })
+            : columnProps.prop
+              ? (row as Record<string, unknown>)[columnProps.prop]
+              : ''
+          return h('div', {
+            class: 'el-table-cell',
+            'data-column': columnProps.label || columnProps.prop || '',
+          }, [
+            h('span', { class: 'el-table-cell__label' }, String(columnProps.label || '')),
+            h('span', { class: 'el-table-cell__value' }, Array.isArray(value) ? value : [value]),
+          ])
+        }),
+      )),
+    )
+  },
+})
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn() },
@@ -215,9 +263,21 @@ vi.mock('@/api/workspace', () => ({
 }))
 
 describe('PortfolioPage', () => {
-  beforeEach(() => { setActivePinia(createPinia()); vi.clearAllMocks() })
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    chartMock.charts.splice(0)
+  })
 
-  const doMount = () => mount(PortfolioPage, { global: { stubs: { ...elStubs, EquityCurve: true } } })
+  const doMount = (renderTableRows = false) => mount(PortfolioPage, {
+    global: {
+      stubs: {
+        ...elStubs,
+        EquityCurve: true,
+        ...(renderTableRows ? { 'el-table': rowAwareElTable } : {}),
+      },
+    },
+  })
 
   it('mounts without error', () => {
     expect(doMount().exists()).toBe(true)
@@ -476,10 +536,15 @@ describe('PortfolioPage', () => {
   })
 
   it('loadTabData skips already loaded tabs', async () => {
-    const vm = doMount().vm as any
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const callsBefore = vi.mocked(workspaceApi.getTradingPositions).mock.calls.length
     await vm.loadTabData('positions')
     await vm.loadTabData('positions')
-    // Second call should be a no-op (already in loadedTabs set)
+
+    expect(workspaceApi.getTradingPositions).toHaveBeenCalledTimes(callsBefore + 1)
+    expect(vm.positions).toHaveLength(1)
   })
 
   it('activeTab defaults to workspaces', () => {
@@ -529,5 +594,338 @@ describe('PortfolioPage', () => {
     expect(vm.formatMoney(-2e8)).toBe('-2.00亿')
     expect(vm.formatMoney(-50000)).toBe('-5.00万')
     expect(vm.formatMoney(-50)).toBe('-50.00')
+  })
+
+  it('reports overview failures and clears the loading state', async () => {
+    vi.mocked(portfolioApi.getOverview).mockRejectedValueOnce(new Error('overview unavailable'))
+
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect(portfolioApi.getOverview).toHaveBeenCalledWith(true)
+    expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('overview unavailable'))
+    expect(wrapper.find('.portfolio-loading').exists()).toBe(false)
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(true)
+  })
+
+  it('refreshes the visible portfolio and reloads the selected tab', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.activeTab = 'positions'
+    await flushPromises()
+    const callsBefore = vi.mocked(workspaceApi.getTradingPositions).mock.calls.length
+
+    vi.mocked(portfolioApi.getOverview).mockResolvedValueOnce({
+      total_assets: 123456,
+      total_cash: 100000,
+      total_position_value: 23456,
+      net_position_value: 23456,
+      total_initial_capital: 100000,
+      total_pnl: 23456,
+      total_pnl_pct: 23.456,
+      strategy_count: 1,
+      running_count: 1,
+      strategies: [],
+    })
+    const refreshButton = wrapper.get('.portfolio-hero__status .el-button')
+    expect(refreshButton.text()).toBe('刷新')
+    await refreshButton.trigger('click')
+    await flushPromises()
+
+    expect(portfolioApi.getOverview).toHaveBeenCalledTimes(2)
+    expect(workspaceApi.getTradingPositions).toHaveBeenCalledTimes(callsBefore + 1)
+    expect(wrapper.get('.portfolio-hero__asset').text()).toContain('12.35万')
+  })
+
+  it('shows empty position and trade states when there are no running workspaces', async () => {
+    vi.mocked(workspaceApi.list).mockResolvedValueOnce({ total: 0, items: [] })
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.activeTab = 'positions'
+    await flushPromises()
+    expect(vm.positions).toEqual([])
+    expect(vm.positionSummary).toMatchObject({
+      total_long_value: 0,
+      total_short_value: 0,
+      gross_market_value: 0,
+      net_market_value: 0,
+      total_pnl: 0,
+    })
+    expect(wrapper.find('.portfolio-empty').text()).toContain('暂无持仓数据')
+    expect(workspaceApi.getTradingPositions).not.toHaveBeenCalled()
+
+    vm.activeTab = 'trades'
+    await flushPromises()
+    expect(vm.trades).toEqual([])
+    expect(wrapper.get('.el-tab-pane[name="trades"] .portfolio-empty').text()).toContain('暂无交易记录')
+    expect(portfolioApi.getTrades).not.toHaveBeenCalled()
+  })
+
+  it('reports a positions request failure and retries the tab on the next request', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vi.mocked(workspaceApi.getTradingPositions).mockRejectedValueOnce(new Error('positions unavailable'))
+
+    vm.activeTab = 'positions'
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('positions unavailable'))
+    expect(vm.isTabLoading('positions')).toBe(false)
+    expect(wrapper.find('.portfolio-empty').text()).toContain('暂无持仓数据')
+
+    await vm.loadTabData('positions')
+
+    expect(workspaceApi.getTradingPositions).toHaveBeenCalledTimes(2)
+    expect(vm.positions).toHaveLength(1)
+    expect(vm.positions[0].data_name).toBe('RB2510')
+  })
+
+  it('renders long and short position rows including zero and unavailable valuation fields', async () => {
+    const wrapper = doMount(true)
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vi.mocked(workspaceApi.getTradingPositions).mockResolvedValueOnce({
+      positions: [
+        {
+          unit_id: 'unit-long',
+          unit_name: '多头趋势',
+          symbol: 'LONG',
+          symbol_name: '多头标的',
+          trading_mode: 'live',
+          long_position: 2,
+          short_position: 0,
+          avg_price: 10.5,
+          latest_price: 12,
+          position_pnl: 3,
+          market_value: 24,
+          margin_value: 2.4,
+          leverage: 10,
+          commission: 0.5,
+          position_source: 'gateway',
+          asset_spec_source: 'exchange',
+          valuation_status: 'confirmed',
+          valuation_warnings: [],
+        },
+        {
+          unit_id: 'unit-short',
+          unit_name: '空头对冲',
+          symbol: 'SHORT',
+          symbol_name: '空头标的',
+          trading_mode: 'live',
+          long_position: 0,
+          short_position: 1,
+          avg_price: null,
+          latest_price: null,
+          position_pnl: -2,
+          market_value: 0,
+          margin_value: null,
+          leverage: null,
+          commission: null,
+          position_source: 'snapshot',
+          asset_spec_source: null,
+          valuation_status: 'estimated',
+          valuation_warnings: ['价格为估算值'],
+        },
+      ],
+    } as any)
+
+    vm.activeTab = 'positions'
+    await flushPromises()
+
+    const rows = wrapper.findAll('.el-tab-pane[name="positions"] .el-table-row')
+    expect(workspaceApi.getTradingPositions).toHaveBeenCalledWith('ws-running')
+    expect(rows).toHaveLength(2)
+    const cellText = (row: typeof rows[number], label: string) => (
+      row.get(`[data-column="${label}"] .el-table-cell__value`).text()
+    )
+
+    const longRow = rows.find(row => cellText(row, '标的代码') === 'LONG')
+    expect(longRow).toBeDefined()
+    expect(cellText(longRow!, '方向')).toBe('多')
+    expect(cellText(longRow!, '多头')).toBe('2.0000')
+    expect(cellText(longRow!, '空头')).toBe('--')
+    expect(cellText(longRow!, '成本价')).toBe('10.5000')
+    expect(cellText(longRow!, '最新价')).toBe('12.0000')
+    expect(cellText(longRow!, '市值')).toBe('24.00')
+    expect(cellText(longRow!, '持仓盈亏')).toBe('+3.00')
+    expect(cellText(longRow!, '保证金')).toBe('2.40')
+    expect(cellText(longRow!, '手续费')).toBe('0.50')
+    expect(cellText(longRow!, '估值状态')).toBe('交易所确认')
+
+    const shortRow = rows.find(row => cellText(row, '标的代码') === 'SHORT')
+    expect(shortRow).toBeDefined()
+    expect(cellText(shortRow!, '方向')).toBe('空')
+    expect(cellText(shortRow!, '持仓量')).toBe('-1.0000')
+    expect(cellText(shortRow!, '成本价')).toBe('0.0000')
+    expect(cellText(shortRow!, '最新价')).toBe('0.0000')
+    expect(cellText(shortRow!, '市值')).toBe('0.00')
+    expect(cellText(shortRow!, '持仓盈亏')).toBe('-2.00')
+    expect(cellText(shortRow!, '保证金')).toBe('--')
+    expect(cellText(shortRow!, '杠杆')).toBe('--')
+    expect(cellText(shortRow!, '手续费')).toBe('--')
+    expect(cellText(shortRow!, '估值状态')).toBe('估算')
+  })
+
+  it('renders buy and sell trade rows with signed net profit and loss', async () => {
+    const wrapper = doMount(true)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vi.mocked(portfolioApi.getTrades).mockResolvedValueOnce({
+      total: 2,
+      trades: [
+        {
+          workspace_id: 'ws-running',
+          strategy_name: 'CTA 交易工作区 / 多头策略',
+          data_name: 'LONG',
+          direction: 'buy',
+          dtopen: '2026-06-19 09:30:00',
+          dtclose: '2026-06-19 10:00:00',
+          price: 10.5,
+          size: 2,
+          commission: 1.25,
+          pnlcomm: 20,
+          barlen: 7,
+        },
+        {
+          workspace_id: 'ws-running',
+          strategy_name: 'CTA 交易工作区 / 空头策略',
+          data_name: 'SHORT',
+          direction: 'sell',
+          dtopen: '2026-06-19 10:30:00',
+          dtclose: '2026-06-19 11:00:00',
+          price: 8,
+          size: 1,
+          commission: 0.75,
+          pnlcomm: -5,
+          barlen: 3,
+        },
+      ],
+    } as any)
+
+    vm.activeTab = 'trades'
+    await flushPromises()
+
+    const rows = wrapper.findAll('.el-tab-pane[name="trades"] .el-table-row')
+    expect(portfolioApi.getTrades).toHaveBeenCalledWith(1000, ['ws-running'], false)
+    expect(rows).toHaveLength(2)
+    const cellText = (row: typeof rows[number], label: string) => (
+      row.get(`[data-column="${label}"] .el-table-cell__value`).text()
+    )
+    const longRow = rows.find(row => cellText(row, '标的') === 'LONG')
+    const shortRow = rows.find(row => cellText(row, '标的') === 'SHORT')
+
+    expect(longRow).toBeDefined()
+    expect(cellText(longRow!, '方向')).toBe('多')
+    expect(cellText(longRow!, '价格')).toBe('10.50')
+    expect(cellText(longRow!, '手续费')).toBe('1.25')
+    expect(cellText(longRow!, '净盈亏')).toBe('+20.00')
+    expect(shortRow).toBeDefined()
+    expect(cellText(shortRow!, '方向')).toBe('空')
+    expect(cellText(shortRow!, '价格')).toBe('8.00')
+    expect(cellText(shortRow!, '净盈亏')).toBe('-5.00')
+  })
+
+  it('renders both equity charts and updates the selected strategy series', async () => {
+    vi.mocked(portfolioApi.getEquity).mockResolvedValueOnce({
+      dates: ['2026-06-20', '2026-06-21'],
+      total_equity: [100000, 101000],
+      cumulative_pnl: [0, 1000],
+      total_drawdown: [0, -0.01],
+      strategies: [{
+        strategy_id: 's1',
+        strategy_name: 'SMA 单元',
+        instance_id: 'unit-1',
+        values: [50000, 51000],
+        pnl_values: [-100, 200],
+      }],
+    } as any)
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.activeTab = 'equity'
+    await flushPromises()
+
+    expect(portfolioApi.getEquity).toHaveBeenCalledWith(['ws-running'], false)
+    expect(wrapper.find('.portfolio-chart--pnl').exists()).toBe(true)
+    expect(wrapper.find('.portfolio-chart--drawdown').exists()).toBe(true)
+    expect(chartMock.init).toHaveBeenCalledTimes(2)
+    expect(chartMock.charts[0].setOption).toHaveBeenCalledWith(
+      expect.objectContaining({ series: [expect.objectContaining({ data: [0, 1000] })] }),
+      true,
+    )
+
+    vm.selectedEquitySeries = 'unit-1'
+    await flushPromises()
+
+    expect(vm.selectedEquityCurve.name).toBe('SMA 单元')
+    expect(vm.selectedEquityCurve.values).toEqual([50000, 51000])
+    expect(vm.selectedEquityCurve.cumulativePnl).toEqual([-100, 200])
+    expect(chartMock.charts[0].setOption).toHaveBeenLastCalledWith(
+      expect.objectContaining({ series: [expect.objectContaining({ data: [-100, 200] })] }),
+      true,
+    )
+    expect(chartMock.charts[0].resize).toHaveBeenCalled()
+
+    vm.activeTab = 'workspaces'
+    await flushPromises()
+    vm.activeTab = 'equity'
+    await flushPromises()
+
+    expect(chartMock.charts[0].dispose).toHaveBeenCalledOnce()
+    expect(chartMock.charts[1].dispose).toHaveBeenCalledOnce()
+    expect(chartMock.init).toHaveBeenCalledTimes(4)
+  })
+
+  it('renders the allocation chart from the selected workspace data', async () => {
+    vi.mocked(portfolioApi.getAllocation).mockResolvedValueOnce({
+      total: 100,
+      items: [
+        { asset: 'RB2510', value: 70, weight: 70, long_value: 70, short_value: 0, net_value: 70, position_count: 1 },
+        { asset: 'AG2512', value: 30, weight: 30, long_value: 0, short_value: 30, net_value: -30, position_count: 1 },
+      ],
+    })
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.activeTab = 'allocation'
+    await flushPromises()
+
+    expect(portfolioApi.getAllocation).toHaveBeenCalledWith(['ws-running'])
+    expect(wrapper.find('.portfolio-chart--allocation').exists()).toBe(true)
+    expect(chartMock.init).toHaveBeenCalledTimes(1)
+    expect(chartMock.charts[0].setOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        series: [expect.objectContaining({
+          type: 'pie',
+          data: [{ name: 'RB2510', value: 70 }, { name: 'AG2512', value: 30 }],
+        })],
+      }),
+      true,
+    )
+  })
+
+  it('reports allocation request errors and allows the tab to be retried', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vi.mocked(portfolioApi.getAllocation).mockRejectedValueOnce(new Error('allocation unavailable'))
+
+    vm.activeTab = 'allocation'
+    await flushPromises()
+
+    expect(portfolioApi.getAllocation).toHaveBeenCalledWith(['ws-running'])
+    expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('allocation unavailable'))
+    expect(vm.isTabLoading('allocation')).toBe(false)
+    expect(wrapper.get('.el-tab-pane[name="allocation"] .portfolio-empty').text()).toContain('暂无持仓资产')
+
+    await vm.loadTabData('allocation')
+
+    expect(portfolioApi.getAllocation).toHaveBeenCalledTimes(2)
+    expect(vm.allocationItems).toHaveLength(1)
   })
 })

@@ -1,6 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type {
+  AssetResearchAssetType,
+  AssetResearchCapabilities,
+  AssetResearchTask,
+  InstrumentIdentity,
+  InstrumentSearchResponse,
+} from '@/api/assetResearch'
 import { elStubs } from '@/test/stubs'
 import AssetAnalysisPage from '@/views/investment/AssetAnalysisPage.vue'
 
@@ -38,6 +45,14 @@ function mountPage(assetType = 'futures') {
     props: { assetType },
     global: { stubs: elStubs },
   })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
 }
 
 describe('AssetAnalysisPage', () => {
@@ -604,5 +619,144 @@ describe('AssetAnalysisPage', () => {
     )
     expect(wrapper.find('.scorecard-panel').text()).toContain('样本不足')
     expect(wrapper.find('.scorecard-panel').text()).not.toContain('0.0%')
+  })
+
+  it('uses the option identity and confirmed position when submitting a multi-asset request', async () => {
+    const assetType: AssetResearchAssetType = 'option'
+    const capabilities: AssetResearchCapabilities = {
+      capability_version: 'v1',
+      execution_disabled: true,
+      asset_types: [
+        {
+          asset_type: assetType,
+          research_enabled: true,
+          short_open_research_allowed: false,
+          reason_codes: [],
+        },
+      ],
+    }
+    const optionIdentity: InstrumentIdentity = {
+      asset_type: assetType,
+      identity_level: 'CONTRACT',
+      canonical_id: 'option:CFFEX:IO2609-C-3800:CNY',
+      display_symbol: 'IO2609-C-3800',
+      name: '沪深300股指期权 2609 看涨 3800',
+      venue: 'CFFEX',
+      currency: 'CNY',
+      timezone: 'Asia/Shanghai',
+      identifier_type: 'OPTION_CONTRACT',
+      identifier_value: 'IO2609-C-3800',
+      metadata_version: 'option-v1',
+      details: { strike: 3800, option_type: 'CALL' },
+    }
+    const searchResponse: InstrumentSearchResponse = {
+      asset_type: assetType,
+      items: [
+        {
+          asset_type: assetType,
+          symbol: optionIdentity.display_symbol,
+          name: optionIdentity.name,
+          market: 'CFFEX',
+          canonical_id: optionIdentity.canonical_id,
+          metadata_version: optionIdentity.metadata_version,
+          asset_research_identity: optionIdentity,
+        },
+      ],
+    }
+    mocks.getCapabilities.mockResolvedValue(capabilities)
+    mocks.searchInstruments.mockResolvedValue(searchResponse)
+    mocks.resolveInstrument.mockResolvedValue(optionIdentity)
+
+    const wrapper = mountPage(assetType)
+    await flushPromises()
+    await wrapper.find('.instrument-input input').setValue('IO2609-C-3800')
+    const searchButton = wrapper.findAll('button').find((button) => button.text().includes('搜索候选'))
+    await searchButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.searchInstruments).toHaveBeenCalledWith('option', 'IO2609-C-3800', 20)
+    const candidateButton = wrapper.findAll('button').find((button) => button.text().includes('确认 IO2609-C-3800'))
+    await candidateButton!.trigger('click')
+    await flushPromises()
+    expect(mocks.resolveInstrument).toHaveBeenCalledWith({
+      asset_type: 'option',
+      query: 'IO2609-C-3800',
+      venue: 'CFFEX',
+      canonical_id: 'option:CFFEX:IO2609-C-3800:CNY',
+      identity_level: 'CONTRACT',
+    })
+
+    const vm = wrapper.vm as unknown as {
+      form: { positionContext: string; horizonCode: string }
+    }
+    vm.form.positionContext = 'SHORT'
+    vm.form.horizonCode = 'standard'
+    await wrapper.vm.$nextTick()
+    const submitButton = wrapper.findAll('button').find((button) => button.text().includes('开始 期权研究'))
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      {
+        asset_type: 'option',
+        canonical_id: 'option:CFFEX:IO2609-C-3800:CNY',
+        horizon_code: 'standard',
+        position_context: 'SHORT',
+      },
+      expect.any(String),
+    )
+    expect(wrapper.text()).toContain('AI期权')
+    wrapper.unmount()
+  })
+
+  it('does not attach a late task response to a different asset after switching routes', async () => {
+    const pendingTask = deferred<AssetResearchTask>()
+    mocks.createTask.mockReturnValueOnce(pendingTask.promise)
+    const wrapper = mountPage('futures')
+    await flushPromises()
+    await wrapper.find('.instrument-input input').setValue('IF2609')
+    const searchButton = wrapper.findAll('button').find((button) => button.text().includes('搜索候选'))
+    await searchButton!.trigger('click')
+    await flushPromises()
+    const candidateButton = wrapper.findAll('button').find((button) => button.text().includes('确认 IF2609'))
+    await candidateButton!.trigger('click')
+    await flushPromises()
+    const submitButton = wrapper.findAll('button').find((button) => button.text().includes('开始 期货研究'))
+    await submitButton!.trigger('click')
+
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset_type: 'futures',
+        canonical_id: 'futures:CFFEX:IF2609:CNY',
+      }),
+      expect.any(String),
+    )
+    await wrapper.setProps({ assetType: 'option' })
+    await flushPromises()
+    pendingTask.resolve({
+      task_id: 'late-futures-task',
+      status: 'QUEUED',
+      asset_type: 'futures',
+      canonical_id: 'futures:CFFEX:IF2609:CNY',
+      progress: 0,
+      created_at: '2026-08-01T10:00:00Z',
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('AI期权')
+    expect(wrapper.find('.resolved-instrument').exists()).toBe(false)
+    expect(wrapper.find('.task-panel').exists()).toBe(false)
+    expect(mocks.getTask).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('falls back to the bond page for an unsupported asset route', async () => {
+    const wrapper = mountPage('unsupported-asset')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('AI债券')
+    expect(wrapper.text()).not.toContain('AIunsupported-asset')
+    expect(mocks.getCapabilities).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 })

@@ -200,15 +200,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,backtrader]"
 
+      - name: Generate ephemeral E2E credentials
+        id: e2e-credentials
+        run: |
+          python - <<'PY'
+          import os
+          import secrets
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              for name in ("admin_password", "secret_key", "jwt_secret_key"):
+                  value = secrets.token_urlsafe(32)
+                  print(f"::add-mask::{value}")
+                  output.write(f"{name}={value}\n")
+          PY
+
+      - name: Migrate E2E database and seed temporary admin
+        working-directory: src/backend
+        env:
+          SECRET_KEY: ${{ steps.e2e-credentials.outputs.secret_key }}
+          JWT_SECRET_KEY: ${{ steps.e2e-credentials.outputs.jwt_secret_key }}
+          DATABASE_URL: sqlite+aiosqlite:///./backtrader_e2e.db
+          DB_AUTO_CREATE_SCHEMA: "false"
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ${{ steps.e2e-credentials.outputs.admin_password }}
+          ADMIN_EMAIL: admin@example.com
+        run: |
+          alembic upgrade head
+          python -m app.db.bootstrap_admin
+
       - name: Start services
         env:
-          SECRET_KEY: e2e-secret-key-with-sufficient-length-123456
-          JWT_SECRET_KEY: e2e-jwt-secret-key-with-sufficient-length-654321
+          SECRET_KEY: ${{ steps.e2e-credentials.outputs.secret_key }}
+          JWT_SECRET_KEY: ${{ steps.e2e-credentials.outputs.jwt_secret_key }}
           DATABASE_URL: sqlite+aiosqlite:///./backtrader_e2e.db
-          DB_AUTO_CREATE_SCHEMA: "true"
-          DB_AUTO_CREATE_DEFAULT_ADMIN: "true"
+          DB_AUTO_CREATE_SCHEMA: "false"
           ADMIN_USERNAME: admin
-          ADMIN_PASSWORD: Admin12345678
+          ADMIN_PASSWORD: ${{ steps.e2e-credentials.outputs.admin_password }}
           ADMIN_EMAIL: admin@example.com
           RATE_LIMIT_REGISTER: "100/hour"
           RATE_LIMIT_LOGIN: "500/minute"
@@ -260,7 +287,7 @@ jobs:
           BASE_URL: http://127.0.0.1:3000
           CI: true
           E2E_ADMIN_USERNAME: admin
-          E2E_ADMIN_PASSWORD: Admin12345678
+          E2E_ADMIN_PASSWORD: ${{ steps.e2e-credentials.outputs.admin_password }}
           E2E_SETUP_BROWSER: chromium
         run: npx playwright test
 

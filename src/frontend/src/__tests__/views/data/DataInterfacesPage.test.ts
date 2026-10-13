@@ -78,11 +78,14 @@ vi.mock('@/api/index', () => ({
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ user: { is_admin: true } }),
+  useAuthStore: () => authState,
 }))
+
+const authState = vi.hoisted(() => ({ user: { is_admin: true } }))
 
 import DataInterfacesPage from '@/views/data/DataInterfacesPage.vue'
 import { akshareInterfacesApi } from '@/api/akshare'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { elStubs } from '@/test/stubs'
 
 const api = akshareInterfacesApi as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -95,6 +98,7 @@ describe('DataInterfacesPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    authState.user.is_admin = true
     api.getCategories.mockResolvedValue([
       { id: 1, name: 'stock', description: '股票' },
       { id: 2, name: 'future', description: '' },
@@ -170,5 +174,121 @@ describe('DataInterfacesPage', () => {
     const vm = doMount().vm as any
     await vm.deleteInterface(7)
     expect(api.delete).toHaveBeenCalledWith(7)
+  })
+
+  it('filters interfaces, resets pagination, and displays an empty state', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.page = 2
+    vm.categoryId = 2
+    vm.search = 'fund flow'
+    vm.activeFilter = 'active'
+    api.list.mockResolvedValueOnce({ items: [], total: 0 })
+
+    await vm.loadInterfaces()
+
+    expect(api.list).toHaveBeenLastCalledWith({
+      page: 2,
+      page_size: 20,
+      category_id: 2,
+      search: 'fund flow',
+      is_active: true,
+    })
+    expect(vm.interfaces).toEqual([])
+    expect(vm.total).toBe(0)
+    expect(vm.loading).toBe(false)
+    expect(wrapper.find('.interfaces-empty').exists()).toBe(true)
+
+    vm.page = 5
+    vm.pageSize = 50
+    vm.handleSizeChange()
+    await flushPromises()
+    expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, page_size: 50 }))
+  })
+
+  it('rejects an incomplete create form before making an API request', async () => {
+    const vm = doMount().vm as any
+    await vm.submitForm()
+
+    expect(api.create).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('dataPages.ifValidationFill')
+    expect(vm.saving).toBe(false)
+  })
+
+  it('updates an edited interface with parsed JSON and trimmed fields', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+    vm.openEditDialog({ ...interfaceFixture })
+    vm.form.display_name = '  Updated label  '
+    vm.form.description = '   '
+    vm.parametersText = '{"symbol":{"required":true}}'
+    vm.extraConfigText = '{"throttle_ms":250}'
+
+    await vm.submitForm()
+
+    expect(api.update).toHaveBeenCalledWith(1, expect.objectContaining({
+      display_name: 'Updated label',
+      description: null,
+      parameters: { symbol: { required: true } },
+      extra_config: { throttle_ms: 250 },
+    }))
+    expect(vm.dialogVisible).toBe(false)
+    expect(vm.saving).toBe(false)
+  })
+
+  it('resets loading after list failure and reports the error', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    api.list.mockRejectedValueOnce(new Error('service unavailable'))
+
+    await (wrapper.vm as any).loadInterfaces()
+
+    expect((wrapper.vm as any).loading).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.ifLoadFailed')
+  })
+
+  it('does not delete an interface when confirmation is canceled', async () => {
+    const vm = doMount().vm as any
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel')
+
+    await vm.deleteInterface(7)
+
+    expect(api.delete).not.toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
+  it('keeps interface data visible but hides edit and delete actions for non-admins', async () => {
+    authState.user.is_admin = false
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect((wrapper.vm as any).isAdmin).toBe(false)
+    expect(wrapper.text()).toContain('A 股历史行情')
+    expect(wrapper.text()).not.toContain('dataPages.ifActionEdit')
+    expect(wrapper.text()).not.toContain('dataPages.ifActionDelete')
+  })
+
+  it('renders fallbacks for interfaces with optional metadata missing', async () => {
+    api.list.mockResolvedValueOnce({
+      items: [{
+        ...interfaceFixture,
+        description: '',
+        module_path: '',
+        function_name: '',
+        params: [],
+        parameters: { symbol: { type: 'string' } },
+        updated_at: null,
+        is_active: false,
+      }],
+      total: 1,
+    })
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect((wrapper.vm as any).visibleParamCount).toBe(1)
+    expect(wrapper.text()).toContain('dataPages.ifNoDescription')
+    expect(wrapper.text()).toContain('dataPages.ifStatusInactive')
+    expect(wrapper.text()).toContain('stock_zh_a_hist')
   })
 })

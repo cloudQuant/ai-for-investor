@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('vue-i18n', () => ({
@@ -40,11 +40,14 @@ vi.mock('@/api/index', () => ({
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ user: { is_admin: true } }),
+  useAuthStore: () => authState,
 }))
+
+const authState = vi.hoisted(() => ({ user: { is_admin: true } }))
 
 import DataScriptsPage from '@/views/data/DataScriptsPage.vue'
 import { akshareScriptsApi } from '@/api/akshare'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { elStubs } from '@/test/stubs'
 
 const api = akshareScriptsApi as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -57,6 +60,7 @@ describe('DataScriptsPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    authState.user.is_admin = true
   })
 
   it('loads categories, stats and scripts on mount', async () => {
@@ -140,5 +144,142 @@ describe('DataScriptsPage', () => {
     expect(api.run).toHaveBeenCalledWith('s-1', { parameters: {} })
     expect(vm.dialogVisible).toBe(true)
     expect(vm.dialogMode).toBe('edit')
+  })
+
+  it('sends script filters and pagination and renders an empty result', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.page = 3
+    vm.filters.category = 'stock'
+    vm.filters.keyword = 'history'
+    vm.activeFilter = 'inactive'
+    api.list.mockResolvedValueOnce({ items: [], total: 0 })
+
+    await vm.loadScripts()
+
+    expect(api.list).toHaveBeenLastCalledWith({
+      page: 3,
+      page_size: 20,
+      category: 'stock',
+      keyword: 'history',
+      is_active: false,
+    })
+    expect(vm.scripts).toEqual([])
+    expect(vm.total).toBe(0)
+    expect(vm.loading).toBe(false)
+    expect(wrapper.find('.scripts-empty').exists()).toBe(true)
+
+    vm.page = 4
+    vm.pageSize = 50
+    vm.handleSizeChange()
+    await flushPromises()
+    expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, page_size: 50 }))
+  })
+
+  it('shows an empty state and clears loading after a list request fails', async () => {
+    api.list.mockRejectedValueOnce(new Error('offline'))
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect((wrapper.vm as any).loading).toBe(false)
+    expect(wrapper.find('.scripts-empty').exists()).toBe(true)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.scriptsLoadFailed')
+  })
+
+  it('validates create fields and submits trimmed values with parsed dependencies', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openCreateDialog()
+    await vm.submitForm()
+    expect(api.create).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('dataPages.scriptsValidationFill')
+
+    Object.assign(vm.form, {
+      script_id: '  custom-script  ',
+      script_name: '  Custom script  ',
+      category: ' stock ',
+      description: '  daily prices  ',
+      target_table: ' ',
+      module_path: ' akshare.stock ',
+    })
+    vm.dependenciesText = '{"symbol": "close"}'
+    await vm.submitForm()
+
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
+      script_id: 'custom-script',
+      script_name: 'Custom script',
+      category: 'stock',
+      description: 'daily prices',
+      target_table: null,
+      module_path: 'akshare.stock',
+      dependencies: { symbol: 'close' },
+    }))
+    expect(vm.dialogVisible).toBe(false)
+    expect(vm.saving).toBe(false)
+  })
+
+  it('keeps the edit dialog open and resets saving when update fails', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openEditDialog({
+      script_id: 's-9',
+      script_name: 'Before',
+      category: 'stock',
+      source: 'akshare',
+      dependencies: {},
+      estimated_duration: 60,
+      timeout: 300,
+      is_active: true,
+    })
+    vm.form.script_name = 'After'
+    api.update.mockRejectedValueOnce(new Error('write failed'))
+
+    await vm.submitForm()
+
+    expect(api.update).toHaveBeenCalledWith('s-9', expect.any(Object))
+    expect((api.update.mock.calls[0][1] as object)).not.toHaveProperty('script_id')
+    expect(vm.dialogVisible).toBe(true)
+    expect(vm.saving).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.scriptsSaveFailed')
+  })
+
+  it('does not delete a script when the confirmation dialog is canceled', async () => {
+    const vm = doMount().vm as any
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel')
+
+    await vm.deleteScript({ script_id: 's-1', script_name: 'One' })
+
+    expect(api.delete).not.toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
+  it('hides script management actions from non-admin users', async () => {
+    authState.user.is_admin = false
+    api.list.mockResolvedValueOnce({
+      items: [{
+        script_id: 'builtin-1',
+        script_name: 'Built-in script',
+        category: 'stock',
+        source: 'akshare',
+        is_custom: false,
+        is_active: false,
+        description: null,
+        target_table: null,
+        frequency: null,
+        updated_at: null,
+      }],
+      total: 1,
+    })
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect((wrapper.vm as any).isAdmin).toBe(false)
+    expect(wrapper.find('.scripts-action-more').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Built-in script')
+    expect(wrapper.text()).toContain('dataPages.scriptsNoDescription')
+    expect(wrapper.text()).toContain('dataPages.scriptsStatusInactive')
   })
 })
