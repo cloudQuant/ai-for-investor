@@ -68,7 +68,7 @@ cd /Users/yunjinqi/Downloads/backtrader_web/src/backend
   被防御性校验拒绝 → 改用非破坏性 `Base.metadata.create_all` 补建缺失表。
 - 5 张空表（`md_observation_revisions`/`md_source_snapshots`/`md_calendar_snapshots`/
   `md_publications`/`dg_dataset_storages`）结构不完整 → 确认 0 行后重建。
-- bootstrap 因既有 `akshare` provider 的 `category='china_market'`（[registry.py](src/backend/app/services/data_connectors/registry.py:17) 定义）
+- bootstrap 因既有 `akshare` provider 的 `category='china_market'`（[registry.py](../../../src/backend/app/services/data_connectors/registry.py#L17) 定义）
   与期望 `market_data` 冲突 → 改为复刻 dataset 注册部分（13 个 dataset，含 199 新增 4 个）。
 
 **回填结果**：
