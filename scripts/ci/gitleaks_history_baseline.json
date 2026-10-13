@@ -1,11 +1,23 @@
 {
   "schema_version": 1,
   "gitleaks_version": "8.30.1",
-  "audit_date": "2026-08-15",
-  "accepted_fingerprints": 122,
+  "audit_date": "2026-10-13",
+  "accepted_fingerprints": 237,
   "unresolved_findings": 0,
   "blocking_ready": true,
-  "credential_status": "owner-confirmed-revoked-2026-07-18",
+  "credential_status": "mixed: prior historical findings owner-confirmed revoked 2026-07-18; one historical credential occurrence accepted 2026-10-13 with rotation not confirmed",
   "strategy": "fingerprint-scoped risk acceptance; no history rewrite",
-  "_note": "2026-08-15 added 3 false positives from commit 7a68bfa7: two config_hash_without_secrets SHA-256 values in iteration evidence JSON files and one test idempotency_key in test_schedules.py:90. None are credentials. 2026-09-12 added 4 reviewed test-fixture values (E2E smoke password, two idempotency-key literals, one fixture SECRET_KEY) to unblock the blocking history gate; none are credentials."
+  "fingerprint_count_semantics": "The accepted count includes exact commit/path/rule/line aliases. The 114 pre- and post-migration SHA pairs map to the same byte-identical historical findings and do not represent additional credentials.",
+  "exceptions": [
+    {
+      "fingerprint": "899fe293ad539a2dcb56cce265394fce504ef5d5:scripts/ops/audit_akshare_data_completeness.py:generic-api-key:93",
+      "classification": "owner-acknowledged historical credential risk",
+      "reason": "The historical script revision contained a database password default. The current revision removes that default and requires environment-provided credentials.",
+      "owner_decision": "2026-10-13: owner acknowledged this historical occurrence for exact-fingerprint acceptance; revocation or rotation was not confirmed.",
+      "remediation": "Read credentials from DB_PASSWORD or the configured database URL and fail before connecting when the password is absent.",
+      "rotation_status": "NOT_CONFIRMED",
+      "scope": "This exact historical fingerprint only; future occurrences remain blocking."
+    }
+  ],
+  "_note": "2026-08-15 added 3 false positives from commit 7a68bfa7: two config_hash_without_secrets SHA-256 values in iteration evidence JSON files and one test idempotency_key in test_schedules.py:90. None are credentials. 2026-09-12 added 4 reviewed test-fixture values (E2E smoke password, two idempotency-key literals, one fixture SECRET_KEY) to unblock the blocking history gate; none are credentials. 2026-10-13: 114 pre- and post-migration commit SHA aliases are retained because both histories remain reachable from preserved refs; each paired source line was verified byte-for-byte. One additional exact historical credential occurrence remains accepted with rotation not confirmed."
 }

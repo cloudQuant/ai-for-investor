@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { useAiResearchV2, type AiResearchV2Api } from '@/composables/useAiResearchV2'
+import {
+  useAiResearchV2,
+  type AiResearchV2Api,
+  type AiResearchV2PreparedRun,
+  type TrustedResearchStartInput,
+} from '@/composables/useAiResearchV2'
 import type {
   AiResearchV2Candidate,
   AiResearchV2DataPrecheck,
@@ -183,6 +188,49 @@ function workbenchWithCandidate(
       content_hash: 'd'.repeat(64),
     },
     candidates: [candidate('candidate-1', freezeStatus)],
+  }
+}
+
+function preparedRun(
+  overrides: Partial<AiResearchV2PreparedRun> = {},
+): AiResearchV2PreparedRun {
+  return {
+    hypothesisId: 'hypothesis-1',
+    datasetId: 'dataset-1',
+    epochId: 'epoch-1',
+    profileId: 'isolated-profile',
+    profileVersion: 'v1',
+    promotionPolicyVersion: 'promotion-v1',
+    requestJson: {
+      hypothesis_content_hash: 'a'.repeat(64),
+      dataset_snapshot_id: 'dataset-1',
+      experiment_epoch_id: 'epoch-1',
+    },
+    idempotencyKey: 'operation-1',
+    precheck: passedPrecheck('precheck-1'),
+    ...overrides,
+  }
+}
+
+function startInput(): TrustedResearchStartInput {
+  return {
+    hypothesisPayload: { research_question: 'Does the signal persist?' },
+    dataset: {
+      dataset_policy_version: 'policy-v1',
+      partition_kind: 'DISCOVERY',
+      instrument_manifest: { symbols: ['RB0'] },
+      split_manifest: {},
+      source_manifest: {},
+      execution_policy: {},
+      point_in_time_cutoff: '2026-09-05T00:00:00Z',
+      object_receipt_id: 'fixture-receipt-discovery-v1',
+      license_tags: ['test-license'],
+    },
+    searchBudget: { max_trials: 1 },
+    profileId: 'isolated-profile',
+    profileVersion: 'v1',
+    promotionPolicyVersion: 'promotion-v1',
+    idempotencyKey: 'operation-1',
   }
 }
 
@@ -1474,6 +1522,156 @@ describe('useAiResearchV2', () => {
     ])
     expect(retried?.precheck.id).toBe('precheck-retry')
     expect(runtime.preparedRun.value?.precheck.status).toBe('PASS')
+    runtime.dispose()
+  })
+
+  it('requires a draft before confirmation and reports a draft creation failure without leaving loading state set', async () => {
+    const api = apiWithWorkbench(async () => workbench('unused'))
+    api.createTrustedAIResearchHypothesis = async () => {
+      throw { response: { data: { detail: 'HYPOTHESIS_REJECTED' } } }
+    }
+    const runtime = useAiResearchV2({ api })
+
+    expect(await runtime.confirmDraftAndPrepare(startInput())).toBeNull()
+    expect(runtime.errorCode.value).toBe('RESEARCH_HYPOTHESIS_DRAFT_REQUIRED')
+    expect(await runtime.createDraft({ research_question: 'Does the signal persist?' })).toBeNull()
+
+    expect(runtime.errorCode.value).toBe('HYPOTHESIS_REJECTED')
+    expect(runtime.draft.value).toBeNull()
+    expect(runtime.submitting.value).toBe(false)
+    runtime.dispose()
+  })
+
+  it('keeps a failed preparation bound to its confirmed draft and returns the API error', async () => {
+    const api = apiWithWorkbench(async () => workbench('unused'))
+    api.createTrustedAIResearchHypothesis = async () => ({
+      id: 'draft-1',
+      content_hash: 'a'.repeat(64),
+      canonical_payload: { research_question: 'server normalized' },
+    })
+    api.confirmTrustedAIResearchHypothesis = async (hypothesisId, requestHash) => {
+      expect(hypothesisId).toBe('draft-1')
+      expect(requestHash).toBe('a'.repeat(64))
+      return { id: 'confirmed-1', content_hash: 'b'.repeat(64) }
+    }
+    api.createTrustedAIResearchDataset = async () => {
+      throw new Error('dataset unavailable')
+    }
+    const runtime = useAiResearchV2({ api })
+    await runtime.createDraft({ research_question: 'Does the signal persist?' })
+
+    expect(await runtime.confirmDraftAndPrepare(startInput())).toBeNull()
+
+    expect(runtime.errorCode.value).toBe('dataset unavailable')
+    expect(runtime.draft.value?.id).toBe('draft-1')
+    expect(runtime.preparedRun.value).toBeNull()
+    expect(runtime.submitting.value).toBe(false)
+    runtime.dispose()
+  })
+
+  it('fails closed for missing, blocked, or expired launch prechecks', async () => {
+    const submitRun = vi.fn<AiResearchV2Api['submitTrustedAIResearchRun']>()
+    const runtime = useAiResearchV2({
+      api: { ...apiWithWorkbench(async () => workbench('unused')), submitTrustedAIResearchRun: submitRun },
+    })
+
+    expect(await runtime.startPreparedRun()).toBeNull()
+    expect(runtime.errorCode.value).toBe('RESEARCH_TASK_PRECHECK_REQUIRED')
+
+    runtime.preparedRun.value = preparedRun({
+      precheck: { ...passedPrecheck('precheck-blocked'), status: 'BLOCKED', reason_code: null },
+    })
+    expect(await runtime.startPreparedRun()).toBeNull()
+    expect(runtime.errorCode.value).toBe('RESEARCH_TASK_PRECHECK_NOT_PASSED')
+
+    runtime.preparedRun.value = preparedRun({
+      precheck: { ...passedPrecheck('precheck-expired'), expires_at: '2000-01-01T00:00:00Z' },
+    })
+    expect(await runtime.startPreparedRun()).toBeNull()
+    expect(runtime.errorCode.value).toBe('RESEARCH_TASK_PRECHECK_EXPIRED')
+    expect(submitRun).not.toHaveBeenCalled()
+    runtime.dispose()
+  })
+
+  it('preserves the prepared launch when run submission fails', async () => {
+    const submitRun = vi.fn<AiResearchV2Api['submitTrustedAIResearchRun']>()
+      .mockRejectedValue(new Error('run service unavailable'))
+    const api = {
+      ...apiWithWorkbench(async () => workbench('unused')),
+      submitTrustedAIResearchRun: submitRun,
+    }
+    const runtime = useAiResearchV2({ api })
+    const selected = preparedRun()
+    runtime.preparedRun.value = selected
+
+    expect(await runtime.startPreparedRun()).toBeNull()
+
+    expect(submitRun).toHaveBeenCalledWith(
+      {
+        hypothesis_version_id: 'hypothesis-1',
+        dataset_snapshot_id: 'dataset-1',
+        experiment_epoch_id: 'epoch-1',
+        profile_id: 'isolated-profile',
+        profile_version: 'v1',
+        promotion_policy_version: 'promotion-v1',
+        request_json: selected.requestJson,
+        precheck_id: 'precheck-1',
+      },
+      'operation-1',
+      expect.any(AbortSignal),
+    )
+    expect(runtime.errorCode.value).toBe('run service unavailable')
+    expect(runtime.preparedRun.value).toEqual(selected)
+    expect(runtime.submitting.value).toBe(false)
+    runtime.dispose()
+  })
+
+  it('handles cancellation without a selected task and reports cancellation API failures', async () => {
+    const cancelTask = vi.fn<AiResearchV2Api['cancelTrustedAIResearchTask']>()
+      .mockRejectedValue(new Error('cancel denied'))
+    const api = {
+      ...apiWithWorkbench(async (runId) => (
+        runId === 'run-with-task'
+          ? workbenchWithTask(runId, 'task-1')
+          : workbench(runId)
+      )),
+      cancelTrustedAIResearchTask: cancelTask,
+    }
+    const runtime = useAiResearchV2({ api, pollIntervalMs: 60_000 })
+
+    expect(await runtime.cancelCurrent()).toBeNull()
+    await runtime.load('run-without-task')
+    expect(await runtime.cancelCurrent()).toBeNull()
+    expect(cancelTask).not.toHaveBeenCalled()
+
+    await runtime.load('run-with-task')
+    expect(await runtime.cancelCurrent()).toBeNull()
+    expect(cancelTask).toHaveBeenCalledWith('task-1', expect.any(AbortSignal))
+    expect(runtime.errorCode.value).toBe('cancel denied')
+    expect(runtime.workbench.value?.task?.status).toBe('RUNNING')
+    expect(runtime.loading.value).toBe(false)
+    runtime.dispose()
+  })
+
+  it('clears history loading after an API failure and skips pagination without a cursor', async () => {
+    const listTasks = vi.fn<AiResearchV2Api['listTrustedAIResearchTasks']>()
+      .mockResolvedValue({ items: [], next_cursor: null })
+    const api = {
+      ...apiWithWorkbench(async () => workbench('unused')),
+      listTrustedAIResearchTasks: listTasks,
+    }
+    const runtime = useAiResearchV2({ api })
+
+    expect(await runtime.loadTaskHistory()).toEqual({ items: [], next_cursor: null })
+    expect(runtime.taskHistory.value).toEqual([])
+    expect(runtime.taskHistoryNextCursor.value).toBeNull()
+    expect(await runtime.loadMoreTaskHistory()).toBeNull()
+    expect(listTasks).toHaveBeenCalledTimes(1)
+
+    listTasks.mockRejectedValueOnce({ response: { data: { error: 'TASK_HISTORY_UNAVAILABLE' } } })
+    expect(await runtime.loadTaskHistory()).toBeNull()
+    expect(runtime.errorCode.value).toBe('TASK_HISTORY_UNAVAILABLE')
+    expect(runtime.taskHistoryLoading.value).toBe(false)
     runtime.dispose()
   })
 })

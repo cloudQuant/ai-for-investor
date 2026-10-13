@@ -132,6 +132,18 @@ describe('API module', () => {
       const err = new Error('req error')
       await expect(handler.rejected(err)).rejects.toThrow('req error')
     })
+
+    it('rejects a request config after its captured session has been replaced', async () => {
+      const api = (await import('@/api/index')).default
+      const handler = (api.interceptors.request as any).handlers[0]
+      beginSession('token-a')
+      const config = handler.fulfilled({ headers: {} })
+      expect(config.headers.Authorization).toBe('Bearer token-a')
+
+      beginSession('token-b')
+
+      expect(() => handler.fulfilled(config)).toThrow('Request belongs to a superseded session')
+    })
   })
 
   describe('响应拦截器逻辑', () => {
@@ -207,6 +219,20 @@ describe('API module', () => {
       const error = { response: { status: 422, data: {} } }
       await expect(handler.rejected(error)).rejects.toBe(error)
       expect(ElMessage.error).toHaveBeenCalledWith('请求失败')
+    })
+
+    it('rejects an error without showing a toast when the caller suppresses messages', async () => {
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
+      const api = (await import('@/api/index')).default
+      const handler = (api.interceptors.response as any).handlers[0]
+      const error = {
+        config: { suppressErrorMessage: true },
+        response: { status: 500, data: { detail: 'handled by caller' } },
+      }
+
+      await expect(handler.rejected(error)).rejects.toBe(error)
+
+      expect(ElMessage.error).not.toHaveBeenCalled()
     })
 
     it.each([
@@ -519,6 +545,48 @@ describe('API module', () => {
   })
 
   describe('Retry behavior on response interceptor', () => {
+    it('retries an idempotent request after a transient response', async () => {
+      const api = (await import('@/api/index')).default
+      const { RETRY_CONFIG } = await import('@/api/index')
+      const handler = (api.interceptors.response as any).handlers[0]
+      const originalDelay = RETRY_CONFIG.initialDelay
+      const originalJitter = RETRY_CONFIG.jitterRange
+      const config = {
+        method: 'GET',
+        headers: {},
+        __retryCount: 0,
+        __sessionGeneration: getSessionGeneration(),
+        __sessionToken: null,
+      } as any
+      const response = {
+        status: 503,
+        statusText: 'Service Unavailable',
+        data: {},
+        headers: {},
+        config,
+      }
+      const error = new AxiosError('temporarily unavailable', undefined, config, undefined, response)
+
+      vi.useFakeTimers()
+      RETRY_CONFIG.initialDelay = 0
+      RETRY_CONFIG.jitterRange = 0
+      const retryRequest = vi.spyOn(api, 'request').mockResolvedValue({ ok: true } as never)
+      try {
+        const retryResult = handler.rejected(error)
+        await vi.runAllTimersAsync()
+
+        await expect(retryResult).resolves.toEqual({ ok: true })
+        expect(retryRequest).toHaveBeenCalledWith(config)
+        expect(config.__retryCount).toBe(1)
+        expect(config.__isRetrying).toBe(true)
+      } finally {
+        retryRequest.mockRestore()
+        RETRY_CONFIG.initialDelay = originalDelay
+        RETRY_CONFIG.jitterRange = originalJitter
+        vi.useRealTimers()
+      }
+    })
+
     it('should not duplicate ElMessage on retried failures (skip generic)', async () => {
       const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default

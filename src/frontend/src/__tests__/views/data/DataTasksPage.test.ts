@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const routerMock = vi.hoisted(() => ({
@@ -69,11 +69,14 @@ vi.mock('@/api/index', () => ({
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ user: { is_admin: true } }),
+  useAuthStore: () => authState,
 }))
+
+const authState = vi.hoisted(() => ({ user: { is_admin: true } }))
 
 import DataTasksPage from '@/views/data/DataTasksPage.vue'
 import { akshareTasksApi } from '@/api/akshare'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { elStubs } from '@/test/stubs'
 
 const tasksApi = akshareTasksApi as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -86,6 +89,7 @@ describe('DataTasksPage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    authState.user.is_admin = true
   })
 
   it('loads scripts, templates and tasks on mount', async () => {
@@ -161,5 +165,121 @@ describe('DataTasksPage', () => {
     const vm = doMount().vm as any
     await vm.deleteTask(9)
     expect(tasksApi.delete).toHaveBeenCalledWith(9)
+  })
+
+  it('applies the active filter, resets pagination, and renders no tasks', async () => {
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.page = 2
+    vm.activeFilter = 'inactive'
+    tasksApi.list.mockResolvedValueOnce({ items: [], total: 0 })
+
+    await vm.loadTasks()
+
+    expect(tasksApi.list).toHaveBeenLastCalledWith({ page: 2, page_size: 20, is_active: false })
+    expect(vm.tasks).toEqual([])
+    expect(vm.total).toBe(0)
+    expect(vm.loading).toBe(false)
+    expect(wrapper.find('.tasks-empty').exists()).toBe(true)
+
+    vm.page = 4
+    vm.pageSize = 50
+    vm.handleSizeChange()
+    await flushPromises()
+    expect(tasksApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, page_size: 50 }))
+  })
+
+  it('validates a new task and submits its normalized parameters', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+    vm.openCreateDialog()
+    await vm.submitForm()
+    expect(tasksApi.create).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('dataPages.tasksValidationFill')
+
+    vm.form.name = '  Nightly import  '
+    vm.form.script_id = 's-1'
+    vm.form.description = '  refresh bars  '
+    vm.paramsText = '{"symbol":"RB2510"}'
+    await vm.submitForm()
+
+    expect(tasksApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Nightly import',
+      script_id: 's-1',
+      description: 'refresh bars',
+      parameters: { symbol: 'RB2510' },
+    }))
+    expect(vm.dialogVisible).toBe(false)
+    expect(vm.saving).toBe(false)
+  })
+
+  it('keeps an edited task open when saving fails and clears the saving state', async () => {
+    const vm = doMount().vm as any
+    await flushPromises()
+    vm.openEditDialog({
+      id: 3,
+      name: 'Before',
+      script_id: 's-1',
+      description: null,
+      schedule_type: 'cron',
+      schedule_expression: '0 8 * * 1-5',
+      parameters: { symbol: 'old' },
+      is_active: true,
+      retry_on_failure: true,
+      max_retries: 3,
+      timeout: 0,
+    })
+    vm.form.name = 'After'
+    tasksApi.update.mockRejectedValueOnce(new Error('write failed'))
+
+    await vm.submitForm()
+
+    expect(tasksApi.update).toHaveBeenCalledWith(3, expect.objectContaining({ name: 'After' }))
+    expect(vm.dialogVisible).toBe(true)
+    expect(vm.saving).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.tasksSaveFailed')
+  })
+
+  it('does not delete a task when the confirmation dialog is canceled', async () => {
+    const vm = doMount().vm as any
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel')
+
+    await vm.deleteTask(9)
+
+    expect(tasksApi.delete).not.toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
+  it('shows scheduled tasks without exposing admin actions to non-admins', async () => {
+    authState.user.is_admin = false
+    tasksApi.list.mockResolvedValueOnce({
+      items: [{
+        id: 4,
+        name: 'Read-only schedule',
+        description: '',
+        script_id: 'missing-script',
+        schedule_type: 'once',
+        schedule_expression: '2026-10-14T09:00:00',
+        parameters: {},
+        is_active: false,
+        retry_on_failure: false,
+        max_retries: 0,
+        timeout: 0,
+        last_execution_at: null,
+        next_execution_at: null,
+      }],
+      total: 1,
+    })
+    const wrapper = doMount()
+    await flushPromises()
+
+    expect((wrapper.vm as any).isAdmin).toBe(false)
+    expect(wrapper.text()).toContain('Read-only schedule')
+    expect(wrapper.text()).toContain('missing-script')
+    expect(wrapper.text()).toContain('dataPages.tasksNoDescription')
+    expect(wrapper.text()).toContain('dataPages.tasksStatusInactive')
+    expect(wrapper.text()).not.toContain('dataPages.tasksActionRunNow')
+    expect(wrapper.text()).not.toContain('dataPages.tasksActionEdit')
   })
 })

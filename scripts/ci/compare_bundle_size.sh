@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI script: compare current entry chunk gzip size against the target branch.
+# CI script: compare the Vite manifest entry gzip size against the target branch.
 #
 # Iteration 175 §7.6 — > 10% growth blocks the PR. base missing → emit a
 # notice and skip. The blocking can be bypassed by either:
@@ -21,24 +21,18 @@ set -euo pipefail
 
 CURRENT_DIST="${1:-src/frontend/dist}"
 BASE_GZIP_BYTES="${2:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-GROWTH_THRESHOLD_PCT=10  # > 10% growth blocks
 GROWTH_THRESHOLD_NUM=10
-GROWTH_THRESHOLD_DEN=100
 
-filesize() {
-  local p="$1"
-  stat -f%z "$p" 2>/dev/null || stat --format=%s "$p" 2>/dev/null
-}
-
-ENTRY_FILE=$(find "$CURRENT_DIST/assets" -maxdepth 1 -name "index-*.js" -type f 2>/dev/null | head -1)
-if [ -z "$ENTRY_FILE" ]; then
-  echo "ERROR: entry chunk dist/assets/index-*.js not found"
+ENTRY_REL="$(node "$SCRIPT_DIR/list_route_assets.mjs" /login "$CURRENT_DIST" --kind=entry-file)"
+if [ -z "$ENTRY_REL" ]; then
+  echo "ERROR: Vite manifest did not identify an entry file" >&2
   exit 1
 fi
-CURRENT_BYTES=$(gzip -c -9 "$ENTRY_FILE" | wc -c | tr -d ' ')
+CURRENT_BYTES="$(gzip -n -c -9 "$CURRENT_DIST/$ENTRY_REL" | wc -c | tr -d '[:space:]')"
 
-if [ -z "$BASE_GZIP_BYTES" ] || [ "$BASE_GZIP_BYTES" -le 0 ] 2>/dev/null; then
+if [ -z "$BASE_GZIP_BYTES" ]; then
   echo "::notice::bundle-size base missing, ratchet skipped"
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {
@@ -49,23 +43,24 @@ if [ -z "$BASE_GZIP_BYTES" ] || [ "$BASE_GZIP_BYTES" -le 0 ] 2>/dev/null; then
   fi
   exit 0
 fi
-
-# Compute (current - base) * 100 / base using integer math, then compare to 10.
-DELTA=$((CURRENT_BYTES - BASE_GZIP_BYTES))
-# Guard against div-by-zero (already excluded above)
+if ! [[ "$BASE_GZIP_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: base entry gzip size must be a non-negative integer" >&2
+  exit 1
+fi
 if [ "$BASE_GZIP_BYTES" -eq 0 ]; then
   echo "::notice::bundle-size base = 0, ratchet skipped"
   exit 0
 fi
-GROWTH_NUM=$((DELTA * 100))
-GROWTH_INT=$((GROWTH_NUM / BASE_GZIP_BYTES))
+
+DELTA=$((CURRENT_BYTES - BASE_GZIP_BYTES))
+GROWTH_PCT="$(awk -v delta="$DELTA" -v base="$BASE_GZIP_BYTES" 'BEGIN { printf "%.3f", (delta * 100) / base }')"
 
 echo "Current entry gzip: $CURRENT_BYTES bytes"
 echo "Base entry gzip:    $BASE_GZIP_BYTES bytes"
-echo "Delta:              $DELTA bytes (~ ${GROWTH_INT}%)"
+echo "Delta:              $DELTA bytes (~ ${GROWTH_PCT}%)"
 
-if [ "$GROWTH_INT" -le "$GROWTH_THRESHOLD_NUM" ]; then
-  echo "::notice::Bundle size growth ${GROWTH_INT}% within ratchet (<= ${GROWTH_THRESHOLD_NUM}%)"
+if [ "$DELTA" -le 0 ] || [ $((DELTA * 100)) -le $((BASE_GZIP_BYTES * GROWTH_THRESHOLD_NUM)) ]; then
+  echo "::notice::Bundle size growth ${GROWTH_PCT}% within ratchet (<= ${GROWTH_THRESHOLD_NUM}%)"
   exit 0
 fi
 
@@ -82,12 +77,12 @@ if [ -n "${PR_BODY:-}" ]; then
 fi
 
 if [ -n "$OVERRIDE_REASON" ]; then
-  echo "::warning::bundle-size growth ${GROWTH_INT}% exceeds ${GROWTH_THRESHOLD_NUM}% threshold but override active: $OVERRIDE_REASON"
+  echo "::warning::bundle-size growth ${GROWTH_PCT}% exceeds ${GROWTH_THRESHOLD_NUM}% threshold but override active: $OVERRIDE_REASON"
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {
       echo "### Bundle Size Ratchet"
       echo ""
-      echo "⚠️ growth=${GROWTH_INT}% exceeds threshold but override is active: \`${OVERRIDE_REASON}\`"
+      echo "⚠️ growth=${GROWTH_PCT}% exceeds threshold but override is active: \`${OVERRIDE_REASON}\`"
       echo ""
       echo "Reminder: PR must additionally have a CODEOWNERS approval before merge."
     } >> "$GITHUB_STEP_SUMMARY"
@@ -95,6 +90,6 @@ if [ -n "$OVERRIDE_REASON" ]; then
   exit 0
 fi
 
-echo "::error::Bundle size growth ${GROWTH_INT}% exceeds ${GROWTH_THRESHOLD_NUM}% threshold (no override active)"
+echo "::error::Bundle size growth ${GROWTH_PCT}% exceeds ${GROWTH_THRESHOLD_NUM}% threshold (no override active)"
 echo "Apply label \`BUNDLE_SIZE_GROWTH_OVERRIDE\` or include \`<!-- bundle-size-override: <reason> -->\` in PR description if growth is intentional."
 exit 1

@@ -127,7 +127,6 @@
           :data="articles"
           :empty-text="t('newsIntel.emptyArticles')"
         >
-          <!-- @vue-generic {NewsArticleItem} -->
           <el-table-column
             :label="t('newsIntel.colHeadline')"
             min-width="280"
@@ -173,7 +172,7 @@
               <code class="news-cluster-code">{{ displayValue(scope.row.cluster_id) }}</code>
             </template>
           </el-table-column>
-          <!-- @vue-generic {NewsArticleItem} --><el-table-column
+          <el-table-column
             :label="t('newsIntel.colActions')"
             width="220"
           >

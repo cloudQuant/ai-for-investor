@@ -31,6 +31,7 @@ from app.services.market_data.access import MarketDataSourceAuthorization
 from app.services.market_data.catalog import DatasetStorageResolution
 from app.services.market_data.coverage import QueryIdentity
 from app.services.market_data.identity import ResolvedMarketDataIdentity
+from app.services.market_data.persisted_fetch_boundary import find_cancellation_error
 from app.services.market_data.publication import MarketDataDeferredPublicationIntent
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.snapshot_importer import FrozenSnapshotIdentity
@@ -1027,8 +1028,9 @@ async def test_cancellation_after_durable_write_returns_the_complete_prefix(
             await asyncio.wait_for(second_persistence_is_durable.wait(), timeout=1.0)
             task.cancel()
             release_second_return.set()
-            with pytest.raises(StockValuationCollectorPartialPublishCancelledError) as cancelled:
+            with pytest.raises(asyncio.CancelledError) as cancelled:
                 await task
+            assert task.cancelled()
         finally:
             release_second_return.set()
             if not task.done():
@@ -1038,6 +1040,10 @@ async def test_cancellation_after_durable_write_returns_the_complete_prefix(
         counts = await _counts(db)
 
     assert persist_attempts == 2
-    assert cancelled.value.code == "STOCK_VALUATION_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
-    assert len(cancelled.value.persisted_fetches) == 2
+    partial_cancel = find_cancellation_error(
+        cancelled.value, StockValuationCollectorPartialPublishCancelledError
+    )
+    assert partial_cancel is not None
+    assert partial_cancel.code == "STOCK_VALUATION_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
+    assert len(partial_cancel.persisted_fetches) == 2
     assert counts == (2, 2, 2)

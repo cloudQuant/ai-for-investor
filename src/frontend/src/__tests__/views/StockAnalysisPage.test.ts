@@ -3,7 +3,7 @@
 // Keep jsdom scoped to Markdown tests; other frontend tests remain in happy-dom.
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { elStubs } from '@/test/stubs'
 import StockAnalysisPage from '@/views/investment/StockAnalysisPage.vue'
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getLatestResult: vi.fn(),
   getSignalHistory: vi.fn(),
   getSignalSummary: vi.fn(),
+  cancelTask: vi.fn(),
   exportReport: vi.fn(),
   getMyAvailableModels: vi.fn(),
   messageSuccess: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('@/api/stockAnalysis', () => ({
     getLatestResult: mocks.getLatestResult,
     getSignalHistory: mocks.getSignalHistory,
     getSignalSummary: mocks.getSignalSummary,
+    cancelTask: mocks.cancelTask,
     exportReport: mocks.exportReport,
   },
 }))
@@ -79,6 +81,11 @@ function mountPage() {
 }
 
 describe('StockAnalysisPage', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getMyAvailableModels.mockResolvedValue({
@@ -102,6 +109,7 @@ describe('StockAnalysisPage', () => {
       actions: [],
       confidence_bins: [],
     })
+    mocks.cancelTask.mockResolvedValue({ ...baseTask, status: 'cancelled' })
   })
 
   it('renders a standalone single-stock analysis workspace instead of chat', async () => {
@@ -232,5 +240,126 @@ describe('StockAnalysisPage', () => {
     expect(rendered.exists()).toBe(true)
     expect(rendered.html()).toContain('<h1>盘面结论</h1>')
     expect(rendered.html()).toContain('<strong>趋势：</strong> 区间震荡。')
+  })
+
+  it('rejects an empty symbol or an empty module selection without creating a task', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      form: { symbol: string; selectedModules: string[] }
+    }
+    const startButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('开始智能分析'))
+
+    vm.form.symbol = '   '
+    await nextTick()
+    await startButton!.trigger('click')
+    expect(mocks.messageWarning).toHaveBeenCalledWith('请输入股票代码')
+    expect(mocks.createTask).not.toHaveBeenCalled()
+
+    vm.form.symbol = '000001.SZ'
+    vm.form.selectedModules = []
+    await nextTick()
+    await startButton!.trigger('click')
+    expect(mocks.messageWarning).toHaveBeenLastCalledWith('请至少选择一个研究模块')
+    expect(mocks.createTask).not.toHaveBeenCalled()
+  })
+
+  it('reports task submission failure and clears the submitting state', async () => {
+    mocks.createTask.mockRejectedValueOnce(new Error('service unavailable'))
+    const wrapper = mountPage()
+    await flushPromises()
+    const startButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('开始智能分析'))
+
+    await startButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({ symbol: '000001.SZ' }))
+    expect(mocks.messageError).toHaveBeenCalledWith('提交分析任务失败')
+    expect(wrapper.find('.runtime-panel').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('分析任务已提交')
+    expect((wrapper.vm as unknown as { submitting: boolean }).submitting).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('cancels a pending task and reflects the server terminal status', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const startButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('开始智能分析'))
+    await startButton!.trigger('click')
+    await flushPromises()
+
+    const cancelButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('取消任务'))
+    expect(cancelButton).toBeDefined()
+    await cancelButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.cancelTask).toHaveBeenCalledWith('task-1')
+    expect(wrapper.text()).toContain('已取消')
+    expect(wrapper.findAll('button').some((button) => button.text().includes('取消任务'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps the pending task visible when cancellation fails', async () => {
+    mocks.cancelTask.mockRejectedValueOnce(new Error('cancel endpoint unavailable'))
+    const wrapper = mountPage()
+    await flushPromises()
+    const startButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('开始智能分析'))
+    await startButton!.trigger('click')
+    await flushPromises()
+
+    const cancelButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('取消任务'))
+    await cancelButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.cancelTask).toHaveBeenCalledWith('task-1')
+    expect(mocks.messageError).toHaveBeenCalledWith('取消任务失败')
+    expect((wrapper.vm as unknown as { currentTask: { task_id: string; status: string } }).currentTask)
+      .toMatchObject({ task_id: 'task-1', status: 'pending' })
+    expect(wrapper.findAll('button').some((button) => button.text().includes('取消任务'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('downloads a report blob and reports an export API failure', async () => {
+    mocks.getLatestResult.mockResolvedValue({
+      task: { ...baseTask, status: 'completed', report_id: 'latest-report-1' },
+      report: { meta: { symbol: '000001.SZ' }, sections: [] },
+    })
+    mocks.exportReport
+      .mockRejectedValueOnce(new Error('export service unavailable'))
+      .mockResolvedValueOnce(new Blob(['report markdown'], { type: 'text/markdown' }))
+    const createObjectURL = vi.fn(() => 'blob:stock-report')
+    const revokeObjectURL = vi.fn()
+    const clickLink = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    const exportButtons = wrapper.findAll('.export-actions button')
+
+    await exportButtons.find((button) => button.text() === 'PDF')!.trigger('click')
+    await flushPromises()
+    expect(mocks.exportReport).toHaveBeenNthCalledWith(1, 'latest-report-1', 'pdf')
+    expect(mocks.messageError).toHaveBeenCalledWith('导出报告失败')
+
+    await exportButtons.find((button) => button.text() === 'HTML')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.exportReport).toHaveBeenNthCalledWith(2, 'latest-report-1', 'html')
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(clickLink).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:stock-report')
+    wrapper.unmount()
   })
 })

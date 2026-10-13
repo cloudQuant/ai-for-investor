@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import BacktestResultPage from '@/views/BacktestResultPage.vue'
+import { analyticsApi } from '@/api/analytics'
 import { elStubs } from '@/test/stubs'
 
 const mockPush = vi.fn()
@@ -282,7 +283,6 @@ vi.mock('@/api/backtest', () => ({
 
 describe('BacktestResultPage', () => {
   beforeEach(async () => {
-    const { analyticsApi } = await import('@/api/analytics')
     const { backtestApi } = await import('@/api/backtest')
     const { strategyApi } = await import('@/api/strategy')
     setActivePinia(createPinia())
@@ -292,6 +292,7 @@ describe('BacktestResultPage', () => {
     vi.mocked(analyticsApi.getBacktestDetail).mockClear()
     vi.mocked(analyticsApi.getKlineWithSignals).mockClear()
     vi.mocked(analyticsApi.getMonthlyReturns).mockClear()
+    vi.mocked(analyticsApi.exportResults).mockClear()
     vi.mocked(backtestApi.getSummary).mockClear()
     vi.mocked(backtestApi.getResult).mockClear()
     vi.mocked(backtestApi.runRobustness).mockClear()
@@ -578,5 +579,300 @@ describe('BacktestResultPage', () => {
       name: 'BacktestWorkspaceDetail',
       params: { id: 'ws-1' },
     })
+  })
+
+  it('shows a detail request error and retries the request from the error state', async () => {
+    const { backtestApi } = await import('@/api/backtest')
+    vi.mocked(analyticsApi.getBacktestDetail).mockRejectedValueOnce(new Error('detail unavailable'))
+    vi.mocked(backtestApi.getSummary).mockRejectedValueOnce(new Error('summary unavailable'))
+
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(analyticsApi.getBacktestDetail).toHaveBeenCalledWith('t1')
+    expect(backtestApi.getSummary).toHaveBeenCalledWith('t1')
+    expect(wrapper.get('[role="alert"]').text()).toContain('detail unavailable')
+
+    await wrapper.get('[role="alert"] .el-button').trigger('click')
+    await flushPromises()
+
+    expect(analyticsApi.getBacktestDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="backtest-detail"]').text()).toContain('SMA')
+  })
+
+  it('keeps the compact summary visible when the full detail request fails', async () => {
+    const { backtestApi } = await import('@/api/backtest')
+    vi.mocked(analyticsApi.getBacktestDetail).mockRejectedValueOnce(new Error('detail timed out'))
+    vi.mocked(backtestApi.getSummary).mockResolvedValueOnce({
+      task_id: 't1',
+      strategy_id: 'summary-sma',
+      symbol: 'RB0',
+      status: 'completed',
+      metrics: {
+        total_return: 0.12,
+        annual_return: 0.08,
+        sharpe_ratio: 1.2,
+        max_drawdown: -0.04,
+        win_rate: 55,
+        total_trades: 7,
+        profitable_trades: 4,
+        losing_trades: 3,
+        break_even_trades: 0,
+        avg_holding_bars: 0,
+        avg_holding_period: 0,
+        max_consecutive_wins: 0,
+        max_consecutive_losses: 0,
+        profit_loss_ratio: 1.7,
+        initial_cash: 100000,
+        final_value: 112000,
+        metrics_source: 'test',
+      },
+      data_precheck: null,
+      robustness: null,
+    } as any)
+
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const summary = wrapper.get('[data-test="backtest-summary-first"]')
+    expect(summary.text()).toContain('summary-sma')
+    expect(summary.text()).toContain('detail timed out')
+    expect(summary.find('.el-button').text()).toContain('重试')
+  })
+
+  it('renders signed return metrics and maps a running artifact to an in-progress status', async () => {
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.detail = {
+      ...vm.detail,
+      artifact_status: 'running',
+      metrics: {
+        ...vm.detail.metrics,
+        total_return: -0.12,
+        annualized_return: -0.04,
+      },
+    }
+    await wrapper.vm.$nextTick()
+
+    expect(vm.resultStatusLabel).toBe('运行中')
+    expect(vm.statusTagType).toBe('warning')
+    expect(wrapper.get('[data-test="backtest-status"]').text()).toBe('running')
+    expect(wrapper.find('.backtest-result-metric--negative').text()).toContain('-12.00%')
+    expect(wrapper.find('.backtest-result-metric--positive').exists()).toBe(false)
+  })
+
+  it('falls back to sparse detail metrics when the summary request fails and shows failed status', async () => {
+    const { backtestApi } = await import('@/api/backtest')
+    vi.mocked(backtestApi.getSummary).mockRejectedValueOnce(new Error('summary unavailable'))
+    vi.mocked(analyticsApi.getBacktestDetail).mockResolvedValueOnce({
+      task_id: 't1',
+      strategy_name: 'Sparse SMA',
+      symbol: 'RB0',
+      start_date: '2024-01-01',
+      end_date: '2024-01-31',
+      artifact_status: 'failed',
+      artifact_error: 'worker failed to produce a result',
+      metrics: {
+        initial_capital: 100000,
+        final_assets: 100000,
+        total_return: null,
+        annualized_return: undefined,
+        max_drawdown: null,
+        sharpe_ratio: null,
+      },
+      result_summary: {
+        strategy_id: 'sparse-sma',
+        symbol: 'RB0',
+        total_trades: 0,
+        sharpe_ratio: null,
+        total_return: null,
+        max_drawdown: null,
+      },
+      data_precheck: null,
+      robustness: null,
+      equity_curve: [],
+      drawdown_curve: [],
+      trades: [],
+      created_at: '2024-02-01T00:00:00',
+    } as any)
+
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(backtestApi.getSummary).toHaveBeenCalledWith('t1')
+    expect(analyticsApi.getBacktestDetail).toHaveBeenCalledWith('t1')
+    expect(wrapper.get('[data-test="backtest-detail"]').text()).toContain('Sparse SMA')
+    expect(wrapper.get('[data-test="backtest-status"]').text()).toBe('failed')
+    expect(wrapper.get('[data-test="backtest-detail"]').text()).toContain('失败')
+    expect(wrapper.findAll('.backtest-result-metric strong').map(metric => metric.text())).toEqual([
+      '--', '--', '--', '--',
+    ])
+    expect(wrapper.get('[data-test="backtest-trust-summary"]').text()).toContain('sparse-sma')
+    expect(wrapper.get('[data-test="backtest-trust-summary"]').text()).toContain('RB0')
+    expect(wrapper.get('[data-test="backtest-trust-summary"]').text()).toContain('0')
+    expect(wrapper.get('[data-test="backtest-workflow-guide"]').text())
+      .toContain('worker failed to produce a result')
+  })
+
+  it('loads and displays chart data when switching between analysis and kline views', async () => {
+    vi.mocked(analyticsApi.getMonthlyReturns).mockResolvedValueOnce({
+      returns: [],
+      years: [2023, 2024],
+      summary: { 2024: -0.02, 2023: 0.1 },
+    } as any)
+    vi.mocked(analyticsApi.getKlineWithSignals).mockResolvedValueOnce({
+      symbol: 'BTC',
+      klines: [{ date: '2024-01-02', open: 1, high: 2, low: 0.5, close: 1.5, volume: 100 }],
+      signals: [],
+      indicators: {},
+    } as any)
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.activeTab = 'analysis'
+    await flushPromises()
+    expect(analyticsApi.getMonthlyReturns).toHaveBeenCalledWith('t1')
+    expect(vm.annualReturnEntries).toEqual([
+      { year: '2023', value: 0.1 },
+      { year: '2024', value: -0.02 },
+    ])
+    expect(wrapper.find('.backtest-annual-item').text()).toContain('2023')
+    const negativeAnnualRow = wrapper.findAll('.backtest-annual-item')
+      .find((item) => item.text().includes('-2.00%'))
+    expect(negativeAnnualRow?.text()).toContain('2024')
+
+    vm.activeTab = 'kline'
+    await flushPromises()
+    expect(analyticsApi.getKlineWithSignals).toHaveBeenCalledWith('t1')
+    expect(vm.klineData.klines[0].date).toBe('2024-01-02')
+
+    vm.activeTab = 'equity'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.backtest-analysis-grid').exists()).toBe(false)
+    expect(wrapper.find('[data-test="equity-curve"]').exists()).toBe(true)
+  })
+
+  it('keeps chart sections usable when lazy chart requests fail', async () => {
+    vi.mocked(analyticsApi.getKlineWithSignals).mockRejectedValueOnce(new Error('kline unavailable'))
+    vi.mocked(analyticsApi.getMonthlyReturns).mockRejectedValueOnce(new Error('returns unavailable'))
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.activeTab = 'kline'
+    await flushPromises()
+    expect(analyticsApi.getKlineWithSignals).toHaveBeenCalledWith('t1')
+    expect(vm.klineData).toEqual({ symbol: 'BTC', klines: [], signals: [], indicators: {} })
+
+    vm.activeTab = 'analysis'
+    await flushPromises()
+    expect(analyticsApi.getMonthlyReturns).toHaveBeenCalledWith('t1')
+    expect(vm.monthlyReturns).toEqual({ returns: [], years: [], summary: {} })
+    expect(wrapper.find('.backtest-annual-empty').exists()).toBe(true)
+  })
+
+  it('exports the displayed backtest as CSV', async () => {
+    const wrapper = mount(BacktestResultPage, {
+      global: {
+        stubs: {
+          ...elStubs,
+          EquityCurve: true,
+          DrawdownChart: true,
+          TradeRecordsTable: true,
+          TradeSignalChart: true,
+          ReturnHeatmap: true,
+          MetricCard: true,
+          PerformancePanel: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const exportButton = wrapper.get('.backtest-result-actions .el-button')
+    expect(exportButton.text()).toContain('导出CSV')
+    await exportButton.trigger('click')
+
+    expect(analyticsApi.exportResults).toHaveBeenCalledWith('t1', 'csv')
   })
 })

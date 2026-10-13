@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import PositionManagerDialog from '@/components/workspace/PositionManagerDialog.vue'
+import { ElMessage } from 'element-plus'
+import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
 
 vi.mock('element-plus', () => ({
@@ -24,12 +26,32 @@ vi.mock('@/api/workspace', () => ({
 }))
 
 describe('PositionManagerDialog', () => {
-  const mountDialog = () => mount(PositionManagerDialog, {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(workspaceApi.getTradingPositions).mockResolvedValue({
+      positions: [],
+      total_long_value: 0,
+      total_short_value: 0,
+      total_pnl: 0,
+    })
+  })
+
+  const mountDialog = (props: Record<string, unknown> = {}) => mount(PositionManagerDialog, {
     props: {
       modelValue: false,
       workspaceId: 'workspace-1',
+      ...props,
     },
-    global: { stubs: elStubs },
+    global: {
+      stubs: {
+        ...elStubs,
+        'el-dialog': {
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template: '<div class="el-dialog"><button data-test="dialog-cancel" @click="$emit(\'update:modelValue\', false)">Cancel</button><slot /></div>',
+        },
+      },
+    },
   })
 
   it('preserves micro nonzero position quantities when formatting', () => {
@@ -97,5 +119,68 @@ describe('PositionManagerDialog', () => {
     expect(vm.summary.total_long_value).toBe(1500400)
     expect(vm.summary.total_short_value).toBe(0)
     expect(vm.summary.total_pnl).toBe(265.5)
+  })
+
+  it('requests the selected units, summarizes visible exposure, and emits close on cancel', async () => {
+    vi.mocked(workspaceApi.getTradingPositions).mockResolvedValueOnce({
+      positions: [
+        {
+          unit_id: 'unit-mixed',
+          unit_name: 'Mixed Position',
+          symbol: 'IF2609',
+          symbol_name: '沪深300',
+          trading_mode: 'paper',
+          long_position: 2,
+          short_position: 1,
+          avg_price: 100,
+          latest_price: 102,
+          position_pnl: 15.25,
+          market_value: 300,
+        },
+        {
+          unit_id: 'unit-zero',
+          unit_name: 'Zero Position',
+          symbol: 'rb2601',
+          symbol_name: '螺纹钢',
+          trading_mode: 'paper',
+          long_position: 0,
+          short_position: 0,
+          avg_price: 0,
+          latest_price: 0,
+          position_pnl: 0,
+          market_value: 0,
+        },
+      ],
+      total_long_value: 900,
+      total_short_value: 600,
+      total_pnl: 900,
+    })
+    const wrapper = mountDialog({ unitIds: ['unit-mixed'] })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(workspaceApi.getTradingPositions).toHaveBeenCalledWith('workspace-1', ['unit-mixed'])
+    expect(vm.positions.map((position: { unit_id: string }) => position.unit_id)).toEqual(['unit-mixed'])
+    expect(vm.summary).toMatchObject({
+      total_long_value: 200,
+      total_short_value: 100,
+      total_pnl: 15.25,
+    })
+
+    await wrapper.get('[data-test="dialog-cancel"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
+  })
+
+  it('keeps an empty summary and reports an error when position loading fails', async () => {
+    vi.mocked(workspaceApi.getTradingPositions).mockRejectedValueOnce(new Error('gateway unavailable'))
+    const wrapper = mountDialog({ unitIds: ['unit-1', 'unit-2'] })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    expect(workspaceApi.getTradingPositions).toHaveBeenCalledWith('workspace-1', ['unit-1', 'unit-2'])
+    expect(ElMessage.error).toHaveBeenCalledWith('gateway unavailable')
+    expect((wrapper.vm as any).positions).toEqual([])
+    expect((wrapper.vm as any).loading).toBe(false)
   })
 })

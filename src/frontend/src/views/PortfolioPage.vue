@@ -210,7 +210,7 @@
                       :label="t('portfolio.colSymbol')"
                       width="120"
                     />
-                    <!-- @vue-generic {PositionItem} --><el-table-column
+                    <el-table-column
                       :label="t('portfolio.colDirection')"
                       width="90"
                       align="center"
@@ -316,7 +316,7 @@
                         {{ formatNumber(row.commission, 2) }}
                       </template>
                     </el-table-column>
-                    <!-- @vue-generic {PositionItem} --><el-table-column
+                    <el-table-column
                       :label="t('portfolio.colValuationStatus')"
                       width="130"
                       align="center"

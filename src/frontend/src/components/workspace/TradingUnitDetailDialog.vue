@@ -178,7 +178,6 @@
               {{ formatPrice(row.price) }}
             </template>
           </el-table-column>
-          <!-- @vue-generic {TradingTrade} -->
           <el-table-column
             :label="t('tradingUnits.netPnL')"
             width="110"

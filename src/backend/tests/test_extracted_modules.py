@@ -8,6 +8,7 @@ GatewayPresetService work correctly in isolation.
 import asyncio
 import os
 import threading
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,6 +30,27 @@ from app.services.live_trading import instance as live_instance_service
 from app.services.manual_gateway import ib_clientportal as ib_clientportal_service
 from app.services.process_supervisor import is_pid_alive, kill_pid, scan_running_strategy_pids
 from app.services.strategy import runtime_support as strategy_runtime_support
+
+
+@pytest.fixture
+def preserve_app_settings_singleton() -> Iterator[None]:
+    """Restore the settings cache after the real IB env-persistence path runs."""
+    import app.config as config_module
+    import app.db.database as database_module
+    import app.main as main_module
+
+    original_settings = config_module._settings
+    assert original_settings is not None
+    assert main_module.settings is original_settings
+    assert database_module.settings is original_settings
+
+    try:
+        yield
+    finally:
+        config_module._settings = original_settings
+        assert config_module._settings is original_settings
+        assert main_module.settings is original_settings
+        assert database_module.settings is original_settings
 
 
 class TestInstanceStore:
@@ -590,7 +612,9 @@ class TestManualGatewayService:
         mock_sleep.assert_called_once_with(1.0)
         logger.warning.assert_called_once()
 
-    def test_connect_gateway_bootstraps_ib_session_and_persists_env_updates(self):
+    def test_connect_gateway_bootstraps_ib_session_and_persists_env_updates(
+        self, preserve_app_settings_singleton: None
+    ) -> None:
         gateways: dict[str, dict] = {}
 
         class _FakeGatewayConfig:
@@ -1146,6 +1170,10 @@ class TestManualGatewayService:
                 manual_gateway_service,
                 "_wait_for_runtime_ready",
             ) as mock_wait,
+            patch.object(
+                manual_gateway_service,
+                "_persist_ib_web_env_updates",
+            ),
         ):
             result = manual_gateway_service.connect_gateway(
                 gateways=gateways,

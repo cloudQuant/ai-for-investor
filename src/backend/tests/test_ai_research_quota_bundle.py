@@ -368,14 +368,19 @@ async def test_claim_bundle_allows_only_one_independent_connection_to_dispatch(
     context = await _context()
     request_hash, receipts = await _reserve_bundle(context, suffix="race")
     requirements = _requirements(receipts, request_hash)
-    barrier = asyncio.Barrier(2)
+    group_reads_completed = 0
+    both_group_reads_completed = asyncio.Event()
     original_locked_group = quota_module._locked_complete_bundle_group
 
     async def synchronize_after_group_read(
         session: Any, reservation_ids: tuple[str, ...]
     ) -> tuple[ResearchQuotaReservation, ...] | None:
+        nonlocal group_reads_completed
         result = await original_locked_group(session, reservation_ids)
-        await barrier.wait()
+        group_reads_completed += 1
+        if group_reads_completed == 2:
+            both_group_reads_completed.set()
+        await both_group_reads_completed.wait()
         return result
 
     monkeypatch.setattr(quota_module, "_locked_complete_bundle_group", synchronize_after_group_read)

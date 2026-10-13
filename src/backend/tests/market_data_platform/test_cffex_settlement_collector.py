@@ -40,6 +40,7 @@ from app.services.market_data.cffex_settlement_collector import (
 from app.services.market_data.coverage import QueryIdentity
 from app.services.market_data.fetch_lease import MarketDataFetchLeaseError
 from app.services.market_data.identity import ResolvedMarketDataIdentity
+from app.services.market_data.persisted_fetch_boundary import find_cancellation_error
 from app.services.market_data.publication import (
     MarketDataDeferredPublicationIntent,
     MarketDataPublicationError,
@@ -911,8 +912,9 @@ async def test_cancellation_after_second_publication_reports_two_durable_prefixe
             assert not collection_task.done()
             release_second_persistence_return.set()
 
-            with pytest.raises(CffexSettlementCollectorPartialPublishCancelledError) as cancelled:
+            with pytest.raises(asyncio.CancelledError) as cancelled:
                 await collection_task
+            assert collection_task.cancelled()
         finally:
             release_second_persistence_return.set()
             if not collection_task.done():
@@ -934,9 +936,12 @@ async def test_cancellation_after_second_publication_reports_two_durable_prefixe
 
     assert source.calls == [TRADING_DATE]
     assert persist_attempts == 2
-    assert isinstance(cancelled.value, asyncio.CancelledError)
-    assert cancelled.value.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
-    assert len(cancelled.value.persisted_fetches) == 2
+    partial_cancel = find_cancellation_error(
+        cancelled.value, CffexSettlementCollectorPartialPublishCancelledError
+    )
+    assert partial_cancel is not None
+    assert partial_cancel.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
+    assert len(partial_cancel.persisted_fetches) == 2
     assert len(first_rows) == 1
     assert len(second_rows) == 1
     assert counts == (2, 2, 2)
@@ -991,8 +996,9 @@ async def test_cancellation_during_lease_release_reports_the_complete_durable_pr
             assert not collection_task.done()
             release_can_complete.set()
 
-            with pytest.raises(CffexSettlementCollectorPartialPublishCancelledError) as cancelled:
+            with pytest.raises(asyncio.CancelledError) as cancelled:
                 await collection_task
+            assert collection_task.cancelled()
         finally:
             release_can_complete.set()
             if not collection_task.done():
@@ -1008,8 +1014,12 @@ async def test_cancellation_during_lease_release_reports_the_complete_durable_pr
         counts = await _counts(db)
 
     assert source.calls == [TRADING_DATE]
-    assert cancelled.value.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
-    assert len(cancelled.value.persisted_fetches) == 1
+    partial_cancel = find_cancellation_error(
+        cancelled.value, CffexSettlementCollectorPartialPublishCancelledError
+    )
+    assert partial_cancel is not None
+    assert partial_cancel.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
+    assert len(partial_cancel.persisted_fetches) == 1
     assert len(rows) == 1
     assert counts == (1, 1, 1)
 
@@ -1062,8 +1072,9 @@ async def test_cancellation_during_failed_lease_release_keeps_the_durable_prefix
             assert not collection_task.done()
             release_can_fail.set()
 
-            with pytest.raises(CffexSettlementCollectorPartialPublishCancelledError) as cancelled:
+            with pytest.raises(asyncio.CancelledError) as cancelled:
                 await collection_task
+            assert collection_task.cancelled()
         finally:
             release_can_fail.set()
             if not collection_task.done():
@@ -1079,9 +1090,13 @@ async def test_cancellation_during_failed_lease_release_keeps_the_durable_prefix
         counts = await _counts(db)
 
     assert source.calls == [TRADING_DATE]
-    assert cancelled.value.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
-    assert isinstance(cancelled.value.__cause__, MarketDataFetchLeaseError)
-    assert len(cancelled.value.persisted_fetches) == 1
+    partial_cancel = find_cancellation_error(
+        cancelled.value, CffexSettlementCollectorPartialPublishCancelledError
+    )
+    assert partial_cancel is not None
+    assert partial_cancel.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
+    assert isinstance(partial_cancel.__cause__, MarketDataFetchLeaseError)
+    assert len(partial_cancel.persisted_fetches) == 1
     assert len(rows) == 1
     assert counts == (1, 1, 1)
 
@@ -1134,8 +1149,9 @@ async def test_cancellation_during_false_lease_release_keeps_the_durable_prefix(
             assert not collection_task.done()
             release_can_return.set()
 
-            with pytest.raises(CffexSettlementCollectorPartialPublishCancelledError) as cancelled:
+            with pytest.raises(asyncio.CancelledError) as cancelled:
                 await collection_task
+            assert collection_task.cancelled()
         finally:
             release_can_return.set()
             if not collection_task.done():
@@ -1151,9 +1167,13 @@ async def test_cancellation_during_false_lease_release_keeps_the_durable_prefix(
         counts = await _counts(db)
 
     assert source.calls == [TRADING_DATE]
-    assert cancelled.value.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
-    assert isinstance(cancelled.value.__cause__, CffexSettlementCollectorFetchLeaseReleaseError)
-    assert len(cancelled.value.persisted_fetches) == 1
+    partial_cancel = find_cancellation_error(
+        cancelled.value, CffexSettlementCollectorPartialPublishCancelledError
+    )
+    assert partial_cancel is not None
+    assert partial_cancel.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
+    assert isinstance(partial_cancel.__cause__, CffexSettlementCollectorFetchLeaseReleaseError)
+    assert len(partial_cancel.persisted_fetches) == 1
     assert len(rows) == 1
     assert counts == (1, 1, 1)
 
@@ -1359,8 +1379,9 @@ async def test_store_cancellation_then_failed_release_keeps_every_durable_prefix
             assert not collection_task.done()
             release_can_return.set()
 
-            with pytest.raises(CffexSettlementCollectorPartialPublishCancelledError) as cancelled:
+            with pytest.raises(asyncio.CancelledError) as cancelled:
                 await collection_task
+            assert collection_task.cancelled()
         finally:
             release_second_persistence_return.set()
             release_can_return.set()
@@ -1383,9 +1404,13 @@ async def test_store_cancellation_then_failed_release_keeps_every_durable_prefix
 
     assert source.calls == [TRADING_DATE]
     assert persist_attempts == 2
-    assert cancelled.value.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
-    assert isinstance(cancelled.value.__cause__, CffexSettlementCollectorFetchLeaseReleaseError)
-    assert len(cancelled.value.persisted_fetches) == 2
+    partial_cancel = find_cancellation_error(
+        cancelled.value, CffexSettlementCollectorPartialPublishCancelledError
+    )
+    assert partial_cancel is not None
+    assert partial_cancel.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
+    assert isinstance(partial_cancel.__cause__, CffexSettlementCollectorFetchLeaseReleaseError)
+    assert len(partial_cancel.persisted_fetches) == 2
     assert len(first_rows) == 1
     assert len(second_rows) == 1
     assert counts == (2, 2, 2)

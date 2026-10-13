@@ -152,6 +152,27 @@ describe('renderMarkdown', () => {
       const result = renderMarkdown('[link](https://example.com)', { allowLinks: true })
       expect(result).toContain('<a')
     })
+
+    it('can disable images while preserving links', () => {
+      const result = renderMarkdown(
+        '[link](https://example.com) ![alt](https://example.com/img.png)',
+        { allowImages: false, allowLinks: true },
+      )
+
+      expect(result).toContain('<a href="https://example.com"')
+      expect(result).not.toContain('<img')
+    })
+
+    it('can disable links while preserving images', () => {
+      const result = renderMarkdown(
+        '[link](https://example.com) ![alt](https://example.com/img.png)',
+        { allowImages: true, allowLinks: false },
+      )
+
+      expect(result).not.toContain('<a')
+      expect(result).toContain('<img src="https://example.com/img.png"')
+      expect(result).toContain('alt="alt"')
+    })
   })
 
   describe('Property-based tests (fast-check)', () => {

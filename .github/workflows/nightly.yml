@@ -200,15 +200,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,backtrader]"
 
+      - name: Generate ephemeral E2E credentials
+        id: e2e-credentials
+        run: |
+          python - <<'PY'
+          import os
+          import secrets
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              for name in ("admin_password", "secret_key", "jwt_secret_key"):
+                  value = secrets.token_urlsafe(32)
+                  print(f"::add-mask::{value}")
+                  output.write(f"{name}={value}\n")
+          PY
+
+      - name: Migrate E2E database and seed temporary admin
+        working-directory: src/backend
+        env:
+          SECRET_KEY: ${{ steps.e2e-credentials.outputs.secret_key }}
+          JWT_SECRET_KEY: ${{ steps.e2e-credentials.outputs.jwt_secret_key }}
+          DATABASE_URL: sqlite+aiosqlite:///./backtrader_e2e.db
+          DB_AUTO_CREATE_SCHEMA: "false"
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ${{ steps.e2e-credentials.outputs.admin_password }}
+          ADMIN_EMAIL: admin@example.com
+        run: |
+          alembic upgrade head
+          python -m app.db.bootstrap_admin
+
       - name: Start services
         env:
-          SECRET_KEY: e2e-secret-key-with-sufficient-length-123456
-          JWT_SECRET_KEY: e2e-jwt-secret-key-with-sufficient-length-654321
+          SECRET_KEY: ${{ steps.e2e-credentials.outputs.secret_key }}
+          JWT_SECRET_KEY: ${{ steps.e2e-credentials.outputs.jwt_secret_key }}
           DATABASE_URL: sqlite+aiosqlite:///./backtrader_e2e.db
-          DB_AUTO_CREATE_SCHEMA: "true"
-          DB_AUTO_CREATE_DEFAULT_ADMIN: "true"
+          DB_AUTO_CREATE_SCHEMA: "false"
           ADMIN_USERNAME: admin
-          ADMIN_PASSWORD: Admin12345678
+          ADMIN_PASSWORD: ${{ steps.e2e-credentials.outputs.admin_password }}
           ADMIN_EMAIL: admin@example.com
           RATE_LIMIT_REGISTER: "100/hour"
           RATE_LIMIT_LOGIN: "500/minute"
@@ -260,7 +287,7 @@ jobs:
           BASE_URL: http://127.0.0.1:3000
           CI: true
           E2E_ADMIN_USERNAME: admin
-          E2E_ADMIN_PASSWORD: Admin12345678
+          E2E_ADMIN_PASSWORD: ${{ steps.e2e-credentials.outputs.admin_password }}
           E2E_SETUP_BROWSER: chromium
         run: npx playwright test
 
@@ -278,6 +305,9 @@ jobs:
   performance-tests:
     name: Performance Tests
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite+aiosqlite:////tmp/ai-for-investor-performance.db
+      DB_AUTO_CREATE_SCHEMA: "false"
 
     defaults:
       run:
@@ -299,53 +329,95 @@ jobs:
           pip install -e ".[dev,backtrader]"
           pip install locust
 
+      - name: Migrate performance-test database
+        run: alembic upgrade head
+
       - name: Run API performance test
         run: |
-          # Basic API response time test
-          python -c "
-          import time
-          import httpx
-
-          # Start the app in a subprocess for testing
-          import subprocess
+          python - <<'PY'
           import asyncio
+          import threading
+          import time
 
-          from app.main import app
+          import httpx
           from uvicorn import Config, Server
 
-          async def run_test():
+          from app.main import app
+
+          BASE_URL = "http://127.0.0.1:8001"
+          READY_TIMEOUT_SECONDS = 60.0
+          READY_REQUEST_TIMEOUT_SECONDS = 2.0
+
+          async def run_test() -> None:
               config = Config(app=app, host='127.0.0.1', port=8001, log_level='error')
               server = Server(config)
+              server_thread = threading.Thread(
+                  target=server.run, name='performance-test-api', daemon=True
+              )
+              client = httpx.AsyncClient(base_url=BASE_URL, timeout=10.0)
+              server_thread.start()
+              try:
+                  deadline = time.monotonic() + READY_TIMEOUT_SECONDS
+                  health_status = None
+                  root_status = None
+                  last_request_error = None
 
-              import threading
-              t = threading.Thread(target=server.run)
-              t.daemon = True
-              t.start()
-              await asyncio.sleep(2)
+                  while time.monotonic() < deadline:
+                      if not server_thread.is_alive():
+                          raise RuntimeError('API test server exited before becoming ready')
 
-              # Test endpoints
-              client = httpx.AsyncClient(base_url='http://127.0.0.1:8001', timeout=10.0)
+                      try:
+                          health_response = await asyncio.wait_for(
+                              client.get('/health'), timeout=READY_REQUEST_TIMEOUT_SECONDS
+                          )
+                          root_response = await asyncio.wait_for(
+                              client.get('/'), timeout=READY_REQUEST_TIMEOUT_SECONDS
+                          )
+                      except (httpx.RequestError, asyncio.TimeoutError) as exc:
+                          last_request_error = type(exc).__name__
+                      else:
+                          health_status = health_response.status_code
+                          root_status = root_response.status_code
+                          if health_response.is_success and root_response.is_success:
+                              break
 
-              start = time.time()
-              response = await client.get('/health')
-              health_time = (time.time() - start) * 1000
+                      await asyncio.sleep(0.25)
+                  else:
+                      raise RuntimeError(
+                          'API test server did not return HTTP success from /health and / '
+                          f'within {READY_TIMEOUT_SECONDS:.0f}s '
+                          f'(last statuses: /health={health_status}, /={root_status}; '
+                          f'last request error: {last_request_error})'
+                      )
 
-              start = time.time()
-              response = await client.get('/')
-              root_time = (time.time() - start) * 1000
+                  start = time.perf_counter()
+                  health_response = await client.get('/health')
+                  health_response.raise_for_status()
+                  health_time = (time.perf_counter() - start) * 1000
 
-              await client.aclose()
+                  start = time.perf_counter()
+                  root_response = await client.get('/')
+                  root_response.raise_for_status()
+                  root_time = (time.perf_counter() - start) * 1000
 
-              print(f'Health check: {health_time:.2f}ms')
-              print(f'Root endpoint: {root_time:.2f}ms')
+                  print(f'Health check: {health_time:.2f}ms')
+                  print(f'Root endpoint: {root_time:.2f}ms')
 
-              if health_time > 500:
-                  print('::warning::Health check too slow (>500ms)')
-              if root_time > 500:
-                  print('::warning::Root endpoint too slow (>500ms)')
+                  if health_time > 500:
+                      print('::warning::Health check too slow (>500ms)')
+                  if root_time > 500:
+                      print('::warning::Root endpoint too slow (>500ms)')
+              finally:
+                  try:
+                      await client.aclose()
+                  finally:
+                      server.should_exit = True
+                      await asyncio.to_thread(server_thread.join, 10.0)
+                      if server_thread.is_alive():
+                          raise RuntimeError('API test server did not stop within 10 seconds')
 
           asyncio.run(run_test())
-          "
+          PY
 
   # ========================================
   # Dependency Audit & Vulnerability Scanning
@@ -374,6 +446,8 @@ jobs:
         working-directory: src/backend
         run: |
           python -m pip install --upgrade pip
+          # Pin the runner's preinstalled build tooling to the audited fixed release.
+          python -m pip install --upgrade "setuptools==83.0.0"
           pip install -e ".[dev,backtrader,data,redis]"
           pip install pip-audit
           pip-audit --desc --format json --output pip-audit-report.json 2>&1 || true

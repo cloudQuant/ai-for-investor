@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { workspaceApi } from '@/api/workspace'
 import * as sessionUtils from '@/utils/session'
-import { setToken } from '@/utils/tokenRef'
+import { beginSession, expireSession, setToken } from '@/utils/tokenRef'
 
 // Mock the auth API
 vi.mock('@/api/auth', () => ({
@@ -144,7 +144,9 @@ describe('useAuthStore', () => {
     expect(store.token).toBe('valid-token')
     expect(store.user).toBeNull()
     expect(store.identityStatus).toBe('retryable_error')
-    expect(store.identityError).toBeTruthy()
+    expect(store.identityError).toBe(error instanceof Error
+      ? error.message
+      : 'Unable to confirm the current user.')
     expect(store.isAuthenticated).toBe(false)
     expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
   })
@@ -218,6 +220,101 @@ describe('useAuthStore', () => {
     expect(store.user?.username).toBe('user-b')
     expect(store.isAuthenticated).toBe(true)
     expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('does not let an earlier credential request replace the later login', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    const earlierLogin = deferred<any>()
+    const laterLogin = deferred<any>()
+    vi.mocked(authApi.login)
+      .mockReturnValueOnce(earlierLogin.promise)
+      .mockReturnValueOnce(laterLogin.promise)
+    vi.mocked(authApi.getMe).mockResolvedValueOnce({
+      id: 'user-b', username: 'user-b', email: 'b@test.com', is_active: true,
+      created_at: '2024-01-01T00:00:00',
+    })
+
+    const earlierAttempt = store.login({ username: 'user-a', password: 'password123' })
+    const earlierOutcome = earlierAttempt.then(() => null, error => error)
+    const laterAttempt = store.login({ username: 'user-b', password: 'password123' })
+
+    laterLogin.resolve({ access_token: 'token-b', token_type: 'bearer', expires_in: 86400 })
+    await laterAttempt
+    earlierLogin.resolve({ access_token: 'token-a', token_type: 'bearer', expires_in: 86400 })
+
+    const earlierError = await earlierOutcome
+    expect(earlierError).toMatchObject({ message: 'Login attempt was superseded.' })
+    expect(store.token).toBe('token-b')
+    expect(store.user?.username).toBe('user-b')
+    expect(store.isAuthenticated).toBe(true)
+  })
+
+  it('keeps account B when account A identity confirmation finishes late', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    const identityA = deferred<any>()
+    vi.mocked(authApi.login)
+      .mockResolvedValueOnce({ access_token: 'token-a', token_type: 'bearer', expires_in: 86400 })
+      .mockResolvedValueOnce({ access_token: 'token-b', token_type: 'bearer', expires_in: 86400 })
+    vi.mocked(authApi.getMe)
+      .mockReturnValueOnce(identityA.promise)
+      .mockResolvedValueOnce({
+        id: 'user-b', username: 'user-b', email: 'b@test.com', is_active: true,
+        created_at: '2024-01-01T00:00:00',
+      })
+
+    const loginA = store.login({ username: 'user-a', password: 'password123' })
+    const loginAOutcome = loginA.then(() => null, error => error)
+    await Promise.resolve()
+    expect(authApi.getMe).toHaveBeenCalledTimes(1)
+
+    await store.login({ username: 'user-b', password: 'password123' })
+    identityA.resolve({
+      id: 'user-a', username: 'user-a', email: 'a@test.com', is_active: true,
+      created_at: '2024-01-01T00:00:00',
+    })
+
+    const identityAError = await loginAOutcome
+    expect(identityAError).toMatchObject({ message: 'Unable to confirm the current user.' })
+    expect(store.token).toBe('token-b')
+    expect(store.user?.username).toBe('user-b')
+    expect(store.identityStatus).toBe('confirmed')
+    expect(store.isAuthenticated).toBe(true)
+    expect(sessionUtils.clearAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('clears Pinia identity when the matching API session expires before a 401 is handled', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    store.token = 'expired-token'
+    const sessionGeneration = beginSession('expired-token')
+    vi.mocked(authApi.getMe).mockImplementationOnce(async () => {
+      expect(expireSession(sessionGeneration)).toBe(true)
+      throw { response: { status: 401 } }
+    })
+
+    expect(await store.fetchUser(sessionGeneration)).toBe(false)
+
+    expect(store.token).toBeNull()
+    expect(store.user).toBeNull()
+    expect(store.identityStatus).toBe('anonymous')
+    expect(store.isAuthenticated).toBe(false)
+    expect(sessionUtils.clearAccessToken).toHaveBeenCalled()
+  })
+
+  it('skips identity requests carrying an older session generation', async () => {
+    const { authApi } = await import('@/api/auth')
+    const store = useAuthStore()
+    store.token = 'token-b'
+    const staleGeneration = beginSession('token-a')
+    beginSession('token-b')
+
+    expect(await store.fetchUser(staleGeneration)).toBe(false)
+
+    expect(authApi.getMe).not.toHaveBeenCalled()
+    expect(store.token).toBe('token-b')
+    expect(store.user).toBeNull()
   })
 
   it('clears workspace A as soon as login B starts identity confirmation', async () => {

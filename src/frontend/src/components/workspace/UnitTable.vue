@@ -26,7 +26,6 @@
             {{ row.sort_order + 1 }}
           </template>
         </el-table-column>
-        <!-- @vue-generic {StrategyUnit} -->
         <el-table-column
           :label="t('workspaceDialogs.statusCol')"
           width="156"
@@ -224,7 +223,6 @@
             {{ formatSignedNumber(row.trading_snapshot?.max_drawdown_rate, 2, false, '%') }}
           </template>
         </el-table-column>
-        <!-- @vue-generic {StrategyUnit} -->
         <el-table-column
           :label="t('workspaceDialogs.detailCol')"
           width="90"

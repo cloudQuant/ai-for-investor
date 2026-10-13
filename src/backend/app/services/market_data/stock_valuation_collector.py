@@ -108,7 +108,12 @@ class StockValuationCollectorPartialPublishError(StockValuationCollectorError):
 
 
 class StockValuationCollectorPartialPublishCancelledError(asyncio.CancelledError):
-    """Preserve cancellation while retaining the receipts already made durable."""
+    """Preserve cancellation while retaining the receipts already made durable.
+
+    Python 3.10 may surface a plain ``CancelledError`` when this outcome crosses
+    a Task boundary; ``find_cancellation_error`` recovers it from the exception
+    chain.
+    """
 
     code = "STOCK_VALUATION_BATCH_PARTIALLY_PUBLISHED_CANCELLED"
 

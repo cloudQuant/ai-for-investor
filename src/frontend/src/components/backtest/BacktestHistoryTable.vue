@@ -76,7 +76,6 @@
           {{ formatDate(row.created_at) }}
         </template>
       </el-table-column>
-      <!-- @vue-generic {BacktestResult} -->
       <el-table-column
         :label="t('backtestComp.bhActions')"
         width="150"

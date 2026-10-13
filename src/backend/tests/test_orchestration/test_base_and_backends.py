@@ -4,7 +4,31 @@ Acceptance tests for Task 2 & 6: Backend abstraction, APScheduler adapter, detec
 Validates Requirements: 6.1, 6.2, 6.3, 6.4, 6.6
 """
 
+from collections.abc import Iterator
+from types import ModuleType
+
 import pytest
+
+
+@pytest.fixture
+def isolated_settings_cache() -> Iterator[ModuleType]:
+    """Reset settings for a detector test without invalidating app imports."""
+    import app.config as config_module
+    import app.db.database as database_module
+    import app.main as main_module
+
+    application_settings = config_module._settings
+    assert application_settings is not None
+    assert main_module.settings is application_settings
+    assert database_module.settings is application_settings
+
+    with pytest.MonkeyPatch.context() as cache_patch:
+        cache_patch.setattr(config_module, "_settings", None)
+        yield config_module
+
+    assert config_module._settings is application_settings
+    assert main_module.settings is application_settings
+    assert database_module.settings is application_settings
 
 
 class TestOrchestratorBackendInterface:
@@ -57,16 +81,15 @@ class TestAPSchedulerBackend:
 class TestBackendDetector:
     """AT-6.1 to AT-6.4: Backend auto-detection logic."""
 
-    async def test_auto_detect_no_airflow_url_uses_apscheduler(self, monkeypatch):
+    async def test_auto_detect_no_airflow_url_uses_apscheduler(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        isolated_settings_cache: ModuleType,
+    ) -> None:
         """When AIRFLOW_API_BASE_URL is empty, auto mode selects APScheduler."""
         monkeypatch.setenv("ORCHESTRATION_BACKEND", "auto")
         monkeypatch.setenv("AIRFLOW_API_BASE_URL", "")
 
-        # Reset settings cache
-        import app.config
-
-        app.config._settings = None
-
         from app.services.orchestration.apscheduler_backend import APSchedulerBackend
         from app.services.orchestration.detector import BackendDetector
 
@@ -74,17 +97,12 @@ class TestBackendDetector:
         backend = await detector.detect()
         assert isinstance(backend, APSchedulerBackend)
 
-        # Cleanup
-        app.config._settings = None
-
-    async def test_forced_apscheduler(self, monkeypatch):
+    async def test_forced_apscheduler(
+        self, monkeypatch: pytest.MonkeyPatch, isolated_settings_cache: ModuleType
+    ) -> None:
         """ORCHESTRATION_BACKEND=apscheduler forces APScheduler."""
         monkeypatch.setenv("ORCHESTRATION_BACKEND", "apscheduler")
 
-        import app.config
-
-        app.config._settings = None
-
         from app.services.orchestration.apscheduler_backend import APSchedulerBackend
         from app.services.orchestration.detector import BackendDetector
 
@@ -92,17 +110,13 @@ class TestBackendDetector:
         backend = await detector.detect()
         assert isinstance(backend, APSchedulerBackend)
 
-        app.config._settings = None
-
-    async def test_forced_airflow_no_url_fallback(self, monkeypatch):
+    async def test_forced_airflow_no_url_fallback(
+        self, monkeypatch: pytest.MonkeyPatch, isolated_settings_cache: ModuleType
+    ) -> None:
         """ORCHESTRATION_BACKEND=airflow but no URL falls back to APScheduler."""
         monkeypatch.setenv("ORCHESTRATION_BACKEND", "airflow")
         monkeypatch.setenv("AIRFLOW_API_BASE_URL", "")
 
-        import app.config
-
-        app.config._settings = None
-
         from app.services.orchestration.apscheduler_backend import APSchedulerBackend
         from app.services.orchestration.detector import BackendDetector
 
@@ -110,18 +124,16 @@ class TestBackendDetector:
         backend = await detector.detect()
         assert isinstance(backend, APSchedulerBackend)
 
-        app.config._settings = None
-
-    async def test_auto_detect_airflow_unreachable_fallback(self, monkeypatch):
+    async def test_auto_detect_airflow_unreachable_fallback(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        isolated_settings_cache: ModuleType,
+    ) -> None:
         """Auto mode with unreachable Airflow URL falls back to APScheduler."""
         monkeypatch.setenv("ORCHESTRATION_BACKEND", "auto")
         monkeypatch.setenv("AIRFLOW_API_BASE_URL", "http://127.0.0.1:19999/api/v1")
         monkeypatch.setenv("AIRFLOW_PASSWORD", "test")
 
-        import app.config
-
-        app.config._settings = None
-
         from app.services.orchestration.apscheduler_backend import APSchedulerBackend
         from app.services.orchestration.detector import BackendDetector
 
@@ -129,4 +141,12 @@ class TestBackendDetector:
         backend = await detector.detect()
         assert isinstance(backend, APSchedulerBackend)
 
-        app.config._settings = None
+
+def test_settings_cache_reset_restores_already_imported_modules(
+    isolated_settings_cache: ModuleType,
+) -> None:
+    """A fresh cache entry must not leave already-imported modules stale afterward."""
+    import app.main as main_module
+
+    replacement_settings = isolated_settings_cache.get_settings()
+    assert replacement_settings is not main_module.settings

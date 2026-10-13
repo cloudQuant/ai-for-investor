@@ -791,6 +791,7 @@ export function useWorkspaceUnitsTab(props: WorkspaceUnitsTabProps) {
     handleCopyOptParams,
     handleExportUnits,
     handleImportUnits,
+    importFileInput,
     handleMove,
     handleOpenKline,
     handleOpenSelectedReport,

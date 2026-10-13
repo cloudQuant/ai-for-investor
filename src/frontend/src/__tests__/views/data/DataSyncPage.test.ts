@@ -187,4 +187,166 @@ describe('DataSyncPage', () => {
     expect(api.getDatabases).toHaveBeenCalledTimes(2)
     expect(api.getHistory).toHaveBeenCalledTimes(2)
   })
+
+  it('shows partial connection results and resets the connection loading state', async () => {
+    const wrapper = doMount()
+    await flushAll()
+    api.testConnection.mockResolvedValueOnce({
+      ...connectionStatus,
+      success: false,
+      checks: { local_mysql: true, remote_mysql: false },
+      details: { local_mysql: 'local ok', remote_mysql: 'remote unavailable' },
+    })
+
+    await (wrapper.vm as any).handleTestConnection()
+
+    expect((wrapper.vm as any).connectionStatus.success).toBe(false)
+    expect((wrapper.vm as any).connectionSummary).toBe('dataPages.syncConnectionIssue')
+    expect((wrapper.vm as any).testingConnection).toBe(false)
+    expect(ElMessage.success).toHaveBeenCalledWith('dataPages.syncTestPartial')
+  })
+
+  it('clears connection loading and reports a failed connection test', async () => {
+    const wrapper = doMount()
+    await flushAll()
+    api.testConnection.mockRejectedValueOnce(new Error('connection refused'))
+
+    await (wrapper.vm as any).handleTestConnection()
+
+    expect((wrapper.vm as any).testingConnection).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.syncTestFailed')
+  })
+
+  it('skips empty or canceled sync requests and clears upload loading after API failure', async () => {
+    const wrapper = doMount()
+    await flushAll()
+    const vm = wrapper.vm as any
+    await vm.startSync('upload', [])
+    expect(ElMessage.warning).toHaveBeenCalledWith('dataPages.syncNoDatabases')
+    expect(api.upload).not.toHaveBeenCalled()
+
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel')
+    await vm.startSync('upload', ['ai_for_investor'])
+    expect(api.upload).not.toHaveBeenCalled()
+
+    vi.mocked(ElMessageBox.confirm).mockResolvedValueOnce(
+      'confirm' as unknown as Awaited<ReturnType<typeof ElMessageBox.confirm>>
+    )
+    api.upload.mockRejectedValueOnce(new Error('remote unavailable'))
+    await vm.startSync('upload', ['ai_for_investor'])
+    expect(api.upload).toHaveBeenCalledWith({
+      databases: ['ai_for_investor'],
+      confirm: true,
+      compress: true,
+      sync_mode: 'full',
+    })
+    expect(vm.submittingBulkUpload).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.syncStartFailed')
+  })
+
+  it('starts a download and surfaces the terminal task failure after refreshing state', async () => {
+    const wrapper = doMount()
+    await flushAll()
+    api.download.mockResolvedValueOnce({ task_id: 'sync-failed', status: 'pending', message: 'queued' })
+    api.getStatus.mockResolvedValueOnce({
+      ...historyItem,
+      task_id: 'sync-failed',
+      direction: 'download',
+      status: 'failed',
+      error: 'remote disk full',
+    })
+
+    await (wrapper.vm as any).startSync('download', ['akshare_data'])
+    await flushAll()
+
+    expect(api.download).toHaveBeenCalledWith({
+      databases: ['akshare_data'],
+      confirm: true,
+      compress: true,
+      sync_mode: 'full',
+    })
+    expect(api.getStatus).toHaveBeenCalledWith('sync-failed')
+    expect((wrapper.vm as any).submittingBulkDownload).toBe(false)
+    expect((wrapper.vm as any).activeTaskMap['sync-failed'].status).toBe('failed')
+    expect(api.getDatabases).toHaveBeenCalledTimes(2)
+    expect(api.getHistory).toHaveBeenCalledTimes(2)
+    expect(ElMessage.error).toHaveBeenCalledWith('remote disk full')
+  })
+
+  it('renders partial history fields and clears history loading after refresh', async () => {
+    const wrapper = doMount()
+    await flushAll()
+    api.getHistory.mockResolvedValueOnce({
+      items: [{
+        ...historyItem,
+        task_id: 'sync-error',
+        direction: 'download',
+        status: 'failed',
+        started_at: null,
+        duration_seconds: null,
+        error: 'remote disk full',
+        message: '',
+      }],
+    })
+
+    await (wrapper.vm as any).loadHistory()
+    await flushPromises()
+
+    expect((wrapper.vm as any).loadingHistory).toBe(false)
+    expect(wrapper.find('[data-test="sync-history-mobile-list"]').text()).toContain('remote disk full')
+  })
+
+  it('formats sync states and normalizes database configuration inputs', async () => {
+    const vm = doMount().vm as any
+    await flushAll()
+
+    expect(vm.formatDateTime(null)).toBe('-')
+    expect(vm.formatDuration(null)).toBe('-')
+    expect(vm.formatDuration(Number.NaN)).toBe('-')
+    expect(vm.formatDuration(30)).toBe('30.0s')
+    expect(vm.formatDuration(61)).toBe('1m1s')
+    expect(vm.statusLabel('pending')).toBe('dataPages.syncStatusPending')
+    expect(vm.statusLabel('running')).toBe('dataPages.syncStatusRunning')
+    expect(vm.statusLabel('completed')).toBe('dataPages.syncStatusCompleted')
+    expect(vm.statusLabel('failed')).toBe('dataPages.syncStatusFailed')
+    expect(vm.syncModeLabel('schema_only')).toBe('dataPages.syncModeSchemaOnly')
+    expect(vm.syncModeLabel('data_only')).toBe('dataPages.syncModeDataOnly')
+    expect(vm.syncModeLabel('full')).toBe('dataPages.syncModeFull')
+    expect(vm.labelForCheck('local_tools')).toBe('dataPages.syncCheckLocalTools')
+    expect(vm.labelForCheck('ssh')).toBe('dataPages.syncCheckSsh')
+    expect(vm.labelForCheck('docker')).toBe('dataPages.syncCheckDocker')
+    expect(vm.labelForCheck('remote_env')).toBe('dataPages.syncCheckRemoteEnv')
+    expect(vm.labelForCheck('unrecognized')).toBe('unrecognized')
+    expect(vm.formatRemoteState(databaseRows[0])).toContain('512 B')
+    expect(vm.formatRemoteState(databaseRows[1])).toBe('dataPages.syncStateNotExists')
+    expect(vm.formatLocalState(databaseRows[0])).toContain('1 KB')
+    expect(vm.formatLocalState(databaseRows[1])).toContain('2 KB')
+
+    vm.syncDatabasesInput = ' ai_for_investor, ,akshare_data\ncustom_db，'
+    expect(vm.buildConfigPayload().sync_databases).toEqual([
+      'ai_for_investor',
+      'akshare_data',
+      'custom_db',
+    ])
+  })
+
+  it('saves configuration with refreshed databases and handles save failure', async () => {
+    const wrapper = doMount()
+    await flushAll()
+    const vm = wrapper.vm as any
+
+    await vm.handleSaveConfig()
+    expect(api.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      connection_mode: 'direct_mysql',
+      sync_databases: ['ai_for_investor', 'akshare_data'],
+    }))
+    expect(api.getDatabases).toHaveBeenCalledTimes(2)
+    expect(vm.savingConfig).toBe(false)
+    expect(ElMessage.success).toHaveBeenCalledWith('dataPages.syncSavedSuccess')
+
+    api.saveConfig.mockRejectedValueOnce(new Error('write failed'))
+    await vm.handleSaveConfig()
+    expect(vm.savingConfig).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('dataPages.syncSaveFailed')
+  })
 })

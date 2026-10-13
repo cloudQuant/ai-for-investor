@@ -509,7 +509,6 @@
           {{ objectiveLabel(row.optimization_config?.objective, row.optimization_config?.direction) }}
         </template>
       </el-table-column>
-      <!-- @vue-generic {import('@/types/workspace').StrategyUnit} -->
       <el-table-column
         :label="t('units.runStatus')"
         width="120"
@@ -561,7 +560,6 @@
           </div>
         </template>
       </el-table-column>
-      <!-- @vue-generic {import('@/types/workspace').StrategyUnit} -->
       <el-table-column
         label="结果"
         min-width="280"
@@ -596,7 +594,6 @@
         width="80"
         align="center"
       />
-      <!-- @vue-generic {import('@/types/workspace').StrategyUnit} -->
       <el-table-column
         :label="t('units.elapsed')"
         width="90"
@@ -606,7 +603,6 @@
           {{ formatElapsedTime(row) }}
         </template>
       </el-table-column>
-      <!-- @vue-generic {import('@/types/workspace').StrategyUnit} -->
       <el-table-column
         :label="t('units.remaining')"
         width="130"
@@ -762,6 +758,7 @@ const {
   handleCopyOptParams,
   handleExportUnits,
   handleImportUnits,
+  importFileInput,
   handleMove,
   handleOpenKline,
   handleOpenSelectedReport,

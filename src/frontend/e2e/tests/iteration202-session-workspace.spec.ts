@@ -1,6 +1,5 @@
 import { expect, test, type Page, type Request, type Route } from '@playwright/test'
 
-const APP_ORIGIN = 'http://127.0.0.1:4177'
 const TOKEN_A = 'iteration202-fixture-token-a'
 const TOKEN_B = 'iteration202-fixture-token-b'
 
@@ -20,12 +19,37 @@ type RuntimeDiagnostic = { source: string; message: string }
 
 const runtimeDiagnosticsByPage = new WeakMap<Page, RuntimeDiagnostic[]>()
 
+function getFixtureAppOrigin(): URL {
+  const configuredBaseURL = test.info().project.use.baseURL
+  if (typeof configuredBaseURL !== 'string' || configuredBaseURL.trim() === '') {
+    throw new Error('The current Playwright project must configure an absolute HTTP(S) baseURL.')
+  }
+
+  let appOrigin: URL
+  try {
+    appOrigin = new URL(configuredBaseURL)
+  } catch {
+    throw new Error('The current Playwright project baseURL must be an absolute HTTP(S) URL.')
+  }
+
+  const hostname = appOrigin.hostname.replace(/^\[|\]$/g, '')
+  const isLoopbackHost = ['127.0.0.1', 'localhost', '::1'].includes(hostname)
+  if (!['http:', 'https:'].includes(appOrigin.protocol) || !isLoopbackHost) {
+    throw new Error('The fixture API may only run against an HTTP(S) loopback baseURL.')
+  }
+
+  return new URL(appOrigin.origin)
+}
+
 function collectRuntimeDiagnostics(page: Page): void {
   const diagnostics: RuntimeDiagnostic[] = []
   runtimeDiagnosticsByPage.set(page, diagnostics)
 
   page.on('pageerror', error => {
-    diagnostics.push({ source: 'pageerror', message: error.stack ?? error.message })
+    diagnostics.push({
+      source: 'pageerror',
+      message: error.stack || error.message || error.name || 'Unknown browser runtime error',
+    })
   })
   page.on('console', message => {
     const text = message.text()
@@ -209,12 +233,13 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
 }
 
 async function installFixtureApi(page: Page, handler: ApiHandler): Promise<void> {
+  const appOrigin = getFixtureAppOrigin()
   collectRuntimeDiagnostics(page)
   await page.route('**/*', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
 
-    if (url.origin !== APP_ORIGIN) {
+    if (url.origin !== appOrigin.origin) {
       await route.abort()
       return
     }
@@ -229,7 +254,9 @@ async function installFixtureApi(page: Page, handler: ApiHandler): Promise<void>
 
   // The fixture pages make no websocket calls. Closing local sockets prevents
   // Vite HMR messages from reloading the application during a controlled race.
-  await page.routeWebSocket(`${APP_ORIGIN.replace('http', 'ws')}/**`, (socket) => {
+  const webSocketOrigin = new URL(appOrigin)
+  webSocketOrigin.protocol = appOrigin.protocol === 'https:' ? 'wss:' : 'ws:'
+  await page.routeWebSocket(`${webSocketOrigin.origin}/**`, (socket) => {
     socket.close()
   })
 }
@@ -459,19 +486,27 @@ test('AC-D09: retains credentials through 503 and network failures, then confirm
 
   await page.goto('/research/workspaces')
   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+  const initialIdentityError = page.getByTestId('identity-retry-panel').locator('p').nth(1)
+  await expect(initialIdentityError).toBeVisible()
+  await expect(initialIdentityError).toHaveText(/\S/)
+  await expect(page.locator('.el-message--error')).toHaveCount(0)
   expect(meCalls).toBe(4)
   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
   expect(workspaceRequests).toEqual([])
   await expect(page.getByTestId('login-submit')).toHaveCount(0)
 
   await page.getByTestId('identity-retry').click()
-  await expect.poll(() => meCalls).toBe(8)
+  await expect.poll(() => meCalls, { timeout: 60_000 }).toBe(8)
   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+  const retryIdentityError = page.getByTestId('identity-retry-panel').locator('p').nth(1)
+  await expect(retryIdentityError).toBeVisible()
+  await expect(retryIdentityError).toHaveText(/\S/)
+  await expect(page.locator('.el-message--error')).toHaveCount(0)
   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
   await expect(page.getByTestId('login-submit')).toHaveCount(0)
 
   await page.getByTestId('identity-retry').click()
-  await expect.poll(() => meCalls).toBe(9)
+  await expect.poll(() => meCalls, { timeout: 60_000 }).toBe(9)
   await expect.poll(async () => (await readAuthAppState(page)).currentRoute)
     .toBe('/research/workspaces')
   await expect(page.locator('.user-dropdown-trigger')).toContainText('user-a')

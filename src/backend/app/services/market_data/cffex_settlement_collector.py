@@ -123,7 +123,9 @@ class CffexSettlementCollectorPartialPublishCancelledError(asyncio.CancelledErro
     The collector cannot roll back a prior canonical series publication when a
     scheduler cancels a later target.  Raising a ``CancelledError`` subclass
     keeps cancellation handling intact while giving the scheduler the exact
-    receipts it must reconcile before it retries the frozen date.
+    receipts it must reconcile before it retries the frozen date. Python 3.10
+    may surface a plain ``CancelledError`` when this outcome crosses a Task
+    boundary; ``find_cancellation_error`` recovers it from the exception chain.
     """
 
     code = "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED_CANCELLED"

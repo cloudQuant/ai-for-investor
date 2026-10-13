@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import GatewayStatusPage from '@/views/GatewayStatusPage.vue'
 import { elStubs } from '@/test/stubs'
@@ -68,6 +68,14 @@ async function flushUi() {
   await nextTick()
 }
 
+const GatewayAlertStub = defineComponent({
+  name: 'GatewayAlertStub',
+  props: ['title'],
+  setup(props) {
+    return () => h('div', { role: 'alert' }, String(props.title ?? ''))
+  },
+})
+
 describe('GatewayStatusPage', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -107,7 +115,10 @@ describe('GatewayStatusPage', () => {
     document.body.innerHTML = ''
   })
 
-  const doMount = () => mount(GatewayStatusPage, { attachTo: document.body, global: { stubs: elStubs } })
+  const doMount = () => mount(GatewayStatusPage, {
+    attachTo: document.body,
+    global: { stubs: { ...elStubs, 'el-alert': GatewayAlertStub } },
+  })
 
   it('mounts without error', () => {
     expect(doMount().exists()).toBe(true)
@@ -172,5 +183,23 @@ describe('GatewayStatusPage', () => {
 
     expect(vm.formatHeartbeatAge(vm.gateways[0])).toBe('8s')
     expect(liveTradingApiMocks.listGatewayHealth).not.toHaveBeenCalled()
+  })
+
+  it('shows a health access error and recovers to the empty gateway state', async () => {
+    liveTradingApiMocks.listGatewayHealth.mockRejectedValueOnce(new Error('access denied'))
+    const wrapper = doMount()
+    await flushUi()
+
+    expect(wrapper.get('[data-test="gateway-alert"]').text()).toBe('access denied')
+    expect(wrapper.get('[data-test="gateway-empty"]').text()).toContain('暂无已连接网关')
+
+    liveTradingApiMocks.listGatewayHealth.mockResolvedValueOnce({ total: 0, gateways: [] })
+    await (wrapper.vm as any).fetchHealth()
+    await flushUi()
+
+    expect(wrapper.find('[data-test="gateway-alert"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="gateway-empty"]').text()).toBeTruthy()
+    expect(liveTradingApiMocks.listGatewayHealth).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
   })
 })

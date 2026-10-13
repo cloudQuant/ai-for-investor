@@ -128,6 +128,32 @@ describe('useThemeStore', () => {
     expect(meta).toBeTruthy()
   })
 
+  it('creates a dark theme-color meta tag when no tag exists', () => {
+    const store = useThemeStore()
+    store.setTheme('obsidian')
+
+    store.init()
+
+    const meta = document.querySelector('meta[name="theme-color"]')
+    expect(meta?.getAttribute('content')).toBe('#141414')
+    expect(document.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
+  })
+
+  it('uses Aurora fallbacks when updating the meta color for an unknown theme', () => {
+    const store = useThemeStore()
+    const meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    meta.content = 'stale color'
+    document.head.appendChild(meta)
+
+    store.setTheme('unknown' as any)
+
+    expect(document.documentElement.dataset.theme).toBe('unknown')
+    expect(document.documentElement.style.getPropertyValue('--bg-color'))
+      .toBe('var(--theme-aurora-bg-color)')
+    expect(meta.content).toBe('#FFFFFF')
+  })
+
   it('currentThemeLabel returns correct label', () => {
     const store = useThemeStore()
     expect(store.currentThemeLabel).toBe('极光')

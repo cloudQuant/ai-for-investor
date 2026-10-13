@@ -78,24 +78,39 @@ def db_config_from_url(env_name: str, default_database: str) -> DbConfig:
     value = os.environ.get(env_name, "")
     if value:
         parsed = urlparse(value)
+        url_password = unquote(parsed.password or "")
+        password = url_password if url_password.strip() else os.environ.get("DB_PASSWORD", "")
+        if not password.strip():
+            raise ValueError(
+                f"Missing database password: include it in {env_name} or set DB_PASSWORD"
+            )
         return DbConfig(
             host=parsed.hostname or "127.0.0.1",
             port=parsed.port or 3306,
             user=unquote(parsed.username or ""),
-            password=unquote(parsed.password or ""),
+            password=password,
             database=(parsed.path or f"/{default_database}").lstrip("/")
             or default_database,
+        )
+    password = os.environ.get("DB_PASSWORD", "")
+    if not password.strip():
+        raise ValueError(
+            f"Missing database password: set DB_PASSWORD or provide credentials in {env_name}"
         )
     return DbConfig(
         host=os.environ.get("DB_HOST", "127.0.0.1"),
         port=int(os.environ.get("DB_PORT", "3306")),
         user=os.environ.get("DB_USER", "ai_for_investor"),
-        password=os.environ.get("DB_PASSWORD", "AiForInvestor_2026"),
+        password=password,
         database=default_database,
     )
 
 
 def connect(config: DbConfig) -> mysql.connector.MySQLConnection:
+    if not config.password.strip():
+        raise ValueError(
+            "Missing database password; set DB_PASSWORD or provide credentials in the database URL"
+        )
     return mysql.connector.connect(
         host=config.host,
         port=config.port,

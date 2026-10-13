@@ -1090,6 +1090,21 @@ async def test_akshare_provider_times_out_bounded_worker_calls() -> None:
 
 
 @pytest.mark.asyncio
+async def test_akshare_provider_maps_injected_builtin_timeout_to_timeout_code() -> None:
+    """A runner-raised builtin timeout retains the provider timeout contract."""
+
+    async def timeout_runner(_: dict[str, Any]) -> dict[str, Any]:
+        raise TimeoutError("injected runner timeout")
+
+    provider = _test_provider(timeout_runner)
+
+    with pytest.raises(AkShareProviderError) as timeout:
+        await provider.fetch(_request())
+
+    assert timeout.value.code == "AKSHARE_TIMEOUT"
+
+
+@pytest.mark.asyncio
 async def test_akshare_provider_times_out_while_all_worker_slots_are_held() -> None:
     """A timed-out runner shuts down before another request can acquire its slot."""
 

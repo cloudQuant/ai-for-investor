@@ -278,7 +278,7 @@ class TestCORSConfig:
         while hasattr(middleware_stack, "app"):
             middleware_stack = middleware_stack.app
             runtime_middleware_types.append(type(middleware_stack))
-        assert runtime_middleware_types[:6] == [
+        expected_runtime_middleware_types = [
             PerformanceLoggingMiddleware,
             AuditLoggingMiddleware,
             LoggingMiddleware,
@@ -286,6 +286,14 @@ class TestCORSConfig:
             RateLimitHeadersMiddleware,
             SecurityHeadersMiddleware,
         ]
+        # FastAPI may add framework-owned middleware around the user stack.
+        # Preserve the execution-order assertion for the application's layers.
+        application_middleware_types = [
+            middleware_type
+            for middleware_type in runtime_middleware_types
+            if middleware_type in expected_runtime_middleware_types
+        ]
+        assert application_middleware_types == expected_runtime_middleware_types
 
     async def test_cors_headers(self, client: AsyncClient):
         """Test CORS response headers."""

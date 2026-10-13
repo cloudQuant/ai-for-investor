@@ -45,7 +45,15 @@ describe('authApi', () => {
   it('getMe calls GET /auth/me', async () => {
     vi.mocked(api.get).mockResolvedValue(mockUser)
     const result = await authApi.getMe()
-    expect(api.get).toHaveBeenCalledWith('/auth/me')
+    expect(api.get).toHaveBeenCalledWith('/auth/me', { suppressErrorToast: true })
     expect(result).toEqual(mockUser)
+  })
+
+  it('preserves identity probe failures for the retry flow', async () => {
+    const error = new Error('identity service unavailable')
+    vi.mocked(api.get).mockRejectedValue(error)
+
+    await expect(authApi.getMe()).rejects.toBe(error)
+    expect(api.get).toHaveBeenCalledWith('/auth/me', { suppressErrorToast: true })
   })
 })
