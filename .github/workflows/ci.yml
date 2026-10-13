@@ -945,6 +945,8 @@ jobs:
           node --test \
             scripts/ci/tests/list_route_assets.test.mjs \
             scripts/ci/tests/check_bundle_size.test.mjs \
+            scripts/ci/tests/compare_bundle_size.test.mjs \
+            scripts/ci/tests/select_bundle_baseline.test.mjs \
             scripts/ci/tests/check_node_engine_compat.test.mjs
 
       - name: Compare bundle size with target branch
@@ -952,31 +954,67 @@ jobs:
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Iteration 175 §7.6 — > 10% growth blocks unless override label or
           # `<!-- bundle-size-override: <reason> -->` HTML comment is present.
 
-          # Try to get base branch entry chunk size from last successful build artifact
-          echo "Fetching base branch build artifact..."
-
-          ARTIFACT_URL=$(curl -s -H "Authorization: token ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts?name=frontend-dist&per_page=5" \
-            | node -e "
-              const data = JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8'));
-              const artifacts = (data.artifacts || []).filter(a => !a.expired);
-              if (artifacts.length > 0) {
-                console.log(artifacts[0].archive_download_url);
-              }
-            " 2>/dev/null || echo "")
-
+          # The workflow-scoped API query plus local checks require a completed
+          # successful push/workflow_dispatch run on the exact PR base commit.
+          # PR runs, other branches, and stale commits are never baseline inputs.
+          API_DIR="$(mktemp -d)"
+          trap 'rm -rf "$API_DIR"' EXIT
+          BASELINE_HELPER="../../scripts/ci/select_bundle_baseline.mjs"
+          echo "Fetching CI runs for target branch $BASE_REF at $BASE_SHA..."
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            --method GET \
+            --field "branch=$BASE_REF" \
+            --field "head_sha=$BASE_SHA" \
+            --field event=push \
+            --field status=completed \
+            --field per_page=100 > "$API_DIR/workflow-runs-push.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            --method GET \
+            --field "branch=$BASE_REF" \
+            --field "head_sha=$BASE_SHA" \
+            --field event=workflow_dispatch \
+            --field status=completed \
+            --field per_page=100 > "$API_DIR/workflow-runs-dispatch.json"
+          BASE_RUN_ID="$(node "$BASELINE_HELPER" run "$BASE_REF" "$BASE_SHA" \
+            "$API_DIR/workflow-runs-push.json" "$API_DIR/workflow-runs-dispatch.json")"
           BASE_BYTES=""
-          if [ -n "$ARTIFACT_URL" ]; then
-            mkdir -p /tmp/base-dist
-            curl -s -L -H "Authorization: token ${{ github.token }}" "$ARTIFACT_URL" -o /tmp/base-dist.zip || true
-            unzip -q -o /tmp/base-dist.zip -d /tmp/base-dist 2>/dev/null || true
-            BASE_ENTRY=$(find /tmp/base-dist -name "index-*.js" -type f 2>/dev/null | head -1 || true)
-            if [ -n "$BASE_ENTRY" ]; then
-              BASE_BYTES=$(gzip -c -9 "$BASE_ENTRY" | wc -c | tr -d ' ')
+          if [ -z "$BASE_RUN_ID" ]; then
+            echo "::notice::No successful push/workflow_dispatch CI run found for exact target commit $BASE_SHA"
+          else
+            echo "Fetching frontend-dist artifact for successful target CI run $BASE_RUN_ID..."
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BASE_RUN_ID}/artifacts" \
+              --method GET \
+              --field per_page=100 > "$API_DIR/artifacts.json"
+            BASE_ARTIFACT_ID="$(node "$BASELINE_HELPER" artifact "$API_DIR/artifacts.json" "$BASE_RUN_ID")"
+            if [ -z "$BASE_ARTIFACT_ID" ]; then
+              echo "::notice::No unexpired frontend-dist artifact exists for target CI run $BASE_RUN_ID"
+            else
+              mkdir -p "$API_DIR/base-dist"
+              curl --fail --silent --show-error --location \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${BASE_ARTIFACT_ID}/zip" \
+                --output "$API_DIR/base-dist.zip"
+              unzip -q -o "$API_DIR/base-dist.zip" -d "$API_DIR/base-dist"
+              BASE_MANIFESTS="$(find "$API_DIR/base-dist" -type f -path '*/.vite/manifest.json' -print)"
+              MANIFEST_COUNT="$(printf '%s\n' "$BASE_MANIFESTS" | awk 'NF { count += 1 } END { print count + 0 }')"
+              if [ "$MANIFEST_COUNT" -eq 0 ]; then
+                echo "::notice::Target frontend-dist artifact has no Vite manifest; bundle baseline skipped"
+              elif [ "$MANIFEST_COUNT" -ne 1 ]; then
+                echo "ERROR: expected one Vite manifest in target artifact, found $MANIFEST_COUNT" >&2
+                exit 1
+              else
+                BASE_DIST="$(dirname "$(dirname "$BASE_MANIFESTS")")"
+                BASE_ENTRY="$(node ../../scripts/ci/list_route_assets.mjs /login "$BASE_DIST" --kind=entry-file)"
+                BASE_BYTES="$(gzip -n -c -9 "$BASE_DIST/$BASE_ENTRY" | wc -c | tr -d '[:space:]')"
+              fi
             fi
           fi
 
@@ -989,6 +1027,7 @@ jobs:
         with:
           name: frontend-dist
           path: src/frontend/dist/
+          include-hidden-files: true
           retention-days: 7
 
   # ========================================
