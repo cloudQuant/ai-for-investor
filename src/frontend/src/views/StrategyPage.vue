@@ -213,7 +213,7 @@
                   row-key="id"
                   highlight-current-row
                   :empty-text="t('strategy.aiResearchConfigEmpty')"
-                  @row-click="(profile: AIStrategyResearchConfigProfile) => applyAIResearchConfigProfile(profile)"
+                  @row-click="(profile: Parameters<typeof applyAIResearchConfigProfile>[0]) => applyAIResearchConfigProfile(profile)"
                 >
                   <el-table-column
                     :label="t('strategy.strategyName')"
@@ -2971,7 +2971,6 @@ import { Delete, EditPen, Link, MagicStick, Plus, RefreshRight, Search, Upload, 
 import { getCategoryType, getCategoryLabel, stripStrategyMeta } from '@/constants/strategy'
 import MonacoEditor from '@/components/common/MonacoEditor.vue'
 import TrustedResearchWorkbench from '@/components/aiResearch/TrustedResearchWorkbench.vue'
-import type { AIStrategyResearchConfigProfile } from '@/api/strategy'
 import StrategyEditDialog from './strategy-components/StrategyEditDialog.vue'
 import StrategyDetailDialog from './strategy-components/StrategyDetailDialog.vue'
 import StrategyTemplateCard from './strategy-components/StrategyTemplateCard.vue'

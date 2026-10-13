@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 import { useBacktestRuntime } from '@/composables/useBacktestRuntime'
-import type { BacktestResult } from '@/types'
+import type { BacktestResult, BacktestStatusResponse } from '@/types'
 
 // ─────────────────────────────────────────────────────────────
 // Module mocks
@@ -634,7 +634,7 @@ describe('useBacktestRuntime', () => {
     it('does not schedule another delay when polling is aborted during a status request', async () => {
       const { backtestApi } = await import('@/api/backtest')
       const { ElMessage } = await import('element-plus')
-      let resolveStatus!: (status: { task_id: string; status: string }) => void
+      let resolveStatus!: (status: BacktestStatusResponse) => void
       vi.mocked(backtestApi.getStatus).mockImplementation(() => new Promise((resolve) => {
         resolveStatus = resolve
       }))
