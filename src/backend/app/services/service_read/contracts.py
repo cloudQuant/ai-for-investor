@@ -21,6 +21,7 @@ from typing import Any
 
 __all__ = [
     "AccountReadView",
+    "OrderReadView",
     "ReadQuality",
     "ServiceReadContractError",
     "StrategyHealthView",
@@ -216,3 +217,89 @@ class StrategyHealthView:
             quality=ReadQuality.UNAVAILABLE,
             detail_code=_text(detail_code, "INVALID_DETAIL_CODE"),
         )
+
+
+@dataclass(frozen=True)
+class OrderReadView:
+    """One authorized managed-order record, or its explicit absence.
+
+    The service journal is the only authority for this state.  The application
+    may display it and link it to a user's intent, but it must not treat it as
+    a strategy ledger, a virtual position, or a permission to act.
+    """
+
+    intent_id: str
+    quality: ReadQuality
+    state: str | None = None
+    provider_order_id: str | None = None
+    filled_quantity: Decimal | None = None
+    average_price: Decimal | None = None
+    cumulative_commission: Decimal | None = None
+    is_terminal: bool | None = None
+    unknown_reason: str | None = None
+    review_required: bool | None = None
+    updated_at_ns: int | None = None
+    detail_code: str | None = None
+
+    def __post_init__(self) -> None:
+        _text(self.intent_id, "INVALID_INTENT_ID")
+        if not isinstance(self.quality, ReadQuality):
+            raise ServiceReadContractError("INVALID_QUALITY")
+        if self.quality in _ABSENT_QUALITIES:
+            if any(
+                item is not None
+                for item in (
+                    self.state,
+                    self.provider_order_id,
+                    self.filled_quantity,
+                    self.average_price,
+                    self.is_terminal,
+                )
+            ):
+                # An unavailable or never-collected record must not carry a
+                # state a caller could read as a real order fact.
+                raise ServiceReadContractError("ABSENT_VIEW_MUST_NOT_CARRY_VALUES")
+            return
+        _text(self.state, "INVALID_STATE", maximum=32)
+        if self.state != self.state.upper():
+            raise ServiceReadContractError("INVALID_STATE")
+        for value, code in (
+            (self.provider_order_id, "INVALID_PROVIDER_ORDER_ID"),
+            (self.unknown_reason, "INVALID_UNKNOWN_REASON"),
+        ):
+            if value is not None:
+                _text(value, code)
+        for value, code in (
+            (self.filled_quantity, "INVALID_FILLED_QUANTITY"),
+            (self.average_price, "INVALID_AVERAGE_PRICE"),
+            (self.cumulative_commission, "INVALID_COMMISSION"),
+        ):
+            _optional_decimal(value, code)
+        if self.is_terminal is not None and type(self.is_terminal) is not bool:
+            raise ServiceReadContractError("INVALID_TERMINAL_FLAG")
+        if self.updated_at_ns is not None and (
+            type(self.updated_at_ns) is not int or self.updated_at_ns < 0
+        ):
+            raise ServiceReadContractError("INVALID_UPDATED_AT")
+
+    @property
+    def is_unknown(self) -> bool:
+        """Return whether the provider outcome still needs reconciliation."""
+
+        return self.state == "UNKNOWN"
+
+    @classmethod
+    def unavailable(cls, intent_id: str, detail_code: str) -> OrderReadView:
+        """Build the explicit view used when the record cannot be read."""
+
+        return cls(
+            intent_id=intent_id,
+            quality=ReadQuality.UNAVAILABLE,
+            detail_code=_text(detail_code, "INVALID_DETAIL_CODE"),
+        )
+
+    @classmethod
+    def not_collected(cls, intent_id: str) -> OrderReadView:
+        """Build the explicit view used when the service holds no record."""
+
+        return cls(intent_id=intent_id, quality=ReadQuality.NOT_COLLECTED)

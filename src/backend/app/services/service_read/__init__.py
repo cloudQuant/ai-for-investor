@@ -4,6 +4,7 @@ from app.services.service_read.client import (
     AccountBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
+    OrderBinding,
     ServiceReadUnavailableError,
 )
 from app.services.service_read.consumers import (
@@ -15,6 +16,7 @@ from app.services.service_read.consumers import (
 )
 from app.services.service_read.contracts import (
     AccountReadView,
+    OrderReadView,
     ReadQuality,
     ServiceReadContractError,
     StrategyHealthView,
@@ -27,6 +29,8 @@ __all__ = [
     "AuthorizedServiceReadClient",
     "ConsumerRegistryError",
     "MonitorBinding",
+    "OrderBinding",
+    "OrderReadView",
     "ReadQuality",
     "ServiceConsumer",
     "ServiceReadContractError",

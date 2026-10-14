@@ -16,6 +16,7 @@ from app.services.service_read.client import (
     AccountBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
+    OrderBinding,
     ServiceReadUnavailableError,
 )
 from app.services.service_read.consumers import (
@@ -27,6 +28,7 @@ from app.services.service_read.consumers import (
 )
 from app.services.service_read.contracts import (
     AccountReadView,
+    OrderReadView,
     ReadQuality,
     ServiceReadContractError,
     StrategyHealthView,
@@ -470,3 +472,139 @@ def test_bindings_are_validated_at_construction():
         )
     with pytest.raises(ServiceReadContractError, match="INVALID_COVERAGE"):
         _binding(coverage=())
+
+
+def _order_record(**overrides):
+    record = {
+        "intent_id": "intent-1",
+        "scope_key": "scope:abc",
+        "payload_sha256": "0" * 64,
+        "state": "ACKED",
+        "provider_order_id": "provider-order-1",
+        "filled_quantity": "0",
+        "average_price": None,
+        "cumulative_commission": None,
+        "permit_reference": "permit-1",
+        "dispatch_attempts": 1,
+        "unknown_reason": None,
+        "review_required": False,
+        "created_at_ns": 1,
+        "updated_at_ns": 9,
+        "is_terminal": False,
+    }
+    record.update(overrides)
+    return record
+
+
+def _order_client(payload=None, error=None):
+    runtime = _FakeRuntime(payload=payload, error=error)
+    client = AuthorizedServiceReadClient(
+        runtime,
+        account_bindings={},
+        order_bindings={"orders-a": OrderBinding("broker.order_query", "orders-a")},
+    )
+    return runtime, client
+
+
+def test_order_read_projects_the_durable_record():
+    runtime, client = _order_client(
+        payload={
+            "found": True,
+            "record": _order_record(state="PARTIALLY_FILLED", filled_quantity="1.5"),
+        }
+    )
+
+    view = client.read_order("orders-a", "intent-1")
+
+    assert view.quality is ReadQuality.FRESH
+    assert view.state == "PARTIALLY_FILLED"
+    assert view.provider_order_id == "provider-order-1"
+    assert view.filled_quantity == Decimal("1.5")
+    assert view.is_unknown is False
+    assert view.updated_at_ns == 9
+    assert runtime.calls == [
+        ("broker.order_query", "orders.query", {"intent_id": "intent-1"}, "orders-a")
+    ]
+
+
+def test_order_read_reports_a_missing_record_without_a_state():
+    _runtime, client = _order_client(payload={"found": False, "record": None})
+
+    view = client.read_order("orders-a", "intent-1")
+
+    assert view.quality is ReadQuality.NOT_COLLECTED
+    assert view.state is None
+    assert view.provider_order_id is None
+
+
+def test_order_read_keeps_an_unknown_record_reconcilable():
+    _runtime, client = _order_client(
+        payload={
+            "found": True,
+            "record": _order_record(
+                state="UNKNOWN", provider_order_id=None, unknown_reason="provider_timeout"
+            ),
+        }
+    )
+
+    view = client.read_order("orders-a", "intent-1")
+
+    assert view.is_unknown is True
+    assert view.unknown_reason == "provider_timeout"
+    assert view.state == "UNKNOWN"
+
+
+def test_order_read_degrades_explicitly_and_refuses_unauthorized_scope():
+    _runtime, client = _order_client(error=_StubError("BUSINESS_OUTCOME_UNKNOWN"))
+    unavailable = client.read_order("orders-a", "intent-1")
+    assert unavailable.quality is ReadQuality.UNAVAILABLE
+    assert unavailable.state is None
+
+    _runtime2, client2 = _order_client(error=_StubError("SCOPE_DENIED"))
+    with pytest.raises(ServiceReadUnavailableError, match="SCOPE_DENIED"):
+        client2.read_order("orders-a", "intent-1")
+
+    with pytest.raises(ServiceReadUnavailableError, match="SCOPE_NOT_CONFIGURED"):
+        client.read_order("orders-z", "intent-1")
+
+
+def test_order_read_rejects_a_malformed_or_mismatched_reply():
+    for payload in (
+        {"found": True, "record": None},
+        {"found": True, "record": _order_record(intent_id="intent-9")},
+        {"found": True, "record": _order_record(state="")},
+        {"found": True, "record": {"intent_id": "intent-1"}},
+        {"record": None},
+    ):
+        _runtime, client = _order_client(payload=payload)
+        with pytest.raises(ServiceReadUnavailableError, match="INVALID_ORDER_REPLY"):
+            client.read_order("orders-a", "intent-1")
+
+
+def test_order_view_refuses_a_state_without_a_quality():
+    with pytest.raises(ServiceReadContractError, match="ABSENT_VIEW_MUST_NOT_CARRY_VALUES"):
+        OrderReadView(intent_id="intent-1", quality=ReadQuality.UNAVAILABLE, state="ACKED")
+    with pytest.raises(ServiceReadContractError, match="INVALID_STATE"):
+        OrderReadView(intent_id="intent-1", quality=ReadQuality.FRESH, state="acked")
+
+
+def test_order_bindings_are_validated_at_construction():
+    runtime = _FakeRuntime()
+    with pytest.raises(ServiceReadContractError, match="INVALID_ORDER_BINDING"):
+        AuthorizedServiceReadClient(
+            runtime, account_bindings={}, order_bindings={"orders-a": object()}
+        )
+    with pytest.raises(ServiceReadContractError, match="INVALID_SCOPE_REF"):
+        AuthorizedServiceReadClient(
+            runtime,
+            account_bindings={},
+            order_bindings={"": OrderBinding("broker.order_query", "x")},
+        )
+
+
+def test_order_consumer_is_registered_with_its_evidence():
+    consumer = consumer_for("order-status")
+
+    assert consumer.capability == "service.order_query"
+    assert consumer.status == "read-migrated"
+    assert consumer.evidence == "offline"

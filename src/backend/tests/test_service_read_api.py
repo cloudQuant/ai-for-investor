@@ -255,7 +255,7 @@ def test_consumer_registry_endpoint_lists_recorded_evidence():
     payload = response.json()
     ids = {item["consumer_id"] for item in payload["consumers"]}
     assert "manual-and-ai-orders" in ids
-    assert payload["migrated"] == ["strategy-health"]
+    assert payload["migrated"] == ["order-status", "strategy-health"]
 
 
 def test_health_view_without_a_bound_scope_is_refused():

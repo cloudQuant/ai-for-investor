@@ -21,6 +21,7 @@ from typing import Any
 
 from app.services.service_read.contracts import (
     AccountReadView,
+    OrderReadView,
     ReadQuality,
     ServiceReadContractError,
     StrategyHealthView,
@@ -30,6 +31,7 @@ __all__ = [
     "AccountBinding",
     "AuthorizedServiceReadClient",
     "MonitorBinding",
+    "OrderBinding",
     "ServiceReadUnavailableError",
 ]
 
@@ -105,6 +107,22 @@ class AccountBinding:
 
 
 @dataclass(frozen=True)
+class OrderBinding:
+    """One authorized order-read scope the deployment has granted to the app."""
+
+    mount: str
+    scope_ref: str
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+
+
+@dataclass(frozen=True)
 class MonitorBinding:
     """One authorized telemetry scope the deployment has granted to the app.
 
@@ -141,6 +159,7 @@ class AuthorizedServiceReadClient:
         *,
         account_bindings: Mapping[str, AccountBinding],
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
+        order_bindings: Mapping[str, OrderBinding] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if runtime is None:
@@ -162,9 +181,18 @@ class AuthorizedServiceReadClient:
                 raise ServiceReadContractError("INVALID_MONITOR_BINDING")
             monitor_map[scope_ref] = binding
 
+        order_map: dict[str, OrderBinding] = {}
+        for scope_ref, binding in dict(order_bindings or {}).items():
+            if type(scope_ref) is not str or not scope_ref:
+                raise ServiceReadContractError("INVALID_SCOPE_REF")
+            if not isinstance(binding, OrderBinding):
+                raise ServiceReadContractError("INVALID_ORDER_BINDING")
+            order_map[scope_ref] = binding
+
         self._runtime = runtime
         self._account_bindings = dict(account_bindings)
         self._monitor_bindings = monitor_map
+        self._order_bindings = order_map
         self._clock = clock
         self._account_clients: dict[str, Any] = {}
 
@@ -273,6 +301,35 @@ class AuthorizedServiceReadClient:
             code,
         )
 
+    # -- managed orders -----------------------------------------------------
+
+    def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
+        """Return the authorized durable record for one managed order.
+
+        This never dispatches or cancels: it asks the journal what it already
+        holds.  An unknown scope is a refusal; an unreadable record is an
+        explicit unavailable view rather than a fabricated state.
+        """
+
+        binding = self._order_bindings.get(scope_ref)
+        if binding is None:
+            raise ServiceReadUnavailableError("SCOPE_NOT_CONFIGURED")
+        if type(intent_id) is not str or not intent_id or intent_id != intent_id.strip():
+            raise ServiceReadContractError("INVALID_INTENT_ID")
+        try:
+            payload = self._runtime.call(
+                binding.mount,
+                "orders.query",
+                {"intent_id": intent_id},
+                scope_ref=binding.scope_ref,
+            )
+        except Exception as error:  # noqa: BLE001 - mapped to a finite view
+            code = _error_code(error)
+            if code in _REFUSAL_CODES:
+                raise ServiceReadUnavailableError(code) from None
+            return OrderReadView.unavailable(intent_id, code)
+        return _order_view(payload, intent_id)
+
     # -- strategy health ----------------------------------------------------
 
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
@@ -297,6 +354,40 @@ class AuthorizedServiceReadClient:
 
 
 # -- snapshot parsing -------------------------------------------------------
+
+
+def _order_view(payload: Any, intent_id: str) -> OrderReadView:
+    if not isinstance(payload, Mapping) or set(payload) != {"found", "record"}:
+        raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    if payload.get("found") is False:
+        return OrderReadView.not_collected(intent_id)
+    if payload.get("found") is not True:
+        raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    record = payload.get("record")
+    if not isinstance(record, Mapping):
+        raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    if record.get("intent_id") != intent_id:
+        raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    state = record.get("state")
+    if type(state) is not str or not state:
+        raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    return OrderReadView(
+        intent_id=intent_id,
+        quality=ReadQuality.FRESH,
+        state=state,
+        provider_order_id=_text_or_none(record.get("provider_order_id")),
+        filled_quantity=_decimal_or_none(record.get("filled_quantity")),
+        average_price=_decimal_or_none(record.get("average_price")),
+        cumulative_commission=_decimal_or_none(record.get("cumulative_commission")),
+        is_terminal=_bool_or_none(record.get("is_terminal")),
+        unknown_reason=_text_or_none(record.get("unknown_reason")),
+        review_required=_bool_or_none(record.get("review_required")),
+        updated_at_ns=_int_or_none(record.get("updated_at_ns")),
+    )
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    return value if type(value) is bool else None
 
 
 def _strategy_health_view(payload: Any, scope_ref: str, strategy_ref: str) -> StrategyHealthView:

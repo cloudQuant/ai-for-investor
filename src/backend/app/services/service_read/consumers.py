@@ -175,6 +175,19 @@ _CONSUMERS: Final[tuple[ServiceConsumer, ...]] = (
         ),
     ),
     ServiceConsumer(
+        consumer_id="order-status",
+        surface="workspace order status panels",
+        capability="service.order_query",
+        status="read-migrated",
+        evidence="offline",
+        authority_owner="bt_api_execution",
+        notes=(
+            "Managed order state now projects from the authorized journal "
+            "record; a missing record reports not_collected and an unreadable "
+            "one reports unavailable, never a guessed state."
+        ),
+    ),
+    ServiceConsumer(
         consumer_id="paper-trading",
         surface="paper runtime order endpoints",
         capability="service.order_entry",
