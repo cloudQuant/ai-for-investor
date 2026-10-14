@@ -25,7 +25,11 @@ from app.services.service_read.client import (
     ServiceReadUnavailableError,
 )
 from app.services.service_read.consumers import CONSUMERS, validate_consumers
-from app.services.service_read.contracts import AccountReadView, StrategyHealthView
+from app.services.service_read.contracts import (
+    AccountReadView,
+    OrderReadView,
+    StrategyHealthView,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +122,25 @@ def _account_payload(view: AccountReadView) -> dict[str, Any]:
     }
 
 
+def _order_payload(view: OrderReadView) -> dict[str, Any]:
+    return {
+        "intent_id": view.intent_id,
+        "quality": view.quality.value,
+        "state": view.state,
+        "provider_order_id": view.provider_order_id,
+        "filled_quantity": _decimal_text(view.filled_quantity),
+        "average_price": _decimal_text(view.average_price),
+        "cumulative_commission": _decimal_text(view.cumulative_commission),
+        "is_terminal": view.is_terminal,
+        "is_unknown": view.is_unknown,
+        "unknown_reason": view.unknown_reason,
+        "review_required": view.review_required,
+        "updated_at_ns": view.updated_at_ns,
+        "detail_code": view.detail_code,
+        "authority": "durable execution journal record, not a strategy ledger",
+    }
+
+
 def _health_payload(view: StrategyHealthView) -> dict[str, Any]:
     return {
         "strategy_ref": view.strategy_ref,
@@ -181,6 +204,30 @@ async def read_service_account(
         logger.warning("authorized account read failed: %s", type(error).__name__)
         raise _unavailable("SERVICE_READ_FAILED") from None
     return _account_payload(view)
+
+
+@router.get("/service-read/orders/{intent_id}")
+async def read_service_order(
+    intent_id: str,
+    scope_ref: str,
+    current_user: Any = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return the authorized durable record for one managed order.
+
+    The scope reference is explicit: an order is only readable through the
+    order-query scope this deployment granted, never through an inferred one.
+    """
+
+    del current_user
+    client = _require_client()
+    try:
+        view = client.read_order(scope_ref, intent_id)
+    except ServiceReadUnavailableError as error:
+        raise _unavailable(error.code) from None
+    except Exception as error:  # noqa: BLE001 - finite local diagnostics only
+        logger.warning("authorized order read failed: %s", type(error).__name__)
+        raise _unavailable("SERVICE_READ_FAILED") from None
+    return _order_payload(view)
 
 
 @router.get("/service-read/strategy-health/{scope_ref}")

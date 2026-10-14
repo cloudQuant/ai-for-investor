@@ -18,6 +18,7 @@ from app.services.service_read.client import (
     AccountBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
+    OrderBinding,
 )
 from app.services.service_read.contracts import ReadQuality, StrategyHealthView
 from tests.test_service_read_client import (
@@ -273,3 +274,83 @@ def test_neutral_views_keep_the_read_quality_enum():
 
     assert view.quality is ReadQuality.NOT_COLLECTED
     assert view.is_healthy is False
+
+
+def _order_client(payload=None, error=None):
+    from tests.test_service_read_client import _FakeRuntime, _order_record
+
+    runtime = _FakeRuntime(payload=payload, error=error)
+    client = AuthorizedServiceReadClient(
+        runtime,
+        account_bindings={},
+        order_bindings={"orders-a": OrderBinding("application.order_query", "orders-a")},
+    )
+    del _order_record
+    return client
+
+
+def test_order_endpoint_projects_the_authorized_record():
+    from tests.test_service_read_client import _order_record
+
+    configure_service_read(
+        _order_client(
+            payload={"found": True, "record": _order_record(state="ACKED")},
+        )
+    )
+    app = _app()
+
+    response = _get(app, "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["quality"] == "fresh"
+    assert payload["state"] == "ACKED"
+    assert payload["provider_order_id"] == "provider-order-1"
+    assert payload["is_terminal"] is False
+    assert "not a strategy ledger" in payload["authority"]
+
+
+def test_order_endpoint_reports_a_missing_record_without_a_state():
+    configure_service_read(_order_client(payload={"found": False, "record": None}))
+    app = _app()
+
+    response = _get(app, "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["quality"] == "not_collected"
+    assert payload["state"] is None
+
+
+def test_order_endpoint_refuses_an_ungranted_scope():
+    configure_service_read(_order_client(payload={"found": False, "record": None}))
+    app = _app()
+
+    response = _get(app, "/api/v1/service-read/orders/intent-1?scope_ref=orders-z")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "SCOPE_NOT_CONFIGURED"
+
+
+def test_order_endpoint_maps_a_refusal_and_a_degraded_read():
+    from tests.test_service_read_client import _StubError
+
+    configure_service_read(_order_client(error=_StubError("SCOPE_DENIED")))
+    forbidden = _get(_app(), "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
+    assert forbidden.status_code == 403
+    assert forbidden.json()["detail"]["code"] == "SCOPE_DENIED"
+
+    configure_service_read(_order_client(error=_StubError("BUSINESS_OUTCOME_UNKNOWN")))
+    degraded = _get(_app(), "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
+    assert degraded.status_code == 200
+    payload = degraded.json()
+    assert payload["quality"] == "unavailable"
+    assert payload["state"] is None
+    assert payload["detail_code"] == "BUSINESS_OUTCOME_UNKNOWN"
+
+
+def test_order_endpoint_requires_a_configured_read_path():
+    response = _get(_app(), "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "SERVICE_READ_NOT_CONFIGURED"
