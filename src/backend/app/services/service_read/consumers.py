@@ -197,12 +197,13 @@ _CONSUMERS: Final[tuple[ServiceConsumer, ...]] = (
         surface="workspace strategy status panels",
         capability="service.monitor_query",
         status="read-migrated",
-        evidence="offline",
+        evidence="local-process",
         authority_owner="bt_api_monitor",
         notes=(
-            "Strategy heartbeat/health now projects from the authorized "
-            "telemetry snapshot; a missing heartbeat reports not_collected "
-            "and never infers health from order activity."
+            "Strategy heartbeat/health projects from the authorized telemetry "
+            "snapshot and was verified against a real local service process "
+            "over CURVE: not_collected -> fresh -> stale -> unavailable. A "
+            "missing heartbeat never infers health from order activity."
         ),
     ),
     ServiceConsumer(

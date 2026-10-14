@@ -8,6 +8,7 @@ refusal differently from a degraded read.
 
 import sys
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -152,13 +153,43 @@ def _snapshot(metrics=None, status="fresh", strategy_ref="strategy-a"):
     }
 
 
+_ISOLATION_SCRIPT = """
+import importlib.abc, sys
+sys.path.insert(0, {backend_root!r})
+BLOCKED = {blocked!r}
+class Blocker(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if any(fullname == n or fullname.startswith(n + ".") for n in BLOCKED):
+            raise AssertionError("blocked import: " + fullname)
+        return None
+sys.meta_path.insert(0, Blocker())
+import app.services.service_read  # noqa: F401
+import app.api.service_read  # noqa: F401
+loaded = sorted(n for n in sys.modules if any(n == b or n.startswith(b + ".") for b in BLOCKED))
+assert not loaded, loaded
+print("isolated")
+"""
+
+
 def test_importing_the_application_read_path_loads_no_domain_package():
-    loaded = tuple(
-        name
-        for name in sys.modules
-        if any(name == package or name.startswith(f"{package}.") for package in _DOMAIN_PACKAGES)
+    """The check runs in a fresh interpreter so test order cannot mask it."""
+
+    import subprocess
+
+    backend_root = str(Path(__file__).resolve().parents[1])
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _ISOLATION_SCRIPT.format(backend_root=backend_root, blocked=list(_DOMAIN_PACKAGES)),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
-    assert loaded == ()
+
+    assert result.returncode == 0, result.stderr
+    assert "isolated" in result.stdout
 
 
 def test_contracts_never_project_an_absent_fact_as_zero():
