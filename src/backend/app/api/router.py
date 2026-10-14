@@ -153,3 +153,12 @@ _register_optional_router(
     prefix="/quote",
     tags=["Quote"],
 )
+
+# Authorized read-only access to the shared service packages.  Registered as
+# optional so a deployment without the SDK still starts and reports the
+# surface as unavailable instead of failing the whole application.
+_register_optional_router(
+    "service_read",
+    "app.api.service_read",
+    tags=["Service Read"],
+)
