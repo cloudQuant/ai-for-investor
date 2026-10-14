@@ -357,7 +357,22 @@ class AuthorizedServiceReadClient:
 
 
 def _order_view(payload: Any, intent_id: str) -> OrderReadView:
-    if not isinstance(payload, Mapping) or set(payload) != {"found", "record"}:
+    if not isinstance(payload, Mapping):
+        raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    if set(payload) == {"ok", "code", "result"}:
+        # The registry returns a handler's own reply as the call result, so a
+        # business refusal arrives here as a nested envelope.
+        code = payload.get("code")
+        if payload.get("ok") is not True:
+            if isinstance(code, str) and code in _REFUSAL_CODES:
+                raise ServiceReadUnavailableError(code) from None
+            return OrderReadView.unavailable(
+                intent_id, code if isinstance(code, str) and code else "SERVICE_READ_FAILED"
+            )
+        payload = payload.get("result")
+        if not isinstance(payload, Mapping):
+            raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
+    if set(payload) != {"found", "record"}:
         raise ServiceReadUnavailableError("INVALID_ORDER_REPLY")
     if payload.get("found") is False:
         return OrderReadView.not_collected(intent_id)

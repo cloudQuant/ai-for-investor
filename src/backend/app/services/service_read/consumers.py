@@ -179,12 +179,14 @@ _CONSUMERS: Final[tuple[ServiceConsumer, ...]] = (
         surface="workspace order status panels",
         capability="service.order_query",
         status="read-migrated",
-        evidence="offline",
+        evidence="local-process",
         authority_owner="bt_api_execution",
         notes=(
-            "Managed order state now projects from the authorized journal "
-            "record; a missing record reports not_collected and an unreadable "
-            "one reports unavailable, never a guessed state."
+            "Managed order state projects from the authorized journal record "
+            "and was verified against a real local execution service process: "
+            "not_collected -> ACKED -> UNKNOWN, then readable again after an "
+            "explicit recovery. A missing record reports not_collected and an "
+            "unreadable one reports unavailable, never a guessed state."
         ),
     ),
     ServiceConsumer(

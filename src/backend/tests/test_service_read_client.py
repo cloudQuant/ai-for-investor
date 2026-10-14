@@ -607,4 +607,33 @@ def test_order_consumer_is_registered_with_its_evidence():
 
     assert consumer.capability == "service.order_query"
     assert consumer.status == "read-migrated"
-    assert consumer.evidence == "offline"
+    assert consumer.evidence == "local-process"
+
+
+def test_order_read_accepts_the_registry_wrapped_reply_envelope():
+    """The real wire shape nests the handler reply inside the call result."""
+
+    _runtime, client = _order_client(
+        payload={
+            "ok": True,
+            "code": "OK",
+            "result": {"found": True, "record": _order_record(state="ACKED")},
+        }
+    )
+
+    assert client.read_order("orders-a", "intent-1").state == "ACKED"
+
+
+def test_order_read_maps_a_wrapped_business_refusal_by_certainty():
+    _runtime, refused = _order_client(
+        payload={"ok": False, "code": "SCOPE_DENIED", "result": {"found": False, "record": None}}
+    )
+    with pytest.raises(ServiceReadUnavailableError, match="SCOPE_DENIED"):
+        refused.read_order("orders-a", "intent-1")
+
+    _runtime, degraded = _order_client(
+        payload={"ok": False, "code": "HANDLER_FAILED", "result": {"found": False, "record": None}}
+    )
+    view = degraded.read_order("orders-a", "intent-1")
+    assert view.quality is ReadQuality.UNAVAILABLE
+    assert view.state is None
