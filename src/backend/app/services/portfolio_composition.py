@@ -95,6 +95,32 @@ class PortfolioCompositionService:
             )
         return row
 
+    async def list_versions(
+        self, owner_subject: str, page: int, page_size: int
+    ) -> tuple[list[PortfolioCompositionVersion], int]:
+        """Return only this owner's version metadata in stable paginated order."""
+
+        owner_filter = PortfolioCompositionVersion.owner_subject == owner_subject
+        result = await self.db.execute(
+            select(PortfolioCompositionVersion, func.count().over())
+            .where(owner_filter)
+            .order_by(
+                PortfolioCompositionVersion.portfolio_ref.asc(),
+                PortfolioCompositionVersion.membership_version.desc(),
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        rows = result.all()
+        if rows:
+            return [row[0] for row in rows], int(rows[0][1])
+
+        # An out-of-range page has no row carrying the window count.
+        total = await self.db.scalar(
+            select(func.count()).select_from(PortfolioCompositionVersion).where(owner_filter)
+        )
+        return [], int(total or 0)
+
     async def project(
         self, current_user: TokenPayload, row: PortfolioCompositionVersion
     ) -> dict[str, Any]:

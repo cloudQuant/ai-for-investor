@@ -22,6 +22,22 @@ describe('portfolioApi', () => {
     expect(request.get).toHaveBeenCalledWith('/portfolio/overview/summary')
   })
 
+  it('lists composition selector versions with bounded pagination parameters', async () => {
+    vi.mocked(request.get).mockResolvedValue({ items: [], total: 0 })
+    await portfolioApi.listCompositionVersions(2, 25)
+    expect(request.get).toHaveBeenCalledWith('/portfolio/compositions', {
+      params: { page: 2, page_size: 25 },
+    })
+  })
+
+  it('requests the exact owner-listed composition through the overview projection route', async () => {
+    vi.mocked(request.get).mockResolvedValue({ portfolio_ref: 'primary', membership_version: 3 })
+    await portfolioApi.getCompositionProjection('primary', 3)
+    expect(request.get).toHaveBeenCalledWith('/portfolio/overview', {
+      params: { portfolio_ref: 'primary', membership_version: 3 },
+    })
+  })
+
   it('getPositions', async () => {
     vi.mocked(request.get).mockResolvedValue({ total: 0, positions: [] })
     await portfolioApi.getPositions()

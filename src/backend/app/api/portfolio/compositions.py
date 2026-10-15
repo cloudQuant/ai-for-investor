@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -15,6 +15,37 @@ from app.schemas.portfolio_composition import PortfolioCompositionCreate
 from app.services.portfolio_composition import PortfolioCompositionService
 
 router = APIRouter(prefix="/portfolio/compositions", tags=["Portfolio Compositions"])
+
+
+@router.get("")
+async def list_portfolio_composition_versions(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    current_user: TokenPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """List this authenticated owner's version selector metadata only."""
+
+    rows, total = await PortfolioCompositionService(db).list_versions(
+        current_user.sub, page, page_size
+    )
+    items = [
+        {
+            "portfolio_ref": row.portfolio_ref,
+            "membership_version": row.membership_version,
+            "source_type": row.source_type,
+            "base_currency": row.base_currency,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "has_more": page * page_size < total,
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

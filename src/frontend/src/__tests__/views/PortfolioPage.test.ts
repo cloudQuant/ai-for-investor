@@ -99,6 +99,30 @@ vi.mock('@/api/portfolio', () => ({
         { strategy_id: 's1', strategy_name: 'SMA', status: 'running', assets: 60000, pnl: 10000, pnl_pct: 20 },
       ],
     }),
+    listCompositionVersions: vi.fn().mockResolvedValue({
+      items: [], total: 0, page: 1, page_size: 50, has_more: false,
+    }),
+    getCompositionProjection: vi.fn().mockResolvedValue({
+      portfolio_ref: 'empty',
+      membership_version: 1,
+      source_type: 'live',
+      source_status: 'no_account_members',
+      base_currency: 'USD',
+      projection_kind: 'display_only',
+      creditable: false,
+      overlap_policy: 'non_additive_display_only',
+      account_total: { status: 'not_collected', currency: 'USD', value: null },
+      accounts: [],
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED' },
+    }),
     getPositions: vi.fn().mockResolvedValue({
       total: 0,
       positions: [],
@@ -277,6 +301,245 @@ describe('PortfolioPage', () => {
         ...(renderTableRows ? { 'el-table': rowAwareElTable } : {}),
       },
     },
+  })
+
+  it('selects owner-listed membership versions and renders source-aware values without legacy fallback', async () => {
+    const liveProjection = {
+      portfolio_ref: 'primary',
+      membership_version: 2,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USD', value: '1500' },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USD', quality: 'fresh', cash: '200', value: '1000',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+        {
+          member_ref: 'account-a-alias', currency: 'USD', quality: 'fresh', cash: '200',
+          value: '1000', included_in_total: false, duplicate_of_ref: 'account-a', detail_code: null,
+        },
+        {
+          member_ref: 'account-b', currency: 'USD', quality: 'fresh', cash: '250', value: '500',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+      ],
+      strategies: [{
+        strategy_ref: 'strategy-x',
+        attribution_status: 'execution_attribution_not_collected',
+        attributed_value: null,
+      }],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 1,
+        attributed_value: null,
+        unattributed_account_value: '1500',
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: true,
+        strategy_attribution_complete: false,
+        code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED',
+      },
+    }
+    const researchProjection = {
+      ...liveProjection,
+      portfolio_ref: 'research-set',
+      membership_version: 1,
+      source_type: 'research' as const,
+      source_status: 'adapter_not_integrated',
+      account_total: { status: 'not_collected', currency: 'USD', value: null },
+      strategies: [],
+      strategy_attribution: {
+        ...liveProjection.strategy_attribution,
+        strategy_count: 0,
+        unattributed_account_value: null,
+      },
+      coverage: { complete: false, code: 'RESEARCH_FACT_ADAPTER_NOT_INTEGRATED' },
+    }
+    const conflictingProjection = {
+      ...liveProjection,
+      portfolio_ref: 'conflict-live',
+      source_status: 'projected',
+      account_total: { status: 'incomplete', currency: 'USD', value: null },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USD', quality: 'fresh', cash: '200', value: '1000',
+          included_in_total: false, duplicate_of_ref: null,
+          detail_code: 'DUPLICATE_ACCOUNT_FACT_CONFLICT',
+        },
+        {
+          member_ref: 'account-a-alias', currency: 'USD', quality: 'fresh', cash: '300',
+          value: '1100', included_in_total: false, duplicate_of_ref: 'account-a',
+          detail_code: 'DUPLICATE_ACCOUNT_FACT_CONFLICT',
+        },
+      ],
+      strategies: [],
+      strategy_attribution: {
+        ...liveProjection.strategy_attribution,
+        strategy_count: 0,
+        unattributed_account_value: null,
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: false,
+        strategy_attribution_complete: true,
+        code: 'ACCOUNT_FACT_COVERAGE_INCOMPLETE',
+      },
+    }
+    const firstPageItems = [
+      {
+        portfolio_ref: 'primary', membership_version: 2, source_type: 'live' as const,
+        base_currency: 'USD', created_at: '2026-10-15T00:00:00Z',
+      },
+      {
+        portfolio_ref: 'research-set', membership_version: 1, source_type: 'research' as const,
+        base_currency: 'USD', created_at: '2026-10-14T00:00:00Z',
+      },
+      ...Array.from({ length: 48 }, (_, index) => ({
+        portfolio_ref: `paper-set-${index + 1}`,
+        membership_version: 1,
+        source_type: 'paper' as const,
+        base_currency: 'USD',
+        created_at: '2026-10-13T00:00:00Z',
+      })),
+    ]
+    vi.mocked(portfolioApi.listCompositionVersions)
+      .mockResolvedValueOnce({
+        items: firstPageItems,
+        total: 52,
+        page: 1,
+        page_size: 50,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            portfolio_ref: 'primary', membership_version: 2, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-15T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'conflict-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-13T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'error-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-12T00:00:00Z',
+          },
+        ],
+        total: 53,
+        page: 2,
+        page_size: 50,
+        has_more: false,
+      })
+      .mockResolvedValueOnce({
+        items: firstPageItems,
+        total: 53,
+        page: 1,
+        page_size: 50,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            portfolio_ref: 'conflict-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-13T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'error-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-12T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'final-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-11T00:00:00Z',
+          },
+        ],
+        total: 53,
+        page: 2,
+        page_size: 50,
+        has_more: false,
+      })
+    vi.mocked(portfolioApi.getCompositionProjection)
+      .mockResolvedValueOnce(liveProjection)
+      .mockResolvedValueOnce(liveProjection)
+      .mockResolvedValueOnce(researchProjection)
+      .mockResolvedValueOnce(conflictingProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(true)
+    const legacyOverviewCalls = vi.mocked(portfolioApi.getOverview).mock.calls.length
+
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+    expect(portfolioApi.listCompositionVersions).toHaveBeenCalledWith(1, 50)
+    expect(portfolioApi.getCompositionProjection).toHaveBeenNthCalledWith(1, 'primary', 2)
+    expect(wrapper.find('[data-test="portfolio-composition-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('1500 USD')
+    expect(wrapper.get('[data-test="portfolio-composition-attributed-value"]').text()).toBe('不可用')
+    expect(wrapper.get('[data-test="portfolio-composition-residual"]').text()).toBe('1500 USD')
+    expect(wrapper.get('[data-test="portfolio-composition-attribution-status"]').text())
+      .toContain('尚未采集执行归属')
+    expect(wrapper.text()).toContain('未计入账户总额')
+    expect(wrapper.text()).toContain('不会推算策略份额')
+    expect(wrapper.text()).toContain('不能重复授信')
+
+    await wrapper.get('[data-test="portfolio-composition-load-more"]').trigger('click')
+    await flushPromises()
+    expect(portfolioApi.listCompositionVersions).toHaveBeenNthCalledWith(2, 2, 50)
+    expect(portfolioApi.listCompositionVersions).toHaveBeenNthCalledWith(3, 1, 50)
+    expect(wrapper.get('[data-test="portfolio-composition-list-changed"]')
+      .text()).toContain('列表发生变化')
+    const selector = wrapper.get<HTMLSelectElement>(
+      '[data-test="portfolio-composition-version-select"]',
+    )
+    await wrapper.get('[data-test="portfolio-composition-load-more"]').trigger('click')
+    await flushPromises()
+    expect(portfolioApi.listCompositionVersions).toHaveBeenNthCalledWith(4, 2, 50)
+    expect(selector.findAll('option').filter(option => (
+      option.attributes('value')?.startsWith('[')
+    ))).toHaveLength(53)
+    expect(selector.findAll('option').filter(option => (
+      option.attributes('value') === JSON.stringify(['primary', 2])
+    ))).toHaveLength(1)
+    await selector.setValue(JSON.stringify(['research-set', 1]))
+    await flushPromises()
+    expect(portfolioApi.getCompositionProjection).toHaveBeenNthCalledWith(
+      3,
+      'research-set',
+      1,
+    )
+    expect(wrapper.get('[data-test="portfolio-composition-adapter-unavailable"]').text())
+      .toContain('尚未接入事实适配器')
+    expect(wrapper.get('[data-test="portfolio-composition-source-status"]').text())
+      .toContain('尚未接入事实适配器')
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.find('[data-test="portfolio-overview"]').exists()).toBe(false)
+    expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
+
+    await selector.setValue(JSON.stringify(['conflict-live', 1]))
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.text()).toContain('DUPLICATE_ACCOUNT_FACT_CONFLICT')
+    expect(wrapper.text()).toContain('与 account-a 是同一账户')
+    expect(wrapper.findAll('[data-test="portfolio-composition-account-detail-code"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-test="portfolio-composition-account-detail-code"]')
+      .every(node => node.text().includes('DUPLICATE_ACCOUNT_FACT_CONFLICT'))).toBe(true)
+
+    vi.mocked(portfolioApi.getCompositionProjection)
+      .mockRejectedValueOnce(new Error('selected projection unavailable'))
+    await selector.setValue(JSON.stringify(['error-live', 1]))
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-error"]').text())
+      .toContain('selected projection unavailable')
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(false)
+    expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
   })
 
   it('mounts without error', () => {

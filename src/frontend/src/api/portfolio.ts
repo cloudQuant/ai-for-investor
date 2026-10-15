@@ -33,6 +33,68 @@ export interface PortfolioOverview {
   strategies: StrategySummary[]
 }
 
+export type PortfolioCompositionSource = 'research' | 'imported' | 'paper' | 'live'
+
+export interface PortfolioCompositionVersionOption {
+  portfolio_ref: string
+  membership_version: number
+  source_type: PortfolioCompositionSource
+  base_currency: string
+  created_at: string
+}
+
+export interface PortfolioCompositionVersionPage {
+  items: PortfolioCompositionVersionOption[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
+export interface PortfolioCompositionProjection {
+  portfolio_ref: string
+  membership_version: number
+  source_type: PortfolioCompositionSource
+  source_status: string
+  base_currency: string
+  projection_kind: 'display_only'
+  creditable: false
+  overlap_policy: 'non_additive_display_only'
+  account_total: {
+    status: string
+    currency: string
+    value: string | null
+  }
+  accounts: Array<{
+    member_ref: string
+    currency: string
+    quality: string
+    cash: string | null
+    value: string | null
+    included_in_total: boolean
+    duplicate_of_ref: string | null
+    detail_code: string | null
+  }>
+  strategies: Array<{
+    strategy_ref: string
+    attribution_status: string
+    attributed_value: string | null
+  }>
+  strategy_attribution: {
+    status: string
+    strategy_count: number
+    attributed_value: string | null
+    unattributed_account_value: string | null
+    residual_basis: string
+  }
+  coverage: {
+    complete: boolean
+    account_facts_complete?: boolean
+    strategy_attribution_complete?: boolean
+    code: string | null
+  }
+}
+
 export interface PositionItem {
   strategy_id: string
   strategy_name: string
@@ -127,6 +189,21 @@ export const portfolioApi = {
   getOverview(summaryOnly = false): Promise<PortfolioOverview> {
     if (!summaryOnly) return request.get('/portfolio/overview')
     return request.get('/portfolio/overview/summary')
+  },
+
+  listCompositionVersions(page = 1, pageSize = 50): Promise<PortfolioCompositionVersionPage> {
+    return request.get('/portfolio/compositions', {
+      params: { page, page_size: pageSize },
+    })
+  },
+
+  getCompositionProjection(
+    portfolioRef: string,
+    membershipVersion: number,
+  ): Promise<PortfolioCompositionProjection> {
+    return request.get('/portfolio/overview', {
+      params: { portfolio_ref: portfolioRef, membership_version: membershipVersion },
+    })
   },
 
   getPositions(): Promise<{ total: number; positions: PositionItem[]; summary?: PositionSummary; warnings?: string[] }> {

@@ -289,9 +289,78 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                     assert body["account_total"]["value"] is None
                     assert body["coverage"]["complete"] is False
 
+                first_page = await client.get(
+                    "/api/v1/portfolio/compositions", params={"page": 1, "page_size": 2}
+                )
+                assert first_page.status_code == 200, first_page.text
+                first_page_body = first_page.json()
+                assert first_page_body["total"] == 6
+                assert first_page_body["page"] == 1
+                assert first_page_body["page_size"] == 2
+                assert first_page_body["has_more"] is True
+                assert len(first_page_body["items"]) == 2
+                assert all("members" not in item for item in first_page_body["items"])
+                assert all("owner_subject" not in item for item in first_page_body["items"])
+
+                second_page = await client.get(
+                    "/api/v1/portfolio/compositions", params={"page": 2, "page_size": 2}
+                )
+                third_page = await client.get(
+                    "/api/v1/portfolio/compositions", params={"page": 3, "page_size": 2}
+                )
+                assert second_page.status_code == third_page.status_code == 200
+                owner_a_items = [
+                    *first_page_body["items"],
+                    *second_page.json()["items"],
+                    *third_page.json()["items"],
+                ]
+                assert len(owner_a_items) == 6
+                assert {item["portfolio_ref"] for item in owner_a_items} == {
+                    "primary",
+                    "overlap-view",
+                    "research-view",
+                    "imported-view",
+                    "paper-view",
+                }
+                assert [
+                    item["membership_version"]
+                    for item in owner_a_items
+                    if item["portfolio_ref"] == "primary"
+                ] == [2, 1]
+                assert third_page.json()["has_more"] is False
+                assert "account-a" not in first_page.text + second_page.text + third_page.text
+
+                invalid_page_size = await client.get(
+                    "/api/v1/portfolio/compositions", params={"page_size": 101}
+                )
+                assert invalid_page_size.status_code == 422
+
                 app.dependency_overrides[get_current_user] = lambda: TokenPayload(
                     sub="owner-b", username="other"
                 )
+                empty_owner_b = await client.get("/api/v1/portfolio/compositions")
+                assert empty_owner_b.status_code == 200
+                assert empty_owner_b.json()["items"] == []
+                assert empty_owner_b.json()["total"] == 0
+
+                private_create = await client.post(
+                    "/api/v1/portfolio/compositions",
+                    json={
+                        "portfolio_ref": "private-b",
+                        "source_type": "research",
+                        "base_currency": "USD",
+                        "members": [{"kind": "research_artifact", "ref": "owner-b-artifact"}],
+                    },
+                )
+                assert private_create.status_code == 201, private_create.text
+                owner_b_list = await client.get("/api/v1/portfolio/compositions")
+                assert owner_b_list.status_code == 200
+                assert owner_b_list.json()["total"] == 1
+                assert [item["portfolio_ref"] for item in owner_b_list.json()["items"]] == [
+                    "private-b"
+                ]
+                assert "primary" not in owner_b_list.text
+                assert "owner-b-artifact" not in owner_b_list.text
                 private = await client.get(
                     "/api/v1/portfolio/compositions/primary/versions/1/projection"
                 )

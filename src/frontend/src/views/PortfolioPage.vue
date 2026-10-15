@@ -17,7 +17,243 @@
     </div>
 
     <template v-else>
+      <nav
+        class="portfolio-view-switch"
+        role="group"
+        :aria-label="t('portfolio.viewModeLabel')"
+      >
+        <button
+          type="button"
+          data-test="portfolio-mode-legacy"
+          :aria-pressed="viewMode === 'legacy'"
+          @click="setViewMode('legacy')"
+        >
+          {{ t('portfolio.viewLegacy') }}
+        </button>
+        <button
+          type="button"
+          data-test="portfolio-mode-composition"
+          :aria-pressed="viewMode === 'composition'"
+          @click="setViewMode('composition')"
+        >
+          {{ t('portfolio.viewComposition') }}
+        </button>
+      </nav>
+
       <section
+        v-if="viewMode === 'composition'"
+        class="portfolio-composition"
+        data-test="portfolio-composition-view"
+        :aria-label="t('portfolio.compositionTitle')"
+      >
+        <header class="portfolio-composition__header">
+          <div>
+            <span class="portfolio-kicker">{{ t('portfolio.compositionKicker') }}</span>
+            <h1>{{ t('portfolio.compositionTitle') }}</h1>
+            <p>{{ t('portfolio.compositionDescription') }}</p>
+          </div>
+          <button
+            type="button"
+            class="portfolio-composition__refresh"
+            data-test="portfolio-composition-refresh"
+            :disabled="compositionListLoading || compositionProjectionLoading"
+            @click="loadData"
+          >
+            {{ t('portfolio.btnRefresh') }}
+          </button>
+        </header>
+
+        <div class="portfolio-composition__selector">
+          <label for="portfolio-composition-version">
+            {{ t('portfolio.compositionSelectVersion') }}
+          </label>
+          <select
+            id="portfolio-composition-version"
+            v-model="selectedCompositionKey"
+            data-test="portfolio-composition-version-select"
+            :disabled="compositionListLoading || compositionVersions.length === 0"
+            @change="loadCompositionProjection"
+          >
+            <option
+              value=""
+              disabled
+            >
+              {{ t('portfolio.compositionSelectPlaceholder') }}
+            </option>
+            <option
+              v-for="version in compositionVersions"
+              :key="compositionVersionKey(version)"
+              :value="compositionVersionKey(version)"
+            >
+              {{ version.portfolio_ref }} · v{{ version.membership_version }} ·
+              {{ compositionSourceLabel(version.source_type) }}
+            </option>
+          </select>
+          <button
+            v-if="compositionHasMore"
+            type="button"
+            data-test="portfolio-composition-load-more"
+            :disabled="compositionListLoading"
+            @click="loadMoreCompositionVersions"
+          >
+            {{ compositionListLoading ? t('portfolio.querying') : t('portfolio.compositionLoadMore') }}
+          </button>
+        </div>
+
+        <p
+          v-if="compositionError"
+          class="portfolio-composition__error"
+          role="alert"
+          data-test="portfolio-composition-error"
+        >
+          {{ compositionError }}
+        </p>
+        <p
+          v-else-if="compositionListLoading"
+          class="portfolio-composition__status"
+          role="status"
+        >
+          {{ t('portfolio.querying') }}
+        </p>
+        <p
+          v-else-if="compositionVersions.length === 0"
+          class="portfolio-composition__status"
+          data-test="portfolio-composition-empty"
+        >
+          {{ t('portfolio.compositionEmpty') }}
+        </p>
+        <p
+          v-else-if="compositionProjectionLoading"
+          class="portfolio-composition__status"
+          role="status"
+        >
+          {{ t('portfolio.querying') }}
+        </p>
+        <p
+          v-else-if="compositionListChanged"
+          class="portfolio-composition__status"
+          role="status"
+          data-test="portfolio-composition-list-changed"
+        >
+          {{ t('portfolio.compositionListChanged') }}
+        </p>
+
+        <template v-if="compositionProjection">
+          <p
+            v-if="compositionProjection.source_status === 'adapter_not_integrated'"
+            class="portfolio-composition__unavailable"
+            role="status"
+            data-test="portfolio-composition-adapter-unavailable"
+          >
+            {{ t('portfolio.compositionAdapterUnavailable') }}
+          </p>
+          <dl class="portfolio-composition__facts">
+            <div>
+              <dt>{{ t('portfolio.compositionSource') }}</dt>
+              <dd data-test="portfolio-composition-source">
+                {{ compositionSourceLabel(compositionProjection.source_type) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t('portfolio.compositionSourceStatus') }}</dt>
+              <dd data-test="portfolio-composition-source-status">
+                {{ compositionStatusLabel(compositionProjection.source_status) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t('portfolio.compositionAccountTotal') }}</dt>
+              <dd data-test="portfolio-composition-account-total">
+                {{ compositionAmount(compositionProjection.account_total.value, compositionProjection.account_total.currency) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t('portfolio.compositionCoverage') }}</dt>
+              <dd data-test="portfolio-composition-coverage">
+                {{ compositionProjection.coverage.complete
+                  ? t('portfolio.compositionCoverageComplete')
+                  : t('portfolio.compositionCoverageIncomplete') }}
+                <code v-if="compositionProjection.coverage.code">
+                  {{ t('portfolio.compositionDiagnosticCode') }}:
+                  {{ compositionProjection.coverage.code }}
+                </code>
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t('portfolio.compositionCreditability') }}</dt>
+              <dd data-test="portfolio-composition-creditability">
+                {{ t('portfolio.compositionDisplayOnly') }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ t('portfolio.compositionOverlap') }}</dt>
+              <dd data-test="portfolio-composition-overlap">
+                {{ t('portfolio.compositionNonAdditive') }}
+              </dd>
+            </div>
+          </dl>
+
+          <section class="portfolio-composition__section">
+            <h2>{{ t('portfolio.compositionAttribution') }}</h2>
+            <p data-test="portfolio-composition-attribution-status">
+              {{ compositionAttributionStatusLabel(compositionProjection.strategy_attribution.status) }}
+            </p>
+            <p>
+              {{ t('portfolio.compositionAttributedValue') }}:
+              <strong data-test="portfolio-composition-attributed-value">
+                {{ compositionAmount(compositionProjection.strategy_attribution.attributed_value, compositionProjection.base_currency) }}
+              </strong>
+            </p>
+            <p>
+              {{ t('portfolio.compositionResidual') }}:
+              <strong data-test="portfolio-composition-residual">
+                {{ compositionAmount(compositionProjection.strategy_attribution.unattributed_account_value, compositionProjection.base_currency) }}
+              </strong>
+            </p>
+            <p>{{ t('portfolio.compositionResidualBasis') }}</p>
+            <ul v-if="compositionProjection.strategies.length > 0">
+              <li
+                v-for="strategy in compositionProjection.strategies"
+                :key="strategy.strategy_ref"
+              >
+                {{ strategy.strategy_ref }} —
+                {{ compositionAmount(strategy.attributed_value, compositionProjection.base_currency) }}
+                ({{ compositionAttributionStatusLabel(strategy.attribution_status) }})
+              </li>
+            </ul>
+          </section>
+
+          <section class="portfolio-composition__section">
+            <h2>{{ t('portfolio.compositionAccountMembers') }}</h2>
+            <p v-if="compositionProjection.accounts.length === 0">
+              {{ t('portfolio.compositionNoAccountMembers') }}
+            </p>
+            <ul v-else>
+              <li
+                v-for="account in compositionProjection.accounts"
+                :key="account.member_ref"
+              >
+                {{ account.member_ref }} — {{ compositionAmount(account.value, account.currency) }}
+                <span v-if="account.duplicate_of_ref">
+                  ({{ t('portfolio.compositionDuplicateOf', { ref: account.duplicate_of_ref }) }})
+                </span>
+                <span v-if="!account.included_in_total">
+                  ({{ t('portfolio.compositionNotIncluded') }})
+                </span>
+                <span
+                  v-if="account.detail_code"
+                  data-test="portfolio-composition-account-detail-code"
+                >
+                  {{ t('portfolio.compositionDiagnosticCode') }}:
+                  <code>{{ account.detail_code }}</code>
+                </span>
+              </li>
+            </ul>
+          </section>
+        </template>
+      </section>
+
+      <section
+        v-if="viewMode === 'legacy'"
         class="portfolio-hero"
         data-test="portfolio-hero"
       >
@@ -66,6 +302,7 @@
       </section>
 
       <section
+        v-if="viewMode === 'legacy'"
         class="portfolio-overview"
         data-test="portfolio-overview"
         :aria-label="t('portfolio.overviewTitle')"
@@ -87,7 +324,10 @@
         </article>
       </section>
 
-      <section class="portfolio-layout">
+      <section
+        v-if="viewMode === 'legacy'"
+        class="portfolio-layout"
+      >
         <section
           class="portfolio-workbench"
           data-test="portfolio-workbench"
@@ -610,6 +850,9 @@ import type {
   TradeItem,
   PortfolioEquity,
   AllocationItem,
+  PortfolioCompositionProjection,
+  PortfolioCompositionSource,
+  PortfolioCompositionVersionOption,
 } from '@/api/portfolio'
 import type {
   TradingPositionManagerItem,
@@ -621,6 +864,23 @@ const { t } = useI18n()
 
 const loading = ref(true)
 const activeTab = ref('workspaces')
+const viewMode = ref<'legacy' | 'composition'>('legacy')
+const compositionVersions = ref<PortfolioCompositionVersionOption[]>([])
+const selectedCompositionKey = ref('')
+const compositionProjection = ref<PortfolioCompositionProjection | null>(null)
+const compositionListLoading = ref(false)
+const compositionProjectionLoading = ref(false)
+const compositionError = ref('')
+const compositionPage = ref(1)
+const compositionHasMore = ref(false)
+const compositionTotal = ref(0)
+const compositionListChanged = ref(false)
+let compositionListRequestSequence = 0
+let compositionProjectionRequestSequence = 0
+
+const selectedCompositionVersion = computed(() => compositionVersions.value.find(
+  version => compositionVersionKey(version) === selectedCompositionKey.value,
+))
 
 const overview = ref<PortfolioOverview>({
   total_assets: 0, total_cash: 0, total_position_value: 0, net_position_value: 0,
@@ -694,6 +954,156 @@ function calculateDrawdown(values: number[]) {
     peak = Math.max(peak, value)
     return peak > 0 && value < peak ? -((peak - value) / peak) : 0
   })
+}
+
+function compositionVersionKey(version: PortfolioCompositionVersionOption) {
+  return JSON.stringify([version.portfolio_ref, version.membership_version])
+}
+
+function compositionSourceLabel(source: PortfolioCompositionSource) {
+  const keys: Record<PortfolioCompositionSource, string> = {
+    research: 'portfolio.compositionSourceResearch',
+    imported: 'portfolio.compositionSourceImported',
+    paper: 'portfolio.compositionSourcePaper',
+    live: 'portfolio.compositionSourceLive',
+  }
+  return t(keys[source])
+}
+
+function compositionStatusLabel(status: string) {
+  if (status === 'adapter_not_integrated') return t('portfolio.compositionAdapterUnavailable')
+  if (status === 'projected') return t('portfolio.compositionStatusProjected')
+  if (status === 'no_account_members') return t('portfolio.compositionStatusNoAccounts')
+  return status
+}
+
+function compositionAttributionStatusLabel(status: string) {
+  if (status === 'execution_attribution_not_collected') {
+    return t('portfolio.compositionAttributionUnavailable')
+  }
+  return status
+}
+
+function compositionAmount(value: string | null, currency: string) {
+  return value === null ? t('portfolio.compositionUnavailable') : `${value} ${currency}`
+}
+
+function setViewMode(mode: 'legacy' | 'composition') {
+  if (viewMode.value === mode) return
+  viewMode.value = mode
+  compositionListRequestSequence += 1
+  compositionProjectionRequestSequence += 1
+  if (mode === 'legacy') compositionProjection.value = null
+  void loadData()
+}
+
+async function loadCompositionData(listChanged = false) {
+  const requestSequence = ++compositionListRequestSequence
+  const preferredKey = selectedCompositionKey.value
+  compositionError.value = ''
+  compositionListChanged.value = listChanged
+  compositionProjection.value = null
+  compositionListLoading.value = true
+  try {
+    const page = await portfolioApi.listCompositionVersions(1, 50)
+    if (requestSequence !== compositionListRequestSequence || viewMode.value !== 'composition') return
+    compositionVersions.value = page.items
+    compositionPage.value = page.page
+    compositionHasMore.value = page.has_more
+    compositionTotal.value = page.total
+    if (page.items.length === 0) {
+      selectedCompositionKey.value = ''
+      return
+    }
+    const preferred = page.items.find(version => compositionVersionKey(version) === preferredKey)
+    const firstVersion = page.items[0]
+    if (!firstVersion) {
+      selectedCompositionKey.value = ''
+      return
+    }
+    selectedCompositionKey.value = compositionVersionKey(preferred ?? firstVersion)
+    await loadCompositionProjection()
+  } catch (error: unknown) {
+    if (requestSequence === compositionListRequestSequence) {
+      compositionVersions.value = []
+      selectedCompositionKey.value = ''
+      compositionProjection.value = null
+      compositionHasMore.value = false
+      compositionTotal.value = 0
+      compositionError.value = getErrorMessage(error, t('portfolio.compositionLoadFailed'))
+    }
+  } finally {
+    if (requestSequence === compositionListRequestSequence) compositionListLoading.value = false
+  }
+}
+
+async function loadCompositionProjection() {
+  const requestSequence = ++compositionProjectionRequestSequence
+  const selected = selectedCompositionVersion.value
+  compositionError.value = ''
+  compositionProjection.value = null
+  if (!selected) {
+    compositionProjectionLoading.value = false
+    return
+  }
+
+  compositionProjectionLoading.value = true
+  try {
+    const projection = await portfolioApi.getCompositionProjection(
+      selected.portfolio_ref,
+      selected.membership_version,
+    )
+    if (requestSequence === compositionProjectionRequestSequence && viewMode.value === 'composition') {
+      compositionProjection.value = projection
+    }
+  } catch (error: unknown) {
+    if (requestSequence === compositionProjectionRequestSequence) {
+      compositionProjection.value = null
+      compositionError.value = getErrorMessage(error, t('portfolio.compositionLoadFailed'))
+    }
+  } finally {
+    if (requestSequence === compositionProjectionRequestSequence) {
+      compositionProjectionLoading.value = false
+    }
+  }
+}
+
+async function loadMoreCompositionVersions() {
+  if (!compositionHasMore.value || compositionListLoading.value) return
+  const requestSequence = ++compositionListRequestSequence
+  const nextPage = compositionPage.value + 1
+  compositionError.value = ''
+  compositionListChanged.value = false
+  compositionListLoading.value = true
+  try {
+    const page = await portfolioApi.listCompositionVersions(nextPage, 50)
+    if (requestSequence !== compositionListRequestSequence || viewMode.value !== 'composition') return
+    if (page.total !== compositionTotal.value) {
+      await loadCompositionData(true)
+      return
+    }
+    const versionsByKey = new Map(
+      compositionVersions.value.map(version => [compositionVersionKey(version), version]),
+    )
+    for (const version of page.items) {
+      const key = compositionVersionKey(version)
+      if (!versionsByKey.has(key)) versionsByKey.set(key, version)
+    }
+    if (!page.has_more && versionsByKey.size !== page.total) {
+      await loadCompositionData(true)
+      return
+    }
+    compositionVersions.value = [...versionsByKey.values()]
+    compositionPage.value = page.page
+    compositionHasMore.value = page.has_more
+    compositionTotal.value = page.total
+  } catch (error: unknown) {
+    if (requestSequence === compositionListRequestSequence) {
+      compositionError.value = getErrorMessage(error, t('portfolio.compositionLoadFailed'))
+    }
+  } finally {
+    if (requestSequence === compositionListRequestSequence) compositionListLoading.value = false
+  }
 }
 
 // Chart refs
@@ -941,6 +1351,10 @@ async function loadData() {
   loadedTabs.value = new Set(['workspaces'])
   loadingTabs.value = new Set()
   try {
+    if (viewMode.value === 'composition') {
+      await loadCompositionData()
+      return
+    }
     const [dashboard, workspaceList] = await Promise.all([
       portfolioApi.getOverview(true),
       workspaceApi.list(0, 100, 'trading'),
@@ -1356,6 +1770,139 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 20px;
   color: var(--text-color-primary);
+}
+
+.portfolio-view-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.portfolio-view-switch button,
+.portfolio-composition__refresh,
+.portfolio-composition__selector button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  color: var(--text-color-primary);
+  cursor: pointer;
+}
+
+.portfolio-view-switch button[aria-pressed='true'] {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.portfolio-composition {
+  display: grid;
+  gap: 20px;
+  padding: 22px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-color);
+}
+
+.portfolio-composition__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.portfolio-composition__header h1,
+.portfolio-composition__section h2 {
+  margin: 6px 0;
+  color: var(--text-color-primary);
+}
+
+.portfolio-composition__header p,
+.portfolio-composition__section p,
+.portfolio-composition__status {
+  color: var(--text-color-secondary);
+  line-height: 1.6;
+}
+
+.portfolio-composition__selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.portfolio-composition__selector label {
+  font-weight: 650;
+}
+
+.portfolio-composition__selector select {
+  min-width: min(360px, 100%);
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  color: var(--text-color-primary);
+}
+
+.portfolio-composition__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.portfolio-composition__facts > div,
+.portfolio-composition__section {
+  padding: 14px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 6px;
+}
+
+.portfolio-composition__facts dt {
+  margin-bottom: 6px;
+  color: var(--text-color-secondary);
+  font-size: 13px;
+}
+
+.portfolio-composition__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.portfolio-composition__facts code,
+.portfolio-composition__section li span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-color-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.portfolio-composition__section ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
+
+.portfolio-composition__unavailable,
+.portfolio-composition__error {
+  padding: 12px 14px;
+  border-radius: 6px;
+  line-height: 1.6;
+}
+
+.portfolio-composition__unavailable {
+  background: color-mix(in srgb, var(--warning-color, #d97706) 10%, var(--bg-color));
+}
+
+.portfolio-composition__error {
+  color: var(--danger-color, #b91c1c);
+  background: color-mix(in srgb, var(--danger-color, #b91c1c) 8%, var(--bg-color));
 }
 
 .portfolio-loading {
