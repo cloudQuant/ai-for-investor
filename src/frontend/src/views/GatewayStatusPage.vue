@@ -396,6 +396,7 @@
               </el-tag>
             </template>
           </el-table-column>
+          <!-- @vue-generic {typeof visibleGateways.value[number]} -->
           <el-table-column
             :label="t('gatewayStatus.fieldHeartbeat')"
             width="120"

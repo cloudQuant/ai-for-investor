@@ -462,6 +462,7 @@
                 v-for="col in visibleColumns"
                 :key="col.prop"
               >
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-if="col.prop === 'symbol'"
                   prop="symbol"
@@ -493,6 +494,7 @@
                   width="90"
                   show-overflow-tooltip
                 />
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-else-if="col.prop === 'last_price'"
                   prop="last_price"
@@ -505,6 +507,7 @@
                     <span :class="priceClass(row)">{{ formatQuoteTickPrice(row.last_price, row) }}</span>
                   </template>
                 </el-table-column>
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-else-if="col.prop === 'change'"
                   prop="change"
@@ -553,6 +556,7 @@
                     {{ fmtVol(row[col.prop]) }}
                   </template>
                 </el-table-column>
+                <!-- @vue-generic {QuoteTick} -->
                 <el-table-column
                   v-else
                   :prop="col.prop"
@@ -588,6 +592,7 @@
                   </el-tooltip>
                 </template>
               </el-table-column>
+              <!-- @vue-generic {QuoteTick} -->
               <el-table-column
                 :label="t('quote.colRemoveSubscription')"
                 width="64"

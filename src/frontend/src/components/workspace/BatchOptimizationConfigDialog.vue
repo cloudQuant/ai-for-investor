@@ -106,6 +106,7 @@
             />
           </template>
         </el-table-column>
+        <!-- @vue-generic {ParamLayer} -->
         <el-table-column
           :label="t('workspaceDialogs.optSettings')"
           min-width="300"
