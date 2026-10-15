@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import MappingProxyType
 from typing import Any
@@ -71,10 +71,12 @@ def _thaw_json(value: Any) -> Any:
 class AccountBookReadView:
     """An exact account-level execution-book projection from the SDK service.
 
-    It contains owner positions, fees, coverage cursors and residuals. It does
-    not contain account cash, market value, or FX conversions; consumers must
-    keep those separate and unavailable when their own provider source lacks
-    them.
+    The legacy projection contains owner positions, fees, coverage cursors and
+    residuals. Its optional persisted ``financial`` child can carry owner-book
+    cash and cost basis on a separate ledger cut. Neither source supplies a
+    provider account total, market value, marks, or FX conversions; consumers
+    must keep those unavailable when their provider source lacks them and must
+    not add owner-book amounts to account totals.
     """
 
     account_ref: str
@@ -85,7 +87,7 @@ class AccountBookReadView:
         _text(self.account_ref, "INVALID_ACCOUNT_REF")
         _text(self.account_key_id, "INVALID_ACCOUNT_KEY_ID")
         projection = _freeze_json(self.projection, "INVALID_ACCOUNT_BOOK_REPLY")
-        if not isinstance(projection, Mapping) or set(projection) != {
+        legacy_fields = {
             "view",
             "coverage",
             "state",
@@ -97,6 +99,13 @@ class AccountBookReadView:
             "provider_position_change",
             "position_residual",
             "fee_residual",
+        }
+        projection_fields = (
+            frozenset(projection) if isinstance(projection, Mapping) else frozenset()
+        )
+        if not isinstance(projection, Mapping) or projection_fields not in {
+            frozenset(legacy_fields),
+            frozenset(legacy_fields | {"financial"}),
         }:
             raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
         if projection["view"] != "ACCOUNT" or projection["state"] not in {
@@ -151,6 +160,9 @@ class AccountBookReadView:
         for name in ("continuations", "input_continuations", "quarantined_intents"):
             if type(coverage[name]) is not tuple:
                 raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+
+        if "financial" in projection:
+            _validate_account_book_financial(projection["financial"], coverage)
 
         books = projection["books"]
         if type(books) is not tuple:
@@ -257,6 +269,272 @@ def _optional_decimal(value: Any, code: str) -> Decimal | None:
     if not number.is_finite():
         raise ServiceReadContractError(code)
     return number
+
+
+_FINANCIAL_UNAVAILABLE_CODES = frozenset(
+    {
+        "FINANCIAL_DIRECTORY_UNAVAILABLE",
+        "FINANCIAL_DIRECTORY_MISMATCH",
+        "PERSISTED_PROJECTION_UNAVAILABLE",
+        "INCOMPLETE_PERSISTED_PROJECTION",
+        "FINANCIAL_EXECUTION_CUT_MISMATCH",
+    }
+)
+_FINANCIAL_LEDGER_SOURCES = frozenset({"execution_outbox", "account_facts", "account_activity"})
+
+
+def _financial_decimal(value: Any, code: str) -> Decimal:
+    if type(value) is not str:
+        raise ServiceReadContractError(code)
+    try:
+        number = Decimal(value)
+    except (InvalidOperation, ValueError):
+        raise ServiceReadContractError(code) from None
+    if not number.is_finite():
+        raise ServiceReadContractError(code)
+    return number
+
+
+def _financial_text(value: Any, code: str, *, maximum: int = 256) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or len(value) > maximum
+        or not value.isascii()
+        or any(ord(char) < 0x21 for char in value)
+    ):
+        raise ServiceReadContractError(code)
+    return value
+
+
+def _validate_financial_money_rows(value: Any, code: str) -> None:
+    if type(value) is not tuple:
+        raise ServiceReadContractError(code)
+    currencies: set[str] = set()
+    for row in value:
+        if not isinstance(row, Mapping) or set(row) != {"currency", "amount"}:
+            raise ServiceReadContractError(code)
+        currency = _financial_text(row["currency"], code, maximum=16)
+        if currency in currencies:
+            raise ServiceReadContractError(code)
+        currencies.add(currency)
+        _financial_decimal(row["amount"], code)
+
+
+def _validate_financial_ledger_cut(value: Any, coverage: Mapping[str, Any]) -> None:
+    code = "INVALID_ACCOUNT_BOOK_FINANCIAL"
+    if not isinstance(value, Mapping) or set(value) != {
+        "account_key",
+        "owner_directory_revision",
+        "captured_at_ns",
+        "watermarks",
+    }:
+        raise ServiceReadContractError(code)
+    if _financial_text(value["account_key"], code) != coverage["account_key"]:
+        raise ServiceReadContractError(code)
+    _financial_text(value["owner_directory_revision"], code)
+    captured_at_ns = value["captured_at_ns"]
+    if type(captured_at_ns) is not int or captured_at_ns <= 0:
+        raise ServiceReadContractError(code)
+
+    watermarks = value["watermarks"]
+    if type(watermarks) is not tuple or len(watermarks) != len(_FINANCIAL_LEDGER_SOURCES):
+        raise ServiceReadContractError(code)
+    by_kind: dict[str, Mapping[str, Any]] = {}
+    for watermark in watermarks:
+        if not isinstance(watermark, Mapping) or set(watermark) != {
+            "source_kind",
+            "source_ref",
+            "generation",
+            "cursor",
+            "as_of_ns",
+        }:
+            raise ServiceReadContractError(code)
+        kind = watermark["source_kind"]
+        if type(kind) is not str or kind not in _FINANCIAL_LEDGER_SOURCES or kind in by_kind:
+            raise ServiceReadContractError(code)
+        _financial_text(watermark["source_ref"], code)
+        _financial_text(watermark["generation"], code)
+        cursor = watermark["cursor"]
+        as_of_ns = watermark["as_of_ns"]
+        if type(cursor) is not int or cursor < 0:
+            raise ServiceReadContractError(code)
+        if type(as_of_ns) is not int or as_of_ns <= 0 or as_of_ns > captured_at_ns:
+            raise ServiceReadContractError(code)
+        by_kind[kind] = watermark
+    if set(by_kind) != _FINANCIAL_LEDGER_SOURCES:
+        raise ServiceReadContractError(code)
+
+    execution = by_kind["execution_outbox"]
+    if (
+        execution["generation"] != coverage["journal_generation"]
+        or execution["cursor"] != coverage["current_execution_cursor"]
+    ):
+        raise ServiceReadContractError(code)
+
+
+def _validate_financial_book(value: Any, ledger_cut: Mapping[str, Any]) -> tuple[str, str]:
+    code = "INVALID_ACCOUNT_BOOK_FINANCIAL"
+    if not isinstance(value, Mapping) or set(value) != {
+        "owner",
+        "ledger_cut",
+        "cash",
+        "positions",
+        "cumulative_fees",
+        "realized_pnl",
+        "cost_basis_complete",
+    }:
+        raise ServiceReadContractError(code)
+    if value["ledger_cut"] != ledger_cut:
+        raise ServiceReadContractError(code)
+    owner = value["owner"]
+    if not isinstance(owner, Mapping) or set(owner) != {
+        "kind",
+        "owner_ref",
+        "execution_scope_key",
+    }:
+        raise ServiceReadContractError(code)
+    kind = owner["kind"]
+    owner_ref = _financial_text(owner["owner_ref"], code)
+    execution_scope_key = owner["execution_scope_key"]
+    if type(kind) is not str or kind not in {"STRATEGY", "MANUAL_BOOK"}:
+        # UNALLOCATED is represented only by the separate residual fields.
+        raise ServiceReadContractError(code)
+    if kind == "STRATEGY":
+        _financial_text(execution_scope_key, code)
+    elif execution_scope_key is not None:
+        _financial_text(execution_scope_key, code)
+    if owner_ref == "UNALLOCATED":
+        raise ServiceReadContractError(code)
+
+    _validate_financial_money_rows(value["cash"], code)
+    _validate_financial_money_rows(value["cumulative_fees"], code)
+    _validate_financial_money_rows(value["realized_pnl"], code)
+    positions = value["positions"]
+    if type(positions) is not tuple:
+        raise ServiceReadContractError(code)
+    instruments: set[str] = set()
+    for position in positions:
+        if not isinstance(position, Mapping) or set(position) != {
+            "instrument",
+            "quantity",
+            "cost_basis",
+            "cost_currency",
+            "cost_method",
+            "product_model",
+            "metadata_version",
+        }:
+            raise ServiceReadContractError(code)
+        instrument = _financial_text(position["instrument"], code)
+        if instrument in instruments:
+            raise ServiceReadContractError(code)
+        instruments.add(instrument)
+        quantity = _financial_decimal(position["quantity"], code)
+        if quantity < 0:
+            raise ServiceReadContractError(code)
+        if position["cost_basis"] is not None:
+            cost_basis = _financial_decimal(position["cost_basis"], code)
+            if (
+                cost_basis < 0
+                or (quantity == 0 and cost_basis != 0)
+                or (quantity > 0 and cost_basis == 0)
+            ):
+                raise ServiceReadContractError(code)
+            _financial_text(position["cost_currency"], code, maximum=16)
+        elif position["cost_currency"] is not None or quantity == 0:
+            raise ServiceReadContractError(code)
+        if position["cost_method"] != "AVERAGE_COST" or position["product_model"] != "SPOT":
+            raise ServiceReadContractError(code)
+        _financial_text(position["metadata_version"], code)
+    if type(value["cost_basis_complete"]) is not bool:
+        raise ServiceReadContractError(code)
+    return kind, owner_ref
+
+
+def _validate_account_book_financial(value: Any, coverage: Mapping[str, Any]) -> None:
+    code = "INVALID_ACCOUNT_BOOK_FINANCIAL"
+    if not isinstance(value, Mapping) or type(value.get("available")) is not bool:
+        raise ServiceReadContractError(code)
+    if value["available"] is False:
+        if set(value) != {"available", "code", "freshness", "cut_relationship"}:
+            raise ServiceReadContractError(code)
+        if (
+            type(value["code"]) is not str
+            or value["code"] not in _FINANCIAL_UNAVAILABLE_CODES
+            or value["freshness"] != "NOT_ESTABLISHED"
+            or value["cut_relationship"] != "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT"
+        ):
+            raise ServiceReadContractError(code)
+        return
+
+    if set(value) != {
+        "available",
+        "source",
+        "freshness",
+        "cut_relationship",
+        "complete",
+        "ledger_cut",
+        "state",
+        "books",
+        "unallocated",
+    }:
+        raise ServiceReadContractError(code)
+    state = value["state"]
+    if (
+        value["source"] != "PERSISTED_EXECUTION_FINANCIAL_PROJECTION"
+        or value["freshness"] != "PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED"
+        or value["cut_relationship"] != "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT"
+        or type(value["complete"]) is not bool
+        or value["complete"] is not True
+        or type(state) is not str
+        or state not in {"BALANCED", "RESIDUAL"}
+    ):
+        raise ServiceReadContractError(code)
+    ledger_cut = value["ledger_cut"]
+    _validate_financial_ledger_cut(ledger_cut, coverage)
+
+    books = value["books"]
+    if type(books) is not tuple or not books:
+        raise ServiceReadContractError(code)
+    owner_keys = [_validate_financial_book(book, ledger_cut) for book in books]
+    if len(owner_keys) != len(set(owner_keys)):
+        raise ServiceReadContractError(code)
+    execution_scopes = [
+        book["owner"]["execution_scope_key"]
+        for book in books
+        if book["owner"]["execution_scope_key"] is not None
+    ]
+    if len(execution_scopes) != len(set(execution_scopes)):
+        raise ServiceReadContractError(code)
+
+    unallocated = value["unallocated"]
+    if not isinstance(unallocated, Mapping) or set(unallocated) != {
+        "cash",
+        "positions",
+        "fees",
+    }:
+        raise ServiceReadContractError(code)
+    _validate_financial_money_rows(unallocated["cash"], code)
+    _validate_financial_money_rows(unallocated["fees"], code)
+    for row in (*unallocated["cash"], *unallocated["fees"]):
+        if _financial_decimal(row["amount"], code) == 0:
+            raise ServiceReadContractError(code)
+    residual_positions = unallocated["positions"]
+    if type(residual_positions) is not tuple:
+        raise ServiceReadContractError(code)
+    residual_instruments: set[str] = set()
+    for item in residual_positions:
+        if type(item) is not tuple or len(item) != 2:
+            raise ServiceReadContractError(code)
+        instrument = _financial_text(item[0], code)
+        if instrument in residual_instruments or _financial_decimal(item[1], code) == 0:
+            raise ServiceReadContractError(code)
+        residual_instruments.add(instrument)
+    has_residual = bool(unallocated["cash"] or residual_positions or unallocated["fees"])
+    expected_state = "RESIDUAL" if has_residual else "BALANCED"
+    if state != expected_state:
+        raise ServiceReadContractError(code)
 
 
 def _optional_seconds(value: Any, code: str) -> float | None:
