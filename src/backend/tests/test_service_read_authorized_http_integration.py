@@ -404,6 +404,7 @@ class _SyntheticAccountBookSource:
         self.account_key = account_key
         self.account_scope = account_scope
         self.read_count = 0
+        self.authorization_facts: list[tuple[str, str, str, str, str, str]] = []
         self.baseline_as_of_ns = time.time_ns()
         self.strategy_a_scope = _BOOK_WIRE_SCOPE_A
         self.strategy_b_scope = _BOOK_WIRE_SCOPE_B
@@ -411,6 +412,16 @@ class _SyntheticAccountBookSource:
     def authorize_account_view(
         self, *, principal_ref: str, identity: WireIdentity, scope: WireScope, account_key: str
     ) -> bool:
+        self.authorization_facts.append(
+            (
+                principal_ref,
+                identity.principal_ref,
+                identity.actor_ref,
+                identity.delegate_ref or "",
+                scope.account_ref or "",
+                account_key,
+            )
+        )
         return (
             principal_ref == _APP_PRINCIPAL
             and identity == _APPLICATION_IDENTITY_A
@@ -700,6 +711,12 @@ def _account_book_service_process(
                 if command == ("metrics",):
                     control.send(("metrics", source.read_count))
                     continue
+                if command == ("authorization_facts",):
+                    control.send(("authorization_facts", tuple(source.authorization_facts)))
+                    continue
+                if command == ("write_counts",):
+                    control.send(("write_counts", tuple(provider.submitted), tuple(gate.reserved)))
+                    continue
                 raise AssertionError("unknown account-book host command")
             host.serve_once(timeout_ms=20)
     except BaseException as error:
@@ -830,7 +847,7 @@ def _new_runtime(
     )
 
 
-def _make_token(subject: str, key: str) -> str:
+def _make_token(subject: str, key: str, *, expires_at: int | None = None) -> str:
     import jwt
 
     return jwt.encode(
@@ -838,7 +855,7 @@ def _make_token(subject: str, key: str) -> str:
             "sub": subject,
             "username": subject,
             "token_type": "access",
-            "exp": int(time.time()) + 600,
+            "exp": expires_at if expires_at is not None else int(time.time()) + 600,
         },
         key,
         algorithm=_JWT_ALGORITHM,
@@ -1707,16 +1724,20 @@ def test_default_deployment_lifespan_uses_production_sdk_workers_and_enforces_su
         _COMMAND_GUARD_STATE["active"] = False
 
 
-def test_live_composition_projects_only_trusted_strategy_books_from_sdk_host(
-    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+def _run_live_composition_projection(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    authorization_matrix: bool,
 ) -> None:
-    """Use the normal HTTP and AFI worker path for one synthetic SDK account book."""
+    """Use the normal HTTP and AFI worker path for synthetic SDK account-book facts."""
 
     import json
     from pathlib import Path
 
     import httpx
     from bt_api_base.account_protocol import AccountKey
+    from bt_api_execution import ExecutionScope
     from pydantic import SecretStr
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import StaticPool
@@ -1797,6 +1818,9 @@ def test_live_composition_projects_only_trusted_strategy_books_from_sdk_host(
         account_id="synthetic-provider-account-id",
         subaccount_id=None,
     )
+    expected_service_account_key = ExecutionScope(
+        "PAPER", "simulation", _ACCOUNT_A, _STRATEGY_A, "run-a"
+    ).account_key
     profile = _default_order_read_profile(
         endpoint=endpoint,
         subject=_SUBJECT_A,
@@ -1991,6 +2015,96 @@ def test_live_composition_projects_only_trusted_strategy_books_from_sdk_host(
                     assert projection["creditable"] is False
                     assert projection["overlap_policy"] == "non_additive_display_only"
 
+                    if authorization_matrix:
+                        forged_headers = {
+                            **headers_a,
+                            "X-User-Id": _SUBJECT_B,
+                            "X-Actor-Ref": _SUBJECT_B,
+                            "X-Principal-Ref": "forged-principal",
+                            "X-Delegate-Ref": _DELEGATE_B,
+                            "X-Approver-Ref": _SUBJECT_B,
+                        }
+                        repeated_read = await client.get(
+                            "/api/v1/portfolio/overview",
+                            params={
+                                "portfolio_ref": "execution-books-view",
+                                "membership_version": 1,
+                                "actor_ref": _SUBJECT_B,
+                                "principal_ref": "forged-principal",
+                                "delegate_ref": _DELEGATE_B,
+                                "approver_ref": _SUBJECT_B,
+                            },
+                            headers=forged_headers,
+                        )
+                        assert repeated_read.status_code == 200, repeated_read.text
+                        assert repeated_read.json() == projection
+
+                        expired_read = await client.get(
+                            "/api/v1/portfolio/overview",
+                            params={
+                                "portfolio_ref": "execution-books-view",
+                                "membership_version": 1,
+                            },
+                            headers={
+                                "Authorization": (
+                                    "Bearer "
+                                    + _make_token(
+                                        _SUBJECT_A,
+                                        _JWT_SECRET,
+                                        expires_at=int(time.time()) - 60,
+                                    )
+                                )
+                            },
+                        )
+                        assert expired_read.status_code == 401
+
+                        forged_scope = await client.get(
+                            f"/api/v1/service-read/orders/{_INTENT_A}",
+                            params={
+                                "scope_ref": _BOOK_QUERY_SCOPE,
+                                "actor_ref": _SUBJECT_A,
+                                "approver_ref": _SUBJECT_B,
+                            },
+                            headers=forged_headers,
+                        )
+                        assert forged_scope.status_code == 403
+                        assert (
+                            forged_scope.json()["details"]["code"] == "SERVICE_READ_ACCESS_DENIED"
+                        )
+
+                        cross_account_read = await client.get(
+                            f"/api/v1/service-read/accounts/{_ACCOUNT_B}",
+                            headers=forged_headers,
+                        )
+                        assert cross_account_read.status_code == 403
+                        assert (
+                            cross_account_read.json()["details"]["code"]
+                            == "SERVICE_READ_ACCESS_DENIED"
+                        )
+
+                        read_write_method = await client.post(
+                            f"/api/v1/service-read/orders/{_INTENT_A}",
+                            headers=forged_headers,
+                            json={"approver_ref": _SUBJECT_B, "scope_ref": _BOOK_QUERY_SCOPE},
+                        )
+                        assert read_write_method.status_code == 405
+
+                        forged_approver_membership = await client.post(
+                            "/api/v1/portfolio/compositions",
+                            headers=headers_a,
+                            json={
+                                "portfolio_ref": "forged-approver-view",
+                                "source_type": "live",
+                                "base_currency": "USDT",
+                                "members": [
+                                    {"kind": "account", "ref": _ACCOUNT_A},
+                                    {"kind": "strategy", "ref": "strategy-owner-a"},
+                                ],
+                                "approver_ref": _SUBJECT_B,
+                            },
+                        )
+                        assert forged_approver_membership.status_code == 422
+
                     unbound_owner = await client.post(
                         "/api/v1/portfolio/compositions",
                         headers=headers_a,
@@ -2097,7 +2211,30 @@ def test_live_composition_projects_only_trusted_strategy_books_from_sdk_host(
         assert owner_threads[0].ident != threading.get_ident()
 
         metrics = _order._command(host, "metrics")
-        assert metrics == ("metrics", 1)
+        assert metrics == ("metrics", 2 if authorization_matrix else 1)
+        if authorization_matrix:
+            assert _order._command(host, "authorization_facts") == (
+                "authorization_facts",
+                (
+                    (
+                        _APP_PRINCIPAL,
+                        _APPLICATION_IDENTITY_A.principal_ref,
+                        _SUBJECT_A,
+                        _DELEGATE_A,
+                        _ACCOUNT_A,
+                        expected_service_account_key,
+                    ),
+                    (
+                        _APP_PRINCIPAL,
+                        _APPLICATION_IDENTITY_A.principal_ref,
+                        _SUBJECT_A,
+                        _DELEGATE_A,
+                        _ACCOUNT_A,
+                        expected_service_account_key,
+                    ),
+                ),
+            )
+            assert _order._command(host, "write_counts") == ("write_counts", (), ())
     finally:
         app.dependency_overrides.pop(get_db, None)
         if prior_db_override is not None:
@@ -2108,3 +2245,15 @@ def test_live_composition_projects_only_trusted_strategy_books_from_sdk_host(
         finally:
             asyncio.run(engine.dispose())
             _COMMAND_GUARD_STATE["active"] = False
+
+
+def test_live_composition_projects_only_trusted_strategy_books_from_sdk_host(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_live_composition_projection(tmp_path, monkeypatch, authorization_matrix=False)
+
+
+def test_afi01_read_authorization_matrix_keeps_http_identity_scope_and_replay_boundaries(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_live_composition_projection(tmp_path, monkeypatch, authorization_matrix=True)
