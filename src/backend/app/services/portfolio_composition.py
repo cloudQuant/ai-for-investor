@@ -41,68 +41,81 @@ class PortfolioCompositionService:
     ) -> PortfolioCompositionVersion:
         """Persist a new membership version without rewriting earlier versions."""
 
-        if request.source_type == "imported":
-            imported_refs = [member.ref for member in request.members]
-            owned_result = await self.db.execute(
-                select(PortfolioLedgerImportModel.id)
-                .join(
-                    PortfolioLedgerModel,
-                    PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
-                )
-                .where(
-                    PortfolioLedgerImportModel.id.in_(imported_refs),
-                    PortfolioLedgerModel.owner_id == owner_subject,
-                )
-            )
-            if set(owned_result.scalars().all()) != set(imported_refs):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"code": "PORTFOLIO_IMPORT_SOURCE_NOT_FOUND"},
-                )
+        from app.services.strategy_approval_authority import (
+            advance_strategy_approval_authority_epoch,
+            lock_strategy_approval_authority_epoch,
+        )
 
-        canonical_members = sorted(
-            (member.model_dump(mode="json") for member in request.members),
-            key=lambda member: (member["kind"], member["ref"]),
-        )
-        membership_document = {
-            "source_type": request.source_type,
-            "base_currency": request.base_currency,
-            "members": canonical_members,
-        }
-        membership_sha256 = hashlib.sha256(
-            json.dumps(
-                membership_document,
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ).encode("utf-8")
-        ).hexdigest()
-        latest = await self.db.scalar(
-            select(func.max(PortfolioCompositionVersion.membership_version)).where(
-                PortfolioCompositionVersion.owner_subject == owner_subject,
-                PortfolioCompositionVersion.portfolio_ref == request.portfolio_ref,
-            )
-        )
-        row = PortfolioCompositionVersion(
-            owner_subject=owner_subject,
-            portfolio_ref=request.portfolio_ref,
-            membership_version=(latest or 0) + 1,
-            source_type=request.source_type,
-            base_currency=request.base_currency,
-            members=canonical_members,
-            membership_sha256=membership_sha256,
-        )
-        self.db.add(row)
         try:
+            await lock_strategy_approval_authority_epoch(self.db, owner_subject)
+
+            if request.source_type == "imported":
+                imported_refs = [member.ref for member in request.members]
+                owned_result = await self.db.execute(
+                    select(PortfolioLedgerImportModel.id)
+                    .join(
+                        PortfolioLedgerModel,
+                        PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
+                    )
+                    .where(
+                        PortfolioLedgerImportModel.id.in_(imported_refs),
+                        PortfolioLedgerModel.owner_id == owner_subject,
+                    )
+                )
+                if set(owned_result.scalars().all()) != set(imported_refs):
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={"code": "PORTFOLIO_IMPORT_SOURCE_NOT_FOUND"},
+                    )
+
+            canonical_members = sorted(
+                (member.model_dump(mode="json") for member in request.members),
+                key=lambda member: (member["kind"], member["ref"]),
+            )
+            membership_document = {
+                "source_type": request.source_type,
+                "base_currency": request.base_currency,
+                "members": canonical_members,
+            }
+            membership_sha256 = hashlib.sha256(
+                json.dumps(
+                    membership_document,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            latest = await self.db.scalar(
+                select(func.max(PortfolioCompositionVersion.membership_version)).where(
+                    PortfolioCompositionVersion.owner_subject == owner_subject,
+                    PortfolioCompositionVersion.portfolio_ref == request.portfolio_ref,
+                )
+            )
+            row = PortfolioCompositionVersion(
+                owner_subject=owner_subject,
+                portfolio_ref=request.portfolio_ref,
+                membership_version=(latest or 0) + 1,
+                source_type=request.source_type,
+                base_currency=request.base_currency,
+                members=canonical_members,
+                membership_sha256=membership_sha256,
+            )
+            self.db.add(row)
+            await advance_strategy_approval_authority_epoch(self.db, owner_subject)
             await self.db.commit()
-        except IntegrityError:
-            await self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "MEMBERSHIP_VERSION_CONFLICT"},
-            ) from None
-        await self.db.refresh(row)
-        return row
+            await self.db.refresh(row)
+            return row
+        except BaseException as error:
+            try:
+                await self.db.rollback()
+            except BaseException as rollback_error:
+                raise error from rollback_error
+            if isinstance(error, IntegrityError):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "MEMBERSHIP_VERSION_CONFLICT"},
+                ) from None
+            raise
 
     async def get_version(
         self, owner_subject: str, portfolio_ref: str, membership_version: int

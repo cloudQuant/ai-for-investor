@@ -60,6 +60,14 @@ class StrategyTargetApproval(Base):
         ),
         CheckConstraint("length(target_sha256) = 64", name="ck_strategy_target_hash_length"),
         CheckConstraint(
+            "(strategy_version_source_id IS NULL AND strategy_version_branch IS NULL "
+            "AND strategy_version_sha256 IS NULL) OR "
+            "(strategy_version_source_id IS NOT NULL AND strategy_version_branch IS NOT NULL "
+            "AND strategy_version_sha256 IS NOT NULL "
+            "AND length(strategy_version_sha256) = 64)",
+            name="ck_strategy_target_source_version_binding",
+        ),
+        CheckConstraint(
             "(operation_key_sha256 IS NULL AND operation_request_sha256 IS NULL "
             "AND intent_id IS NULL AND operation_reserved_at_ns IS NULL) OR "
             "(operation_key_sha256 IS NOT NULL AND operation_request_sha256 IS NOT NULL "
@@ -108,6 +116,13 @@ class StrategyTargetApproval(Base):
     account_ref = Column(String(128), nullable=False)
     strategy_ref = Column(String(128), nullable=False)
     strategy_version = Column(Integer, nullable=False)
+    # AFI-internal binding to the exact branch-local row. These columns are
+    # deliberately outside the frozen SDK target JSON v1.
+    strategy_version_source_id = Column(
+        String(36), ForeignKey("strategy_versions.id", ondelete="RESTRICT"), nullable=True
+    )
+    strategy_version_branch = Column(String(50), nullable=True)
+    strategy_version_sha256 = Column(String(64), nullable=True)
     membership_version = Column(Integer, nullable=True)
     membership_sha256 = Column(String(64), nullable=True)
 

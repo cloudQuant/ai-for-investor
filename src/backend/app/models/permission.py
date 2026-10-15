@@ -33,6 +33,10 @@ class Permission(str, enum.Enum):
     MANAGE_APPROVAL_GRANTS = "research:manage-approval-grants"
     # Manual submission is separate from approval authority and strategy/group writers.
     SUBMIT_MANUAL_ORDER = "orders:submit-manual"
+    # Strategy target approvals are explicit trading authority and are not
+    # inherited from research approval, manual order, USER, PREMIUM, or ADMIN.
+    APPROVE_STRATEGY_ORDER_TARGET = "orders:approve-strategy-target"
+    MANAGE_STRATEGY_ORDER_APPROVAL_POLICY = "orders:manage-strategy-approval-policy"
 
     # Data permissions
     UPLOAD_DATA = "data:upload"

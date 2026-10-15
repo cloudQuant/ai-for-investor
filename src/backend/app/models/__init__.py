@@ -141,6 +141,11 @@ from app.models.strategy_target_approval import (
     StrategyTargetApproval,
     StrategyTargetApprovalEvent,
 )
+from app.models.strategy_approval_authority import (
+    StrategyApprovalAuthorityEpoch,
+    StrategyOrderApprovalPolicyHead,
+    StrategyOrderApprovalPolicyVersion,
+)
 from app.models.portfolio_ledger import (
     PortfolioLedgerImportModel,
     PortfolioLedgerModel,
@@ -289,6 +294,9 @@ __all__ = [
     "ServiceOrderOperation",
     "StrategyTargetApproval",
     "StrategyTargetApprovalEvent",
+    "StrategyApprovalAuthorityEpoch",
+    "StrategyOrderApprovalPolicyHead",
+    "StrategyOrderApprovalPolicyVersion",
     "PortfolioLedgerImportModel",
     "PortfolioLedgerModel",
     "PortfolioLedgerSnapshotModel",

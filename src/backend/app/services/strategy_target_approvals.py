@@ -131,6 +131,9 @@ class ApprovedTargetCurrentStateV1:
     policy_ref: str
     policy_version: int
     policy_sha256: str
+    strategy_version_source_id: str
+    strategy_version_branch: str
+    strategy_version_sha256: str
 
 
 class ApprovedTargetCurrentStateProvider(Protocol):
@@ -195,6 +198,10 @@ async def create_approved_order_target(
     approved_by_delegate_ref: str | None,
     approved_at_ns: int,
     expires_at_ns: int,
+    strategy_version_source_id: str | None = None,
+    strategy_version_branch: str | None = None,
+    strategy_version_sha256: str | None = None,
+    commit: bool = True,
 ) -> StrategyTargetApproval:
     """Persist an already-authorized decision and its immutable target.
 
@@ -232,6 +239,18 @@ async def create_approved_order_target(
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     if type(approval_version) is not int or approval_version <= 0:
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
+    if strategy_version_source_id is not None:
+        _required_identifier(strategy_version_source_id, "strategy_version_source_id")
+        _required_identifier(strategy_version_branch, "strategy_version_branch")
+        if not _valid_hash(strategy_version_sha256):
+            raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
+    elif strategy_version_branch is not None or strategy_version_sha256 is not None:
+        raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
+    from app.services.strategy_approval_authority import (
+        lock_strategy_approval_authority_epoch,
+    )
+
+    await lock_strategy_approval_authority_epoch(db, owner_subject)
     if approval_ref is None:
         approval_ref = uuid.uuid4().hex
     else:
@@ -255,6 +274,9 @@ async def create_approved_order_target(
         account_ref=wire_scope["account_ref"],
         strategy_ref=wire_scope["strategy_ref"],
         strategy_version=normalized["strategy_version"],
+        strategy_version_source_id=strategy_version_source_id,
+        strategy_version_branch=strategy_version_branch,
+        strategy_version_sha256=strategy_version_sha256,
         membership_version=membership_version,
         membership_sha256=membership_sha256,
         target_ref=normalized["target_ref"],
@@ -289,7 +311,10 @@ async def create_approved_order_target(
     )
     db.add(event)
     try:
-        await db.commit()
+        if commit:
+            await db.commit()
+        else:
+            await db.flush()
         return row
     except IntegrityError:
         await db.rollback()
@@ -315,6 +340,12 @@ async def reserve_approved_target_operation(
     now_ns: int | None = None,
 ) -> ApprovedTargetOperationClaim:
     """Atomically pin an operation key to its caller-supplied stable intent ID."""
+
+    from app.services.strategy_approval_authority import (
+        lock_strategy_approval_authority_epoch,
+    )
+
+    await lock_strategy_approval_authority_epoch(db, owner_subject)
 
     row = await _load_bound_approval(
         db,
@@ -534,12 +565,17 @@ async def consume_approved_target_v1(
     current_state_provider: ApprovedTargetCurrentStateProvider,
     now_ns: int | None = None,
 ) -> dict[str, object]:
+    from app.services.strategy_approval_authority import (
+        lock_strategy_approval_authority_epoch,
+    )
+
     if not db.in_transaction():
         try:
             await db.begin()
         except SQLAlchemyError:
             raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
     try:
+        await lock_strategy_approval_authority_epoch(db, owner_subject)
         result = await _consume_approved_target_v1_in_transaction(
             db,
             approval_ref,
@@ -636,6 +672,9 @@ async def _consume_approved_target_v1_in_transaction(
         expected_scope_ref=expected_scope_ref,
         identity=identity,
         wire_scope=wire_scope,
+        strategy_version_source_id=row.strategy_version_source_id,
+        strategy_version_branch=row.strategy_version_branch,
+        strategy_version_sha256=row.strategy_version_sha256,
     )
 
     current_ns = _now_ns(now_ns)
@@ -720,6 +759,10 @@ async def revoke_approved_order_target(
     accepted.  This transaction is the race ordering point against consume.
     """
 
+    from app.services.strategy_approval_authority import (
+        lock_strategy_approval_authority_epoch,
+    )
+
     _required_text(revoker_subject, "revoker_subject", 256)
     _required_identifier(revoker_principal_ref, "revoker_principal_ref")
     _required_identifier(revoker_actor_ref, "revoker_actor_ref")
@@ -727,6 +770,7 @@ async def revoke_approved_order_target(
     if type(reason_code) is not str or not _REASON_CODE.fullmatch(reason_code):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     current_ns = _now_ns(revoked_at_ns)
+    await lock_strategy_approval_authority_epoch(db, owner_subject)
     row = await _load_for_owner(db, approval_ref, approval_version, owner_subject)
     if row.state == "CONSUMED":
         raise StrategyTargetApprovalError("APPROVAL_CONSUMED_CONFLICT")
@@ -896,6 +940,9 @@ async def _require_current_approved_target_state(
     expected_scope_ref: str,
     identity: object,
     wire_scope: object,
+    strategy_version_source_id: str | None,
+    strategy_version_branch: str | None,
+    strategy_version_sha256: str | None,
 ) -> None:
     """Read trusted current state in the same transaction as the consume CAS."""
 
@@ -935,6 +982,10 @@ async def _require_current_approved_target_state(
         _positive_int(current.policy_version, "current.policy_version")
         if not _valid_hash(current.policy_sha256):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
+        _required_identifier(current.strategy_version_source_id, "current.strategy_version_source_id")
+        _required_identifier(current.strategy_version_branch, "current.strategy_version_branch")
+        if not _valid_hash(current.strategy_version_sha256):
+            raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
     except StrategyTargetApprovalError:
         raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE") from None
     expected = (
@@ -946,6 +997,9 @@ async def _require_current_approved_target_state(
         target["policy_ref"],
         target["policy_version"],
         target["policy_sha256"],
+        strategy_version_source_id,
+        strategy_version_branch,
+        strategy_version_sha256,
     )
     observed = (
         current.target_ref,
@@ -956,6 +1010,9 @@ async def _require_current_approved_target_state(
         current.policy_ref,
         current.policy_version,
         current.policy_sha256,
+        current.strategy_version_source_id,
+        current.strategy_version_branch,
+        current.strategy_version_sha256,
     )
     if observed != expected:
         raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")

@@ -56,6 +56,9 @@ try:
         StrategyTargetApproval,
         StrategyTargetApprovalEvent,
     )
+    from app.models.strategy_approval_authority import (  # noqa: E402
+        StrategyApprovalAuthorityEpoch,
+    )
     from app.services.strategy_target_approvals import (  # noqa: E402
         ApprovedTargetCurrentStateV1,
         StrategyTargetApprovalError,
@@ -74,7 +77,11 @@ finally:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _isolated_approval_schema():
-    tables = [StrategyTargetApprovalEvent.__table__, StrategyTargetApproval.__table__]
+    tables = [
+        StrategyApprovalAuthorityEpoch.__table__,
+        StrategyTargetApproval.__table__,
+        StrategyTargetApprovalEvent.__table__,
+    ]
     async with engine.begin() as connection:
         await connection.run_sync(lambda sync: Base.metadata.create_all(sync, tables=tables))
     yield
@@ -177,6 +184,9 @@ async def _create_approval(db, *, target=None, approval_ref="approval-a"):
         approved_by_delegate_ref=None,
         approved_at_ns=100,
         expires_at_ns=1_000,
+        strategy_version_source_id="version-source-a",
+        strategy_version_branch="main",
+        strategy_version_sha256="c" * 64,
     )
 
 
@@ -223,6 +233,9 @@ class _SyntheticCurrentStateProvider:
             "target_ref": "target-a",
             "target_version": 1,
             "strategy_version": 7,
+            "strategy_version_source_id": "version-source-a",
+            "strategy_version_branch": "main",
+            "strategy_version_sha256": "c" * 64,
             "membership_version": None,
             "membership_sha256": None,
             "policy_ref": "policy-a",
@@ -396,7 +409,11 @@ async def test_competing_file_sqlite_sessions_reserve_one_intent_and_refresh_los
         connect_args={"timeout": 10},
     )
     race_sessions = async_sessionmaker(race_engine, expire_on_commit=False)
-    tables = [StrategyTargetApprovalEvent.__table__, StrategyTargetApproval.__table__]
+    tables = [
+        StrategyApprovalAuthorityEpoch.__table__,
+        StrategyTargetApprovalEvent.__table__,
+        StrategyTargetApproval.__table__,
+    ]
     try:
         async with race_engine.begin() as connection:
             await connection.run_sync(lambda sync: Base.metadata.create_all(sync, tables=tables))
