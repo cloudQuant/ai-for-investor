@@ -2257,3 +2257,1713 @@ def test_afi01_read_authorization_matrix_keeps_http_identity_scope_and_replay_bo
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _run_live_composition_projection(tmp_path, monkeypatch, authorization_matrix=True)
+
+
+_DUAL_LIVE_DOMAIN = "paper:afi-dual-live-composition"
+_DUAL_LIVE_PRINCIPAL = "afi-dual-live-application-principal"
+_DUAL_LIVE_APPLICATION_IDENTITY = WireIdentity(
+    WireRole.APPLICATION_CLIENT, _DUAL_LIVE_PRINCIPAL, _SUBJECT_A, _DELEGATE_A
+)
+_DUAL_LIVE_VALUES = {
+    # Cash totals exclude holdings; the synthetic position mark is 10 USDT
+    # per unit, so reported equity includes the marked position value.
+    _ACCOUNT_A: {
+        "total": "100",
+        "cash": "80",
+        "locked": "20",
+        "position_quantity": "6",
+        "average_price": "10",
+        "position_mark": "10",
+    },
+    _ACCOUNT_B: {
+        "total": "700",
+        "cash": "650",
+        "locked": "50",
+        "position_quantity": "9",
+        "average_price": "10",
+        "position_mark": "10",
+    },
+}
+
+
+class _DualLiveSyntheticAccountProvider:
+    """One synthetic Gateway-owned account snapshot with finite lifecycle counts."""
+
+    def __init__(self, account_key: Any, account_ref: str) -> None:
+        self.account_key = account_key
+        self.account_ref = account_ref
+        self.generation: str | None = None
+        self.connect_calls = 0
+        self.read_calls = 0
+        self.close_calls = 0
+
+    def connect(self, *, account_key: Any, generation: str, timeout: float) -> None:
+        if account_key != self.account_key or not generation or timeout <= 0 or self.generation:
+            raise AssertionError("invalid synthetic account-session connect")
+        self.connect_calls += 1
+        self.generation = generation
+
+    def read_account(self, *, generation: str, timeout: float) -> Any:
+        from datetime import UTC, datetime
+        from decimal import Decimal
+
+        from bt_api_base.account_protocol import (
+            AccountBalance,
+            AccountObservation,
+            AccountPosition,
+            AccountResourceKey,
+            AccountValuation,
+        )
+        from bt_api_base.market_protocol import MarketInstrumentKey
+
+        if generation != self.generation or timeout <= 0:
+            raise AssertionError("synthetic account read used a stale session")
+        self.read_calls += 1
+        values = _DUAL_LIVE_VALUES[self.account_ref]
+        observed_at = datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        resource = AccountResourceKey("spot", "cash")
+        suffix = self.account_ref[-1].upper()
+        instrument_id = f"PAPER:SIM:AFI-DUAL-{suffix}"
+        position_quantity = values["position_quantity"]
+        average_price = values["average_price"]
+        position_mark = Decimal(values["position_mark"])
+        equity = Decimal(values["total"]) + Decimal(position_quantity) * position_mark
+        return AccountObservation(
+            account_key=self.account_key,
+            observation_id=f"{self.account_ref}-snapshot-{self.read_calls}",
+            coverage=(resource,),
+            balances=(
+                AccountBalance(
+                    resource=resource,
+                    currency="USDT",
+                    total=values["total"],
+                    available=values["cash"],
+                    locked=values["locked"],
+                    observed_at_utc=observed_at,
+                ),
+            ),
+            positions=(
+                AccountPosition(
+                    resource=resource,
+                    instrument=MarketInstrumentKey(
+                        provider=self.account_key.provider,
+                        venue=self.account_key.venue,
+                        environment=self.account_key.environment,
+                        product_type=resource.product_type,
+                        instrument_id=instrument_id,
+                        native_symbol=f"AFI-DUAL-{suffix}",
+                    ),
+                    side="net",
+                    quantity=position_quantity,
+                    qty_unit="unit",
+                    average_price=average_price,
+                    price_currency="USDT",
+                    observed_at_utc=observed_at,
+                ),
+            ),
+            valuation=AccountValuation(
+                currency="USDT",
+                available_cash=values["cash"],
+                equity=format(equity, "f"),
+                observed_at_utc=observed_at,
+            ),
+            started_at_utc=observed_at,
+            completed_at_utc=observed_at,
+            consistency="provider_atomic",
+            balances_complete=True,
+            positions_complete=True,
+        )
+
+    def close(self) -> bool:
+        self.close_calls += 1
+        self.generation = None
+        return True
+
+
+class _DualLiveSyntheticAccountBookSource:
+    """Synthetic source facts consumed by the real Execution account-book adapter."""
+
+    def __init__(self, account_ref: str, strategy_ref: str) -> None:
+        from bt_api_base.service_protocol import WireScope
+        from bt_api_execution import ExecutionScope
+
+        self.account_ref = account_ref
+        self.strategy_ref = strategy_ref
+        self.execution_scope = ExecutionScope(
+            "PAPER", "simulation", account_ref, strategy_ref, f"run-{account_ref}"
+        )
+        self.wire_scope = WireScope(
+            _DUAL_LIVE_DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref
+        )
+        self.account_key = self.execution_scope.account_key
+        self.baseline_as_of_ns = time.time_ns()
+        self.read_count = 0
+
+    def authorize_account_view(
+        self, *, principal_ref: str, identity: Any, scope: Any, account_key: str
+    ) -> bool:
+        from bt_api_base.service_protocol import WireScope
+
+        return (
+            principal_ref == _DUAL_LIVE_PRINCIPAL
+            and identity == _DUAL_LIVE_APPLICATION_IDENTITY
+            and scope == WireScope(_DUAL_LIVE_DOMAIN, account_ref=self.account_ref)
+            and account_key == self.account_key
+        )
+
+    def read_inputs(
+        self, *, account_key: str, journal_generation: str, execution_cursor: int
+    ) -> Any:
+        from decimal import Decimal
+
+        from bt_api_execution import (
+            AllocationOwnerKind,
+            CurrencyAmount,
+            ExecutionAccountSnapshot,
+            ExecutionAllocationBaseline,
+            ExecutionOwnerScope,
+            ExecutionScopeDirectory,
+            ExternalActivitySnapshot,
+            ExternalFillFact,
+            ExternalOrderFact,
+            OwnerPosition,
+            PositionFact,
+            Side,
+        )
+        from bt_api_py.service_execution_account_books import ExecutionAccountBookReadInputsV1
+
+        if account_key != self.account_key or type(execution_cursor) is not int:
+            raise AssertionError("execution account-book source crossed its trusted account")
+        self.read_count += 1
+        suffix = self.account_ref[-1].upper()
+        strategy_ref = self.strategy_ref
+        baseline_ns = self.baseline_as_of_ns
+        as_of_ns = baseline_ns + 100
+        revision = f"afi-dual-directory-{suffix}-r1"
+        generation = f"afi-dual-provider-generation-{suffix}-r1"
+        instrument = f"PAPER:SIM:AFI-DUAL-{suffix}"
+        baseline_quantity = Decimal("5") if self.account_ref == _ACCOUNT_A else Decimal("7")
+        current_quantity = Decimal(_DUAL_LIVE_VALUES[self.account_ref]["position_quantity"])
+        allocated_quantity = Decimal("2") if self.account_ref == _ACCOUNT_A else Decimal("3")
+        fill_quantity = Decimal("0.5") if self.account_ref == _ACCOUNT_A else Decimal("1")
+        baseline_fee = Decimal("0.10") if self.account_ref == _ACCOUNT_A else Decimal("0.20")
+        current_fee = Decimal("0.20") if self.account_ref == _ACCOUNT_A else Decimal("0.40")
+        fill_fee = Decimal("0.06") if self.account_ref == _ACCOUNT_A else Decimal("0.13")
+        directory = ExecutionScopeDirectory(
+            account_key=account_key,
+            source="afi-dual-synthetic-owner-directory",
+            source_ref=f"afi-dual-directory-source-{suffix}-r1",
+            revision=revision,
+            covers_from_ns=baseline_ns,
+            as_of_ns=as_of_ns,
+            scopes=(
+                ExecutionOwnerScope(
+                    self.execution_scope,
+                    AllocationOwnerKind.STRATEGY,
+                    strategy_ref,
+                    self.wire_scope,
+                ),
+            ),
+        )
+        baseline = ExecutionAccountSnapshot(
+            account_key=account_key,
+            source="afi-dual-synthetic-account-snapshot",
+            source_ref=f"afi-dual-baseline-{suffix}-r1",
+            generation=generation,
+            journal_generation=journal_generation,
+            as_of_ns=baseline_ns,
+            execution_cursor=0,
+            position_mode="NET",
+            positions=(PositionFact(instrument, baseline_quantity),),
+            cumulative_fees=(CurrencyAmount("USDT", baseline_fee),),
+            fee_coverage_start_ns=baseline_ns,
+        )
+        current = ExecutionAccountSnapshot(
+            account_key=account_key,
+            source="afi-dual-synthetic-account-snapshot",
+            source_ref=f"afi-dual-current-{suffix}-r1",
+            generation=generation,
+            journal_generation=journal_generation,
+            as_of_ns=as_of_ns,
+            execution_cursor=execution_cursor,
+            position_mode="NET",
+            positions=(PositionFact(instrument, current_quantity),),
+            cumulative_fees=(CurrencyAmount("USDT", current_fee),),
+            fee_coverage_start_ns=baseline_ns,
+        )
+        allocation = ExecutionAllocationBaseline(
+            account_key=account_key,
+            source="afi-dual-synthetic-allocation-baseline",
+            source_ref=f"afi-dual-allocation-{suffix}-r1",
+            revision=f"afi-dual-allocation-revision-{suffix}-r1",
+            scope_directory_revision=revision,
+            provider_generation=generation,
+            journal_generation=journal_generation,
+            as_of_ns=baseline_ns,
+            execution_cursor=0,
+            positions=(
+                OwnerPosition(
+                    AllocationOwnerKind.STRATEGY,
+                    strategy_ref,
+                    instrument,
+                    allocated_quantity,
+                ),
+            ),
+        )
+        order_ref = f"afi-dual-synthetic-order-{suffix}"
+        activity = ExternalActivitySnapshot(
+            account_key=account_key,
+            source="afi-dual-synthetic-account-activity",
+            source_ref=f"afi-dual-activity-{suffix}-r1",
+            generation=generation,
+            coverage_start_ns=baseline_ns,
+            coverage_end_ns=as_of_ns,
+            fills=(
+                ExternalFillFact(
+                    f"afi-dual-synthetic-fill-{suffix}",
+                    instrument,
+                    Side.BUY,
+                    fill_quantity,
+                    Decimal("100"),
+                    baseline_ns + 10,
+                    fee=fill_fee,
+                    fee_currency="USDT",
+                    provider_order_ref=order_ref,
+                ),
+            ),
+            orders=(
+                ExternalOrderFact(
+                    order_ref,
+                    instrument,
+                    Side.BUY,
+                    fill_quantity,
+                    fill_quantity,
+                    "FILLED",
+                    baseline_ns + 10,
+                    owner_kind=AllocationOwnerKind.STRATEGY,
+                    owner_ref=strategy_ref,
+                ),
+            ),
+        )
+        return ExecutionAccountBookReadInputsV1(directory, baseline, current, allocation, activity)
+
+
+def _dual_gateway_service_config(
+    endpoint: str,
+    account_ref: str,
+    service_id: str,
+    instance_id: str,
+    scope_ref: str,
+    transport_ref: str,
+    security_ref: str,
+) -> dict[str, Any]:
+    return {
+        "service_config_schema_version": 1,
+        "process_role": "service",
+        "service_id": service_id,
+        "scope_ref": scope_ref,
+        "transport_ref": transport_ref,
+        "registration_policy_ref": f"{account_ref}-gateway-policy-v1",
+        "service_requirements_ref": f"{account_ref}-gateway-requirements-v1",
+        "components": {
+            "gateway": {
+                "config_schema_version": 2,
+                "settings": {
+                    "instance_id": instance_id,
+                    "bind_ports": ["service.account_read", "service.provider_session"],
+                    "options": {
+                        "role": "account_session_worker",
+                        "account_session_ref": f"{account_ref}-session-v1",
+                    },
+                },
+            }
+        },
+        "communication": {
+            "config_schema_version": 1,
+            "profiles": {
+                transport_ref: {
+                    "backend": "zmq",
+                    "config_schema_version": 1,
+                    "endpoints": {"rpc_bind": endpoint},
+                    "security_profile_ref": security_ref,
+                    "options": {"high_water_mark": 32, "max_message_bytes": _MAX_MESSAGE_BYTES},
+                }
+            },
+        },
+    }
+
+
+def _dual_execution_service_config(
+    endpoint: str,
+    account_ref: str,
+    service_id: str,
+    instance_id: str,
+    scope_ref: str,
+    transport_ref: str,
+    security_ref: str,
+) -> dict[str, Any]:
+    raw = _order._service_config(endpoint)
+    old_transport_ref = raw["transport_ref"]
+    raw["service_id"] = service_id
+    raw["scope_ref"] = scope_ref
+    raw["transport_ref"] = transport_ref
+    raw["registration_policy_ref"] = f"{account_ref}-execution-policy-v1"
+    raw["service_requirements_ref"] = f"{account_ref}-execution-requirements-v1"
+    settings = raw["components"]["execution"]["settings"]
+    settings["instance_id"] = instance_id
+    profile = raw["communication"]["profiles"].pop(old_transport_ref)
+    profile["endpoints"] = {"rpc_bind": endpoint}
+    profile["security_profile_ref"] = security_ref
+    raw["communication"]["profiles"][transport_ref] = profile
+    return raw
+
+
+def _dual_gateway_service_process(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    journal_path: str,
+    guard_directory: str,
+    account_ref: str,
+    client_scope_ref: str,
+    account_key_values: dict[str, Any],
+    service_keys: dict[str, bytes],
+) -> None:
+    """Spawn target: one actual Gateway ServiceHost and one synthetic account session."""
+
+    from pathlib import Path
+
+    from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+    from bt_api_gateway import GatewayEventJournal
+    from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
+    from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
+    from bt_api_gateway.service_component import GatewayServiceAccountScope
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+    from bt_api_py.service_components import ComponentResources
+    from bt_api_py.service_config import parse_service_config
+    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+
+    config = parse_service_config(raw_config)
+    account_key = AccountKey.from_dict(account_key_values)
+    journal = GatewayEventJournal(journal_path)
+    provider = _DualLiveSyntheticAccountProvider(account_key, account_ref)
+    journal_scope = f"afi-dual-journal:{account_ref}"
+    state_scope = f"afi-dual-state:{account_ref}"
+    account_scope = GatewayServiceAccountScope(
+        account_ref=account_ref,
+        execution_domain_ref=_DUAL_LIVE_DOMAIN,
+        journal_account_scope=journal_scope,
+        account_read_strategy_scope=state_scope,
+        shared_account_facts_scope=state_scope,
+    )
+    principal = GatewayPrincipal(
+        principal_id=_DUAL_LIVE_PRINCIPAL,
+        account_scopes=frozenset({journal_scope}),
+        strategy_scopes=frozenset({state_scope}),
+        allowed_kinds=frozenset({GatewayCommandKind.READ}),
+    )
+    holder: dict[str, Any] = {}
+
+    def resource_provider(component: str, _instance_id: str, options: Any, _scope: Any):
+        if component != "gateway" or options.get("role") != "account_session_worker":
+            raise AssertionError("unexpected dual-live Gateway resource request")
+        worker = GatewayAccountSessionWorker(
+            provider,
+            journal,
+            account_key=account_key,
+            journal_account_scope=journal_scope,
+            state_scope=state_scope,
+            guard=LocalAccountSessionGuard(
+                Path(guard_directory), account_key.account_key_id, owner_ref=f"afi-{account_ref}"
+            ),
+            required_coverage=(AccountResourceKey("spot", "cash"),),
+            refresh_interval_seconds=3600,
+            max_staleness_seconds=7200,
+            request_timeout_seconds=2,
+        )
+        holder["worker"] = worker
+        return ComponentResources.owned(
+            {
+                "journal": journal,
+                "accounts": {account_ref: account_scope},
+                "principals": {_DUAL_LIVE_PRINCIPAL: principal},
+            },
+            ready=lambda: True,
+            close=worker.close,
+            internal_ports={"service.provider_session": worker},
+        )
+
+    identity = _DUAL_LIVE_APPLICATION_IDENTITY
+    app_grant = ResourceGrant(
+        config.components["gateway"]["settings"]["instance_id"],
+        "service.account_read",
+        client_scope_ref,
+        WireScope(_DUAL_LIVE_DOMAIN, account_ref=account_ref),
+        frozenset({"account.snapshot"}),
+    )
+    host = None
+    try:
+        host = ServiceHost(
+            config,
+            TrustedServiceAuthority(
+                identity=WireIdentity(
+                    WireRole.SERVICE, f"{config.service_id}-principal", config.service_id
+                ),
+                scope=WireScope(_DUAL_LIVE_DOMAIN),
+                scope_ref=config.scope_ref,
+                scope_version=f"{account_ref}-gateway-scope-v1",
+                security_ref=service_keys["security_ref"],
+                security_version="curve-key-v1",
+                registration_policy_ref=config.registration_policy_ref,
+                registration_policy_version=f"{account_ref}-gateway-policy-v1",
+                service_requirements_ref=config.service_requirements_ref,
+                service_requirements_version=f"{account_ref}-gateway-requirements-v1",
+                curve_public_key=service_keys["server_public"],
+                curve_secret_key=service_keys["server_secret"],
+                principals={service_keys["application_public"]: _DUAL_LIVE_PRINCIPAL},
+                grants={_DUAL_LIVE_PRINCIPAL: (PrincipalGrant(identity, (app_grant,)),)},
+            ),
+            registry_path,
+            resource_provider,
+        )
+        host.start()
+        worker = holder["worker"]
+        control.send(
+            (
+                "ready",
+                host.endpoint,
+                host.state,
+                {
+                    "worker_state": worker.state,
+                    "worker_ready": worker.ready,
+                    "connect_calls": provider.connect_calls,
+                    "read_calls": provider.read_calls,
+                    "close_calls": provider.close_calls,
+                    "account_key_id": account_key.account_key_id,
+                },
+            )
+        )
+        while True:
+            host.serve_once(timeout_ms=10)
+            if not control.poll():
+                continue
+            command = control.recv()
+            if command == ("close",):
+                host.close()
+                control.send(
+                    (
+                        "closed",
+                        host.state,
+                        provider.connect_calls,
+                        provider.read_calls,
+                        provider.close_calls,
+                        worker.state,
+                    )
+                )
+                return
+            if command == ("status",):
+                worker = holder["worker"]
+                control.send(
+                    (
+                        "status",
+                        provider.connect_calls,
+                        provider.read_calls,
+                        provider.close_calls,
+                        worker.ready,
+                    )
+                )
+                continue
+            raise AssertionError("unknown synthetic Gateway host command")
+    except BaseException as error:
+        if host is not None and host.state not in {"closed", "failed"}:
+            with suppress(BaseException):
+                host.close()
+        with suppress(Exception):
+            control.send(("error", getattr(error, "code", type(error).__name__)))
+        raise
+    finally:
+        control.close()
+
+
+def _dual_execution_service_process(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    store_path: str,
+    account_ref: str,
+    strategy_ref: str,
+    client_scope_ref: str,
+    service_keys: dict[str, bytes],
+) -> None:
+    """Spawn target: one actual Execution ServiceHost with one trusted owner book."""
+
+    from bt_api_execution import SqliteExecutionStore
+    from bt_api_py.service_components import ComponentResources
+    from bt_api_py.service_config import parse_service_config
+    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+
+    config = parse_service_config(raw_config)
+    store = SqliteExecutionStore(store_path)
+    provider = _CountingProvider()
+    gate = _order._Gate()
+    source = _DualLiveSyntheticAccountBookSource(account_ref, strategy_ref)
+    scope = WireScope(_DUAL_LIVE_DOMAIN, account_ref=account_ref, strategy_ref=strategy_ref)
+    account_scope = WireScope(_DUAL_LIVE_DOMAIN, account_ref=account_ref)
+    execution_scope = source.execution_scope
+    targets = {scope: execution_scope}
+    instance_id = config.components["execution"]["settings"]["instance_id"]
+    app_identity = _DUAL_LIVE_APPLICATION_IDENTITY
+    app_grant = ResourceGrant(
+        instance_id,
+        "service.order_query",
+        client_scope_ref,
+        account_scope,
+        frozenset({"execution.account_books.query"}),
+    )
+
+    def resource_provider(component: str, requested_instance: str, _options: Any, _scope: Any):
+        if component != "execution" or requested_instance != instance_id:
+            raise AssertionError("unexpected dual-live Execution resource request")
+        return ComponentResources.borrowed(
+            {
+                "store": store,
+                "targets": targets,
+                "dispatch": provider,
+                "admission": {"order_gate": gate, "cancel_gate": gate},
+                "account_books": source,
+            },
+            ready=lambda: True,
+        )
+
+    host = None
+    try:
+        host = ServiceHost(
+            config,
+            TrustedServiceAuthority(
+                identity=WireIdentity(
+                    WireRole.SERVICE, f"{config.service_id}-principal", config.service_id
+                ),
+                scope=WireScope(_DUAL_LIVE_DOMAIN),
+                scope_ref=config.scope_ref,
+                scope_version=f"{account_ref}-execution-scope-v1",
+                security_ref=service_keys["security_ref"],
+                security_version="curve-key-v1",
+                registration_policy_ref=config.registration_policy_ref,
+                registration_policy_version=f"{account_ref}-execution-policy-v1",
+                service_requirements_ref=config.service_requirements_ref,
+                service_requirements_version=f"{account_ref}-execution-requirements-v1",
+                curve_public_key=service_keys["server_public"],
+                curve_secret_key=service_keys["server_secret"],
+                principals={service_keys["application_public"]: _DUAL_LIVE_PRINCIPAL},
+                grants={_DUAL_LIVE_PRINCIPAL: (PrincipalGrant(app_identity, (app_grant,)),)},
+            ),
+            registry_path,
+            resource_provider,
+        )
+        host.start()
+        control.send(("ready", host.endpoint, host.state))
+        while True:
+            host.serve_once(timeout_ms=10)
+            if not control.poll():
+                continue
+            command = control.recv()
+            if command == ("close",):
+                host.close()
+                store.close()
+                control.send(("closed", host.state, source.read_count))
+                return
+            if command == ("status",):
+                control.send(("status", source.read_count))
+                continue
+            raise AssertionError("unknown synthetic Execution host command")
+    except BaseException as error:
+        if host is not None and host.state not in {"closed", "failed"}:
+            with suppress(BaseException):
+                host.close()
+        with suppress(BaseException):
+            store.close()
+        with suppress(Exception):
+            control.send(("error", getattr(error, "code", type(error).__name__)))
+        raise
+    finally:
+        control.close()
+
+
+def _stop_dual_live_service_host(host: dict[str, Any]) -> tuple[Any, ...]:
+    """Gracefully stop one test-owned process and always release its pipe/handle."""
+
+    process, pipe = host["process"], host["pipe"]
+    failures: list[BaseException] = []
+    close_reply: tuple[Any, ...] = ()
+    exit_code: int | None = None
+    try:
+        if process.is_alive() and not host.get("startup_failed", False):
+            pipe.send(("close",))
+            close_reply = _order._receive(pipe, timeout=15.0)
+            if not close_reply or close_reply[0] != "closed":
+                failures.append(AssertionError("synthetic ServiceHost did not confirm close"))
+    except BaseException as error:
+        failures.append(error)
+    try:
+        process.join(15.0)
+        if process.is_alive():
+            process.terminate()
+            process.join(10.0)
+            failures.append(AssertionError("synthetic ServiceHost required termination"))
+        exit_code = process.exitcode
+    except BaseException as error:
+        failures.append(error)
+    try:
+        pipe.close()
+    except BaseException as error:
+        failures.append(error)
+    try:
+        process.close()
+    except BaseException as error:
+        failures.append(error)
+    if exit_code != 0:
+        failures.append(AssertionError(f"synthetic ServiceHost exit code was {exit_code!r}"))
+    host["shutdown"] = {
+        "reply": close_reply,
+        "exit_code": exit_code,
+        "failure_count": len(failures),
+    }
+    if failures:
+        raise AssertionError(
+            f"synthetic ServiceHost cleanup had {len(failures)} failure(s)"
+        ) from failures[0]
+    return close_reply
+
+
+def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise two real SDK Gateway and Execution hosts through the production AFI HTTP path."""
+
+    import json
+    import re
+    from pathlib import Path
+
+    import httpx
+    from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+    from pydantic import SecretStr
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import StaticPool
+
+    original_is_file = Path.is_file
+    original_path_isfile = os.path.isfile
+
+    def no_private_dotenv_path_probe(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".slowapi.env" or basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_is_file(path)
+
+    def no_private_dotenv_open(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_path_isfile(path)
+
+    monkeypatch.setattr(Path, "is_file", no_private_dotenv_path_probe)
+    monkeypatch.setattr(os.path, "isfile", no_private_dotenv_open)
+    import app.api.portfolio.api as portfolio_api
+    import app.main as main_module
+    from app.db.database import get_db
+    from app.models.portfolio_composition import PortfolioCompositionVersion
+    from app.services.service_read.deployment import (
+        ServiceReadDeployment,
+        _load_sdk_types,
+        _parse_profile,
+    )
+
+    monkeypatch.setattr(
+        portfolio_api,
+        "_get_manager",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("versioned composition must not instantiate the legacy manager")
+        ),
+    )
+    monkeypatch.setattr(main_module.settings, "DB_AUTO_CREATE_SCHEMA", True)
+    monkeypatch.setattr(main_module.settings, "RAG_VECTOR_ENABLED", False)
+    app = main_module.app
+
+    context = multiprocessing.get_context("spawn")
+    preflight_only = os.environ.get("AFI_DUAL_LIVE_PREFLIGHT_ONLY") == "1"
+    next_preflight_port = 45100
+
+    def endpoint() -> str:
+        nonlocal next_preflight_port
+        if preflight_only:
+            value = f"tcp://127.0.0.1:{next_preflight_port}"
+            next_preflight_port += 1
+            return value
+        return _order._endpoint()
+
+    account_refs = {"account-a": _ACCOUNT_A, "account-b": _ACCOUNT_B}
+    strategy_refs = {"account-a": _STRATEGY_A, "account-b": _STRATEGY_B}
+    account_keys = {
+        name: AccountKey("PAPER", "synthetic-venue", "simulation", f"afi-{name}-id")
+        for name in account_refs
+    }
+    assert account_keys["account-a"].account_key_id != account_keys["account-b"].account_key_id
+    app_public, app_secret = zmq.curve_keypair()
+    services: dict[str, dict[str, Any]] = {}
+    for name in account_refs:
+        gateway_endpoint = endpoint()
+        gateway_server_public, gateway_server_secret = zmq.curve_keypair()
+        gateway_security_ref = f"afi-dual-{name}-gateway-curve-v1"
+        gateway_transport_ref = f"afi-dual-{name}-gateway-connect-v1"
+        gateway_service_id = f"afi-dual-{name}-gateway-service"
+        gateway_instance_id = f"afi-dual-{name}-gateway-instance"
+        gateway_scope_ref = f"afi-dual-{name}-gateway-scope-v1"
+        execution_endpoint = endpoint()
+        execution_server_public, execution_server_secret = zmq.curve_keypair()
+        execution_security_ref = f"afi-dual-{name}-execution-curve-v1"
+        execution_transport_ref = f"afi-dual-{name}-execution-connect-v1"
+        execution_service_id = f"afi-dual-{name}-execution-service"
+        execution_instance_id = f"afi-dual-{name}-execution-instance"
+        execution_service_scope_ref = f"afi-dual-{name}-execution-service-scope-v1"
+        gateway_client_scope_ref = f"afi-dual-{name}-account-snapshot-v1"
+        books_client_scope_ref = f"afi-dual-{name}-account-books-v1"
+        services[name] = {
+            "account_ref": account_refs[name],
+            "strategy_ref": strategy_refs[name],
+            "account_key": account_keys[name],
+            "gateway": {
+                "endpoint": gateway_endpoint,
+                "server_public": gateway_server_public,
+                "server_secret": gateway_server_secret,
+                "security_ref": gateway_security_ref,
+                "transport_ref": gateway_transport_ref,
+                "service_id": gateway_service_id,
+                "instance_id": gateway_instance_id,
+                "service_scope_ref": gateway_scope_ref,
+                "client_scope_ref": gateway_client_scope_ref,
+                "config": _dual_gateway_service_config(
+                    gateway_endpoint,
+                    account_refs[name],
+                    gateway_service_id,
+                    gateway_instance_id,
+                    gateway_scope_ref,
+                    gateway_transport_ref,
+                    gateway_security_ref,
+                ),
+            },
+            "execution": {
+                "endpoint": execution_endpoint,
+                "server_public": execution_server_public,
+                "server_secret": execution_server_secret,
+                "security_ref": execution_security_ref,
+                "transport_ref": execution_transport_ref,
+                "service_id": execution_service_id,
+                "instance_id": execution_instance_id,
+                "service_scope_ref": execution_service_scope_ref,
+                "client_scope_ref": books_client_scope_ref,
+                "config": _dual_execution_service_config(
+                    execution_endpoint,
+                    account_refs[name],
+                    execution_service_id,
+                    execution_instance_id,
+                    execution_service_scope_ref,
+                    f"afi-dual-{name}-execution-listener-v1",
+                    execution_security_ref,
+                ),
+            },
+        }
+
+    identity = _DUAL_LIVE_APPLICATION_IDENTITY
+    gateway_bindings = []
+    execution_bindings = []
+    scope_claims: dict[str, dict[str, Any]] = {}
+    peers: dict[str, dict[str, str]] = {}
+    curve_keys: dict[str, dict[str, str]] = {}
+    communication_profiles: dict[str, dict[str, Any]] = {}
+    account_bindings: dict[str, dict[str, Any]] = {}
+    account_book_bindings: dict[str, dict[str, Any]] = {}
+    strategy_book_bindings: dict[str, dict[str, str]] = {}
+    for _name, service in services.items():
+        account_ref, strategy_ref, account_key = (
+            service["account_ref"],
+            service["strategy_ref"],
+            service["account_key"],
+        )
+        for role in ("gateway", "execution"):
+            endpoint = service[role]["endpoint"]
+            transport_ref = service[role]["transport_ref"]
+            security_ref = service[role]["security_ref"]
+            peer_service_id = service[role]["service_id"]
+            peer_principal = f"{peer_service_id}-principal"
+            peers[peer_service_id] = {"principal_ref": peer_principal, "actor_ref": peer_service_id}
+            curve_keys[security_ref] = {
+                "server_key": service[role]["server_public"].decode("ascii"),
+                "public_key": app_public.decode("ascii"),
+                "secret_key": app_secret.decode("ascii"),
+            }
+            communication_profiles[transport_ref] = {
+                "backend": "zmq",
+                "config_schema_version": 1,
+                "endpoints": {"rpc_connect": endpoint},
+                "security_profile_ref": security_ref,
+                "options": {
+                    "request_timeout_ms": _REQUEST_TIMEOUT_MS,
+                    "high_water_mark": 32,
+                    "max_message_bytes": _MAX_MESSAGE_BYTES,
+                },
+            }
+            client_scope_ref = service[role]["client_scope_ref"]
+            scope_claims[client_scope_ref] = {
+                "execution_domain_ref": _DUAL_LIVE_DOMAIN,
+                "account_ref": account_ref,
+                "strategy_ref": None,
+            }
+            if role == "gateway":
+                gateway_bindings.append(
+                    {
+                        "mount": "application.account",
+                        "service_id": peer_service_id,
+                        "instance_id": service[role]["instance_id"],
+                        "scope_ref": client_scope_ref,
+                        "transport_ref": transport_ref,
+                        "account_ref": account_ref,
+                    }
+                )
+                account_bindings[account_ref] = {
+                    "mount": "application.account",
+                    "scope_ref": client_scope_ref,
+                    "currency": "USDT",
+                    "account_key": account_key.to_dict(),
+                    "coverage": [AccountResourceKey("spot", "cash").to_dict()],
+                    "require_open_orders": False,
+                }
+            else:
+                execution_bindings.append(
+                    {
+                        "mount": "application.order_query",
+                        "service_id": peer_service_id,
+                        "instance_id": service[role]["instance_id"],
+                        "scope_ref": client_scope_ref,
+                        "transport_ref": transport_ref,
+                        "account_ref": account_ref,
+                    }
+                )
+                account_book_bindings[account_ref] = {
+                    "mount": "application.order_query",
+                    "scope_ref": client_scope_ref,
+                    "account_key": account_key.to_dict(),
+                }
+                strategy_book_bindings[strategy_ref] = {
+                    "account_ref": account_ref,
+                    "owner_ref": strategy_ref,
+                }
+
+    client_config = {
+        "client_config_schema_version": 1,
+        "process_role": "application_client",
+        "registration": {"application_ref": identity.actor_ref},
+        "clients": {
+            "gateway": {
+                "config_schema_version": 1,
+                "settings": {
+                    "bindings": gateway_bindings,
+                    "options": {"request_timeout_ms": _REQUEST_TIMEOUT_MS},
+                },
+            },
+            "execution": {
+                "config_schema_version": 1,
+                "settings": {
+                    "bindings": execution_bindings,
+                    "options": {"request_timeout_ms": _REQUEST_TIMEOUT_MS},
+                },
+            },
+        },
+        "communication": {"config_schema_version": 1, "profiles": communication_profiles},
+    }
+    profile = {
+        "subject": _SUBJECT_A,
+        "identity": {
+            "principal_ref": identity.principal_ref,
+            "actor_ref": identity.actor_ref,
+            "delegate_ref": identity.delegate_ref,
+        },
+        "client_config": client_config,
+        "scope_claims": scope_claims,
+        "peer_identities": peers,
+        "curve_keys": curve_keys,
+        "grants": {
+            "account_refs": list(account_bindings),
+            "account_book_refs": list(account_book_bindings),
+            "strategy_book_refs": list(strategy_book_bindings),
+            "order_scope_refs": [],
+            "monitor_scope_refs": [],
+        },
+        "account_bindings": account_bindings,
+        "account_book_bindings": account_book_bindings,
+        "strategy_book_bindings": strategy_book_bindings,
+        "order_bindings": {},
+        "monitor_bindings": {},
+        "worker": {"max_queue_size": 16, "maintenance_interval_seconds": 30.0},
+    }
+
+    # Parse every component/profile before creating any process or runtime.
+    from bt_api_py.service_config import parse_client_config, parse_service_config
+
+    assert len(parse_client_config(client_config).clients) == 2
+    for service in services.values():
+        parse_service_config(service["gateway"]["config"])
+        parse_service_config(service["execution"]["config"])
+    parsed_profile = _parse_profile(profile, _load_sdk_types())
+    assert parsed_profile.identity == _DUAL_LIVE_APPLICATION_IDENTITY
+    assert set(parsed_profile.account_bindings) == {_ACCOUNT_A, _ACCOUNT_B}
+    assert set(parsed_profile.account_book_bindings) == {_ACCOUNT_A, _ACCOUNT_B}
+    assert set(parsed_profile.strategy_book_bindings) == {_STRATEGY_A, _STRATEGY_B}
+    gateway_client_bindings = client_config["clients"]["gateway"]["settings"]["bindings"]
+    execution_client_bindings = client_config["clients"]["execution"]["settings"]["bindings"]
+    for name in account_refs:
+        account_ref = account_refs[name]
+        service = services[name]
+        assert parsed_profile.account_bindings[account_ref].account_key == account_keys[name]
+        assert parsed_profile.account_book_bindings[account_ref].account_key == account_keys[name]
+        gateway = service["gateway"]
+        assert parsed_profile.account_bindings[account_ref].scope_ref == (
+            gateway["client_scope_ref"]
+        )
+        gateway_binding = next(
+            binding
+            for binding in gateway_client_bindings
+            if binding["service_id"] == gateway["service_id"]
+        )
+        assert gateway_binding["scope_ref"] == gateway["client_scope_ref"]
+        assert gateway_binding["transport_ref"] == gateway["transport_ref"]
+        assert gateway_binding["instance_id"] == gateway["config"]["components"]["gateway"][
+            "settings"
+        ]["instance_id"]
+        assert peers[gateway["service_id"]] == {
+            "principal_ref": f"{gateway['service_id']}-principal",
+            "actor_ref": gateway["service_id"],
+        }
+        gateway_profile = communication_profiles[gateway["transport_ref"]]
+        assert gateway_profile["endpoints"]["rpc_connect"] == gateway["endpoint"]
+        assert gateway_profile["security_profile_ref"] == gateway["security_ref"]
+        assert gateway["security_ref"] in curve_keys
+        assert scope_claims[gateway["client_scope_ref"]] == {
+            "execution_domain_ref": _DUAL_LIVE_DOMAIN,
+            "account_ref": account_ref,
+            "strategy_ref": None,
+        }
+        execution = service["execution"]
+        execution_binding = next(
+            binding
+            for binding in execution_client_bindings
+            if binding["service_id"] == execution["service_id"]
+        )
+        assert execution_binding["scope_ref"] == execution["client_scope_ref"]
+        assert execution_binding["transport_ref"] == execution["transport_ref"]
+        assert execution_binding["instance_id"] == execution["config"]["components"][
+            "execution"
+        ]["settings"]["instance_id"]
+        assert peers[execution["service_id"]] == {
+            "principal_ref": f"{execution['service_id']}-principal",
+            "actor_ref": execution["service_id"],
+        }
+        execution_profile = communication_profiles[execution["transport_ref"]]
+        assert execution_profile["endpoints"]["rpc_connect"] == execution["endpoint"]
+        assert execution_profile["security_profile_ref"] == execution["security_ref"]
+        assert execution["security_ref"] in curve_keys
+        assert scope_claims[execution["client_scope_ref"]] == {
+            "execution_domain_ref": _DUAL_LIVE_DOMAIN,
+            "account_ref": account_ref,
+            "strategy_ref": None,
+        }
+        assert parsed_profile.account_book_bindings[account_ref].scope_ref == (
+            execution["client_scope_ref"]
+        )
+        strategy_binding = parsed_profile.strategy_book_bindings[service["strategy_ref"]]
+        assert strategy_binding.account_ref == account_ref
+        assert strategy_binding.owner_ref == service["strategy_ref"]
+
+    if preflight_only:
+        return
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    app_db = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _create_tables() -> None:
+        async with engine.begin() as connection:
+            await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+
+    asyncio.run(_create_tables())
+
+    async def _override_db():
+        async with app_db() as session:
+            yield session
+
+    prior_db_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = _override_db
+    hosts: list[dict[str, Any]] = []
+    deployment: ServiceReadDeployment | None = None
+    owner_threads: tuple[threading.Thread, ...] = ()
+    cleanup_failures: list[BaseException] = []
+    primary_error: BaseException | None = None
+    primary_traceback = None
+    root = tmp_path / "afi-dual-live"
+    root.mkdir(parents=True, exist_ok=True)
+    _COMMAND_GUARD_STATE["active"] = True
+    startup_trace_phases = {
+        ("app.services.service_read.deployment", "_create_runtime"): "runtime_factory",
+        (
+            "app.services.service_read.session",
+            "SdkServiceReadSession.__init__",
+        ): "session_construct",
+        ("app.services.service_read.session", "SdkServiceReadSession.start"): "session_start",
+        ("app.services.service_read.worker", "ServiceReadWorker._run_owner"): "owner_thread_start",
+        ("bt_api_py.service_runtime", "ServiceClientRuntime.__init__"): "sdk_runtime_construct",
+        ("bt_api_py.service_runtime", "ServiceClientRuntime.start"): "sdk_runtime_start",
+        (
+            "bt_api_py.service_runtime",
+            "ServiceClientRuntime._register_port",
+        ): "sdk_port_register",
+        ("bt_api_py.service_runtime", "ServiceClientRuntime._rpc"): "sdk_control_rpc",
+    }
+    startup_rpc_operation_labels = {
+        "service.discover": "discover",
+        "service.register": "register",
+        "service.renew": "renew",
+        "service.unregister": "unregister",
+        "account.snapshot": "account_snapshot",
+        "execution.account_books.query": "account_book_query",
+    }
+    startup_rpc_services = {
+        "afi-dual-account-a-gateway-service": (
+            "account_a_gateway",
+            frozenset(
+                {
+                    "service.discover",
+                    "service.register",
+                    "service.renew",
+                    "service.unregister",
+                    "account.snapshot",
+                }
+            ),
+        ),
+        "afi-dual-account-a-execution-service": (
+            "account_a_execution",
+            frozenset(
+                {
+                    "service.discover",
+                    "service.register",
+                    "service.renew",
+                    "service.unregister",
+                    "execution.account_books.query",
+                }
+            ),
+        ),
+        "afi-dual-account-b-gateway-service": (
+            "account_b_gateway",
+            frozenset(
+                {
+                    "service.discover",
+                    "service.register",
+                    "service.renew",
+                    "service.unregister",
+                    "account.snapshot",
+                }
+            ),
+        ),
+        "afi-dual-account-b-execution-service": (
+            "account_b_execution",
+            frozenset(
+                {
+                    "service.discover",
+                    "service.register",
+                    "service.renew",
+                    "service.unregister",
+                    "execution.account_books.query",
+                }
+            ),
+        ),
+    }
+    startup_rpc_stages = {
+        (service_id, operation): f"{service_label}_{startup_rpc_operation_labels[operation]}"
+        for service_id, (service_label, operations) in startup_rpc_services.items()
+        for operation in operations
+    }
+    coded_startup_errors = {
+        ("app.services.service_read.deployment", "ServiceReadDeploymentError"),
+        ("app.services.service_read.session", "ServiceReadSessionError"),
+        ("app.services.service_read.session", "ServiceReadUnavailableError"),
+        ("app.services.service_read.worker", "ServiceReadWorkerError"),
+        ("bt_api_py.service_runtime", "ServiceRuntimeError"),
+        ("bt_api_py.service_runtime", "ServiceRuntimeStartupCleanupError"),
+        ("bt_api_py.service_runtime", "ServiceRuntimeRequestNotSentError"),
+        ("bt_api_py.service_runtime", "ServiceCallOutcomeUnknownError"),
+    }
+    startup_exception_events: list[dict[str, str | None]] = []
+    startup_exception_overflow = False
+    startup_exception_lock = threading.Lock()
+
+    def safe_exception_type(error_type: type[BaseException]) -> str:
+        module_name = getattr(error_type, "__module__", None)
+        qualified_name = getattr(error_type, "__qualname__", None)
+        if (
+            type(module_name) is not str
+            or type(qualified_name) is not str
+            or len(module_name) + len(qualified_name) > 192
+            or not module_name
+            or not qualified_name
+            or any(
+                not part.isidentifier()
+                for part in (*module_name.split("."), *qualified_name.split("."))
+            )
+        ):
+            return "unclassified"
+        return f"{module_name}.{qualified_name}"
+
+    def safe_exception_code(
+        error_type: type[BaseException], error: BaseException
+    ) -> str | None:
+        if (error_type.__module__, error_type.__name__) not in coded_startup_errors:
+            return None
+        return _safe_diagnostic_code(getattr(error, "code", None))
+
+    def observe_startup_exceptions(frame: Any, event: str, _argument: Any) -> Any:
+        if event != "call" or not threading.current_thread().name.startswith(
+            "afi-service-read-"
+        ):
+            return None
+        phase = startup_trace_phases.get(
+            (frame.f_globals.get("__name__"), frame.f_code.co_qualname)
+        )
+        if phase is None:
+            return None
+        rpc_stage = None
+        if phase == "sdk_control_rpc":
+            rpc_stage = startup_rpc_stages.get(
+                (frame.f_locals.get("service_id"), frame.f_locals.get("operation")),
+                "unclassified_synthetic_rpc",
+            )
+
+        def observe_phase(_frame: Any, phase_event: str, phase_argument: Any) -> Any:
+            nonlocal startup_exception_overflow
+            if phase_event == "exception" and type(phase_argument) is tuple:
+                try:
+                    error_type, error, _traceback = phase_argument
+                    if isinstance(error_type, type) and isinstance(error, BaseException):
+                        record = {
+                            "phase": phase,
+                            "type": safe_exception_type(error_type),
+                            "code": safe_exception_code(error_type, error),
+                        }
+                        if rpc_stage is not None:
+                            record["service_operation"] = rpc_stage
+                        with startup_exception_lock:
+                            if len(startup_exception_events) < 8:
+                                startup_exception_events.append(record)
+                            else:
+                                startup_exception_overflow = True
+                except BaseException:
+                    with startup_exception_lock:
+                        startup_exception_overflow = True
+            return observe_phase
+
+        return observe_phase
+
+    try:
+        guard_directories: dict[str, str] = {}
+        for name in account_refs:
+            guard_directory = root / f"{name}-session-guard"
+            guard_directory.mkdir(exist_ok=False)
+            guard_directories[name] = str(guard_directory)
+        for name, service in services.items():
+            for role, target, arguments, process_name in (
+                (
+                    "gateway",
+                    _dual_gateway_service_process,
+                    (
+                        service["gateway"]["config"],
+                        str(root / f"{name}-gateway-registry.sqlite3"),
+                        str(root / f"{name}-gateway-journal.sqlite3"),
+                        guard_directories[name],
+                        service["account_ref"],
+                        service["gateway"]["client_scope_ref"],
+                        service["account_key"].to_dict(),
+                        {
+                            "server_public": service["gateway"]["server_public"],
+                            "server_secret": service["gateway"]["server_secret"],
+                            "application_public": app_public,
+                            "security_ref": service["gateway"]["security_ref"],
+                        },
+                    ),
+                    f"afi-dual-{name}-gateway-host",
+                ),
+                (
+                    "execution",
+                    _dual_execution_service_process,
+                    (
+                        service["execution"]["config"],
+                        str(root / f"{name}-execution-registry.sqlite3"),
+                        str(root / f"{name}-execution-store.sqlite3"),
+                        service["account_ref"],
+                        service["strategy_ref"],
+                        service["execution"]["client_scope_ref"],
+                        {
+                            "server_public": service["execution"]["server_public"],
+                            "server_secret": service["execution"]["server_secret"],
+                            "application_public": app_public,
+                            "security_ref": service["execution"]["security_ref"],
+                        },
+                    ),
+                    f"afi-dual-{name}-execution-host",
+                ),
+            ):
+                host = _order._start_process(context, target, arguments, process_name)
+                hosts.append(host)
+                host["role"] = role
+                host["account_ref"] = service["account_ref"]
+                diagnostic_path = root / f"{name}-{role}-startup.json"
+                host["diagnostic_path"] = diagnostic_path
+                host["account_book_diagnostic"] = {"schema_version": 1, "role": role}
+                try:
+                    ready = _order._receive(host["pipe"], timeout=20.0)
+                except BaseException:
+                    host["startup_failed"] = True
+                    raise
+                if ready[0] == "error":
+                    host["startup_failed"] = True
+                    _write_account_book_diagnostic(
+                        diagnostic_path,
+                        {
+                            "schema_version": 1,
+                            "role": role,
+                            "status": "error",
+                            "code": _safe_diagnostic_code(ready[1] if len(ready) > 1 else None),
+                        },
+                    )
+                    pytest.fail(
+                        f"synthetic {role} ServiceHost startup failed; "
+                        f"finite record at {diagnostic_path}",
+                        pytrace=False,
+                    )
+                assert ready[0] == "ready", ready
+                assert ready[2] == "started", ready
+                if role == "gateway":
+                    assert ready[3]["worker_ready"] is True
+                    assert ready[3]["connect_calls"] == ready[3]["read_calls"] == 1
+                    assert ready[3]["close_calls"] == 0
+                    assert ready[3]["account_key_id"] == service["account_key"].account_key_id
+                    host["startup_facts"] = ready[3]
+                else:
+                    host["startup_facts"] = ready[2]
+
+        monkeypatch.setattr(
+            main_module.settings,
+            "SERVICE_READ_DEPLOYMENT_JSON",
+            SecretStr(json.dumps({"schema_version": 1, "subjects": [profile]})),
+        )
+
+        async def _exercise_http() -> None:
+            nonlocal deployment, owner_threads
+            async with main_module.lifespan(app):
+                deployment = app.state.service_read_deployment
+                assert deployment is not None
+                assert len(deployment._workers) == 1
+                worker = deployment._workers[0]
+                assert worker._thread is not None and worker._thread.is_alive()
+                owner_threads = (worker._thread,)
+                assert owner_threads[0] is not threading.current_thread()
+                headers_a = {"Authorization": f"Bearer {_make_token(_SUBJECT_A, _JWT_SECRET)}"}
+                headers_b = {"Authorization": f"Bearer {_make_token(_SUBJECT_B, _JWT_SECRET)}"}
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://afi-dual-live.synthetic.test",
+                ) as client:
+                    base_members = [
+                        {"kind": "account", "ref": _ACCOUNT_A},
+                        {"kind": "account", "ref": _ACCOUNT_B},
+                        {"kind": "strategy", "ref": _STRATEGY_A},
+                        {"kind": "strategy", "ref": _STRATEGY_B},
+                    ]
+                    created = await client.post(
+                        "/api/v1/portfolio/compositions",
+                        headers=headers_a,
+                        json={
+                            "portfolio_ref": "afi-dual-live-overlap-one",
+                            "source_type": "live",
+                            "base_currency": "USDT",
+                            "members": base_members,
+                        },
+                    )
+                    assert created.status_code == 201, created.text
+                    assert created.json()["membership_version"] == 1
+                    create_overlap = await client.post(
+                        "/api/v1/portfolio/compositions",
+                        headers=headers_a,
+                        json={
+                            "portfolio_ref": "afi-dual-live-overlap-two",
+                            "source_type": "live",
+                            "base_currency": "USDT",
+                            "members": [
+                                {"kind": "account", "ref": _ACCOUNT_A},
+                                {"kind": "strategy", "ref": _STRATEGY_A},
+                            ],
+                        },
+                    )
+                    assert create_overlap.status_code == 201, create_overlap.text
+
+                    async def projection(portfolio_ref: str) -> dict[str, Any]:
+                        response = await client.get(
+                            "/api/v1/portfolio/overview",
+                            params={"portfolio_ref": portfolio_ref, "membership_version": 1},
+                            headers=headers_a,
+                        )
+                        assert response.status_code == 200, response.text
+                        return response.json()
+
+                    combined = await projection("afi-dual-live-overlap-one")
+                    overlapping = await projection("afi-dual-live-overlap-two")
+                    assert combined["source_type"] == "live"
+                    assert combined["membership_version"] == 1
+                    assert combined["account_total"] == {
+                        "status": "current",
+                        "currency": "USDT",
+                        "value": "950",
+                    }
+                    assert [row["member_ref"] for row in combined["accounts"]] == [
+                        _ACCOUNT_A,
+                        _ACCOUNT_B,
+                    ]
+                    assert {row["member_ref"]: row["cash"] for row in combined["accounts"]} == {
+                        _ACCOUNT_A: "80",
+                        _ACCOUNT_B: "650",
+                    }
+                    assert {row["member_ref"]: row["value"] for row in combined["accounts"]} == {
+                        _ACCOUNT_A: "160",
+                        _ACCOUNT_B: "790",
+                    }
+                    assert all(row["included_in_total"] is True for row in combined["accounts"])
+                    assert all(row["duplicate_of_ref"] is None for row in combined["accounts"])
+                    assert {row["strategy_ref"] for row in combined["strategies"]} == {
+                        _STRATEGY_A,
+                        _STRATEGY_B,
+                    }
+                    assert all(
+                        row["attribution_status"] == "available_with_residuals"
+                        for row in combined["strategies"]
+                    )
+                    assert all(
+                        "cash" not in row and "value" not in row and row["attributed_value"] is None
+                        for row in combined["strategies"]
+                    )
+                    assert {
+                        row["strategy_ref"]: row["positions"]
+                        for row in combined["strategies"]
+                    } == {
+                        _STRATEGY_A: [
+                            {"instrument": "PAPER:SIM:AFI-DUAL-A", "net_quantity": "2.5"}
+                        ],
+                        _STRATEGY_B: [
+                            {"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "4"}
+                        ],
+                    }
+                    assert {
+                        row["strategy_ref"]: row["fees_since_baseline"]
+                        for row in combined["strategies"]
+                    } == {
+                        _STRATEGY_A: [{"currency": "USDT", "amount": "0.06"}],
+                        _STRATEGY_B: [{"currency": "USDT", "amount": "0.13"}],
+                    }
+                    assert {
+                        row["strategy_ref"]: row["source_cursor"] for row in combined["strategies"]
+                    } == {_STRATEGY_A: 0, _STRATEGY_B: 0}
+                    books_by_account = {
+                        row["account_ref"]: row for row in combined["account_book_sources"]
+                    }
+                    coverage_by_account = {
+                        account_ref: row["coverage"]
+                        for account_ref, row in books_by_account.items()
+                    }
+                    journal_generations = []
+                    for account_ref, suffix in ((_ACCOUNT_A, "A"), (_ACCOUNT_B, "B")):
+                        coverage = coverage_by_account[account_ref]
+                        assert coverage["scope_directory_revision"] == (
+                            f"afi-dual-directory-{suffix}-r1"
+                        )
+                        assert re.fullmatch(r"[0-9a-f]{32}", coverage["journal_generation"])
+                        journal_generations.append(coverage["journal_generation"])
+                        assert coverage["baseline_execution_cursor"] == 0
+                        assert coverage["current_execution_cursor"] == 0
+                        assert coverage["complete"] is True
+                        assert coverage["reasons"] == []
+                        assert coverage["scanned_outbox_events"] == 0
+                        assert coverage["outbox_history_contiguous"] is True
+                        assert coverage["outbox_scan_complete"] is True
+                        assert coverage["continuations"] == []
+                        assert coverage["input_continuations"] == []
+                        assert coverage["quarantined_intents"] == []
+                    assert len(set(journal_generations)) == 2
+                    strategy_cursors = {
+                        row["strategy_ref"]: row["source_cursor"] for row in combined["strategies"]
+                    }
+                    assert (
+                        strategy_cursors[_STRATEGY_A]
+                        == coverage_by_account[_ACCOUNT_A]["current_execution_cursor"]
+                    )
+                    assert (
+                        strategy_cursors[_STRATEGY_B]
+                        == coverage_by_account[_ACCOUNT_B]["current_execution_cursor"]
+                    )
+                    assert {
+                        row["account_ref"]: row["state"] for row in combined["account_book_sources"]
+                    } == {_ACCOUNT_A: "RESIDUAL", _ACCOUNT_B: "RESIDUAL"}
+                    assert {
+                        row["account_ref"]: row["provider_position_change"]
+                        for row in combined["account_book_sources"]
+                    } == {
+                        _ACCOUNT_A: [
+                            {"instrument": "PAPER:SIM:AFI-DUAL-A", "net_quantity": "1"}
+                        ],
+                        _ACCOUNT_B: [
+                            {"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "2"}
+                        ],
+                    }
+                    assert {
+                        row["account_ref"]: row["position_residual"]
+                        for row in combined["account_book_sources"]
+                    } == {
+                        _ACCOUNT_A: [{"instrument": "PAPER:SIM:AFI-DUAL-A", "net_quantity": "0.5"}],
+                        _ACCOUNT_B: [{"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "1"}],
+                    }
+                    assert {
+                        row["account_ref"]: row["unallocated_book"]
+                        for row in combined["account_book_sources"]
+                    } == {
+                        _ACCOUNT_A: {
+                            "owner_kind": "UNALLOCATED",
+                            "owner_ref": "UNALLOCATED",
+                            "current_positions": [
+                                {
+                                    "instrument": "PAPER:SIM:AFI-DUAL-A",
+                                    "net_quantity": "3.5",
+                                }
+                            ],
+                            "fees_since_baseline": [{"currency": "USDT", "amount": "0.04"}],
+                        },
+                        _ACCOUNT_B: {
+                            "owner_kind": "UNALLOCATED",
+                            "owner_ref": "UNALLOCATED",
+                            "current_positions": [
+                                {
+                                    "instrument": "PAPER:SIM:AFI-DUAL-B",
+                                    "net_quantity": "5",
+                                }
+                            ],
+                            "fees_since_baseline": [{"currency": "USDT", "amount": "0.07"}],
+                        },
+                    }
+                    assert {
+                        row["account_ref"]: row["fee_residual"]
+                        for row in combined["account_book_sources"]
+                    } == {
+                        _ACCOUNT_A: [{"currency": "USDT", "amount": "0.04"}],
+                        _ACCOUNT_B: [{"currency": "USDT", "amount": "0.07"}],
+                    }
+                    assert combined["strategy_attribution"]["attributed_value"] is None
+                    assert combined["coverage"]["account_facts_complete"] is True
+                    assert combined["coverage"]["strategy_attribution_complete"] is False
+                    assert combined["coverage"]["complete"] is False
+                    assert combined["creditable"] is False
+                    assert combined["overlap_policy"] == "non_additive_display_only"
+
+                    assert overlapping["account_total"]["value"] == "160"
+                    assert overlapping["accounts"][0]["value"] == "160"
+                    assert overlapping["creditable"] is False
+                    assert overlapping["overlap_policy"] == "non_additive_display_only"
+                    assert overlapping["account_book_sources"][0]["account_ref"] == _ACCOUNT_A
+                    assert combined["membership_sha256"] != overlapping["membership_sha256"]
+                    cross_owner = await client.get(
+                        "/api/v1/portfolio/overview",
+                        params={
+                            "portfolio_ref": "afi-dual-live-overlap-one",
+                            "membership_version": 1,
+                        },
+                        headers=headers_b,
+                    )
+                    assert cross_owner.status_code == 404
+
+        from app.services.service_read.session import SdkServiceReadSession
+
+        session_phases = {
+            SdkServiceReadSession.__init__.__code__: "constructed",
+            SdkServiceReadSession.start.__code__: "started",
+            SdkServiceReadSession.read_account.__code__: "read_account",
+            SdkServiceReadSession.read_account_book.__code__: "read_account_book",
+            SdkServiceReadSession.close.__code__: "closed",
+        }
+        session_events: list[tuple[str, int]] = []
+        events_lock = threading.Lock()
+
+        def observe_owner_thread(frame: Any, event: str, _argument: Any) -> None:
+            if event == "call" and frame.f_code in session_phases:
+                with events_lock:
+                    session_events.append((session_phases[frame.f_code], threading.get_ident()))
+
+        prior_profile = threading.getprofile()
+        prior_trace = threading.gettrace()
+        try:
+            threading.setprofile(observe_owner_thread)
+            threading.settrace(observe_startup_exceptions)
+            asyncio.run(_exercise_http())
+        finally:
+            threading.setprofile(prior_profile)
+            threading.settrace(prior_trace)
+        assert {phase for phase, _thread_id in session_events} == {
+            "constructed",
+            "started",
+            "read_account",
+            "read_account_book",
+            "closed",
+        }
+        assert len({thread_id for _phase, thread_id in session_events}) == 1
+        assert owner_threads and owner_threads[0].ident in {
+            thread_id for _phase, thread_id in session_events
+        }
+        assert owner_threads[0].ident != threading.get_ident()
+        assert deployment is not None and deployment.closed
+        assert deployment.close_failures == ()
+        assert app.state.service_read_deployment is None
+        assert all(not thread.is_alive() for thread in owner_threads)
+        for host in hosts:
+            if host["role"] == "gateway":
+                status = _order._command(host, "status")
+                assert status[0] == "status" and status[1:4] == (1, 1, 0)
+            else:
+                status = _order._command(host, "status")
+                expected_reads = 2 if host["account_ref"] == _ACCOUNT_A else 1
+                assert status[0] == "status" and status[1] == expected_reads
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+    finally:
+        try:
+            try:
+                app.dependency_overrides.pop(get_db, None)
+                if prior_db_override is not None:
+                    app.dependency_overrides[get_db] = prior_db_override
+            except BaseException as error:
+                cleanup_failures.append(error)
+            for host in reversed(hosts):
+                try:
+                    receipt = _stop_dual_live_service_host(host)
+                    if host["role"] == "gateway":
+                        assert len(receipt) == 6 and receipt[1] == receipt[5] == "closed", receipt
+                    else:
+                        assert len(receipt) == 3 and receipt[1] == "closed", receipt
+                except BaseException as error:
+                    cleanup_failures.append(error)
+                try:
+                    _write_account_book_diagnostic(
+                        host["diagnostic_path"],
+                        {
+                            "schema_version": 1,
+                            "role": host.get("role"),
+                            "account_ref": host.get("account_ref"),
+                            "startup": host.get("startup_facts"),
+                            "shutdown": host.get("shutdown"),
+                        },
+                    )
+                except BaseException as error:
+                    cleanup_failures.append(error)
+            try:
+                asyncio.run(engine.dispose())
+            except BaseException as error:
+                cleanup_failures.append(error)
+        finally:
+            _COMMAND_GUARD_STATE["active"] = False
+
+    startup_diagnostic = {
+        "schema_version": 1,
+        "events": list(startup_exception_events),
+        "events_overflow": startup_exception_overflow,
+        "outer_failure": (
+            {
+                "phase": "integration_body",
+                "type": safe_exception_type(type(primary_error)),
+                "code": safe_exception_code(type(primary_error), primary_error),
+            }
+            if primary_error is not None
+            else None
+        ),
+    }
+    try:
+        _write_account_book_diagnostic(
+            root / "service-read-startup-diagnostic.json", startup_diagnostic
+        )
+    except BaseException as error:
+        cleanup_failures.append(error)
+
+    if primary_error is not None:
+        import json
+
+        primary_error.add_note(
+            "service-read-startup-diagnostic="
+            + json.dumps(startup_diagnostic, sort_keys=True, separators=(",", ":"))
+        )
+        if cleanup_failures:
+            primary_error.__dict__["dual_live_cleanup_failures"] = tuple(cleanup_failures)
+            primary_error.add_note(
+                f"synthetic ServiceHost cleanup also reported {len(cleanup_failures)} failure(s)"
+            )
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"dual-live integration cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]
+
+
+def test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_dual_live_composition_projection(tmp_path, monkeypatch)
+
+
+def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.service_read.deployment import _create_runtime
+    import bt_api_py.service_runtime as service_runtime
+    from bt_api_py.service_config import parse_client_config
+
+    real_runtime_type = service_runtime.ServiceClientRuntime
+    requested_operations: list[Any] = []
+
+    def observe_real_runtime_constructor(config: Any, **kwargs: Any) -> Any:
+        requested_operations.append(kwargs.get("requested_operations"))
+        return real_runtime_type(config, **kwargs)
+
+    monkeypatch.setattr(
+        service_runtime, "ServiceClientRuntime", observe_real_runtime_constructor
+    )
+    profile = SimpleNamespace(
+        curve_keys={},
+        account_bindings={_ACCOUNT_A: object(), _ACCOUNT_B: object()},
+        account_book_bindings={_ACCOUNT_A: object(), _ACCOUNT_B: object()},
+        order_bindings={},
+        client_config=parse_client_config({}),
+        identity=_DUAL_LIVE_APPLICATION_IDENTITY,
+        scopes={},
+        peer_identities={},
+    )
+
+    runtime = _create_runtime(profile)
+    expected = {
+        "application.account": frozenset({"account.snapshot"}),
+        "application.order_query": frozenset({"execution.account_books.query"}),
+    }
+    assert requested_operations == [expected]
+    assert type(runtime) is real_runtime_type
+    assert runtime._requested_operations == expected
+    assert runtime.state == "new"
+    runtime.close()

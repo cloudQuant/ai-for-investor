@@ -227,6 +227,8 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
         for security_ref, (server_key, public_key, secret_key) in profile.curve_keys.items()
     }
     requested_operations: dict[str, frozenset[str]] = {}
+    if profile.account_bindings:
+        requested_operations["application.account"] = frozenset({"account.snapshot"})
     if profile.account_book_bindings:
         operations = {"execution.account_books.query"}
         if profile.order_bindings:

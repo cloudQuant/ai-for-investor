@@ -333,11 +333,23 @@ class PortfolioCompositionService:
                 source = view.to_dict()
                 coverage = source["coverage"]
                 coverage.pop("account_key", None)
+                unallocated_book = next(
+                    (
+                        item
+                        for item in source["books"]
+                        if item["owner_kind"] == "UNALLOCATED"
+                        and item["owner_ref"] == "UNALLOCATED"
+                    ),
+                    None,
+                )
                 book_sources[view.account_key_id] = {
                     "account_ref": account_ref,
                     "state": source["state"],
                     "coverage": coverage,
                     "provider_position_change": source["provider_position_change"],
+                    # Preserve the SDK's current unallocated owner book separately
+                    # from its baseline-relative position residual below.
+                    "unallocated_book": unallocated_book,
                     "position_residual": source["position_residual"],
                     "fee_residual": source["fee_residual"],
                 }
