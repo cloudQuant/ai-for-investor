@@ -38,6 +38,10 @@ def upgrade() -> None:
         }
         if not required.issubset(columns):
             raise RuntimeError("PORTFOLIO_COMPOSITION_SCHEMA_CONFLICT")
+        if inspector.get_pk_constraint("portfolio_composition_versions").get(
+            "constrained_columns"
+        ) != ["id"]:
+            raise RuntimeError("PORTFOLIO_COMPOSITION_SCHEMA_CONFLICT")
         expected_lengths = {
             "id": 36,
             "owner_subject": 256,

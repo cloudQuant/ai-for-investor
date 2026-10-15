@@ -23,8 +23,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.api.deps import get_current_user  # noqa: E402
+from app.api.portfolio import api as portfolio_api  # noqa: E402
 from app.api.portfolio import router as portfolio_router  # noqa: E402
-from app.api.portfolio.api import _get_manager  # noqa: E402
 from app.api.service_read import configure_service_read  # noqa: E402
 from app.db.database import get_db  # noqa: E402
 from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
@@ -74,13 +74,23 @@ def _account_view(account_ref: str, key: object, *, value: str, cash: str) -> Ac
     )
 
 
-def test_composition_membership_versions_and_live_overview_projection():
+def test_composition_membership_versions_and_live_overview_projection(monkeypatch):
     try:
         from bt_api_base.account_protocol import AccountKey
     except ImportError:
         pytest.skip("the service SDK account protocol is not installed")
 
     async def scenario() -> None:
+        manager_calls = 0
+        legacy_manager = object()
+
+        def fake_get_manager() -> object:
+            nonlocal manager_calls
+            manager_calls += 1
+            return legacy_manager
+
+        monkeypatch.setattr(portfolio_api, "_get_manager", fake_get_manager)
+
         engine = create_async_engine(
             "sqlite+aiosqlite://",
             connect_args={"check_same_thread": False},
@@ -99,7 +109,6 @@ def test_composition_membership_versions_and_live_overview_projection():
         app.include_router(portfolio_router, prefix="/api/v1")
         app.dependency_overrides[get_current_user] = lambda: owner
         app.dependency_overrides[get_db] = override_db
-        app.dependency_overrides[_get_manager] = lambda: None
 
         first_key = AccountKey(
             provider="synthetic-provider",
@@ -228,6 +237,14 @@ def test_composition_membership_versions_and_live_overview_projection():
                 assert live["creditable"] is False
                 assert live["overlap_policy"] == "non_additive_display_only"
                 assert "credit_amount" not in live and "budget_credit" not in live
+                assert manager_calls == 0
+
+                incomplete_selector = await client.get(
+                    "/api/v1/portfolio/overview",
+                    params={"portfolio_ref": "primary"},
+                )
+                assert incomplete_selector.status_code == 422
+                assert manager_calls == 0
 
                 overlap = await client.post(
                     "/api/v1/portfolio/compositions",
@@ -279,6 +296,20 @@ def test_composition_membership_versions_and_live_overview_projection():
                     "/api/v1/portfolio/compositions/primary/versions/1/projection"
                 )
                 assert private.status_code == 404
+
+                async def legacy_compact_overview(_current_user, manager):
+                    assert manager is legacy_manager
+                    return {"legacy_overview": True}
+
+                monkeypatch.setattr(
+                    portfolio_api, "_compact_portfolio_overview", legacy_compact_overview
+                )
+                legacy = await client.get(
+                    "/api/v1/portfolio/overview", params={"summary_only": "true"}
+                )
+                assert legacy.status_code == 200
+                assert legacy.json() == {"legacy_overview": True}
+                assert manager_calls == 1
                 assert len(source_session.account_reads) == 4
         finally:
             configure_service_read(None)

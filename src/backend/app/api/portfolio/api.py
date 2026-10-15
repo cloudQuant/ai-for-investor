@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -222,6 +222,13 @@ def _get_manager() -> LiveTradingManager:
         LiveTradingManager: The live trading manager singleton instance.
     """
     return get_live_trading_manager()
+
+
+def _get_manager_for_overview(request: Request) -> LiveTradingManager | None:
+    """Avoid restoring live trading state for a versioned composition read."""
+    if "portfolio_ref" in request.query_params or "membership_version" in request.query_params:
+        return None
+    return _get_manager()
 
 
 def _leverage_from_margin_rate(value: Any) -> float | None:
@@ -1042,7 +1049,7 @@ async def get_portfolio_overview(
     portfolio_ref: str | None = Query(default=None, min_length=1, max_length=128),
     membership_version: int | None = Query(default=None, ge=1),
     current_user: typing.Any = Depends(get_current_user),
-    mgr: LiveTradingManager = Depends(_get_manager),
+    mgr: LiveTradingManager | None = Depends(_get_manager_for_overview),
     db: AsyncSession = Depends(get_db),
 ) -> typing.Any:
     """Return portfolio-level aggregated metrics.
@@ -1077,6 +1084,9 @@ async def get_portfolio_overview(
             current_user.sub, portfolio_ref, membership_version
         )
         return await composition_service.project(current_user, composition)
+
+    if mgr is None:
+        mgr = _get_manager()
 
     if summary_only:
         compact_overview = await _compact_portfolio_overview(current_user, mgr)
