@@ -111,6 +111,47 @@ export type PortfolioCompositionSourceFacts = {
   artifacts: PortfolioImportedSourceArtifact[]
 }
 
+export interface PortfolioExecutionBookPosition {
+  instrument: string
+  net_quantity: string
+}
+
+export interface PortfolioExecutionBookFee {
+  currency: string
+  amount: string
+}
+
+export interface PortfolioExecutionOwnerBook {
+  owner_kind: 'STRATEGY' | 'MANUAL_BOOK' | 'UNALLOCATED'
+  owner_ref: string
+  current_positions: PortfolioExecutionBookPosition[]
+  fees_since_baseline: PortfolioExecutionBookFee[]
+}
+
+export interface PortfolioAccountBookSource {
+  account_ref: string
+  state: string
+  coverage: {
+    scope_directory_revision: string
+    journal_generation: string
+    baseline_execution_cursor: number
+    current_execution_cursor: number
+    complete: boolean
+    reasons: string[]
+    scanned_outbox_events: number
+    outbox_history_contiguous: boolean
+    outbox_scan_complete: boolean
+    continuations: unknown[]
+    input_continuations: unknown[]
+    quarantined_intents: unknown[]
+  }
+  provider_position_change: PortfolioExecutionBookPosition[]
+  /** Optional for compatibility with projections written before this field was added. */
+  unallocated_book?: PortfolioExecutionOwnerBook | null
+  position_residual: PortfolioExecutionBookPosition[]
+  fee_residual: PortfolioExecutionBookFee[]
+}
+
 export interface PortfolioCompositionProjection {
   portfolio_ref: string
   membership_version: number
@@ -136,6 +177,8 @@ export interface PortfolioCompositionProjection {
     duplicate_of_ref: string | null
     detail_code: string | null
   }>
+  /** Optional so older servers remain readable while the live book projection rolls out. */
+  account_book_sources?: PortfolioAccountBookSource[]
   strategies: Array<{
     strategy_ref: string
     attribution_status: string

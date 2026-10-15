@@ -521,6 +521,131 @@
               </li>
             </ul>
           </section>
+
+          <section
+            v-if="compositionProjection.source_type === 'live' && compositionProjection.account_book_sources?.length"
+            class="portfolio-composition__section"
+            data-test="portfolio-account-book-sources"
+          >
+            <h2>{{ t('portfolio.compositionExecutionBooks') }}</h2>
+            <p>{{ t('portfolio.compositionExecutionBooksDisclaimer') }}</p>
+            <article
+              v-for="source in compositionProjection.account_book_sources"
+              :key="source.account_ref"
+              class="portfolio-composition__execution-book"
+              data-test="portfolio-account-book-source"
+            >
+              <h3>{{ t('portfolio.compositionExecutionAccount') }}: {{ source.account_ref }}</h3>
+              <dl>
+                <div>
+                  <dt>{{ t('portfolio.compositionExecutionState') }}</dt>
+                  <dd>{{ source.state }}</dd>
+                </div>
+                <div data-test="portfolio-account-book-coverage">
+                  <dt>{{ t('portfolio.compositionCoverage') }}</dt>
+                  <dd>
+                    {{ source.coverage.complete
+                      ? t('portfolio.compositionCoverageComplete')
+                      : t('portfolio.compositionCoverageIncomplete') }}
+                    · {{ t('portfolio.compositionExecutionCursor') }}
+                    {{ source.coverage.baseline_execution_cursor }} →
+                    {{ source.coverage.current_execution_cursor }}
+                  </dd>
+                </div>
+                <div v-if="source.coverage.reasons.length > 0">
+                  <dt>{{ t('portfolio.compositionExecutionCoverageReasons') }}</dt>
+                  <dd>{{ source.coverage.reasons.join(', ') }}</dd>
+                </div>
+              </dl>
+
+              <section
+                v-if="source.unallocated_book"
+                data-test="portfolio-account-book-unallocated"
+              >
+                <h4>
+                  {{ t('portfolio.compositionUnallocatedBook') }}
+                  · {{ source.unallocated_book.owner_kind }}/{{ source.unallocated_book.owner_ref }}
+                </h4>
+                <p>{{ t('portfolio.compositionCurrentUnallocatedPositions') }}</p>
+                <ul v-if="source.unallocated_book.current_positions.length > 0">
+                  <li
+                    v-for="position in source.unallocated_book.current_positions"
+                    :key="position.instrument"
+                    data-test="portfolio-account-book-unallocated-position"
+                  >
+                    {{ position.instrument }} · {{ position.net_quantity }}
+                  </li>
+                </ul>
+                <p v-else>
+                  {{ t('portfolio.compositionNoExecutionFacts') }}
+                </p>
+                <p>{{ t('portfolio.compositionUnallocatedFees') }}</p>
+                <ul v-if="source.unallocated_book.fees_since_baseline.length > 0">
+                  <li
+                    v-for="fee in source.unallocated_book.fees_since_baseline"
+                    :key="fee.currency"
+                    data-test="portfolio-account-book-unallocated-fee"
+                  >
+                    {{ fee.amount }} {{ fee.currency }}
+                  </li>
+                </ul>
+                <p v-else>
+                  {{ t('portfolio.compositionNoExecutionFacts') }}
+                </p>
+              </section>
+              <p
+                v-else
+                data-test="portfolio-account-book-unallocated-unavailable"
+              >
+                {{ t('portfolio.compositionUnallocatedUnavailable') }}
+              </p>
+
+              <div data-test="portfolio-account-book-provider-change">
+                <h4>{{ t('portfolio.compositionProviderPositionChange') }}</h4>
+                <ul v-if="source.provider_position_change.length > 0">
+                  <li
+                    v-for="position in source.provider_position_change"
+                    :key="position.instrument"
+                  >
+                    {{ position.instrument }} · {{ position.net_quantity }}
+                  </li>
+                </ul>
+                <p v-else>
+                  {{ t('portfolio.compositionNoExecutionFacts') }}
+                </p>
+              </div>
+
+              <div data-test="portfolio-account-book-position-residual">
+                <h4>{{ t('portfolio.compositionPositionResidual') }}</h4>
+                <ul v-if="source.position_residual.length > 0">
+                  <li
+                    v-for="position in source.position_residual"
+                    :key="position.instrument"
+                  >
+                    {{ position.instrument }} · {{ position.net_quantity }}
+                  </li>
+                </ul>
+                <p v-else>
+                  {{ t('portfolio.compositionNoExecutionFacts') }}
+                </p>
+              </div>
+
+              <div data-test="portfolio-account-book-fee-residual">
+                <h4>{{ t('portfolio.compositionFeeResidual') }}</h4>
+                <ul v-if="source.fee_residual.length > 0">
+                  <li
+                    v-for="fee in source.fee_residual"
+                    :key="fee.currency"
+                  >
+                    {{ fee.amount }} {{ fee.currency }}
+                  </li>
+                </ul>
+                <p v-else>
+                  {{ t('portfolio.compositionNoExecutionFacts') }}
+                </p>
+              </div>
+            </article>
+          </section>
         </template>
       </section>
 

@@ -627,6 +627,225 @@ describe('PortfolioPage', () => {
     expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
   })
 
+  it('shows live unallocated books separately from provider changes and incremental residuals', async () => {
+    const makeCoverage = (complete: boolean, reasons: string[] = []) => ({
+      scope_directory_revision: 'directory-r1',
+      journal_generation: complete ? 'a'.repeat(32) : 'b'.repeat(32),
+      baseline_execution_cursor: 10,
+      current_execution_cursor: 12,
+      complete,
+      reasons,
+      scanned_outbox_events: 2,
+      outbox_history_contiguous: complete,
+      outbox_scan_complete: true,
+      continuations: [],
+      input_continuations: [],
+      quarantined_intents: [],
+    })
+    const liveProjection = {
+      portfolio_ref: 'dual-live',
+      membership_version: 4,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USDT',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USDT', value: '950' },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USDT', quality: 'fresh', cash: null, value: '160',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+        {
+          member_ref: 'account-b', currency: 'USDT', quality: 'fresh', cash: null, value: '790',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+      ],
+      account_book_sources: [
+        {
+          account_ref: 'account-a',
+          state: 'RESIDUAL',
+          coverage: makeCoverage(true),
+          provider_position_change: [{ instrument: 'SYNTH-A', net_quantity: '1' }],
+          unallocated_book: {
+            owner_kind: 'UNALLOCATED' as const,
+            owner_ref: 'UNALLOCATED',
+            current_positions: [{ instrument: 'SYNTH-A', net_quantity: '3.5' }],
+            fees_since_baseline: [{ currency: 'USDT', amount: '0.04' }],
+          },
+          position_residual: [{ instrument: 'SYNTH-A', net_quantity: '0.5' }],
+          fee_residual: [{ currency: 'USDT', amount: '0.04' }],
+        },
+        {
+          account_ref: 'account-b',
+          state: 'PARTIAL',
+          coverage: makeCoverage(false, ['OUTBOX_HISTORY_GAP']),
+          provider_position_change: [{ instrument: 'SYNTH-B', net_quantity: '2' }],
+          unallocated_book: {
+            owner_kind: 'UNALLOCATED' as const,
+            owner_ref: 'UNALLOCATED',
+            current_positions: [{ instrument: 'SYNTH-B', net_quantity: '5' }],
+            fees_since_baseline: [{ currency: 'USDT', amount: '0.07' }],
+          },
+          position_residual: [{ instrument: 'SYNTH-B', net_quantity: '1' }],
+          fee_residual: [{ currency: 'USDT', amount: '0.07' }],
+        },
+      ],
+      strategies: [
+        { strategy_ref: 'strategy-a', attribution_status: 'available', attributed_value: null },
+        { strategy_ref: 'strategy-b', attribution_status: 'available', attributed_value: null },
+      ],
+      strategy_attribution: {
+        status: 'execution_attribution_incomplete',
+        strategy_count: 2,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: true,
+        strategy_attribution_complete: false,
+        code: 'EXECUTION_ATTRIBUTION_INCOMPLETE',
+      },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [{
+        portfolio_ref: 'dual-live', membership_version: 4, source_type: 'live',
+        base_currency: 'USDT', created_at: '2026-10-16T00:00:00Z',
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(liveProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('950 USDT')
+    expect(wrapper.get('[data-test="portfolio-composition-coverage"]').text()).toContain('不完整')
+    expect(wrapper.get('[data-test="portfolio-composition-creditability"]').text()).toContain('仅供展示，不可计入')
+    expect(wrapper.get('[data-test="portfolio-composition-overlap"]').text()).toContain('不可相加')
+    expect(wrapper.get('[data-test="portfolio-composition-attributed-value"]').text()).toBe('不可用')
+
+    const accountSources = wrapper.findAll('[data-test="portfolio-account-book-source"]')
+    expect(accountSources).toHaveLength(2)
+    expect(accountSources[0].get('[data-test="portfolio-account-book-coverage"]').text()).toContain('完整')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-coverage"]').text()).toContain('不完整')
+    expect(accountSources[1].text()).toContain('OUTBOX_HISTORY_GAP')
+
+    expect(accountSources[0].get('[data-test="portfolio-account-book-unallocated"]')
+      .get('[data-test="portfolio-account-book-unallocated-position"]').text()).toBe('SYNTH-A · 3.5')
+    expect(accountSources[0].get('[data-test="portfolio-account-book-provider-change"]')
+      .text()).toContain('SYNTH-A · 1')
+    expect(accountSources[0].get('[data-test="portfolio-account-book-position-residual"]')
+      .text()).toContain('SYNTH-A · 0.5')
+    expect(accountSources[0].get('[data-test="portfolio-account-book-fee-residual"]')
+      .text()).toContain('0.04 USDT')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-unallocated"]')
+      .get('[data-test="portfolio-account-book-unallocated-position"]').text()).toBe('SYNTH-B · 5')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-provider-change"]')
+      .text()).toContain('SYNTH-B · 2')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-position-residual"]')
+      .text()).toContain('SYNTH-B · 1')
+
+    // These execution quantities remain separate source facts; none are folded into account equity.
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('950 USDT')
+    expect(wrapper.text()).toContain('不会加到账户总额')
+    expect(wrapper.text()).not.toContain('strategy-a · 3.5')
+    expect(wrapper.text()).not.toContain('strategy-b · 5')
+  })
+
+  it('keeps older live projections usable when the unallocated-book field is absent', async () => {
+    const legacyProjection = {
+      portfolio_ref: 'legacy-live',
+      membership_version: 1,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USD', value: '42' },
+      accounts: [],
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED' },
+    }
+    const partialProjection = {
+      ...legacyProjection,
+      portfolio_ref: 'partial-live',
+      account_book_sources: [{
+        account_ref: 'account-old',
+        state: 'PARTIAL',
+        coverage: {
+          scope_directory_revision: 'directory-r0',
+          journal_generation: 'c'.repeat(32),
+          baseline_execution_cursor: 0,
+          current_execution_cursor: 0,
+          complete: false,
+          reasons: ['ACCOUNT_BOOK_NOT_CONFIGURED'],
+          scanned_outbox_events: 0,
+          outbox_history_contiguous: false,
+          outbox_scan_complete: false,
+          continuations: [],
+          input_continuations: [],
+          quarantined_intents: [],
+        },
+        provider_position_change: [],
+        position_residual: [],
+        fee_residual: [],
+        // Older backend response has no unallocated_book field.
+      }],
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [
+        {
+          portfolio_ref: 'legacy-live', membership_version: 1, source_type: 'live',
+          base_currency: 'USD', created_at: '2026-10-16T00:00:00Z',
+        },
+        {
+          portfolio_ref: 'partial-live', membership_version: 1, source_type: 'live',
+          base_currency: 'USD', created_at: '2026-10-15T00:00:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection)
+      .mockResolvedValueOnce(legacyProjection)
+      .mockResolvedValueOnce(partialProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('42 USD')
+    expect(wrapper.find('[data-test="portfolio-account-book-sources"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="portfolio-composition-version-select"]')
+      .setValue(JSON.stringify(['partial-live', 1]))
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('42 USD')
+    expect(wrapper.get('[data-test="portfolio-account-book-unallocated-unavailable"]')
+      .text()).toContain('未提供未分配账簿详情')
+    expect(wrapper.findAll('[data-test="portfolio-account-book-unallocated-position"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-test="portfolio-account-book-position-residual"] li')).toHaveLength(0)
+  })
+
   it('imports versioned raw transactions and selects the imported display projection', async () => {
     const importedProjection = {
       portfolio_ref: 'imported-portfolio',
