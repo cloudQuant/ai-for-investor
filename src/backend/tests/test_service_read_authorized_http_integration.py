@@ -1371,6 +1371,8 @@ def _close_default_deployment_service_host(host: dict[str, Any]) -> None:
     termination_attempted = False
     pipe_closed = False
     process_closed = False
+    process_pid = process.pid
+    process_reaped = False
     if process.is_alive() and not host.get("startup_failed", False):
         graceful_close = "failed"
         try:
@@ -1388,17 +1390,19 @@ def _close_default_deployment_service_host(host: dict[str, Any]) -> None:
         failures.append(error)
 
     try:
-        alive = process.is_alive()
-        if alive:
+        alive_after_join = process.is_alive()
+        if alive_after_join:
             try:
                 termination_attempted = True
                 process.terminate()
                 process.join(10.0)
             except BaseException as error:
                 failures.append(error)
-            if process.is_alive():
-                failures.append(AssertionError("synthetic execution service did not exit"))
+        alive_after_cleanup = process.is_alive()
+        if alive_after_cleanup:
+            failures.append(AssertionError("synthetic execution service did not exit"))
         exit_code = process.exitcode
+        process_reaped = not alive_after_cleanup and type(exit_code) is int
     except BaseException as error:
         failures.append(error)
         exit_code = None
@@ -1416,26 +1420,30 @@ def _close_default_deployment_service_host(host: dict[str, Any]) -> None:
 
     if exit_code != 0:
         failures.append(AssertionError(f"synthetic execution service exit code was {exit_code!r}"))
+    cleanup_facts = {
+        "pid": process_pid if type(process_pid) is int else None,
+        "graceful_close": graceful_close,
+        "join_attempted": join_attempted,
+        "termination_attempted": termination_attempted,
+        "exit_code": exit_code if type(exit_code) is int else None,
+        "process_reaped": process_reaped,
+        "pipe_closed": pipe_closed,
+        "process_closed": process_closed,
+        "failure_count": len(failures),
+        "failure_chain": tuple(
+            (
+                type(error).__name__
+                if type(error).__name__.isidentifier() and len(type(error).__name__) <= 64
+                else "OtherError",
+                _safe_diagnostic_code(getattr(error, "code", None)),
+            )
+            for error in failures[:8]
+        ),
+    }
+    host["cleanup_facts"] = cleanup_facts
     diagnostic = host.get("account_book_diagnostic")
     if isinstance(diagnostic, dict):
-        diagnostic["cleanup"] = {
-            "graceful_close": graceful_close,
-            "join_attempted": join_attempted,
-            "termination_attempted": termination_attempted,
-            "exit_code": exit_code if type(exit_code) is int else None,
-            "pipe_closed": pipe_closed,
-            "process_closed": process_closed,
-            "failure_count": len(failures),
-            "failure_chain": tuple(
-                (
-                    type(error).__name__
-                    if type(error).__name__.isidentifier() and len(type(error).__name__) <= 64
-                    else "OtherError",
-                    _safe_diagnostic_code(getattr(error, "code", None)),
-                )
-                for error in failures[:8]
-            ),
-        }
+        diagnostic["cleanup"] = cleanup_facts
         try:
             _write_account_book_diagnostic(host["diagnostic_path"], diagnostic)
         except BaseException as error:
@@ -4248,6 +4256,23 @@ def _manual_order_service_process(
         control.close()
 
 
+def _manual_order_service_process_synthetic_environment(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    keys: dict[str, bytes],
+    store_path: str,
+) -> None:
+    """Run the real test Host with only the integration's synthetic environment."""
+
+    previous_environment = os.environ
+    os.environ = dict(_SYNTHETIC_ENV)  # noqa: B003 - isolate child imports from ambient credentials
+    try:
+        _manual_order_service_process(control, raw_config, registry_path, keys, store_path)
+    finally:
+        os.environ = previous_environment  # noqa: B003 - restore the child process environment
+
+
 def _manual_order_deployment_profile(
     *,
     endpoint: str,
@@ -4691,5 +4716,846 @@ def test_manual_http_submission_reuses_owner_and_durable_execution_intent(
     _COMMAND_GUARD_STATE["active"] = True
     try:
         _run_manual_order_submission_integration(tmp_path, monkeypatch)
+    finally:
+        _COMMAND_GUARD_STATE["active"] = False
+
+
+def _manual_order_persistent_http_app_process(
+    control: Any,
+    database_url: str,
+    deployment_json: str,
+) -> None:
+    """Serve the real AFI app/lifespan against a shared file-backed database."""
+
+    import asyncio
+    import socket
+
+    phase = "imports"
+    listener = None
+    server = None
+    deployment_refs: list[Any] = []
+    path_is_file = None
+    os_path_isfile = os.path.isfile
+    previous_environment = os.environ
+    synthetic_environment = dict(_SYNTHETIC_ENV)
+    runtime_path = previous_environment.get("PATH")
+    synthetic_environment["PATH"] = runtime_path if isinstance(runtime_path, str) else ""
+    synthetic_environment["USERPROFILE"] = os.path.join(
+        _SYNTHETIC_LOG_DIR, "synthetic-user-profile"
+    )
+    # Windows native-library lookup needs PATH; app import calls Path.home(),
+    # so use an isolated synthetic profile instead of inheriting the real one.
+    os.environ = synthetic_environment  # noqa: B003 - keep app config synthetic
+    try:
+        from pathlib import Path
+
+        path_is_file = Path.is_file
+
+        def _without_optional_dotenv_file(path: Any) -> bool:
+            basename = ntpath.basename(os.fsdecode(path)).casefold()
+            if basename == ".slowapi.env" or basename == ".env" or basename.startswith(".env."):
+                return False
+            return path_is_file(path)
+
+        def _without_optional_dotenv_probe(path: Any) -> bool:
+            basename = ntpath.basename(os.fsdecode(path)).casefold()
+            if basename == ".env" or basename.startswith(".env."):
+                return False
+            return os_path_isfile(path)
+
+        Path.is_file = _without_optional_dotenv_file
+        os.path.isfile = _without_optional_dotenv_probe
+        import uvicorn
+        from pydantic import SecretStr
+
+        import app.main as main_module
+        import app.services.quote_service as quote_service
+        from app.db import database
+        from app.services.service_read.deployment import ServiceReadDeploymentError
+        from app.utils import security
+
+        Path.is_file = path_is_file
+        os.path.isfile = os_path_isfile
+
+        if database._engine is not None:
+            raise RuntimeError("AFI test process initialized its database before file binding")
+        database.settings.DATABASE_URL = database_url
+        main_module.settings.DATABASE_URL = database_url
+        main_module.settings.SERVICE_READ_DEPLOYMENT_JSON = SecretStr(deployment_json)
+        main_module.settings.RAG_VECTOR_ENABLED = False
+        security.settings = SimpleNamespace(
+            JWT_SECRET_KEY=_JWT_SECRET,
+            JWT_ALGORITHM=_JWT_ALGORITHM,
+        )
+
+        async def _no_startup(*_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        class _NoopShutdownManager:
+            async def initiate(self, _app: Any) -> None:
+                return None
+
+        monkeypatch_deployment_start = main_module.start_service_read_deployment
+        main_module.run_startup = _no_startup
+        main_module.run_shutdown = _no_startup
+        main_module.GracefulShutdownManager = _NoopShutdownManager
+        quote_service.get_quote_service = lambda: SimpleNamespace(shutdown=lambda: None)
+
+        async def _observe_deployment_start(raw_config: Any) -> Any:
+            try:
+                deployment = await monkeypatch_deployment_start(raw_config)
+            except ServiceReadDeploymentError as error:
+                if error.deployment is not None:
+                    deployment_refs.append(error.deployment)
+                raise
+            if deployment is not None:
+                deployment_refs.append(deployment)
+            return deployment
+
+        main_module.start_service_read_deployment = _observe_deployment_start
+
+        phase = "bind_loopback"
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(socket.SOMAXCONN)
+        listener.setblocking(False)
+        port = listener.getsockname()[1]
+
+        async def _serve() -> None:
+            nonlocal server, phase
+            phase = "real_lifespan_start"
+            config = uvicorn.Config(
+                main_module.app,
+                host="127.0.0.1",
+                port=port,
+                lifespan="on",
+                log_level="critical",
+                access_log=False,
+            )
+            server = uvicorn.Server(config)
+            serve_task = asyncio.create_task(server.serve(sockets=[listener]))
+            deadline = time.monotonic() + 25.0
+            while not server.started and not serve_task.done():
+                if time.monotonic() >= deadline:
+                    server.should_exit = True
+                    raise TimeoutError()
+                await asyncio.sleep(0.01)
+            if not server.started:
+                await serve_task
+                raise RuntimeError("AFI HTTP server stopped before startup completed")
+
+            phase = "http_serving"
+            control.send(("ready", os.getpid(), port))
+            while not serve_task.done():
+                if control.poll():
+                    command = control.recv()
+                    if command == ("close",):
+                        server.should_exit = True
+                    else:
+                        raise RuntimeError("unknown AFI HTTP test command")
+                await asyncio.sleep(0.01)
+            await serve_task
+
+            phase = "lifespan_closed"
+            deployment = deployment_refs[-1] if deployment_refs else None
+            workers = tuple(getattr(deployment, "_workers", ()))
+            owner_threads_stopped = all(
+                worker._thread is None or not worker._thread.is_alive() for worker in workers
+            )
+            close_facts = (
+                len(deployment_refs) == 1,
+                deployment is not None and deployment.closed,
+                deployment is not None and deployment.close_failures == (),
+                main_module.app.state.service_read_deployment is None,
+                owner_threads_stopped,
+                len(workers),
+            )
+            control.send(("closed", os.getpid(), close_facts))
+
+        phase = "uvicorn_run"
+        asyncio.run(_serve())
+    except BaseException as error:
+        error_type = type(error).__name__
+        if not error_type.isidentifier() or len(error_type) > 64:
+            error_type = "OtherError"
+        code = getattr(error, "code", None)
+        if type(code) is not str or not code.isidentifier() or len(code) > 64:
+            code = "UNCLASSIFIED"
+        with suppress(BaseException):
+            control.send(("error", phase, error_type, code))
+        raise SystemExit(1) from None
+    finally:
+        if path_is_file is not None:
+            from pathlib import Path
+
+            Path.is_file = path_is_file
+        os.path.isfile = os_path_isfile
+        os.environ = previous_environment  # noqa: B003 - restore only after the child has stopped
+        if listener is not None:
+            with suppress(BaseException):
+                listener.close()
+        with suppress(BaseException):
+            control.close()
+
+
+def _start_manual_order_http_app_process(
+    context: Any,
+    *,
+    database_url: str,
+    deployment_json: str,
+    label: str,
+) -> dict[str, Any]:
+    parent, child = context.Pipe(duplex=True)
+    process = context.Process(
+        target=_manual_order_persistent_http_app_process,
+        args=(child, database_url, deployment_json),
+        name=label,
+    )
+    process.start()
+    child.close()
+    return {
+        "process": process,
+        "pid": process.pid,
+        "control": parent,
+        "label": label,
+        "ready": None,
+    }
+
+
+def _receive_manual_order_app_message(server: dict[str, Any], timeout: float = 25.0) -> Any:
+    control = server["control"]
+    if not control.poll(timeout):
+        raise AssertionError("AFI HTTP process missed its bounded response")
+    message = control.recv()
+    if message[0] == "error":
+        error_fact = _manual_order_app_error_fact(message)
+        server["startup_error"] = error_fact
+        raise AssertionError((server["label"], ("error", *error_fact)))
+    return message
+
+
+def _manual_order_app_error_fact(message: Any) -> tuple[str, str, str]:
+    """Keep only the finite child phase/type/code receipt, never exception text."""
+
+    phases = {
+        "imports",
+        "bind_loopback",
+        "uvicorn_run",
+        "real_lifespan_start",
+        "http_serving",
+        "lifespan_closed",
+    }
+    if not isinstance(message, tuple) or len(message) != 4 or message[0] != "error":
+        return ("other", "OtherError", "UNCLASSIFIED")
+    phase, error_type, code = message[1:]
+    if not isinstance(phase, str) or phase not in phases:
+        phase = "other"
+    if not isinstance(error_type, str) or not error_type.isidentifier() or len(error_type) > 64:
+        error_type = "OtherError"
+    if not isinstance(code, str) or not code.isidentifier() or len(code) > 64:
+        code = "UNCLASSIFIED"
+    return (phase, error_type, code)
+
+
+def _stop_manual_order_http_app_process(server: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
+    process = server["process"]
+    control = server["control"]
+    previous_cleanup = server.get("cleanup")
+    if isinstance(previous_cleanup, dict) and previous_cleanup.get("process_closed") is True:
+        # A prior stop attempt already closed the process handle. Retry only an
+        # unclosed control pipe; querying or joining the closed Process raises.
+        failures = list(previous_cleanup.get("failures", ()))
+        control_closed = previous_cleanup.get("control_closed") is True
+        if not control_closed:
+            try:
+                control.close()
+                control_closed = True
+            except BaseException as error:
+                failures.append(type(error).__name__)
+        cleanup = dict(previous_cleanup)
+        cleanup["control_closed"] = control_closed
+        cleanup["failures"] = tuple(failures)
+        return server.get("close_receipt"), cleanup
+    receipt = None
+    failures: list[str] = []
+    close_sent = False
+    join_attempted = False
+    terminate_attempted = False
+    process_reaped = False
+    control_closed = False
+    process_closed = False
+    if process.is_alive():
+        try:
+            control.send(("close",))
+            close_sent = True
+            deadline = time.monotonic() + 25.0
+            while time.monotonic() < deadline:
+                if not control.poll(0.1):
+                    if not process.is_alive():
+                        break
+                    continue
+                message = control.recv()
+                if message[0] == "ready":
+                    server["ready"] = message
+                    continue
+                if message[0] == "closed":
+                    receipt = message
+                    break
+                if message[0] == "error":
+                    server["startup_error"] = _manual_order_app_error_fact(message)
+                    failures.append("child_error_receipt")
+                    break
+                failures.append("unexpected_close_receipt")
+                break
+            if receipt is None and process.is_alive():
+                failures.append("close_receipt_timeout")
+        except BaseException as error:
+            failures.append(type(error).__name__)
+    try:
+        join_attempted = True
+        process.join(20.0)
+    except BaseException as error:
+        failures.append(type(error).__name__)
+    try:
+        if process.is_alive():
+            terminate_attempted = True
+            process.terminate()
+            process.join(10.0)
+        alive_after_cleanup = process.is_alive()
+        if alive_after_cleanup:
+            failures.append("process_still_alive")
+        exit_code = process.exitcode
+        process_reaped = not alive_after_cleanup and type(exit_code) is int
+    except BaseException as error:
+        failures.append(type(error).__name__)
+        exit_code = None
+    if exit_code != 0:
+        failures.append("nonzero_exit")
+    if receipt is None:
+        try:
+            while control.poll(0):
+                message = control.recv()
+                if isinstance(message, tuple) and message and message[0] == "ready":
+                    server["ready"] = message
+                elif isinstance(message, tuple) and message and message[0] == "error":
+                    server["startup_error"] = _manual_order_app_error_fact(message)
+                elif isinstance(message, tuple) and message and message[0] == "closed":
+                    receipt = message
+                else:
+                    failures.append("unexpected_close_receipt")
+        except (EOFError, OSError):
+            pass
+    try:
+        control.close()
+        control_closed = True
+    except BaseException as error:
+        failures.append(type(error).__name__)
+    try:
+        process.close()
+        process_closed = True
+    except BaseException as error:
+        failures.append(type(error).__name__)
+    return receipt, {
+        "close_sent": close_sent,
+        "join_attempted": join_attempted,
+        "terminate_attempted": terminate_attempted,
+        "exit_code": exit_code if type(exit_code) is int else None,
+        "process_reaped": process_reaped,
+        "control_closed": control_closed,
+        "process_closed": process_closed,
+        "failures": tuple(failures),
+    }
+
+
+def _manual_order_operation_rows(database_url: str) -> list[dict[str, Any]]:
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.models.service_order_operation import ServiceOrderOperation
+
+    async def _read_rows() -> list[dict[str, Any]]:
+        engine = create_async_engine(database_url)
+        try:
+            session_factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with session_factory() as db:
+                rows = (await db.scalars(select(ServiceOrderOperation))).all()
+                return [
+                    {
+                        "owner_subject": row.owner_subject,
+                        "principal_ref": row.principal_ref,
+                        "actor_ref": row.actor_ref,
+                        "delegate_ref": row.delegate_ref,
+                        "operation_key_sha256": row.operation_key_sha256,
+                        "request_sha256": row.request_sha256,
+                        "intent_id": row.intent_id,
+                        "scope_ref": row.scope_ref,
+                        "account_ref": row.account_ref,
+                        "manual_book_ref": row.manual_book_ref,
+                        "last_service_code": row.last_service_code,
+                        "last_record_state": row.last_record_state,
+                    }
+                    for row in rows
+                ]
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_read_rows())
+
+
+def _stop_manual_order_http_servers(servers: list[dict[str, Any]]) -> list[BaseException]:
+    failures: list[BaseException] = []
+    for server in servers:
+        try:
+            receipt, cleanup = _stop_manual_order_http_app_process(server)
+            server["close_receipt"] = receipt
+            server["cleanup"] = cleanup
+            server.setdefault("cleanup_attempts", []).append(cleanup)
+            if cleanup["failures"]:
+                failures.append(AssertionError((server["label"], cleanup)))
+            if receipt is None or receipt[0] != "closed":
+                failures.append(AssertionError((server["label"], "missing_close_receipt")))
+            elif not all(receipt[2][:5]):
+                failures.append(AssertionError((server["label"], "lifespan_cleanup_incomplete")))
+            elif receipt[1] != (server.get("ready") or (None, None))[1]:
+                failures.append(AssertionError((server["label"], "close_pid_mismatch")))
+            elif receipt[2][5] != 1:
+                failures.append(AssertionError((server["label"], "owner_worker_count_mismatch")))
+            if cleanup["terminate_attempted"]:
+                failures.append(AssertionError((server["label"], "forced_termination_used")))
+        except BaseException as error:
+            server["stop_error"] = type(error).__name__
+            server.setdefault("cleanup_attempts", []).append(
+                {
+                    "close_sent": None,
+                    "join_attempted": None,
+                    "terminate_attempted": None,
+                    "exit_code": None,
+                    "process_reaped": None,
+                    "control_closed": None,
+                    "process_closed": None,
+                    "failures": (type(error).__name__,),
+                }
+            )
+            failures.append(error)
+    return failures
+
+
+def _manual_order_http_server_needs_cleanup(server: dict[str, Any]) -> bool:
+    cleanup = server.get("cleanup")
+    return not (
+        isinstance(cleanup, dict)
+        and cleanup.get("process_closed") is True
+        and cleanup.get("control_closed") is True
+    )
+
+
+def _manual_order_http_cleanup_facts(servers: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    """Project only finite process receipts and cleanup facts for failure reports."""
+
+    facts: list[dict[str, Any]] = []
+    for server in servers:
+        pid = server.get("pid")
+        ready = server.get("ready")
+        receipt = server.get("close_receipt")
+        cleanup = server.get("cleanup")
+        close_facts = None
+        close_pid = None
+        close_kind = "missing"
+        if isinstance(receipt, tuple) and receipt:
+            close_kind = receipt[0] if receipt[0] in {"closed", "error", "ready"} else "other"
+            close_pid = receipt[1] if len(receipt) > 1 and type(receipt[1]) is int else None
+            if (
+                close_kind == "closed"
+                and len(receipt) == 3
+                and isinstance(receipt[2], tuple)
+                and len(receipt[2]) == 6
+                and all(type(value) is bool for value in receipt[2][:5])
+                and type(receipt[2][5]) is int
+            ):
+                close_facts = receipt[2]
+        cleanup_fact = None
+        if isinstance(cleanup, dict):
+            failures = cleanup.get("failures", ())
+            cleanup_fact = {
+                key: cleanup.get(key)
+                for key in (
+                    "close_sent",
+                    "join_attempted",
+                    "terminate_attempted",
+                    "exit_code",
+                    "process_reaped",
+                    "control_closed",
+                    "process_closed",
+                )
+            }
+            cleanup_fact["failures"] = tuple(
+                value if isinstance(value, str) and value.isidentifier() else "OtherError"
+                for value in failures
+            )
+        cleanup_attempts = server.get("cleanup_attempts", ())
+        attempts_fact = tuple(
+            {
+                key: attempt.get(key)
+                for key in (
+                    "close_sent",
+                    "join_attempted",
+                    "terminate_attempted",
+                    "exit_code",
+                    "process_reaped",
+                    "control_closed",
+                    "process_closed",
+                )
+            }
+            | {
+                "failures": tuple(
+                    value if isinstance(value, str) and value.isidentifier() else "OtherError"
+                    for value in attempt.get("failures", ())
+                )
+            }
+            for attempt in cleanup_attempts
+            if isinstance(attempt, dict)
+        )
+        facts.append(
+            {
+                "label": server.get("label")
+                if server.get("label")
+                in {
+                    "afi07-manual-order-app-1",
+                    "afi07-manual-order-app-2",
+                    "afi07-manual-order-app-restarted",
+                }
+                else "other",
+                "pid": pid if type(pid) is int else None,
+                "ready_received": isinstance(ready, tuple) and bool(ready) and ready[0] == "ready",
+                "ready_pid": ready[1]
+                if isinstance(ready, tuple) and len(ready) > 1 and type(ready[1]) is int
+                else None,
+                "startup_error": server.get("startup_error"),
+                "close_message": close_kind,
+                "close_pid": close_pid,
+                "close_facts": close_facts,
+                "cleanup": cleanup_fact,
+                "cleanup_attempts": attempts_fact,
+                "stop_error": server.get("stop_error")
+                if isinstance(server.get("stop_error"), str) and server["stop_error"].isidentifier()
+                else None,
+            }
+        )
+    return tuple(facts)
+
+
+def _run_manual_order_cross_process_integration(tmp_path: Any) -> None:
+    """Exercise HTTP idempotency across independent processes and a disk restart."""
+
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import httpx
+    from sqlalchemy import insert
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.db import database
+    from app.models.permission import Role, user_roles
+    from app.models.user import User
+
+    context = multiprocessing.get_context("spawn")
+    database_path = Path(tmp_path) / "afi-manual-order-operations.sqlite3"
+    database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
+    initialization_engine = create_async_engine(database_url)
+    primary_error: BaseException | None = None
+    primary_traceback: Any = None
+    cleanup_failures: list[BaseException] = []
+    app_servers: list[dict[str, Any]] = []
+    all_app_servers: list[dict[str, Any]] = []
+    deployment_json = ""
+    operation_rows_after_race: list[dict[str, Any]] = []
+    operation_rows_after_restart: list[dict[str, Any]] = []
+    request_results: tuple[Any, Any] | None = None
+    changed_result = None
+    restarted_result = None
+    old_app_pids: tuple[int, int] = ()
+    initialization_disposed = False
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    keys = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+    }
+    host_keys = {
+        key: value
+        for key, value in keys.items()
+        if key.endswith("_public") or key == "server_secret"
+    }
+    endpoint = _order._endpoint()
+    profiles = [
+        _manual_order_deployment_profile(
+            endpoint=endpoint,
+            subject=_SUBJECT_A,
+            identity=_APPLICATION_IDENTITY_A,
+            account_ref=_ACCOUNT_A,
+            manual_book_ref=_MANUAL_BOOK_A,
+            manual_scope=_MANUAL_SCOPE_A,
+            security_ref="afi-afi07-manual-order-curve-v1",
+            keys=keys,
+        )
+    ]
+    deployment_json = json.dumps({"schema_version": 1, "subjects": profiles})
+    primary_error_phase = "database_setup"
+
+    async def _prepare_database() -> None:
+        nonlocal initialization_disposed
+        import app.models  # noqa: F401 - register all mapped models before create_all
+
+        try:
+            async with initialization_engine.begin() as connection:
+                await connection.run_sync(database.Base.metadata.create_all)
+            async with async_sessionmaker(initialization_engine, expire_on_commit=False)() as db:
+                db.add(
+                    User(
+                        id=_SUBJECT_A,
+                        username="manual-order-process-user-a",
+                        email="manual-order-process-a@example.invalid",
+                        hashed_password="synthetic-only",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    )
+                )
+                await db.flush()
+                await db.execute(
+                    insert(user_roles), [{"user_id": _SUBJECT_A, "role": Role.USER.value}]
+                )
+                await db.commit()
+        finally:
+            await initialization_engine.dispose()
+            initialization_disposed = True
+
+    async def _post(server: dict[str, Any], body: dict[str, Any]) -> Any:
+        _, process_id, port = server["ready"]
+        assert process_id == server["process"].pid
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            return await client.post(
+                f"http://127.0.0.1:{port}/api/v1/service-orders/manual",
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {_make_token(_SUBJECT_A, _JWT_SECRET)}",
+                    "Idempotency-Key": "afi07-process-shared-operation-key",
+                },
+            )
+
+    try:
+        asyncio.run(_prepare_database())
+        assert database_path.is_file()
+        assert ":memory:" not in database_url
+        host = _order._start_process(
+            context,
+            _manual_order_service_process_synthetic_environment,
+            (
+                _order._service_config(endpoint),
+                str(Path(tmp_path) / "afi07-execution-registry.sqlite3"),
+                host_keys,
+                str(Path(tmp_path) / "afi07-execution-journal.sqlite3"),
+            ),
+            "afi07-manual-order-execution-host",
+        )
+        host["startup_failed"] = True
+        ready = _order._receive(host["pipe"], timeout=20.0)
+        if ready[0] == "ready":
+            host["startup_failed"] = False
+        assert ready[0] == "ready", ready
+        assert host["process"].is_alive()
+
+        for index in (1, 2):
+            app_server = _start_manual_order_http_app_process(
+                context,
+                database_url=database_url,
+                deployment_json=deployment_json,
+                label=f"afi07-manual-order-app-{index}",
+            )
+            app_servers.append(app_server)
+            all_app_servers.append(app_server)
+
+        for app_server in app_servers:
+            ready_message = _receive_manual_order_app_message(app_server)
+            assert ready_message[0] == "ready", ready_message
+            app_server["ready"] = ready_message
+        old_app_pids = tuple(server["process"].pid for server in app_servers)
+        assert len(set(old_app_pids)) == 2
+        assert all(pid != os.getpid() for pid in old_app_pids)
+
+        body = {
+            "scope_ref": _MANUAL_SUBMIT_SELECTOR,
+            "instrument": "BTC-USDT",
+            "side": "BUY",
+            "position_effect": "OPEN",
+            "order_type": "LIMIT",
+            "quantity": "1",
+            "price": "50000",
+            "time_in_force": "DAY",
+            "reduce_only": False,
+        }
+        primary_error_phase = "same_key_concurrent_http"
+
+        async def _concurrent_posts() -> tuple[Any, Any]:
+            # Synchronize only the two HTTP request starts; reservation, SQL and SDK calls stay real.
+            start_barrier = asyncio.Barrier(2)
+
+            async def submit_after_common_start(app_server: dict[str, Any]) -> Any:
+                await start_barrier.wait()
+                return await _post(app_server, body)
+
+            return await asyncio.gather(
+                submit_after_common_start(app_servers[0]),
+                submit_after_common_start(app_servers[1]),
+            )
+
+        request_results = asyncio.run(_concurrent_posts())
+        assert request_results[0].status_code == request_results[1].status_code == 200, (
+            _manual_order_http_response_fact_from_response(
+                "concurrent-app-process-1", request_results[0]
+            ),
+            _manual_order_http_response_fact_from_response(
+                "concurrent-app-process-2", request_results[1]
+            ),
+        )
+        first_payload, second_payload = (response.json() for response in request_results)
+        assert first_payload["intent_id"] == second_payload["intent_id"]
+        assert first_payload["record"]["intent_id"] == second_payload["record"]["intent_id"]
+        assert first_payload["record"]["state"] == second_payload["record"]["state"] == "ACKED"
+        assert first_payload["record"]["provider_order_id"] == "provider-order-1"
+        assert second_payload["record"]["provider_order_id"] == "provider-order-1"
+        operation_rows_after_race = _manual_order_operation_rows(database_url)
+        assert len(operation_rows_after_race) == 1
+        race_row = operation_rows_after_race[0]
+        assert race_row["owner_subject"] == _SUBJECT_A
+        assert (
+            race_row["operation_key_sha256"]
+            == hashlib.sha256(b"afi07-process-shared-operation-key").hexdigest()
+        )
+        assert len(race_row["request_sha256"]) == 64
+        assert race_row["intent_id"] == first_payload["intent_id"]
+        assert race_row["last_record_state"] == "ACKED"
+
+        primary_error_phase = "same_key_changed_request_http"
+        changed_result = asyncio.run(_post(app_servers[1], {**body, "quantity": "2"}))
+        assert changed_result.status_code == 409, _manual_order_http_response_fact_from_response(
+            "same-key-changed-content-conflict", changed_result
+        )
+        assert _manual_order_operation_rows(database_url) == operation_rows_after_race
+
+        primary_error_phase = "first_process_generation_close"
+        first_generation_servers = app_servers
+        cleanup_failures.extend(_stop_manual_order_http_servers(first_generation_servers))
+        app_servers = [
+            server
+            for server in first_generation_servers
+            if _manual_order_http_server_needs_cleanup(server)
+        ]
+        assert not cleanup_failures, tuple(type(error).__name__ for error in cleanup_failures)
+        assert all(server["cleanup"]["exit_code"] == 0 for server in first_generation_servers)
+        assert all(
+            server["cleanup"]["terminate_attempted"] is False for server in first_generation_servers
+        )
+
+        primary_error_phase = "restart_generation_start"
+        restarted_server = _start_manual_order_http_app_process(
+            context,
+            database_url=database_url,
+            deployment_json=deployment_json,
+            label="afi07-manual-order-app-restarted",
+        )
+        app_servers = [restarted_server]
+        all_app_servers.append(restarted_server)
+        restarted_ready = _receive_manual_order_app_message(restarted_server)
+        assert restarted_ready[0] == "ready", restarted_ready
+        restarted_server["ready"] = restarted_ready
+        assert restarted_server["process"].pid is not None
+
+        primary_error_phase = "post_restart_same_key_http"
+        restarted_result = asyncio.run(_post(restarted_server, body))
+        assert restarted_result.status_code == 200, _manual_order_http_response_fact_from_response(
+            "same-key-replay-after-process-restart", restarted_result
+        )
+        restarted_payload = restarted_result.json()
+        assert restarted_payload["intent_id"] == first_payload["intent_id"]
+        assert restarted_payload["record"]["intent_id"] == first_payload["intent_id"]
+        assert restarted_payload["record"]["state"] == "ACKED"
+        assert restarted_payload["record"]["provider_order_id"] == "provider-order-1"
+        operation_rows_after_restart = _manual_order_operation_rows(database_url)
+        assert operation_rows_after_restart == operation_rows_after_race
+
+        primary_error_phase = "restarted_process_generation_close"
+        cleanup_failures.extend(_stop_manual_order_http_servers(app_servers))
+        app_servers = [
+            server for server in app_servers if _manual_order_http_server_needs_cleanup(server)
+        ]
+        assert not cleanup_failures, tuple(type(error).__name__ for error in cleanup_failures)
+
+        primary_error_phase = "execution_provider_observation"
+        execution_facts = _order._command(host, "facts")
+        assert len(execution_facts[1]) == 1
+        assert len(set(execution_facts[1])) == 1
+        assert len(execution_facts[2]) == 1
+        assert execution_facts[2][0] == execution_facts[1][0]
+        assert len(execution_facts[3]) == 3
+        assert all(row[0] == _APP_PRINCIPAL for row in execution_facts[3])
+        assert all(row[1:3] == (_SUBJECT_A, _DELEGATE_A) for row in execution_facts[3])
+        assert all(row[3:5] == (_ACCOUNT_A, _MANUAL_BOOK_A) for row in execution_facts[3])
+        assert all(row[-1] == "orders.submit" for row in execution_facts[3])
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+        error.__dict__["manual_order_failure_phase"] = primary_error_phase
+        error.add_note(f"manual-order integration phase: {primary_error_phase}")
+    finally:
+        if app_servers:
+            cleanup_failures.extend(_stop_manual_order_http_servers(app_servers))
+        if host is not None:
+            try:
+                _close_default_deployment_service_host(host)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        if not initialization_disposed:
+            try:
+                asyncio.run(initialization_engine.dispose())
+            except BaseException as error:
+                cleanup_failures.append(error)
+
+    if primary_error is not None:
+        child_cleanup_facts = _manual_order_http_cleanup_facts(all_app_servers)
+        if child_cleanup_facts:
+            primary_error.__dict__["manual_order_http_child_cleanup_facts"] = child_cleanup_facts
+            primary_error.add_note(
+                "manual-order HTTP child cleanup facts: "
+                + json.dumps(child_cleanup_facts, sort_keys=True)
+            )
+        host_cleanup_facts = host.get("cleanup_facts") if isinstance(host, dict) else None
+        if isinstance(host_cleanup_facts, dict):
+            primary_error.__dict__["manual_order_execution_host_cleanup_facts"] = host_cleanup_facts
+            primary_error.add_note(
+                "manual-order Execution Host cleanup facts: "
+                + json.dumps(host_cleanup_facts, sort_keys=True)
+            )
+        if cleanup_failures:
+            primary_error.__dict__["manual_order_cleanup_failures"] = tuple(cleanup_failures)
+            primary_error.add_note(
+                f"manual-order cross-process cleanup reported {len(cleanup_failures)} failure(s)"
+            )
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"manual-order cross-process cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]
+
+
+def test_manual_order_operation_is_durable_across_concurrent_processes_and_restart(
+    tmp_path: Any,
+) -> None:
+    _COMMAND_GUARD_STATE["active"] = True
+    try:
+        _run_manual_order_cross_process_integration(tmp_path)
     finally:
         _COMMAND_GUARD_STATE["active"] = False
