@@ -17,6 +17,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.api.router import api_router, optional_router_status
+from app.api.service_read import configure_service_read
 from app.config import get_settings
 from app.db.database import ensure_database_ready
 from app.main_routes import register_runtime_routes
@@ -29,6 +30,10 @@ from app.middleware.logging import (
 from app.middleware.rate_limit_headers import RateLimitHeadersMiddleware
 from app.middleware.security_headers import add_security_headers
 from app.rate_limit import limiter
+from app.services.service_read.deployment import (
+    ServiceReadDeploymentError,
+    start_service_read_deployment,
+)
 from app.shutdown import GracefulShutdownManager
 from app.startup import run_shutdown, run_startup
 from app.telemetry import setup_telemetry
@@ -85,43 +90,83 @@ monitoring, with AI-assisted quantitative research workflows.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
+    previous_service_read = getattr(app.state, "service_read_deployment", None)
+    if previous_service_read is not None and not previous_service_read.closed:
+        raise ServiceReadDeploymentError("PRIOR_CLOSE_UNCERTAIN")
+    app.state.service_read_deployment = None
+    configure_service_read(None)
     logger.info("Starting ai-for-investor API...")
     app.state.startup_logger = logger
     app.state.ensure_database_ready = ensure_database_ready
     await run_startup(app, settings)
-    if settings.RAG_VECTOR_ENABLED:
-        try:
-            from app.api.rag import get_rag_service
-
-            await get_rag_service().semantic_retriever.warm_up()
-        except Exception:
-            # The RAG service records a safe diagnostic state and retains
-            # lexical retrieval as a fallback; startup must remain available.
-            logger.warning("Semantic retrieval warm-up failed; lexical fallback remains available")
-    logger.info("Application ready - accepting requests")
-    yield
-    logger.info("Shutting down ai-for-investor API...")
-
-    shutdown_mgr = GracefulShutdownManager()
-    await shutdown_mgr.initiate(app)
-    await run_shutdown(app, settings)
-
+    service_read_deployment = None
     try:
-        from app.services.quote_service import get_quote_service
-
-        get_quote_service().shutdown()
-    except Exception:
-        logger.debug("Failed to shut down quote service cleanly", exc_info=True)
-
-    # Reset the feature-flags cache so a subsequent in-process startup (e.g.
-    # tests, ASGI reload) recomputes flags after router registration rather
-    # than serving a stale snapshot. Computed once per process otherwise.
-    reset_feature_flags = globals().get("_reset_feature_flags_cache")
-    if callable(reset_feature_flags):
         try:
-            reset_feature_flags()
+            service_read_deployment = await start_service_read_deployment(
+                getattr(settings, "SERVICE_READ_DEPLOYMENT_JSON", None)
+            )
+        except ServiceReadDeploymentError as error:
+            partial_deployment = error.deployment
+            if partial_deployment is not None and not partial_deployment.closed:
+                app.state.service_read_deployment = partial_deployment
+            raise
+        if service_read_deployment is not None:
+            configure_service_read(service_read_deployment.directory)
+            app.state.service_read_deployment = service_read_deployment
+
+        if settings.RAG_VECTOR_ENABLED:
+            try:
+                from app.api.rag import get_rag_service
+
+                await get_rag_service().semantic_retriever.warm_up()
+            except Exception:
+                # The RAG service records a safe diagnostic state and retains
+                # lexical retrieval as a fallback; startup must remain available.
+                logger.warning(
+                    "Semantic retrieval warm-up failed; lexical fallback remains available"
+                )
+        logger.info("Application ready - accepting requests")
+        yield
+    finally:
+        # Remove request access before draining owner threads.  A second app
+        # startup in this process remains unconfigured until its own workers
+        # have all completed startup.
+        configure_service_read(None)
+        logger.info("Shutting down ai-for-investor API...")
+
+        try:
+            shutdown_mgr = GracefulShutdownManager()
+            await shutdown_mgr.initiate(app)
+        finally:
+            if service_read_deployment is not None:
+                try:
+                    await service_read_deployment.aclose()
+                except Exception:
+                    # Keep the owner object attached when cleanup is uncertain
+                    # so a later lifespan cannot silently start duplicate owners.
+                    app.state.service_read_deployment = service_read_deployment
+                    logger.exception("Failed to close the authorized service-read workers")
+                else:
+                    app.state.service_read_deployment = None
+
+        await run_shutdown(app, settings)
+
+        try:
+            from app.services.quote_service import get_quote_service
+
+            get_quote_service().shutdown()
         except Exception:
-            logger.debug("Failed to reset feature-flags cache on shutdown", exc_info=True)
+            logger.debug("Failed to shut down quote service cleanly", exc_info=True)
+
+        # Reset the feature-flags cache so a subsequent in-process startup (e.g.
+        # tests, ASGI reload) recomputes flags after router registration rather
+        # than serving a stale snapshot. Computed once per process otherwise.
+        reset_feature_flags = globals().get("_reset_feature_flags_cache")
+        if callable(reset_feature_flags):
+            try:
+                reset_feature_flags()
+            except Exception:
+                logger.debug("Failed to reset feature-flags cache on shutdown", exc_info=True)
 
 
 app = FastAPI(

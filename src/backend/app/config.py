@@ -888,6 +888,19 @@ class Settings(BaseSettings):
         description="Graceful shutdown timeout in seconds (range 1-300)",
     )
 
+    # Optional, deployment-owned read-only service-client composition. This
+    # value contains client authentication material and is never exposed by
+    # settings reprs or ordinary model dumps. Empty keeps the integration off.
+    SERVICE_READ_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret deployment JSON for explicitly authorized read-only service clients; "
+            "leave blank to keep service reads unconfigured"
+        ),
+    )
+
     # Backtest subprocess timeout (seconds)
     BACKTEST_TIMEOUT: int = Field(default=300, description="Backtest subprocess timeout in seconds")
     AI_STRATEGY_SANDBOX_USE_DOCKER: bool = Field(
@@ -1245,6 +1258,14 @@ class Settings(BaseSettings):
         if normalized and len(normalized.encode("utf-8")) < 32:
             raise ValueError("MARKET_DATA_CURSOR_SIGNING_KEY must be at least 32 bytes")
         return normalized
+
+    @field_validator("SERVICE_READ_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_read_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Keep the secret deployment document bounded before JSON parsing."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("SERVICE_READ_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
 
     @field_validator("AI_BUDGET_MODE")
     @classmethod

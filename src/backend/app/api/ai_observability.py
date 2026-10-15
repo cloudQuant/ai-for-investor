@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,15 +127,21 @@ async def update_admin_ai_provider_config(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.delete("/admin/ai/provider-configs/{provider_key}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/admin/ai/provider-configs/{provider_key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+)
 async def delete_admin_ai_provider_config(
     provider_key: str,
     current_user: User = Depends(require_data_admin_user),
-) -> None:
+) -> Response:
     try:
         delete_provider_config(provider_key, base_registry=get_settings().AI_PROVIDERS)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me/ai/usage")

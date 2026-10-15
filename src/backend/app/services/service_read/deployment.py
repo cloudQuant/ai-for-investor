@@ -1,0 +1,691 @@
+"""Trusted deployment composition for optional application service reads.
+
+The JSON input is deployment-owned configuration.  It maps exact JWT subjects
+to separately authorized application identities, read-only SDK bindings, and
+selectors.  This module never consults request data to build an identity and
+does no work when the deployment value is empty.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any
+
+from pydantic import SecretStr
+
+from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
+from app.services.service_read.client import AccountBinding, MonitorBinding, OrderBinding
+from app.services.service_read.session import SdkServiceReadSession
+from app.services.service_read.worker import ServiceReadWorker
+
+__all__ = [
+    "ServiceReadDeployment",
+    "ServiceReadDeploymentError",
+    "start_service_read_deployment",
+]
+
+_MAX_DEPLOYMENT_BYTES = 262_144
+_MAX_SUBJECTS = 256
+_MAX_BINDINGS_PER_SUBJECT = 128
+_MAX_SELECTORS = 4096
+_MAX_QUEUE_SIZE = 256
+_MAX_MAINTENANCE_INTERVAL = 300.0
+_Z85_ALPHABET = frozenset(
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
+)
+_SCOPE_FIELDS = frozenset(
+    {
+        "execution_domain_ref",
+        "account_ref",
+        "account_refs",
+        "strategy_ref",
+        "run_id",
+        "manual_book_ref",
+        "portfolio_ref",
+        "group_id",
+        "leg_id",
+    }
+)
+_READ_MOUNTS = frozenset({"application.account", "application.order_query", "application.monitor"})
+
+
+class ServiceReadDeploymentError(RuntimeError):
+    """Finite startup or cleanup failure without configuration values."""
+
+    def __init__(
+        self,
+        code: str,
+        *,
+        cause_type: str | None = None,
+        failures: tuple[BaseException, ...] = (),
+        deployment: ServiceReadDeployment | None = None,
+    ) -> None:
+        self.code = code
+        self.cause_type = cause_type
+        self.failures = failures
+        self.deployment = deployment
+        super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class _SubjectProfile:
+    subject: str
+    identity: Any
+    client_config: Any = field(repr=False, compare=False)
+    scopes: Mapping[str, Any] = field(repr=False, compare=False)
+    peer_identities: Mapping[str, Any] = field(repr=False, compare=False)
+    curve_keys: Mapping[str, tuple[bytes, bytes, bytes]] = field(repr=False, compare=False)
+    account_bindings: Mapping[str, AccountBinding] = field(repr=False, compare=False)
+    order_bindings: Mapping[str, OrderBinding] = field(repr=False, compare=False)
+    monitor_bindings: Mapping[str, MonitorBinding] = field(repr=False, compare=False)
+    account_grants: frozenset[str]
+    order_grants: frozenset[str]
+    monitor_grants: frozenset[str]
+    max_queue_size: int
+    maintenance_interval_seconds: float
+
+
+class ServiceReadDeployment:
+    """Started workers and the immutable directory that routes authorized reads."""
+
+    def __init__(
+        self,
+        workers: tuple[ServiceReadWorker, ...],
+        directory: ServiceReadAccessDirectory,
+    ) -> None:
+        self._workers = workers
+        self.directory = directory
+        self._close_failures: tuple[BaseException, ...] = ()
+        self._closed = False
+
+    @property
+    def close_failures(self) -> tuple[BaseException, ...]:
+        """Original worker close errors retained for startup diagnostics."""
+
+        return self._close_failures
+
+    @property
+    def closed(self) -> bool:
+        """Whether every owned worker closed without reporting uncertainty."""
+
+        return self._closed
+
+    async def aclose(self) -> None:
+        """Close every worker on its owner thread, even when one close fails."""
+
+        failures: list[BaseException] = []
+        for worker in reversed(self._workers):
+            try:
+                await worker.aclose()
+            except BaseException as error:
+                failures.append(error)
+        self._close_failures = tuple(failures)
+        self._closed = not failures
+        if failures:
+            raise ServiceReadDeploymentError("CLOSE_FAILED", failures=tuple(failures)) from None
+
+
+async def start_service_read_deployment(
+    value: SecretStr | str | None,
+) -> ServiceReadDeployment | None:
+    """Parse trusted configuration and start one SDK owner worker per subject.
+
+    An empty value returns ``None`` without importing any SDK package, creating
+    workers, or opening a transport.  The access directory is returned only
+    after every worker has completed startup.
+    """
+
+    profiles = _parse_deployment(value)
+    if not profiles:
+        return None
+
+    workers: list[ServiceReadWorker] = []
+    subject_access: dict[str, ReadAccess] = {}
+    try:
+        for profile in profiles:
+            worker = _build_worker(profile)
+            workers.append(worker)
+            await worker.start()
+            subject_access[profile.subject] = ReadAccess(
+                worker,
+                allow_account_refs=profile.account_grants,
+                allow_order_scope_refs=profile.order_grants,
+                allow_monitor_scope_refs=profile.monitor_grants,
+            )
+        directory = ServiceReadAccessDirectory(subject_access)
+        return ServiceReadDeployment(tuple(workers), directory)
+    except BaseException as error:
+        partial = ServiceReadDeployment(tuple(workers), ServiceReadAccessDirectory({}))
+        try:
+            await partial.aclose()
+        except BaseException:
+            pass
+        raise ServiceReadDeploymentError(
+            "START_FAILED",
+            cause_type=type(error).__name__,
+            failures=partial.close_failures,
+            deployment=partial,
+        ) from None
+
+
+def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
+    """Build the default fixed-thread worker for one fully validated profile."""
+
+    def create_session() -> SdkServiceReadSession:
+        return SdkServiceReadSession(
+            lambda: _create_runtime(profile),
+            profile.identity,
+            account_bindings=profile.account_bindings,
+            order_bindings=profile.order_bindings,
+            monitor_bindings=profile.monitor_bindings,
+        )
+
+    stable_name = hashlib.sha256(profile.subject.encode("utf-8")).hexdigest()[:12]
+    return ServiceReadWorker(
+        create_session,
+        max_queue_size=profile.max_queue_size,
+        maintenance_interval_seconds=profile.maintenance_interval_seconds,
+        name=f"afi-service-read-{stable_name}",
+    )
+
+
+def _create_runtime(profile: _SubjectProfile) -> Any:
+    """Create the SDK runtime from deployment-held identity and key material."""
+
+    try:
+        from bt_api_py.service_runtime import (
+            ClientCurveKeys,
+            ServiceClientRuntime,
+            ZmqTransportFactory,
+        )
+    except ImportError:
+        raise ServiceReadDeploymentError("SDK_NOT_INSTALLED") from None
+
+    transport_keys = {
+        security_ref: ClientCurveKeys(server_key, public_key, secret_key)
+        for security_ref, (server_key, public_key, secret_key) in profile.curve_keys.items()
+    }
+    return ServiceClientRuntime(
+        profile.client_config,
+        identity=profile.identity,
+        scope_resolver=lambda scope_ref: _lookup(profile.scopes, scope_ref),
+        peer_resolver=lambda service_id: _lookup(profile.peer_identities, service_id),
+        transport_factory=ZmqTransportFactory(transport_keys),
+    )
+
+
+def _lookup(mapping: Mapping[str, Any], key: str) -> Any:
+    try:
+        return mapping[key]
+    except KeyError:
+        raise KeyError("unconfigured trusted service reference") from None
+
+
+def _parse_deployment(value: SecretStr | str | None) -> tuple[_SubjectProfile, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, SecretStr):
+        raw_text = value.get_secret_value()
+    elif type(value) is str:
+        raw_text = value
+    else:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
+    if not raw_text:
+        return ()
+    try:
+        raw_bytes = raw_text.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT") from None
+    if len(raw_bytes) > _MAX_DEPLOYMENT_BYTES:
+        raise ServiceReadDeploymentError("DEPLOYMENT_TOO_LARGE")
+    try:
+        decoded = json.loads(
+            raw_text,
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+        )
+    except (ValueError, TypeError, RecursionError):
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT") from None
+    if type(decoded) is not dict or set(decoded) != {"schema_version", "subjects"}:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
+    if type(decoded["schema_version"]) is not int or decoded["schema_version"] != 1:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
+    subjects = decoded["subjects"]
+    if type(subjects) is not list or not subjects or len(subjects) > _MAX_SUBJECTS:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
+
+    sdk = _load_sdk_types()
+    profiles: list[_SubjectProfile] = []
+    seen_subjects: set[str] = set()
+    seen_identities: set[tuple[str, str, str | None]] = set()
+    try:
+        for raw_profile in subjects:
+            profile = _parse_profile(raw_profile, sdk)
+            if profile.subject in seen_subjects:
+                raise ServiceReadDeploymentError("DUPLICATE_SUBJECT")
+            identity_key = (
+                profile.identity.principal_ref,
+                profile.identity.actor_ref,
+                profile.identity.delegate_ref,
+            )
+            if identity_key in seen_identities:
+                raise ServiceReadDeploymentError("IDENTITY_SHARED")
+            seen_subjects.add(profile.subject)
+            seen_identities.add(identity_key)
+            profiles.append(profile)
+    except ServiceReadDeploymentError:
+        raise
+    except Exception:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT") from None
+    return tuple(sorted(profiles, key=lambda item: item.subject))
+
+
+def _load_sdk_types() -> Mapping[str, Any]:
+    """Import optional SDK schemas only when an explicit deployment is present."""
+
+    try:
+        from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+        from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+        from bt_api_py.service_config import parse_client_config
+    except ImportError:
+        raise ServiceReadDeploymentError("SDK_NOT_INSTALLED") from None
+    return {
+        "AccountKey": AccountKey,
+        "AccountResourceKey": AccountResourceKey,
+        "WireIdentity": WireIdentity,
+        "WireRole": WireRole,
+        "WireScope": WireScope,
+        "parse_client_config": parse_client_config,
+    }
+
+
+def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
+    fields = {
+        "subject",
+        "identity",
+        "client_config",
+        "scope_claims",
+        "peer_identities",
+        "curve_keys",
+        "grants",
+        "account_bindings",
+        "order_bindings",
+        "monitor_bindings",
+        "worker",
+    }
+    profile = _exact_mapping(raw, fields)
+    subject = _identifier(profile["subject"])
+    identity_raw = _exact_mapping(
+        profile["identity"], {"principal_ref", "actor_ref", "delegate_ref"}
+    )
+    if identity_raw["delegate_ref"] is not None:
+        delegate_ref = _identifier(identity_raw["delegate_ref"])
+    else:
+        delegate_ref = None
+    identity = sdk["WireIdentity"](
+        sdk["WireRole"].APPLICATION_CLIENT,
+        _identifier(identity_raw["principal_ref"]),
+        _identifier(identity_raw["actor_ref"]),
+        delegate_ref,
+    )
+
+    client_raw = profile["client_config"]
+    if type(client_raw) is not dict:
+        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
+    try:
+        client_config = sdk["parse_client_config"](client_raw)
+        client_public = client_config.to_public_dict()
+    except Exception:
+        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG") from None
+    if (
+        client_config.process_role != "application_client"
+        or client_config.registration.get("application_ref") != identity.actor_ref
+    ):
+        raise ServiceReadDeploymentError("CLIENT_IDENTITY_MISMATCH")
+
+    scopes_raw = profile["scope_claims"]
+    if (
+        type(scopes_raw) is not dict
+        or not scopes_raw
+        or len(scopes_raw) > _MAX_BINDINGS_PER_SUBJECT
+    ):
+        raise ServiceReadDeploymentError("INVALID_SCOPES")
+    scopes: dict[str, Any] = {}
+    for scope_ref, scope_raw in scopes_raw.items():
+        scope_ref = _identifier(scope_ref)
+        if type(scope_raw) is not dict or set(scope_raw) - _SCOPE_FIELDS:
+            raise ServiceReadDeploymentError("INVALID_SCOPES")
+        scope_arguments = dict(scope_raw)
+        if "execution_domain_ref" not in scope_arguments:
+            raise ServiceReadDeploymentError("INVALID_SCOPES")
+        if "account_refs" in scope_arguments:
+            if type(scope_arguments["account_refs"]) is not list:
+                raise ServiceReadDeploymentError("INVALID_SCOPES")
+            scope_arguments["account_refs"] = tuple(scope_arguments["account_refs"])
+        scopes[scope_ref] = sdk["WireScope"](**scope_arguments)
+
+    peers_raw = profile["peer_identities"]
+    if type(peers_raw) is not dict or not peers_raw or len(peers_raw) > _MAX_BINDINGS_PER_SUBJECT:
+        raise ServiceReadDeploymentError("INVALID_PEERS")
+    peers: dict[str, Any] = {}
+    for service_id, peer_raw in peers_raw.items():
+        service_id = _identifier(service_id)
+        peer = _exact_mapping(peer_raw, {"principal_ref", "actor_ref"})
+        actor_ref = _identifier(peer["actor_ref"])
+        if actor_ref != service_id:
+            raise ServiceReadDeploymentError("INVALID_PEERS")
+        peers[service_id] = sdk["WireIdentity"](
+            sdk["WireRole"].SERVICE,
+            _identifier(peer["principal_ref"]),
+            actor_ref,
+        )
+
+    key_raw = profile["curve_keys"]
+    if type(key_raw) is not dict or not key_raw or len(key_raw) > _MAX_BINDINGS_PER_SUBJECT:
+        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+    curve_keys: dict[str, tuple[bytes, bytes, bytes]] = {}
+    for security_ref, raw_keys in key_raw.items():
+        security_ref = _identifier(security_ref)
+        keys = _exact_mapping(raw_keys, {"server_key", "public_key", "secret_key"})
+        encoded = tuple(
+            _curve_key(keys[name]) for name in ("server_key", "public_key", "secret_key")
+        )
+        curve_keys[security_ref] = encoded  # type: ignore[assignment]
+
+    account_bindings = _parse_account_bindings(profile["account_bindings"], sdk)
+    order_bindings = _parse_order_bindings(profile["order_bindings"])
+    monitor_bindings = _parse_monitor_bindings(profile["monitor_bindings"])
+    grants_raw = _exact_mapping(
+        profile["grants"], {"account_refs", "order_scope_refs", "monitor_scope_refs"}
+    )
+    account_grants = frozenset(_string_list(grants_raw["account_refs"]))
+    order_grants = frozenset(_string_list(grants_raw["order_scope_refs"]))
+    monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
+    if (
+        account_grants != frozenset(account_bindings)
+        or order_grants != frozenset(order_bindings)
+        or monitor_grants != frozenset(monitor_bindings)
+        or not (account_grants or order_grants or monitor_grants)
+    ):
+        raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
+
+    worker_raw = profile["worker"]
+    if type(worker_raw) is not dict or set(worker_raw) - {
+        "max_queue_size",
+        "maintenance_interval_seconds",
+    }:
+        raise ServiceReadDeploymentError("INVALID_WORKER_OPTIONS")
+    max_queue_size = worker_raw.get("max_queue_size", 32)
+    interval = worker_raw.get("maintenance_interval_seconds", 1.0)
+    if type(max_queue_size) is not int or not 1 <= max_queue_size <= _MAX_QUEUE_SIZE:
+        raise ServiceReadDeploymentError("INVALID_WORKER_OPTIONS")
+    if (
+        isinstance(interval, bool)
+        or not isinstance(interval, (int, float))
+        or not math.isfinite(interval)
+        or interval <= 0
+        or interval > _MAX_MAINTENANCE_INTERVAL
+    ):
+        raise ServiceReadDeploymentError("INVALID_WORKER_OPTIONS")
+
+    _validate_profile_bindings(
+        client_public,
+        identity,
+        scopes,
+        peers,
+        curve_keys,
+        account_bindings,
+        order_bindings,
+        monitor_bindings,
+    )
+    return _SubjectProfile(
+        subject=subject,
+        identity=identity,
+        client_config=client_config,
+        scopes=MappingProxyType(scopes),
+        peer_identities=MappingProxyType(peers),
+        curve_keys=MappingProxyType(curve_keys),
+        account_bindings=MappingProxyType(account_bindings),
+        order_bindings=MappingProxyType(order_bindings),
+        monitor_bindings=MappingProxyType(monitor_bindings),
+        account_grants=account_grants,
+        order_grants=order_grants,
+        monitor_grants=monitor_grants,
+        max_queue_size=max_queue_size,
+        maintenance_interval_seconds=float(interval),
+    )
+
+
+def _parse_account_bindings(raw: object, sdk: Mapping[str, Any]) -> dict[str, AccountBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_ACCOUNT_BINDINGS")
+    result: dict[str, AccountBinding] = {}
+    for account_ref, raw_binding in raw.items():
+        account_ref = _identifier(account_ref)
+        binding = _exact_mapping(
+            raw_binding,
+            {"mount", "scope_ref", "currency", "account_key", "coverage", "require_open_orders"},
+        )
+        coverage_raw = binding["coverage"]
+        if type(coverage_raw) is not list or not coverage_raw:
+            raise ServiceReadDeploymentError("INVALID_ACCOUNT_BINDINGS")
+        try:
+            account_key = sdk["AccountKey"].from_dict(binding["account_key"])
+            coverage = tuple(sdk["AccountResourceKey"].from_dict(row) for row in coverage_raw)
+            result[account_ref] = AccountBinding(
+                mount=_identifier(binding["mount"]),
+                scope_ref=_identifier(binding["scope_ref"]),
+                currency=_identifier(binding["currency"]),
+                account_key=account_key,
+                coverage=coverage,
+                require_open_orders=binding["require_open_orders"],
+            )
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_ACCOUNT_BINDINGS") from None
+    return result
+
+
+def _parse_order_bindings(raw: object) -> dict[str, OrderBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_ORDER_BINDINGS")
+    result: dict[str, OrderBinding] = {}
+    for scope_ref, raw_binding in raw.items():
+        scope_ref = _identifier(scope_ref)
+        binding = _exact_mapping(raw_binding, {"mount"})
+        try:
+            result[scope_ref] = OrderBinding(
+                mount=_identifier(binding["mount"]),
+                scope_ref=scope_ref,
+            )
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_ORDER_BINDINGS") from None
+    return result
+
+
+def _parse_monitor_bindings(raw: object) -> dict[str, MonitorBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_MONITOR_BINDINGS")
+    result: dict[str, MonitorBinding] = {}
+    for scope_ref, raw_binding in raw.items():
+        scope_ref = _identifier(scope_ref)
+        binding = _exact_mapping(raw_binding, {"mount", "strategy_ref"})
+        try:
+            result[scope_ref] = MonitorBinding(
+                mount=_identifier(binding["mount"]),
+                scope_ref=scope_ref,
+                strategy_ref=_identifier(binding["strategy_ref"]),
+            )
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_MONITOR_BINDINGS") from None
+    return result
+
+
+def _validate_profile_bindings(
+    client_config: Mapping[str, Any],
+    identity: Any,
+    scopes: Mapping[str, Any],
+    peers: Mapping[str, Any],
+    curve_keys: Mapping[str, Any],
+    account_bindings: Mapping[str, AccountBinding],
+    order_bindings: Mapping[str, OrderBinding],
+    monitor_bindings: Mapping[str, MonitorBinding],
+) -> None:
+    declared: dict[tuple[str, str], tuple[str, str | None]] = {}
+    for account_ref, binding in account_bindings.items():
+        scope = scopes.get(binding.scope_ref)
+        if (
+            binding.mount != "application.account"
+            or scope is None
+            or scope.account_ref != account_ref
+            or scope.account_refs
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
+    for scope_ref, binding in order_bindings.items():
+        if binding.mount != "application.order_query" or scope_ref not in scopes:
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        scope = scopes[scope_ref]
+        _add_declared(declared, binding.mount, scope_ref, scope.account_ref)
+    for scope_ref, binding in monitor_bindings.items():
+        scope = scopes.get(scope_ref)
+        if (
+            binding.mount != "application.monitor"
+            or scope is None
+            or scope.strategy_ref != binding.strategy_ref
+            or scope.account_refs
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, scope_ref, None)
+
+    if set(scopes) != {scope_ref for _, scope_ref in declared}:
+        raise ServiceReadDeploymentError("UNUSED_SCOPE")
+
+    bindings_by_alias = client_config.get("clients")
+    if type(bindings_by_alias) is not dict:
+        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
+    observed: dict[tuple[str, str], tuple[str, str | None]] = {}
+    used_services: set[str] = set()
+    used_transports: set[str] = set()
+    for client in bindings_by_alias.values():
+        if type(client) is not dict or type(client.get("settings")) is not dict:
+            raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
+        bindings = client["settings"].get("bindings")
+        if type(bindings) is not list:
+            raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
+        for binding in bindings:
+            if type(binding) is not dict:
+                raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
+            mount = binding.get("mount")
+            scope_ref = binding.get("scope_ref")
+            if mount not in _READ_MOUNTS or type(scope_ref) is not str:
+                raise ServiceReadDeploymentError("WRITABLE_BINDING_FORBIDDEN")
+            pair = (mount, scope_ref)
+            if pair in observed or pair not in declared:
+                raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
+            account_ref = declared[pair][1]
+            if binding.get("account_ref") != account_ref:
+                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+            service_id = binding.get("service_id")
+            transport_ref = binding.get("transport_ref")
+            if type(service_id) is not str or service_id not in peers:
+                raise ServiceReadDeploymentError("INVALID_PEERS")
+            if type(transport_ref) is not str:
+                raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+            observed[pair] = declared[pair]
+            used_services.add(service_id)
+            used_transports.add(transport_ref)
+
+    if set(observed) != set(declared):
+        raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
+    if used_services != set(peers):
+        raise ServiceReadDeploymentError("INVALID_PEERS")
+
+    communication = client_config.get("communication")
+    if type(communication) is not dict:
+        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
+    profiles = communication.get("profiles")
+    if type(profiles) is not dict or set(profiles) != used_transports:
+        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+    used_security_refs: set[str] = set()
+    for transport in profiles.values():
+        if type(transport) is not dict:
+            raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+        endpoints = transport.get("endpoints")
+        security_ref = transport.get("security_profile_ref")
+        if type(endpoints) is not dict or "rpc_connect" not in endpoints:
+            raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+        if type(security_ref) is not str:
+            raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+        used_security_refs.add(security_ref)
+    if used_security_refs != set(curve_keys):
+        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+    if identity.role.value != "application_client":
+        raise ServiceReadDeploymentError("CLIENT_IDENTITY_MISMATCH")
+
+
+def _add_declared(
+    declared: dict[tuple[str, str], tuple[str, str | None]],
+    mount: str,
+    scope_ref: str,
+    account_ref: str | None,
+) -> None:
+    pair = (mount, scope_ref)
+    if pair in declared:
+        raise ServiceReadDeploymentError("DUPLICATE_BINDING")
+    declared[pair] = (mount, account_ref)
+
+
+def _curve_key(value: object) -> bytes:
+    if (
+        type(value) is not str
+        or len(value) != 40
+        or any(character not in _Z85_ALPHABET for character in value)
+    ):
+        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
+    return value.encode("ascii")
+
+
+def _identifier(value: object) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or value == "*"
+        or len(value) > 256
+        or not value.isprintable()
+    ):
+        raise ServiceReadDeploymentError("INVALID_IDENTIFIER")
+    return value
+
+
+def _string_list(value: object) -> tuple[str, ...]:
+    if type(value) is not list or len(value) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_GRANTS")
+    result = tuple(_identifier(item) for item in value)
+    if len(set(result)) != len(result):
+        raise ServiceReadDeploymentError("INVALID_GRANTS")
+    return result
+
+
+def _exact_mapping(value: object, keys: set[str]) -> dict[str, Any]:
+    if type(value) is not dict or set(value) != keys:
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
+    return value
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _reject_constant(_value: str) -> None:
+    raise ValueError("non-finite JSON number")
