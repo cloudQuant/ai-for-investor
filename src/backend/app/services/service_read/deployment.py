@@ -1,9 +1,10 @@
-"""Trusted deployment composition for optional application service reads.
+"""Trusted deployment composition for optional application service access.
 
 The JSON input is deployment-owned configuration.  It maps exact JWT subjects
-to separately authorized application identities, read-only SDK bindings, and
-selectors.  This module never consults request data to build an identity and
-does no work when the deployment value is empty.
+to separately authorized application identities, read bindings, one explicitly
+opted-in manual-order binding, and selectors. This module never consults
+request data to build an identity and does no work when the deployment value
+is empty. Approved-target execution is not implemented here.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from app.services.service_read.client import (
     AccountBookBinding,
     MonitorBinding,
     OrderBinding,
+    OrderSubmitBinding,
 )
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
@@ -61,6 +63,7 @@ _SCOPE_FIELDS = frozenset(
     }
 )
 _READ_MOUNTS = frozenset({"application.account", "application.order_query", "application.monitor"})
+_DEPLOYMENT_MOUNTS = _READ_MOUNTS | {"application.orders"}
 
 
 class ServiceReadDeploymentError(RuntimeError):
@@ -93,18 +96,20 @@ class _SubjectProfile:
     account_book_bindings: Mapping[str, AccountBookBinding] = field(repr=False, compare=False)
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(repr=False, compare=False)
     order_bindings: Mapping[str, OrderBinding] = field(repr=False, compare=False)
+    order_submit_bindings: Mapping[str, OrderSubmitBinding] = field(repr=False, compare=False)
     monitor_bindings: Mapping[str, MonitorBinding] = field(repr=False, compare=False)
     account_grants: frozenset[str]
     account_book_grants: frozenset[str]
     strategy_book_grants: frozenset[str]
     order_grants: frozenset[str]
+    order_submit_grants: frozenset[str]
     monitor_grants: frozenset[str]
     max_queue_size: int
     maintenance_interval_seconds: float
 
 
 class ServiceReadDeployment:
-    """Started workers and the immutable directory that routes authorized reads."""
+    """Started owner workers and the immutable directory for configured service access."""
 
     def __init__(
         self,
@@ -169,8 +174,11 @@ async def start_service_read_deployment(
                 allow_account_refs=profile.account_grants,
                 allow_account_book_refs=profile.account_book_grants,
                 allow_order_scope_refs=profile.order_grants,
+                allow_order_submit_scope_refs=profile.order_submit_grants,
                 allow_monitor_scope_refs=profile.monitor_grants,
                 strategy_book_bindings=profile.strategy_book_bindings,
+                order_submit_bindings=profile.order_submit_bindings,
+                application_identity=profile.identity,
             )
         directory = ServiceReadAccessDirectory(subject_access)
         return ServiceReadDeployment(tuple(workers), directory)
@@ -198,6 +206,7 @@ def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
             account_bindings=profile.account_bindings,
             account_book_bindings=profile.account_book_bindings,
             order_bindings=profile.order_bindings,
+            order_submit_bindings=profile.order_submit_bindings,
             monitor_bindings=profile.monitor_bindings,
         )
 
@@ -234,6 +243,8 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
         if profile.order_bindings:
             operations.add("orders.query")
         requested_operations["application.order_query"] = frozenset(operations)
+    if profile.order_submit_bindings:
+        requested_operations["application.orders"] = frozenset({"orders.submit"})
     return ServiceClientRuntime(
         profile.client_config,
         identity=profile.identity,
@@ -343,7 +354,11 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "monitor_bindings",
         "worker",
     }
-    optional_fields = {"account_book_bindings", "strategy_book_bindings"}
+    optional_fields = {
+        "account_book_bindings",
+        "strategy_book_bindings",
+        "order_submit_bindings",
+    }
     if (
         type(raw) is not dict
         or not required_fields <= set(raw)
@@ -437,36 +452,42 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         profile.get("strategy_book_bindings", {}), account_book_bindings
     )
     order_bindings = _parse_order_bindings(profile["order_bindings"])
+    order_submit_bindings = _parse_order_submit_bindings(
+        profile.get("order_submit_bindings", {}), scopes
+    )
     monitor_bindings = _parse_monitor_bindings(profile["monitor_bindings"])
     grants_fields = {"account_refs", "order_scope_refs", "monitor_scope_refs"}
-    optional_grant_fields = {"account_book_refs", "strategy_book_refs"}
+    book_grant_fields = {"account_book_refs", "strategy_book_refs"}
+    optional_grant_fields = book_grant_fields | {"order_submit_scope_refs"}
     grants_raw = profile["grants"]
     if (
         type(grants_raw) is not dict
         or not grants_fields <= set(grants_raw)
         or set(grants_raw) - grants_fields - optional_grant_fields
-        or (
-            bool(set(grants_raw) & optional_grant_fields)
-            and not optional_grant_fields <= set(grants_raw)
-        )
+        or (bool(set(grants_raw) & book_grant_fields) and not book_grant_fields <= set(grants_raw))
     ):
         raise ServiceReadDeploymentError("INVALID_GRANTS")
     account_grants = frozenset(_string_list(grants_raw["account_refs"]))
     account_book_grants = frozenset(_string_list(grants_raw.get("account_book_refs", [])))
     strategy_book_grants = frozenset(_string_list(grants_raw.get("strategy_book_refs", [])))
     order_grants = frozenset(_string_list(grants_raw["order_scope_refs"]))
+    order_submit_grants = frozenset(
+        _string_list(grants_raw.get("order_submit_scope_refs", []))
+    )
     monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
     if (
         account_grants != frozenset(account_bindings)
         or account_book_grants != frozenset(account_book_bindings)
         or strategy_book_grants != frozenset(strategy_book_bindings)
         or order_grants != frozenset(order_bindings)
+        or order_submit_grants != frozenset(order_submit_bindings)
         or monitor_grants != frozenset(monitor_bindings)
         or not (
             account_grants
             or account_book_grants
             or strategy_book_grants
             or order_grants
+            or order_submit_grants
             or monitor_grants
         )
     ):
@@ -505,6 +526,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         account_bindings,
         account_book_bindings,
         order_bindings,
+        order_submit_bindings,
         monitor_bindings,
     )
     return _SubjectProfile(
@@ -518,11 +540,13 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         account_book_bindings=MappingProxyType(account_book_bindings),
         strategy_book_bindings=MappingProxyType(strategy_book_bindings),
         order_bindings=MappingProxyType(order_bindings),
+        order_submit_bindings=MappingProxyType(order_submit_bindings),
         monitor_bindings=MappingProxyType(monitor_bindings),
         account_grants=account_grants,
         account_book_grants=account_book_grants,
         strategy_book_grants=strategy_book_grants,
         order_grants=order_grants,
+        order_submit_grants=order_submit_grants,
         monitor_grants=monitor_grants,
         max_queue_size=max_queue_size,
         maintenance_interval_seconds=float(interval),
@@ -628,6 +652,37 @@ def _parse_order_bindings(raw: object) -> dict[str, OrderBinding]:
     return result
 
 
+def _parse_order_submit_bindings(
+    raw: object, scopes: Mapping[str, Any]
+) -> dict[str, OrderSubmitBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_ORDER_SUBMIT_BINDINGS")
+    result: dict[str, OrderSubmitBinding] = {}
+    for scope_ref, raw_binding in raw.items():
+        scope_ref = _identifier(scope_ref)
+        binding = _exact_mapping(raw_binding, {"mount", "account_ref", "manual_book_ref"})
+        try:
+            parsed = OrderSubmitBinding(
+                mount=_identifier(binding["mount"]),
+                scope_ref=scope_ref,
+                account_ref=_identifier(binding["account_ref"]),
+                manual_book_ref=_identifier(binding["manual_book_ref"]),
+            )
+            scope = scopes.get(scope_ref)
+            if (
+                parsed.mount != "application.orders"
+                or scope is None
+                or not _is_manual_order_scope(scope, parsed.account_ref, parsed.manual_book_ref)
+            ):
+                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+            result[scope_ref] = parsed
+        except ServiceReadDeploymentError:
+            raise
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_ORDER_SUBMIT_BINDINGS") from None
+    return result
+
+
 def _parse_monitor_bindings(raw: object) -> dict[str, MonitorBinding]:
     if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
         raise ServiceReadDeploymentError("INVALID_MONITOR_BINDINGS")
@@ -655,6 +710,7 @@ def _validate_profile_bindings(
     account_bindings: Mapping[str, AccountBinding],
     account_book_bindings: Mapping[str, AccountBookBinding],
     order_bindings: Mapping[str, OrderBinding],
+    order_submit_bindings: Mapping[str, OrderSubmitBinding],
     monitor_bindings: Mapping[str, MonitorBinding],
 ) -> None:
     declared: dict[tuple[str, str], tuple[str, str | None]] = {}
@@ -689,6 +745,15 @@ def _validate_profile_bindings(
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         scope = scopes[scope_ref]
         _add_declared(declared, binding.mount, scope_ref, scope.account_ref)
+    for scope_ref, binding in order_submit_bindings.items():
+        scope = scopes.get(scope_ref)
+        if (
+            binding.mount != "application.orders"
+            or scope is None
+            or not _is_manual_order_scope(scope, binding.account_ref, binding.manual_book_ref)
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
     for scope_ref, binding in monitor_bindings.items():
         scope = scopes.get(scope_ref)
         if (
@@ -720,7 +785,7 @@ def _validate_profile_bindings(
                 raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
             mount = binding.get("mount")
             scope_ref = binding.get("scope_ref")
-            if mount not in _READ_MOUNTS or type(scope_ref) is not str:
+            if mount not in _DEPLOYMENT_MOUNTS or type(scope_ref) is not str:
                 raise ServiceReadDeploymentError("WRITABLE_BINDING_FORBIDDEN")
             pair = (mount, scope_ref)
             if pair in observed or pair not in declared:
@@ -788,6 +853,19 @@ def _is_account_scope(scope: Any) -> bool:
         and scope.strategy_ref is None
         and scope.run_id is None
         and scope.manual_book_ref is None
+        and scope.portfolio_ref is None
+        and scope.group_id is None
+        and scope.leg_id is None
+    )
+
+
+def _is_manual_order_scope(scope: Any, account_ref: str, manual_book_ref: str) -> bool:
+    return (
+        scope.account_ref == account_ref
+        and not scope.account_refs
+        and scope.strategy_ref is None
+        and scope.manual_book_ref == manual_book_ref
+        and scope.run_id is None
         and scope.portfolio_ref is None
         and scope.group_id is None
         and scope.leg_id is None

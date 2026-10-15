@@ -3967,3 +3967,729 @@ def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
     assert runtime._requested_operations == expected
     assert runtime.state == "new"
     runtime.close()
+
+
+_MANUAL_SUBMIT_SELECTOR = "afi-manual-order-current-v1"
+_MANUAL_BOOK_A = "afi-manual-book-a-v1"
+_MANUAL_BOOK_B = "afi-manual-book-b-v1"
+_MANUAL_SCOPE_A = WireScope(
+    _DOMAIN, account_ref=_ACCOUNT_A, manual_book_ref=_MANUAL_BOOK_A
+)
+_MANUAL_SCOPE_B = WireScope(
+    _DOMAIN, account_ref=_ACCOUNT_B, manual_book_ref=_MANUAL_BOOK_B
+)
+_MANUAL_HTTP_PHASES = frozenset(
+    {
+        "first-owner-A-submit",
+        "same-key-owner-A-replay",
+        "same-key-owner-B-submit",
+        "changed-terms-idempotency-conflict",
+        "client-supplied-actor-ref-refusal",
+        "unknown-server-scope-ref-refusal",
+        "post-lifespan-restart-owner-A-replay",
+    }
+)
+
+
+def _manual_order_http_response_fact(
+    phase: str, status_code: int, payload: object
+) -> tuple[str, int, str | None, str | None]:
+    """Project only a fixed phase, status and safe error codes from HTTP JSON."""
+
+    if phase not in _MANUAL_HTTP_PHASES or type(status_code) is not int:
+        raise AssertionError("manual-order HTTP diagnostic input is not bounded")
+    if not isinstance(payload, dict):
+        return phase, status_code, None, None
+    details = payload.get("details", payload.get("detail"))
+    outer_error = payload.get("error")
+    detail_code = details.get("code") if isinstance(details, dict) else None
+
+    def finite_code(value: Any) -> str | None:
+        if (
+            type(value) is str
+            and 1 <= len(value) <= 64
+            and value[0].isalpha()
+            and value[0].isascii()
+            and value.isascii()
+            and all(char.isupper() or char.isdigit() or char == "_" for char in value)
+        ):
+            return value
+        return None
+
+    return phase, status_code, finite_code(outer_error), finite_code(detail_code)
+
+
+def _manual_order_http_response_fact_from_response(
+    phase: str, response: Any
+) -> tuple[str, int, str | None, str | None]:
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        payload = None
+    return _manual_order_http_response_fact(phase, response.status_code, payload)
+
+
+def test_manual_order_http_error_diagnostic_uses_real_exception_handler() -> None:
+    """Check the finite response projection against the application's handlers."""
+
+    import json
+
+    from fastapi.exceptions import RequestValidationError
+    from starlette.requests import Request
+
+    from app.api.service_orders import _map_service_error
+    from app.middleware.exception_handling import (
+        handle_http_exception,
+        handle_request_validation_error,
+    )
+
+    request = Request(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/v1/service-orders/manual",
+            "raw_path": b"/api/v1/service-orders/manual",
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 32100),
+            "server": ("manual-order.synthetic.test", 80),
+            "root_path": "",
+        }
+    )
+
+    async def _response_for_service_code(code: str):
+        return await handle_http_exception(request, _map_service_error(code))
+
+    for phase, service_code, status_code in (
+        ("client-supplied-actor-ref-refusal", "SCOPE_DENIED", 403),
+        ("changed-terms-idempotency-conflict", "INTENT_CONFLICT", 409),
+        ("first-owner-A-submit", "SERVICE_READ_FAILED", 503),
+    ):
+        response = asyncio.run(_response_for_service_code(service_code))
+        payload = json.loads(response.body)
+        assert _manual_order_http_response_fact(
+            phase, response.status_code, payload
+        ) == (f"{phase}", status_code, f"HTTP_{status_code}", service_code)
+
+    validation = RequestValidationError(
+        [
+            {
+                "loc": ("body", "actor_ref"),
+                "msg": "Extra inputs are not permitted",
+                "type": "extra_forbidden",
+            }
+        ],
+        body={"actor_ref": "synthetic-forged-actor"},
+    )
+    validation_response = asyncio.run(handle_request_validation_error(request, validation))
+    validation_payload = json.loads(validation_response.body)
+    assert _manual_order_http_response_fact(
+        "client-supplied-actor-ref-refusal",
+        validation_response.status_code,
+        validation_payload,
+    ) == ("client-supplied-actor-ref-refusal", 422, "VALIDATION_ERROR", None)
+
+
+def _manual_order_service_process(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    keys: dict[str, bytes],
+    store_path: str,
+) -> None:
+    """Run the normal account-owner Host and observe its real submit handler."""
+
+    import sys
+
+    from bt_api_execution import ExecutionScope, SqliteExecutionStore
+    from bt_api_execution.service_order_entry import ExecutionOrderEntryService
+    from bt_api_py.service_components import ComponentResources
+    from bt_api_py.service_config import parse_service_config
+    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+
+    config = parse_service_config(raw_config)
+    provider = _CountingProvider()
+    gate = _order._Gate()
+    execution_store = None
+    host = None
+    identity_facts: list[tuple[str, str, str, str, str, str]] = []
+    submit_code = ExecutionOrderEntryService.handle.__code__
+
+    def observe_submit(frame: Any, event: str, _argument: Any) -> Any:
+        if event != "call" or frame.f_code is not submit_code:
+            return None
+        local = frame.f_locals
+        if local.get("operation") != "orders.submit":
+            return None
+        identity = local.get("identity")
+        scope = local.get("scope")
+        if type(identity) is WireIdentity and type(scope) is WireScope:
+            identity_facts.append(
+                (
+                    identity.principal_ref,
+                    identity.actor_ref,
+                    identity.delegate_ref or "",
+                    scope.account_ref or "",
+                    scope.manual_book_ref or "",
+                    local["operation"],
+                )
+            )
+        return None
+
+    sys.settrace(observe_submit)
+    try:
+        authority = TrustedServiceAuthority(
+            identity=_SERVICE_IDENTITY,
+            scope=WireScope(_DOMAIN),
+            scope_ref=config.scope_ref,
+            scope_version="afi-manual-order-scope-v1",
+            security_ref=_SERVER_SECURITY_REF,
+            security_version="afi-manual-order-curve-v1",
+            registration_policy_ref=config.registration_policy_ref,
+            registration_policy_version="afi-manual-order-policy-v1",
+            service_requirements_ref=config.service_requirements_ref,
+            service_requirements_version="afi-manual-order-requirements-v1",
+            curve_public_key=keys["server_public"],
+            curve_secret_key=keys["server_secret"],
+            principals={keys["application_public"]: _APP_PRINCIPAL},
+            grants={
+                _APP_PRINCIPAL: (
+                    PrincipalGrant(
+                        _APPLICATION_IDENTITY_A,
+                        (
+                            ResourceGrant(
+                                _INSTANCE_ID,
+                                "service.order_entry",
+                                _MANUAL_SUBMIT_SELECTOR,
+                                _MANUAL_SCOPE_A,
+                                frozenset({"orders.submit"}),
+                            ),
+                        ),
+                    ),
+                    PrincipalGrant(
+                        _APPLICATION_IDENTITY_B,
+                        (
+                            ResourceGrant(
+                                _INSTANCE_ID,
+                                "service.order_entry",
+                                _MANUAL_SUBMIT_SELECTOR,
+                                _MANUAL_SCOPE_B,
+                                frozenset({"orders.submit"}),
+                            ),
+                        ),
+                    ),
+                )
+            },
+        )
+        execution_store = SqliteExecutionStore(store_path)
+        targets = {
+            _MANUAL_SCOPE_A: ExecutionScope(
+                "afi-synthetic-provider", "simulation", _ACCOUNT_A, _MANUAL_BOOK_A, "20261016"
+            ),
+            _MANUAL_SCOPE_B: ExecutionScope(
+                "afi-synthetic-provider", "simulation", _ACCOUNT_B, _MANUAL_BOOK_B, "20261016"
+            ),
+        }
+
+        def resource_provider(component: str, _instance: str, _options: Any, _scope: Any):
+            if component != "execution":
+                raise AssertionError("unexpected component in manual-order Host")
+            return ComponentResources.borrowed(
+                {
+                    "store": execution_store,
+                    "targets": targets,
+                    "dispatch": provider,
+                    "admission": {"order_gate": gate, "cancel_gate": gate},
+                },
+                ready=lambda: True,
+            )
+
+        host = ServiceHost(config, authority, registry_path, resource_provider)
+        host.start()
+        control.send(("ready", host.endpoint, host.state))
+        while True:
+            host.serve_once(timeout_ms=25)
+            if not control.poll():
+                continue
+            command = control.recv()
+            if command == ("close",):
+                host.close()
+                execution_store.close()
+                execution_store = None
+                control.send(("closed", host.state))
+                return
+            if command == ("facts",):
+                control.send(
+                    (
+                        "facts",
+                        tuple(provider.submitted),
+                        tuple(gate.reserved),
+                        tuple(identity_facts),
+                    )
+                )
+                continue
+            raise AssertionError("unknown manual-order Host command")
+    except BaseException as error:
+        if host is not None and host.state not in {"closed", "failed"}:
+            with suppress(BaseException):
+                host.close()
+        if execution_store is not None:
+            with suppress(BaseException):
+                execution_store.close()
+        with suppress(Exception):
+            control.send(("error", getattr(error, "code", type(error).__name__)))
+        raise
+    finally:
+        sys.settrace(None)
+        control.close()
+
+
+def _manual_order_deployment_profile(
+    *,
+    endpoint: str,
+    subject: str,
+    identity: WireIdentity,
+    account_ref: str,
+    manual_book_ref: str,
+    manual_scope: WireScope,
+    security_ref: str,
+    keys: dict[str, bytes],
+) -> dict[str, Any]:
+    """Build one strict server-owned selector to a manual account book."""
+
+    client_config = _order._client_config(
+        endpoint,
+        "application_client",
+        security_ref,
+        application=identity.actor_ref,
+    )
+    client_binding = client_config["clients"]["execution"]["settings"]["bindings"][0]
+    client_binding.update(
+        mount="application.orders",
+        scope_ref=_MANUAL_SUBMIT_SELECTOR,
+        account_ref=account_ref,
+    )
+    return {
+        "subject": subject,
+        "identity": {
+            "principal_ref": identity.principal_ref,
+            "actor_ref": identity.actor_ref,
+            "delegate_ref": identity.delegate_ref,
+        },
+        "client_config": client_config,
+        "scope_claims": {
+            _MANUAL_SUBMIT_SELECTOR: {
+                "execution_domain_ref": manual_scope.execution_domain_ref,
+                "account_ref": account_ref,
+                "manual_book_ref": manual_book_ref,
+            }
+        },
+        "peer_identities": {
+            _SERVICE_ID: {"principal_ref": _SERVICE_PRINCIPAL, "actor_ref": _SERVICE_ID}
+        },
+        "curve_keys": {
+            security_ref: {
+                "server_key": keys["server_public"].decode("ascii"),
+                "public_key": keys["application_public"].decode("ascii"),
+                "secret_key": keys["application_secret"].decode("ascii"),
+            }
+        },
+        "grants": {
+            "account_refs": [],
+            "order_scope_refs": [],
+            "order_submit_scope_refs": [_MANUAL_SUBMIT_SELECTOR],
+            "monitor_scope_refs": [],
+        },
+        "account_bindings": {},
+        "order_bindings": {},
+        "order_submit_bindings": {
+            _MANUAL_SUBMIT_SELECTOR: {
+                "mount": "application.orders",
+                "account_ref": account_ref,
+                "manual_book_ref": manual_book_ref,
+            }
+        },
+        "monitor_bindings": {},
+        "worker": {"max_queue_size": 8, "maintenance_interval_seconds": 30.0},
+    }
+
+
+def _run_manual_order_submission_integration(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise manual HTTP submission through a real owner worker and SDK Host."""
+
+    import json
+    import threading
+    from pathlib import Path
+
+    import httpx
+    from pydantic import SecretStr
+    from sqlalchemy import insert
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import StaticPool
+
+    original_is_file = Path.is_file
+    original_path_isfile = os.path.isfile
+
+    def _without_optional_dotenv_file(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".slowapi.env" or basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_is_file(path)
+
+    def _without_optional_dotenv_probe(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_path_isfile(path)
+
+    monkeypatch.setattr(Path, "is_file", _without_optional_dotenv_file)
+    monkeypatch.setattr(os.path, "isfile", _without_optional_dotenv_probe)
+    import app.main as main_module
+    import app.services.quote_service as quote_service
+
+    from app.api.service_read import configure_service_read
+    from app.db import database
+    from app.models.permission import Role, user_roles
+    from app.models.user import User
+    from app.services.service_read.session import SdkServiceReadSession
+    from app.utils import security
+
+    monkeypatch.setattr(
+        security,
+        "settings",
+        SimpleNamespace(JWT_SECRET_KEY=_JWT_SECRET, JWT_ALGORITHM=_JWT_ALGORITHM),
+    )
+
+    async def _no_startup(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    class _NoopShutdownManager:
+        async def initiate(self, _app: Any) -> None:
+            return None
+
+    monkeypatch.setattr(main_module, "run_startup", _no_startup)
+    monkeypatch.setattr(main_module, "run_shutdown", _no_startup)
+    monkeypatch.setattr(main_module, "GracefulShutdownManager", _NoopShutdownManager)
+    monkeypatch.setattr(main_module.settings, "RAG_VECTOR_ENABLED", False)
+    monkeypatch.setattr(
+        quote_service,
+        "get_quote_service",
+        lambda: SimpleNamespace(shutdown=lambda: None),
+    )
+
+    context = multiprocessing.get_context("spawn")
+    endpoint = _order._endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    keys: dict[str, bytes] = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+    }
+    host_keys = {
+        key: value
+        for key, value in keys.items()
+        if key.endswith("_public") or key == "server_secret"
+    }
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    previous_overrides = dict(main_module.app.dependency_overrides)
+    app = main_module.app
+    host = None
+    primary_error: BaseException | None = None
+    primary_traceback: Any = None
+    cleanup_failures: list[BaseException] = []
+    worker_threads: list[tuple[int, ...]] = []
+    session_calls: list[tuple[int, int, str, str]] = []
+    old_thread_profile = threading.getprofile()
+    profile_code = SdkServiceReadSession.submit_manual_order.__code__
+    configure_service_read(None)
+
+    def _observe_owner_call(frame: Any, event: str, _argument: Any) -> None:
+        if event != "call" or frame.f_code is not profile_code:
+            return
+        session = frame.f_locals.get("self")
+        if not isinstance(session, SdkServiceReadSession):
+            return
+        session_calls.append(
+            (
+                threading.get_ident(),
+                session._owner_thread,
+                session._expected_identity.actor_ref,
+                session._expected_identity.delegate_ref or "",
+            )
+        )
+
+    threading.setprofile(_observe_owner_call)
+    try:
+        async def _prepare_database() -> None:
+            import app.models  # noqa: F401 - register all mapped models before create_all
+
+            async with engine.begin() as connection:
+                await connection.run_sync(database.Base.metadata.create_all)
+            async with session_factory() as db:
+                db.add_all(
+                    [
+                        User(
+                            id=_SUBJECT_A,
+                            username="manual-order-user-a",
+                            email="manual-order-user-a@example.invalid",
+                            hashed_password="synthetic-only",
+                            is_active=True,
+                            principal_kind="HUMAN",
+                        ),
+                        User(
+                            id=_SUBJECT_B,
+                            username="manual-order-user-b",
+                            email="manual-order-user-b@example.invalid",
+                            hashed_password="synthetic-only",
+                            is_active=True,
+                            principal_kind="HUMAN",
+                        ),
+                    ]
+                )
+                await db.flush()
+                await db.execute(
+                    insert(user_roles),
+                    [
+                        {"user_id": _SUBJECT_A, "role": Role.USER.value},
+                        {"user_id": _SUBJECT_B, "role": Role.USER.value},
+                    ],
+                )
+                await db.commit()
+
+        async def _get_db():
+            async with session_factory() as db:
+                yield db
+
+        asyncio.run(_prepare_database())
+        app.dependency_overrides[database.get_db] = _get_db
+        host = _order._start_process(
+            context,
+            _manual_order_service_process,
+            (
+                _order._service_config(endpoint),
+                str(tmp_path / "afi-manual-order-registry.sqlite3"),
+                host_keys,
+                str(tmp_path / "afi-manual-order-execution.sqlite3"),
+            ),
+            "afi-manual-order-execution-host",
+        )
+        host["startup_failed"] = True
+        ready = _order._receive(host["pipe"], timeout=20.0)
+        if ready[0] == "ready":
+            host["startup_failed"] = False
+        assert ready[0] == "ready", ready
+        assert host["process"].is_alive()
+
+        profiles = [
+            _manual_order_deployment_profile(
+                endpoint=endpoint,
+                subject=subject,
+                identity=identity,
+                account_ref=account_ref,
+                manual_book_ref=manual_book_ref,
+                manual_scope=scope,
+                security_ref=f"afi-{subject}-manual-order-curve-v1",
+                keys=keys,
+            )
+            for subject, identity, account_ref, manual_book_ref, scope in (
+                (
+                    _SUBJECT_A,
+                    _APPLICATION_IDENTITY_A,
+                    _ACCOUNT_A,
+                    _MANUAL_BOOK_A,
+                    _MANUAL_SCOPE_A,
+                ),
+                (
+                    _SUBJECT_B,
+                    _APPLICATION_IDENTITY_B,
+                    _ACCOUNT_B,
+                    _MANUAL_BOOK_B,
+                    _MANUAL_SCOPE_B,
+                ),
+            )
+        ]
+        monkeypatch.setattr(
+            main_module.settings,
+            "SERVICE_READ_DEPLOYMENT_JSON",
+            SecretStr(json.dumps({"schema_version": 1, "subjects": profiles})),
+        )
+        body = {
+            "scope_ref": _MANUAL_SUBMIT_SELECTOR,
+            "instrument": "BTC-USDT",
+            "side": "BUY",
+            "position_effect": "OPEN",
+            "order_type": "LIMIT",
+            "quantity": "1",
+            "price": "50000",
+            "time_in_force": "DAY",
+            "reduce_only": False,
+        }
+        token_a = _make_token(_SUBJECT_A, _JWT_SECRET)
+        token_b = _make_token(_SUBJECT_B, _JWT_SECRET)
+        main_thread = threading.get_ident()
+
+        result_a_id = None
+
+        async def _exercise_both_generations() -> None:
+            nonlocal result_a_id
+            for generation in range(2):
+                async with main_module.lifespan(app):
+                    deployment = app.state.service_read_deployment
+                    assert deployment is not None
+                    workers = deployment._workers
+                    assert len(workers) == 2
+                    current_threads = tuple(worker._thread for worker in workers)
+                    assert all(thread is not None and thread.is_alive() for thread in current_threads)
+                    thread_ids = tuple(thread.ident for thread in current_threads)
+                    assert len(set(thread_ids)) == 2
+                    assert all(ident != main_thread for ident in thread_ids)
+                    worker_threads.append(thread_ids)
+
+                    async with httpx.AsyncClient(
+                        transport=httpx.ASGITransport(app=app),
+                        base_url="http://manual-order.synthetic.test",
+                    ) as client:
+                        async def submit(token: str, payload: dict[str, Any] = body):
+                            return await client.post(
+                                "/api/v1/service-orders/manual",
+                                json=payload,
+                                headers={
+                                    "Authorization": f"Bearer {token}",
+                                    "Idempotency-Key": "same-manual-business-key",
+                                },
+                            )
+
+                        if generation == 0:
+                            first_a = await submit(token_a)
+                            replay_a = await submit(token_a)
+                            other_actor = await submit(token_b)
+                            changed = await submit(token_a, {**body, "quantity": "2"})
+                            forged_actor = await submit(token_a, {**body, "actor_ref": "forged-actor"})
+                            unknown_scope = await submit(token_a, {**body, "scope_ref": "manual-other-account"})
+                            assert first_a.status_code == replay_a.status_code == 200, (
+                                _manual_order_http_response_fact_from_response(
+                                    "first-owner-A-submit", first_a
+                                ),
+                                _manual_order_http_response_fact_from_response(
+                                    "same-key-owner-A-replay", replay_a
+                                ),
+                                _manual_order_http_response_fact_from_response(
+                                    "same-key-owner-B-submit", other_actor
+                                ),
+                            )
+                            assert other_actor.status_code == 200, _manual_order_http_response_fact_from_response(
+                                "same-key-owner-B-submit", other_actor
+                            )
+                            result_a = first_a.json()
+                            result_b = other_actor.json()
+                            assert result_a["intent_id"] == replay_a.json()["intent_id"]
+                            assert result_a["intent_id"] != result_b["intent_id"]
+                            assert result_a["actor_ref"] == _SUBJECT_A
+                            assert result_a["delegate_ref"] == _DELEGATE_A
+                            assert result_b["actor_ref"] == _SUBJECT_B
+                            assert result_b["delegate_ref"] == _DELEGATE_B
+                            assert result_a["account_ref"] == _ACCOUNT_A
+                            assert result_b["account_ref"] == _ACCOUNT_B
+                            assert result_a["record"]["state"] == "ACKED"
+                            assert result_b["record"]["state"] == "ACKED"
+                            assert changed.status_code == 409, _manual_order_http_response_fact_from_response(
+                                "changed-terms-idempotency-conflict", changed
+                            )
+                            assert forged_actor.status_code == 422, _manual_order_http_response_fact_from_response(
+                                "client-supplied-actor-ref-refusal", forged_actor
+                            )
+                            assert unknown_scope.status_code == 403, _manual_order_http_response_fact_from_response(
+                                "unknown-server-scope-ref-refusal", unknown_scope
+                            )
+                            result_a_id = result_a["intent_id"]
+                        else:
+                            restarted_replay = await submit(token_a)
+                            assert restarted_replay.status_code == 200, _manual_order_http_response_fact_from_response(
+                                "post-lifespan-restart-owner-A-replay", restarted_replay
+                            )
+                            assert restarted_replay.json()["intent_id"] == result_a_id
+
+                assert deployment.closed
+                assert deployment.close_failures == ()
+                assert app.state.service_read_deployment is None
+                assert all(not thread.is_alive() for thread in current_threads)
+
+        asyncio.run(_exercise_both_generations())
+        facts = _order._command(host, "facts")
+        assert len(facts[1]) == 2
+        assert len(set(facts[1])) == 2
+        assert set(facts[2]) == set(facts[1])
+        observed = facts[3]
+        assert len(observed) == 4
+        assert [row[1:3] for row in observed].count((_SUBJECT_A, _DELEGATE_A)) == 3
+        assert [row[1:3] for row in observed].count((_SUBJECT_B, _DELEGATE_B)) == 1
+        assert all(row[0] == _APP_PRINCIPAL for row in observed)
+        assert all(row[-1] == "orders.submit" for row in observed)
+        assert {row[3:] for row in observed} == {
+            (_ACCOUNT_A, _MANUAL_BOOK_A, "orders.submit"),
+            (_ACCOUNT_B, _MANUAL_BOOK_B, "orders.submit"),
+        }
+        assert len(session_calls) == 4
+        assert all(call_thread == owner_thread for call_thread, owner_thread, *_ in session_calls)
+        assert all(call_thread != main_thread for call_thread, *_ in session_calls)
+        assert [row[2:4] for row in session_calls].count((_SUBJECT_A, _DELEGATE_A)) == 3
+        assert [row[2:4] for row in session_calls].count((_SUBJECT_B, _DELEGATE_B)) == 1
+        assert len(worker_threads) == 2
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+    finally:
+        threading.setprofile(old_thread_profile)
+        configure_service_read(None)
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
+        if host is not None:
+            try:
+                _close_default_deployment_service_host(host)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        async def _dispose_database() -> None:
+            async with engine.begin() as connection:
+                await connection.run_sync(database.Base.metadata.drop_all)
+            await engine.dispose()
+
+        try:
+            asyncio.run(_dispose_database())
+        except BaseException as error:
+            cleanup_failures.append(error)
+
+    if primary_error is not None:
+        if cleanup_failures:
+            primary_error.__dict__["manual_order_cleanup_failures"] = tuple(cleanup_failures)
+            primary_error.add_note(
+                f"manual-order integration cleanup reported {len(cleanup_failures)} failure(s)"
+            )
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"manual-order integration cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]
+
+
+def test_manual_http_submission_reuses_owner_and_durable_execution_intent(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _COMMAND_GUARD_STATE["active"] = True
+    try:
+        _run_manual_order_submission_integration(tmp_path, monkeypatch)
+    finally:
+        _COMMAND_GUARD_STATE["active"] = False

@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+from app.services.service_read.client import OrderSubmitBinding
+
 __all__ = [
     "ReadAccess",
     "StrategyBookBinding",
@@ -57,10 +59,15 @@ class ReadAccess:
     allow_account_refs: frozenset[str] = frozenset()
     allow_account_book_refs: frozenset[str] = frozenset()
     allow_order_scope_refs: frozenset[str] = frozenset()
+    allow_order_submit_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(
         default_factory=dict, repr=False
     )
+    order_submit_bindings: Mapping[str, OrderSubmitBinding] = field(
+        default_factory=dict, repr=False
+    )
+    application_identity: Any = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         required_methods = ("read_account", "read_order", "read_strategy_health")
@@ -73,6 +80,7 @@ class ReadAccess:
             "allow_account_refs",
             "allow_account_book_refs",
             "allow_order_scope_refs",
+            "allow_order_submit_scope_refs",
             "allow_monitor_scope_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
@@ -100,6 +108,38 @@ class ReadAccess:
         ):
             raise ServiceReadAccessError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
         object.__setattr__(self, "strategy_book_bindings", MappingProxyType(normalized))
+        submit_bindings = self.order_submit_bindings
+        if not isinstance(submit_bindings, Mapping) or len(submit_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_ORDER_SUBMIT_BINDINGS")
+        normalized_submit: dict[str, OrderSubmitBinding] = {}
+        for selector, binding in submit_bindings.items():
+            if (
+                not _valid_identifier(selector)
+                or type(binding) is not OrderSubmitBinding
+                or binding.scope_ref != selector
+            ):
+                raise ServiceReadAccessError("INVALID_ORDER_SUBMIT_BINDINGS")
+            normalized_submit[selector] = binding
+        if set(normalized_submit) != set(self.allow_order_submit_scope_refs):
+            raise ServiceReadAccessError("ORDER_SUBMIT_BINDING_MISMATCH")
+        if normalized_submit:
+            if not inspect.iscoroutinefunction(
+                getattr(self.worker, "submit_manual_order", None)
+            ):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+                or (
+                    getattr(identity, "delegate_ref", None) is not None
+                    and not _valid_identifier(identity.delegate_ref)
+                )
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(self, "order_submit_bindings", MappingProxyType(normalized_submit))
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -172,6 +212,11 @@ class ServiceReadAccessDirectory:
         """Resolve one order-query scope for an exact authenticated subject."""
 
         return self._resolve(subject, scope_ref, "allow_order_scope_refs")
+
+    def resolve_order_submit_scope(self, subject: str, scope_ref: str) -> ReadAccess:
+        """Resolve one deployment-owned manual submit scope for an exact subject."""
+
+        return self._resolve(subject, scope_ref, "allow_order_submit_scope_refs")
 
     def resolve_monitor_scope(self, subject: str, scope_ref: str) -> ReadAccess:
         """Resolve one telemetry scope for an exact authenticated subject."""

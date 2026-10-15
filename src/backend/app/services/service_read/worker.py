@@ -1,4 +1,4 @@
-"""Single-thread owner for authorized service reads.
+"""Single-thread owner for authorized service reads and manual submission.
 
 The composition root supplies a trusted session factory.  The factory and
 every session method run on one dedicated, non-daemon thread so runtimes and
@@ -60,6 +60,8 @@ class ServiceReadSession(Protocol):
 
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView: ...
 
+    def submit_manual_order(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
+
     def close(self) -> None: ...
 
 
@@ -77,6 +79,7 @@ class _Kind(Enum):
     ACCOUNT_BOOK = auto()
     ORDER = auto()
     STRATEGY_HEALTH = auto()
+    MANUAL_ORDER = auto()
 
 
 class _Request:
@@ -95,12 +98,12 @@ class _Request:
 
 
 class ServiceReadWorker:
-    """Dispatch bounded read-only work through one session-owning thread.
+    """Dispatch bounded configured work through one session-owning thread.
 
-    Construction is inert.  ``start`` creates the thread and resolves only
-    after factory/session startup completes; reads then enqueue fixed typed
-    operations.  Application routes remain responsible for authenticating and
-    authorizing each request before calling this interface.
+    Construction is inert. ``start`` creates the thread and resolves only
+    after factory/session startup completes. Reads and the one explicitly
+    configured manual-order operation enqueue fixed operations. Application
+    routes remain responsible for authenticating and authorizing each request.
     """
 
     def __init__(
@@ -203,6 +206,11 @@ class ServiceReadWorker:
 
     async def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
         return await self._submit(_Kind.STRATEGY_HEALTH, scope_ref)
+
+    async def submit_manual_order(self, scope_ref: str, arguments: dict[str, Any]) -> Any:
+        """Queue a deployment-authorized manual submit on the session owner thread."""
+
+        return await self._submit(_Kind.MANUAL_ORDER, scope_ref, arguments)
 
     async def aclose(self) -> None:
         """Reject new reads, discard queued reads, and close on the owner thread."""
@@ -377,6 +385,10 @@ class ServiceReadWorker:
                 result = session.read_account_book(request.arguments[0])
             elif request.kind is _Kind.ORDER:
                 result = session.read_order(request.arguments[0], request.arguments[1])
+            elif request.kind is _Kind.MANUAL_ORDER:
+                result = session.submit_manual_order(
+                    request.arguments[0], request.arguments[1]
+                )
             else:
                 result = session.read_strategy_health(request.arguments[0])
         except Exception as error:

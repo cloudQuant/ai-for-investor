@@ -162,3 +162,8 @@ _register_optional_router(
     "app.api.service_read",
     tags=["Service Read"],
 )
+_register_optional_router(
+    "service_orders",
+    "app.api.service_orders",
+    tags=["Service Orders"],
+)

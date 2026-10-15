@@ -34,6 +34,7 @@ __all__ = [
     "AuthorizedServiceReadClient",
     "MonitorBinding",
     "OrderBinding",
+    "OrderSubmitBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
 ]
@@ -153,6 +154,26 @@ class OrderBinding:
         for value, code in (
             (self.mount, "INVALID_MOUNT"),
             (self.scope_ref, "INVALID_SCOPE_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+
+
+@dataclass(frozen=True)
+class OrderSubmitBinding:
+    """One deployment-owned manual-order scope on the normal E owner port."""
+
+    mount: str
+    scope_ref: str
+    account_ref: str
+    manual_book_ref: str
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+            (self.account_ref, "INVALID_ACCOUNT_REF"),
+            (self.manual_book_ref, "INVALID_MANUAL_BOOK_REF"),
         ):
             if type(value) is not str or not value or value != value.strip():
                 raise ServiceReadContractError(code)

@@ -1,8 +1,9 @@
-"""Owner-thread adapter for the optional service SDK read runtime.
+"""Owner-thread adapter for the optional service SDK runtime.
 
 The SDK is deliberately imported only when a session is constructed. Applications
 that do not configure service reads therefore do not import or initialize the
-optional SDK package.
+optional SDK package. A configured manual-order selector sends only its exact
+``orders.submit`` operation through the existing owner thread.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from .client import (
     AuthorizedServiceReadClient,
     MonitorBinding,
     OrderBinding,
+    OrderSubmitBinding,
     ServiceReadUnavailableError,
 )
 from .contracts import AccountBookReadView, AccountReadView, OrderReadView, StrategyHealthView
@@ -60,6 +62,24 @@ class SdkServiceReadSession:
     HTTP selector.
     """
 
+    _MANUAL_SUBMIT_ARGUMENTS = frozenset(
+        {
+            "intent_id",
+            "signal_id",
+            "instrument",
+            "side",
+            "position_effect",
+            "order_type",
+            "quantity",
+            "price",
+            "time_in_force",
+            "reduce_only",
+            "metadata_version",
+            "deadline_ns",
+            "tags",
+        }
+    )
+
     def __init__(
         self,
         runtime_factory: Callable[[], Any],
@@ -68,16 +88,19 @@ class SdkServiceReadSession:
         account_bindings: Mapping[str, AccountBinding],
         account_book_bindings: Mapping[str, AccountBookBinding] | None = None,
         order_bindings: Mapping[str, OrderBinding] | None = None,
+        order_submit_bindings: Mapping[str, OrderSubmitBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
     ) -> None:
         self._account_bindings = dict(account_bindings)
         self._account_book_bindings = dict(account_book_bindings or {})
         self._order_bindings = dict(order_bindings or {})
+        self._order_submit_bindings = dict(order_submit_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
         if not (
             self._account_bindings
             or self._account_book_bindings
             or self._order_bindings
+            or self._order_submit_bindings
             or self._monitor_bindings
         ):
             raise ServiceReadSessionError(
@@ -186,6 +209,8 @@ class SdkServiceReadSession:
             expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
         for binding in self._account_book_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
+        for binding in self._order_submit_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
         for binding in self._monitor_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"telemetry.snapshot"})))
         return expected
@@ -216,6 +241,16 @@ class SdkServiceReadSession:
 
         for configured in self._order_bindings.values():
             self._one_registered_binding(configured.mount, configured.scope_ref)
+
+        for configured in self._order_submit_bindings.values():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            if not self._scope_is_manual_order_scope(
+                binding.scope, configured.account_ref, configured.manual_book_ref
+            ):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "manual-order scope does not match its configured account and book",
+                )
 
         for account_ref, configured in self._account_book_bindings.items():
             binding = self._one_registered_binding(configured.mount, configured.scope_ref)
@@ -293,6 +328,21 @@ class SdkServiceReadSession:
             and getattr(scope, "leg_id", None) is None
         )
 
+    @staticmethod
+    def _scope_is_manual_order_scope(
+        scope: Any, account_ref: str, manual_book_ref: str
+    ) -> bool:
+        return (
+            getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "manual_book_ref", None) == manual_book_ref
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "portfolio_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
+
     def start(self) -> None:
         self._assert_owner()
         self._require_open()
@@ -350,6 +400,36 @@ class SdkServiceReadSession:
         self._validate_runtime()
         assert self._read_client is not None
         return self._read_client.read_order(scope_ref, intent_id)
+
+    def submit_manual_order(
+        self, scope_ref: str, arguments: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """Submit one manual intent on this runtime's existing owner thread."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        configured = self._order_submit_bindings.get(scope_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("ORDER_SUBMIT_SCOPE_NOT_CONFIGURED")
+        if (
+            not isinstance(arguments, Mapping)
+            or any(type(key) is not str for key in arguments)
+            or set(arguments) != self._MANUAL_SUBMIT_ARGUMENTS
+        ):
+            raise ServiceReadUnavailableError("INVALID_ORDER_SUBMIT_ARGUMENTS")
+        self._validate_runtime()
+        assert self._runtime is not None
+        return self._runtime.call(
+            configured.mount,
+            "orders.submit",
+            dict(arguments),
+            scope_ref=configured.scope_ref,
+        )
 
     def read_account_book(self, account_ref: str) -> AccountBookReadView:
         self._assert_owner()
