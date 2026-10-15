@@ -6,8 +6,8 @@ with an explicit unavailable status instead of a placeholder balance, and a
 refused scope is a refusal rather than a degraded page.  Nothing here connects
 to a provider, so opening the page never logs an account in.
 
-The composition root installs the borrowed client with
-:func:`configure_service_read`.  Without it the endpoints report
+The composition root installs the trusted subject-to-worker directory with
+:func:`configure_service_read`. Without it the endpoints report
 ``not_configured``; they never construct a runtime on their own.
 """
 
@@ -15,15 +15,18 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
-from app.services.service_read.client import (
-    AuthorizedServiceReadClient,
-    ServiceReadUnavailableError,
+from app.schemas.auth import TokenPayload
+from app.services.service_read.access import (
+    ReadAccess,
+    ServiceReadAccessDirectory,
+    ServiceReadAccessError,
 )
+from app.services.service_read.client import ServiceReadUnavailableError
 from app.services.service_read.consumers import CONSUMERS, validate_consumers
 from app.services.service_read.contracts import (
     AccountReadView,
@@ -35,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_client: AuthorizedServiceReadClient | None = None
+_access_directory: ServiceReadAccessDirectory | None = None
 
 #: Refusals that must not be presented as a degraded page.
 _FORBIDDEN_CODES = frozenset(
@@ -49,24 +52,37 @@ _FORBIDDEN_CODES = frozenset(
         "STALE_EPOCH",
     }
 )
+_RESOURCE_NOT_CONFIGURED_CODES = frozenset({"ACCOUNT_NOT_CONFIGURED", "SCOPE_NOT_CONFIGURED"})
+_WORKER_FAILURE_CODES = frozenset(
+    {
+        "START_FAILED",
+        "MAINTAIN_FAILED",
+        "CLOSE_FAILED",
+        "NOT_STARTED",
+        "CLOSED",
+        "QUEUE_FULL",
+    }
+)
 
 
-def configure_service_read(client: AuthorizedServiceReadClient | None) -> None:
-    """Install or clear the borrowed read client owned by the composition root."""
+def configure_service_read(
+    directory: ServiceReadAccessDirectory | None,
+) -> None:
+    """Install or clear the trusted subject-to-worker directory.
 
-    global _client
-    _client = client
+    Worker lifecycle remains with the composition root. Bare synchronous
+    clients are rejected so authenticated users cannot share one read session.
+    """
+
+    global _access_directory
+    if directory is not None and type(directory) is not ServiceReadAccessDirectory:
+        raise ServiceReadAccessError("INVALID_ACCESS_DIRECTORY")
+    _access_directory = directory
 
 
-def get_service_read_client() -> AuthorizedServiceReadClient | None:
-    """Return the installed read client, if this deployment configured one."""
-
-    return _client
-
-
-def _require_client() -> AuthorizedServiceReadClient:
-    client = get_service_read_client()
-    if client is None:
+def _require_directory() -> ServiceReadAccessDirectory:
+    directory = _access_directory
+    if directory is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -77,23 +93,64 @@ def _require_client() -> AuthorizedServiceReadClient:
                 ),
             },
         )
-    return client
+    return directory
+
+
+def _resolve_access(
+    current_user: TokenPayload,
+    selector: str,
+    selector_kind: Literal["account", "order", "monitor"],
+) -> ReadAccess:
+    directory = _require_directory()
+    if type(current_user) is not TokenPayload:
+        raise _access_denied() from None
+    try:
+        if selector_kind == "account":
+            return directory.resolve_account(current_user.sub, selector)
+        if selector_kind == "order":
+            return directory.resolve_order_scope(current_user.sub, selector)
+        if selector_kind == "monitor":
+            return directory.resolve_monitor_scope(current_user.sub, selector)
+    except ServiceReadAccessError:
+        raise _access_denied() from None
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "SERVICE_READ_FAILED",
+            "message": "The authorized service could not answer.",
+        },
+    )
+
+
+def _access_denied() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "SERVICE_READ_ACCESS_DENIED",
+            "message": "The requested service-read scope is not authorized.",
+        },
+    )
 
 
 def _unavailable(code: str) -> HTTPException:
-    if code in _FORBIDDEN_CODES:
-        return HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": code, "message": "The requested scope is not authorized."},
-        )
-    if code.endswith("NOT_CONFIGURED"):
-        return HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": code, "message": "The requested subject is not registered here."},
-        )
+    if code in _FORBIDDEN_CODES or code in _RESOURCE_NOT_CONFIGURED_CODES:
+        return _access_denied()
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail={"code": code, "message": "The authorized service could not answer."},
+    )
+
+
+def _worker_failure(error: BaseException, category: str) -> HTTPException:
+    code = getattr(error, "code", None)
+    if type(code) is str and code in _WORKER_FAILURE_CODES:
+        public_code = code
+    else:
+        logger.warning("authorized %s read failed: %s", category, type(error).__name__)
+        public_code = "SERVICE_READ_FAILED"
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"code": public_code, "message": "The authorized service could not answer."},
     )
 
 
@@ -159,7 +216,7 @@ def _health_payload(view: StrategyHealthView) -> dict[str, Any]:
 
 @router.get("/service-read/consumers")
 async def list_service_read_consumers(
-    current_user: Any = Depends(get_current_user),
+    current_user: TokenPayload = Depends(get_current_user),
 ) -> dict[str, Any]:
     """List the registered service consumers and their recorded evidence."""
 
@@ -190,19 +247,17 @@ async def list_service_read_consumers(
 async def read_service_account(
     account_ref: str,
     currency: str | None = None,
-    current_user: Any = Depends(get_current_user),
+    current_user: TokenPayload = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return the authorized account view for one configured account."""
 
-    del current_user
-    client = _require_client()
+    access = _resolve_access(current_user, account_ref, "account")
     try:
-        view = client.read_account(account_ref, currency=currency)
+        view = await access.worker.read_account(account_ref, currency=currency)
     except ServiceReadUnavailableError as error:
         raise _unavailable(error.code) from None
     except Exception as error:  # noqa: BLE001 - finite local diagnostics only
-        logger.warning("authorized account read failed: %s", type(error).__name__)
-        raise _unavailable("SERVICE_READ_FAILED") from None
+        raise _worker_failure(error, "account") from None
     return _account_payload(view)
 
 
@@ -210,7 +265,7 @@ async def read_service_account(
 async def read_service_order(
     intent_id: str,
     scope_ref: str,
-    current_user: Any = Depends(get_current_user),
+    current_user: TokenPayload = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return the authorized durable record for one managed order.
 
@@ -218,32 +273,28 @@ async def read_service_order(
     order-query scope this deployment granted, never through an inferred one.
     """
 
-    del current_user
-    client = _require_client()
+    access = _resolve_access(current_user, scope_ref, "order")
     try:
-        view = client.read_order(scope_ref, intent_id)
+        view = await access.worker.read_order(scope_ref, intent_id)
     except ServiceReadUnavailableError as error:
         raise _unavailable(error.code) from None
     except Exception as error:  # noqa: BLE001 - finite local diagnostics only
-        logger.warning("authorized order read failed: %s", type(error).__name__)
-        raise _unavailable("SERVICE_READ_FAILED") from None
+        raise _worker_failure(error, "order") from None
     return _order_payload(view)
 
 
 @router.get("/service-read/strategy-health/{scope_ref}")
 async def read_service_strategy_health(
     scope_ref: str,
-    current_user: Any = Depends(get_current_user),
+    current_user: TokenPayload = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return the authorized heartbeat view for one telemetry scope."""
 
-    del current_user
-    client = _require_client()
+    access = _resolve_access(current_user, scope_ref, "monitor")
     try:
-        view = client.read_strategy_health(scope_ref)
+        view = await access.worker.read_strategy_health(scope_ref)
     except ServiceReadUnavailableError as error:
         raise _unavailable(error.code) from None
     except Exception as error:  # noqa: BLE001 - finite local diagnostics only
-        logger.warning("authorized strategy read failed: %s", type(error).__name__)
-        raise _unavailable("SERVICE_READ_FAILED") from None
+        raise _worker_failure(error, "strategy") from None
     return _health_payload(view)

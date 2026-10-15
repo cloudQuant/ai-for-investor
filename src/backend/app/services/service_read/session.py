@@ -1,0 +1,414 @@
+"""Owner-thread adapter for the optional service SDK read runtime.
+
+The SDK is deliberately imported only when a session is constructed. Applications
+that do not configure service reads therefore do not import or initialize the
+optional SDK package.
+"""
+
+from __future__ import annotations
+
+import threading
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from .client import (
+    AccountBinding,
+    AuthorizedServiceReadClient,
+    MonitorBinding,
+    OrderBinding,
+    ServiceReadUnavailableError,
+)
+from .contracts import AccountReadView, OrderReadView, StrategyHealthView
+
+if TYPE_CHECKING:
+    from bt_api_base.service_protocol import WireIdentity
+    from bt_api_py.service_runtime import ServiceClientRuntime
+
+
+@dataclass(frozen=True)
+class ServiceReadCloseFailure:
+    """One retained cleanup failure, including its original exception object."""
+
+    component: str
+    error: BaseException
+
+
+class ServiceReadSessionError(RuntimeError):
+    """Finite session-lifecycle error suitable for the read API boundary."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        failures: tuple[ServiceReadCloseFailure, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.failures = failures
+
+
+class SdkServiceReadSession:
+    """Own an SDK runtime and use it only from its constructing thread.
+
+    ``runtime_factory`` must create a fresh runtime whose identity and service
+    bindings have already been authorized by the application composition. The
+    session checks that configuration against the runtime after registration
+    and again before each read. It never derives a WireIdentity from a caller or
+    HTTP selector.
+    """
+
+    def __init__(
+        self,
+        runtime_factory: Callable[[], Any],
+        expected_identity: WireIdentity,
+        *,
+        account_bindings: Mapping[str, AccountBinding],
+        order_bindings: Mapping[str, OrderBinding] | None = None,
+        monitor_bindings: Mapping[str, MonitorBinding] | None = None,
+    ) -> None:
+        self._account_bindings = dict(account_bindings)
+        self._order_bindings = dict(order_bindings or {})
+        self._monitor_bindings = dict(monitor_bindings or {})
+        if not (self._account_bindings or self._order_bindings or self._monitor_bindings):
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_CONFIGURED",
+                "no service-read bindings are configured",
+            )
+
+        # SDK imports stay inside construction so an unconfigured deployment
+        # does not load the optional package.
+        try:
+            from bt_api_base.service_protocol import WireIdentity as SdkWireIdentity
+            from bt_api_base.service_protocol import WireRole
+        except ImportError:
+            raise ServiceReadUnavailableError("SDK_NOT_INSTALLED") from None
+
+        if type(expected_identity) is not SdkWireIdentity:
+            raise TypeError("expected_identity must be a configured WireIdentity")
+        if expected_identity.role is not WireRole.APPLICATION_CLIENT:
+            raise ValueError("service reads require an APPLICATION_CLIENT identity")
+
+        self._owner_thread = threading.get_ident()
+        self._expected_identity = expected_identity
+
+        self._runtime: ServiceClientRuntime | None = None
+        self._read_client: AuthorizedServiceReadClient | None = None
+        self._start_attempted = False
+        self._started = False
+        self._closed = False
+        self._close_succeeded = False
+        self._close_failures: list[ServiceReadCloseFailure] = []
+
+        runtime = runtime_factory()
+        self._runtime = runtime
+        try:
+            self._check_identity()
+            if self._state_name(runtime) != "new":
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_RUNTIME_NOT_NEW",
+                    "runtime_factory must return a new, unstarted runtime",
+                )
+            self._read_client = AuthorizedServiceReadClient(
+                runtime,
+                account_bindings=self._account_bindings,
+                order_bindings=self._order_bindings,
+                monitor_bindings=self._monitor_bindings,
+            )
+        except BaseException as error:
+            cleanup_error = self._close_runtime_after_constructor_failure(runtime)
+            if cleanup_error is not None:
+                try:
+                    error.__dict__["service_read_cleanup_error"] = cleanup_error
+                except Exception:
+                    pass
+            raise
+
+    @staticmethod
+    def _state_name(runtime: Any) -> str:
+        state = runtime.state
+        return str(getattr(state, "value", state)).lower()
+
+    def _assert_owner(self) -> None:
+        if threading.get_ident() != self._owner_thread:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_WRONG_THREAD",
+                "service-read session methods must run on the owner thread",
+            )
+
+    def _require_open(self) -> None:
+        if self._closed:
+            raise ServiceReadUnavailableError("SERVICE_READ_CLOSED")
+
+    def _check_identity(self) -> None:
+        assert self._runtime is not None
+        from bt_api_base.service_protocol import WireRole
+
+        actual = self._runtime.identity
+        if actual != self._expected_identity or actual.role is not WireRole.APPLICATION_CLIENT:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_IDENTITY_MISMATCH",
+                "runtime identity does not match the configured application identity",
+            )
+
+    @staticmethod
+    def _scope_has_unbounded_account_alias(scope: Any) -> bool:
+        return bool(getattr(scope, "account_refs", ()))
+
+    @staticmethod
+    def _operations(binding: Any) -> frozenset[str]:
+        return frozenset(getattr(binding, "operations", ()))
+
+    @staticmethod
+    def _active(binding: Any) -> bool:
+        return bool(getattr(binding, "active", False))
+
+    def _expected_binding_specs(self) -> set[tuple[str, str, frozenset[str]]]:
+        expected: set[tuple[str, str, frozenset[str]]] = set()
+        for binding in self._account_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, frozenset({"account.snapshot"})))
+        for binding in self._order_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, frozenset({"orders.query"})))
+        for binding in self._monitor_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, frozenset({"telemetry.snapshot"})))
+        return expected
+
+    def _validate_registered_bindings(self) -> None:
+        assert self._runtime is not None
+        active = [binding for binding in self._runtime.bindings if self._active(binding)]
+        expected = self._expected_binding_specs()
+        observed = [
+            (binding.mount, binding.scope_ref, self._operations(binding)) for binding in active
+        ]
+        if len(observed) != len(set(observed)) or set(observed) != expected:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_BINDING_MISMATCH",
+                "active runtime bindings do not exactly match configured read bindings",
+            )
+
+        for account_ref, configured in self._account_bindings.items():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            scope = binding.scope
+            if getattr(
+                scope, "account_ref", None
+            ) != account_ref or self._scope_has_unbounded_account_alias(scope):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "account binding scope is not exact for its configured account",
+                )
+
+        for configured in self._order_bindings.values():
+            self._one_registered_binding(configured.mount, configured.scope_ref)
+
+        for configured in self._monitor_bindings.values():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            scope = binding.scope
+            if getattr(
+                scope, "strategy_ref", None
+            ) != configured.strategy_ref or self._scope_has_unbounded_account_alias(scope):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "monitor binding scope does not match its configured strategy",
+                )
+
+    def _one_registered_binding(self, mount: str, scope_ref: str) -> Any:
+        assert self._runtime is not None
+        matches = [
+            binding
+            for binding in self._runtime.bindings
+            if self._active(binding) and binding.mount == mount and binding.scope_ref == scope_ref
+        ]
+        if len(matches) != 1:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_BINDING_MISMATCH",
+                "expected exactly one active registered binding for the configured scope",
+            )
+        return matches[0]
+
+    def _validate_runtime(self) -> None:
+        assert self._runtime is not None
+        self._check_identity()
+        if self._state_name(self._runtime) != "registered" or not self._runtime.healthy:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_RUNTIME_UNHEALTHY",
+                "service runtime is not registered and healthy",
+            )
+        self._validate_registered_bindings()
+
+    def _validate_account_scope(self, account_ref: str, configured: AccountBinding) -> None:
+        assert self._runtime is not None
+        view = self._runtime.account_binding_view(
+            configured.mount,
+            account_ref,
+            required_operations=frozenset({"account.snapshot"}),
+        )
+        if (
+            view.scope_ref != configured.scope_ref
+            or view.account_ref != account_ref
+            or view.mount != configured.mount
+            or frozenset(view.operations) != frozenset({"account.snapshot"})
+            or getattr(view.rpc_scope, "account_ref", None) != account_ref
+            or self._scope_has_unbounded_account_alias(view.rpc_scope)
+        ):
+            raise ServiceReadSessionError(
+                "SERVICE_READ_SCOPE_MISMATCH",
+                "runtime account scope does not match the trusted account binding",
+            )
+
+    def start(self) -> None:
+        self._assert_owner()
+        self._require_open()
+        if self._start_attempted:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_ALREADY_STARTED",
+                "service-read runtime start may be attempted only once",
+            )
+        assert self._runtime is not None
+        self._start_attempted = True
+        self._check_identity()
+        self._runtime.start()
+        self._validate_runtime()
+        self._started = True
+
+    def maintain(self) -> None:
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service-read runtime must be started before maintenance",
+            )
+        assert self._runtime is not None
+        self._runtime.maintain()
+        self._validate_runtime()
+
+    def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView:
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service-read runtime must be started before reads",
+            )
+        configured = self._account_bindings.get(account_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("ACCOUNT_NOT_CONFIGURED")
+        self._validate_runtime()
+        self._validate_account_scope(account_ref, configured)
+        assert self._read_client is not None
+        return self._read_client.read_account(account_ref, currency=currency)
+
+    def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service-read runtime must be started before reads",
+            )
+        configured = self._order_bindings.get(scope_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("ORDER_SCOPE_NOT_CONFIGURED")
+        self._validate_runtime()
+        assert self._read_client is not None
+        return self._read_client.read_order(scope_ref, intent_id)
+
+    def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service-read runtime must be started before reads",
+            )
+        configured = self._monitor_bindings.get(scope_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("MONITOR_SCOPE_NOT_CONFIGURED")
+        self._validate_runtime()
+        assert self._read_client is not None
+        return self._read_client.read_strategy_health(scope_ref)
+
+    def _close_runtime_after_constructor_failure(self, runtime: Any) -> BaseException | None:
+        try:
+            runtime.close()
+        except BaseException as error:
+            return error
+        if self._runtime_uncertainty(runtime):
+            return ServiceReadSessionError(
+                "SERVICE_READ_CLEANUP_UNCERTAIN",
+                "runtime reported cleanup uncertainty during constructor rollback",
+            )
+        return None
+
+    @staticmethod
+    def _runtime_uncertainty(runtime: Any) -> bool:
+        return bool(
+            getattr(runtime, "cleanup_failures", 0)
+            or getattr(runtime, "unregister_uncertainties", 0)
+        )
+
+    @property
+    def cleanup_failures(self) -> int:
+        return int(getattr(self._runtime, "cleanup_failures", 0))
+
+    @property
+    def unregister_uncertainties(self) -> int:
+        return int(getattr(self._runtime, "unregister_uncertainties", 0))
+
+    @property
+    def close_failures(self) -> tuple[ServiceReadCloseFailure, ...]:
+        return tuple(self._close_failures)
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    @property
+    def close_succeeded(self) -> bool:
+        return self._close_succeeded
+
+    def close(self) -> None:
+        self._assert_owner()
+        if self._close_succeeded:
+            return
+        self._closed = True
+        failures: list[ServiceReadCloseFailure] = []
+        if self._read_client is not None:
+            try:
+                self._read_client.close()
+            except BaseException as error:
+                nested = getattr(error, "failures", None)
+                if isinstance(nested, tuple) and nested:
+                    failures.extend(
+                        ServiceReadCloseFailure("account_facade", failure)
+                        for failure in nested
+                        if isinstance(failure, BaseException)
+                    )
+                else:
+                    failures.append(ServiceReadCloseFailure("read_client", error))
+        if self._runtime is not None:
+            try:
+                self._runtime.close()
+            except BaseException as error:
+                failures.append(ServiceReadCloseFailure("runtime", error))
+            if self._runtime_uncertainty(self._runtime):
+                failures.append(
+                    ServiceReadCloseFailure(
+                        "runtime_uncertainty",
+                        ServiceReadSessionError(
+                            "SERVICE_READ_CLEANUP_UNCERTAIN",
+                            "runtime close reported cleanup or unregister uncertainty",
+                        ),
+                    )
+                )
+        self._close_failures.extend(failures)
+        if failures:
+            self._close_succeeded = False
+            error = ServiceReadSessionError(
+                "SERVICE_READ_CLOSE_FAILED",
+                "one or more service-read resources did not close cleanly",
+                failures=tuple(failures),
+            )
+            raise error from failures[0].error
+        self._close_succeeded = True

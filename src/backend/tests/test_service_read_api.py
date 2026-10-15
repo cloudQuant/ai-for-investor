@@ -14,6 +14,12 @@ from fastapi import FastAPI
 
 from app.api.deps import get_current_user
 from app.api.service_read import configure_service_read, router
+from app.schemas.auth import TokenPayload
+from app.services.service_read.access import (
+    ReadAccess,
+    ServiceReadAccessDirectory,
+    ServiceReadAccessError,
+)
 from app.services.service_read.client import (
     AccountBinding,
     AuthorizedServiceReadClient,
@@ -30,21 +36,65 @@ from tests.test_service_read_client import (
 )
 
 
-def _app(*, authenticated=True):
+def _app(*, authenticated=True, token=None):
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     if authenticated:
-        app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user"}
+        current = token or TokenPayload(sub="test-user", username="tester")
+        app.dependency_overrides[get_current_user] = lambda: current
     return app
 
 
-def _get(app, path):
+def _get(app, path, *, headers=None):
     async def _call():
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            return await client.get(path)
+            return await client.get(path, headers=headers)
 
     return asyncio.run(_call())
+
+
+class _AsyncClientWorker:
+    """Route-facing async fake that delegates to the established read client."""
+
+    def __init__(self, client):
+        self.client = client
+        self.calls = []
+
+    async def read_account(self, account_ref, *, currency=None):
+        self.calls.append(("account", account_ref, currency))
+        return self.client.read_account(account_ref, currency=currency)
+
+    async def read_order(self, scope_ref, intent_id):
+        self.calls.append(("order", scope_ref, intent_id))
+        return self.client.read_order(scope_ref, intent_id)
+
+    async def read_strategy_health(self, scope_ref):
+        self.calls.append(("monitor", scope_ref))
+        return self.client.read_strategy_health(scope_ref)
+
+
+def _configure_client(
+    client,
+    *,
+    account_refs=(),
+    order_scope_refs=(),
+    monitor_scope_refs=(),
+    subject="test-user",
+):
+    worker = _AsyncClientWorker(client)
+    directory = ServiceReadAccessDirectory(
+        {
+            subject: ReadAccess(
+                worker,
+                allow_account_refs=frozenset(account_refs),
+                allow_order_scope_refs=frozenset(order_scope_refs),
+                allow_monitor_scope_refs=frozenset(monitor_scope_refs),
+            )
+        }
+    )
+    configure_service_read(directory)
+    return worker
 
 
 def _binding():
@@ -81,6 +131,19 @@ def test_without_a_configured_read_path_nothing_is_projected():
     assert response.json()["detail"]["code"] == "SERVICE_READ_NOT_CONFIGURED"
 
 
+def test_clearing_configuration_returns_the_routes_to_default_off():
+    _configure_client(
+        AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={}),
+        account_refs={"account-a"},
+    )
+    configure_service_read(None)
+
+    response = _get(_app(), "/api/v1/service-read/accounts/account-a")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "SERVICE_READ_NOT_CONFIGURED"
+
+
 def test_account_read_projects_quality_and_never_a_placeholder(monkeypatch):
     client = AuthorizedServiceReadClient(
         _FakeRuntime(), account_bindings={"account-a": _binding()}, clock=lambda: 150.0
@@ -88,7 +151,7 @@ def test_account_read_projects_quality_and_never_a_placeholder(monkeypatch):
     monkeypatch.setattr(
         client, "_account_clients", {"account-a": _FakeAccountClient(state=_FakeState())}
     )
-    configure_service_read(client)
+    _configure_client(client, account_refs={"account-a"})
     app = _app()
 
     response = _get(app, "/api/v1/service-read/accounts/account-a")
@@ -115,7 +178,7 @@ def test_absent_currency_is_reported_as_nulls_with_an_explicit_marker(monkeypatc
             )
         },
     )
-    configure_service_read(client)
+    _configure_client(client, account_refs={"account-a"})
     app = _app()
 
     response = _get(app, "/api/v1/service-read/accounts/account-a")
@@ -134,23 +197,26 @@ def test_refused_scope_is_forbidden_rather_than_degraded(monkeypatch):
         "_account_clients",
         {"account-a": _FakeAccountClient(error=_StubError("SCOPE_DENIED"))},
     )
-    configure_service_read(client)
+    _configure_client(client, account_refs={"account-a"})
     app = _app()
 
     response = _get(app, "/api/v1/service-read/accounts/account-a")
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "SCOPE_DENIED"
+    assert response.json()["detail"]["code"] == "SERVICE_READ_ACCESS_DENIED"
 
 
 def test_unregistered_account_is_not_found():
-    configure_service_read(AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={}))
+    _configure_client(
+        AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={}),
+        account_refs={"account-z"},
+    )
     app = _app()
 
     response = _get(app, "/api/v1/service-read/accounts/account-z")
 
-    assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "ACCOUNT_NOT_CONFIGURED"
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "SERVICE_READ_ACCESS_DENIED"
 
 
 def test_transport_failure_is_reported_as_unavailable(monkeypatch):
@@ -160,7 +226,7 @@ def test_transport_failure_is_reported_as_unavailable(monkeypatch):
         "_account_clients",
         {"account-a": _FakeAccountClient(error=_StubError("BUSINESS_OUTCOME_UNKNOWN"))},
     )
-    configure_service_read(client)
+    _configure_client(client, account_refs={"account-a"})
     app = _app()
 
     response = _get(app, "/api/v1/service-read/accounts/account-a")
@@ -215,7 +281,7 @@ def test_strategy_health_reports_the_heartbeat_observation():
             "scope-a": MonitorBinding("application.monitor", "scope-a", "strategy-a")
         },
     )
-    configure_service_read(client)
+    _configure_client(client, monitor_scope_refs={"scope-a"})
     app = _app()
 
     response = _get(app, "/api/v1/service-read/strategy-health/scope-a")
@@ -236,7 +302,7 @@ def test_missing_heartbeat_is_not_reported_as_healthy():
             "scope-a": MonitorBinding("application.monitor", "scope-a", "strategy-a")
         },
     )
-    configure_service_read(client)
+    _configure_client(client, monitor_scope_refs={"scope-a"})
     app = _app()
 
     response = _get(app, "/api/v1/service-read/strategy-health/scope-a")
@@ -247,7 +313,6 @@ def test_missing_heartbeat_is_not_reported_as_healthy():
 
 
 def test_consumer_registry_endpoint_lists_recorded_evidence():
-    configure_service_read(AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={}))
     app = _app()
 
     response = _get(app, "/api/v1/service-read/consumers")
@@ -260,13 +325,16 @@ def test_consumer_registry_endpoint_lists_recorded_evidence():
 
 
 def test_health_view_without_a_bound_scope_is_refused():
-    configure_service_read(AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={}))
+    _configure_client(
+        AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={}),
+        monitor_scope_refs={"scope-z"},
+    )
     app = _app()
 
     response = _get(app, "/api/v1/service-read/strategy-health/scope-z")
 
-    assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "SCOPE_NOT_CONFIGURED"
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "SERVICE_READ_ACCESS_DENIED"
 
 
 def test_neutral_views_keep_the_read_quality_enum():
@@ -292,10 +360,11 @@ def _order_client(payload=None, error=None):
 def test_order_endpoint_projects_the_authorized_record():
     from tests.test_service_read_client import _order_record
 
-    configure_service_read(
+    _configure_client(
         _order_client(
             payload={"found": True, "record": _order_record(state="ACKED")},
-        )
+        ),
+        order_scope_refs={"orders-a"},
     )
     app = _app()
 
@@ -311,7 +380,10 @@ def test_order_endpoint_projects_the_authorized_record():
 
 
 def test_order_endpoint_reports_a_missing_record_without_a_state():
-    configure_service_read(_order_client(payload={"found": False, "record": None}))
+    _configure_client(
+        _order_client(payload={"found": False, "record": None}),
+        order_scope_refs={"orders-a"},
+    )
     app = _app()
 
     response = _get(app, "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
@@ -323,24 +395,33 @@ def test_order_endpoint_reports_a_missing_record_without_a_state():
 
 
 def test_order_endpoint_refuses_an_ungranted_scope():
-    configure_service_read(_order_client(payload={"found": False, "record": None}))
+    _configure_client(
+        _order_client(payload={"found": False, "record": None}),
+        order_scope_refs={"orders-a"},
+    )
     app = _app()
 
     response = _get(app, "/api/v1/service-read/orders/intent-1?scope_ref=orders-z")
 
-    assert response.status_code == 404
-    assert response.json()["detail"]["code"] == "SCOPE_NOT_CONFIGURED"
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "SERVICE_READ_ACCESS_DENIED"
 
 
 def test_order_endpoint_maps_a_refusal_and_a_degraded_read():
     from tests.test_service_read_client import _StubError
 
-    configure_service_read(_order_client(error=_StubError("SCOPE_DENIED")))
+    _configure_client(
+        _order_client(error=_StubError("SCOPE_DENIED")),
+        order_scope_refs={"orders-a"},
+    )
     forbidden = _get(_app(), "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
     assert forbidden.status_code == 403
-    assert forbidden.json()["detail"]["code"] == "SCOPE_DENIED"
+    assert forbidden.json()["detail"]["code"] == "SERVICE_READ_ACCESS_DENIED"
 
-    configure_service_read(_order_client(error=_StubError("BUSINESS_OUTCOME_UNKNOWN")))
+    _configure_client(
+        _order_client(error=_StubError("BUSINESS_OUTCOME_UNKNOWN")),
+        order_scope_refs={"orders-a"},
+    )
     degraded = _get(_app(), "/api/v1/service-read/orders/intent-1?scope_ref=orders-a")
     assert degraded.status_code == 200
     payload = degraded.json()
@@ -354,3 +435,105 @@ def test_order_endpoint_requires_a_configured_read_path():
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "SERVICE_READ_NOT_CONFIGURED"
+
+
+def test_configuration_rejects_a_shared_synchronous_client():
+    client = AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={})
+
+    with pytest.raises(ServiceReadAccessError) as error:
+        configure_service_read(client)
+
+    assert error.value.code == "INVALID_ACCESS_DIRECTORY"
+
+
+def test_worker_lifecycle_failure_is_a_generic_unavailable_response():
+    class FailedWorker:
+        async def read_account(self, account_ref, *, currency=None):
+            del account_ref, currency
+            error = RuntimeError("private runtime details")
+            error.code = "MAINTAIN_FAILED"
+            raise error
+
+        async def read_order(self, scope_ref, intent_id):
+            del scope_ref, intent_id
+
+        async def read_strategy_health(self, scope_ref):
+            del scope_ref
+
+    configure_service_read(
+        ServiceReadAccessDirectory(
+            {"test-user": ReadAccess(FailedWorker(), allow_account_refs={"account-a"})}
+        )
+    )
+    response = _get(_app(), "/api/v1/service-read/accounts/account-a")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "MAINTAIN_FAILED"
+    assert "private runtime details" not in response.text
+
+
+def test_subjects_cannot_cross_read_each_others_account_order_or_health():
+    alice_worker = _AsyncClientWorker(
+        AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={})
+    )
+    bob_worker = _AsyncClientWorker(
+        AuthorizedServiceReadClient(_FakeRuntime(), account_bindings={})
+    )
+    configure_service_read(
+        ServiceReadAccessDirectory(
+            {
+                "alice": ReadAccess(
+                    alice_worker,
+                    allow_account_refs={"account-a"},
+                    allow_order_scope_refs={"orders-a"},
+                    allow_monitor_scope_refs={"health-a"},
+                ),
+                "bob": ReadAccess(
+                    bob_worker,
+                    allow_account_refs={"account-b"},
+                    allow_order_scope_refs={"orders-b"},
+                    allow_monitor_scope_refs={"health-b"},
+                ),
+            }
+        )
+    )
+    forged_headers = {
+        "X-Actor-Ref": "alice",
+        "X-Principal-Ref": "principal-a",
+        "X-Delegate-Ref": "delegate-a",
+        "X-User-Id": "alice",
+        "X-Account-Ref": "account-a",
+        "X-Scope-Ref": "orders-a",
+    }
+    cases = (
+        (
+            "alice",
+            "/api/v1/service-read/accounts/account-b?actor_ref=alice&principal_ref=principal-a&user_id=alice",
+        ),
+        (
+            "alice",
+            "/api/v1/service-read/orders/intent-1?scope_ref=orders-b&actor_ref=alice&user_id=alice",
+        ),
+        ("alice", "/api/v1/service-read/strategy-health/health-b?actor_ref=alice&user_id=alice"),
+        (
+            "bob",
+            "/api/v1/service-read/accounts/account-a?actor_ref=bob&principal_ref=principal-b&user_id=alice",
+        ),
+        (
+            "bob",
+            "/api/v1/service-read/orders/intent-1?scope_ref=orders-a&actor_ref=bob&user_id=alice",
+        ),
+        ("bob", "/api/v1/service-read/strategy-health/health-a?actor_ref=bob&user_id=alice"),
+        ("mallory", "/api/v1/service-read/accounts/account-a?actor_ref=alice&user_id=alice"),
+    )
+
+    responses = []
+    for subject, path in cases:
+        token = TokenPayload(sub=subject, username=subject)
+        responses.append(_get(_app(token=token), path, headers=forged_headers))
+
+    assert [
+        (response.status_code, response.json()["detail"]["code"]) for response in responses
+    ] == [(403, "SERVICE_READ_ACCESS_DENIED")] * len(cases)
+    assert alice_worker.calls == []
+    assert bob_worker.calls == []

@@ -32,6 +32,7 @@ __all__ = [
     "AuthorizedServiceReadClient",
     "MonitorBinding",
     "OrderBinding",
+    "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
 ]
 
@@ -46,6 +47,20 @@ class ServiceReadUnavailableError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+class ServiceReadClientCloseError(RuntimeError):
+    """One or more cached account facades could not be closed.
+
+    Failed facade objects remain in the client's cache for inspection and a
+    later close retry. The exception retains every original failure object.
+    """
+
+    code = "SERVICE_READ_CLOSE_FAILED"
+
+    def __init__(self, failures: tuple[BaseException, ...]) -> None:
+        self.failures = failures
+        super().__init__(self.code)
 
 
 #: Registry outcomes that mean the request was refused, not merely degraded.
@@ -195,6 +210,45 @@ class AuthorizedServiceReadClient:
         self._order_bindings = order_map
         self._clock = clock
         self._account_clients: dict[str, Any] = {}
+        self._closed = False
+        self._close_failures: list[BaseException] = []
+
+    @property
+    def close_failures(self) -> tuple[BaseException, ...]:
+        """Return original facade-close exceptions retained across retries."""
+
+        return tuple(self._close_failures)
+
+    def close(self) -> None:
+        """Permanently close this adapter and every cached account facade.
+
+        The runtime is borrowed and is never closed here. Closing is permanent
+        even if one facade fails, so subsequent reads fail closed; a later
+        ``close()`` retries only the facades that did not close successfully.
+        """
+
+        self._closed = True
+        failures: list[BaseException] = []
+        for account_ref, client in tuple(self._account_clients.items()):
+            closer = getattr(client, "close", None)
+            if not callable(closer):
+                failures.append(RuntimeError("SERVICE_ACCOUNT_CLOSE_UNAVAILABLE"))
+                continue
+            try:
+                closer()
+            except BaseException as error:  # continue closing independent facades
+                failures.append(error)
+                continue
+            if self._account_clients.get(account_ref) is client:
+                del self._account_clients[account_ref]
+        self._close_failures.extend(failures)
+        if failures:
+            error = ServiceReadClientCloseError(tuple(failures))
+            raise error from failures[0]
+
+    def _require_open(self) -> None:
+        if self._closed:
+            raise ServiceReadUnavailableError("SERVICE_READ_CLOSED")
 
     # -- account ------------------------------------------------------------
 
@@ -207,6 +261,7 @@ class AuthorizedServiceReadClient:
         be read now.
         """
 
+        self._require_open()
         binding = self._account_bindings.get(account_ref)
         if binding is None:
             raise ServiceReadUnavailableError("ACCOUNT_NOT_CONFIGURED")
@@ -236,6 +291,7 @@ class AuthorizedServiceReadClient:
                 expected_account=binding.account_key,
                 required_coverage=binding.coverage,
                 require_open_orders=binding.require_open_orders,
+                expected_scope_ref=binding.scope_ref,
             )
         except Exception as error:  # noqa: BLE001 - configuration misuse
             raise ServiceReadUnavailableError(_error_code(error)) from None
@@ -311,6 +367,7 @@ class AuthorizedServiceReadClient:
         explicit unavailable view rather than a fabricated state.
         """
 
+        self._require_open()
         binding = self._order_bindings.get(scope_ref)
         if binding is None:
             raise ServiceReadUnavailableError("SCOPE_NOT_CONFIGURED")
@@ -335,6 +392,7 @@ class AuthorizedServiceReadClient:
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
         """Return the authorized heartbeat view for one telemetry scope."""
 
+        self._require_open()
         binding = self._monitor_bindings.get(scope_ref)
         if binding is None:
             raise ServiceReadUnavailableError("SCOPE_NOT_CONFIGURED")

@@ -11,7 +11,7 @@
 |---|---|---|---|
 | provider 账户余额/估值 | `bt_api_gateway` 账户会话 | `application_client`（显式绑定到具体账户与 scope） | `service.account_read` |
 | 策略心跳与普通指标 | 策略进程经 SDK 发射器上报，`bt_api_monitor` 保存 | `application_client`（显式绑定到具体 strategy scope） | `service.monitor_query` |
-| 订单与成交事实 | `bt_api_execution` 账户 owner | 尚未接入 | `service.order_entry`／`service.order_query` |
+| 订单与成交事实 | `bt_api_execution` 账户 owner | `application_client`（按用户与 order-query scope 单独授权） | 只读 `service.order_query` |
 | 风险政策与预留 | `bt_api_risk` | 尚未接入 | `service.risk_query`／`service.risk_policy` |
 | 用户导入的交易行、审批、研究记录 | AFI 自有业务数据 | 不适用 | 不迁移、不当作 provider 事实 |
 
@@ -50,18 +50,57 @@ AFI 不持有 provider 凭据，也不建立 provider 会话；任何“读取�
 ## 4 转换拒绝条件
 
 1. 客户端请求体自带 scope／账户归属：拒绝（归属只能来自认证后的 `WireScope`）。
-2. 未登记账户或未授权 scope：拒绝，不降级成页面状态（HTTP 403／404）。
+2. 未授权账户或 scope：HTTP 403，统一返回 `SERVICE_READ_ACCESS_DENIED`；不得区分不存在与未授权。
 3. 快照里出现非本策略的流：不得据此推断本策略健康，视为未采集。
 4. 数值非有限、类型不符、字段多余或缺失：拒绝整个视图，不做部分投影。
 5. 用户导入账本被当作 provider 余额、或策略预算被当作账户现金：拒绝（语义越界）。
 
 ## 5 证据等级
 
-当前已取得的等级：
+`contract`／`offline` 覆盖适配器与路由；`local-process` 已用本机服务和 CURVE 验证 health 状态变化。
+集成 `59151a`／`674b68`：1 passed／10.11s／exit 0，4 项配置 warning 及既有 Pydantic `model_id` warning。
+它通过真实 JWT 和最小 FastAPI/ASGI 路由驱动两个独立 owner-thread SDK session，再连本机 CURVE Execution 服务；跨用户越权为 403 且未进入 worker，服务端拒绝伪造 identity／跨 scope，合成 provider 计数未增，worker 正常关闭。
+该路径是 ASGI 内部 HTTP 调用，不是网络 HTTP server；provider 是合成品，不代表账户。真实部署、账户、页面接线、写入链路和旧实现退役仍未验收；AFI01 仍部分完成。
 
-- `contract`／`offline`：合同、登记表、适配器与 HTTP 端点（`tests/test_service_read_client.py`、`tests/test_service_read_api.py`）。
-- `local-process`：`strategy-health` 读取在真实本机服务进程 + 真实 CURVE 传输上验证
-  （`tests/test_service_read_local_process.py`：未上报 → 新鲜 → 陈旧 → 服务停止后不可用，
-  未授权 scope 拒绝）。
+## 6 部署授权与运行
 
-尚未取得：`real-service`（部署环境）、真实账户读取、真实页面接线、写入链路与旧实现退役。
+`configure_service_read` 只接受 `ServiceReadAccessDirectory` 或 `None`。部署把已验证的 `TokenPayload.sub` 精确映射到 `ReadAccess(worker, allow_account_refs, allow_order_scope_refs, allow_monitor_scope_refs)`；请求中的身份字段不能授予权限，三个 selector 集合互相独立。未知用户和未授权 selector 统一返回 HTTP 403，目录未配置返回 503。每个 subject 使用独立 worker/runtime 和服务端已授予的 `WireIdentity`；Directory 只绑定，不创建身份、授予权限或管理 worker。
+
+以下 `trusted_*` 变量代表部署中已经存在的解析配置、key resolver 派生的传输工厂及 scope/peer resolver；不得用 HTTP 数据生成它们。
+
+```python
+from contextlib import asynccontextmanager
+from app.api.service_read import configure_service_read
+from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
+from app.services.service_read.session import SdkServiceReadSession
+from app.services.service_read.worker import ServiceReadWorker
+from bt_api_py.service_runtime import ServiceClientRuntime
+
+def session_factory():
+    return SdkServiceReadSession(
+        lambda: ServiceClientRuntime(trusted_client_config, identity=application_identity,
+            scope_resolver=trusted_scope_resolver, peer_resolver=trusted_peer_resolver,
+            transport_factory=trusted_transport_factory),
+        application_identity,
+        account_bindings=account_bindings, order_bindings=order_bindings,
+        monitor_bindings=monitor_bindings,
+    )
+
+@asynccontextmanager
+async def service_read_lifespan(_app):
+    worker = ServiceReadWorker(session_factory, max_queue_size=32,
+                               maintenance_interval_seconds=1.0)
+    try:
+        await worker.start()
+        directory = ServiceReadAccessDirectory({verified_sub: ReadAccess(
+            worker, allow_account_refs=account_refs, allow_order_scope_refs=order_scopes,
+            allow_monitor_scope_refs=monitor_scopes,
+        )})
+        configure_service_read(directory)
+        yield
+    finally:
+        configure_service_read(None)
+        await worker.aclose()
+```
+
+部署 lifespan 必须显式装配：当前 `main` 尚未自动接线。退出时先 `configure_service_read(None)`，再逐个 `await worker.aclose()`；上报有限 `CLOSE_FAILED`／`MAINTAIN_FAILED`，不向 HTTP 暴露底层异常。SDK 兼容依赖 `bt_api_py` commit `84710c27`，其账户 facade 在 snapshot 前核对 `expected_scope_ref`。裸 `AuthorizedServiceReadClient` 已不兼容。35 项 service-read unit、11 项 worker 测试及上述双用户 ASGI 集成均已验收；证据仍不代表 main 接线、真实账户或完整 AFI01 通过。
