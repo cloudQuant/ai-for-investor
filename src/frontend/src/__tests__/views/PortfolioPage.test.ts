@@ -352,15 +352,54 @@ describe('PortfolioPage', () => {
       portfolio_ref: 'research-set',
       membership_version: 1,
       source_type: 'research' as const,
-      source_status: 'adapter_not_integrated',
-      account_total: { status: 'not_collected', currency: 'USD', value: null },
+      source_status: 'research_reports_projected',
+      source_facts: {
+        kind: 'asset_research_reports',
+        research_facts_available: true,
+        freshness_status: 'not_defined',
+        currency_status: 'not_declared',
+        artifacts: [{
+          status: 'available',
+          report_integrity_status: 'verified',
+          task_status: 'SUCCEEDED',
+          asset_type: 'stock',
+          canonical_id: 'SYNTH:AAA',
+          report_version: 'v1',
+          report_content_hash: 'a'.repeat(64),
+          report_created_at: '2026-10-14T12:00:00+00:00',
+          decision_status: 'available',
+          published_decision: {
+            asset_type: 'stock',
+            market_view: 'BULLISH',
+            normalized_direction: 'LONG',
+            recommendation: 'BUY',
+            actionability: 'RESEARCH_ONLY',
+            quality_status: 'ELIGIBLE',
+            horizon_code: '1d',
+            execution_disabled: true as const,
+          },
+          freshness_status: 'not_defined',
+          currency: null,
+          currency_status: 'not_declared',
+          account_value_status: 'not_applicable_research',
+        }],
+      },
+      account_total: { status: 'not_applicable_research', currency: null, value: null },
       strategies: [],
       strategy_attribution: {
         ...liveProjection.strategy_attribution,
+        status: 'not_applicable_research',
         strategy_count: 0,
         unattributed_account_value: null,
+        residual_basis: 'research reports do not establish account or strategy holdings',
       },
-      coverage: { complete: false, code: 'RESEARCH_FACT_ADAPTER_NOT_INTEGRATED' },
+      coverage: {
+        complete: false,
+        research_facts_available: true,
+        account_facts_complete: false,
+        strategy_attribution_complete: false,
+        code: 'RESEARCH_REPORTS_NOT_FINANCIAL_ACCOUNTS',
+      },
     }
     const conflictingProjection = {
       ...liveProjection,
@@ -515,11 +554,16 @@ describe('PortfolioPage', () => {
       'research-set',
       1,
     )
-    expect(wrapper.get('[data-test="portfolio-composition-adapter-unavailable"]').text())
-      .toContain('尚未接入事实适配器')
     expect(wrapper.get('[data-test="portfolio-composition-source-status"]').text())
-      .toContain('尚未接入事实适配器')
+      .toContain('已读取公开研究报告')
     expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.get('[data-test="portfolio-research-disclaimer"]')
+      .text()).toContain('不代表持仓、账户余额或执行归属')
+    expect(wrapper.get('[data-test="portfolio-research-artifact"]').text()).toContain('SYNTH:AAA')
+    expect(wrapper.get('[data-test="portfolio-research-artifact"]').text()).toContain('BUY')
+    expect(wrapper.get('[data-test="portfolio-research-artifact"]').text()).toContain('未声明')
+    expect(wrapper.get('[data-test="portfolio-composition-attribution-status"]')
+      .text()).toContain('不适用持仓归属')
     expect(wrapper.find('[data-test="portfolio-overview"]').exists()).toBe(false)
     expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
 

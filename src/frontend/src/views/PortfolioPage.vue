@@ -192,6 +192,60 @@
             </div>
           </dl>
 
+          <section
+            v-if="compositionProjection.source_facts?.kind === 'asset_research_reports'"
+            class="portfolio-composition__section"
+            data-test="portfolio-research-facts"
+          >
+            <h2>{{ t('portfolio.compositionResearchFacts') }}</h2>
+            <p data-test="portfolio-research-disclaimer">
+              {{ t('portfolio.compositionResearchDisclaimer') }}
+            </p>
+            <ul>
+              <li
+                v-for="(artifact, index) in compositionProjection.source_facts.artifacts || []"
+                :key="`${artifact.report_content_hash || artifact.status}-${index}`"
+                data-test="portfolio-research-artifact"
+              >
+                <p>
+                  {{ t('portfolio.compositionResearchArtifactStatus') }}:
+                  {{ compositionResearchArtifactStatusLabel(artifact.status) }}
+                </p>
+                <template v-if="artifact.status === 'available'">
+                  <p>
+                    {{ t('portfolio.compositionResearchIdentity') }}:
+                    {{ artifact.asset_type }} · {{ artifact.canonical_id }}
+                  </p>
+                  <p>
+                    {{ t('portfolio.compositionResearchReportIntegrity') }}:
+                    {{ compositionResearchIntegrityLabel(artifact.report_integrity_status) }}
+                  </p>
+                  <p>
+                    {{ t('portfolio.compositionResearchReportCreated') }}:
+                    {{ artifact.report_created_at || t('portfolio.compositionUnavailable') }}
+                  </p>
+                  <p>
+                    {{ t('portfolio.compositionResearchFreshness') }}:
+                    {{ t('portfolio.compositionResearchFreshnessUndefined') }}
+                  </p>
+                  <p>
+                    {{ t('portfolio.compositionResearchCurrency') }}:
+                    {{ t('portfolio.compositionResearchCurrencyUndeclared') }}
+                  </p>
+                  <p v-if="artifact.published_decision">
+                    {{ t('portfolio.compositionResearchDecision') }}:
+                    {{ artifact.published_decision.market_view }} ·
+                    {{ artifact.published_decision.recommendation }} ·
+                    {{ artifact.published_decision.actionability }}
+                  </p>
+                  <p v-else>
+                    {{ t('portfolio.compositionResearchDecisionUnavailable') }}
+                  </p>
+                </template>
+              </li>
+            </ul>
+          </section>
+
           <section class="portfolio-composition__section">
             <h2>{{ t('portfolio.compositionAttribution') }}</h2>
             <p data-test="portfolio-composition-attribution-status">
@@ -974,18 +1028,35 @@ function compositionStatusLabel(status: string) {
   if (status === 'adapter_not_integrated') return t('portfolio.compositionAdapterUnavailable')
   if (status === 'projected') return t('portfolio.compositionStatusProjected')
   if (status === 'no_account_members') return t('portfolio.compositionStatusNoAccounts')
+  if (status === 'research_reports_projected') return t('portfolio.compositionResearchProjected')
+  if (status === 'research_reports_unavailable') return t('portfolio.compositionResearchUnavailable')
   return status
 }
 
 function compositionAttributionStatusLabel(status: string) {
+  if (status === 'not_applicable_research') return t('portfolio.compositionResearchNoAttribution')
   if (status === 'execution_attribution_not_collected') {
     return t('portfolio.compositionAttributionUnavailable')
   }
   return status
 }
 
-function compositionAmount(value: string | null, currency: string) {
-  return value === null ? t('portfolio.compositionUnavailable') : `${value} ${currency}`
+function compositionAmount(value: string | null, currency: string | null) {
+  if (value === null) return t('portfolio.compositionUnavailable')
+  return currency ? `${value} ${currency}` : value
+}
+
+function compositionResearchArtifactStatusLabel(status: string) {
+  if (status === 'available') return t('portfolio.compositionResearchArtifactAvailable')
+  if (status === 'missing_or_not_owned') return t('portfolio.compositionResearchArtifactUnavailable')
+  if (status === 'integrity_invalid') return t('portfolio.compositionResearchArtifactInvalid')
+  return status
+}
+
+function compositionResearchIntegrityLabel(status: string) {
+  if (status === 'verified') return t('portfolio.compositionResearchIntegrityVerified')
+  if (status === 'invalid') return t('portfolio.compositionResearchArtifactInvalid')
+  return t('portfolio.compositionResearchArtifactUnavailable')
 }
 
 function setViewMode(mode: 'legacy' | 'composition') {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -14,9 +15,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.service_read import _resolve_access
+from app.models.asset_research import AssetAnalysisReport, AssetAnalysisTask
 from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.schemas.auth import TokenPayload
 from app.schemas.portfolio_composition import PortfolioCompositionCreate
+from app.services.asset_research.data import canonical_json_hash
 from app.services.service_read.client import ServiceReadUnavailableError
 from app.services.service_read.contracts import AccountReadView, ReadQuality
 
@@ -137,6 +140,8 @@ class PortfolioCompositionService:
             "creditable": False,
             "overlap_policy": "non_additive_display_only",
         }
+        if row.source_type == "research":
+            return await self._project_research_source(current_user, row, base)
         if row.source_type != "live":
             return {
                 **base,
@@ -231,6 +236,215 @@ class PortfolioCompositionService:
                 "code": coverage_code,
             },
         }
+
+    async def _project_research_source(
+        self,
+        current_user: TokenPayload,
+        row: PortfolioCompositionVersion,
+        base: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Read owner-scoped published research reports without treating them as holdings."""
+
+        if not row.members or any(member["kind"] != "research_artifact" for member in row.members):
+            return {
+                **base,
+                "source_status": "adapter_not_integrated",
+                "account_total": {
+                    "status": "not_applicable_research",
+                    "currency": None,
+                    "value": None,
+                },
+                "accounts": [],
+                "strategies": [],
+                "strategy_attribution": _research_attribution(),
+                "coverage": {
+                    "complete": False,
+                    "code": "RESEARCH_REPORT_ADAPTER_NOT_INTEGRATED",
+                },
+            }
+
+        member_refs = [member["ref"] for member in row.members]
+        result = await self.db.execute(
+            select(AssetAnalysisReport, AssetAnalysisTask)
+            .join(AssetAnalysisTask, AssetAnalysisTask.id == AssetAnalysisReport.task_id)
+            .where(
+                AssetAnalysisReport.id.in_(member_refs),
+                AssetAnalysisReport.tombstoned_at.is_(None),
+                AssetAnalysisTask.owner_scope == "USER",
+                AssetAnalysisTask.user_id == current_user.sub,
+                AssetAnalysisTask.tombstoned_at.is_(None),
+            )
+        )
+        owned_reports = {report.id: (report, task) for report, task in result.all()}
+        source_artifacts: list[dict[str, Any]] = []
+        for member_ref in member_refs:
+            owned = owned_reports.get(member_ref)
+            if owned is None:
+                source_artifacts.append(
+                    {
+                        "status": "missing_or_not_owned",
+                        "report_integrity_status": "unavailable",
+                        "task_status": None,
+                        "asset_type": None,
+                        "canonical_id": None,
+                        "report_version": None,
+                        "report_content_hash": None,
+                        "report_created_at": None,
+                        "decision_status": "unavailable",
+                        "published_decision": None,
+                        "freshness_status": "not_defined",
+                        "currency": None,
+                        "currency_status": "not_declared",
+                        "account_value_status": "not_applicable_research",
+                    }
+                )
+                continue
+
+            try:
+                report, task = owned
+                report_sections = report.sections_json
+                if not isinstance(report_sections, dict):
+                    raise ValueError("report payload is invalid")
+                if canonical_json_hash(report_sections) != report.content_hash:
+                    raise ValueError("report content hash mismatch")
+                report_meta = report_sections.get("meta")
+                if (
+                    not isinstance(report_meta, dict)
+                    or report_meta.get("asset_type") != task.asset_type
+                    or report_meta.get("canonical_id") != task.canonical_id
+                ):
+                    raise ValueError("report identity mismatch")
+                report_created_at = _iso_utc(report.created_at)
+            except (AttributeError, TypeError, ValueError):
+                # Integrity problems are projected as finite status, never raw content/errors.
+                source_artifacts.append(
+                    {
+                        "status": "integrity_invalid",
+                        "report_integrity_status": "invalid",
+                        "task_status": None,
+                        "asset_type": None,
+                        "canonical_id": None,
+                        "report_version": None,
+                        "report_content_hash": None,
+                        "report_created_at": None,
+                        "decision_status": "unavailable",
+                        "published_decision": None,
+                        "freshness_status": "not_defined",
+                        "currency": None,
+                        "currency_status": "not_declared",
+                        "account_value_status": "not_applicable_research",
+                    }
+                )
+                continue
+
+            decision = _published_research_decision(report_sections)
+            source_artifacts.append(
+                {
+                    "status": "available",
+                    "report_integrity_status": "verified",
+                    "task_status": str(task.status),
+                    "asset_type": str(task.asset_type),
+                    "canonical_id": str(task.canonical_id),
+                    "report_version": str(report.report_version),
+                    "report_content_hash": str(report.content_hash),
+                    "report_created_at": report_created_at,
+                    "decision_status": "available" if decision is not None else "unavailable",
+                    "published_decision": decision,
+                    # Research reports do not declare a universal freshness SLA or account value.
+                    "freshness_status": "not_defined",
+                    "currency": None,
+                    "currency_status": "not_declared",
+                    "account_value_status": "not_applicable_research",
+                }
+            )
+
+        statuses = [item["status"] for item in source_artifacts]
+        if any(value == "missing_or_not_owned" for value in statuses):
+            coverage_code = "RESEARCH_REPORT_MISSING_OR_NOT_OWNED"
+        elif any(value == "integrity_invalid" for value in statuses):
+            coverage_code = "RESEARCH_REPORT_INTEGRITY_INVALID"
+        else:
+            coverage_code = "RESEARCH_REPORTS_NOT_FINANCIAL_ACCOUNTS"
+
+        all_artifacts_readable = all(value == "available" for value in statuses)
+        return {
+            **base,
+            "source_status": (
+                "research_reports_projected"
+                if any(value == "available" for value in statuses)
+                else "research_reports_unavailable"
+            ),
+            "source_facts": {
+                "kind": "asset_research_reports",
+                "artifacts": source_artifacts,
+                "research_facts_available": all_artifacts_readable,
+                "freshness_status": "not_defined",
+                "currency_status": "not_declared",
+            },
+            "account_total": {
+                "status": "not_applicable_research",
+                "currency": None,
+                "value": None,
+            },
+            "accounts": [],
+            "strategies": [],
+            "strategy_attribution": _research_attribution(),
+            "coverage": {
+                "complete": False,
+                "research_facts_available": all_artifacts_readable,
+                "account_facts_complete": False,
+                "strategy_attribution_complete": False,
+                "code": coverage_code,
+            },
+        }
+
+
+def _iso_utc(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _published_research_decision(report_sections: Any) -> dict[str, Any] | None:
+    """Select non-valuational fields from the persisted published decision only."""
+
+    if not isinstance(report_sections, dict):
+        return None
+    decision = report_sections.get("published_decision")
+    if not isinstance(decision, dict):
+        return None
+    allowed_values = {
+        "asset_type": {"stock", "bond", "fund", "futures", "option", "fx", "crypto"},
+        "market_view": {"BULLISH", "BEARISH", "NEUTRAL", "INDETERMINATE"},
+        "normalized_direction": {"LONG", "SHORT", "NEUTRAL", "INDETERMINATE"},
+        "recommendation": {"BUY", "SELL", "HOLD", "AVOID"},
+        "actionability": {
+            "ACTIONABLE",
+            "RESEARCH_ONLY",
+            "INSUFFICIENT_DATA",
+            "REGION_RESTRICTED",
+        },
+        "quality_status": {"ELIGIBLE", "DEGRADED", "REJECTED"},
+    }
+    string_fields = (*allowed_values, "horizon_code")
+    result = {
+        field: value[:256] if isinstance(value, str) else None
+        for field in string_fields
+        if (value := decision.get(field)) is not None
+    }
+    if any(
+        not isinstance(decision.get(field), str)
+        or not decision[field]
+        or len(decision[field]) > 256
+        or not decision[field].isprintable()
+        or (field in allowed_values and decision[field] not in allowed_values[field])
+        for field in string_fields
+    ):
+        return None
+    if decision.get("execution_disabled") is not True:
+        return None
+    result["execution_disabled"] = True
+    return result
 
 
 def _project_account_total(
@@ -349,6 +563,16 @@ def _unavailable_attribution(
         "attributed_value": None,
         "unattributed_account_value": unattributed_account_value,
         "residual_basis": "account total only; no strategy shares inferred",
+    }
+
+
+def _research_attribution() -> dict[str, Any]:
+    return {
+        "status": "not_applicable_research",
+        "strategy_count": 0,
+        "attributed_value": None,
+        "unattributed_account_value": None,
+        "residual_basis": "research reports do not establish account or strategy holdings",
     }
 
 

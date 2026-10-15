@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import datetime, timezone
 from decimal import Decimal
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
@@ -19,6 +20,7 @@ Settings.model_config["env_file"] = None
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
@@ -27,8 +29,10 @@ from app.api.portfolio import api as portfolio_api  # noqa: E402
 from app.api.portfolio import router as portfolio_router  # noqa: E402
 from app.api.service_read import configure_service_read  # noqa: E402
 from app.db.database import get_db  # noqa: E402
+from app.models.asset_research import AssetAnalysisReport, AssetAnalysisTask  # noqa: E402
 from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
+from app.services.asset_research.data import canonical_json_hash  # noqa: E402
 from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory  # noqa: E402
 from app.services.service_read.contracts import AccountReadView, ReadQuality  # noqa: E402
 from app.services.service_read.worker import ServiceReadWorker  # noqa: E402
@@ -98,7 +102,81 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
         )
         async with engine.begin() as connection:
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+            await connection.run_sync(AssetAnalysisTask.__table__.create)
+            await connection.run_sync(AssetAnalysisReport.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
+
+        report_time = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+
+        def report_rows(report_id: str, task_id: str, user_id: str, canonical_id: str):
+            sections = {
+                "meta": {"asset_type": "stock", "canonical_id": canonical_id},
+                "published_decision": {
+                    "asset_type": "stock",
+                    "market_view": "BULLISH",
+                    "normalized_direction": "LONG",
+                    "recommendation": "BUY",
+                    "actionability": "RESEARCH_ONLY",
+                    "quality_status": "ELIGIBLE",
+                    "horizon_code": "1d",
+                    "execution_disabled": True,
+                    "expected_return": 999.0,
+                },
+                "candidate_decision": {"recommendation": "MUST_NOT_LEAK"},
+                "sections": [],
+            }
+            task = AssetAnalysisTask(
+                id=task_id,
+                user_id=user_id,
+                owner_scope="USER",
+                instrument_id=f"instrument-{task_id}",
+                asset_type="stock",
+                canonical_id=canonical_id,
+                identity_version="synthetic-v1",
+                request_json={},
+                position_context="UNKNOWN",
+                horizon_code="1d",
+                status="SUCCEEDED",
+                progress=100,
+                created_at=report_time,
+                completed_at=report_time,
+            )
+            report = AssetAnalysisReport(
+                id=report_id,
+                task_id=task_id,
+                prediction_id=None,
+                report_version="v1",
+                sections_json=sections,
+                rendered_markdown="synthetic report body is not projected",
+                content_hash=canonical_json_hash(sections),
+                created_at=report_time,
+            )
+            return task, report
+
+        owner_report_id = "report-owner-a"
+        other_owner_report_id = "report-owner-b"
+        corrupt_report_id = "report-corrupt"
+        owner_task, owner_report = report_rows(
+            owner_report_id, "task-owner-a", "owner-a", "SYNTH:AAA"
+        )
+        other_task, other_report = report_rows(
+            other_owner_report_id, "task-owner-b", "owner-b", "SYNTH:SECRET"
+        )
+        corrupt_task, corrupt_report = report_rows(
+            corrupt_report_id, "task-corrupt", "owner-a", "SYNTH:CORRUPT"
+        )
+        corrupt_report.content_hash = "0" * 64
+        async with session_maker() as source_db:
+            source_db.add_all(
+                [owner_task, owner_report, other_task, other_report, corrupt_task, corrupt_report]
+            )
+            await source_db.commit()
+            report_count_before_projection = await source_db.scalar(
+                select(func.count()).select_from(AssetAnalysisReport)
+            )
+            task_count_before_projection = await source_db.scalar(
+                select(func.count()).select_from(AssetAnalysisTask)
+            )
 
         async def override_db():
             async with session_maker() as session:
@@ -264,7 +342,6 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 assert overlap_projection.json()["creditable"] is False
 
                 for source_type, member in (
-                    ("research", {"kind": "research_artifact", "ref": "run-1"}),
                     ("imported", {"kind": "imported_ledger", "ref": "ledger-1"}),
                     ("paper", {"kind": "paper_account", "ref": "paper-1"}),
                 ):
@@ -289,12 +366,127 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                     assert body["account_total"]["value"] is None
                     assert body["coverage"]["complete"] is False
 
+                research_request = {
+                    "portfolio_ref": "research-report-view",
+                    "source_type": "research",
+                    "base_currency": "USD",
+                    "members": [{"kind": "research_artifact", "ref": owner_report_id}],
+                }
+                created_research = await client.post(
+                    "/api/v1/portfolio/compositions", json=research_request
+                )
+                assert created_research.status_code == 201, created_research.text
+                research_projection = await client.get(
+                    "/api/v1/portfolio/overview",
+                    params={"portfolio_ref": "research-report-view", "membership_version": 1},
+                )
+                assert research_projection.status_code == 200, research_projection.text
+                research = research_projection.json()
+                assert research["source_status"] == "research_reports_projected"
+                assert research["source_facts"]["kind"] == "asset_research_reports"
+                assert research["source_facts"]["freshness_status"] == "not_defined"
+                assert research["source_facts"]["currency_status"] == "not_declared"
+                artifact = research["source_facts"]["artifacts"][0]
+                assert artifact["status"] == "available"
+                assert artifact["report_integrity_status"] == "verified"
+                assert artifact["canonical_id"] == "SYNTH:AAA"
+                assert artifact["freshness_status"] == "not_defined"
+                assert artifact["currency"] is None
+                assert artifact["currency_status"] == "not_declared"
+                assert artifact["account_value_status"] == "not_applicable_research"
+                assert artifact["published_decision"] == {
+                    "asset_type": "stock",
+                    "market_view": "BULLISH",
+                    "normalized_direction": "LONG",
+                    "recommendation": "BUY",
+                    "actionability": "RESEARCH_ONLY",
+                    "quality_status": "ELIGIBLE",
+                    "horizon_code": "1d",
+                    "execution_disabled": True,
+                }
+                assert research["account_total"] == {
+                    "status": "not_applicable_research",
+                    "currency": None,
+                    "value": None,
+                }
+                assert research["accounts"] == []
+                assert research["strategies"] == []
+                assert research["coverage"]["complete"] is False
+                assert "MUST_NOT_LEAK" not in research_projection.text
+                assert "expected_return" not in research_projection.text
+                assert "rendered_markdown" not in research_projection.text
+                assert "storage_uri" not in research_projection.text
+                assert manager_calls == 0
+
+                unavailable_request = {
+                    **research_request,
+                    "portfolio_ref": "research-private-refs",
+                    "members": [
+                        {"kind": "research_artifact", "ref": other_owner_report_id},
+                        {"kind": "research_artifact", "ref": "report-does-not-exist"},
+                    ],
+                }
+                unavailable_create = await client.post(
+                    "/api/v1/portfolio/compositions", json=unavailable_request
+                )
+                assert unavailable_create.status_code == 201, unavailable_create.text
+                unavailable_response = await client.get(
+                    "/api/v1/portfolio/overview",
+                    params={"portfolio_ref": "research-private-refs", "membership_version": 1},
+                )
+                assert unavailable_response.status_code == 200
+                unavailable = unavailable_response.json()
+                unavailable_artifacts = unavailable["source_facts"]["artifacts"]
+                assert [item["status"] for item in unavailable_artifacts] == [
+                    "missing_or_not_owned",
+                    "missing_or_not_owned",
+                ]
+                assert unavailable_artifacts[0] == unavailable_artifacts[1]
+                assert "SYNTH:SECRET" not in unavailable_response.text
+                assert other_report.content_hash not in unavailable_response.text
+                assert unavailable["account_total"]["value"] is None
+                assert unavailable["coverage"]["complete"] is False
+
+                corrupt_request = {
+                    **research_request,
+                    "portfolio_ref": "research-corrupt-report",
+                    "members": [{"kind": "research_artifact", "ref": corrupt_report_id}],
+                }
+                corrupt_create = await client.post(
+                    "/api/v1/portfolio/compositions", json=corrupt_request
+                )
+                assert corrupt_create.status_code == 201
+                corrupt_response = await client.get(
+                    "/api/v1/portfolio/overview",
+                    params={"portfolio_ref": "research-corrupt-report", "membership_version": 1},
+                )
+                assert corrupt_response.status_code == 200
+                corrupt = corrupt_response.json()["source_facts"]["artifacts"][0]
+                assert corrupt["status"] == "integrity_invalid"
+                assert corrupt["report_integrity_status"] == "invalid"
+                assert corrupt["canonical_id"] is None
+                assert corrupt["published_decision"] is None
+                assert corrupt["currency"] is None
+                assert manager_calls == 0
+
+                async with session_maker() as source_db:
+                    assert (
+                        await source_db.scalar(
+                            select(func.count()).select_from(AssetAnalysisReport)
+                        )
+                        == report_count_before_projection
+                    )
+                    assert (
+                        await source_db.scalar(select(func.count()).select_from(AssetAnalysisTask))
+                        == task_count_before_projection
+                    )
+
                 first_page = await client.get(
                     "/api/v1/portfolio/compositions", params={"page": 1, "page_size": 2}
                 )
                 assert first_page.status_code == 200, first_page.text
                 first_page_body = first_page.json()
-                assert first_page_body["total"] == 6
+                assert first_page_body["total"] == 8
                 assert first_page_body["page"] == 1
                 assert first_page_body["page_size"] == 2
                 assert first_page_body["has_more"] is True
@@ -308,27 +500,36 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 third_page = await client.get(
                     "/api/v1/portfolio/compositions", params={"page": 3, "page_size": 2}
                 )
+                fourth_page = await client.get(
+                    "/api/v1/portfolio/compositions", params={"page": 4, "page_size": 2}
+                )
                 assert second_page.status_code == third_page.status_code == 200
+                assert fourth_page.status_code == 200
                 owner_a_items = [
                     *first_page_body["items"],
                     *second_page.json()["items"],
                     *third_page.json()["items"],
+                    *fourth_page.json()["items"],
                 ]
-                assert len(owner_a_items) == 6
+                assert len(owner_a_items) == 8
                 assert {item["portfolio_ref"] for item in owner_a_items} == {
                     "primary",
                     "overlap-view",
-                    "research-view",
                     "imported-view",
                     "paper-view",
+                    "research-report-view",
+                    "research-private-refs",
+                    "research-corrupt-report",
                 }
                 assert [
                     item["membership_version"]
                     for item in owner_a_items
                     if item["portfolio_ref"] == "primary"
                 ] == [2, 1]
-                assert third_page.json()["has_more"] is False
-                assert "account-a" not in first_page.text + second_page.text + third_page.text
+                assert fourth_page.json()["has_more"] is False
+                assert "account-a" not in (
+                    first_page.text + second_page.text + third_page.text + fourth_page.text
+                )
 
                 invalid_page_size = await client.get(
                     "/api/v1/portfolio/compositions", params={"page_size": 101}

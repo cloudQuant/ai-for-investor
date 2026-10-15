@@ -60,9 +60,40 @@ export interface PortfolioCompositionProjection {
   projection_kind: 'display_only'
   creditable: false
   overlap_policy: 'non_additive_display_only'
+  source_facts?: {
+    kind: string
+    research_facts_available?: boolean
+    freshness_status?: string
+    currency_status?: string
+    artifacts?: Array<{
+      status: string
+      report_integrity_status: string
+      task_status: string | null
+      asset_type: string | null
+      canonical_id: string | null
+      report_version: string | null
+      report_content_hash: string | null
+      report_created_at: string | null
+      decision_status: string
+      published_decision: {
+        asset_type: string
+        market_view: string
+        normalized_direction: string
+        recommendation: string
+        actionability: string
+        quality_status: string
+        horizon_code: string
+        execution_disabled: true
+      } | null
+      freshness_status: string
+      currency: string | null
+      currency_status: string
+      account_value_status: string
+    }>
+  }
   account_total: {
     status: string
-    currency: string
+    currency: string | null
     value: string | null
   }
   accounts: Array<{
@@ -91,6 +122,7 @@ export interface PortfolioCompositionProjection {
     complete: boolean
     account_facts_complete?: boolean
     strategy_attribution_complete?: boolean
+    research_facts_available?: boolean
     code: string | null
   }
 }
