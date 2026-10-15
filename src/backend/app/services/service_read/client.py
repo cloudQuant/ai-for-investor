@@ -312,6 +312,7 @@ class AuthorizedServiceReadClient:
         quality = ReadQuality.STALE
         if isinstance(fresh_until, (int, float)) and now <= float(fresh_until):
             quality = ReadQuality.FRESH
+        account_key, account_key_id = _account_key_identity(observation)
         cash, value, observed_at = _valuation_for(observation, currency)
         if cash is None and value is None and quality is ReadQuality.FRESH:
             # A current observation that carries no figure for this currency is
@@ -327,6 +328,8 @@ class AuthorizedServiceReadClient:
                 detail_code="CURRENCY_NOT_OBSERVED",
                 positions_count=_count(getattr(observation, "positions", None)),
                 open_orders_count=_count(getattr(observation, "open_orders", None)),
+                account_key=account_key,
+                account_key_id=account_key_id,
             )
         return AccountReadView(
             account_ref=account_ref,
@@ -342,6 +345,8 @@ class AuthorizedServiceReadClient:
             fresh_for_seconds=_age(fresh_until, now),
             positions_count=_count(getattr(observation, "positions", None)),
             open_orders_count=_count(getattr(observation, "open_orders", None)),
+            account_key=account_key,
+            account_key_id=account_key_id,
         )
 
     def _degraded_account_view(
@@ -559,6 +564,26 @@ def _execution_domain_ref(observation: Any) -> str:
     if isinstance(environment, str) and isinstance(venue, str) and environment and venue:
         return f"{environment}:{venue}"
     return "unresolved"
+
+
+def _account_key_identity(observation: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """Preserve the complete SDK key and its base-generated stable identity."""
+
+    key = getattr(observation, "account_key", None)
+    if key is None:
+        return None, None
+    try:
+        from bt_api_base.account_protocol import AccountKey
+
+        if type(key) is not AccountKey:
+            return None, None
+        raw = key.to_dict()
+        identity = key.account_key_id
+        if type(raw) is not dict or type(identity) is not str:
+            return None, None
+        return dict(raw), identity
+    except Exception:  # noqa: BLE001 - keep optional SDK failures explicit as missing identity
+        return None, None
 
 
 def _decimal_or_none(value: Any) -> Decimal | None:

@@ -292,6 +292,36 @@ def test_account_read_projects_provider_facts_with_quality(monkeypatch):
     assert fake.calls == 1
 
 
+def test_account_read_preserves_the_complete_sdk_account_key(monkeypatch):
+    try:
+        from bt_api_base.account_protocol import AccountKey
+    except ImportError:
+        pytest.skip("bt_api_base account protocol is not installed")
+
+    sdk_key = AccountKey(
+        provider="synthetic-provider",
+        venue="synthetic-venue",
+        environment="paper",
+        account_id="account-7",
+        subaccount_id="sub-2",
+    )
+    observation = _Observation()
+    observation.account_key = sdk_key
+    client = AuthorizedServiceReadClient(
+        _FakeRuntime(), account_bindings={"account-a": _binding()}, clock=lambda: 150.0
+    )
+    monkeypatch.setattr(
+        client,
+        "_account_clients",
+        {"account-a": _FakeAccountClient(state=_FakeState(observation=observation))},
+    )
+
+    view = client.read_account("account-a")
+
+    assert dict(view.account_key) == sdk_key.to_dict()
+    assert view.account_key_id == sdk_key.account_key_id
+
+
 def test_stale_observation_keeps_its_figures_but_is_not_current(monkeypatch):
     runtime = _FakeRuntime()
     client = AuthorizedServiceReadClient(

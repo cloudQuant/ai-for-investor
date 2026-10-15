@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
+from types import MappingProxyType
 from typing import Any
 
 __all__ = [
@@ -105,6 +106,8 @@ class AccountReadView:
     detail_code: str | None = None
     positions_count: int | None = None
     open_orders_count: int | None = None
+    account_key: Mapping[str, Any] | None = None
+    account_key_id: str | None = None
 
     def __post_init__(self) -> None:
         _text(self.account_ref, "INVALID_ACCOUNT_REF")
@@ -127,6 +130,28 @@ class AccountReadView:
                 raise ServiceReadContractError("INVALID_COUNT")
         if self.cursor is not None and (type(self.cursor) is not int or self.cursor < 0):
             raise ServiceReadContractError("INVALID_CURSOR")
+        if self.account_key is None:
+            if self.account_key_id is not None:
+                raise ServiceReadContractError("ACCOUNT_KEY_ID_WITHOUT_KEY")
+        else:
+            key = self.account_key
+            required = {"provider", "venue", "environment", "account_id", "subaccount_id"}
+            if not isinstance(key, Mapping) or set(key) != required:
+                raise ServiceReadContractError("INVALID_ACCOUNT_KEY")
+            normalized = dict(key)
+            for name in ("provider", "venue", "environment", "account_id"):
+                _text(normalized[name], "INVALID_ACCOUNT_KEY")
+            subaccount_id = normalized["subaccount_id"]
+            if subaccount_id is not None:
+                _text(subaccount_id, "INVALID_ACCOUNT_KEY")
+            if (
+                type(self.account_key_id) is not str
+                or len(self.account_key_id) != 72
+                or not self.account_key_id.startswith("account-")
+                or any(character not in "0123456789abcdef" for character in self.account_key_id[8:])
+            ):
+                raise ServiceReadContractError("INVALID_ACCOUNT_KEY_ID")
+            object.__setattr__(self, "account_key", MappingProxyType(normalized))
 
     @property
     def has_current_facts(self) -> bool:
