@@ -51,6 +51,66 @@ export interface PortfolioCompositionVersionPage {
   has_more: boolean
 }
 
+export interface PortfolioResearchSourceArtifact {
+  status: string
+  report_integrity_status: string
+  task_status: string | null
+  asset_type: string | null
+  canonical_id: string | null
+  report_version: string | null
+  report_content_hash: string | null
+  report_created_at: string | null
+  decision_status: string
+  published_decision: {
+    asset_type: string
+    market_view: string
+    normalized_direction: string
+    recommendation: string
+    actionability: string
+    quality_status: string
+    horizon_code: string
+    execution_disabled: true
+  } | null
+  freshness_status: string
+  currency: string | null
+  currency_status: string
+  account_value_status: string
+}
+
+export interface PortfolioImportedSourceArtifact {
+  status: string
+  import_version_id?: string
+  portfolio_name?: string
+  import_format: string | null
+  source_integrity_status?: string
+  source_schema_version: number | null
+  source_sha256: string | null
+  source_as_of: string | null
+  source_as_of_status: string
+  source_currency: string | null
+  currency_status: string
+  freshness_status: string
+  source_row_count: number | null
+  trade_date_rows_present: number | null
+  trade_date_coverage: string
+  source_metadata_status: string
+  source_rows_available: boolean
+}
+
+export type PortfolioCompositionSourceFacts = {
+  kind: 'asset_research_reports'
+  research_facts_available: boolean
+  freshness_status: string
+  currency_status: string
+  artifacts: PortfolioResearchSourceArtifact[]
+} | {
+  kind: 'portfolio_ledger_import_versions'
+  source_materials_verified: boolean
+  freshness_status: string
+  account_value_status: string
+  artifacts: PortfolioImportedSourceArtifact[]
+}
+
 export interface PortfolioCompositionProjection {
   portfolio_ref: string
   membership_version: number
@@ -60,37 +120,7 @@ export interface PortfolioCompositionProjection {
   projection_kind: 'display_only'
   creditable: false
   overlap_policy: 'non_additive_display_only'
-  source_facts?: {
-    kind: string
-    research_facts_available?: boolean
-    freshness_status?: string
-    currency_status?: string
-    artifacts?: Array<{
-      status: string
-      report_integrity_status: string
-      task_status: string | null
-      asset_type: string | null
-      canonical_id: string | null
-      report_version: string | null
-      report_content_hash: string | null
-      report_created_at: string | null
-      decision_status: string
-      published_decision: {
-        asset_type: string
-        market_view: string
-        normalized_direction: string
-        recommendation: string
-        actionability: string
-        quality_status: string
-        horizon_code: string
-        execution_disabled: true
-      } | null
-      freshness_status: string
-      currency: string | null
-      currency_status: string
-      account_value_status: string
-    }>
-  }
+  source_facts?: PortfolioCompositionSourceFacts
   account_total: {
     status: string
     currency: string | null
@@ -227,6 +257,27 @@ export const portfolioApi = {
     return request.get('/portfolio/compositions', {
       params: { page, page_size: pageSize },
     })
+  },
+
+  createCompositionVersion(payload: {
+    portfolio_ref: string
+    source_type: PortfolioCompositionSource
+    base_currency: string
+    members: Array<{
+      kind: 'account' | 'strategy' | 'research_artifact' | 'imported_ledger' | 'paper_account'
+      ref: string
+    }>
+  }): Promise<{
+    portfolio_ref: string
+    membership_version: number
+    source_type: PortfolioCompositionSource
+    base_currency: string
+    created_at: string
+    membership_sha256: string
+    members: Array<{ kind: string; ref: string }>
+    creditable: false
+  }> {
+    return request.post('/portfolio/compositions', payload)
   },
 
   getCompositionProjection(

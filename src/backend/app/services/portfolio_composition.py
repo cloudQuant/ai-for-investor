@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -17,9 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.service_read import _resolve_access
 from app.models.asset_research import AssetAnalysisReport, AssetAnalysisTask
 from app.models.portfolio_composition import PortfolioCompositionVersion
+from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel
 from app.schemas.auth import TokenPayload
 from app.schemas.portfolio_composition import PortfolioCompositionCreate
 from app.services.asset_research.data import canonical_json_hash
+from app.services.portfolio_import_source import verify_portfolio_import_source
 from app.services.service_read.client import ServiceReadUnavailableError
 from app.services.service_read.contracts import AccountReadView, ReadQuality
 
@@ -34,6 +36,25 @@ class PortfolioCompositionService:
         self, owner_subject: str, request: PortfolioCompositionCreate
     ) -> PortfolioCompositionVersion:
         """Persist a new membership version without rewriting earlier versions."""
+
+        if request.source_type == "imported":
+            imported_refs = [member.ref for member in request.members]
+            owned_result = await self.db.execute(
+                select(PortfolioLedgerImportModel.id)
+                .join(
+                    PortfolioLedgerModel,
+                    PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
+                )
+                .where(
+                    PortfolioLedgerImportModel.id.in_(imported_refs),
+                    PortfolioLedgerModel.owner_id == owner_subject,
+                )
+            )
+            if set(owned_result.scalars().all()) != set(imported_refs):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": "PORTFOLIO_IMPORT_SOURCE_NOT_FOUND"},
+                )
 
         canonical_members = sorted(
             (member.model_dump(mode="json") for member in request.members),
@@ -142,6 +163,8 @@ class PortfolioCompositionService:
         }
         if row.source_type == "research":
             return await self._project_research_source(current_user, row, base)
+        if row.source_type == "imported":
+            return await self._project_imported_source(current_user, row, base)
         if row.source_type != "live":
             return {
                 **base,
@@ -233,6 +256,138 @@ class PortfolioCompositionService:
                 "complete": account_facts_complete and attribution_complete,
                 "account_facts_complete": account_facts_complete,
                 "strategy_attribution_complete": attribution_complete,
+                "code": coverage_code,
+            },
+        }
+
+    async def _project_imported_source(
+        self,
+        current_user: TokenPayload,
+        row: PortfolioCompositionVersion,
+        base: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Project owner-held import source documents without deriving valuations."""
+
+        if not row.members or any(member["kind"] != "imported_ledger" for member in row.members):
+            return _unavailable_imported_projection(base, "IMPORTED_SOURCE_MEMBERS_INVALID")
+
+        member_refs = [member["ref"] for member in row.members]
+        result = await self.db.execute(
+            select(PortfolioLedgerImportModel, PortfolioLedgerModel)
+            .join(
+                PortfolioLedgerModel,
+                PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
+            )
+            .where(
+                PortfolioLedgerImportModel.id.in_(member_refs),
+                PortfolioLedgerModel.owner_id == current_user.sub,
+            )
+        )
+        owned_sources = {imported.id: (imported, portfolio) for imported, portfolio in result.all()}
+        artifacts: list[dict[str, Any]] = []
+        for member_ref in member_refs:
+            owned = owned_sources.get(member_ref)
+            if owned is None:
+                artifacts.append(_unavailable_import_artifact("missing_or_not_owned"))
+                continue
+
+            imported, portfolio = owned
+            if imported.source_document is None or imported.source_sha256 is None:
+                artifacts.append(_unavailable_import_artifact("source_material_unavailable"))
+                continue
+            if not verify_portfolio_import_source(
+                document=imported.source_document,
+                expected_sha256=imported.source_sha256,
+                expected_schema_version=imported.source_schema_version,
+                import_format=imported.import_format,
+                imported_count=imported.imported_count,
+                source_as_of=imported.source_as_of,
+                source_currency=imported.source_currency,
+            ):
+                artifacts.append(_unavailable_import_artifact("integrity_invalid"))
+                continue
+
+            source_rows = imported.source_document["transactions"]
+            dates_present = sum(
+                1 for source_row in source_rows if _has_explicit_trade_date(source_row)
+            )
+            if not source_rows:
+                date_coverage = "not_applicable_empty_source"
+            elif dates_present == len(source_rows):
+                date_coverage = "complete"
+            elif dates_present == 0:
+                date_coverage = "missing"
+            else:
+                date_coverage = "partial"
+            metadata_complete = bool(imported.source_as_of and imported.source_currency)
+            artifacts.append(
+                {
+                    "status": "available",
+                    "import_version_id": imported.id,
+                    "portfolio_name": portfolio.name,
+                    "import_format": imported.import_format,
+                    "source_schema_version": imported.source_schema_version,
+                    "source_sha256": imported.source_sha256,
+                    "source_as_of": imported.source_as_of,
+                    "source_as_of_status": (
+                        "declared" if imported.source_as_of else "not_declared"
+                    ),
+                    "source_currency": imported.source_currency,
+                    "source_integrity_status": "verified",
+                    "currency_status": ("declared" if imported.source_currency else "not_declared"),
+                    "freshness_status": "not_defined",
+                    "source_row_count": len(source_rows),
+                    "trade_date_rows_present": dates_present,
+                    "trade_date_coverage": date_coverage,
+                    "source_metadata_status": "complete" if metadata_complete else "incomplete",
+                    "source_rows_available": True,
+                }
+            )
+
+        statuses = [artifact["status"] for artifact in artifacts]
+        if any(value == "integrity_invalid" for value in statuses):
+            coverage_code = "IMPORTED_SOURCE_INTEGRITY_INVALID"
+        elif any(value != "available" for value in statuses):
+            coverage_code = "IMPORTED_SOURCE_MATERIAL_UNAVAILABLE"
+        elif any(artifact["source_metadata_status"] != "complete" for artifact in artifacts):
+            coverage_code = "IMPORTED_SOURCE_METADATA_INCOMPLETE"
+        elif any(
+            artifact["trade_date_coverage"] not in {"complete", "not_applicable_empty_source"}
+            for artifact in artifacts
+        ):
+            coverage_code = "IMPORTED_SOURCE_TRADE_DATES_INCOMPLETE"
+        else:
+            coverage_code = "IMPORTED_SOURCE_NOT_ACCOUNT_FACTS"
+
+        all_sources_verified = bool(artifacts) and all(value == "available" for value in statuses)
+        if all_sources_verified:
+            source_status = "imported_materials_projected"
+        elif any(value == "integrity_invalid" for value in statuses):
+            source_status = "imported_material_integrity_invalid"
+        else:
+            source_status = "imported_materials_unavailable"
+        return {
+            **base,
+            "source_status": source_status,
+            "source_facts": {
+                "kind": "portfolio_ledger_import_versions",
+                "artifacts": artifacts,
+                "source_materials_verified": all_sources_verified,
+                "freshness_status": "not_defined",
+                "account_value_status": "not_applicable_imported",
+            },
+            "account_total": {
+                "status": "not_applicable_imported",
+                "currency": None,
+                "value": None,
+            },
+            "accounts": [],
+            "strategies": [],
+            "strategy_attribution": _imported_attribution(),
+            "coverage": {
+                "complete": False,
+                "account_facts_complete": False,
+                "source_materials_verified": all_sources_verified,
                 "code": coverage_code,
             },
         }
@@ -574,6 +729,79 @@ def _research_attribution() -> dict[str, Any]:
         "unattributed_account_value": None,
         "residual_basis": "research reports do not establish account or strategy holdings",
     }
+
+
+def _imported_attribution() -> dict[str, Any]:
+    return {
+        "status": "not_applicable_imported",
+        "strategy_count": 0,
+        "attributed_value": None,
+        "unattributed_account_value": None,
+        "residual_basis": "imported transaction materials do not establish account holdings",
+    }
+
+
+def _unavailable_import_artifact(source_status: str) -> dict[str, Any]:
+    return {
+        "status": source_status,
+        "source_integrity_status": "unavailable",
+        "import_format": None,
+        "source_schema_version": None,
+        "source_sha256": None,
+        "source_as_of": None,
+        "source_as_of_status": "unavailable",
+        "source_currency": None,
+        "currency_status": "not_declared",
+        "freshness_status": "not_defined",
+        "source_row_count": None,
+        "trade_date_rows_present": None,
+        "trade_date_coverage": "unavailable",
+        "source_metadata_status": "unavailable",
+        "source_rows_available": False,
+    }
+
+
+def _unavailable_imported_projection(base: dict[str, Any], code: str) -> dict[str, Any]:
+    return {
+        **base,
+        "source_status": "imported_materials_unavailable",
+        "source_facts": {
+            "kind": "portfolio_ledger_import_versions",
+            "artifacts": [],
+            "source_materials_verified": False,
+            "freshness_status": "not_defined",
+            "account_value_status": "not_applicable_imported",
+        },
+        "account_total": {
+            "status": "not_applicable_imported",
+            "currency": None,
+            "value": None,
+        },
+        "accounts": [],
+        "strategies": [],
+        "strategy_attribution": _imported_attribution(),
+        "coverage": {
+            "complete": False,
+            "account_facts_complete": False,
+            "source_materials_verified": False,
+            "code": code,
+        },
+    }
+
+
+def _has_explicit_trade_date(source_row: dict[str, Any]) -> bool:
+    value = source_row.get("trade_date")
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        parsed_date = date.fromisoformat(value)
+    except ValueError:
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        return True
+    return parsed_date.isoformat() == value
 
 
 def _strategy_views(members: list[dict[str, str]]) -> list[dict[str, Any]]:

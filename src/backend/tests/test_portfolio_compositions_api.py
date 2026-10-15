@@ -31,6 +31,7 @@ from app.api.service_read import configure_service_read  # noqa: E402
 from app.db.database import get_db  # noqa: E402
 from app.models.asset_research import AssetAnalysisReport, AssetAnalysisTask  # noqa: E402
 from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
+from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 from app.services.asset_research.data import canonical_json_hash  # noqa: E402
 from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory  # noqa: E402
@@ -104,7 +105,30 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
             await connection.run_sync(AssetAnalysisTask.__table__.create)
             await connection.run_sync(AssetAnalysisReport.__table__.create)
+            await connection.run_sync(PortfolioLedgerModel.__table__.create)
+            await connection.run_sync(PortfolioLedgerImportModel.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with session_maker() as source_db:
+            source_db.add(
+                PortfolioLedgerModel(
+                    id="ledger-owner-a",
+                    owner_id="owner-a",
+                    name="legacy imported ledger",
+                    base_currency="USD",
+                    source_type="imported",
+                )
+            )
+            source_db.add(
+                PortfolioLedgerImportModel(
+                    id="ledger-1",
+                    portfolio_id="ledger-owner-a",
+                    import_format="json",
+                    idempotency_key="legacy-import-key",
+                    imported_count=1,
+                )
+            )
+            await source_db.commit()
 
         report_time = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
 
@@ -342,7 +366,6 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 assert overlap_projection.json()["creditable"] is False
 
                 for source_type, member in (
-                    ("imported", {"kind": "imported_ledger", "ref": "ledger-1"}),
                     ("paper", {"kind": "paper_account", "ref": "paper-1"}),
                 ):
                     source_ref = f"{source_type}-view"
@@ -365,6 +388,33 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                     assert body["source_status"] == "adapter_not_integrated"
                     assert body["account_total"]["value"] is None
                     assert body["coverage"]["complete"] is False
+
+                created_legacy_imported = await client.post(
+                    "/api/v1/portfolio/compositions",
+                    json={
+                        "portfolio_ref": "imported-view",
+                        "source_type": "imported",
+                        "base_currency": "USD",
+                        "members": [{"kind": "imported_ledger", "ref": "ledger-1"}],
+                    },
+                )
+                assert created_legacy_imported.status_code == 201, created_legacy_imported.text
+                legacy_import_projection = await client.get(
+                    "/api/v1/portfolio/compositions/imported-view/versions/1/projection"
+                )
+                assert legacy_import_projection.status_code == 200
+                legacy_imported = legacy_import_projection.json()
+                assert legacy_imported["source_status"] == "imported_materials_unavailable"
+                assert legacy_imported["source_facts"]["artifacts"][0]["status"] == (
+                    "source_material_unavailable"
+                )
+                assert legacy_imported["account_total"] == {
+                    "status": "not_applicable_imported",
+                    "currency": None,
+                    "value": None,
+                }
+                assert legacy_imported["coverage"]["complete"] is False
+                assert legacy_imported["creditable"] is False
 
                 research_request = {
                     "portfolio_ref": "research-report-view",

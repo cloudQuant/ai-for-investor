@@ -3,7 +3,7 @@ import { portfolioApi } from '@/api/portfolio'
 import request from '@/api/index'
 
 vi.mock('@/api/index', () => ({
-  default: { get: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn() },
 }))
 
 describe('portfolioApi', () => {
@@ -36,6 +36,18 @@ describe('portfolioApi', () => {
     expect(request.get).toHaveBeenCalledWith('/portfolio/overview', {
       params: { portfolio_ref: 'primary', membership_version: 3 },
     })
+  })
+
+  it('creates a display-only imported composition with an exact version reference', async () => {
+    vi.mocked(request.post).mockResolvedValue({ portfolio_ref: 'import-view', membership_version: 1 })
+    const payload = {
+      portfolio_ref: 'import-view',
+      source_type: 'imported' as const,
+      base_currency: 'USD',
+      members: [{ kind: 'imported_ledger' as const, ref: 'import-version-1' }],
+    }
+    await portfolioApi.createCompositionVersion(payload)
+    expect(request.post).toHaveBeenCalledWith('/portfolio/compositions', payload)
   })
 
   it('getPositions', async () => {

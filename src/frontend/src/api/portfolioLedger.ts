@@ -36,6 +36,39 @@ export interface PortfolioLedgerExportPayload {
   transactions: PortfolioTransaction[]
 }
 
+export interface PortfolioLedgerImportSource {
+  import_version_id: string
+  portfolio_id: string
+  portfolio_name: string
+  base_currency: string
+  import_format: string
+  imported_count: number
+  source_material_status: 'verified' | 'unavailable_legacy' | 'integrity_invalid'
+  source_as_of: string | null
+  source_currency: string | null
+  source_sha256: string | null
+  created_at: string
+}
+
+export interface PortfolioLedgerImportSourcePage {
+  items: PortfolioLedgerImportSource[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
+export interface PortfolioLedgerImportSourceDetail extends PortfolioLedgerImportSource {
+  source_schema_version: number | null
+  source_document: {
+    schema_version: number
+    format: string
+    source_as_of: string | null
+    source_currency: string | null
+    transactions: Array<Record<string, unknown>>
+  } | null
+}
+
 export interface PortfolioLedgerVarCvarResult {
   portfolio_id: string
   status: 'ok' | 'degraded'
@@ -113,11 +146,33 @@ export const portfolioLedgerApi = {
   list() {
     return request.get<{ items: PortfolioLedgerSummary[]; total: number }>('/portfolio-ledger')
   },
+  listImportSources(page = 1, pageSize = 50) {
+    return request.get<PortfolioLedgerImportSourcePage>('/portfolio-ledger/imports', {
+      params: { page, page_size: pageSize },
+    })
+  },
+  getImportSource(importVersionId: string) {
+    return request.get<PortfolioLedgerImportSourceDetail>(
+      `/portfolio-ledger/imports/${encodeURIComponent(importVersionId)}`,
+    )
+  },
   create(payload: { name: string; base_currency?: string; source_type?: string }) {
     return request.post<PortfolioLedgerSummary>('/portfolio-ledger', payload)
   },
-  importTransactions(portfolioId: string, payload: { format: string; idempotency_key: string; transactions: Array<Record<string, unknown>> }) {
-    return request.post<{ duplicate: boolean; imported_count: number }>(`/portfolio-ledger/${portfolioId}/import`, payload)
+  importTransactions(portfolioId: string, payload: {
+    format: string
+    idempotency_key: string
+    transactions: Array<Record<string, unknown>>
+    source_as_of?: string
+    source_currency?: string
+  }) {
+    return request.post<{
+      duplicate: boolean
+      imported_count: number
+      import_version_id: string
+      source_sha256: string | null
+      source_material_status: string
+    }>(`/portfolio-ledger/${portfolioId}/import`, payload)
   },
   getDetail(portfolioId: string) {
     return request.get<PortfolioLedgerSummary>(`/portfolio-ledger/${portfolioId}`)

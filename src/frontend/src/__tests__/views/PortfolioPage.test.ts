@@ -5,6 +5,7 @@ import { defineComponent, h } from 'vue'
 import { ElMessage } from 'element-plus'
 import PortfolioPage from '@/views/PortfolioPage.vue'
 import { portfolioApi } from '@/api/portfolio'
+import { portfolioLedgerApi } from '@/api/portfolioLedger'
 import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
 
@@ -102,6 +103,9 @@ vi.mock('@/api/portfolio', () => ({
     listCompositionVersions: vi.fn().mockResolvedValue({
       items: [], total: 0, page: 1, page_size: 50, has_more: false,
     }),
+    createCompositionVersion: vi.fn().mockResolvedValue({
+      portfolio_ref: 'imported-display', membership_version: 1,
+    }),
     getCompositionProjection: vi.fn().mockResolvedValue({
       portfolio_ref: 'empty',
       membership_version: 1,
@@ -190,6 +194,43 @@ vi.mock('@/api/portfolio', () => ({
         net_value: 7200,
         position_count: 1,
       }],
+    }),
+  },
+}))
+
+vi.mock('@/api/portfolioLedger', () => ({
+  portfolioLedgerApi: {
+    listImportSources: vi.fn().mockResolvedValue({
+      items: [], total: 0, page: 1, page_size: 100, has_more: false,
+    }),
+    create: vi.fn().mockResolvedValue({ id: 'ledger-import-1' }),
+    importTransactions: vi.fn().mockResolvedValue({
+      duplicate: false,
+      imported_count: 2,
+      import_version_id: 'import-version-1',
+      source_sha256: 'a'.repeat(64),
+      source_material_status: 'verified',
+    }),
+    getImportSource: vi.fn().mockResolvedValue({
+      import_version_id: 'import-version-1',
+      portfolio_id: 'ledger-import-1',
+      portfolio_name: 'Imported transactions',
+      base_currency: 'USD',
+      import_format: 'json',
+      imported_count: 2,
+      source_material_status: 'verified',
+      source_schema_version: 1,
+      source_as_of: '2026-10-13',
+      source_currency: 'USD',
+      source_sha256: 'a'.repeat(64),
+      source_document: {
+        schema_version: 1,
+        format: 'json',
+        source_as_of: '2026-10-13',
+        source_currency: 'USD',
+        transactions: [{ symbol: 'SYNTH-A' }, { symbol: 'SYNTH-B', trade_date: '2026-10-12' }],
+      },
+      created_at: '2026-10-15T00:00:00Z',
     }),
   },
 }))
@@ -354,7 +395,7 @@ describe('PortfolioPage', () => {
       source_type: 'research' as const,
       source_status: 'research_reports_projected',
       source_facts: {
-        kind: 'asset_research_reports',
+        kind: 'asset_research_reports' as const,
         research_facts_available: true,
         freshness_status: 'not_defined',
         currency_status: 'not_declared',
@@ -584,6 +625,146 @@ describe('PortfolioPage', () => {
       .toContain('selected projection unavailable')
     expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(false)
     expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
+  })
+
+  it('imports versioned raw transactions and selects the imported display projection', async () => {
+    const importedProjection = {
+      portfolio_ref: 'imported-portfolio',
+      membership_version: 1,
+      source_type: 'imported' as const,
+      source_status: 'imported_materials_projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      source_facts: {
+        kind: 'portfolio_ledger_import_versions' as const,
+        source_materials_verified: true,
+        freshness_status: 'not_defined',
+        account_value_status: 'not_applicable_imported',
+        artifacts: [{
+          status: 'available',
+          import_version_id: 'import-version-1',
+          portfolio_name: 'Imported transactions',
+          import_format: 'json',
+          source_integrity_status: 'verified',
+          source_schema_version: 1,
+          source_sha256: 'a'.repeat(64),
+          source_as_of: '2026-10-13',
+          source_as_of_status: 'declared',
+          source_currency: 'USD',
+          currency_status: 'declared',
+          freshness_status: 'not_defined',
+          source_row_count: 2,
+          trade_date_rows_present: 1,
+          trade_date_coverage: 'partial',
+          source_metadata_status: 'complete',
+          source_rows_available: true,
+        }],
+      },
+      account_total: { status: 'not_applicable_imported', currency: null, value: null },
+      accounts: [],
+      strategies: [],
+      strategy_attribution: {
+        status: 'not_applicable_imported',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'imported transaction materials do not establish account holdings',
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: false,
+        source_materials_verified: true,
+        code: 'IMPORTED_SOURCE_TRADE_DATES_INCOMPLETE',
+      },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions)
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 50, has_more: false })
+      .mockResolvedValueOnce({
+        items: [{
+          portfolio_ref: 'imported-portfolio',
+          membership_version: 1,
+          source_type: 'imported',
+          base_currency: 'USD',
+          created_at: '2026-10-15T00:00:00Z',
+        }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+        has_more: false,
+      })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(importedProjection)
+    vi.mocked(portfolioApi.createCompositionVersion).mockResolvedValueOnce({
+      portfolio_ref: 'imported-portfolio',
+      membership_version: 1,
+      source_type: 'imported',
+      base_currency: 'USD',
+      created_at: '2026-10-15T00:00:00Z',
+      membership_sha256: 'b'.repeat(64),
+      members: [{ kind: 'imported_ledger', ref: 'import-version-1' }],
+      creditable: false,
+    })
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-import-source-open"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-test="portfolio-import-source-name"]').setValue('Imported transactions')
+    await wrapper.get('[data-test="portfolio-import-source-ref"]').setValue('imported-portfolio')
+    await wrapper.get('[data-test="portfolio-import-source-base-currency"]').setValue('USD')
+    await wrapper.get('[data-test="portfolio-import-source-as-of"]').setValue('2026-10-13')
+    await wrapper.get('[data-test="portfolio-import-source-currency"]').setValue('USD')
+    const rawRows = [
+      { symbol: 'SYNTH-A', trade_type: 'buy', quantity: 2, price: 10 },
+      { symbol: 'SYNTH-B', trade_type: 'sell', quantity: 1, price: 12, trade_date: '2026-10-12' },
+    ]
+    await wrapper.get('[data-test="portfolio-import-source-rows"]').setValue(JSON.stringify(rawRows))
+    await wrapper.get('[data-test="portfolio-import-source-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(portfolioLedgerApi.create).toHaveBeenCalledWith({
+      name: 'Imported transactions',
+      base_currency: 'USD',
+      source_type: 'imported',
+    })
+    expect(portfolioLedgerApi.importTransactions).toHaveBeenCalledWith(
+      'ledger-import-1',
+      expect.objectContaining({
+        format: 'json',
+        transactions: rawRows,
+        source_as_of: '2026-10-13',
+        source_currency: 'USD',
+      }),
+    )
+    expect(portfolioApi.createCompositionVersion).toHaveBeenCalledWith({
+      portfolio_ref: 'imported-portfolio',
+      source_type: 'imported',
+      base_currency: 'USD',
+      members: [{ kind: 'imported_ledger', ref: 'import-version-1' }],
+    })
+    expect(portfolioApi.getCompositionProjection).toHaveBeenCalledWith('imported-portfolio', 1)
+    expect(wrapper.find('[data-test="portfolio-import-source-dialog"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="portfolio-composition-source-status"]').text())
+      .toContain('导入来源材料已验证')
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.get('[data-test="portfolio-import-source-disclaimer"]').text())
+      .toContain('不证明当前持仓或账户价值')
+    expect(wrapper.get('[data-test="portfolio-import-source-artifact"]').text())
+      .toContain('2026-10-13')
+    expect(wrapper.get('[data-test="portfolio-import-source-artifact"]').text())
+      .toContain('部分缺失')
+    expect(wrapper.find('[data-test="portfolio-overview"]').exists()).toBe(false)
+    expect(portfolioApi.getOverview).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('[data-test="portfolio-import-source-detail-import-version-1"]').trigger('click')
+    await flushPromises()
+    expect(portfolioLedgerApi.getImportSource).toHaveBeenCalledWith('import-version-1')
+    expect(wrapper.get('[data-test="portfolio-import-source-raw-import-version-1"]').text())
+      .toContain('SYNTH-A')
   })
 
   it('mounts without error', () => {

@@ -61,7 +61,166 @@
           >
             {{ t('portfolio.btnRefresh') }}
           </button>
+          <button
+            type="button"
+            class="portfolio-composition__refresh"
+            data-test="portfolio-import-source-open"
+            @click="openImportedSourceDialog"
+          >
+            {{ t('portfolio.importSourceOpen') }}
+          </button>
         </header>
+
+        <section
+          v-if="showImportedSourceDialog"
+          class="portfolio-composition__section portfolio-import-source-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('portfolio.importSourceTitle')"
+          data-test="portfolio-import-source-dialog"
+        >
+          <header class="portfolio-composition__header">
+            <div>
+              <h2>{{ t('portfolio.importSourceTitle') }}</h2>
+              <p>{{ t('portfolio.importSourceDisclaimer') }}</p>
+            </div>
+            <button
+              type="button"
+              class="portfolio-composition__refresh"
+              data-test="portfolio-import-source-close"
+              :disabled="sourceImportBusy"
+              @click="showImportedSourceDialog = false"
+            >
+              {{ t('portfolio.importSourceClose') }}
+            </button>
+          </header>
+
+          <div class="portfolio-import-source-dialog__existing">
+            <label for="portfolio-existing-import-source">
+              {{ t('portfolio.importSourceExisting') }}
+            </label>
+            <select
+              id="portfolio-existing-import-source"
+              v-model="selectedImportVersionId"
+              data-test="portfolio-existing-import-source"
+              :disabled="existingImportsLoading || existingImportSources.length === 0"
+            >
+              <option value="">
+                {{ t('portfolio.importSourceExistingPlaceholder') }}
+              </option>
+              <option
+                v-for="source in existingImportSources"
+                :key="source.import_version_id"
+                :value="source.import_version_id"
+                :disabled="source.source_material_status !== 'verified'"
+              >
+                {{ source.portfolio_name }} · {{ source.import_version_id }} ·
+                {{ source.source_material_status === 'verified'
+                  ? `${source.imported_count} ${t('portfolio.importSourceRows')}`
+                  : importSourceArtifactStatusLabel(source.source_material_status) }}
+              </option>
+            </select>
+            <button
+              type="button"
+              class="portfolio-composition__refresh"
+              data-test="portfolio-import-source-attach"
+              :disabled="sourceImportBusy || !selectedImportSource"
+              @click="attachExistingImportSource"
+            >
+              {{ t('portfolio.importSourceAttach') }}
+            </button>
+            <button
+              v-if="existingImportSourcesHasMore"
+              type="button"
+              class="portfolio-composition__refresh"
+              data-test="portfolio-import-source-load-more"
+              :disabled="existingImportsLoading"
+              @click="loadMoreImportedSources"
+            >
+              {{ t('portfolio.compositionLoadMore') }}
+            </button>
+          </div>
+
+          <form
+            class="portfolio-import-source-form"
+            data-test="portfolio-import-source-form"
+            @submit.prevent="importTransactionsAsComposition"
+          >
+            <fieldset :disabled="sourceImportBusy || Boolean(pendingImportVersionId)">
+              <label>
+                {{ t('portfolio.importSourcePortfolioName') }}
+                <input
+                  v-model="importPortfolioName"
+                  data-test="portfolio-import-source-name"
+                  maxlength="200"
+                  required
+                >
+              </label>
+              <label>
+                {{ t('portfolio.importSourcePortfolioRef') }}
+                <input
+                  v-model="importPortfolioRef"
+                  data-test="portfolio-import-source-ref"
+                  maxlength="128"
+                  required
+                >
+              </label>
+              <label>
+                {{ t('portfolio.importSourceBaseCurrency') }}
+                <input
+                  v-model="importBaseCurrency"
+                  data-test="portfolio-import-source-base-currency"
+                  maxlength="16"
+                  required
+                >
+              </label>
+              <label>
+                {{ t('portfolio.importSourceAsOf') }}
+                <input
+                  v-model="importSourceAsOf"
+                  data-test="portfolio-import-source-as-of"
+                  type="date"
+                >
+              </label>
+              <label>
+                {{ t('portfolio.importSourceCurrency') }}
+                <input
+                  v-model="importSourceCurrency"
+                  data-test="portfolio-import-source-currency"
+                  maxlength="16"
+                >
+              </label>
+              <label class="portfolio-import-source-form__rows">
+                {{ t('portfolio.importSourceJsonRows') }}
+                <textarea
+                  v-model="importTransactionsJson"
+                  data-test="portfolio-import-source-rows"
+                  rows="8"
+                  required
+                />
+              </label>
+            </fieldset>
+            <p class="portfolio-import-source-form__hint">
+              {{ t('portfolio.importSourceMissingMetadata') }}
+            </p>
+            <p
+              v-if="sourceImportError"
+              class="portfolio-composition__error"
+              role="alert"
+              data-test="portfolio-import-source-error"
+            >
+              {{ sourceImportError }}
+            </p>
+            <button
+              type="submit"
+              class="portfolio-composition__refresh"
+              data-test="portfolio-import-source-submit"
+              :disabled="sourceImportBusy"
+            >
+              {{ sourceImportBusy ? t('portfolio.querying') : t('portfolio.importSourceSubmit') }}
+            </button>
+          </form>
+        </section>
 
         <div class="portfolio-composition__selector">
           <label for="portfolio-composition-version">
@@ -244,6 +403,65 @@
                 </template>
               </li>
             </ul>
+          </section>
+
+          <section
+            v-if="compositionProjection.source_facts?.kind === 'portfolio_ledger_import_versions'"
+            class="portfolio-composition__section"
+            data-test="portfolio-imported-source-facts"
+          >
+            <h2>{{ t('portfolio.importSourceFacts') }}</h2>
+            <p data-test="portfolio-import-source-disclaimer">
+              {{ t('portfolio.importSourceProjectionDisclaimer') }}
+            </p>
+            <ul>
+              <li
+                v-for="(artifact, index) in compositionProjection.source_facts.artifacts"
+                :key="`${artifact.import_version_id || artifact.status}-${index}`"
+                data-test="portfolio-import-source-artifact"
+              >
+                <p>{{ t('portfolio.importSourceArtifactStatus') }}: {{ importSourceArtifactStatusLabel(artifact.status) }}</p>
+                <template v-if="artifact.status === 'available'">
+                  <p>{{ t('portfolio.importSourcePortfolioName') }}: {{ artifact.portfolio_name }}</p>
+                  <p>{{ t('portfolio.importSourceId') }}: {{ artifact.import_version_id }}</p>
+                  <p>{{ t('portfolio.importSourceAsOf') }}: {{ artifact.source_as_of || t('portfolio.importSourceUnknown') }}</p>
+                  <p>{{ t('portfolio.importSourceCurrency') }}: {{ artifact.source_currency || t('portfolio.importSourceUnknown') }}</p>
+                  <p>{{ t('portfolio.importSourceIntegrity') }}: {{ artifact.source_integrity_status }}</p>
+                  <p>{{ t('portfolio.importSourceHash') }}: <code>{{ artifact.source_sha256 }}</code></p>
+                  <p>{{ t('portfolio.importSourceRows') }}: {{ artifact.source_row_count }}</p>
+                  <p>
+                    {{ t('portfolio.importSourceDateCoverage') }}:
+                    {{ artifact.trade_date_rows_present }}/{{ artifact.source_row_count }} ·
+                    {{ importSourceDateCoverageLabel(artifact.trade_date_coverage) }}
+                  </p>
+                  <p>{{ t('portfolio.importSourceFreshness') }}: {{ t('portfolio.importSourceFreshnessUndefined') }}</p>
+                  <button
+                    type="button"
+                    class="portfolio-composition__refresh"
+                    :data-test="`portfolio-import-source-detail-${artifact.import_version_id}`"
+                    :disabled="importedSourceLoadingId === artifact.import_version_id"
+                    @click="loadImportedSourceDetail(artifact.import_version_id || '')"
+                  >
+                    {{ importedSourceLoadingId === artifact.import_version_id
+                      ? t('portfolio.querying')
+                      : t('portfolio.importSourceShowRaw') }}
+                  </button>
+                  <pre
+                    v-if="importedSourceDetails[artifact.import_version_id || '']"
+                    class="portfolio-import-source-raw"
+                    :data-test="`portfolio-import-source-raw-${artifact.import_version_id}`"
+                  >{{ JSON.stringify(importedSourceDetails[artifact.import_version_id || '']?.source_document?.transactions, null, 2) }}</pre>
+                </template>
+              </li>
+            </ul>
+            <p
+              v-if="importedSourceDetailError"
+              class="portfolio-composition__error"
+              role="alert"
+              data-test="portfolio-import-source-detail-error"
+            >
+              {{ importedSourceDetailError }}
+            </p>
           </section>
 
           <section class="portfolio-composition__section">
@@ -898,6 +1116,8 @@ import { ElMessage } from 'element-plus'
 import type * as echarts from 'echarts'
 import { getErrorMessage } from '@/api'
 import { portfolioApi } from '@/api/portfolio'
+import type { PortfolioLedgerImportSource, PortfolioLedgerImportSourceDetail } from '@/api/portfolioLedger'
+import { portfolioLedgerApi } from '@/api/portfolioLedger'
 import { workspaceApi } from '@/api/workspace'
 import type {
   PortfolioOverview,
@@ -931,11 +1151,34 @@ const compositionPage = ref(1)
 const compositionHasMore = ref(false)
 const compositionTotal = ref(0)
 const compositionListChanged = ref(false)
+const showImportedSourceDialog = ref(false)
+const sourceImportBusy = ref(false)
+const sourceImportError = ref('')
+const importedSourceDetailError = ref('')
+const existingImportsLoading = ref(false)
+const existingImportSources = ref<PortfolioLedgerImportSource[]>([])
+const existingImportSourcesPage = ref(1)
+const existingImportSourcesHasMore = ref(false)
+const selectedImportVersionId = ref('')
+const importedSourceLoadingId = ref('')
+const importedSourceDetails = ref<Record<string, PortfolioLedgerImportSourceDetail>>({})
+const importPortfolioName = ref('')
+const importPortfolioRef = ref('')
+const importBaseCurrency = ref('')
+const importSourceAsOf = ref('')
+const importSourceCurrency = ref('')
+const importTransactionsJson = ref('[]')
+const pendingImportPortfolioId = ref('')
+const pendingImportVersionId = ref('')
+const importIdempotencyKey = ref('')
 let compositionListRequestSequence = 0
 let compositionProjectionRequestSequence = 0
 
 const selectedCompositionVersion = computed(() => compositionVersions.value.find(
   version => compositionVersionKey(version) === selectedCompositionKey.value,
+))
+const selectedImportSource = computed(() => existingImportSources.value.find(
+  source => source.import_version_id === selectedImportVersionId.value,
 ))
 
 const overview = ref<PortfolioOverview>({
@@ -1032,11 +1275,15 @@ function compositionStatusLabel(status: string) {
   if (status === 'no_account_members') return t('portfolio.compositionStatusNoAccounts')
   if (status === 'research_reports_projected') return t('portfolio.compositionResearchProjected')
   if (status === 'research_reports_unavailable') return t('portfolio.compositionResearchUnavailable')
+  if (status === 'imported_materials_projected') return t('portfolio.importSourceProjected')
+  if (status === 'imported_materials_unavailable') return t('portfolio.importSourceUnavailable')
+  if (status === 'imported_material_integrity_invalid') return t('portfolio.importSourceIntegrityUnavailable')
   return status
 }
 
 function compositionAttributionStatusLabel(status: string) {
   if (status === 'not_applicable_research') return t('portfolio.compositionResearchNoAttribution')
+  if (status === 'not_applicable_imported') return t('portfolio.importSourceNoAttribution')
   if (status === 'execution_attribution_not_collected') {
     return t('portfolio.compositionAttributionUnavailable')
   }
@@ -1059,6 +1306,213 @@ function compositionResearchIntegrityLabel(status: string) {
   if (status === 'verified') return t('portfolio.compositionResearchIntegrityVerified')
   if (status === 'invalid') return t('portfolio.compositionResearchArtifactInvalid')
   return t('portfolio.compositionResearchArtifactUnavailable')
+}
+
+function importSourceArtifactStatusLabel(status: string) {
+  if (status === 'available' || status === 'verified') return t('portfolio.importSourceVerified')
+  if (status === 'integrity_invalid') return t('portfolio.importSourceIntegrityUnavailable')
+  if (status === 'source_material_unavailable' || status === 'unavailable_legacy') {
+    return t('portfolio.importSourceLegacyUnavailable')
+  }
+  return t('portfolio.importSourceUnavailable')
+}
+
+function importSourceDateCoverageLabel(status: string) {
+  const labels: Record<string, string> = {
+    complete: 'portfolio.importSourceDateCoverageComplete',
+    partial: 'portfolio.importSourceDateCoveragePartial',
+    missing: 'portfolio.importSourceDateCoverageMissing',
+    not_applicable_empty_source: 'portfolio.importSourceDateCoverageEmpty',
+  }
+  const key = labels[status]
+  return key ? t(key) : t('portfolio.importSourceUnknown')
+}
+
+function newImportIdempotencyKey() {
+  return `afi-import-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function openImportedSourceDialog() {
+  showImportedSourceDialog.value = true
+  sourceImportError.value = ''
+  if (!importPortfolioName.value) importPortfolioName.value = t('portfolio.importSourceDefaultName')
+  if (!importPortfolioRef.value) importPortfolioRef.value = `imported-${Date.now()}`
+  if (!importIdempotencyKey.value) importIdempotencyKey.value = newImportIdempotencyKey()
+  void loadExistingImportSources()
+}
+
+async function loadExistingImportSources(page = 1) {
+  if (existingImportsLoading.value) return
+  existingImportsLoading.value = true
+  sourceImportError.value = ''
+  try {
+    const result = await portfolioLedgerApi.listImportSources(page, 100)
+    if (page === 1) existingImportSources.value = result.items
+    else existingImportSources.value = [...existingImportSources.value, ...result.items]
+    existingImportSourcesPage.value = result.page
+    existingImportSourcesHasMore.value = result.has_more
+    if (
+      !selectedImportVersionId.value
+      || !existingImportSources.value.some(item => item.import_version_id === selectedImportVersionId.value)
+    ) {
+      selectedImportVersionId.value = result.items.find(
+        item => item.source_material_status === 'verified',
+      )?.import_version_id ?? ''
+    }
+  } catch (error: unknown) {
+    sourceImportError.value = getErrorMessage(error, t('portfolio.importSourceLoadFailed'))
+  } finally {
+    existingImportsLoading.value = false
+  }
+}
+
+async function loadMoreImportedSources() {
+  if (!existingImportSourcesHasMore.value || existingImportsLoading.value) return
+  const nextPage = existingImportSourcesPage.value + 1
+  existingImportsLoading.value = true
+  try {
+    const result = await portfolioLedgerApi.listImportSources(nextPage, 100)
+    if (result.total !== existingImportSources.value.length + result.items.length) {
+      existingImportsLoading.value = false
+      await loadExistingImportSources(1)
+      return
+    }
+    existingImportSources.value = [...existingImportSources.value, ...result.items]
+    existingImportSourcesPage.value = result.page
+    existingImportSourcesHasMore.value = result.has_more
+  } catch (error: unknown) {
+    sourceImportError.value = getErrorMessage(error, t('portfolio.importSourceLoadFailed'))
+  } finally {
+    existingImportsLoading.value = false
+  }
+}
+
+async function createImportedComposition(importVersionId: string, portfolioRef: string, baseCurrency: string) {
+  const created = await portfolioApi.createCompositionVersion({
+    portfolio_ref: portfolioRef,
+    source_type: 'imported',
+    base_currency: baseCurrency,
+    members: [{ kind: 'imported_ledger', ref: importVersionId }],
+  })
+  selectedCompositionKey.value = JSON.stringify([created.portfolio_ref, created.membership_version])
+  showImportedSourceDialog.value = false
+  await loadCompositionData()
+}
+
+async function attachExistingImportSource() {
+  const source = selectedImportSource.value
+  if (!source || source.source_material_status !== 'verified' || sourceImportBusy.value) return
+  sourceImportBusy.value = true
+  sourceImportError.value = ''
+  try {
+    await createImportedComposition(
+      source.import_version_id,
+      `import-${source.import_version_id}`,
+      source.base_currency,
+    )
+  } catch (error: unknown) {
+    sourceImportError.value = getErrorMessage(error, t('portfolio.importSourceAttachFailed'))
+  } finally {
+    sourceImportBusy.value = false
+  }
+}
+
+function parseImportTransactions(): Array<Record<string, unknown>> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(importTransactionsJson.value)
+  } catch {
+    throw new Error(t('portfolio.importSourceInvalidJson'))
+  }
+  if (
+    !Array.isArray(parsed)
+    || parsed.some(row => row === null || typeof row !== 'object' || Array.isArray(row))
+  ) {
+    throw new Error(t('portfolio.importSourceRowsInvalid'))
+  }
+  return parsed as Array<Record<string, unknown>>
+}
+
+async function importTransactionsAsComposition() {
+  if (sourceImportBusy.value) return
+  sourceImportError.value = ''
+  sourceImportBusy.value = true
+  try {
+    const rows = parseImportTransactions()
+    const baseCurrency = importBaseCurrency.value.trim()
+    const portfolioName = importPortfolioName.value.trim()
+    const portfolioRef = importPortfolioRef.value.trim()
+    if (!portfolioName || !portfolioRef || !/^[A-Z0-9]{3,16}$/.test(baseCurrency)) {
+      throw new Error(t('portfolio.importSourceFieldsInvalid'))
+    }
+    if (importSourceCurrency.value && !/^[A-Z0-9]{3,16}$/.test(importSourceCurrency.value)) {
+      throw new Error(t('portfolio.importSourceCurrencyInvalid'))
+    }
+    if (!pendingImportPortfolioId.value) {
+      const portfolio = await portfolioLedgerApi.create({
+        name: portfolioName,
+        base_currency: baseCurrency,
+        source_type: 'imported',
+      })
+      pendingImportPortfolioId.value = portfolio.id
+    }
+    if (!pendingImportVersionId.value) {
+      const imported = await portfolioLedgerApi.importTransactions(
+        pendingImportPortfolioId.value,
+        {
+          format: 'json',
+          idempotency_key: importIdempotencyKey.value,
+          transactions: rows,
+          source_as_of: importSourceAsOf.value || undefined,
+          source_currency: importSourceCurrency.value || undefined,
+        },
+      )
+      if (imported.source_material_status !== 'verified') {
+        throw new Error(t('portfolio.importSourceIntegrityUnavailable'))
+      }
+      pendingImportVersionId.value = imported.import_version_id
+    }
+    await createImportedComposition(
+      pendingImportVersionId.value,
+      portfolioRef,
+      baseCurrency,
+    )
+    importPortfolioName.value = ''
+    importPortfolioRef.value = ''
+    importBaseCurrency.value = ''
+    importSourceAsOf.value = ''
+    importSourceCurrency.value = ''
+    importTransactionsJson.value = '[]'
+    pendingImportPortfolioId.value = ''
+    pendingImportVersionId.value = ''
+    importIdempotencyKey.value = ''
+  } catch (error: unknown) {
+    sourceImportError.value = getErrorMessage(error, t('portfolio.importSourceCreateFailed'))
+  } finally {
+    sourceImportBusy.value = false
+  }
+}
+
+async function loadImportedSourceDetail(importVersionId: string) {
+  if (!importVersionId || importedSourceLoadingId.value) return
+  if (importedSourceDetails.value[importVersionId]) return
+  importedSourceLoadingId.value = importVersionId
+  importedSourceDetailError.value = ''
+  try {
+    const detail = await portfolioLedgerApi.getImportSource(importVersionId)
+    if (detail.source_material_status !== 'verified' || !detail.source_document) {
+      importedSourceDetailError.value = t('portfolio.importSourceIntegrityUnavailable')
+      return
+    }
+    importedSourceDetails.value = {
+      ...importedSourceDetails.value,
+      [importVersionId]: detail,
+    }
+  } catch (error: unknown) {
+    importedSourceDetailError.value = getErrorMessage(error, t('portfolio.importSourceLoadFailed'))
+  } finally {
+    importedSourceLoadingId.value = ''
+  }
 }
 
 function setViewMode(mode: 'legacy' | 'composition') {
@@ -1863,6 +2317,12 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
+.portfolio-composition__refresh:disabled,
+.portfolio-composition__selector button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .portfolio-view-switch button[aria-pressed='true'] {
   border-color: var(--primary-color);
   color: var(--primary-color);
@@ -1959,6 +2419,83 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 8px;
   padding-left: 20px;
+  overflow-wrap: anywhere;
+}
+
+.portfolio-import-source-dialog {
+  background: var(--fill-color-lighter);
+}
+
+.portfolio-import-source-dialog__existing,
+.portfolio-import-source-form {
+  display: grid;
+  gap: 12px;
+}
+
+.portfolio-import-source-dialog__existing {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+}
+
+.portfolio-import-source-dialog__existing label,
+.portfolio-import-source-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-color-secondary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.portfolio-import-source-dialog__existing select,
+.portfolio-import-source-form input,
+.portfolio-import-source-form textarea {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-color);
+  color: var(--text-color-primary);
+  font: inherit;
+}
+
+.portfolio-import-source-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.portfolio-import-source-form fieldset:disabled {
+  opacity: 0.65;
+}
+
+.portfolio-import-source-form__rows {
+  grid-column: 1 / -1;
+}
+
+.portfolio-import-source-form textarea {
+  min-height: 160px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.portfolio-import-source-form__hint {
+  margin: 0;
+  color: var(--text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.portfolio-import-source-raw {
+  max-height: 420px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 5px;
+  background: var(--fill-color-lighter);
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
