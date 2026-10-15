@@ -137,6 +137,10 @@ from app.models.paper_trading import Account, Order, PaperTrade, Position
 from app.models.permission import Permission, Role, user_roles
 from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.models.service_order_operation import ServiceOrderOperation
+from app.models.strategy_target_approval import (
+    StrategyTargetApproval,
+    StrategyTargetApprovalEvent,
+)
 from app.models.portfolio_ledger import (
     PortfolioLedgerImportModel,
     PortfolioLedgerModel,
@@ -283,6 +287,8 @@ __all__ = [
     "Position",
     "PortfolioCompositionVersion",
     "ServiceOrderOperation",
+    "StrategyTargetApproval",
+    "StrategyTargetApprovalEvent",
     "PortfolioLedgerImportModel",
     "PortfolioLedgerModel",
     "PortfolioLedgerSnapshotModel",
