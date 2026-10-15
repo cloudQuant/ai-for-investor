@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.services.service_read.contracts import (
+    AccountBookReadView,
     AccountReadView,
     OrderReadView,
     ReadQuality,
@@ -28,6 +29,7 @@ from app.services.service_read.contracts import (
 )
 
 __all__ = [
+    "AccountBookBinding",
     "AccountBinding",
     "AuthorizedServiceReadClient",
     "MonitorBinding",
@@ -122,6 +124,25 @@ class AccountBinding:
 
 
 @dataclass(frozen=True)
+class AccountBookBinding:
+    """One trusted account-level execution-book scope and full AccountKey."""
+
+    mount: str
+    scope_ref: str
+    account_key: Any
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if type(getattr(self.account_key, "account_key_id", None)) is not str:
+            raise ServiceReadContractError("INVALID_ACCOUNT_KEY")
+
+
+@dataclass(frozen=True)
 class OrderBinding:
     """One authorized order-read scope the deployment has granted to the app."""
 
@@ -173,6 +194,7 @@ class AuthorizedServiceReadClient:
         runtime: Any,
         *,
         account_bindings: Mapping[str, AccountBinding],
+        account_book_bindings: Mapping[str, AccountBookBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
         order_bindings: Mapping[str, OrderBinding] | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -188,6 +210,18 @@ class AuthorizedServiceReadClient:
                 raise ServiceReadContractError("INVALID_ACCOUNT_REF")
             if not isinstance(binding, AccountBinding):
                 raise ServiceReadContractError("INVALID_ACCOUNT_BINDING")
+        account_book_map: dict[str, AccountBookBinding] = {}
+        for account_ref, binding in dict(account_book_bindings or {}).items():
+            if type(account_ref) is not str or not account_ref:
+                raise ServiceReadContractError("INVALID_ACCOUNT_REF")
+            if not isinstance(binding, AccountBookBinding):
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_BINDING")
+            snapshot_binding = account_bindings.get(account_ref)
+            if snapshot_binding is not None and (
+                snapshot_binding.account_key.account_key_id != binding.account_key.account_key_id
+            ):
+                raise ServiceReadContractError("ACCOUNT_BOOK_KEY_MISMATCH")
+            account_book_map[account_ref] = binding
         monitor_map: dict[str, MonitorBinding] = {}
         for scope_ref, binding in dict(monitor_bindings or {}).items():
             if type(scope_ref) is not str or not scope_ref:
@@ -206,6 +240,7 @@ class AuthorizedServiceReadClient:
 
         self._runtime = runtime
         self._account_bindings = dict(account_bindings)
+        self._account_book_bindings = account_book_map
         self._monitor_bindings = monitor_map
         self._order_bindings = order_map
         self._clock = clock
@@ -277,6 +312,31 @@ class AuthorizedServiceReadClient:
         except Exception as error:  # noqa: BLE001 - mapped to a finite view
             return self._degraded_account_view(account_ref, binding, requested_currency, error)
         return self._account_view(account_ref, requested_currency, state)
+
+    def read_account_book(self, account_ref: str) -> AccountBookReadView:
+        """Read one trusted account-book projection through the opted-in SDK op."""
+
+        self._require_open()
+        binding = self._account_book_bindings.get(account_ref)
+        if binding is None:
+            raise ServiceReadUnavailableError("ACCOUNT_BOOK_NOT_CONFIGURED")
+        try:
+            payload = self._runtime.call(
+                binding.mount,
+                "execution.account_books.query",
+                {},
+                scope_ref=binding.scope_ref,
+            )
+        except Exception as error:  # noqa: BLE001 - mapped to finite read diagnostics
+            code = _error_code(error)
+            if code in _REFUSAL_CODES:
+                raise ServiceReadUnavailableError(code) from None
+            raise ServiceReadUnavailableError(code) from None
+        return _account_book_view(
+            payload,
+            account_ref,
+            binding.account_key.account_key_id,
+        )
 
     def _account_client(self, account_ref: str, binding: AccountBinding) -> Any:
         client = self._account_clients.get(account_ref)
@@ -417,6 +477,26 @@ class AuthorizedServiceReadClient:
 
 
 # -- snapshot parsing -------------------------------------------------------
+
+
+def _account_book_view(
+    payload: Any,
+    account_ref: str,
+    account_key_id: str,
+) -> AccountBookReadView:
+    if not isinstance(payload, Mapping) or set(payload) != {"ok", "code", "result"}:
+        raise ServiceReadUnavailableError("INVALID_ACCOUNT_BOOK_REPLY")
+    code = payload.get("code")
+    if payload.get("ok") is not True:
+        if isinstance(code, str) and code in _REFUSAL_CODES:
+            raise ServiceReadUnavailableError(code)
+        raise ServiceReadUnavailableError("ACCOUNT_BOOK_READ_FAILED")
+    if code != "OK" or not isinstance(payload.get("result"), Mapping):
+        raise ServiceReadUnavailableError("INVALID_ACCOUNT_BOOK_REPLY")
+    try:
+        return AccountBookReadView(account_ref, account_key_id, payload["result"])
+    except ServiceReadContractError as error:
+        raise ServiceReadUnavailableError(error.code) from None
 
 
 def _order_view(payload: Any, intent_id: str) -> OrderReadView:

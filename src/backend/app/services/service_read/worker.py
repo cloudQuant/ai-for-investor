@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 if TYPE_CHECKING:
     from app.services.service_read.contracts import (
+        AccountBookReadView,
         AccountReadView,
         OrderReadView,
         StrategyHealthView,
@@ -53,6 +54,8 @@ class ServiceReadSession(Protocol):
 
     def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView: ...
 
+    def read_account_book(self, account_ref: str) -> AccountBookReadView: ...
+
     def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView: ...
 
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView: ...
@@ -71,6 +74,7 @@ class _State(Enum):
 
 class _Kind(Enum):
     ACCOUNT = auto()
+    ACCOUNT_BOOK = auto()
     ORDER = auto()
     STRATEGY_HEALTH = auto()
 
@@ -193,6 +197,9 @@ class ServiceReadWorker:
 
     async def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
         return await self._submit(_Kind.ORDER, scope_ref, intent_id)
+
+    async def read_account_book(self, account_ref: str) -> AccountBookReadView:
+        return await self._submit(_Kind.ACCOUNT_BOOK, account_ref)
 
     async def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
         return await self._submit(_Kind.STRATEGY_HEALTH, scope_ref)
@@ -366,6 +373,8 @@ class ServiceReadWorker:
         try:
             if request.kind is _Kind.ACCOUNT:
                 result = session.read_account(request.arguments[0], currency=request.arguments[1])
+            elif request.kind is _Kind.ACCOUNT_BOOK:
+                result = session.read_account_book(request.arguments[0])
             elif request.kind is _Kind.ORDER:
                 result = session.read_order(request.arguments[0], request.arguments[1])
             else:

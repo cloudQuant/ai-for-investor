@@ -14,12 +14,13 @@ from typing import TYPE_CHECKING, Any
 
 from .client import (
     AccountBinding,
+    AccountBookBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
     OrderBinding,
     ServiceReadUnavailableError,
 )
-from .contracts import AccountReadView, OrderReadView, StrategyHealthView
+from .contracts import AccountBookReadView, AccountReadView, OrderReadView, StrategyHealthView
 
 if TYPE_CHECKING:
     from bt_api_base.service_protocol import WireIdentity
@@ -65,13 +66,20 @@ class SdkServiceReadSession:
         expected_identity: WireIdentity,
         *,
         account_bindings: Mapping[str, AccountBinding],
+        account_book_bindings: Mapping[str, AccountBookBinding] | None = None,
         order_bindings: Mapping[str, OrderBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
     ) -> None:
         self._account_bindings = dict(account_bindings)
+        self._account_book_bindings = dict(account_book_bindings or {})
         self._order_bindings = dict(order_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
-        if not (self._account_bindings or self._order_bindings or self._monitor_bindings):
+        if not (
+            self._account_bindings
+            or self._account_book_bindings
+            or self._order_bindings
+            or self._monitor_bindings
+        ):
             raise ServiceReadSessionError(
                 "SERVICE_READ_NOT_CONFIGURED",
                 "no service-read bindings are configured",
@@ -113,6 +121,7 @@ class SdkServiceReadSession:
             self._read_client = AuthorizedServiceReadClient(
                 runtime,
                 account_bindings=self._account_bindings,
+                account_book_bindings=self._account_book_bindings,
                 order_bindings=self._order_bindings,
                 monitor_bindings=self._monitor_bindings,
             )
@@ -168,8 +177,15 @@ class SdkServiceReadSession:
         expected: set[tuple[str, str, frozenset[str]]] = set()
         for binding in self._account_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"account.snapshot"})))
+        order_query_operations: set[str] = set()
+        if self._order_bindings:
+            order_query_operations.add("orders.query")
+        if self._account_book_bindings:
+            order_query_operations.add("execution.account_books.query")
         for binding in self._order_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset({"orders.query"})))
+            expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
+        for binding in self._account_book_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
         for binding in self._monitor_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"telemetry.snapshot"})))
         return expected
@@ -200,6 +216,14 @@ class SdkServiceReadSession:
 
         for configured in self._order_bindings.values():
             self._one_registered_binding(configured.mount, configured.scope_ref)
+
+        for account_ref, configured in self._account_book_bindings.items():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            if not self._scope_is_account_scope(binding.scope, account_ref):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "account-book scope is not exact for its configured account",
+                )
 
         for configured in self._monitor_bindings.values():
             binding = self._one_registered_binding(configured.mount, configured.scope_ref)
@@ -255,6 +279,19 @@ class SdkServiceReadSession:
                 "SERVICE_READ_SCOPE_MISMATCH",
                 "runtime account scope does not match the trusted account binding",
             )
+
+    @staticmethod
+    def _scope_is_account_scope(scope: Any, account_ref: str) -> bool:
+        return (
+            getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "portfolio_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
 
     def start(self) -> None:
         self._assert_owner()
@@ -313,6 +350,21 @@ class SdkServiceReadSession:
         self._validate_runtime()
         assert self._read_client is not None
         return self._read_client.read_order(scope_ref, intent_id)
+
+    def read_account_book(self, account_ref: str) -> AccountBookReadView:
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service-read runtime must be started before reads",
+            )
+        configured = self._account_book_bindings.get(account_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("ACCOUNT_BOOK_NOT_CONFIGURED")
+        self._validate_runtime()
+        assert self._read_client is not None
+        return self._read_client.read_account_book(account_ref)
 
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
         self._assert_owner()

@@ -99,7 +99,14 @@ def _require_directory() -> ServiceReadAccessDirectory:
 def _resolve_access(
     current_user: TokenPayload,
     selector: str,
-    selector_kind: Literal["account", "order", "monitor"],
+    selector_kind: Literal[
+        "account",
+        "account_book",
+        "account_member",
+        "strategy_book",
+        "order",
+        "monitor",
+    ],
 ) -> ReadAccess:
     directory = _require_directory()
     if type(current_user) is not TokenPayload:
@@ -107,6 +114,12 @@ def _resolve_access(
     try:
         if selector_kind == "account":
             return directory.resolve_account(current_user.sub, selector)
+        if selector_kind == "account_book":
+            return directory.resolve_account_book(current_user.sub, selector)
+        if selector_kind == "account_member":
+            return directory.resolve_account_member(current_user.sub, selector)
+        if selector_kind == "strategy_book":
+            return directory.resolve_strategy_book(current_user.sub, selector)
         if selector_kind == "order":
             return directory.resolve_order_scope(current_user.sub, selector)
         if selector_kind == "monitor":

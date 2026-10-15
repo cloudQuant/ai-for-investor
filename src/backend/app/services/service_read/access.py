@@ -18,6 +18,7 @@ from typing import Any
 
 __all__ = [
     "ReadAccess",
+    "StrategyBookBinding",
     "ServiceReadAccessDirectory",
     "ServiceReadAccessError",
 ]
@@ -32,6 +33,18 @@ class ServiceReadAccessError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class StrategyBookBinding:
+    """Server-owned mapping from a composition selector to one account owner."""
+
+    account_ref: str
+    owner_ref: str
+
+    def __post_init__(self) -> None:
+        if not _valid_identifier(self.account_ref) or not _valid_identifier(self.owner_ref):
+            raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDING")
+
+
+@dataclass(frozen=True, slots=True)
 class ReadAccess:
     """One preassembled async worker and its exact permitted selectors.
 
@@ -42,8 +55,12 @@ class ReadAccess:
 
     worker: Any
     allow_account_refs: frozenset[str] = frozenset()
+    allow_account_book_refs: frozenset[str] = frozenset()
     allow_order_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
+    strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(
+        default_factory=dict, repr=False
+    )
 
     def __post_init__(self) -> None:
         required_methods = ("read_account", "read_order", "read_strategy_health")
@@ -54,10 +71,35 @@ class ReadAccess:
             raise ServiceReadAccessError("INVALID_WORKER")
         for name in (
             "allow_account_refs",
+            "allow_account_book_refs",
             "allow_order_scope_refs",
             "allow_monitor_scope_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
+        if self.allow_account_book_refs and not inspect.iscoroutinefunction(
+            getattr(self.worker, "read_account_book", None)
+        ):
+            raise ServiceReadAccessError("INVALID_WORKER")
+        bindings = self.strategy_book_bindings
+        if not isinstance(bindings, Mapping) or len(bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
+        normalized: dict[str, StrategyBookBinding] = {}
+        for selector, binding in bindings.items():
+            if not _valid_identifier(selector) or type(binding) is not StrategyBookBinding:
+                raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
+            normalized[selector] = binding
+        if normalized and not inspect.iscoroutinefunction(
+            getattr(self.worker, "read_account_book", None)
+        ):
+            raise ServiceReadAccessError("INVALID_WORKER")
+        target_keys = [(item.account_ref, item.owner_ref) for item in normalized.values()]
+        if len(target_keys) != len(set(target_keys)):
+            raise ServiceReadAccessError("DUPLICATE_STRATEGY_BOOK_OWNER")
+        if any(
+            item.account_ref not in self.allow_account_book_refs for item in normalized.values()
+        ):
+            raise ServiceReadAccessError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
+        object.__setattr__(self, "strategy_book_bindings", MappingProxyType(normalized))
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -97,6 +139,34 @@ class ServiceReadAccessDirectory:
         """Resolve one account selector for an exact authenticated subject."""
 
         return self._resolve(subject, account_ref, "allow_account_refs")
+
+    def resolve_account_book(self, subject: str, account_ref: str) -> ReadAccess:
+        """Resolve an exact server-configured account-book selector."""
+
+        return self._resolve(subject, account_ref, "allow_account_book_refs")
+
+    def resolve_account_member(self, subject: str, account_ref: str) -> ReadAccess:
+        """Resolve a composition account member covered by either read grant."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(account_ref):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or not (
+            account_ref in access.allow_account_refs
+            or account_ref in access.allow_account_book_refs
+        ):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
+
+    def resolve_strategy_book(self, subject: str, strategy_ref: str) -> ReadAccess:
+        """Resolve a composition selector to its deployment-owned book target."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(strategy_ref):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or strategy_ref not in access.strategy_book_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
 
     def resolve_order_scope(self, subject: str, scope_ref: str) -> ReadAccess:
         """Resolve one order-query scope for an exact authenticated subject."""

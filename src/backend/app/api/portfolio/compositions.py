@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -57,9 +57,29 @@ async def create_portfolio_composition_version(
     """Write a new membership version; owner identity is taken from the JWT."""
 
     if payload.source_type == "live":
+        account_members = {member.ref for member in payload.members if member.kind == "account"}
+        subject_access = None
         for member in payload.members:
             if member.kind == "account":
-                _resolve_access(current_user, member.ref, "account")
+                subject_access = _resolve_access(current_user, member.ref, "account_member")
+        strategy_members = [member for member in payload.members if member.kind == "strategy"]
+        if strategy_members and subject_access is None:
+            # A strategy selector is not authority by itself. A live strategy
+            # composition must also name an authorized account member.
+            subject_access = _resolve_access(current_user, strategy_members[0].ref, "strategy_book")
+        if subject_access is not None:
+            for member in strategy_members:
+                binding = subject_access.strategy_book_bindings.get(member.ref)
+                # Keep old compositions selectable when no execution-book
+                # adapter is configured; their projection stays unavailable.
+                if binding is None:
+                    continue
+                if binding.account_ref not in account_members:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={"code": "SERVICE_READ_ACCESS_DENIED"},
+                    )
+                _resolve_access(current_user, binding.account_ref, "account_book")
     row = await PortfolioCompositionService(db).create_version(current_user.sub, payload)
     return _membership_payload(row)
 

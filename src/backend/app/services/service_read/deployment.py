@@ -18,8 +18,17 @@ from typing import Any
 
 from pydantic import SecretStr
 
-from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
-from app.services.service_read.client import AccountBinding, MonitorBinding, OrderBinding
+from app.services.service_read.access import (
+    ReadAccess,
+    ServiceReadAccessDirectory,
+    StrategyBookBinding,
+)
+from app.services.service_read.client import (
+    AccountBinding,
+    AccountBookBinding,
+    MonitorBinding,
+    OrderBinding,
+)
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
 
@@ -81,9 +90,13 @@ class _SubjectProfile:
     peer_identities: Mapping[str, Any] = field(repr=False, compare=False)
     curve_keys: Mapping[str, tuple[bytes, bytes, bytes]] = field(repr=False, compare=False)
     account_bindings: Mapping[str, AccountBinding] = field(repr=False, compare=False)
+    account_book_bindings: Mapping[str, AccountBookBinding] = field(repr=False, compare=False)
+    strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(repr=False, compare=False)
     order_bindings: Mapping[str, OrderBinding] = field(repr=False, compare=False)
     monitor_bindings: Mapping[str, MonitorBinding] = field(repr=False, compare=False)
     account_grants: frozenset[str]
+    account_book_grants: frozenset[str]
+    strategy_book_grants: frozenset[str]
     order_grants: frozenset[str]
     monitor_grants: frozenset[str]
     max_queue_size: int
@@ -154,8 +167,10 @@ async def start_service_read_deployment(
             subject_access[profile.subject] = ReadAccess(
                 worker,
                 allow_account_refs=profile.account_grants,
+                allow_account_book_refs=profile.account_book_grants,
                 allow_order_scope_refs=profile.order_grants,
                 allow_monitor_scope_refs=profile.monitor_grants,
+                strategy_book_bindings=profile.strategy_book_bindings,
             )
         directory = ServiceReadAccessDirectory(subject_access)
         return ServiceReadDeployment(tuple(workers), directory)
@@ -181,6 +196,7 @@ def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
             lambda: _create_runtime(profile),
             profile.identity,
             account_bindings=profile.account_bindings,
+            account_book_bindings=profile.account_book_bindings,
             order_bindings=profile.order_bindings,
             monitor_bindings=profile.monitor_bindings,
         )
@@ -210,12 +226,19 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
         security_ref: ClientCurveKeys(server_key, public_key, secret_key)
         for security_ref, (server_key, public_key, secret_key) in profile.curve_keys.items()
     }
+    requested_operations: dict[str, frozenset[str]] = {}
+    if profile.account_book_bindings:
+        operations = {"execution.account_books.query"}
+        if profile.order_bindings:
+            operations.add("orders.query")
+        requested_operations["application.order_query"] = frozenset(operations)
     return ServiceClientRuntime(
         profile.client_config,
         identity=profile.identity,
         scope_resolver=lambda scope_ref: _lookup(profile.scopes, scope_ref),
         peer_resolver=lambda service_id: _lookup(profile.peer_identities, service_id),
         transport_factory=ZmqTransportFactory(transport_keys),
+        requested_operations=requested_operations or None,
     )
 
 
@@ -305,7 +328,7 @@ def _load_sdk_types() -> Mapping[str, Any]:
 
 
 def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
-    fields = {
+    required_fields = {
         "subject",
         "identity",
         "client_config",
@@ -318,7 +341,14 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "monitor_bindings",
         "worker",
     }
-    profile = _exact_mapping(raw, fields)
+    optional_fields = {"account_book_bindings", "strategy_book_bindings"}
+    if (
+        type(raw) is not dict
+        or not required_fields <= set(raw)
+        or set(raw) - required_fields - optional_fields
+    ):
+        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
+    profile = raw
     subject = _identifier(profile["subject"])
     identity_raw = _exact_mapping(
         profile["identity"], {"principal_ref", "actor_ref", "delegate_ref"}
@@ -398,21 +428,52 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         curve_keys[security_ref] = encoded  # type: ignore[assignment]
 
     account_bindings = _parse_account_bindings(profile["account_bindings"], sdk)
+    account_book_bindings = _parse_account_book_bindings(
+        profile.get("account_book_bindings", {}), sdk
+    )
+    strategy_book_bindings = _parse_strategy_book_bindings(
+        profile.get("strategy_book_bindings", {}), account_book_bindings
+    )
     order_bindings = _parse_order_bindings(profile["order_bindings"])
     monitor_bindings = _parse_monitor_bindings(profile["monitor_bindings"])
-    grants_raw = _exact_mapping(
-        profile["grants"], {"account_refs", "order_scope_refs", "monitor_scope_refs"}
-    )
+    grants_fields = {"account_refs", "order_scope_refs", "monitor_scope_refs"}
+    optional_grant_fields = {"account_book_refs", "strategy_book_refs"}
+    grants_raw = profile["grants"]
+    if (
+        type(grants_raw) is not dict
+        or not grants_fields <= set(grants_raw)
+        or set(grants_raw) - grants_fields - optional_grant_fields
+        or (
+            bool(set(grants_raw) & optional_grant_fields)
+            and not optional_grant_fields <= set(grants_raw)
+        )
+    ):
+        raise ServiceReadDeploymentError("INVALID_GRANTS")
     account_grants = frozenset(_string_list(grants_raw["account_refs"]))
+    account_book_grants = frozenset(_string_list(grants_raw.get("account_book_refs", [])))
+    strategy_book_grants = frozenset(_string_list(grants_raw.get("strategy_book_refs", [])))
     order_grants = frozenset(_string_list(grants_raw["order_scope_refs"]))
     monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
     if (
         account_grants != frozenset(account_bindings)
+        or account_book_grants != frozenset(account_book_bindings)
+        or strategy_book_grants != frozenset(strategy_book_bindings)
         or order_grants != frozenset(order_bindings)
         or monitor_grants != frozenset(monitor_bindings)
-        or not (account_grants or order_grants or monitor_grants)
+        or not (
+            account_grants
+            or account_book_grants
+            or strategy_book_grants
+            or order_grants
+            or monitor_grants
+        )
     ):
         raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
+    if any(
+        binding.account_ref not in account_book_grants
+        for binding in strategy_book_bindings.values()
+    ):
+        raise ServiceReadDeploymentError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
 
     worker_raw = profile["worker"]
     if type(worker_raw) is not dict or set(worker_raw) - {
@@ -440,6 +501,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         peers,
         curve_keys,
         account_bindings,
+        account_book_bindings,
         order_bindings,
         monitor_bindings,
     )
@@ -451,9 +513,13 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         peer_identities=MappingProxyType(peers),
         curve_keys=MappingProxyType(curve_keys),
         account_bindings=MappingProxyType(account_bindings),
+        account_book_bindings=MappingProxyType(account_book_bindings),
+        strategy_book_bindings=MappingProxyType(strategy_book_bindings),
         order_bindings=MappingProxyType(order_bindings),
         monitor_bindings=MappingProxyType(monitor_bindings),
         account_grants=account_grants,
+        account_book_grants=account_book_grants,
+        strategy_book_grants=strategy_book_grants,
         order_grants=order_grants,
         monitor_grants=monitor_grants,
         max_queue_size=max_queue_size,
@@ -487,6 +553,59 @@ def _parse_account_bindings(raw: object, sdk: Mapping[str, Any]) -> dict[str, Ac
             )
         except Exception:
             raise ServiceReadDeploymentError("INVALID_ACCOUNT_BINDINGS") from None
+    return result
+
+
+def _parse_account_book_bindings(
+    raw: object, sdk: Mapping[str, Any]
+) -> dict[str, AccountBookBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_ACCOUNT_BOOK_BINDINGS")
+    result: dict[str, AccountBookBinding] = {}
+    for account_ref, raw_binding in raw.items():
+        account_ref = _identifier(account_ref)
+        binding = _exact_mapping(raw_binding, {"mount", "scope_ref", "account_key"})
+        try:
+            account_key = sdk["AccountKey"].from_dict(binding["account_key"])
+            result[account_ref] = AccountBookBinding(
+                mount=_identifier(binding["mount"]),
+                scope_ref=_identifier(binding["scope_ref"]),
+                account_key=account_key,
+            )
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_ACCOUNT_BOOK_BINDINGS") from None
+    return result
+
+
+def _parse_strategy_book_bindings(
+    raw: object,
+    account_book_bindings: Mapping[str, AccountBookBinding],
+) -> dict[str, StrategyBookBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_STRATEGY_BOOK_BINDINGS")
+    result: dict[str, StrategyBookBinding] = {}
+    for strategy_ref, raw_binding in raw.items():
+        strategy_ref = _identifier(strategy_ref)
+        binding = _exact_mapping(raw_binding, {"account_ref", "owner_ref"})
+        try:
+            account_ref = _identifier(binding["account_ref"])
+            owner_ref = _identifier(binding["owner_ref"])
+            if account_ref not in account_book_bindings:
+                raise ServiceReadDeploymentError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
+            result[strategy_ref] = StrategyBookBinding(account_ref, owner_ref)
+        except ServiceReadDeploymentError:
+            raise
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_STRATEGY_BOOK_BINDINGS") from None
+    targets = [
+        (
+            account_book_bindings[binding.account_ref].account_key.account_key_id,
+            binding.owner_ref,
+        )
+        for binding in result.values()
+    ]
+    if len(targets) != len(set(targets)):
+        raise ServiceReadDeploymentError("DUPLICATE_STRATEGY_BOOK_OWNER")
     return result
 
 
@@ -532,6 +651,7 @@ def _validate_profile_bindings(
     peers: Mapping[str, Any],
     curve_keys: Mapping[str, Any],
     account_bindings: Mapping[str, AccountBinding],
+    account_book_bindings: Mapping[str, AccountBookBinding],
     order_bindings: Mapping[str, OrderBinding],
     monitor_bindings: Mapping[str, MonitorBinding],
 ) -> None:
@@ -545,6 +665,22 @@ def _validate_profile_bindings(
             or scope.account_refs
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
+    for account_ref, binding in account_book_bindings.items():
+        scope = scopes.get(binding.scope_ref)
+        if (
+            binding.mount != "application.order_query"
+            or scope is None
+            or scope.account_ref != account_ref
+            or not _is_account_scope(scope)
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        snapshot_binding = account_bindings.get(account_ref)
+        if (
+            snapshot_binding is not None
+            and snapshot_binding.account_key.account_key_id != binding.account_key.account_key_id
+        ):
+            raise ServiceReadDeploymentError("ACCOUNT_BOOK_KEY_MISMATCH")
         _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
     for scope_ref, binding in order_bindings.items():
         if binding.mount != "application.order_query" or scope_ref not in scopes:
@@ -635,9 +771,25 @@ def _add_declared(
     account_ref: str | None,
 ) -> None:
     pair = (mount, scope_ref)
-    if pair in declared:
-        raise ServiceReadDeploymentError("DUPLICATE_BINDING")
+    previous = declared.get(pair)
+    if previous is not None:
+        if previous != (mount, account_ref):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        return
     declared[pair] = (mount, account_ref)
+
+
+def _is_account_scope(scope: Any) -> bool:
+    return (
+        scope.account_ref is not None
+        and not scope.account_refs
+        and scope.strategy_ref is None
+        and scope.run_id is None
+        and scope.manual_book_ref is None
+        and scope.portfolio_ref is None
+        and scope.group_id is None
+        and scope.leg_id is None
+    )
 
 
 def _curve_key(value: object) -> bytes:

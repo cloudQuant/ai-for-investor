@@ -13,6 +13,7 @@ this yet" and "the observed value is zero" are different product statements.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -21,6 +22,7 @@ from types import MappingProxyType
 from typing import Any
 
 __all__ = [
+    "AccountBookReadView",
     "AccountReadView",
     "OrderReadView",
     "ReadQuality",
@@ -35,6 +37,192 @@ class ServiceReadContractError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+def _freeze_json(value: Any, code: str) -> Any:
+    """Copy a JSON-shaped service response into immutable containers."""
+
+    if value is None or type(value) in {str, bool, int}:
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ServiceReadContractError(code)
+        return value
+    if isinstance(value, Mapping):
+        if any(type(key) is not str for key in value):
+            raise ServiceReadContractError(code)
+        return MappingProxyType({key: _freeze_json(item, code) for key, item in value.items()})
+    if type(value) in {list, tuple}:
+        return tuple(_freeze_json(item, code) for item in value)
+    raise ServiceReadContractError(code)
+
+
+def _thaw_json(value: Any) -> Any:
+    """Return a JSON-serializable copy of a frozen service response."""
+
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if type(value) is tuple:
+        return [_thaw_json(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class AccountBookReadView:
+    """An exact account-level execution-book projection from the SDK service.
+
+    It contains owner positions, fees, coverage cursors and residuals. It does
+    not contain account cash, market value, or FX conversions; consumers must
+    keep those separate and unavailable when their own provider source lacks
+    them.
+    """
+
+    account_ref: str
+    account_key_id: str
+    projection: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        _text(self.account_ref, "INVALID_ACCOUNT_REF")
+        _text(self.account_key_id, "INVALID_ACCOUNT_KEY_ID")
+        projection = _freeze_json(self.projection, "INVALID_ACCOUNT_BOOK_REPLY")
+        if not isinstance(projection, Mapping) or set(projection) != {
+            "view",
+            "coverage",
+            "state",
+            "books",
+            "managed_orders",
+            "managed_fills",
+            "external_orders",
+            "external_fills",
+            "provider_position_change",
+            "position_residual",
+            "fee_residual",
+        }:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        if projection["view"] != "ACCOUNT" or projection["state"] not in {
+            "PARTIAL",
+            "RESIDUAL",
+            "BALANCED",
+        }:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+
+        coverage = projection["coverage"]
+        coverage_fields = {
+            "account_key",
+            "scope_directory_revision",
+            "journal_generation",
+            "baseline_execution_cursor",
+            "current_execution_cursor",
+            "complete",
+            "reasons",
+            "scanned_outbox_events",
+            "outbox_history_contiguous",
+            "outbox_scan_complete",
+            "continuations",
+            "input_continuations",
+            "quarantined_intents",
+        }
+        if not isinstance(coverage, Mapping) or set(coverage) != coverage_fields:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+        # The SDK's ExecutionScope account token is a separate internal key
+        # from Base AccountKey.account_key_id. Keep the trusted deployment key
+        # for AFI-side deduplication, but validate the service token on its own.
+        _text(coverage["account_key"], "INVALID_ACCOUNT_BOOK_COVERAGE")
+        for name in ("scope_directory_revision", "journal_generation"):
+            _text(coverage[name], "INVALID_ACCOUNT_BOOK_COVERAGE")
+        for name in (
+            "baseline_execution_cursor",
+            "current_execution_cursor",
+            "scanned_outbox_events",
+        ):
+            if type(coverage[name]) is not int or coverage[name] < 0:
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+        if coverage["baseline_execution_cursor"] > coverage["current_execution_cursor"]:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+        if any(
+            type(coverage[name]) is not bool
+            for name in ("complete", "outbox_history_contiguous", "outbox_scan_complete")
+        ):
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+        if type(coverage["reasons"]) is not tuple or any(
+            type(reason) is not str for reason in coverage["reasons"]
+        ):
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+        for name in ("continuations", "input_continuations", "quarantined_intents"):
+            if type(coverage[name]) is not tuple:
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+
+        books = projection["books"]
+        if type(books) is not tuple:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        owner_keys: set[tuple[str, str]] = set()
+        for book in books:
+            if not isinstance(book, Mapping) or set(book) != {
+                "owner_kind",
+                "owner_ref",
+                "current_positions",
+                "fees_since_baseline",
+            }:
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+            owner_kind = book["owner_kind"]
+            if owner_kind not in {"STRATEGY", "MANUAL_BOOK", "UNALLOCATED"}:
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+            owner_ref = _text(book["owner_ref"], "INVALID_ACCOUNT_BOOK_REPLY")
+            owner_key = (owner_kind, owner_ref)
+            if owner_key in owner_keys:
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+            owner_keys.add(owner_key)
+            positions = book["current_positions"]
+            fees = book["fees_since_baseline"]
+            if type(positions) is not tuple or type(fees) is not tuple:
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+            if any(
+                not isinstance(item, Mapping)
+                or set(item) != {"instrument", "net_quantity"}
+                or type(item["instrument"]) is not str
+                or type(item["net_quantity"]) is not str
+                for item in positions
+            ):
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+            if any(
+                not isinstance(item, Mapping)
+                or set(item) != {"currency", "amount"}
+                or type(item["currency"]) is not str
+                or type(item["amount"]) is not str
+                for item in fees
+            ):
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+
+        for name in ("provider_position_change", "position_residual"):
+            items = projection[name]
+            if type(items) is not tuple or any(
+                not isinstance(item, Mapping)
+                or set(item) != {"instrument", "net_quantity"}
+                or type(item["instrument"]) is not str
+                or type(item["net_quantity"]) is not str
+                for item in items
+            ):
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        fees = projection["fee_residual"]
+        if type(fees) is not tuple or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"currency", "amount"}
+            or type(item["currency"]) is not str
+            or type(item["amount"]) is not str
+            for item in fees
+        ):
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        for name in ("managed_orders", "managed_fills", "external_orders", "external_fills"):
+            if type(projection[name]) is not tuple or any(
+                not isinstance(item, Mapping) for item in projection[name]
+            ):
+                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        object.__setattr__(self, "projection", projection)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a detached JSON-compatible copy for the HTTP projection."""
+
+        return _thaw_json(self.projection)
 
 
 class ReadQuality(str, Enum):

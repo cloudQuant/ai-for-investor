@@ -23,7 +23,11 @@ from app.schemas.portfolio_composition import PortfolioCompositionCreate
 from app.services.asset_research.data import canonical_json_hash
 from app.services.portfolio_import_source import verify_portfolio_import_source
 from app.services.service_read.client import ServiceReadUnavailableError
-from app.services.service_read.contracts import AccountReadView, ReadQuality
+from app.services.service_read.contracts import (
+    AccountBookReadView,
+    AccountReadView,
+    ReadQuality,
+)
 
 
 class PortfolioCompositionService:
@@ -185,15 +189,31 @@ class PortfolioCompositionService:
                 },
             }
 
+        return await self._project_live_source(current_user, row, base)
+
+    async def _project_live_source(
+        self,
+        current_user: TokenPayload,
+        row: PortfolioCompositionVersion,
+        base: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Project provider totals separately from trusted execution owner books."""
+
         account_members = [member for member in row.members if member["kind"] == "account"]
+        selected_account_refs = {member["ref"] for member in account_members}
+        account_access_by_ref = {
+            member["ref"]: _resolve_access(current_user, member["ref"], "account_member")
+            for member in account_members
+        }
+        subject_access = next(iter(account_access_by_ref.values()), None)
         reads: list[tuple[str, AccountReadView | None, str | None]] = []
         for member in account_members:
+            account_ref = member["ref"]
+            access = account_access_by_ref[account_ref]
+            if account_ref not in access.allow_account_refs:
+                continue
             try:
-                access = _resolve_access(current_user, member["ref"], "account")
-            except HTTPException:
-                raise
-            try:
-                view = await access.worker.read_account(member["ref"], currency=row.base_currency)
+                view = await access.worker.read_account(account_ref, currency=row.base_currency)
             except ServiceReadUnavailableError as error:
                 if error.code in {
                     "CAPABILITY_UNAVAILABLE",
@@ -219,39 +239,199 @@ class PortfolioCompositionService:
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail={"code": "SERVICE_READ_FAILED"},
                 ) from None
-            if type(view) is not AccountReadView:
+            if type(view) is not AccountReadView or view.account_ref != account_ref:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail={"code": "SERVICE_READ_CONTRACT_INVALID"},
                 )
-            if view.account_ref != member["ref"]:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={"code": "SERVICE_READ_CONTRACT_INVALID"},
-                )
-            identity = _verified_account_key_id(view)
-            reads.append((member["ref"], view, identity))
+            reads.append((account_ref, view, _verified_account_key_id(view)))
 
         account_rows, account_total = _project_account_total(reads, row.base_currency)
         account_facts_complete = account_total["status"] == "current"
-        strategy_count = sum(member["kind"] == "strategy" for member in row.members)
-        attribution_complete = strategy_count == 0
-        if not account_facts_complete:
-            coverage_code = "ACCOUNT_FACT_COVERAGE_INCOMPLETE"
-        elif not attribution_complete:
-            coverage_code = "EXECUTION_ATTRIBUTION_NOT_COLLECTED"
+        strategy_members = [member for member in row.members if member["kind"] == "strategy"]
+        strategy_rows = _strategy_views(row.members)
+        strategy_row_by_ref = {item["strategy_ref"]: item for item in strategy_rows}
+        book_views: dict[str, AccountBookReadView] = {}
+        book_sources: dict[str, dict[str, Any]] = {}
+        complete_strategy_refs: set[str] = set()
+        mapped_strategy_count = 0
+
+        for member in strategy_members:
+            strategy_ref = member["ref"]
+            strategy_row = strategy_row_by_ref[strategy_ref]
+            binding = (
+                subject_access.strategy_book_bindings.get(strategy_ref)
+                if subject_access is not None
+                else None
+            )
+            if binding is None:
+                # Older deployments may not yet map this display selector to
+                # an execution owner. Keep it explicitly uncollected.
+                continue
+            mapped_strategy_count += 1
+            account_ref = binding.account_ref
+            if account_ref not in selected_account_refs:
+                strategy_row.update(
+                    {
+                        "attribution_status": "account_member_not_selected",
+                        "account_ref": account_ref,
+                        "positions": None,
+                        "fees_since_baseline": None,
+                    }
+                )
+                continue
+
+            access = account_access_by_ref[account_ref]
+            if account_ref not in access.allow_account_book_refs:
+                strategy_row.update(
+                    {
+                        "attribution_status": "account_book_not_granted",
+                        "account_ref": account_ref,
+                        "positions": None,
+                        "fees_since_baseline": None,
+                    }
+                )
+                continue
+
+            view = book_views.get(account_ref)
+            if view is None:
+                try:
+                    view = await access.worker.read_account_book(account_ref)
+                except ServiceReadUnavailableError as error:
+                    if error.code in {
+                        "CAPABILITY_UNAVAILABLE",
+                        "DENIED",
+                        "DUPLICATE_ACTIVE_RUN",
+                        "NOT_REGISTERED",
+                        "POLICY_REQUIREMENT_UNMET",
+                        "SCOPE_DENIED",
+                        "STALE_EPOCH",
+                        "ACCOUNT_BOOK_NOT_CONFIGURED",
+                        "ACCOUNT_NOT_CONFIGURED",
+                        "SCOPE_NOT_CONFIGURED",
+                    }:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail={"code": "SERVICE_READ_ACCESS_DENIED"},
+                        ) from None
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail={"code": "SERVICE_READ_FAILED"},
+                    ) from None
+                except Exception:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail={"code": "SERVICE_READ_FAILED"},
+                    ) from None
+                if type(view) is not AccountBookReadView or view.account_ref != account_ref:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail={"code": "SERVICE_READ_CONTRACT_INVALID"},
+                    )
+                book_views[account_ref] = view
+
+                source = view.to_dict()
+                coverage = source["coverage"]
+                coverage.pop("account_key", None)
+                book_sources[view.account_key_id] = {
+                    "account_ref": account_ref,
+                    "state": source["state"],
+                    "coverage": coverage,
+                    "provider_position_change": source["provider_position_change"],
+                    "position_residual": source["position_residual"],
+                    "fee_residual": source["fee_residual"],
+                }
+
+            source = view.to_dict()
+            source["coverage"].pop("account_key", None)
+            owner_book = next(
+                (
+                    item
+                    for item in source["books"]
+                    if item["owner_kind"] == "STRATEGY" and item["owner_ref"] == binding.owner_ref
+                ),
+                None,
+            )
+            if owner_book is None:
+                strategy_row.update(
+                    {
+                        "attribution_status": "owner_not_in_directory",
+                        "account_ref": account_ref,
+                        "source_cursor": source["coverage"]["current_execution_cursor"],
+                        "positions": None,
+                        "fees_since_baseline": None,
+                    }
+                )
+                continue
+
+            source_complete = (
+                source["coverage"]["complete"] is True and source["state"] == "BALANCED"
+            )
+            if source_complete:
+                complete_strategy_refs.add(strategy_ref)
+            strategy_row.update(
+                {
+                    "attribution_status": (
+                        "available" if source_complete else "available_with_residuals"
+                    ),
+                    "account_ref": account_ref,
+                    "source_cursor": source["coverage"]["current_execution_cursor"],
+                    "source_state": source["state"],
+                    "positions": owner_book["current_positions"],
+                    "fees_since_baseline": owner_book["fees_since_baseline"],
+                    "attributed_value": None,
+                }
+            )
+
+        strategy_count = len(strategy_members)
+        attribution_complete = strategy_count == 0 or (
+            mapped_strategy_count == strategy_count
+            and complete_strategy_refs == {member["ref"] for member in strategy_members}
+        )
+        if mapped_strategy_count == 0:
+            attribution = _unavailable_attribution(
+                account_total["value"] if account_facts_complete else None,
+                strategy_count,
+            )
+            coverage_code = (
+                "ACCOUNT_FACT_COVERAGE_INCOMPLETE"
+                if not account_facts_complete
+                else "EXECUTION_ATTRIBUTION_NOT_COLLECTED"
+                if strategy_count
+                else None
+            )
         else:
-            coverage_code = None
+            attribution = {
+                "status": (
+                    "execution_account_books_current"
+                    if attribution_complete
+                    else "execution_account_books_partial"
+                ),
+                "strategy_count": strategy_count,
+                "mapped_strategy_count": mapped_strategy_count,
+                "attributed_value": None,
+                "unattributed_account_value": None,
+                "residual_basis": (
+                    "Execution owner-book positions and fees only; "
+                    "cash, account value, and FX are not calculated"
+                ),
+            }
+            if not account_facts_complete and not attribution_complete:
+                coverage_code = "ACCOUNT_AND_EXECUTION_COVERAGE_INCOMPLETE"
+            elif not account_facts_complete:
+                coverage_code = "ACCOUNT_FACT_COVERAGE_INCOMPLETE"
+            elif not attribution_complete:
+                coverage_code = "EXECUTION_ACCOUNT_BOOK_COVERAGE_INCOMPLETE"
+            else:
+                coverage_code = None
         return {
             **base,
             "source_status": "projected" if account_members else "no_account_members",
             "accounts": account_rows,
-            "strategies": _strategy_views(row.members),
+            "strategies": strategy_rows,
+            "account_book_sources": list(book_sources.values()),
             "account_total": account_total,
-            "strategy_attribution": _unavailable_attribution(
-                account_total["value"] if account_facts_complete else None,
-                strategy_count,
-            ),
+            "strategy_attribution": attribution,
             "coverage": {
                 "complete": account_facts_complete and attribution_complete,
                 "account_facts_complete": account_facts_complete,
