@@ -79,6 +79,27 @@ def _deny_cmd_autorun(event: str, audit_args: tuple[Any, ...]) -> None:
 
 sys.addaudithook(_deny_cmd_autorun)
 
+
+def _deny_environment_file_read(event: str, audit_args: tuple[Any, ...]) -> None:
+    """Keep deployment and spawned ServiceHost imports away from dotenv files."""
+
+    if event != "open" or not audit_args:
+        return
+    path = audit_args[0]
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        return
+    normalized = os.fsdecode(path).replace("\\", "/")
+    if any(
+        part.casefold() == ".slowapi.env"
+        or part.casefold() == ".env"
+        or part.casefold().startswith(".env.")
+        for part in normalized.split("/")
+    ):
+        raise PermissionError("dotenv reads are disabled by the service-read integration test")
+
+
+sys.addaudithook(_deny_environment_file_read)
+
 # app/__init__.py eagerly imports application modules and initializes settings.
 # Constrain BaseSettings' dotenv input and temporarily expose only synthetic
 # settings while those real modules load; no repository/user .env or ambient
@@ -888,5 +909,370 @@ def test_authorized_http_reads_use_per_subject_owner_threads_and_service_grants(
     _COMMAND_GUARD_STATE["active"] = True
     try:
         _run_authorized_http_integration(tmp_path, monkeypatch)
+    finally:
+        _COMMAND_GUARD_STATE["active"] = False
+
+
+def _default_order_read_profile(
+    *,
+    endpoint: str,
+    subject: str,
+    identity: WireIdentity,
+    account_ref: str,
+    scope_ref: str,
+    scope: WireScope,
+    security_ref: str,
+    keys: dict[str, bytes],
+) -> dict[str, Any]:
+    """Return deployment-owned config for one synthetic read-only subject."""
+
+    client_config = _order._client_config(
+        endpoint,
+        "application_client",
+        security_ref,
+        application=identity.actor_ref,
+    )
+    binding = client_config["clients"]["execution"]["settings"]["bindings"][0]
+    binding["scope_ref"] = scope_ref
+    binding["account_ref"] = account_ref
+    return {
+        "subject": subject,
+        "identity": {
+            "principal_ref": identity.principal_ref,
+            "actor_ref": identity.actor_ref,
+            "delegate_ref": identity.delegate_ref,
+        },
+        "client_config": client_config,
+        "scope_claims": {
+            scope_ref: {
+                "execution_domain_ref": scope.execution_domain_ref,
+                "account_ref": scope.account_ref,
+                "strategy_ref": scope.strategy_ref,
+            }
+        },
+        "peer_identities": {
+            _SERVICE_ID: {"principal_ref": _SERVICE_PRINCIPAL, "actor_ref": _SERVICE_ID}
+        },
+        "curve_keys": {
+            security_ref: {
+                "server_key": keys["server_public"].decode("ascii"),
+                "public_key": keys["application_public"].decode("ascii"),
+                "secret_key": keys["application_secret"].decode("ascii"),
+            }
+        },
+        "grants": {
+            "account_refs": [],
+            "order_scope_refs": [scope_ref],
+            "monitor_scope_refs": [],
+        },
+        "account_bindings": {},
+        "order_bindings": {scope_ref: {"mount": "application.order_query"}},
+        "monitor_bindings": {},
+        "worker": {"max_queue_size": 8, "maintenance_interval_seconds": 30.0},
+    }
+
+
+def _close_default_deployment_service_host(host: dict[str, Any]) -> None:
+    """Attempt graceful close, join, pipe close, and process close on every path."""
+
+    process = host["process"]
+    pipe = host["pipe"]
+    failures: list[BaseException] = []
+    if process.is_alive():
+        try:
+            pipe.send(("close",))
+            closed = _order._receive(pipe, timeout=10.0)
+            assert closed[0] == "closed", closed
+        except BaseException as error:
+            failures.append(error)
+
+    try:
+        process.join(10.0)
+    except BaseException as error:
+        failures.append(error)
+
+    try:
+        alive = process.is_alive()
+        if alive:
+            try:
+                process.terminate()
+                process.join(10.0)
+            except BaseException as error:
+                failures.append(error)
+            if process.is_alive():
+                failures.append(AssertionError("synthetic execution service did not exit"))
+        exit_code = process.exitcode
+    except BaseException as error:
+        failures.append(error)
+        exit_code = None
+
+    try:
+        pipe.close()
+    except BaseException as error:
+        failures.append(error)
+    try:
+        process.close()
+    except BaseException as error:
+        failures.append(error)
+
+    if exit_code != 0:
+        failures.append(AssertionError(f"synthetic execution service exit code was {exit_code!r}"))
+    if failures:
+        raise AssertionError(
+            f"synthetic ServiceHost cleanup had {len(failures)} failure(s)"
+        ) from failures[0]
+
+
+def _run_default_deployment_lifespan_integration(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise trusted deployment JSON through the real app, workers, SDK, and ServiceHost."""
+
+    import json
+
+    import httpx
+    from bt_api_py.service_execution import ServiceExecutionClient
+    from pydantic import SecretStr
+
+    import app.main as main_module
+    from app.api.service_read import configure_service_read
+    from app.utils import security
+
+    monkeypatch.setattr(
+        security,
+        "settings",
+        SimpleNamespace(JWT_SECRET_KEY=_JWT_SECRET, JWT_ALGORITHM=_JWT_ALGORITHM),
+    )
+
+    async def _no_startup(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    class _NoopShutdownManager:
+        async def initiate(self, _app: Any) -> None:
+            return None
+
+    import app.services.quote_service as quote_service
+
+    monkeypatch.setattr(main_module, "run_startup", _no_startup)
+    monkeypatch.setattr(main_module, "run_shutdown", _no_startup)
+    monkeypatch.setattr(main_module, "GracefulShutdownManager", _NoopShutdownManager)
+    monkeypatch.setattr(main_module.settings, "RAG_VECTOR_ENABLED", False)
+    monkeypatch.setattr(
+        quote_service,
+        "get_quote_service",
+        lambda: SimpleNamespace(shutdown=lambda: None),
+    )
+
+    context = multiprocessing.get_context("spawn")
+    endpoint = _order._endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    keypairs = {name: zmq.curve_keypair() for name in ("strategy_a", "strategy_b", "application")}
+    keys: dict[str, bytes] = {"server_public": server_public, "server_secret": server_secret}
+    for name, (public_key, secret_key) in keypairs.items():
+        keys[f"{name}_public"] = public_key
+        keys[f"{name}_secret"] = secret_key
+    service_keys = {
+        key: value
+        for key, value in keys.items()
+        if key.endswith("_public") or key == "server_secret"
+    }
+
+    host = None
+    producer_runtimes: list[Any] = []
+    deployment = None
+    owner_threads: tuple[threading.Thread, ...] = ()
+    app = main_module.app
+    main_thread = threading.current_thread()
+    configure_service_read(None)
+    try:
+        host = _order._start_process(
+            context,
+            _multiuser_service_process,
+            (
+                _order._service_config(endpoint),
+                str(tmp_path / "afi-default-deployment-registry.sqlite3"),
+                service_keys,
+                str(tmp_path / "afi-default-deployment-execution.sqlite3"),
+            ),
+            "afi-default-deployment-execution-host",
+        )
+        assert host["process"].name == "afi-default-deployment-execution-host"
+        assert endpoint.startswith("tcp://127.0.0.1:")
+        ready = _order._receive(host["pipe"], timeout=20.0)
+        assert ready[0] == "ready", ready
+        assert host["process"].is_alive()
+
+        strategy_profiles = (
+            (
+                "strategy_a",
+                _STRATEGY_A_PRINCIPAL,
+                _STRATEGY_A,
+                _ENTRY_SCOPE_A,
+                _SCOPE_A,
+                "afi-strategy-a-curve-v1",
+                _INTENT_A,
+                "signal-user-a",
+            ),
+            (
+                "strategy_b",
+                _STRATEGY_B_PRINCIPAL,
+                _STRATEGY_B,
+                _ENTRY_SCOPE_B,
+                _SCOPE_B,
+                "afi-strategy-b-curve-v1",
+                _INTENT_B,
+                "signal-user-b",
+            ),
+        )
+        for (
+            key_name,
+            principal,
+            actor,
+            scope_ref,
+            scope,
+            security_ref,
+            intent,
+            signal,
+        ) in strategy_profiles:
+            identity = WireIdentity(WireRole.STRATEGY_CLIENT, principal, actor)
+            runtime = _new_runtime(
+                endpoint,
+                role="strategy_client",
+                security_ref=security_ref,
+                keys={
+                    **keys,
+                    f"{security_ref}_public": keys[f"{key_name}_public"],
+                    f"{security_ref}_secret": keys[f"{key_name}_secret"],
+                },
+                identity=identity,
+                scope_ref=scope_ref,
+                scope=scope,
+            )
+            producer_runtimes.append(runtime)
+            assert runtime.start().degraded_count == 0
+            submitter = ServiceExecutionClient(runtime, "broker.orders", scope_ref=scope_ref)
+            _order._submit(submitter, intent, signal, "1")
+
+        profiles = [
+            _default_order_read_profile(
+                endpoint=endpoint,
+                subject=subject,
+                identity=identity,
+                account_ref=account_ref,
+                scope_ref=scope_ref,
+                scope=scope,
+                security_ref=f"afi-{subject}-dashboard-curve-v1",
+                keys=keys,
+            )
+            for subject, identity, account_ref, scope_ref, scope in (
+                (_SUBJECT_A, _APPLICATION_IDENTITY_A, _ACCOUNT_A, _QUERY_SCOPE_A, _SCOPE_A),
+                (_SUBJECT_B, _APPLICATION_IDENTITY_B, _ACCOUNT_B, _QUERY_SCOPE_B, _SCOPE_B),
+            )
+        ]
+        deployment_config = json.dumps({"schema_version": 1, "subjects": profiles})
+        monkeypatch.setattr(
+            main_module.settings,
+            "SERVICE_READ_DEPLOYMENT_JSON",
+            SecretStr(deployment_config),
+        )
+
+        async def _exercise_http() -> None:
+            nonlocal deployment, owner_threads
+            async with main_module.lifespan(app):
+                deployment = app.state.service_read_deployment
+                assert deployment is not None
+                workers = deployment._workers
+                assert len(workers) == 2
+                owner_threads = tuple(worker._thread for worker in workers)
+                assert all(thread is not None and thread.is_alive() for thread in owner_threads)
+                assert len({thread.ident for thread in owner_threads}) == 2
+                assert all(thread is not main_thread for thread in owner_threads)
+
+                token_a = _make_token(_SUBJECT_A, _JWT_SECRET)
+                token_b = _make_token(_SUBJECT_B, _JWT_SECRET)
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://service-read.default-deployment.test",
+                ) as client:
+                    own_a = await client.get(
+                        f"/api/v1/service-read/orders/{_INTENT_A}",
+                        params={"scope_ref": _QUERY_SCOPE_A, "sub": _SUBJECT_B},
+                        headers={
+                            "Authorization": f"Bearer {token_a}",
+                            "X-User-Id": _SUBJECT_B,
+                        },
+                    )
+                    own_b = await client.get(
+                        f"/api/v1/service-read/orders/{_INTENT_B}",
+                        params={"scope_ref": _QUERY_SCOPE_B},
+                        headers={"Authorization": f"Bearer {token_b}"},
+                    )
+                    assert own_a.status_code == own_b.status_code == 200
+                    assert own_a.json()["intent_id"] == _INTENT_A
+                    assert own_a.json()["state"] == "ACKED"
+                    assert own_a.json()["provider_order_id"] == "provider-order-1"
+                    assert own_b.json()["intent_id"] == _INTENT_B
+                    assert own_b.json()["state"] == "ACKED"
+                    assert own_b.json()["provider_order_id"] == "provider-order-2"
+
+                    denied_a_on_b = await client.get(
+                        f"/api/v1/service-read/orders/{_INTENT_B}",
+                        params={"scope_ref": _QUERY_SCOPE_B},
+                        headers={"Authorization": f"Bearer {token_a}"},
+                    )
+                    denied_a_scope_b = await client.get(
+                        f"/api/v1/service-read/orders/{_INTENT_A}",
+                        params={"scope_ref": _QUERY_SCOPE_B},
+                        headers={"Authorization": f"Bearer {token_a}"},
+                    )
+                    denied_b_scope_a = await client.get(
+                        f"/api/v1/service-read/orders/{_INTENT_A}",
+                        params={"scope_ref": _QUERY_SCOPE_A},
+                        headers={"Authorization": f"Bearer {token_b}"},
+                    )
+                    for denied_response in (denied_a_on_b, denied_a_scope_b, denied_b_scope_a):
+                        assert denied_response.status_code == 403
+                        denied_payload = denied_response.json()
+                        assert denied_payload["error"] == "HTTP_403"
+                        assert denied_payload["details"]["code"] == "SERVICE_READ_ACCESS_DENIED"
+
+            assert deployment is not None and deployment.closed
+            assert deployment.close_failures == ()
+            assert app.state.service_read_deployment is None
+            assert all(not thread.is_alive() for thread in owner_threads)
+            assert all(not worker._close_failed for worker in deployment._workers)
+
+        asyncio.run(_exercise_http())
+        counts = _order._command(host, "counts")
+        assert counts[1] == (_INTENT_A, _INTENT_B)
+        assert counts[2] == (_INTENT_A, _INTENT_B)
+    finally:
+        try:
+            configure_service_read(None)
+        finally:
+            runtime_close_errors: list[BaseException] = []
+            try:
+                for runtime in reversed(producer_runtimes):
+                    try:
+                        _close_runtime(runtime)
+                    except BaseException as error:
+                        runtime_close_errors.append(error)
+            finally:
+                if host is not None:
+                    _close_default_deployment_service_host(host)
+            if runtime_close_errors:
+                raise AssertionError(
+                    f"{len(runtime_close_errors)} synthetic producer runtime(s) failed to close"
+                ) from runtime_close_errors[0]
+
+
+def test_default_deployment_lifespan_uses_production_sdk_workers_and_enforces_subject_grants(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the default production composition with synthetic loopback services only."""
+
+    _COMMAND_GUARD_STATE["active"] = True
+    try:
+        _run_default_deployment_lifespan_integration(tmp_path, monkeypatch)
     finally:
         _COMMAND_GUARD_STATE["active"] = False
