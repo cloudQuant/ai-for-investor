@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -1088,6 +1089,421 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
                         )
                     )
 
+            if cleanup_errors:
+                cleanup_error = AssertionError(
+                    "Risk Host cleanup diagnostics: " + ";".join(cleanup_errors)
+                )
+                if primary_error is not None:
+                    raise primary_error.with_traceback(primary_traceback) from cleanup_error
+                raise cleanup_error
+
+
+def _v1_facts(
+    member_ref: str,
+    *,
+    snapshot_suffix: str,
+    flow_complete: bool = True,
+    flow_count: int = 1,
+) -> dict[str, Any]:
+    start_date = "2026-01-01"
+    end_date = "2026-01-11"
+    start_ns = _day_end_ns(start_date)
+    end_ns = _day_end_ns(end_date)
+    contribution_ns = _day_end_ns("2026-01-06")
+    source_generation = "offline-generation-v1"
+    flow_source = "offline-external-flows"
+    member_refs = [member_ref]
+    membership_body = {
+        "effective_end_date_utc_exclusive": None,
+        "effective_start_date_utc": "2025-01-01",
+        "member_refs": member_refs,
+        "membership_version": 1,
+        "portfolio_ref": _PORTFOLIO,
+        "source_ref": "offline-membership-v1",
+        "source_version": "offline-membership-v1",
+    }
+    membership_digest_body = {**membership_body, "version": 1}
+    membership = {
+        **membership_body,
+        "content_sha256": _canonical_sha256(membership_digest_body),
+    }
+
+    def point(day: str, as_of_ns: int, amount: str, tag: str) -> dict[str, Any]:
+        return {
+            "as_of_ns": as_of_ns,
+            "cash_balances": [
+                {
+                    "amount": amount,
+                    "balance_ref": f"cash-{tag}",
+                    "currency": "USD",
+                    "member_ref": member_ref,
+                }
+            ],
+            "covered_asset_classes": ["cash", "spot"],
+            "covered_member_refs": member_refs,
+            "coverage_complete": True,
+            "snapshot_ref": f"offline-{tag}-cut-v1",
+            "source_cursor": f"offline-{tag}-cursor-v1",
+            "source_generation": source_generation,
+            "spot_positions": [],
+            "valuation_cut_policy": "UTC_CALENDAR_DAY_END_V1",
+            "valuation_date_utc": day,
+        }
+
+    flows = [
+        {
+            "amount": "20" if index == 0 else "1",
+            "currency": "USD",
+            "direction": "CONTRIBUTION",
+            "effective_at_ns": contribution_ns,
+            "flow_ref": f"offline-flow-{index:05d}",
+            "source_cursor": f"offline-flow-cursor-{index:05d}",
+            "source_generation": source_generation,
+            "source_ref": flow_source,
+            "source_version": "offline-flow-v1",
+        }
+        for index in range(flow_count)
+    ]
+    return {
+        "beginning": point(start_date, start_ns, "100", "beginning"),
+        "ending": point(end_date, end_ns, "130", "ending"),
+        "external_flows": flows,
+        "facts_snapshot_ref": f"offline-facts-{snapshot_suffix}-v1",
+        "flow_coverage": {
+            "complete": flow_complete,
+            "end_as_of_ns": end_ns,
+            "end_cursor": "offline-flow-end-v1",
+            "source_generation": source_generation,
+            "source_ref": flow_source,
+            "source_version": "offline-flow-v1",
+            "start_as_of_ns": start_ns,
+            "start_cursor": "offline-flow-start-v1",
+        },
+        "fx_observations": [],
+        "membership": membership,
+        "portfolio_ref": _PORTFOLIO,
+        "source_generation": source_generation,
+        "source_mode": "imported",
+        "source_ref": "user-supplied-offline-import",
+        "source_version": "offline-facts-v1",
+        "valuation_basis_ref": "cash_spot_after_booked_internal_flows_v1",
+        "version": 1,
+    }
+
+
+def _day_end_ns(day_text: str) -> int:
+    day = datetime.fromisoformat(day_text).date()
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc).date()
+    return ((day - epoch).days + 1) * 86_400_000_000_000 - 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_risk_host(
+    client, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Exercise V1 upload, computed/unavailable reports, cancel, and normal cleanup."""
+
+    from pydantic import SecretStr
+
+    from app import main as main_module
+    from app.config import get_settings
+    from app.db import database as database_module
+    from app.db.database import async_session_maker
+    from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel
+    from app.services.portfolio_analytics_datasets_v1 import PortfolioAnalyticsDatasetV1Service
+    from app.utils.security import decode_access_token
+
+    assert main_module.settings is database_module.settings is get_settings()
+    monkeypatch.setattr(main_module.settings, "DB_AUTO_CREATE_SCHEMA", True)
+    claims = decode_access_token(auth_headers["Authorization"].split(" ", 1)[1])
+    assert type(claims) is dict and type(claims.get("sub")) is str
+    subject = claims["sub"]
+    subject_tag = hashlib.sha256(subject.encode("utf-8")).hexdigest()[:16]
+    principal_ref = f"afi04-user-{subject_tag}"
+    delegate_ref = f"afi04-delegate-{subject_tag}"
+
+    async with async_session_maker() as db:
+        db.add(
+            PortfolioLedgerModel(
+                id="afi04-v1-import-ledger",
+                owner_id=subject,
+                name="AFI04 V1 offline analytics source",
+                base_currency="USD",
+                source_type="imported",
+            )
+        )
+        db.add(
+            PortfolioLedgerImportModel(
+                id="afi04-v1-import-version",
+                portfolio_id="afi04-v1-import-ledger",
+                import_format="json",
+                idempotency_key="afi04-v1-offline-analytics",
+                imported_count=0,
+            )
+        )
+        await db.commit()
+
+    endpoint = _endpoint()
+    keys = _wire_keys()
+    paths = {name: tmp_path / f"{name}.json" for name in ("host-config", "deployment")}
+    markers = {
+        name: tmp_path / f"{name}.marker"
+        for name in ("host-ready", "host-stop", "host-closed", "host-failure")
+    }
+    host_config = {
+        "closed": str(markers["host-closed"]),
+        "database": str(tmp_path / "risk-v1-analysis.sqlite"),
+        "endpoint": endpoint,
+        "failure": str(markers["host-failure"]),
+        "keys": keys,
+        "principal_ref": principal_ref,
+        "delegate_ref": delegate_ref,
+        "ready": str(markers["host-ready"]),
+        "registry": str(tmp_path / "risk-v1-registry.sqlite"),
+        "stop": str(markers["host-stop"]),
+    }
+    paths["host-config"].write_text(json.dumps(host_config), encoding="utf-8")
+    paths["deployment"].write_text(
+        json.dumps(
+            {"schema_version": 1, "subjects": [_deployment_profile(subject, endpoint, keys)]}
+        ),
+        encoding="utf-8",
+    )
+
+    pythonpath = [str(_BACKEND_ROOT), *_sdk_import_roots()]
+    environment = {
+        name: os.environ[name]
+        for name in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP")
+        if name in os.environ
+    }
+    environment.update(
+        {
+            "PYTHONPATH": os.pathsep.join(dict.fromkeys(pythonpath)),
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPYCACHEPREFIX": str(tmp_path / "risk-v1-host-pycache"),
+            "BT_API_LOG_DIR": str(tmp_path / "risk-v1-host-logs"),
+        }
+    )
+    Path(environment["BT_API_LOG_DIR"]).mkdir(parents=True, exist_ok=True)
+    host_log = tmp_path / "risk-v1-host.log"
+    host_process: subprocess.Popen[bytes] | None = None
+    deployment = None
+    with host_log.open("wb") as host_log_stream:
+        host_process = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), "--risk-host", str(paths["host-config"])],
+            cwd=str(_BACKEND_ROOT),
+            env=environment,
+            stdout=host_log_stream,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            await asyncio.to_thread(
+                _wait_for_marker,
+                host_process,
+                markers["host-ready"],
+                markers["host-failure"],
+                20.0,
+            )
+            monkeypatch.setattr(
+                main_module.settings,
+                "SERVICE_READ_DEPLOYMENT_JSON",
+                SecretStr(paths["deployment"].read_text(encoding="utf-8")),
+            )
+            monkeypatch.setattr(main_module.settings, "RAG_VECTOR_ENABLED", False)
+
+            async with main_module.lifespan(main_module.app):
+                deployment = main_module.app.state.service_read_deployment
+                assert deployment is not None and not deployment.closed
+                created = await client.post(
+                    "/api/v1/portfolio/compositions",
+                    headers=auth_headers,
+                    json={
+                        "portfolio_ref": _PORTFOLIO,
+                        "source_type": "imported",
+                        "base_currency": "USD",
+                        "members": [
+                            {"kind": "imported_ledger", "ref": "afi04-v1-import-version"}
+                        ],
+                    },
+                )
+                assert created.status_code == 201, created.text
+                membership = created.json()
+                v1_base = (
+                    f"/api/v1/portfolio/compositions/{_PORTFOLIO}/versions/"
+                    f"{membership['membership_version']}"
+                )
+                member_ref = PortfolioAnalyticsDatasetV1Service.analytics_member_ref(
+                    "imported_ledger", "afi04-v1-import-version"
+                )
+
+                async def import_dataset(
+                    suffix: str, *, flow_complete: bool = True, flow_count: int = 1
+                ) -> dict[str, Any]:
+                    response = await client.post(
+                        f"{v1_base}/analytics-v1-datasets",
+                        headers=auth_headers,
+                        json={
+                            "idempotency_key": f"afi04-v1-dataset-{suffix}",
+                            "source_trust": "USER_SUPPLIED_OFFLINE",
+                            "facts": _v1_facts(
+                                member_ref,
+                                snapshot_suffix=suffix,
+                                flow_complete=flow_complete,
+                                flow_count=flow_count,
+                            ),
+                        },
+                    )
+                    assert response.status_code == 201, response.text
+                    body = response.json()
+                    assert body["source_trust"] == "USER_SUPPLIED_OFFLINE"
+                    assert body["source_type"] == "imported"
+                    assert body["membership_sha256"] == membership["membership_sha256"]
+                    assert body["facts_sha256"] == _canonical_sha256(
+                        _v1_facts(
+                            member_ref,
+                            snapshot_suffix=suffix,
+                            flow_complete=flow_complete,
+                            flow_count=flow_count,
+                        )
+                    )
+                    assert "facts" not in body and "scope_ref" not in body
+                    return body
+
+                async def submit(dataset: dict[str, Any], suffix: str) -> dict[str, Any]:
+                    response = await client.post(
+                        f"{v1_base}/analytics-v1-tasks",
+                        headers=auth_headers,
+                        json={
+                            "dataset_ref": dataset["dataset_ref"],
+                            "idempotency_key": f"afi04-v1-task-{suffix}",
+                            "request": {
+                                "period_start_date_utc": "2026-01-01",
+                                "period_end_date_utc": "2026-01-11",
+                                "reporting_currency": "USD",
+                            },
+                        },
+                    )
+                    assert response.status_code == 202, response.text
+                    return response.json()
+
+                available_dataset = await import_dataset("available")
+                available_task = await submit(available_dataset, "available")
+                available = await _query_terminal(
+                    client,
+                    auth_headers,
+                    f"{v1_base}/analytics-v1-tasks/{available_task['task_ref']}",
+                )
+                assert available["state"] == "succeeded"
+                assert available["source_trust"] == "USER_SUPPLIED_OFFLINE"
+                assert available["membership_sha256"] == membership["membership_sha256"]
+                assert available["input_sha256"] == available_dataset["facts_sha256"]
+                assert "scope_ref" not in available
+                report = available["result"]
+                assert report["version"] == 1
+                assert report["status"] == "AVAILABLE"
+                assert report["source"] == {
+                    "generation": "offline-generation-v1",
+                    "mode": "imported",
+                    "source_ref": "user-supplied-offline-import",
+                    "source_version": "offline-facts-v1",
+                }
+                assert report["beginning"]["nav"] == "100"
+                assert report["ending"]["nav"] == "130"
+                assert report["external_cashflow_net"] == "20"
+                assert report["return_ratio"] == "0.090909090909090909"
+                assert report["input_sha256"] is not None
+                assert re.fullmatch(r"[0-9a-f]{64}", report["input_sha256"])
+                assert report["input_sha256"] != available["input_sha256"]
+
+                unavailable_dataset = await import_dataset(
+                    "unavailable", flow_complete=False
+                )
+                unavailable_task = await submit(unavailable_dataset, "unavailable")
+                unavailable = await _query_terminal(
+                    client,
+                    auth_headers,
+                    f"{v1_base}/analytics-v1-tasks/{unavailable_task['task_ref']}",
+                )
+                assert unavailable["state"] == "unavailable"
+                assert unavailable["detail_code"] == "EXTERNAL_FLOW_COVERAGE_INCOMPLETE"
+                unavailable_report = unavailable["result"]
+                assert unavailable_report["status"] == "UNAVAILABLE"
+                assert unavailable_report["return_ratio"] is None
+                assert unavailable_report["beginning"]["nav"] is None
+                assert unavailable_report["ending"]["nav"] is None
+                assert unavailable_report["external_cashflow_net"] is None
+
+                cancellation_dataset = await import_dataset(
+                    "cancel", flow_count=2_500
+                )
+                cancellation_task = await submit(cancellation_dataset, "cancel")
+                cancellation_path = (
+                    f"{v1_base}/analytics-v1-tasks/{cancellation_task['task_ref']}"
+                )
+                running = await _query_running(client, auth_headers, cancellation_path)
+                assert running["state"] == "running"
+                cancelled = await client.post(
+                    f"{cancellation_path}/cancel", headers=auth_headers
+                )
+                assert cancelled.status_code == 200, cancelled.text
+                assert cancelled.json()["state"] == "cancelled"
+                queried_cancelled = await client.get(cancellation_path, headers=auth_headers)
+                assert queried_cancelled.status_code == 200, queried_cancelled.text
+                assert queried_cancelled.json()["state"] == "cancelled"
+
+            assert deployment is not None and deployment.closed
+            assert deployment.close_failures == ()
+            assert main_module.app.state.service_read_deployment is None
+        finally:
+            primary_error = sys.exc_info()[1]
+            primary_traceback = (
+                primary_error.__traceback__ if primary_error is not None else None
+            )
+            cleanup_errors: list[str] = []
+            if host_process is not None:
+                try:
+                    markers["host-stop"].touch()
+                except BaseException as error:
+                    cleanup_errors.append(f"stop_marker:{type(error).__name__}")
+                try:
+                    await asyncio.to_thread(host_process.wait, timeout=20.0)
+                except subprocess.TimeoutExpired:
+                    cleanup_errors.append("graceful_wait_timeout")
+                except BaseException as error:
+                    cleanup_errors.append(f"graceful_wait:{type(error).__name__}")
+                if host_process.returncode is None:
+                    cleanup_errors.append("forced_termination_after_wait_failure")
+                    try:
+                        host_process.terminate()
+                    except BaseException as error:
+                        cleanup_errors.append(f"terminate:{type(error).__name__}")
+                    try:
+                        await asyncio.to_thread(host_process.wait, timeout=5.0)
+                    except subprocess.TimeoutExpired:
+                        cleanup_errors.append("terminate_wait_timeout")
+                        try:
+                            host_process.kill()
+                            await asyncio.to_thread(host_process.wait, timeout=5.0)
+                        except BaseException as error:
+                            cleanup_errors.append(f"kill_or_reap:{type(error).__name__}")
+                        else:
+                            cleanup_errors.append("killed_after_terminate_timeout")
+                    except BaseException as error:
+                        cleanup_errors.append(f"terminate_wait:{type(error).__name__}")
+                if host_process.returncode != 0:
+                    cleanup_errors.append(f"host_returncode:{host_process.returncode}")
+                if not markers["host-closed"].is_file():
+                    cleanup_errors.append("host_closed_marker_missing")
+                if markers["host-failure"].is_file():
+                    failure_detail = _read_child_failure(markers["host-failure"])
+                    cleanup_errors.append(
+                        "host_failure:"
+                        + json.dumps(failure_detail, sort_keys=True, separators=(",", ":"))
+                    )
             if cleanup_errors:
                 cleanup_error = AssertionError(
                     "Risk Host cleanup diagnostics: " + ";".join(cleanup_errors)

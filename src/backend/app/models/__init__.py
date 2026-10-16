@@ -137,6 +137,7 @@ from app.models.paper_trading import Account, Order, PaperTrade, Position
 from app.models.legacy_paper_cutover import LegacyPaperCutoverReceipt, LegacyPaperWriterLease
 from app.models.permission import Permission, Role, user_roles
 from app.models.portfolio_composition import PortfolioCompositionVersion
+from app.models.portfolio_analytics_dataset import PortfolioAnalyticsDatasetV1
 from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
 from app.models.service_order_operation import ServiceOrderOperation
 from app.models.strategy_target_approval import (
@@ -293,6 +294,7 @@ __all__ = [
     "Permission",
     "Position",
     "PortfolioCompositionVersion",
+    "PortfolioAnalyticsDatasetV1",
     "ApprovedTargetHttpOperation",
     "ServiceOrderOperation",
     "StrategyTargetApproval",
