@@ -22,7 +22,90 @@ from app.schemas.ai_trading import (
     TradingIntent,
 )
 from app.services.ai_trading_service import AITradingService
+from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
+from app.services.service_read.contracts import AccountReadView, ReadQuality
 from app.services.trading_risk_guard import TradingRiskConfig, TradingRiskGuard
+
+
+def _service_account_view(
+    account_ref: str,
+    *,
+    value: str = "100000",
+    quality: ReadQuality = ReadQuality.FRESH,
+    positions: tuple[dict, ...] = (),
+    balances_complete: bool = True,
+    positions_complete: bool = True,
+) -> AccountReadView:
+    observed_at = "2026-10-17T00:00:00Z"
+    resource = {"product_type": "SWAP", "margin_pool": "default"}
+    account_key = {
+        "provider": "okx",
+        "venue": "OKX",
+        "environment": "live",
+        "account_id": "test-account",
+        "subaccount_id": None,
+    }
+    observation = {
+        "observation_id": "observation-test-1",
+        "coverage": (resource,),
+        "balances": (
+            {
+                "resource": resource,
+                "currency": "USDT",
+                "total": value,
+                "available": value,
+                "locked": "0",
+                "observed_at_utc": observed_at,
+            },
+        ),
+        "positions": positions,
+        "valuation": {
+            "currency": "USDT",
+            "available_cash": value,
+            "equity": value,
+            "observed_at_utc": observed_at,
+        },
+        "started_at_utc": observed_at,
+        "completed_at_utc": observed_at,
+        "consistency": "multi_query",
+        "balances_complete": balances_complete,
+        "positions_complete": positions_complete,
+    }
+    return AccountReadView(
+        account_ref=account_ref,
+        execution_domain_ref="live:OKX",
+        currency="USDT",
+        quality=quality,
+        session_generation="session-generation-test",
+        cash=value,
+        value=value,
+        observed_at_utc=observed_at,
+        received_age_seconds=0.0,
+        fresh_for_seconds=10.0 if quality is ReadQuality.FRESH else 0.0,
+        positions_count=len(positions),
+        open_orders_count=0,
+        account_key=account_key,
+        account_key_id="account-" + "0" * 64,
+        provider_observation=observation,
+    )
+
+
+class _StaticServiceReadWorker:
+    def __init__(self, view_or_error):
+        self.view_or_error = view_or_error
+        self.reads = []
+
+    async def read_account(self, account_ref):
+        self.reads.append(account_ref)
+        if isinstance(self.view_or_error, Exception):
+            raise self.view_or_error
+        return self.view_or_error
+
+    async def read_order(self, *_args, **_kwargs):
+        raise AssertionError("not used")
+
+    async def read_strategy_health(self, *_args, **_kwargs):
+        raise AssertionError("not used")
 
 
 class TestTradingRiskGuard:
@@ -309,23 +392,146 @@ class TestAITradingService:
     def service(self):
         return AITradingService()
 
-    def test_normalize_positions_uses_gateway_aliases_and_filters_zero(self, service):
-        positions = service._normalize_positions(
-            [
+    def test_service_positions_preserve_provider_symbol_direction_and_unit(self, service):
+        positions = service._service_positions(
+            (
                 {
-                    "position_symbol_name": "BTCUSDT",
-                    "positionSide": "SHORT",
-                    "positionAmt": "0.25",
+                    "instrument": {"native_symbol": "BTC-USDT-SWAP"},
+                    "side": "short",
+                    "quantity": "0.25",
+                    "qty_unit": "contract",
+                    "observed_at_utc": "2026-10-17T00:00:00Z",
                 },
                 {
-                    "symbol_name": "ETHUSDT",
-                    "positionSide": "LONG",
-                    "positionAmt": "0",
+                    "instrument": {"native_symbol": "ETH-USDT-SWAP"},
+                    "side": "net",
+                    "quantity": "0",
+                    "qty_unit": "contract",
+                    "observed_at_utc": "2026-10-17T00:00:00Z",
                 },
-            ]
+            )
         )
 
-        assert positions == [{"symbol": "BTCUSDT", "size": -0.25}]
+        assert positions == [
+            {
+                "symbol": "BTC-USDT-SWAP",
+                "size": -0.25,
+                "qty_unit": "contract",
+                "observed_at_utc": "2026-10-17T00:00:00Z",
+            }
+        ]
+
+    async def test_live_context_reads_only_subject_granted_service_account(self, service):
+        class Worker:
+            def __init__(self):
+                self.reads = []
+
+            async def read_account(self, account_ref):
+                self.reads.append(account_ref)
+                return _service_account_view(
+                    account_ref,
+                    positions=(
+                        {
+                            "resource": {"product_type": "SWAP", "margin_pool": "default"},
+                            "instrument": {
+                                "provider": "okx",
+                                "venue": "OKX",
+                                "environment": "live",
+                                "product_type": "SWAP",
+                                "instrument_id": "BTC-USDT-SWAP",
+                                "native_symbol": "BTC-USDT-SWAP",
+                            },
+                            "side": "short",
+                            "quantity": "0.25",
+                            "qty_unit": "contract",
+                            "average_price": "60000",
+                            "price_currency": "USDT",
+                            "observed_at_utc": "2026-10-17T00:00:00Z",
+                        },
+                    ),
+                )
+
+            async def read_order(self, *_args, **_kwargs):
+                raise AssertionError("not used")
+
+            async def read_strategy_health(self, *_args, **_kwargs):
+                raise AssertionError("not used")
+
+        from app.api.service_read import configure_service_read
+
+        worker = Worker()
+        directory = ServiceReadAccessDirectory(
+            {
+                "subject-a": ReadAccess(worker=worker, allow_account_refs={"account-a"}),
+                "subject-b": ReadAccess(worker=Worker(), allow_account_refs={"account-b"}),
+            }
+        )
+        configure_service_read(directory)
+        try:
+            context = await service._resolve_live_trading_context("subject-a", "account-a")
+            denied = await service._resolve_live_trading_context("subject-a", "account-b")
+        finally:
+            configure_service_read(None)
+
+        assert directory.account_refs_for("subject-a") == ("account-a",)
+        assert directory.account_refs_for("unknown-subject") == ()
+        assert worker.reads == ["account-a"]
+        assert context["account_balance"] == 100000.0
+        assert context["current_positions"] == [
+            {
+                "symbol": "BTC-USDT-SWAP",
+                "size": -0.25,
+                "qty_unit": "contract",
+                "observed_at_utc": "2026-10-17T00:00:00Z",
+            }
+        ]
+        assert context["currency"] == "USDT"
+        assert context["read_provenance"]["source"] == "service-v2.account.snapshot"
+        assert context["read_provenance"]["observed_at_utc"] == "2026-10-17T00:00:00Z"
+        assert denied["degraded"] is True
+        assert denied["read_status"] == "ACCOUNT_READ_ACCESS_DENIED"
+
+    async def test_live_context_rejects_missing_service_read_and_incomplete_or_stale_views(
+        self, service
+    ):
+        from app.api.service_read import configure_service_read
+
+        try:
+            configure_service_read(None)
+            missing = await service._resolve_live_trading_context("subject-a", "account-a")
+            stale_directory = ServiceReadAccessDirectory(
+                {
+                    "subject-a": ReadAccess(
+                        worker=_StaticServiceReadWorker(
+                            _service_account_view("account-a", quality=ReadQuality.STALE)
+                        ),
+                        allow_account_refs={"account-a"},
+                    )
+                }
+            )
+            configure_service_read(stale_directory)
+            stale = await service._resolve_live_trading_context("subject-a", "account-a")
+            incomplete_directory = ServiceReadAccessDirectory(
+                {
+                    "subject-a": ReadAccess(
+                        worker=_StaticServiceReadWorker(
+                            _service_account_view("account-a", positions_complete=False)
+                        ),
+                        allow_account_refs={"account-a"},
+                    )
+                }
+            )
+            configure_service_read(incomplete_directory)
+            incomplete = await service._resolve_live_trading_context("subject-a", "account-a")
+        finally:
+            configure_service_read(None)
+
+        assert missing["degraded"] is True
+        assert missing["read_status"] == "SERVICE_READ_NOT_CONFIGURED"
+        assert stale["degraded"] is True
+        assert stale["read_status"] == "stale"
+        assert incomplete["degraded"] is True
+        assert incomplete["read_status"] == "ACCOUNT_OBSERVATION_INCOMPLETE"
 
     async def test_dry_run_execution(self, service):
         """Dry run should return confirmed status without real execution."""
@@ -483,19 +689,8 @@ class TestAITradingService:
             with pytest.raises(MissingGatewayContextError, match="account_id"):
                 await service.process_trading_request("user1", request)
 
-    async def test_live_gateway_without_runtime_returns_degraded_response(self, service):
-        """A configured but not connected gateway returns a degraded response."""
-
-        class FakeManager:
-            def list_connected_gateways(self):
-                return [
-                    {
-                        "gateway_key": "manual:CTP:test",
-                        "exchange_type": "CTP",
-                        "account_id": "investor-001",
-                        "has_runtime": False,
-                    }
-                ]
+    async def test_live_context_without_service_read_returns_degraded_response(self, service):
+        """Missing service-v2 configuration rejects without consulting legacy manager."""
 
         mock_intent = TradingIntent(
             action=TradeAction.BUY,
@@ -513,48 +708,26 @@ class TestAITradingService:
             ),
             patch(
                 "app.services.live_trading_manager.get_live_trading_manager",
-                return_value=FakeManager(),
-            ),
+                side_effect=AssertionError("legacy manager must not be used"),
+            ) as manager_getter,
         ):
             request = AITradingRequest(
                 message="买入1手螺纹钢",
                 dry_run=False,
-                gateway_id="manual:CTP:test",
+                gateway_id="service-account-a",
             )
             result = await service.process_trading_request("user1", request)
 
+        manager_getter.assert_not_called()
         assert result.status == TradeStatus.REJECTED
         assert result.degraded is True
         assert result.diagnostic_message is not None
-        assert "尚未建立运行时连接" in result.diagnostic_message
+        assert "SERVICE_READ_NOT_CONFIGURED" in result.diagnostic_message
+        assert result.intent.additional_params["service_read_account"]["available"] is False
 
-    async def test_live_gateway_position_query_failure_returns_degraded_response(self, service):
-        """AI trading must not treat an unreadable live position book as flat."""
-
-        class FakeManager:
-            def list_connected_gateways(self):
-                return [
-                    {
-                        "gateway_key": "manual:CTP:test",
-                        "exchange_type": "CTP",
-                        "account_id": "investor-001",
-                        "has_runtime": True,
-                    }
-                ]
-
-            def query_gateway_account(self, gateway_id):
-                assert gateway_id == "manual:CTP:test"
-                return {
-                    "gateway_key": gateway_id,
-                    "state": "running",
-                    "trade_connection": "connected",
-                    "equity": 100000.0,
-                }
-
-            def query_gateway_positions(self, gateway_id, *, strict=False):
-                assert gateway_id == "manual:CTP:test"
-                assert strict is True
-                raise RuntimeError("position channel disconnected")
+    async def test_live_context_read_failure_returns_degraded_response(self, service):
+        """AI must not treat an unreadable service-v2 position book as flat."""
+        from app.api.service_read import configure_service_read
 
         mock_intent = TradingIntent(
             action=TradeAction.BUY,
@@ -564,55 +737,46 @@ class TestAITradingService:
             risk_level=RiskLevel.LOW,
         )
 
-        with (
-            patch(
-                "app.services.ai_trading_service.parse_trading_intent",
-                new_callable=AsyncMock,
-                return_value=mock_intent,
-            ),
-            patch(
-                "app.services.live_trading_manager.get_live_trading_manager",
-                return_value=FakeManager(),
-            ),
-        ):
-            request = AITradingRequest(
-                message="买入1手螺纹钢",
-                dry_run=False,
-                gateway_id="manual:CTP:test",
-            )
-            result = await service.process_trading_request("user1", request)
+        manager_getter = patch(
+            "app.services.live_trading_manager.get_live_trading_manager",
+            side_effect=AssertionError("legacy manager must not be used"),
+        )
+        directory = ServiceReadAccessDirectory(
+            {
+                "user1": ReadAccess(
+                    worker=_StaticServiceReadWorker(RuntimeError("position channel disconnected")),
+                    allow_account_refs={"service-account-a"},
+                )
+            }
+        )
+        configure_service_read(directory)
+        try:
+            with (
+                manager_getter as manager_getter_mock,
+                patch(
+                    "app.services.ai_trading_service.parse_trading_intent",
+                    new_callable=AsyncMock,
+                    return_value=mock_intent,
+                ),
+            ):
+                request = AITradingRequest(
+                    message="买入1手螺纹钢",
+                    dry_run=False,
+                    gateway_id="service-account-a",
+                )
+                result = await service.process_trading_request("user1", request)
+        finally:
+            configure_service_read(None)
 
+        manager_getter_mock.assert_not_called()
         assert result.status == TradeStatus.REJECTED
         assert result.degraded is True
         assert result.diagnostic_message is not None
-        assert "持仓查询失败" in result.diagnostic_message
+        assert "SERVICE_READ_FAILED" in result.diagnostic_message
 
-    async def test_live_gateway_risk_uses_gateway_contract_multiplier(self, service):
-        """Live AI risk assessment must use gateway contract specs before execution."""
-
-        class FakeManager:
-            def list_connected_gateways(self):
-                return [
-                    {
-                        "gateway_key": "manual:CTP:test",
-                        "exchange_type": "CTP",
-                        "account_id": "investor-001",
-                        "has_runtime": True,
-                    }
-                ]
-
-            def query_gateway_account(self, gateway_id):
-                assert gateway_id == "manual:CTP:test"
-                return {
-                    "state": "ready",
-                    "trade_connection": "connected",
-                    "total_equity": 1_000_000.0,
-                }
-
-            def query_gateway_positions(self, gateway_id, strict=False):
-                assert gateway_id == "manual:CTP:test"
-                assert strict is True
-                return []
+    async def test_live_risk_uses_only_local_asset_multiplier(self, service):
+        """Live risk enrichment reads local metadata and never the legacy order service."""
+        from app.api.service_read import configure_service_read
 
         mock_intent = TradingIntent(
             action=TradeAction.BUY,
@@ -624,59 +788,160 @@ class TestAITradingService:
             risk_level=RiskLevel.LOW,
         )
 
-        with (
-            patch(
-                "app.services.ai_trading_service.parse_trading_intent",
-                new_callable=AsyncMock,
-                return_value=mock_intent,
-            ),
-            patch(
-                "app.services.live_trading_manager.get_live_trading_manager",
-                return_value=FakeManager(),
-            ),
-            patch(
-                "app.services.direct_order_service.DirectOrderService._gateway_asset_spec",
-                return_value={"multiplier": 300, "contract_size": 300},
-            ),
-        ):
-            request = AITradingRequest(
-                message="买入1手IF2609",
-                dry_run=False,
-                gateway_id="manual:CTP:test",
-                auto_confirm=True,
-            )
-            result = await service.process_trading_request("user1", request)
+        directory = ServiceReadAccessDirectory(
+            {
+                "user1": ReadAccess(
+                    worker=_StaticServiceReadWorker(_service_account_view("service-account-a")),
+                    allow_account_refs={"service-account-a"},
+                )
+            }
+        )
+        configure_service_read(directory)
+        try:
+            with (
+                patch(
+                    "app.services.ai_trading_service.parse_trading_intent",
+                    new_callable=AsyncMock,
+                    return_value=mock_intent,
+                ),
+                patch(
+                    "app.services.ai_trading_service.query_local_asset_spec",
+                    return_value={"symbol": "IF2609", "multiplier": 300, "contract_size": 300},
+                ),
+                patch(
+                    "app.services.live_trading_manager.get_live_trading_manager",
+                    side_effect=AssertionError("legacy manager must not be used"),
+                ) as manager_getter,
+                patch("app.services.direct_order_service.DirectOrderService") as order_service,
+            ):
+                request = AITradingRequest(
+                    message="买入1手IF2609",
+                    dry_run=False,
+                    gateway_id="service-account-a",
+                    auto_confirm=True,
+                )
+                result = await service.process_trading_request("user1", request)
+        finally:
+            configure_service_read(None)
 
+        manager_getter.assert_not_called()
+        order_service.assert_not_called()
         assert result.status == TradeStatus.REJECTED
         assert result.intent.additional_params["multiplier"] == 300
         assert any("单笔交易金额" in reason for reason in result.risk_assessment.blocked_reasons)
 
-    async def test_live_gateway_risk_uses_inverse_contract_notional(self, service):
-        """Inverse contracts use fixed contract value instead of price * contract value."""
+    async def test_live_risk_rejects_missing_local_asset_multiplier(self, service):
+        """Parser guesses cannot substitute for a verified local contract spec."""
+        from app.api.service_read import configure_service_read
 
-        class FakeManager:
-            def list_connected_gateways(self):
-                return [
-                    {
-                        "gateway_key": "manual:OKX:test",
-                        "exchange_type": "OKX",
-                        "account_id": "okx-001",
-                        "has_runtime": True,
-                    }
-                ]
+        mock_intent = TradingIntent(
+            action=TradeAction.BUY,
+            symbol="UNKNOWN-SWAP",
+            quantity=1,
+            price=10,
+            confidence=0.9,
+            risk_level=RiskLevel.LOW,
+            additional_params={"multiplier": 1},
+        )
+        directory = ServiceReadAccessDirectory(
+            {
+                "user1": ReadAccess(
+                    worker=_StaticServiceReadWorker(_service_account_view("service-account-a")),
+                    allow_account_refs={"service-account-a"},
+                )
+            }
+        )
+        configure_service_read(directory)
+        try:
+            with (
+                patch(
+                    "app.services.ai_trading_service.parse_trading_intent",
+                    new_callable=AsyncMock,
+                    return_value=mock_intent,
+                ),
+                patch("app.services.ai_trading_service.query_local_asset_spec", return_value={}),
+                patch("app.services.direct_order_service.DirectOrderService") as order_service,
+            ):
+                result = await service.process_trading_request(
+                    "user1",
+                    AITradingRequest(
+                        message="买入1张未知合约",
+                        dry_run=False,
+                        gateway_id="service-account-a",
+                    ),
+                )
+        finally:
+            configure_service_read(None)
 
-            def query_gateway_account(self, gateway_id):
-                assert gateway_id == "manual:OKX:test"
-                return {
-                    "state": "ready",
-                    "trade_connection": "connected",
-                    "value": 100_000.0,
-                }
+        order_service.assert_not_called()
+        assert result.status is TradeStatus.REJECTED
+        assert result.degraded is True
+        assert "本地资产乘数" in (result.diagnostic_message or "")
+        assert "multiplier" not in result.intent.additional_params
 
-            def query_gateway_positions(self, gateway_id, strict=False):
-                assert gateway_id == "manual:OKX:test"
-                assert strict is True
-                return []
+    def test_live_local_asset_spec_replaces_parser_contract_guesses(self, service):
+        """Only local contract metadata may reach live risk calculations."""
+        intent = TradingIntent(
+            action=TradeAction.BUY,
+            symbol="BTC-USD-SWAP",
+            quantity=1,
+            additional_params={
+                "contract_type": "inverse",
+                "multiplier": 999,
+                "ctValCcy": "BTC",
+                "is_inverse": True,
+            },
+        )
+        request = AITradingRequest(
+            message="buy one contract",
+            dry_run=False,
+            gateway_id="service-account-a",
+        )
+
+        with patch(
+            "app.services.ai_trading_service.query_local_asset_spec",
+            return_value={
+                "source": "local_asset_info",
+                "asset_type": "SWAP",
+                "contract_type": "linear",
+                "multiplier": 2,
+            },
+        ):
+            assert service._enrich_intent_with_asset_spec(intent, request) is True
+
+        assert intent.additional_params["contract_type"] == "linear"
+        assert intent.additional_params["multiplier"] == 2
+        assert "ctValCcy" not in intent.additional_params
+        assert "is_inverse" not in intent.additional_params
+
+    async def test_live_submission_remains_refused_without_legacy_order_adapter(self, service):
+        """A configured context still cannot submit through an unscoped legacy channel."""
+        request = AITradingRequest(message="buy BTC", dry_run=False, gateway_id="service-account-a")
+        intent = TradingIntent(action=TradeAction.BUY, symbol="BTC-USDT-SWAP", quantity=1)
+
+        with (
+            patch(
+                "app.services.live_trading_manager.get_live_trading_manager",
+                side_effect=AssertionError("legacy manager must not be used"),
+            ) as manager_getter,
+            patch("app.services.direct_order_service.DirectOrderService") as order_service,
+        ):
+            result = await service._execute_trade("user1", intent, request)
+
+        manager_getter.assert_not_called()
+        order_service.assert_not_called()
+        assert result == {
+            "success": False,
+            "type": "live_trade",
+            "error": "service_v2_unavailable",
+            "reason": "service_v2_scope_not_configured",
+            "submitted": False,
+            "message": "实盘交易暂不可用：尚未配置 service-v2 执行范围，订单未提交。",
+        }
+
+    async def test_live_risk_uses_local_inverse_contract_metadata(self, service):
+        """Inverse risk uses local specs while live submission remains refused."""
+        from app.api.service_read import configure_service_read
 
         mock_intent = TradingIntent(
             action=TradeAction.BUY,
@@ -689,49 +954,54 @@ class TestAITradingService:
             risk_level=RiskLevel.LOW,
         )
 
-        with (
-            patch(
-                "app.services.ai_trading_service.parse_trading_intent",
-                new_callable=AsyncMock,
-                return_value=mock_intent,
-            ),
-            patch(
-                "app.services.live_trading_manager.get_live_trading_manager",
-                return_value=FakeManager(),
-            ),
-            patch(
-                "app.services.direct_order_service.DirectOrderService._gateway_asset_spec",
-                return_value={
-                    "source": "okx_get_instruments",
-                    "asset_type": "SWAP",
-                    "contract_type": "inverse",
-                    "ctVal": 100,
-                    "ctValCcy": "USD",
-                    "baseCcy": "BTC",
-                    "quoteCcy": "USD",
-                    "settleCcy": "BTC",
-                    "taker_commission_rate": 0.0005,
-                },
-            ),
-            patch.object(
-                service,
-                "_execute_trade",
-                new_callable=AsyncMock,
-                return_value={"success": True, "order_id": "dry-live-okx"},
-            ),
-        ):
-            request = AITradingRequest(
-                message="买入100张BTC反向永续",
-                dry_run=False,
-                gateway_id="manual:OKX:test",
-                auto_confirm=True,
-            )
-            result = await service.process_trading_request("user1", request)
+        directory = ServiceReadAccessDirectory(
+            {
+                "user1": ReadAccess(
+                    worker=_StaticServiceReadWorker(_service_account_view("service-account-a")),
+                    allow_account_refs={"service-account-a"},
+                )
+            }
+        )
+        configure_service_read(directory)
+        try:
+            with (
+                patch(
+                    "app.services.ai_trading_service.parse_trading_intent",
+                    new_callable=AsyncMock,
+                    return_value=mock_intent,
+                ),
+                patch(
+                    "app.services.ai_trading_service.query_local_asset_spec",
+                    return_value={
+                        "source": "local_asset_info",
+                        "asset_type": "SWAP",
+                        "contract_type": "inverse",
+                        "ctVal": 100,
+                        "ctValCcy": "USD",
+                        "baseCcy": "BTC",
+                        "quoteCcy": "USD",
+                        "settleCcy": "BTC",
+                        "taker_commission_rate": 0.0005,
+                    },
+                ),
+                patch("app.services.direct_order_service.DirectOrderService") as order_service,
+            ):
+                request = AITradingRequest(
+                    message="买入100张BTC反向永续",
+                    dry_run=False,
+                    gateway_id="service-account-a",
+                    auto_confirm=True,
+                )
+                result = await service.process_trading_request("user1", request)
+        finally:
+            configure_service_read(None)
 
-        assert result.status == TradeStatus.FILLED
+        order_service.assert_not_called()
+        assert result.status == TradeStatus.FAILED
         assert result.risk_assessment.approved is True
         assert result.risk_assessment.max_loss_estimate == pytest.approx(1000.0)
         assert result.intent.additional_params["contract_type"] == "inverse"
+        assert result.execution_result["error"] == "service_v2_unavailable"
 
 
 class TestAITradingAPI:
@@ -787,26 +1057,13 @@ class TestAITradingAPI:
         error_message = payload.get("detail") or payload.get("message") or ""
         assert "account_id" in error_message
 
-    async def test_config_exposes_available_context_options(self, client, auth_headers):
-        """Config endpoint returns selectable paper and connected account options."""
+    async def test_config_exposes_paper_and_subject_granted_service_accounts(
+        self, client, auth_headers
+    ):
+        """Config lists paper accounts and only exact service-v2 grants for the caller."""
         with (
-            patch.object(
-                AITradingService,
-                "list_available_gateways",
-                return_value=[
-                    {
-                        "gateway_id": "manual:CTP:test",
-                        "exchange_type": "CTP",
-                        "account_id": "investor-001",
-                        "connected": True,
-                    },
-                    {
-                        "gateway_id": "manual:CTP:stale",
-                        "exchange_type": "CTP",
-                        "account_id": "investor-stale",
-                        "connected": False,
-                    },
-                ],
+            patch(
+                "app.api.ai_trading.list_authorized_service_account_refs", return_value=("svc-a",)
             ),
             patch.object(
                 AITradingService,
@@ -828,20 +1085,17 @@ class TestAITradingAPI:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["available_gateways"][0]["gateway_id"] == "manual:CTP:test"
+        assert data["available_gateways"] == []
         assert data["available_accounts"][0]["account_id"] == "paper-001"
         assert data["available_accounts"][1] == {
-            "account_id": "investor-001",
-            "name": "CTP · investor-001",
+            "account_id": "svc-a",
+            "name": "Service v2 · svc-a",
             "total_equity": None,
             "current_cash": None,
             "is_active": True,
-            "source": "gateway",
-            "gateway_id": "manual:CTP:test",
-            "exchange_type": "CTP",
-            "connected": True,
+            "source": "service_v2",
+            "gateway_id": "svc-a",
         }
-        assert all(item["account_id"] != "investor-stale" for item in data["available_accounts"])
 
 
 class TestTradingIntentParser:
@@ -1027,7 +1281,7 @@ class TestAITradingServiceConfirmation:
                 return_value={"account_balance": 100000.0, "current_positions": []},
             ),
         ):
-            request = AITradingRequest(message="买入1个BTC", dry_run=False)
+            request = AITradingRequest(message="买入1个BTC", account_id="paper-001", dry_run=True)
             result = await service.process_trading_request("user1", request)
 
         assert result.status == TradeStatus.PENDING_CONFIRMATION
@@ -1061,7 +1315,9 @@ class TestAITradingServiceConfirmation:
                 return_value={"account_balance": 100000.0, "current_positions": []},
             ),
         ):
-            request = AITradingRequest(message="买入1手螺纹钢", dry_run=False)
+            request = AITradingRequest(
+                message="买入1手螺纹钢", account_id="paper-001", dry_run=True
+            )
             pending_result = await service.process_trading_request("user1", request)
 
         assert pending_result.status == TradeStatus.PENDING_CONFIRMATION
@@ -1113,7 +1369,9 @@ class TestAITradingServiceConfirmation:
                 return_value={"account_balance": 100000.0, "current_positions": []},
             ),
         ):
-            request = AITradingRequest(message="买入1手螺纹钢", dry_run=False)
+            request = AITradingRequest(
+                message="买入1手螺纹钢", account_id="paper-001", dry_run=True
+            )
             pending_result = await service.process_trading_request("user1", request)
 
         _pending_trades[pending_result.trade_id]["expires_at"] = "2000-01-01T00:00:00+00:00"
@@ -1155,7 +1413,9 @@ class TestAITradingServiceConfirmation:
                 return_value={"account_balance": 100000.0, "current_positions": []},
             ),
         ):
-            request = AITradingRequest(message="买入1手螺纹钢", dry_run=False)
+            request = AITradingRequest(
+                message="买入1手螺纹钢", account_id="paper-001", dry_run=True
+            )
             pending_result = await service.process_trading_request("user1", request)
 
         service.risk_guard.config.max_single_trade_amount = 1000.0
@@ -1204,7 +1464,9 @@ class TestAITradingServiceConfirmation:
                 return_value={"account_balance": 100000.0, "current_positions": []},
             ),
         ):
-            request = AITradingRequest(message="买入1手螺纹钢", dry_run=False)
+            request = AITradingRequest(
+                message="买入1手螺纹钢", account_id="paper-001", dry_run=True
+            )
             pending_result = await service.process_trading_request("user1", request)
 
         confirm_req = TradeConfirmRequest(
@@ -1252,7 +1514,9 @@ class TestAITradingServiceConfirmation:
                 return_value={"account_balance": 100000.0, "current_positions": []},
             ),
         ):
-            request = AITradingRequest(message="买入1手螺纹钢", dry_run=False)
+            request = AITradingRequest(
+                message="买入1手螺纹钢", account_id="paper-001", dry_run=True
+            )
             pending_result = await service.process_trading_request("user1", request)
 
         confirm_req = TradeConfirmRequest(
@@ -1351,8 +1615,6 @@ class TestRiskGuardEdgeCases:
         self.guard.record_trade(profit_loss=-100)
         assert self.guard._daily_trade_count == 1
         assert self.guard._daily_loss == 100
-
-
 
 
 class TestConditionalOrders:

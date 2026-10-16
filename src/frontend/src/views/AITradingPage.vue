@@ -50,21 +50,18 @@ const modeClass = computed(() => dryRun.value ? 'mode-paper' : 'mode-live')
 const availableAccounts = computed(() => config.value?.available_accounts ?? [])
 const selectableAccounts = computed(() => {
   if (dryRun.value) {
-    return availableAccounts.value.filter(account => account.source !== 'gateway')
+    return availableAccounts.value.filter(account => account.source === 'paper')
   }
-  return availableAccounts.value.filter(account => account.source === 'gateway' && account.gateway_id)
+  return availableAccounts.value.filter(account => account.source === 'service_v2' && account.gateway_id)
 })
 const selectedAccount = computed(() => (
   selectableAccounts.value.find(account => account.account_id === selectedAccountId.value) ?? null
 ))
 const paperAccountCount = computed(() =>
-  availableAccounts.value.filter(account => account.source !== 'gateway').length
+  availableAccounts.value.filter(account => account.source === 'paper').length
 )
-const liveGatewayCount = computed(() =>
-  availableAccounts.value.filter(account => account.source === 'gateway' && account.gateway_id).length
-)
-const connectedGatewayCount = computed(() =>
-  (config.value?.available_gateways ?? []).filter(gateway => gateway.connected).length
+const serviceAccountCount = computed(() =>
+  availableAccounts.value.filter(account => account.source === 'service_v2' && account.gateway_id).length
 )
 const selectedAccountSummary = computed(() =>
   selectedAccount.value
@@ -86,17 +83,17 @@ const commandStats = computed(() => [
   {
     key: 'accounts',
     label: t('aiTrading.statAccounts'),
-    value: `${paperAccountCount.value}/${liveGatewayCount.value}`,
+    value: `${paperAccountCount.value}/${serviceAccountCount.value}`,
     helper: t('aiTrading.statAccountsHelper'),
     tone: 'primary',
     icon: DataLine,
   },
   {
-    key: 'gateways',
-    label: t('aiTrading.statGateways'),
-    value: connectedGatewayCount.value,
-    helper: t('aiTrading.statGatewaysHelper'),
-    tone: connectedGatewayCount.value > 0 ? 'success' : 'warning',
+    key: 'live-execution',
+    label: t('aiTrading.statLiveExecution'),
+    value: t('aiTrading.statLiveExecutionUnavailable'),
+    helper: t('aiTrading.statLiveExecutionHelper'),
+    tone: 'warning',
     icon: Connection,
   },
   {
@@ -217,7 +214,9 @@ function accountOptionLabel(account: AITradingAccountOption): string {
   if (account.exchange_type && !parts[0].includes(account.exchange_type)) {
     parts.push(account.exchange_type)
   }
-  parts.push(`${t('aiTrading.accountTotalEquity')} ${formatAccountNumber(account.total_equity)}`)
+  if (typeof account.total_equity === 'number' && Number.isFinite(account.total_equity)) {
+    parts.push(`${t('aiTrading.accountTotalEquity')} ${formatAccountNumber(account.total_equity)}`)
+  }
   if (account.source === 'gateway' && account.connected === false) {
     parts.push(t('aiTrading.notConnectedSuffix').trim())
   }

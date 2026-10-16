@@ -98,6 +98,35 @@ def _require_directory() -> ServiceReadAccessDirectory:
     return directory
 
 
+def list_authorized_service_account_refs(subject: str) -> tuple[str, ...]:
+    """Return the configured account refs granted to one authenticated subject."""
+
+    directory = _access_directory
+    return () if directory is None else directory.account_refs_for(subject)
+
+
+async def read_authorized_service_account(
+    subject: str, account_ref: str
+) -> AccountReadView:
+    """Read one account through the existing subject-bound service worker.
+
+    This in-process bridge has the same exact subject/account authorization as
+    the HTTP route and never creates a client or starts a worker.
+    """
+
+    directory = _access_directory
+    if directory is None:
+        raise ServiceReadUnavailableError("SERVICE_READ_NOT_CONFIGURED")
+    try:
+        access = directory.resolve_account(subject, account_ref)
+    except ServiceReadAccessError:
+        raise ServiceReadUnavailableError("ACCOUNT_READ_ACCESS_DENIED") from None
+    try:
+        return await access.worker.read_account(account_ref)
+    except ServiceReadUnavailableError:
+        raise
+
+
 def _resolve_access(
     current_user: TokenPayload,
     selector: str,

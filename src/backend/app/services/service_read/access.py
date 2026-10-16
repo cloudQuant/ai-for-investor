@@ -421,6 +421,14 @@ class ServiceReadAccessDirectory:
 
         return self._resolve(subject, account_ref, "allow_account_refs")
 
+    def account_refs_for(self, subject: str) -> tuple[str, ...]:
+        """List only the account selectors granted to one exact subject."""
+
+        if not _valid_identifier(subject):
+            return ()
+        access = self._access_by_subject.get(subject)
+        return () if access is None else tuple(sorted(access.allow_account_refs))
+
     def resolve_account_book(self, subject: str, account_ref: str) -> ReadAccess:
         """Resolve an exact server-configured account-book selector."""
 
