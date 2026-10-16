@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import UTC, datetime
-from types import SimpleNamespace
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -111,6 +114,115 @@ def _deployment_document(symbol: str = "BTC-USDT-SWAP") -> dict:
             }
         ],
     }
+
+
+def test_configured_service_market_path_does_not_import_legacy_zmq_modules():
+    script = r"""
+import builtins
+import sys
+import threading
+
+blocked = {
+    "app.services.quote.runtime",
+    "app.services.quote.zmq_receiver",
+}
+original_import = builtins.__import__
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name in blocked:
+        raise AssertionError(f"legacy quote transport imported: {name}")
+    return original_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+
+from app.services.quote.service_market import MarketQuoteResult
+from app.services.quote_service import QuoteService
+
+symbol = "BTC-USDT-SWAP"
+key = type("Key", (), {"stream_id": "configured-stream"})()
+
+class Deployment:
+    def configured_routes(self, subject, source, symbols):
+        assert (subject, source, symbols) == ("jwt-subject-a", "OKX", [symbol])
+        return {symbol: key}
+
+    def read_quotes(self, subject, routes, *, wait_ms):
+        assert subject == "jwt-subject-a"
+        assert routes == {symbol: key}
+        assert wait_ms == 250
+        return {
+            key.stream_id: MarketQuoteResult(
+                {"symbol": symbol, "last_price": 65000.0}, None, True
+            )
+        }
+
+service = object.__new__(QuoteService)
+service._service_market_loaded = True
+service._service_market_deployment = Deployment()
+service._service_market_error = None
+service._service_market_load_lock = threading.Lock()
+quotes, config_error = service._read_service_market_quotes(
+    "OKX", "jwt-subject-a", [symbol]
+)
+assert config_error is None
+assert quotes[symbol].data == {"symbol": symbol, "last_price": 65000.0}
+assert blocked.isdisjoint(sys.modules)
+print("service-market-without-legacy-imports")
+"""
+    backend_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=backend_root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "service-market-without-legacy-imports" in result.stdout
+
+
+def test_legacy_zmq_helpers_are_loaded_when_fallback_is_invoked(monkeypatch):
+    receiver_module = ModuleType("app.services.quote.zmq_receiver")
+    receiver_rows = []
+
+    class FakeReceiver:
+        def __init__(self, source, market_endpoint):
+            self.source = source
+            self.market_endpoint = market_endpoint
+            self.started = False
+
+        def start(self):
+            self.started = True
+            receiver_rows.append(self)
+
+        def stop(self):
+            self.started = False
+
+        @property
+        def is_alive(self):
+            return self.started
+
+    receiver_module.ZmqTickReceiver = FakeReceiver
+    runtime_module = ModuleType("app.services.quote.runtime")
+    command_result = {"accepted": ["BTC-USDT-SWAP"]}
+    runtime_module.send_gateway_command = lambda *args, **kwargs: command_result
+    monkeypatch.setitem(sys.modules, "app.services.quote.zmq_receiver", receiver_module)
+    monkeypatch.setitem(sys.modules, "app.services.quote.runtime", runtime_module)
+
+    QuoteService._instance = None
+    service = QuoteService()
+    state = {"config": SimpleNamespace(market_endpoint="tcp://127.0.0.1:5501")}
+    service._ensure_receiver_for_gateway("OKX", "gateway-1", state)
+
+    assert receiver_rows[0].source == "OKX"
+    assert receiver_rows[0].market_endpoint == "tcp://127.0.0.1:5501"
+    assert receiver_rows[0].started is True
+    assert service._send_gateway_command(
+        "tcp://127.0.0.1:5500", "subscribe", {"symbols": ["BTC-USDT-SWAP"]}
+    ) is command_result
 
 
 def _projection(symbol: str = "BTC-USDT-SWAP") -> dict:

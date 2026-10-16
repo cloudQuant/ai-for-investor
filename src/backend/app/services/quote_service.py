@@ -40,9 +40,6 @@ from app.services.quote.registry import (
 from app.services.quote.registry import (
     resolve_quote_fields as _resolve_quote_fields,
 )
-from app.services.quote.runtime import (
-    send_gateway_command as _send_gateway_command_impl,
-)
 from app.services.quote.service_market import (
     MarketQuoteResult as _MarketQuoteResult,
 )
@@ -64,7 +61,6 @@ from app.services.quote.snapshots import (
 from app.services.quote.tick import (
     build_tick as _build_tick,
 )
-from app.services.quote.zmq_receiver import ZmqTickReceiver
 
 logger = logging.getLogger(__name__)
 
@@ -73,16 +69,6 @@ _MAX_SNAPSHOT_HYDRATION_PER_GATEWAY = 10
 # ---------------------------------------------------------------------------
 # Persistent storage for custom symbols
 # ---------------------------------------------------------------------------
-
-
-# ===================================================================
-# ZMQ tick receiver — one per gateway
-# ===================================================================
-
-
-# ZMQ tick receiver moved to quote.zmq_receiver in iteration 174 C4.
-# Keep the legacy private name as an alias for backward compatibility.
-_ZmqTickReceiver = ZmqTickReceiver
 
 
 # ===================================================================
@@ -111,10 +97,10 @@ class QuoteService:
         # Persistently hidden regular subscriptions. Running-workspace rows
         # never enter this collection because their dismissal is UI-local.
         self._hidden_subscriptions: dict[str, dict[str, list[str]]] = load_hidden_subscriptions()
-        # ZMQ receivers: {gateway_key: _ZmqTickReceiver}.  A source may have
+        # Legacy ZMQ receivers: {gateway_key: receiver}.  A source may have
         # several running gateways (for example, two IB workspaces), so the
         # gateway key is the only safe cache boundary.
-        self._receivers: dict[str, _ZmqTickReceiver] = {}
+        self._receivers: dict[str, Any] = {}
         # Symbols we have already asked each gateway to subscribe.  This is
         # deliberately keyed by gateway rather than exchange: two workspaces
         # on the same exchange may use independent sessions, while a shared
@@ -774,7 +760,12 @@ class QuoteService:
         if not market_endpoint:
             return
 
-        receiver = _ZmqTickReceiver(source, market_endpoint)
+        # The SDK service-market route is usable without importing the legacy
+        # ZMQ receiver. Load that transport only when an unconfigured legacy
+        # workspace actually needs it.
+        from app.services.quote.zmq_receiver import ZmqTickReceiver
+
+        receiver = ZmqTickReceiver(source, market_endpoint)
         receiver.start()
         self._receivers[gateway_key] = receiver
         logger.info("Started ZMQ receiver for %s gateway %s", source, gateway_key)
@@ -1252,7 +1243,7 @@ class QuoteService:
         source: str,
         gateway_key: str,
         state: dict[str, Any] | None,
-    ) -> _ZmqTickReceiver | None:
+    ) -> Any | None:
         """Find the receiver for a concrete quote plan, with legacy fallback."""
         receiver = self._receivers.get(gateway_key)
         if receiver is not None:
@@ -1265,7 +1256,7 @@ class QuoteService:
         self,
         manager: Any,
         source: str,
-        receiver: _ZmqTickReceiver | None,
+        receiver: Any | None,
         symbols: list[str],
         cached_ticks: dict[str, dict[str, Any]],
         state: dict[str, Any] | None = None,
@@ -1324,7 +1315,11 @@ class QuoteService:
         send_timeout_ms: int = 3000,
         recv_timeout_ms: int = 3000,
     ) -> Any | None:
-        return _send_gateway_command_impl(
+        # Keep the old command channel out of the ServiceMarketClient import
+        # path. It remains available solely for legacy, unconfigured sources.
+        from app.services.quote.runtime import send_gateway_command
+
+        return send_gateway_command(
             command_endpoint,
             command,
             payload,
