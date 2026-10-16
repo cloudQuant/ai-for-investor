@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         OrderReadView,
         StrategyHealthView,
     )
+    from app.services.service_read.gateway_health import GatewayHealthView
 
 __all__ = ["ServiceReadSession", "ServiceReadWorker", "ServiceReadWorkerError"]
 
@@ -53,6 +54,8 @@ class ServiceReadSession(Protocol):
     def maintain(self) -> None: ...
 
     def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView: ...
+
+    def read_gateway_health(self, account_ref: str) -> GatewayHealthView: ...
 
     def read_account_book(self, account_ref: str) -> AccountBookReadView: ...
 
@@ -90,6 +93,7 @@ class _State(Enum):
 
 class _Kind(Enum):
     ACCOUNT = auto()
+    GATEWAY_HEALTH = auto()
     ACCOUNT_BOOK = auto()
     ORDER = auto()
     STRATEGY_HEALTH = auto()
@@ -216,6 +220,11 @@ class ServiceReadWorker:
         self, account_ref: str, *, currency: str | None = None
     ) -> AccountReadView:
         return await self._submit(_Kind.ACCOUNT, account_ref, currency)
+
+    async def read_gateway_health(self, account_ref: str) -> GatewayHealthView:
+        """Queue the paired status and account reads on the existing owner thread."""
+
+        return await self._submit(_Kind.GATEWAY_HEALTH, account_ref)
 
     async def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
         return await self._submit(_Kind.ORDER, scope_ref, intent_id)
@@ -427,6 +436,8 @@ class ServiceReadWorker:
         try:
             if request.kind is _Kind.ACCOUNT:
                 result = session.read_account(request.arguments[0], currency=request.arguments[1])
+            elif request.kind is _Kind.GATEWAY_HEALTH:
+                result = session.read_gateway_health(request.arguments[0])
             elif request.kind is _Kind.ACCOUNT_BOOK:
                 result = session.read_account_book(request.arguments[0])
             elif request.kind is _Kind.ORDER:

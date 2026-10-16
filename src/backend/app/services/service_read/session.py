@@ -31,6 +31,7 @@ from .contracts import (
     StrategyHealthView,
     _thaw_json,
 )
+from .gateway_health import GatewayHealthView
 
 if TYPE_CHECKING:
     from bt_api_base.service_protocol import WireIdentity
@@ -213,7 +214,13 @@ class SdkServiceReadSession:
     def _expected_binding_specs(self) -> set[tuple[str, str, frozenset[str]]]:
         expected: set[tuple[str, str, frozenset[str]]] = set()
         for binding in self._account_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset({"account.snapshot"})))
+            expected.add(
+                (
+                    binding.mount,
+                    binding.scope_ref,
+                    frozenset({"account.snapshot", "account.head"}),
+                )
+            )
         order_query_operations: set[str] = set()
         if self._order_bindings:
             order_query_operations.add("orders.query")
@@ -364,13 +371,14 @@ class SdkServiceReadSession:
         view = self._runtime.account_binding_view(
             configured.mount,
             account_ref,
-            required_operations=frozenset({"account.snapshot"}),
+            required_operations=frozenset({"account.snapshot", "account.head"}),
         )
         if (
             view.scope_ref != configured.scope_ref
             or view.account_ref != account_ref
             or view.mount != configured.mount
-            or frozenset(view.operations) != frozenset({"account.snapshot"})
+            or frozenset(view.operations)
+            != frozenset({"account.snapshot", "account.head"})
             or getattr(view.rpc_scope, "account_ref", None) != account_ref
             or self._scope_has_unbounded_account_alias(view.rpc_scope)
         ):
@@ -464,6 +472,36 @@ class SdkServiceReadSession:
         self._validate_account_scope(account_ref, configured)
         assert self._read_client is not None
         return self._read_client.read_account(account_ref, currency=currency)
+
+    def read_gateway_health(self, account_ref: str) -> GatewayHealthView:
+        """Read Gateway owner status and account facts as separate observations."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service-read runtime must be started before reads",
+            )
+        configured = self._account_bindings.get(account_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("ACCOUNT_NOT_CONFIGURED")
+        self._validate_runtime()
+        self._validate_account_scope(account_ref, configured)
+        assert self._runtime is not None
+        assert self._read_client is not None
+        head_reply = self._runtime.call(
+            configured.mount,
+            "account.head",
+            {},
+            scope_ref=configured.scope_ref,
+        )
+        account_observation = self._read_client.read_account(account_ref)
+        return GatewayHealthView.from_replies(
+            account_ref,
+            head_reply,
+            account_observation,
+        )
 
     def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
         self._assert_owner()

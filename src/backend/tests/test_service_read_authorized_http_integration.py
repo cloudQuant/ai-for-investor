@@ -2690,6 +2690,7 @@ def _dual_gateway_service_process(
     client_scope_ref: str,
     account_key_values: dict[str, Any],
     service_keys: dict[str, bytes],
+    account_operations: frozenset[str] = frozenset({"account.snapshot"}),
 ) -> None:
     """Spawn target: one actual Gateway ServiceHost and one synthetic account session."""
 
@@ -2763,7 +2764,7 @@ def _dual_gateway_service_process(
         "service.account_read",
         client_scope_ref,
         WireScope(_DUAL_LIVE_DOMAIN, account_ref=account_ref),
-        frozenset({"account.snapshot"}),
+        account_operations,
     )
     host = None
     try:
@@ -3991,12 +3992,13 @@ def test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts(
     _run_dual_live_composition_projection(tmp_path, monkeypatch)
 
 
-def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
+def test_default_service_read_runtime_assembly_requests_gateway_owner_health(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services.service_read.deployment import _create_runtime
     import bt_api_py.service_runtime as service_runtime
     from bt_api_py.service_config import parse_client_config
+
+    from app.services.service_read.deployment import _create_runtime
 
     real_runtime_type = service_runtime.ServiceClientRuntime
     requested_operations: list[Any] = []
@@ -4021,7 +4023,7 @@ def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
 
     runtime = _create_runtime(profile)
     expected = {
-        "application.account": frozenset({"account.snapshot"}),
+        "application.account": frozenset({"account.snapshot", "account.head"}),
         "application.order_query": frozenset({"execution.account_books.query"}),
     }
     assert requested_operations == [expected]
@@ -4029,6 +4031,252 @@ def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
     assert runtime._requested_operations == expected
     assert runtime.state == "new"
     runtime.close()
+
+
+def test_afi09_gateway_health_keeps_missing_owner_status_unobserved() -> None:
+    from app.services.service_read.contracts import AccountReadView, ReadQuality
+    from app.services.service_read.gateway_health import GatewayHealthView
+
+    account = AccountReadView(
+        account_ref=_ACCOUNT_A,
+        execution_domain_ref=_DUAL_LIVE_DOMAIN,
+        currency="USDT",
+        quality=ReadQuality.FRESH,
+        session_generation="account-snapshot-generation",
+        cursor=7,
+        observed_at_utc="2026-10-16T00:00:00Z",
+        received_age_seconds=0.1,
+        fresh_for_seconds=30.0,
+    )
+    view = GatewayHealthView.from_replies(
+        _ACCOUNT_A,
+        {"latest_cursor": 7},
+        account,
+    )
+
+    assert view.rpc_reachable is True
+    assert view.gateway_session_status == "unobserved"
+    assert view.session_generation is None
+    assert view.account_observation.quality is ReadQuality.FRESH
+
+
+def test_afi09_gateway_health_http_reads_real_owner_facts_without_connecting_again(
+    tmp_path: Any,
+) -> None:
+    """Exercise the status API through a real synthetic Gateway ServiceHost."""
+
+    import httpx
+    from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+    from fastapi import FastAPI
+    from pydantic import SecretStr
+
+    from app.api.deps import get_current_user
+    from app.api.service_gateway import router as service_gateway_router
+    from app.api.service_read import configure_service_read
+    from app.schemas.auth import TokenPayload
+    from app.services.service_read.deployment import start_service_read_deployment
+
+    account_ref = _ACCOUNT_A
+    account_key = AccountKey(
+        "PAPER", "synthetic-venue", "simulation", "afi-health-account-a"
+    )
+    app_public, app_secret = zmq.curve_keypair()
+    server_public, server_secret = zmq.curve_keypair()
+    endpoint = _order._endpoint()
+    service_id = "afi09-health-gateway-service"
+    instance_id = "afi09-health-gateway-instance"
+    service_scope_ref = "afi09-health-gateway-v1"
+    transport_ref = "afi09-health-gateway-connect-v1"
+    security_ref = "afi09-health-gateway-curve-v1"
+    client_scope_ref = "afi09-health-account-read-v1"
+    raw_service_config = _dual_gateway_service_config(
+        endpoint,
+        account_ref,
+        service_id,
+        instance_id,
+        service_scope_ref,
+        "afi09-health-gateway-listen-v1",
+        security_ref,
+    )
+    context = multiprocessing.get_context("spawn")
+    root = tmp_path / "afi09-gateway-health"
+    root.mkdir()
+    guard_directory = root / "session-guard"
+    guard_directory.mkdir()
+    host = _order._start_process(
+        context,
+        _dual_gateway_service_process,
+        (
+            raw_service_config,
+            str(root / "registry.sqlite3"),
+            str(root / "journal.sqlite3"),
+            str(guard_directory),
+            account_ref,
+            client_scope_ref,
+            account_key.to_dict(),
+            {
+                "server_public": server_public,
+                "server_secret": server_secret,
+                "application_public": app_public,
+                "security_ref": security_ref,
+            },
+            frozenset({"account.snapshot", "account.head"}),
+        ),
+        "afi09-synthetic-gateway-host",
+    )
+    close_reply = None
+    try:
+        ready = _order._receive(host["pipe"], timeout=20.0)
+        assert ready[0:3] == ("ready", endpoint, "started"), ready
+        startup = ready[3]
+        assert startup["worker_ready"] is True
+        assert startup["connect_calls"] == startup["read_calls"] == 1
+        assert startup["close_calls"] == 0
+
+        identity = _DUAL_LIVE_APPLICATION_IDENTITY
+        profile = {
+            "subject": _SUBJECT_A,
+            "identity": {
+                "principal_ref": identity.principal_ref,
+                "actor_ref": identity.actor_ref,
+                "delegate_ref": identity.delegate_ref,
+            },
+            "client_config": {
+                "client_config_schema_version": 1,
+                "process_role": "application_client",
+                "registration": {"application_ref": identity.actor_ref},
+                "clients": {
+                    "gateway": {
+                        "config_schema_version": 1,
+                        "settings": {
+                            "bindings": [
+                                {
+                                    "mount": "application.account",
+                                    "service_id": service_id,
+                                    "instance_id": instance_id,
+                                    "scope_ref": client_scope_ref,
+                                    "transport_ref": transport_ref,
+                                    "account_ref": account_ref,
+                                }
+                            ],
+                            "options": {"request_timeout_ms": _REQUEST_TIMEOUT_MS},
+                        },
+                    }
+                },
+                "communication": {
+                    "config_schema_version": 1,
+                    "profiles": {
+                        transport_ref: {
+                            "backend": "zmq",
+                            "config_schema_version": 1,
+                            "endpoints": {"rpc_connect": endpoint},
+                            "security_profile_ref": security_ref,
+                            "options": {
+                                "high_water_mark": 32,
+                                "max_message_bytes": _MAX_MESSAGE_BYTES,
+                            },
+                        }
+                    },
+                },
+            },
+            "scope_claims": {
+                client_scope_ref: {
+                    "execution_domain_ref": _DUAL_LIVE_DOMAIN,
+                    "account_ref": account_ref,
+                }
+            },
+            "peer_identities": {
+                service_id: {
+                    "principal_ref": f"{service_id}-principal",
+                    "actor_ref": service_id,
+                }
+            },
+            "curve_keys": {
+                security_ref: {
+                    "server_key": server_public.decode("ascii"),
+                    "public_key": app_public.decode("ascii"),
+                    "secret_key": app_secret.decode("ascii"),
+                }
+            },
+            "grants": {
+                "account_refs": [account_ref],
+                "order_scope_refs": [],
+                "monitor_scope_refs": [],
+            },
+            "account_bindings": {
+                account_ref: {
+                    "mount": "application.account",
+                    "scope_ref": client_scope_ref,
+                    "currency": "USDT",
+                    "account_key": account_key.to_dict(),
+                    "coverage": [AccountResourceKey("spot", "cash").to_dict()],
+                    "require_open_orders": False,
+                }
+            },
+            "order_bindings": {},
+            "monitor_bindings": {},
+            "worker": {"maintenance_interval_seconds": 60},
+        }
+        async def exercise_http() -> None:
+            deployment = await start_service_read_deployment(
+                SecretStr(json.dumps({"schema_version": 1, "subjects": [profile]}))
+            )
+            assert deployment is not None
+            configure_service_read(deployment.directory)
+
+            app = FastAPI()
+            app.include_router(service_gateway_router, prefix="/api/v1")
+            active_subject = {"value": _SUBJECT_A}
+
+            def current_user() -> TokenPayload:
+                return TokenPayload(sub=active_subject["value"], username="synthetic-user")
+
+            app.dependency_overrides[get_current_user] = current_user
+            try:
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="http://afi09-health.synthetic.test",
+                ) as client:
+                    response = await client.get(
+                        f"/api/v1/service-gateway/accounts/{account_ref}/health"
+                    )
+                    assert response.status_code == 200, response.text
+                    payload = response.json()
+                    assert payload["service_connection"]["rpc_status"] == "reachable"
+                    assert payload["gateway_session"]["status"] == "ready"
+                    assert payload["gateway_session"]["session_generation"]
+                    assert payload["account_observation"]["quality"] == "fresh"
+                    assert payload["account_observation"]["same_session_generation"] is True
+                    assert payload["market_data_feed"]["status"] == "unobserved"
+                    assert app_secret.decode("ascii") not in response.text
+                    assert server_secret.decode("ascii") not in response.text
+
+                    active_subject["value"] = _SUBJECT_B
+                    denied = await client.get(
+                        f"/api/v1/service-gateway/accounts/{account_ref}/health"
+                    )
+                    assert denied.status_code == 403
+
+                host["pipe"].send(("status",))
+                status_reply = _order._receive(host["pipe"], timeout=5.0)
+                assert status_reply == ("status", 1, 1, 0, True)
+            finally:
+                configure_service_read(None)
+                await deployment.aclose()
+
+        asyncio.run(exercise_http())
+    finally:
+        if host["process"].is_alive():
+            with suppress(BaseException):
+                host["pipe"].send(("close",))
+                close_reply = _order._receive(host["pipe"], timeout=20.0)
+            host["process"].join(timeout=20.0)
+        assert close_reply is not None
+        assert close_reply[0:2] == ("closed", "closed"), close_reply
+        assert close_reply[2:5] == (1, 1, 1), close_reply
+        assert not host["process"].is_alive()
+        host["pipe"].close()
+        host["process"].close()
 
 
 _MANUAL_SUBMIT_SELECTOR = "afi-manual-order-current-v1"

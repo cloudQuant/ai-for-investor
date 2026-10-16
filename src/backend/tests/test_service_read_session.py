@@ -39,11 +39,14 @@ def _account_scope(account_ref: str = "account-a") -> WireScope:
     return WireScope("paper:venue-a", account_ref=account_ref)
 
 
-def _registered(mount: str, scope_ref: str, operation: str, scope: WireScope):
+def _registered(
+    mount: str, scope_ref: str, operation: str | frozenset[str], scope: WireScope
+):
+    operations = frozenset({operation}) if type(operation) is str else operation
     return SimpleNamespace(
         mount=mount,
         scope_ref=scope_ref,
-        operations=frozenset({operation}),
+        operations=operations,
         active=True,
         scope=scope,
     )
@@ -60,7 +63,7 @@ class _Runtime:
             _registered(
                 "application.account",
                 "account-a-read-v1",
-                "account.snapshot",
+                frozenset({"account.snapshot", "account.head"}),
                 _account_scope(),
             )
         ]
@@ -83,7 +86,7 @@ class _Runtime:
             mount=mount,
             scope_ref=self.view_scope_ref,
             account_ref=account_ref,
-            operations=frozenset({"account.snapshot"}),
+            operations=frozenset({"account.snapshot", "account.head"}),
             rpc_scope=self.view_scope,
         )
 
