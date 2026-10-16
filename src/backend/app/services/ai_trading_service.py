@@ -374,12 +374,10 @@ class AITradingService:
                     account_id=request.account_id,
                 )
             else:
-                # Attempt live trading
-                return await order_service.execute_live_trade(
-                    intent=intent,
-                    user_id=user_id,
-                    gateway_id=request.gateway_id,
-                )
+                # A legacy gateway selector is not an authorized service-v2 scope.
+                return {"success": False, "type": "live_trade", "error": "service_v2_unavailable",
+                        "reason": "service_v2_scope_not_configured", "submitted": False,
+                        "message": "实盘交易暂不可用：尚未配置 service-v2 执行范围，订单未提交。"}
         except Exception as e:
             logger.error("Trade execution failed: %s", e, exc_info=True)
             return {
