@@ -189,6 +189,11 @@ _register_optional_router(
     tags=["Service Orders"],
 )
 _register_optional_router(
+    "strategy_process_stop",
+    "app.api.strategy_process_stop",
+    tags=["Live Trading Control"],
+)
+_register_optional_router(
     "approved_orders",
     "app.api.approved_orders",
     tags=["Approved Orders"],

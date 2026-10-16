@@ -35,6 +35,7 @@ def _stop_fixture(monkeypatch, *, stop_projection):
             subject="subject.test",
             allowed_actions=["STOP_NEW"],
             wire_account_ref=profile.account_ref,
+            command_scope=f"strategy:{profile.strategy_ref}:run.test:stop_new",
         ),
         wire_scope=SimpleNamespace(
             account_ref=profile.account_ref,

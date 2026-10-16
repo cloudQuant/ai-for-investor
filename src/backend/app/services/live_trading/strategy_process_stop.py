@@ -190,6 +190,54 @@ async def stop_service_strategy_process(
     )
 
 
+def select_stop_new_binding(
+    manager: Any,
+    owner_control_deployment: Any,
+    *,
+    subject: str,
+    instance_id: str,
+) -> Any:
+    """Select the unique trusted STOP_NEW grant for the current exact run.
+
+    The HTTP caller chooses only the owned instance ID.  Account, strategy,
+    run, and operator grant are derived from the manager-owned process and
+    installed service-strategy profile.  A deployment with multiple grants
+    for the same exact run is ambiguous and is rejected instead of asking the
+    browser to choose an authorization scope.
+    """
+
+    profile, run_id, _process = _resolve_current_service_run(
+        manager, subject=subject, instance_id=instance_id
+    )
+    bindings = getattr(owner_control_deployment, "bindings", None)
+    if not isinstance(bindings, (tuple, list)):
+        raise StrategyProcessStopError("OWNER_CONTROL_BINDING_INVALID")
+
+    matches: list[Any] = []
+    expected_scope_label = f"strategy:{profile.strategy_ref}:{run_id}:stop_new"
+    for binding in bindings:
+        config = getattr(binding, "config", None)
+        allowed_actions = getattr(config, "allowed_actions", None)
+        wire_scope = getattr(binding, "wire_scope", None)
+        if (
+            getattr(config, "subject", None) == subject
+            and isinstance(allowed_actions, (tuple, list))
+            and "STOP_NEW" in allowed_actions
+            and getattr(config, "wire_account_ref", None) == profile.account_ref
+            and getattr(config, "command_scope", None) == expected_scope_label
+            and getattr(wire_scope, "account_ref", None) == profile.account_ref
+            and getattr(wire_scope, "strategy_ref", None) == profile.strategy_ref
+            and getattr(wire_scope, "run_id", None) == run_id
+        ):
+            matches.append(binding)
+
+    if not matches:
+        raise StrategyProcessStopError("OWNER_CONTROL_NOT_AUTHORIZED")
+    if len(matches) != 1:
+        raise StrategyProcessStopError("OWNER_CONTROL_BINDING_AMBIGUOUS")
+    return matches[0]
+
+
 def _resolve_exact_run(
     manager: Any,
     owner_control_deployment: Any,
@@ -212,6 +260,29 @@ def _resolve_exact_run(
     ):
         raise StrategyProcessStopError("OWNER_CONTROL_NOT_AUTHORIZED")
 
+    profile, run_id, process = _resolve_current_service_run(
+        manager, subject=subject, instance_id=instance_id
+    )
+    expected_scope_label = f"strategy:{profile.strategy_ref}:{run_id}:stop_new"
+    if (
+        getattr(config, "wire_account_ref", None) != profile.account_ref
+        or getattr(config, "command_scope", None) != expected_scope_label
+    ):
+        raise StrategyProcessStopError("SERVICE_STRATEGY_SCOPE_MISMATCH")
+
+    wire_scope = getattr(binding, "wire_scope", None)
+    if (
+        getattr(wire_scope, "account_ref", None) != profile.account_ref
+        or getattr(wire_scope, "strategy_ref", None) != profile.strategy_ref
+        or getattr(wire_scope, "run_id", None) != run_id
+    ):
+        raise StrategyProcessStopError("OWNER_CONTROL_RUN_MISMATCH")
+    return profile, run_id, process
+
+
+def _resolve_current_service_run(
+    manager: Any, *, subject: str, instance_id: str
+) -> tuple[Any, str, Any]:
     with manager_module._instance_store_lock():
         instance = manager_module._load_instances().get(instance_id)
         process = getattr(manager, "_processes", {}).get(instance_id)
@@ -247,20 +318,8 @@ def _resolve_exact_run(
         profile = registry.resolve(profile_ref)
     except ServiceStrategyProfileError as exc:
         raise StrategyProcessStopError(_safe_error_code(exc.code)) from None
-    if (
-        profile.strategy_id != strategy_id
-        or subject not in profile.authorized_subjects
-        or getattr(config, "wire_account_ref", None) != profile.account_ref
-    ):
+    if profile.strategy_id != strategy_id or subject not in profile.authorized_subjects:
         raise StrategyProcessStopError("SERVICE_STRATEGY_SCOPE_MISMATCH")
-
-    wire_scope = getattr(binding, "wire_scope", None)
-    if (
-        getattr(wire_scope, "account_ref", None) != profile.account_ref
-        or getattr(wire_scope, "strategy_ref", None) != profile.strategy_ref
-        or getattr(wire_scope, "run_id", None) != run_id
-    ):
-        raise StrategyProcessStopError("OWNER_CONTROL_RUN_MISMATCH")
     return profile, run_id, process
 
 
