@@ -31,7 +31,6 @@ from app.services.alert_evaluation import (
     get_current_metric_value,
 )
 from app.services.backtest_service import BacktestService
-from app.services.live_trading.service import LiveTradingService
 from app.services.paper_trading_service import PaperTradingService
 from app.utils.safe_webhook import open_safe_webhook
 from app.websocket_manager import manager as ws_manager
@@ -72,7 +71,6 @@ class MonitoringService:
         self.alert_repo = SQLRepository(Alert)
         self.alert_rule_repo = SQLRepository(AlertRule)
         self.notification_repo = SQLRepository(AlertNotification)
-        self.live_trading_service = LiveTradingService()
         self.backtest_service = BacktestService()
         self.paper_trading_service = PaperTradingService()
 
@@ -802,7 +800,6 @@ class MonitoringService:
             rule,
             config,
             getattr(self, "paper_trading_service", None),
-            getattr(self, "live_trading_service", None),
             getattr(self, "backtest_service", None),
         )
 
