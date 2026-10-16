@@ -7,6 +7,7 @@ import socket
 import threading
 import traceback
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -671,6 +672,14 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
             assert {row.generation_ref for row in resolved_rows} == {_GENERATION}
             assert {str(row.risk_policy.max_increase_notional) for row in resolved_rows} == {"25"}
             assert {row.risk_policy.notional_unit for row in resolved_rows} == {"USD"}
+            await _exercise_http_account_gate_consumer(
+                client=client,
+                monkeypatch=monkeypatch,
+                subject=maker_subject,
+                headers=maker_headers,
+                resolver=resolver,
+                tmp_path=tmp_path,
+            )
         finally:
             reopened_catalog.close()
             reopened_confirmations.close()
@@ -682,4 +691,197 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
         if not stores_closed:
             catalog.close()
             confirmations.close()
+
+
+async def _exercise_http_account_gate_consumer(
+    *,
+    client: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    subject: str,
+    headers: dict[str, str],
+    resolver: Any,
+    tmp_path: Path,
+) -> None:
+    """Use the HTTP-created generation through the normal account-owner route."""
+
+    from tests import test_afi_budget_manual_admission_host as manual
+
+    account_ref = _ACCOUNTS[0]
+    resolved = resolver.resolve(
+        _POOL,
+        account_ref,
+        scope=WireScope(
+            _DOMAIN,
+            account_ref=account_ref,
+            portfolio_ref=_PORTFOLIO,
+        ),
+    )
+    assert resolved.generation_ref == _GENERATION, resolved
+    assert resolved.account_ref == account_ref, resolved
+    for name, value in {
+        "_DOMAIN": _DOMAIN,
+        "_ACCOUNT": account_ref,
+        "_POOL": _POOL,
+        "_PORTFOLIO": _PORTFOLIO,
+        "_POLICY_REF_A": resolved.policy_ref,
+    }.items():
+        monkeypatch.setattr(manual, name, value)
+
+    endpoint = manual._endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    keys = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+    }
+    provider = manual._SyntheticProvider()
+    resources: dict[str, Any] = {}
+
+    base_resource_provider = manual._resource_provider_factory(
+        resolver=resolver,
+        gate_path=tmp_path / "afi-budget-consumer-risk.sqlite3",
+        journal_path=tmp_path / "afi-budget-consumer-journal.sqlite3",
+        provider=provider,
+        resources=resources,
+    )
+
+    def provide_account_risk_resources(
+        component: str,
+        instance_id: str,
+        options: Any,
+        scope: WireScope,
+    ) -> ComponentResources:
+        bundle = base_resource_provider(component, instance_id, options, scope)
+        if component != "risk":
+            return bundle
+        resolved_budget = resources.get("resolved_budget")
+        assert resolved_budget is not None, resources
+        values = dict(bundle.values)
+        values["resolved_budget_admission"] = resolved_budget
+        return ComponentResources.borrowed(
+            values,
+            ready=bundle.ready,
+            internal_ports=bundle.internal_ports,
+            risk_policy_bindings=bundle.risk_policy_bindings,
+            shared_collateral_domains=bundle.shared_collateral_domains,
+        )
+
+    host_owner = manual._HostOwner(
+        manual._service_config(endpoint),
+        manual._service_authority(endpoint, keys),
+        tmp_path / "afi-budget-consumer-service-registry.sqlite3",
+        provide_account_risk_resources,
+        resources,
+    )
+    profile = manual._application_profile(
+        subject=subject,
+        endpoint=endpoint,
+        keys=keys,
+    )
+    application = main_module.app
+    previous = getattr(application.state, "service_read_deployment", None)
+    assert previous is None or previous.closed, previous
+    monkeypatch.setattr(
+        main_module.settings,
+        "SERVICE_READ_DEPLOYMENT_JSON",
+        SecretStr(
+            json.dumps(
+                {"schema_version": 1, "subjects": [profile]},
+                separators=(",", ":"),
+            )
+        ),
+    )
+    manual.configure_service_read(None)
+    deployment = None
+    host_started = False
+    try:
+        host_started = host_owner.start()
+        assert host_started, host_owner.diagnostics()
+        assert host_owner.state == "started", host_owner.diagnostics()
+        assert resources["resolved_budget"].generation_ref == _GENERATION
+        assert resources["resolved_budget"].policy_ref == resolved.policy_ref
+        assert resources["startup_policy_binding"].policy_fingerprint == (
+            resolved.risk_policy.fingerprint
+        )
+
+        async with main_module.lifespan(application):
+            deployment = application.state.service_read_deployment
+            assert deployment is not None and not deployment.closed
+            denied = await client.post(
+                "/api/v1/service-orders/manual",
+                json={
+                    "scope_ref": manual._SELECTOR,
+                    "instrument": manual._INSTRUMENT,
+                    "side": "BUY",
+                    "position_effect": "OPEN",
+                    "order_type": "LIMIT",
+                    "quantity": "2",
+                    "price": "20",
+                    "time_in_force": "GTC",
+                    "reduce_only": False,
+                },
+                headers={
+                    **headers,
+                    "Idempotency-Key": "afi-policy-generation-over-budget",
+                },
+            )
+            assert denied.status_code == 200, denied.text
+            denied_payload = denied.json()
+            assert denied_payload["service_code"] == "ADMISSION_DENIED", denied_payload
+            assert denied_payload["record"]["state"] == "REJECTED", denied_payload
+            after_denial = host_owner.observe()
+            assert after_denial["policy_id"] == resolved.policy_ref, after_denial
+            assert after_denial["policy_fingerprint"] == resolved.risk_policy.fingerprint
+            assert after_denial["increase_count"] == 0, after_denial
+            assert Decimal(str(after_denial["increase_notional"])) == Decimal("0"), after_denial
+            assert after_denial["provider_writes"] == (), after_denial
+
+            accepted = await client.post(
+                "/api/v1/service-orders/manual",
+                json={
+                    "scope_ref": manual._SELECTOR,
+                    "instrument": manual._INSTRUMENT,
+                    "side": "BUY",
+                    "position_effect": "OPEN",
+                    "order_type": "LIMIT",
+                    "quantity": "1",
+                    "price": "20",
+                    "time_in_force": "GTC",
+                    "reduce_only": False,
+                },
+                headers={
+                    **headers,
+                    "Idempotency-Key": "afi-policy-generation-under-budget",
+                },
+            )
+            assert accepted.status_code == 200, accepted.text
+            accepted_payload = accepted.json()
+            assert accepted_payload["service_code"] == "OK", accepted_payload
+            assert accepted_payload["record"]["state"] == "ACKED_TRACKED", accepted_payload
+            assert accepted_payload["outcome"] == "durable_record", accepted_payload
+            observed = host_owner.observe()
+            assert observed["policy_id"] == resolved.policy_ref, observed
+            assert observed["policy_fingerprint"] == resolved.risk_policy.fingerprint
+            assert observed["ledger_identity_ref"], observed
+            assert observed["increase_count"] == 1, observed
+            assert Decimal(str(observed["increase_notional"])) == Decimal("20"), observed
+            assert len(observed["provider_writes"]) == 1, observed
+            assert resources["resolved_budget"].generation_ref == _GENERATION
+            assert "consumer_effective" not in accepted_payload
+
+        assert deployment is not None and deployment.closed
+        assert deployment.close_failures == ()
+        assert application.state.service_read_deployment is None
+    finally:
+        manual.configure_service_read(None)
+        if deployment is not None and not deployment.closed:
+            await deployment.aclose()
+        host_owner.close()
+        if host_started:
+            assert host_owner.state == "closed", host_owner.diagnostics()
+            assert host_owner.error is None, host_owner.diagnostics()
+        else:
+            assert not host_owner.diagnostics()["thread_alive"], host_owner.diagnostics()
 
