@@ -676,6 +676,64 @@ describe('PortfolioPage', () => {
           },
           position_residual: [{ instrument: 'SYNTH-A', net_quantity: '0.5' }],
           fee_residual: [{ currency: 'USDT', amount: '0.04' }],
+          financial: {
+            status: 'available' as const,
+            source: 'PERSISTED_EXECUTION_FINANCIAL_PROJECTION' as const,
+            freshness: 'PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED' as const,
+            cut_relationship: 'INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT' as const,
+            complete: true,
+            state: 'RESIDUAL' as const,
+            ledger_cut: {
+              owner_directory_revision: 'financial-directory-a-r1',
+              captured_at_ns: '1797000000123456789',
+              watermarks: [
+                {
+                  source_kind: 'execution_outbox' as const,
+                  source_ref: 'synthetic-outbox-a',
+                  generation: 'synthetic-generation-a',
+                  cursor: 0,
+                  as_of_ns: '1797000000123456789',
+                },
+                {
+                  source_kind: 'account_facts' as const,
+                  source_ref: 'synthetic-facts-a',
+                  generation: 'synthetic-facts-generation-a',
+                  cursor: 3,
+                  as_of_ns: '1797000000123456788',
+                },
+                {
+                  source_kind: 'account_activity' as const,
+                  source_ref: 'synthetic-activity-a',
+                  generation: 'synthetic-activity-generation-a',
+                  cursor: 4,
+                  as_of_ns: '1797000000123456787',
+                },
+              ],
+            },
+            books: [
+              {
+                owner: { kind: 'STRATEGY' as const, owner_ref: 'strategy-a' },
+                cash: [{ currency: 'USDT', amount: '123.45' }],
+                positions: [{
+                  instrument: 'SYNTH-A',
+                  quantity: '2.5',
+                  cost_basis: null,
+                  cost_currency: null,
+                  cost_method: 'AVERAGE_COST' as const,
+                  product_model: 'SPOT' as const,
+                  metadata_version: 'synthetic-spot-v1',
+                }],
+                cumulative_fees: [{ currency: 'USDT', amount: '0' }],
+                realized_pnl: [],
+                cost_basis_complete: false,
+              },
+            ],
+            unallocated: {
+              cash: [],
+              positions: [{ instrument: 'SYNTH-A', quantity: '0.5' }],
+              fees: [],
+            },
+          },
         },
         {
           account_ref: 'account-b',
@@ -690,6 +748,12 @@ describe('PortfolioPage', () => {
           },
           position_residual: [{ instrument: 'SYNTH-B', net_quantity: '1' }],
           fee_residual: [{ currency: 'USDT', amount: '0.07' }],
+          financial: {
+            status: 'unavailable' as const,
+            code: 'PERSISTED_PROJECTION_UNAVAILABLE' as const,
+            freshness: 'NOT_ESTABLISHED' as const,
+            cut_relationship: 'INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT' as const,
+          },
         },
       ],
       strategies: [
@@ -753,6 +817,24 @@ describe('PortfolioPage', () => {
       .text()).toContain('SYNTH-B · 2')
     expect(accountSources[1].get('[data-test="portfolio-account-book-position-residual"]')
       .text()).toContain('SYNTH-B · 1')
+    const availableFinancial = accountSources[0].get('[data-test="portfolio-account-book-financial"]')
+    expect(availableFinancial.get('[data-test="portfolio-account-book-financial-cut"]')
+      .text()).toContain('1797000000123456789')
+    expect(availableFinancial.get('[data-test="portfolio-account-book-financial-cut"]')
+      .text()).toContain('PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED')
+    expect(availableFinancial.get('[data-test="portfolio-account-book-financial-watermarks"]')
+      .text()).toContain('cursor 3')
+    const availableOwner = availableFinancial.get('[data-test="portfolio-account-book-financial-owner"]')
+    expect(availableOwner.get('[data-test="portfolio-account-book-financial-cash"]').text())
+      .toBe('123.45 USDT')
+    expect(availableOwner.get('[data-test="portfolio-account-book-financial-fees"]').text())
+      .toBe('0 USDT')
+    expect(availableOwner
+      .get('[data-test="portfolio-account-book-financial-position"]').text())
+      .toContain('cost basis 缺失 / Missing')
+    expect(availableFinancial.text()).toContain('不会加入账户总额')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-financial-unavailable"]')
+      .text()).toContain('PERSISTED_PROJECTION_UNAVAILABLE')
 
     // These execution quantities remain separate source facts; none are folded into account equity.
     expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('950 USDT')
@@ -842,6 +924,8 @@ describe('PortfolioPage', () => {
     expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('42 USD')
     expect(wrapper.get('[data-test="portfolio-account-book-unallocated-unavailable"]')
       .text()).toContain('未提供未分配账簿详情')
+    expect(wrapper.get('[data-test="portfolio-account-book-financial-absent"]')
+      .text()).toContain('Financial projection not provided')
     expect(wrapper.findAll('[data-test="portfolio-account-book-unallocated-position"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-test="portfolio-account-book-position-residual"] li')).toHaveLength(0)
   })

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -365,6 +366,7 @@ class PortfolioCompositionService:
                     "unallocated_book": unallocated_book,
                     "position_residual": source["position_residual"],
                     "fee_residual": source["fee_residual"],
+                    "financial": _public_financial_projection(source),
                 }
 
             source = view.to_dict()
@@ -897,6 +899,83 @@ def _account_row(
         "included_in_total": included,
         "duplicate_of_ref": duplicate_of,
         "detail_code": detail_code,
+    }
+
+
+def _public_financial_projection(source: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose persisted financial facts without account keys or execution scopes."""
+
+    if "financial" not in source:
+        return {"status": "absent"}
+
+    financial = source["financial"]
+    if not isinstance(financial, Mapping) or type(financial.get("available")) is not bool:
+        raise ValueError("INVALID_ACCOUNT_BOOK_FINANCIAL")
+    if financial["available"] is False:
+        return {
+            "status": "unavailable",
+            "code": financial["code"],
+            "freshness": financial["freshness"],
+            "cut_relationship": financial["cut_relationship"],
+        }
+
+    ledger_cut = financial["ledger_cut"]
+    public_cut = {
+        "owner_directory_revision": ledger_cut["owner_directory_revision"],
+        # Keep nanosecond cursors exact when JSON is parsed by JavaScript.
+        "captured_at_ns": str(ledger_cut["captured_at_ns"]),
+        "watermarks": [
+            {
+                "source_kind": item["source_kind"],
+                "source_ref": item["source_ref"],
+                "generation": item["generation"],
+                "cursor": item["cursor"],
+                "as_of_ns": str(item["as_of_ns"]),
+            }
+            for item in ledger_cut["watermarks"]
+        ],
+    }
+    return {
+        "status": "available",
+        "source": financial["source"],
+        "freshness": financial["freshness"],
+        "cut_relationship": financial["cut_relationship"],
+        "complete": financial["complete"],
+        "state": financial["state"],
+        "ledger_cut": public_cut,
+        "books": [
+            {
+                "owner": {
+                    "kind": book["owner"]["kind"],
+                    "owner_ref": book["owner"]["owner_ref"],
+                },
+                "cash": list(book["cash"]),
+                "positions": [
+                    {
+                        "instrument": position["instrument"],
+                        "quantity": position["quantity"],
+                        "cost_basis": position["cost_basis"],
+                        "cost_currency": position["cost_currency"],
+                        "cost_method": position["cost_method"],
+                        "product_model": position["product_model"],
+                        "metadata_version": position["metadata_version"],
+                    }
+                    for position in book["positions"]
+                ],
+                "cumulative_fees": list(book["cumulative_fees"]),
+                "realized_pnl": list(book["realized_pnl"]),
+                "cost_basis_complete": book["cost_basis_complete"],
+            }
+            for book in financial["books"]
+        ],
+        "unallocated": {
+            "cash": list(financial["unallocated"]["cash"]),
+            "positions": [
+                {"instrument": instrument, "quantity": quantity}
+                for instrument, quantity in financial["unallocated"]["positions"]
+            ],
+            "fees": list(financial["unallocated"]["fees"]),
+        },
     }
 
 

@@ -34,15 +34,30 @@ from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa
 from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 from app.services.asset_research.data import canonical_json_hash  # noqa: E402
-from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory  # noqa: E402
-from app.services.service_read.contracts import AccountReadView, ReadQuality  # noqa: E402
+from app.services.portfolio_composition import _public_financial_projection  # noqa: E402
+from app.services.service_read.access import (  # noqa: E402
+    ReadAccess,
+    ServiceReadAccessDirectory,
+    StrategyBookBinding,
+)
+from app.services.service_read.contracts import (  # noqa: E402
+    AccountBookReadView,
+    AccountReadView,
+    ReadQuality,
+)
 from app.services.service_read.worker import ServiceReadWorker  # noqa: E402
 
 
 class _SyntheticReadSession:
-    def __init__(self, views: dict[str, AccountReadView]) -> None:
+    def __init__(
+        self,
+        views: dict[str, AccountReadView],
+        account_book_views: dict[str, AccountBookReadView] | None = None,
+    ) -> None:
         self.views = views
+        self.account_book_views = account_book_views or {}
         self.account_reads: list[tuple[str, str | None]] = []
+        self.account_book_reads: list[str] = []
         self.closed = False
 
     def start(self) -> None:
@@ -54,6 +69,10 @@ class _SyntheticReadSession:
     def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView:
         self.account_reads.append((account_ref, currency))
         return self.views[account_ref]
+
+    def read_account_book(self, account_ref: str) -> AccountBookReadView:
+        self.account_book_reads.append(account_ref)
+        return self.account_book_views[account_ref]
 
     def read_order(self, scope_ref: str, intent_id: str) -> None:
         raise AssertionError("the composition projection must not read orders")
@@ -77,6 +96,285 @@ def _account_view(account_ref: str, key: object, *, value: str, cash: str) -> Ac
         account_key=key.to_dict(),
         account_key_id=key.account_key_id,
     )
+
+
+def test_public_account_book_projection_preserves_financial_states_and_hides_internal_keys():
+    base_source = {
+        "state": "RESIDUAL",
+        "coverage": {
+            "account_key": "private-account-key",
+            "complete": True,
+            "current_execution_cursor": 7,
+        },
+        "books": [
+            {
+                "owner_kind": "UNALLOCATED",
+                "owner_ref": "UNALLOCATED",
+                "current_positions": [],
+                "fees_since_baseline": [],
+            }
+        ],
+        "provider_position_change": [],
+        "position_residual": [],
+        "fee_residual": [],
+    }
+
+    absent = _public_financial_projection(base_source)
+    assert absent == {"status": "absent"}
+
+    unavailable_source = {
+        **base_source,
+        "financial": {
+            "available": False,
+            "code": "PERSISTED_PROJECTION_UNAVAILABLE",
+            "freshness": "NOT_ESTABLISHED",
+            "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+            "account_key": "private-account-key",
+        },
+    }
+    unavailable = _public_financial_projection(unavailable_source)
+    assert unavailable == {
+        "status": "unavailable",
+        "code": "PERSISTED_PROJECTION_UNAVAILABLE",
+        "freshness": "NOT_ESTABLISHED",
+        "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+    }
+
+    captured_at_ns = 1_797_000_000_123_456_789
+    ledger_cut = {
+        "account_key": "private-account-key",
+        "owner_directory_revision": "directory-r3",
+        "captured_at_ns": captured_at_ns,
+        "watermarks": [
+            {
+                "source_kind": source_kind,
+                "source_ref": f"synthetic-{source_kind}",
+                "generation": f"generation-{source_kind}",
+                "cursor": cursor,
+                "as_of_ns": captured_at_ns,
+            }
+            for source_kind, cursor in (
+                ("execution_outbox", 7),
+                ("account_facts", 8),
+                ("account_activity", 9),
+            )
+        ],
+    }
+    available_source = {
+        **base_source,
+        "financial": {
+            "available": True,
+            "source": "PERSISTED_EXECUTION_FINANCIAL_PROJECTION",
+            "freshness": "PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED",
+            "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+            "complete": True,
+            "state": "RESIDUAL",
+            "ledger_cut": ledger_cut,
+            "books": [
+                {
+                    "owner": {
+                        "kind": "STRATEGY",
+                        "owner_ref": "strategy-a",
+                        "execution_scope_key": "private-execution-scope",
+                    },
+                    "ledger_cut": ledger_cut,
+                    "cash": [{"currency": "USD", "amount": "0"}],
+                    "positions": [
+                        {
+                            "instrument": "BTC-USD",
+                            "quantity": "2",
+                            "cost_basis": None,
+                            "cost_currency": None,
+                            "cost_method": "AVERAGE_COST",
+                            "product_model": "SPOT",
+                            "metadata_version": "spot-v1",
+                        }
+                    ],
+                    "cumulative_fees": [{"currency": "USD", "amount": "0"}],
+                    "realized_pnl": [],
+                    "cost_basis_complete": False,
+                }
+            ],
+            "unallocated": {
+                "cash": [],
+                "positions": [["ETH-USD", "0.5"]],
+                "fees": [],
+            },
+        },
+    }
+    financial = _public_financial_projection(available_source)
+    assert financial["status"] == "available"
+    assert financial["complete"] is True
+    assert financial["cut_relationship"] == "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT"
+    assert financial["ledger_cut"]["captured_at_ns"] == str(captured_at_ns)
+    assert financial["ledger_cut"]["watermarks"][0]["as_of_ns"] == str(captured_at_ns)
+    assert financial["books"][0]["cash"] == [{"currency": "USD", "amount": "0"}]
+    assert financial["books"][0]["positions"][0]["cost_basis"] is None
+    assert financial["unallocated"]["positions"] == [
+        {"instrument": "ETH-USD", "quantity": "0.5"}
+    ]
+    assert "account_key" not in financial["ledger_cut"]
+    assert "execution_scope_key" not in financial["books"][0]["owner"]
+    assert "private-account-key" not in repr(financial)
+    assert "private-execution-scope" not in repr(financial)
+
+
+def test_financial_projection_reaches_composition_http_response():
+    try:
+        from bt_api_base.account_protocol import AccountKey
+    except ImportError:
+        pytest.skip("the service SDK account protocol is not installed")
+
+    async def scenario() -> None:
+        owner = TokenPayload(sub="financial-owner", username="owner")
+        account_ref = "account-a"
+        strategy_ref = "strategy-a"
+        account_key = AccountKey(
+            provider="synthetic-provider",
+            venue="synthetic-venue",
+            environment="live",
+            account_id="synthetic-account-a",
+            subaccount_id=None,
+        )
+        account_view = _account_view(
+            account_ref, account_key, value="950", cash="200"
+        )
+        account_book = AccountBookReadView(
+            account_ref=account_ref,
+            account_key_id=account_key.account_key_id,
+            projection={
+                "view": "ACCOUNT",
+                "coverage": {
+                    "account_key": "private-book-key-a",
+                    "scope_directory_revision": "legacy-directory-r1",
+                    "journal_generation": "legacy-journal-r1",
+                    "baseline_execution_cursor": 0,
+                    "current_execution_cursor": 0,
+                    "complete": False,
+                    "reasons": ["ACCOUNT_BOOK_NOT_CONFIGURED"],
+                    "scanned_outbox_events": 0,
+                    "outbox_history_contiguous": False,
+                    "outbox_scan_complete": False,
+                    "continuations": [],
+                    "input_continuations": [],
+                    "quarantined_intents": [],
+                },
+                "state": "PARTIAL",
+                "books": [
+                    {
+                        "owner_kind": "STRATEGY",
+                        "owner_ref": strategy_ref,
+                        "current_positions": [],
+                        "fees_since_baseline": [],
+                    }
+                ],
+                "managed_orders": [],
+                "managed_fills": [],
+                "external_orders": [],
+                "external_fills": [],
+                "provider_position_change": [],
+                "position_residual": [],
+                "fee_residual": [],
+                "financial": {
+                    "available": False,
+                    "code": "FINANCIAL_DIRECTORY_UNAVAILABLE",
+                    "freshness": "NOT_ESTABLISHED",
+                    "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+                },
+            },
+        )
+        source_session = _SyntheticReadSession(
+            {account_ref: account_view},
+            {account_ref: account_book},
+        )
+        worker = ServiceReadWorker(
+            lambda: source_session,
+            maintenance_interval_seconds=60,
+            name="afi-financial-projection-http-synthetic",
+        )
+        engine = create_async_engine(
+            "sqlite+aiosqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        async with engine.begin() as connection:
+            await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_maker() as db:
+            db.add(
+                PortfolioCompositionVersion(
+                    owner_subject=owner.sub,
+                    portfolio_ref="financial-http",
+                    membership_version=1,
+                    source_type="live",
+                    base_currency="USD",
+                    members=[
+                        {"kind": "account", "ref": account_ref},
+                        {"kind": "strategy", "ref": strategy_ref},
+                    ],
+                    membership_sha256="a" * 64,
+                )
+            )
+            await db.commit()
+
+        app = FastAPI()
+        app.include_router(portfolio_router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: owner
+
+        async def override_db():
+            async with session_maker() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_db
+        configure_service_read(
+            ServiceReadAccessDirectory(
+                {
+                    owner.sub: ReadAccess(
+                        worker,
+                        allow_account_refs={account_ref},
+                        allow_account_book_refs={account_ref},
+                        strategy_book_bindings={
+                            strategy_ref: StrategyBookBinding(
+                                account_ref=account_ref,
+                                owner_ref=strategy_ref,
+                            )
+                        },
+                    )
+                }
+            )
+        )
+        try:
+            await worker.start()
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                response = await client.get(
+                    "/api/v1/portfolio/compositions/financial-http/versions/1/projection"
+                )
+            assert response.status_code == 200, response.text
+            projected = response.json()
+            assert projected["account_total"] == {
+                "status": "current",
+                "currency": "USD",
+                "value": "950",
+            }
+            financial = projected["account_book_sources"][0]["financial"]
+            assert financial == {
+                "status": "unavailable",
+                "code": "FINANCIAL_DIRECTORY_UNAVAILABLE",
+                "freshness": "NOT_ESTABLISHED",
+                "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+            }
+            assert source_session.account_book_reads == [account_ref]
+            for private_value in ("private-book-key-a", "synthetic-account-a"):
+                assert private_value not in response.text
+        finally:
+            configure_service_read(None)
+            await worker.aclose()
+            await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_composition_membership_versions_and_live_overview_projection(monkeypatch):

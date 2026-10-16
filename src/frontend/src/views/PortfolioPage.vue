@@ -559,6 +559,168 @@
               </dl>
 
               <section
+                class="portfolio-composition__financial"
+                data-test="portfolio-account-book-financial"
+              >
+                <h4>持久财务账簿 / Persisted financial books</h4>
+                <p>
+                  持久执行账簿资金与成本仅作账簿投影，不是实时账户总额，也不会加入账户总额。
+                  / Persisted execution-ledger cash and cost are a book projection, not live account equity, and are not added to the account total.
+                </p>
+                <p
+                  v-if="!source.financial || source.financial.status === 'absent'"
+                  data-test="portfolio-account-book-financial-absent"
+                >
+                  财务子投影未提供 / Financial projection not provided.
+                </p>
+                <p
+                  v-else-if="source.financial.status === 'unavailable'"
+                  data-test="portfolio-account-book-financial-unavailable"
+                >
+                  {{ t('portfolio.compositionUnavailable') }}
+                  · {{ source.financial.code }}
+                  · {{ source.financial.freshness }}
+                  · {{ source.financial.cut_relationship }}
+                </p>
+                <template v-else>
+                  <dl data-test="portfolio-account-book-financial-cut">
+                    <div>
+                      <dt>财务账簿状态 / Financial state</dt>
+                      <dd>{{ source.financial.state }}</dd>
+                    </div>
+                    <div>
+                      <dt>账簿投影完整 / Projection complete</dt>
+                      <dd>{{ source.financial.complete ? '是 / Yes' : '否 / No' }}</dd>
+                    </div>
+                    <div>
+                      <dt>独立账簿 cut / Independent ledger cut</dt>
+                      <dd>{{ source.financial.cut_relationship }}</dd>
+                    </div>
+                    <div>
+                      <dt>新鲜度 / Freshness</dt>
+                      <dd>{{ source.financial.freshness }}</dd>
+                    </div>
+                    <div>
+                      <dt>采集时间（纳秒）/ Captured at (ns)</dt>
+                      <dd><code>{{ source.financial.ledger_cut.captured_at_ns }}</code></dd>
+                    </div>
+                    <div>
+                      <dt>Owner directory revision</dt>
+                      <dd><code>{{ source.financial.ledger_cut.owner_directory_revision }}</code></dd>
+                    </div>
+                  </dl>
+                  <ul data-test="portfolio-account-book-financial-watermarks">
+                    <li
+                      v-for="watermark in source.financial.ledger_cut.watermarks"
+                      :key="watermark.source_kind"
+                    >
+                      {{ watermark.source_kind }} · {{ watermark.source_ref }}
+                      · <code>{{ watermark.generation }}</code>
+                      · cursor {{ watermark.cursor }}
+                      · as of <code>{{ watermark.as_of_ns }} ns</code>
+                    </li>
+                  </ul>
+                  <article
+                    v-for="book in source.financial.books"
+                    :key="`${book.owner.kind}/${book.owner.owner_ref}`"
+                    data-test="portfolio-account-book-financial-owner"
+                  >
+                    <h5>{{ book.owner.kind }}/{{ book.owner.owner_ref }}</h5>
+                    <p>现金 / Cash</p>
+                    <ul
+                      v-if="book.cash.length > 0"
+                      data-test="portfolio-account-book-financial-cash"
+                    >
+                      <li
+                        v-for="amount in book.cash"
+                        :key="amount.currency"
+                      >
+                        {{ compositionAmount(amount.amount, amount.currency) }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告现金条目 / No cash rows reported.</p>
+                    <p>持仓成本 / Position cost basis</p>
+                    <ul v-if="book.positions.length > 0">
+                      <li
+                        v-for="position in book.positions"
+                        :key="position.instrument"
+                        data-test="portfolio-account-book-financial-position"
+                      >
+                        {{ position.instrument }} · quantity {{ position.quantity }}
+                        · cost basis
+                        {{ position.cost_basis === null
+                          ? '缺失 / Missing'
+                          : compositionAmount(position.cost_basis, position.cost_currency) }}
+                        · {{ position.cost_method }} / {{ position.product_model }}
+                        · metadata {{ position.metadata_version }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告持仓成本 / No position costs reported.</p>
+                    <p>累计费用 / Cumulative fees</p>
+                    <ul
+                      v-if="book.cumulative_fees.length > 0"
+                      data-test="portfolio-account-book-financial-fees"
+                    >
+                      <li
+                        v-for="amount in book.cumulative_fees"
+                        :key="amount.currency"
+                      >
+                        {{ compositionAmount(amount.amount, amount.currency) }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告费用条目 / No fee rows reported.</p>
+                    <p>已实现盈亏 / Realized PnL</p>
+                    <ul v-if="book.realized_pnl.length > 0">
+                      <li
+                        v-for="amount in book.realized_pnl"
+                        :key="amount.currency"
+                      >
+                        {{ compositionAmount(amount.amount, amount.currency) }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告盈亏条目 / No realized PnL rows reported.</p>
+                    <p>
+                      成本基础完整 / Cost basis complete:
+                      {{ book.cost_basis_complete ? '是 / Yes' : '否 / No' }}
+                    </p>
+                  </article>
+                  <section data-test="portfolio-account-book-financial-unallocated">
+                    <h5>未分配财务账 / Unallocated financial book</h5>
+                    <p>现金 / Cash</p>
+                    <ul v-if="source.financial.unallocated.cash.length > 0">
+                      <li
+                        v-for="amount in source.financial.unallocated.cash"
+                        :key="amount.currency"
+                      >
+                        {{ compositionAmount(amount.amount, amount.currency) }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告现金条目 / No cash rows reported.</p>
+                    <p>持仓数量 / Position quantities</p>
+                    <ul v-if="source.financial.unallocated.positions.length > 0">
+                      <li
+                        v-for="position in source.financial.unallocated.positions"
+                        :key="position.instrument"
+                      >
+                        {{ position.instrument }} · {{ position.quantity }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告持仓 / No positions reported.</p>
+                    <p>费用 / Fees</p>
+                    <ul v-if="source.financial.unallocated.fees.length > 0">
+                      <li
+                        v-for="amount in source.financial.unallocated.fees"
+                        :key="amount.currency"
+                      >
+                        {{ compositionAmount(amount.amount, amount.currency) }}
+                      </li>
+                    </ul>
+                    <p v-else>未报告费用条目 / No fee rows reported.</p>
+                  </section>
+                </template>
+              </section>
+
+              <section
                 v-if="source.unallocated_book"
                 data-test="portfolio-account-book-unallocated"
               >

@@ -121,6 +121,75 @@ export interface PortfolioExecutionBookFee {
   amount: string
 }
 
+export interface PortfolioFinancialAmount {
+  currency: string
+  amount: string
+}
+
+export interface PortfolioFinancialWatermark {
+  source_kind: 'execution_outbox' | 'account_facts' | 'account_activity'
+  source_ref: string
+  generation: string
+  cursor: number
+  as_of_ns: string
+}
+
+export interface PortfolioFinancialLedgerCut {
+  owner_directory_revision: string
+  captured_at_ns: string
+  watermarks: PortfolioFinancialWatermark[]
+}
+
+export interface PortfolioFinancialPosition {
+  instrument: string
+  quantity: string
+  cost_basis: string | null
+  cost_currency: string | null
+  cost_method: 'AVERAGE_COST'
+  product_model: 'SPOT'
+  metadata_version: string
+}
+
+export interface PortfolioFinancialOwnerBook {
+  owner: {
+    kind: 'STRATEGY' | 'MANUAL_BOOK'
+    owner_ref: string
+  }
+  cash: PortfolioFinancialAmount[]
+  positions: PortfolioFinancialPosition[]
+  cumulative_fees: PortfolioFinancialAmount[]
+  realized_pnl: PortfolioFinancialAmount[]
+  cost_basis_complete: boolean
+}
+
+export type PortfolioFinancialProjection = {
+  status: 'absent'
+} | {
+  status: 'unavailable'
+  code:
+    | 'FINANCIAL_DIRECTORY_UNAVAILABLE'
+    | 'FINANCIAL_DIRECTORY_MISMATCH'
+    | 'PERSISTED_PROJECTION_UNAVAILABLE'
+    | 'INCOMPLETE_PERSISTED_PROJECTION'
+    | 'FINANCIAL_EXECUTION_CUT_MISMATCH'
+  freshness: 'NOT_ESTABLISHED'
+  cut_relationship: 'INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT'
+} | {
+  status: 'available'
+  source: 'PERSISTED_EXECUTION_FINANCIAL_PROJECTION'
+  freshness: 'PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED'
+  cut_relationship: 'INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT'
+  complete: boolean
+  state: 'BALANCED' | 'RESIDUAL'
+  ledger_cut: PortfolioFinancialLedgerCut
+  books: PortfolioFinancialOwnerBook[]
+  unallocated: {
+    cash: PortfolioFinancialAmount[]
+    positions: Array<{ instrument: string; quantity: string }>
+    fees: PortfolioFinancialAmount[]
+  }
+}
+
 export interface PortfolioExecutionOwnerBook {
   owner_kind: 'STRATEGY' | 'MANUAL_BOOK' | 'UNALLOCATED'
   owner_ref: string
@@ -150,6 +219,8 @@ export interface PortfolioAccountBookSource {
   unallocated_book?: PortfolioExecutionOwnerBook | null
   position_residual: PortfolioExecutionBookPosition[]
   fee_residual: PortfolioExecutionBookFee[]
+  /** Persisted execution financial facts, kept separate from the provider account total. */
+  financial?: PortfolioFinancialProjection
 }
 
 export interface PortfolioCompositionProjection {
