@@ -36,6 +36,8 @@ from app.models.strategy_approval_authority import (
     StrategyOrderApprovalPolicyVersion,
 )
 from app.models.strategy_target_approval import StrategyTargetApproval, StrategyTargetApprovalEvent
+from app.models.user import User
+from app.models.workspace import StrategyUnit, Workspace
 from app.services.legacy_paper_migration import (
     MAX_INVENTORY_ROWS_PER_TABLE,
     LegacyPaperInventory,
@@ -50,6 +52,97 @@ from app.services.legacy_paper_migration import (
 
 _MAX_PRESERVED_CONTEXT_BYTES = 8 * 1024 * 1024
 _MAX_CONTEXT_ROWS_PER_TABLE = 20_000
+
+
+async def _validate_runtime_instance_account_bindings(
+    session: Any, *, owner_subject: str
+) -> None:
+    """Require persisted, unambiguous account links for owned runtimes.
+
+    A runtime's JSON configuration is not an identity binding.  The only
+    source relation available here is a non-null paper_account_id recorded on
+    every snapshot for the canonical runtime instance.
+    """
+    unit_result = await session.execute(
+        select(Workspace.id, StrategyUnit.id, StrategyUnit.trading_instance_id)
+        .join(StrategyUnit, StrategyUnit.workspace_id == Workspace.id)
+        .where(
+            Workspace.user_id == owner_subject,
+            StrategyUnit.trading_instance_id.is_not(None),
+        )
+        .order_by(Workspace.id.asc(), StrategyUnit.id.asc())
+        .limit(_MAX_CONTEXT_ROWS_PER_TABLE + 1)
+    )
+    unit_rows = list(unit_result.all())
+    if len(unit_rows) > _MAX_CONTEXT_ROWS_PER_TABLE:
+        raise LegacyPaperImportError("LEGACY_CONTEXT_LIMIT_EXCEEDED")
+    runtime_units: dict[str, tuple[str, str]] = {}
+    for workspace_id, unit_id, instance_id in unit_rows:
+        if not all(type(value) is str and value for value in (workspace_id, unit_id, instance_id)):
+            raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
+        if instance_id in runtime_units:
+            raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
+        runtime_units[instance_id] = (workspace_id, unit_id)
+
+    snapshot_result = await session.execute(
+        select(
+            PaperEquitySnapshot.id,
+            PaperEquitySnapshot.workspace_id,
+            PaperEquitySnapshot.unit_id,
+            PaperEquitySnapshot.instance_id,
+            PaperEquitySnapshot.paper_account_id,
+        )
+        .where(PaperEquitySnapshot.user_id == owner_subject)
+        .order_by(PaperEquitySnapshot.id.asc())
+        .limit(_MAX_CONTEXT_ROWS_PER_TABLE + 1)
+    )
+    snapshot_rows = list(snapshot_result.all())
+    if len(snapshot_rows) > _MAX_CONTEXT_ROWS_PER_TABLE:
+        raise LegacyPaperImportError("LEGACY_CONTEXT_LIMIT_EXCEEDED")
+
+    accounts_by_instance: dict[str, set[str]] = {}
+    for _, workspace_id, unit_id, instance_id, account_id in snapshot_rows:
+        unit_identity = runtime_units.get(instance_id)
+        if (
+            unit_identity is None
+            or unit_identity != (workspace_id, unit_id)
+            or type(account_id) is not str
+            or not account_id
+        ):
+            raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
+        accounts_by_instance.setdefault(instance_id, set()).add(account_id)
+
+    if any(len(account_ids) != 1 for account_ids in accounts_by_instance.values()):
+        raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
+    if any(instance_id not in accounts_by_instance for instance_id in runtime_units):
+        raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
+
+    account_ids = sorted(
+        {next(iter(account_ids)) for account_ids in accounts_by_instance.values()}
+    )
+    if account_ids:
+        account_result = await session.execute(
+            select(Account.id)
+            .join(
+                PaperEquitySnapshot,
+                PaperEquitySnapshot.paper_account_id == Account.id,
+            )
+            .where(
+                PaperEquitySnapshot.user_id == owner_subject,
+                Account.user_id == owner_subject,
+            )
+        )
+        owned_accounts = {row[0] for row in account_result.all()}
+        if owned_accounts != set(account_ids):
+            raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
+
+async def _read_runtime_instance_account_bindings(
+    owner_subject: str,
+) -> None:
+    async with database.async_session_maker() as session:
+        await _validate_runtime_instance_account_bindings(
+            session, owner_subject=owner_subject
+        )
 
 
 class LegacyPaperImportError(RuntimeError):
@@ -249,7 +342,11 @@ async def _bounded_rows(session: Any, model: Any, *predicates: Any) -> list[dict
 
 
 async def _preserved_context(
-    session: Any, *, owner_subject: str, binding_payload: Mapping[str, Any], document: Mapping[str, Any]
+    session: Any,
+    *,
+    owner_subject: str,
+    binding_payload: Mapping[str, Any],
+    document: Mapping[str, Any],
 ) -> tuple[dict[str, Any], str, str]:
     account_id = str(binding_payload["legacy_account_id"])
     order_ids = [row["id"] for row in document["orders"]]
@@ -463,6 +560,16 @@ async def _freeze_source(
                     return existing
 
                 if existing is None or existing.state == "ABORTED":
+                    # Snapshot writers take this same owner row before they
+                    # inspect or mutate runtime history.  The no-op UPDATE
+                    # supplies the common serialization point on SQLite as
+                    # well as a row lock on databases that ignore FOR UPDATE
+                    # for read-only queries.
+                    await session.execute(
+                        update(User)
+                        .where(User.id == owner_subject)
+                        .values(updated_at=User.updated_at)
+                    )
                     # The no-op update takes the same account-row lock as legacy
                     # writers.  A racing import that committed its fence first
                     # is handled by the read-only recovery below.
@@ -513,6 +620,9 @@ async def _freeze_source(
                 if not any((locked.order_count, locked.position_count, locked.trade_count)):
                     raise LegacyPaperImportError("LEGACY_ACCOUNT_EMPTY")
                 imported.validate_domain(scope, domain)
+                await _validate_runtime_instance_account_bindings(
+                    session, owner_subject=owner_subject
+                )
                 context, context_json, context_sha = await _preserved_context(
                     session,
                     owner_subject=owner_subject,
@@ -946,6 +1056,9 @@ async def migrate_nonempty_legacy_paper_account(
             symbol_bindings=normalized_bindings,
         )
         imported.validate_domain(scope, domain)
+        # Reject an instance-only or ambiguous runtime relation before the
+        # target Host is queried or any import operation is issued.
+        await _read_runtime_instance_account_bindings(owner_subject)
     except LegacyPaperImportError:
         raise
     except Exception:
