@@ -90,6 +90,7 @@ async def _require_owned_control_target(
     portfolio_ref: str | None,
     session: AsyncSession,
     deployment: OwnerControlDeployment,
+    action: str | None = None,
     require_active: bool = True,
 ) -> tuple[Alert, typing.Any]:
     alert = await session.scalar(
@@ -127,6 +128,7 @@ async def _require_owned_control_target(
             subject=subject,
             afi_account_id=str(account_id),
             portfolio_ref=portfolio_ref,
+            action=action,
             require_active=require_active,
         )
     except OwnerControlError as exc:
@@ -151,23 +153,30 @@ async def control_alert_risk(
     session: AsyncSession = Depends(get_db),
     deployment: OwnerControlDeployment = Depends(get_owner_control_deployment),
 ) -> typing.Any:
-    """Run a supported control through the signed Monitor ledger and owner thread.
+    """Run a supported owner control through its exact authorized service path.
 
-    Acknowledging or resolving this alert remains an independent operation and
-    does not alter any owner RiskGate cause.
+    FREEZE and STOP_NEW use the signed Monitor ledger. CANCEL uses a separately
+    granted execution owner port and returns a durable per-order projection;
+    an acknowledgement does not mean that the orders are terminal.
     """
+    try:
+        implementation = control_implementation_status(request_body.action)
+    except OwnerControlError as exc:
+        _raise_owner_control_error(exc)
+    supported = implementation in {
+        "FREEZE_SUPPORTED",
+        "STOP_NEW_SUPPORTED",
+        "CANCEL_SUPPORTED",
+    }
     _, binding = await _require_owned_control_target(
         alert_id=alert_id,
         subject=current_user.sub,
         portfolio_ref=request_body.portfolio_ref,
         session=session,
         deployment=deployment,
+        action=request_body.action if supported else None,
     )
-    try:
-        implementation = control_implementation_status(request_body.action)
-    except OwnerControlError as exc:
-        _raise_owner_control_error(exc)
-    if implementation not in {"FREEZE_SUPPORTED", "STOP_NEW_SUPPORTED"}:
+    if not supported:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail={"code": implementation},
@@ -220,6 +229,7 @@ async def get_owner_control_status(
         portfolio_ref=binding.config.portfolio_ref,
         session=session,
         deployment=deployment,
+        action=str(projected.get("action", "")).upper(),
         require_active=False,
     )
     if authorized_binding is not binding:

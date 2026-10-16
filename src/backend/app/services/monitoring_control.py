@@ -1,10 +1,11 @@
-"""Signed monitor controls issued through the authenticated SDK service host.
+"""Owner controls issued through the authenticated SDK service host.
 
 AFI holds an operator-provisioned issuer grant and a constrained client
-runtime. It signs, submits, and reads exact FREEZE or STOP_NEW commands. The
-existing MonitorRiskControlOwner applies effects in the service host's
-maintenance cycle; this module never opens a Risk database or constructs a
-Risk policy.
+runtime. FREEZE and STOP_NEW use the signed Monitor ledger. CANCEL uses the
+separately granted execution ``owner.cancel`` port and the same persistent
+issuer/idempotency ledger; it never supplies order identifiers or constructs
+cancellation policy locally. This module never opens a Risk database or
+constructs a Risk policy.
 """
 
 from __future__ import annotations
@@ -23,7 +24,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 _MAX_DEPLOYMENT_BYTES = 262_144
 _MAX_BINDINGS = 128
@@ -32,7 +41,9 @@ _COMMAND_TTL_SECONDS = 30.0
 _MAX_IDEMPOTENCY_KEY_BYTES = 256
 _CONTROL_HMAC_DOMAIN = b"bt-api-monitor.control-command.hmac.v1\0"
 _KEY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_COMMAND_ID_RE = re.compile(r"^afi-monitor-(?P<action>freeze|stop-new)-v1-[0-9a-f]{32}$")
+_COMMAND_ID_RE = re.compile(
+    r"^afi-monitor-(?P<action>freeze|stop-new|cancel)-v1-[0-9a-f]{32}$"
+)
 _STOP_NEW_EFFECT_REF_RE = re.compile(r"^strategy-stop-new-v1:[0-9a-f]{64}$")
 _Z85_ALPHABET = frozenset(
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
@@ -64,7 +75,9 @@ class _BindingConfig(_StrictModel):
     not_before_utc: float
     expires_at_utc: float
     issuer_sequence_start: int = Field(default=0, ge=0)
-    allowed_actions: list[Literal["FREEZE", "STOP_NEW"]] = Field(min_length=1, max_length=2)
+    allowed_actions: list[Literal["FREEZE", "STOP_NEW", "CANCEL"]] = Field(
+        min_length=1, max_length=2
+    )
     service_id: str = Field(min_length=1, max_length=128)
     instance_id: str = Field(min_length=1, max_length=128)
     scope_ref: str = Field(min_length=1, max_length=128)
@@ -124,7 +137,7 @@ class _DeploymentConfig(_StrictModel):
 class OwnerControlRequest(_StrictModel):
     """The request chooses an action only; it cannot carry authority or secrets."""
 
-    action: Literal["FREEZE", "STOP_NEW", "DRAIN", "CLOSE"]
+    action: Literal["FREEZE", "STOP_NEW", "CANCEL", "DRAIN", "CLOSE"]
     portfolio_ref: str | None = None
 
     @field_validator("portfolio_ref")
@@ -135,6 +148,12 @@ class OwnerControlRequest(_StrictModel):
         ):
             raise ValueError("portfolio reference is invalid")
         return value
+
+    @model_validator(mode="after")
+    def _cancel_has_no_client_selected_portfolio(self) -> OwnerControlRequest:
+        if self.action == "CANCEL" and self.portfolio_ref is not None:
+            raise ValueError("CANCEL scope is fixed by the server binding")
+        return self
 
 
 class OwnerControlError(ValueError):
@@ -198,8 +217,6 @@ class OwnerControlDeployment:
                 raise OwnerControlError("DEPLOYMENT_INVALID")
             sdk = _load_sdk()
             bindings = tuple(_build_binding(item, sdk) for item in config.bindings)
-            if len({item.config.subject for item in bindings}) != len(bindings):
-                raise OwnerControlError("DEPLOYMENT_INVALID")
             if len({item.config.issuer for item in bindings}) != len(bindings):
                 # A ledger row records the issuer, not a wire caller. A unique
                 # issuer per actor prevents same-route status disclosure.
@@ -223,8 +240,14 @@ class OwnerControlDeployment:
         subject: str,
         afi_account_id: str,
         portfolio_ref: str | None,
+        action: str | None = None,
         require_active: bool = True,
     ) -> OwnerControlBinding | None:
+        if action is not None and (
+            type(action) is not str
+            or action not in {"FREEZE", "STOP_NEW", "CANCEL"}
+        ):
+            raise OwnerControlError("CONTROL_ACTION_INVALID")
         now = datetime.now(UTC).timestamp()
         if require_active and not self._config.not_before_utc <= now < self._config.expires_at_utc:
             raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
@@ -235,6 +258,7 @@ class OwnerControlDeployment:
             and binding.config.afi_account_id == afi_account_id
             and binding.config.portfolio_ref == portfolio_ref
             and binding.config.wire_portfolio_ref == portfolio_ref
+            and (action is None or action in binding.config.allowed_actions)
             and (
                 not require_active
                 or binding.config.not_before_utc <= now < binding.config.expires_at_utc
@@ -275,7 +299,7 @@ class OwnerControlDeployment:
             raise OwnerControlError("CONTROL_BINDING_INVALID")
         if (
             type(action) is not str
-            or action not in {"FREEZE", "STOP_NEW"}
+            or action not in {"FREEZE", "STOP_NEW", "CANCEL"}
             or action not in binding.config.allowed_actions
         ):
             raise OwnerControlError("OWNER_CONTROL_NOT_AUTHORIZED")
@@ -293,12 +317,28 @@ class OwnerControlDeployment:
                 "payload_b64": base64.b64encode(issued.payload).decode("ascii"),
                 "signature_b64": base64.b64encode(issued.signature).decode("ascii"),
             }
-            projection = self._query_status(
-                binding,
-                issued.command_id,
-                action=action,
-                submit_arguments=arguments if datetime.now(UTC).timestamp() < issued.expires_at else None,
-            )
+            if action == "CANCEL":
+                row = self._issuance_row(issued.command_id)
+                if row is None:
+                    raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
+                cached = _decode_persisted_projection(
+                    row["owner_projection_json"],
+                    issued.command_id,
+                )
+                projection = (
+                    cached
+                    if cached is not None and cached.get("owner_final") is True
+                    else self._query_cancel_owner(binding, issued.command_id)
+                )
+            else:
+                projection = self._query_status(
+                    binding,
+                    issued.command_id,
+                    action=action,
+                    submit_arguments=arguments
+                    if datetime.now(UTC).timestamp() < issued.expires_at
+                    else None,
+                )
             self._record_final(issued.command_id, projection)
             return projection
 
@@ -314,13 +354,21 @@ class OwnerControlDeployment:
             row = self._issuance_row(command_id)
             if row is None or row["subject"] != subject:
                 return None
-            action = "FREEZE" if command_match.group("action") == "freeze" else "STOP_NEW"
+            action = {
+                "freeze": "FREEZE",
+                "stop-new": "STOP_NEW",
+                "cancel": "CANCEL",
+            }[command_match.group("action")]
             try:
                 raw_payload = row["payload"]
                 claims = json.loads(bytes(raw_payload).decode("utf-8", errors="strict"))
             except (TypeError, ValueError, UnicodeError, json.JSONDecodeError):
                 raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
-            expected_wire_action = "freeze" if action == "FREEZE" else "stop_new"
+            expected_wire_action = {
+                "FREEZE": "freeze",
+                "STOP_NEW": "stop_new",
+                "CANCEL": "cancel",
+            }[action]
             if (
                 not isinstance(claims, Mapping)
                 or claims.get("command_id") != command_id
@@ -330,7 +378,24 @@ class OwnerControlDeployment:
             binding = self._by_id.get(str(row["binding_id"]))
             if binding is None:
                 return None
-            projection = self._query_status(binding, command_id, action=action)
+            if action == "CANCEL":
+                connection_projection = row["owner_projection_json"]
+                cached = _decode_persisted_projection(connection_projection, command_id)
+                if cached is not None and cached.get("owner_final") is True:
+                    return binding, str(row["alert_id"]), cached
+                try:
+                    projection = self._query_cancel_owner(binding, command_id)
+                except OwnerControlError:
+                    if cached is None:
+                        projection = _cancel_unknown_projection(
+                            command_id,
+                            action="cancel",
+                            deployment_version=self._config.deployment_version,
+                        )
+                    else:
+                        projection = cached
+            else:
+                projection = self._query_status(binding, command_id, action=action)
             self._record_final(command_id, projection)
             return binding, str(row["alert_id"]), projection
 
@@ -393,6 +458,94 @@ class OwnerControlDeployment:
                 # result; the next status call remains available for recovery.
                 raise OwnerControlError("OWNER_CLIENT_CLEANUP_UNCERTAIN") from None
 
+    def _query_cancel_owner(
+        self, binding: OwnerControlBinding, command_id: str
+    ) -> dict[str, Any]:
+        """Read/submit one durable owner.cancel batch using its same command id."""
+        sdk = _load_sdk()
+        runtime = sdk.ServiceClientRuntime(
+            binding.client_config,
+            identity=binding.client_identity,
+            scope_resolver=lambda scope_ref: _fixed_lookup(
+                {binding.config.scope_ref: binding.wire_scope}, scope_ref
+            ),
+            peer_resolver=lambda service_id: _fixed_lookup(
+                {binding.config.service_id: binding.peer_identity}, service_id
+            ),
+            transport_factory=sdk.ZmqTransportFactory(binding.curve_keys),
+            requested_operations={
+                "upstream.owner_control": frozenset({"owner.cancel"})
+            },
+        )
+        projection: dict[str, Any]
+        try:
+            registered = runtime.start()
+            if registered.degraded_count or len(registered.bindings) != 1:
+                return _cancel_unknown_projection(
+                    command_id,
+                    action="cancel",
+                    deployment_version=self._config.deployment_version,
+                )
+            try:
+                reply = runtime.call(
+                    "upstream.owner_control",
+                    "owner.cancel",
+                    {"command_id": command_id},
+                    account_ref=binding.wire_scope.account_ref,
+                    scope_ref=binding.config.scope_ref,
+                )
+            except sdk.ServiceRuntimeError as error:
+                if error.code in {"SCOPE_DENIED", "ACTION_NOT_GRANTED", "ROLE_NOT_AUTHORIZED"}:
+                    return _cancel_rejected_projection(
+                        command_id,
+                        action="cancel",
+                        deployment_version=self._config.deployment_version,
+                        owner_code=error.code,
+                    )
+                return _cancel_unknown_projection(
+                    command_id,
+                    action="cancel",
+                    deployment_version=self._config.deployment_version,
+                )
+            if isinstance(reply, Mapping) and reply.get("code") in {
+                "SCOPE_DENIED",
+                "ACTION_NOT_GRANTED",
+                "ROLE_NOT_AUTHORIZED",
+            }:
+                return _cancel_rejected_projection(
+                    command_id,
+                    action="cancel",
+                    deployment_version=self._config.deployment_version,
+                    owner_code=str(reply["code"]),
+                )
+            projection = _validate_owner_cancel_reply(
+                reply,
+                command_id,
+                binding=binding,
+                deployment_version=self._config.deployment_version,
+            )
+        except OwnerControlError:
+            return _cancel_unknown_projection(
+                command_id,
+                action="cancel",
+                deployment_version=self._config.deployment_version,
+            )
+        except Exception:
+            return _cancel_unknown_projection(
+                command_id,
+                action="cancel",
+                deployment_version=self._config.deployment_version,
+            )
+        finally:
+            try:
+                runtime.close()
+            except Exception:
+                # The owner reply is already durable. A client close failure
+                # cannot turn an acknowledged batch into a terminal result or
+                # erase its per-order receipt.
+                pass
+        return projection
+
     def _reserve_or_replay(
         self,
         binding: OwnerControlBinding,
@@ -409,8 +562,14 @@ class OwnerControlDeployment:
             and config.not_before_utc <= now < config.expires_at_utc
         ):
             raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
-        action_slug = "freeze" if action == "FREEZE" else "stop-new"
-        wire_action = "freeze" if action == "FREEZE" else "stop_new"
+        action_slug = {"FREEZE": "freeze", "STOP_NEW": "stop-new", "CANCEL": "cancel"}[
+            action
+        ]
+        wire_action = {
+            "FREEZE": "freeze",
+            "STOP_NEW": "stop_new",
+            "CANCEL": "cancel",
+        }[action]
         key_digest = hashlib.sha256(
             (subject + "\0" + binding.binding_id + "\0" + idempotency_key).encode("utf-8")
         ).hexdigest()
@@ -480,11 +639,11 @@ class OwnerControlDeployment:
                 "mode": config.mode,
                 "scope": config.command_scope,
                 "action": wire_action,
-                "reason": (
-                    "AFI monitoring alert owner freeze"
-                    if action == "FREEZE"
-                    else "AFI monitoring alert strategy stop new"
-                ),
+                "reason": {
+                    "FREEZE": "AFI monitoring alert owner freeze",
+                    "STOP_NEW": "AFI monitoring alert strategy stop new",
+                    "CANCEL": "AFI monitoring alert exact-run owner cancellation",
+                }[action],
                 "receipt_digest": config.authority_receipt_digest,
                 "issued_at": now,
                 "expires_at": expires_at,
@@ -563,10 +722,22 @@ class OwnerControlDeployment:
                     signature BLOB NOT NULL,
                     owner_final INTEGER NOT NULL CHECK(owner_final IN (0, 1)),
                     owner_status TEXT,
+                    owner_projection_json TEXT,
                     PRIMARY KEY (issuer, idempotency_digest),
                     UNIQUE (issuer, issuer_sequence)
                 )"""
             )
+            columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(afi_monitor_control_issuance)"
+                ).fetchall()
+            }
+            if "owner_projection_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE afi_monitor_control_issuance "
+                    "ADD COLUMN owner_projection_json TEXT"
+                )
             return connection
         except (OSError, sqlite3.Error):
             raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
@@ -585,16 +756,41 @@ class OwnerControlDeployment:
 
     def _record_final(self, command_id: str, projection: Mapping[str, Any]) -> None:
         final = projection.get("owner_final") is True
+        try:
+            projection_json = json.dumps(
+                dict(projection),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError):
+            raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
         connection = self._connect_issuer_state()
         try:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT owner_final FROM afi_monitor_control_issuance WHERE command_id = ?",
+                (command_id,),
+            ).fetchone()
+            if existing is None:
+                raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
+            if existing["owner_final"] == 1:
+                connection.commit()
+                return
             connection.execute(
-                "UPDATE afi_monitor_control_issuance SET owner_final = ?, owner_status = ? WHERE command_id = ?",
-                (1 if final else 0, projection.get("status"), command_id),
+                """UPDATE afi_monitor_control_issuance
+                   SET owner_final = ?, owner_status = ?, owner_projection_json = ?
+                   WHERE command_id = ?""",
+                (1 if final else 0, projection.get("status"), projection_json, command_id),
             )
             connection.commit()
         except sqlite3.Error:
             connection.rollback()
             raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+        except OwnerControlError:
+            connection.rollback()
+            raise
         finally:
             connection.close()
 
@@ -604,6 +800,8 @@ def control_implementation_status(action: str) -> str:
         return "FREEZE_SUPPORTED"
     if action == "STOP_NEW":
         return "STOP_NEW_SUPPORTED"
+    if action == "CANCEL":
+        return "CANCEL_SUPPORTED"
     if action == "DRAIN":
         return "DRAIN_PENDING_IMPLEMENTATION"
     if action == "CLOSE":
@@ -622,7 +820,7 @@ def get_deployment_setting() -> SecretStr:
 def _load_sdk() -> Any:
     try:
         from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-        from bt_api_py.service_config import parse_client_config
+        from bt_api_py.service_config import parse_client_config, parse_service_config
         from bt_api_py.service_runtime import (
             ClientCurveKeys,
             ServiceClientRuntime,
@@ -638,6 +836,7 @@ def _load_sdk() -> Any:
             "WireRole": WireRole,
             "WireScope": WireScope,
             "parse_client_config": parse_client_config,
+            "parse_service_config": parse_service_config,
             "ClientCurveKeys": ClientCurveKeys,
             "ServiceClientRuntime": ServiceClientRuntime,
             "ZmqTransportFactory": ZmqTransportFactory,
@@ -657,7 +856,9 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
     ):
         raise OwnerControlError("DEPLOYMENT_INVALID")
     _decode_secret(config.key_material_b64, minimum=32)
-    identity = _parse_identity(config.client_identity, sdk, role=sdk.WireRole.APPLICATION_CLIENT)
+    cancel_binding = config.allowed_actions == ["CANCEL"]
+    client_role = sdk.WireRole.SERVICE if cancel_binding else sdk.WireRole.APPLICATION_CLIENT
+    identity = _parse_identity(config.client_identity, sdk, role=client_role)
     peer = _parse_identity(config.peer_identity, sdk, role=sdk.WireRole.SERVICE)
     if identity.delegate_ref is None:
         raise OwnerControlError("DEPLOYMENT_INVALID")
@@ -680,6 +881,23 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
             raise OwnerControlError("DEPLOYMENT_INVALID")
         scope_values.setdefault("account_refs", ())
         wire_scope = sdk.WireScope(**scope_values)
+        if "CANCEL" in config.allowed_actions and (
+            wire_scope.account_ref is None
+            or wire_scope.account_refs
+            or wire_scope.strategy_ref is None
+            or wire_scope.run_id is None
+            or wire_scope.manual_book_ref is not None
+            or wire_scope.portfolio_ref is not None
+            or wire_scope.group_id is not None
+            or wire_scope.leg_id is not None
+            or config.portfolio_ref is not None
+            or config.wire_portfolio_ref is not None
+        ):
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        if "CANCEL" in config.allowed_actions and config.command_scope != (
+            f"strategy:{wire_scope.strategy_ref}:{wire_scope.run_id}:cancel"
+        ):
+            raise OwnerControlError("DEPLOYMENT_INVALID")
         if "STOP_NEW" in config.allowed_actions and (
             wire_scope.account_ref is None
             or wire_scope.account_refs
@@ -697,24 +915,42 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
             # The exact WireScope is separately pinned in the deployment and
             # Monitor owner route; this label is never parsed to select a run.
             raise OwnerControlError("DEPLOYMENT_INVALID")
-        client_config = sdk.parse_client_config(config.client_config)
+        if "CANCEL" in config.allowed_actions and len(config.allowed_actions) != 1:
+            # A CANCEL resource grant is a service-role execution binding;
+            # monitor controls use an application-client mount. Keep them in
+            # separately scoped operator bindings.
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        client_config = (
+            sdk.parse_service_config(config.client_config)
+            if cancel_binding
+            else sdk.parse_client_config(config.client_config)
+        )
         public_config = client_config.to_public_dict()
-        if public_config.get("process_role") != "application_client":
-            raise OwnerControlError("DEPLOYMENT_INVALID")
         clients = public_config.get("clients")
-        if type(clients) is not dict or set(clients) != {"monitor"}:
+        expected_role = "service" if cancel_binding else "application_client"
+        expected_client = "execution" if cancel_binding else "monitor"
+        expected_mount = "upstream.owner_control" if cancel_binding else "application.monitor"
+        if (
+            public_config.get("process_role") != expected_role
+            or type(clients) is not dict
+            or set(clients) != {expected_client}
+        ):
             raise OwnerControlError("DEPLOYMENT_INVALID")
-        monitor = clients["monitor"]
-        settings = monitor.get("settings") if type(monitor) is dict else None
+        client = clients[expected_client]
+        settings = client.get("settings") if type(client) is dict else None
         bindings = settings.get("bindings") if type(settings) is dict else None
         if type(bindings) is not list or len(bindings) != 1:
             raise OwnerControlError("DEPLOYMENT_INVALID")
         client_binding = bindings[0]
         if (
-            client_binding.get("mount") != "application.monitor"
+            client_binding.get("mount") != expected_mount
             or client_binding.get("service_id") != config.service_id
             or client_binding.get("instance_id") != config.instance_id
             or client_binding.get("scope_ref") != config.scope_ref
+            or (
+                cancel_binding
+                and client_binding.get("account_ref") != config.wire_account_ref
+            )
         ):
             raise OwnerControlError("DEPLOYMENT_INVALID")
         if (
@@ -747,6 +983,7 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
     binding_id = _sha256_json(
         {
             "account_id": config.account_id,
+            "allowed_actions": sorted(config.allowed_actions),
             "afi_account_id": config.afi_account_id,
             "issuer": config.issuer,
             "portfolio_ref": config.portfolio_ref,
@@ -914,6 +1151,333 @@ def _validate_owner_projection(
     if status == "acknowledged":
         projection["effect_result"] = dict(value["effect_result"])
     return projection
+
+
+_CANCEL_REPLY_CODES = {
+    "APPLIED": "OWNER_CANCEL_APPLIED",
+    "ACKNOWLEDGED": "OWNER_CANCEL_ACKNOWLEDGED",
+    "PARTIAL": "OWNER_CANCEL_PARTIAL",
+    "PENDING": "OWNER_CANCEL_PENDING",
+    "UNKNOWN": "OWNER_CANCEL_UNKNOWN",
+    "NO_EFFECT": "OWNER_CANCEL_NO_EFFECT",
+}
+_CANCEL_STATES = {
+    "PENDING_ADMISSION",
+    "PENDING_DISPATCH",
+    "DISPATCHING",
+    "ACKED",
+    "PARTIALLY_FILLED",
+    "FILLED",
+    "CANCELLED",
+    "REJECTED",
+    "BLOCKED",
+    "UNKNOWN",
+}
+_CANCEL_DECISIONS = {
+    "READY",
+    "EXISTING_CANCEL",
+    "UNKNOWN",
+    "UNRESOLVED",
+    "PENDING",
+    "ALREADY_CANCELLED",
+    "ALREADY_TERMINAL",
+}
+_CANCEL_ACTIVE_STATES = {
+    "PENDING_ADMISSION",
+    "PENDING_DISPATCH",
+    "DISPATCHING",
+    "ACKED",
+    "PARTIALLY_FILLED",
+    "UNKNOWN",
+}
+
+
+def _validate_owner_cancel_reply(
+    value: Mapping[str, Any],
+    command_id: str,
+    *,
+    binding: OwnerControlBinding,
+    deployment_version: str,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != {"ok", "code", "result"}:
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    code = value.get("code")
+    result = value.get("result")
+    if (
+        type(value.get("ok")) is not bool
+        or type(code) is not str
+        or code not in set(_CANCEL_REPLY_CODES.values())
+        or not isinstance(result, Mapping)
+    ):
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    required_result_fields = {
+        "command_id",
+        "batch_sha256",
+        "scope_key",
+        "account_ref",
+        "portfolio_ref",
+        "strategy_ref",
+        "run_id",
+        "total_count",
+        "selected_count",
+        "omitted_count",
+        "state_counts",
+        "outcome",
+        "items",
+    }
+    if (
+        set(result) != required_result_fields
+        or result.get("command_id") != command_id
+        or result.get("account_ref") != binding.wire_scope.account_ref
+        or result.get("portfolio_ref") is not None
+        or result.get("strategy_ref") != binding.wire_scope.strategy_ref
+        or result.get("run_id") != binding.wire_scope.run_id
+        or type(result.get("batch_sha256")) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", result["batch_sha256"]) is None
+        or type(result.get("scope_key")) is not str
+        or not result["scope_key"]
+    ):
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    outcome = result.get("outcome")
+    if type(outcome) is not str or _CANCEL_REPLY_CODES.get(outcome) != code:
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    if value["ok"] is not (outcome in {"APPLIED", "ACKNOWLEDGED", "PARTIAL", "NO_EFFECT"}):
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    total = _cancel_count(result.get("total_count"), maximum=10_000)
+    selected = _cancel_count(result.get("selected_count"), maximum=128)
+    omitted = _cancel_count(result.get("omitted_count"), maximum=10_000)
+    items = result.get("items")
+    counts = result.get("state_counts")
+    if (
+        total is None
+        or selected is None
+        or omitted is None
+        or selected + omitted != total
+        # WireEnvelope recursively freezes JSON arrays as tuples before a
+        # ServiceClientRuntime exposes the reply. Direct component calls may
+        # still provide lists, so accept both supported representations while
+        # projecting a fresh mutable list below.
+        or type(items) not in (list, tuple)
+        or len(items) != selected
+        or not isinstance(counts, Mapping)
+        or any(type(key) is not str or key not in _CANCEL_STATES for key in counts)
+        or any(_cancel_count(count, maximum=128) is None for count in counts.values())
+    ):
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    copied_items: list[dict[str, Any]] = []
+    observed_counts: dict[str, int] = {}
+    unresolved = False
+    for item in items:
+        item_fields = {
+            "intent_id",
+            "instrument_ref",
+            "record_state",
+            "decision",
+            "cancel_id",
+            "cancel_state",
+            "unknown_reason",
+            "review_required",
+            "dispatch_attempts",
+        }
+        if not isinstance(item, Mapping) or set(item) != item_fields:
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        if (
+            not _cancel_text(item.get("intent_id"), max_bytes=256)
+            or not _cancel_text(item.get("instrument_ref"), max_bytes=256)
+            or item.get("record_state") not in _CANCEL_STATES
+            or item.get("decision") not in _CANCEL_DECISIONS
+            or (
+                item.get("cancel_id") is not None
+                and not _cancel_text(item.get("cancel_id"), max_bytes=256)
+            )
+            or (
+                item.get("cancel_state") is not None
+                and item.get("cancel_state") not in _CANCEL_STATES
+            )
+            or (
+                item.get("unknown_reason") is not None
+                and not _cancel_text(item.get("unknown_reason"), max_bytes=128)
+            )
+            or type(item.get("review_required")) is not bool
+            or _cancel_count(item.get("dispatch_attempts"), maximum=10_000) is None
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        state = item.get("cancel_state")
+        if state is not None:
+            observed_counts[state] = observed_counts.get(state, 0) + 1
+        if item.get("decision") in {"UNKNOWN", "UNRESOLVED", "PENDING"}:
+            unresolved = True
+        if state in _CANCEL_ACTIVE_STATES:
+            unresolved = True
+        copied = dict(item)
+        # Owner/provider diagnostics are internal text. Expose only a finite
+        # summary so an exception or adapter detail cannot leak through HTTP.
+        copied["unknown_reason"] = (
+            "outcome_unknown"
+            if item.get("unknown_reason") is not None
+            or item.get("decision") in {"UNKNOWN", "UNRESOLVED"}
+            or state == "UNKNOWN"
+            else None
+        )
+        copied_items.append(copied)
+    if observed_counts != dict(counts):
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    if outcome in {"UNKNOWN", "PENDING"}:
+        unresolved = True
+    if outcome == "ACKNOWLEDGED":
+        unresolved = True
+    owner_final = not unresolved and outcome in {"APPLIED", "PARTIAL", "NO_EFFECT"}
+    status_value = {
+        "APPLIED": "applied",
+        "ACKNOWLEDGED": "acknowledged",
+        "PARTIAL": "partial",
+        "PENDING": "pending",
+        "UNKNOWN": "unknown",
+        "NO_EFFECT": "no_effect",
+    }[outcome]
+    effect_result = {
+        "action": "cancel",
+        "batch_sha256": result["batch_sha256"],
+        "total_count": total,
+        "selected_count": selected,
+        "omitted_count": omitted,
+        "state_counts": dict(counts),
+        "items": copied_items,
+    }
+    return {
+        "action": "cancel",
+        "command_id": command_id,
+        "deployment_version": deployment_version,
+        "status": status_value,
+        "outcome": outcome.lower(),
+        "effect_ref": result["batch_sha256"],
+        "effect_result": effect_result,
+        "request_recorded": True,
+        "owner_final": owner_final,
+        "reconciliation_required": not owner_final,
+    }
+
+
+def _cancel_unknown_projection(
+    command_id: str, *, action: str, deployment_version: str
+) -> dict[str, Any]:
+    return {
+        "action": action,
+        "command_id": command_id,
+        "deployment_version": deployment_version,
+        "status": "unknown",
+        "outcome": "unknown",
+        "effect_ref": None,
+        "effect_result": {
+            "action": "cancel",
+            "batch_state": "UNKNOWN",
+            "items": [],
+        },
+        "request_recorded": True,
+        "owner_final": False,
+        "reconciliation_required": True,
+    }
+
+
+def _cancel_rejected_projection(
+    command_id: str,
+    *,
+    action: str,
+    deployment_version: str,
+    owner_code: str,
+) -> dict[str, Any]:
+    return {
+        "action": action,
+        "command_id": command_id,
+        "deployment_version": deployment_version,
+        "status": "rejected",
+        "outcome": "rejected",
+        "effect_ref": None,
+        "effect_result": {
+            "action": "cancel",
+            "result": "not_authorized",
+            "owner_code": owner_code,
+        },
+        "request_recorded": True,
+        "owner_final": True,
+        "reconciliation_required": False,
+    }
+
+
+def _decode_persisted_projection(value: Any, command_id: str) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if type(value) is not str or not value or len(value) > 1_000_000:
+        raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
+    try:
+        decoded = json.loads(
+            value,
+            object_pairs_hook=_reject_duplicate_pairs,
+            parse_constant=_reject_constant,
+        )
+    except (TypeError, ValueError, json.JSONDecodeError, RecursionError):
+        raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+    required = {
+        "action",
+        "command_id",
+        "deployment_version",
+        "status",
+        "outcome",
+        "effect_ref",
+        "effect_result",
+        "request_recorded",
+        "owner_final",
+        "reconciliation_required",
+    }
+    if (
+        type(decoded) is not dict
+        or set(decoded) != required
+        or decoded.get("action") != "cancel"
+        or decoded.get("command_id") != command_id
+        or type(decoded.get("owner_final")) is not bool
+        or type(decoded.get("reconciliation_required")) is not bool
+        or decoded.get("request_recorded") is not True
+        or decoded.get("reconciliation_required") is decoded.get("owner_final")
+        or decoded.get("status")
+        not in {
+            "applied",
+            "acknowledged",
+            "partial",
+            "pending",
+            "unknown",
+            "no_effect",
+            "rejected",
+        }
+        or decoded.get("outcome")
+        not in {
+            "applied",
+            "acknowledged",
+            "partial",
+            "pending",
+            "unknown",
+            "no_effect",
+            "rejected",
+        }
+        or type(decoded.get("deployment_version")) is not str
+        or type(decoded.get("effect_result")) is not dict
+    ):
+        raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
+    return decoded
+
+
+def _cancel_count(value: Any, *, maximum: int) -> int | None:
+    if type(value) is not int or value < 0 or value > maximum:
+        return None
+    return value
+
+
+def _cancel_text(value: Any, *, max_bytes: int) -> bool:
+    if type(value) is not str or not value or value != value.strip():
+        return False
+    try:
+        return len(value.encode("utf-8", errors="strict")) <= max_bytes and value.isprintable()
+    except UnicodeEncodeError:
+        return False
 
 
 def _validate_timestamp(value: float) -> float:

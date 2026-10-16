@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 import uuid
+from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,14 @@ from app.models.alerts import Alert, AlertSeverity, AlertStatus, AlertType
 from app.models.paper_trading import Account
 from app.models.user import User
 from app.services.monitoring_control import OwnerControlDeployment, OwnerControlError
+from app.services import monitoring_control as monitoring_control_service
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_execution import (
+    CancelObservation,
+    ExecutionScope,
+    ProviderObservation,
+    SqliteExecutionStore,
+)
 from bt_api_monitor.control import (
     ControlAction,
     ControlCommandBinding,
@@ -48,10 +56,13 @@ from bt_api_monitor.ingress import (
 )
 from bt_api_monitor.service_control import MonitorControlService, MonitorControlTarget
 from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
+from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_monitor_control import MonitorControlRuntime, MonitorRiskControlOwner
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_risk_order_journal import RiskOrderJournal
+from bt_api_py.service_execution_risk_cancel import RiskExecutionCancelAdmissionGate
+from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
 from bt_api_risk import (
     AccountScope,
     DurableRiskGate,
@@ -702,6 +713,668 @@ async def test_unknown_owner_receipt_stays_unknown_after_durable_freeze_effect(
         assert refs["owner_apply_thread"] == refs["owner_thread"]
     finally:
         await _stop_host(host_thread, stopped, refs)
+
+
+_CANCEL_SERVICE_ID = "afi08-http-cancel-service"
+_CANCEL_INSTANCE_ID = "afi08-http-cancel-execution-owner"
+_CANCEL_DOMAIN = "paper:afi08-http-cancel"
+_CANCEL_SCOPE_REF = "afi08-http-cancel-run-v1"
+_CANCEL_LISTENER_REF = "afi08-http-cancel-listener-v1"
+_CANCEL_OWNER_LISTENER_REF = "afi08-http-cancel-owner-client-listener-v1"
+_CANCEL_CONNECT_REF = "afi08-http-cancel-connect-v1"
+_CANCEL_SERVER_SECURITY_REF = "afi08-http-cancel-server-security-v1"
+_CANCEL_STRATEGY_SECURITY_REF = "afi08-http-cancel-strategy-security-v1"
+_CANCEL_OWNER_SECURITY_REF = "afi08-http-cancel-owner-security-v1"
+_CANCEL_SERVICE_PRINCIPAL = "afi08-http-cancel-service-principal"
+_CANCEL_STRATEGY_PRINCIPAL = "afi08-http-cancel-strategy-principal"
+_CANCEL_OWNER_PRINCIPAL = "afi08-http-cancel-owner-principal"
+
+
+def _cancel_execution_service_config(endpoint: str):
+    return parse_service_config(
+        {
+            "service_config_schema_version": 1,
+            "process_role": "service",
+            "service_id": _CANCEL_SERVICE_ID,
+            "scope_ref": "afi08-http-cancel-service-scope-v1",
+            "transport_ref": _CANCEL_LISTENER_REF,
+            "registration_policy_ref": "afi08-http-cancel-registration-v1",
+            "service_requirements_ref": "afi08-http-cancel-requirements-v1",
+            "components": {
+                "execution": {
+                    "config_schema_version": 2,
+                    "settings": {
+                        "instance_id": _CANCEL_INSTANCE_ID,
+                        "bind_ports": [
+                            "service.order_entry",
+                            "service.order_query",
+                            "service.owner_control",
+                        ],
+                        "options": {"role": "account_owner"},
+                    },
+                }
+            },
+            "communication": {
+                "config_schema_version": 1,
+                "profiles": {
+                    _CANCEL_LISTENER_REF: {
+                        "backend": "zmq",
+                        "config_schema_version": 1,
+                        "endpoints": {"rpc_bind": endpoint},
+                        "security_profile_ref": _CANCEL_SERVER_SECURITY_REF,
+                        "options": {"high_water_mark": 32, "max_message_bytes": 1_000_000},
+                    }
+                },
+            },
+        }
+    )
+
+
+def _cancel_owner_client_config(
+    endpoint: str,
+    *,
+    strategy: bool,
+    account_ref: str,
+    strategy_ref: str | None = None,
+) -> Any:
+    if strategy:
+        role = "strategy_client"
+        if type(strategy_ref) is not str or not strategy_ref:
+            raise ValueError("strategy_ref is required for a strategy client")
+        registration: dict[str, Any] = {"strategy_ref": strategy_ref}
+        mount = "broker.orders"
+        security_ref = _CANCEL_STRATEGY_SECURITY_REF
+        version = {"client_config_schema_version": 1}
+    else:
+        role = "service"
+        registration = {
+            "service_id": "afi08-http-cancel-owner-client",
+            "scope_ref": "afi08-http-cancel-owner-client-scope-v1",
+            "transport_ref": _CANCEL_OWNER_LISTENER_REF,
+            "registration_policy_ref": "afi08-http-cancel-owner-client-registration-v1",
+            "service_requirements_ref": "afi08-http-cancel-owner-client-requirements-v1",
+        }
+        mount = "upstream.owner_control"
+        security_ref = _CANCEL_OWNER_SECURITY_REF
+        version = {"service_config_schema_version": 1}
+    config: dict[str, Any] = {
+        "process_role": role,
+        "clients": {
+            "execution": {
+                "config_schema_version": 1,
+                "settings": {
+                    "bindings": [
+                        {
+                            "mount": mount,
+                            "service_id": _CANCEL_SERVICE_ID,
+                            "instance_id": _CANCEL_INSTANCE_ID,
+                            "scope_ref": _CANCEL_SCOPE_REF,
+                            "transport_ref": _CANCEL_CONNECT_REF,
+                            "account_ref": account_ref,
+                        }
+                    ],
+                    "options": {
+                        "request_timeout_ms": 3_000,
+                        "heartbeat_interval_seconds": 5,
+                    },
+                },
+            }
+        },
+        "communication": {
+            "config_schema_version": 1,
+            "profiles": {
+                _CANCEL_CONNECT_REF: {
+                    "backend": "zmq",
+                    "config_schema_version": 1,
+                    "endpoints": {"rpc_connect": endpoint},
+                    "security_profile_ref": security_ref,
+                    "options": {
+                        "request_timeout_ms": 3_000,
+                        "high_water_mark": 32,
+                        "max_message_bytes": 1_000_000,
+                    },
+                }
+            },
+        },
+    }
+    if strategy:
+        config.update(version)
+        config["registration"] = registration
+        return parse_client_config(config)
+    config.update(registration)
+    config.update(version)
+    config["components"] = {
+        "monitor": {
+            "config_schema_version": 2,
+            "settings": {
+                "instance_id": "afi08-http-cancel-unused-monitor",
+                "bind_ports": ["service.monitor_query"],
+                "options": {},
+            },
+        }
+    }
+    config["communication"]["profiles"][_CANCEL_OWNER_LISTENER_REF] = {
+        "backend": "zmq",
+        "config_schema_version": 1,
+        "endpoints": {"rpc_bind": "tcp://127.0.0.1:9"},
+        "security_profile_ref": security_ref,
+        "options": {"high_water_mark": 32, "max_message_bytes": 1_000_000},
+    }
+    return parse_service_config(config)
+
+
+class _HttpCancelProvider:
+    def __init__(self) -> None:
+        self.submitted: list[str] = []
+        self.cancelled: list[str] = []
+
+    def submit(self, intent: Any) -> ProviderObservation:
+        self.submitted.append(intent.intent_id)
+        return ProviderObservation.accepted(
+            intent.intent_id, f"provider-order:{intent.intent_id}"
+        )
+
+    def cancel(self, intent: Any) -> CancelObservation:
+        self.cancelled.append(intent.cancel_id)
+        if intent.target_intent_id.endswith("-unknown"):
+            raise TimeoutError("synthetic provider secret detail must not reach HTTP")
+        return CancelObservation.accepted(
+            intent.cancel_id, intent.target_intent_id, intent.provider_order_id
+        )
+
+
+def _start_cancel_execution_host(
+    tmp_path: Path,
+    *,
+    afi_subject: str,
+    afi_account_id: str,
+    risk_account_id: str,
+    strategy_ref: str,
+    run_id: str,
+    endpoint: str,
+) -> tuple[OwnerControlDeployment, threading.Thread, threading.Event, dict[str, Any]]:
+    server_public, server_secret = zmq.curve_keypair()
+    strategy_public, strategy_secret = zmq.curve_keypair()
+    owner_public, owner_secret = zmq.curve_keypair()
+    service_identity = WireIdentity(
+        WireRole.SERVICE,
+        _CANCEL_SERVICE_PRINCIPAL,
+        _CANCEL_SERVICE_ID,
+        "service-delegation:afi08-http-cancel",
+    )
+    strategy_identity = WireIdentity(
+        WireRole.STRATEGY_CLIENT,
+        _CANCEL_STRATEGY_PRINCIPAL,
+        strategy_ref,
+    )
+    owner_identity = WireIdentity(
+        WireRole.SERVICE,
+        _CANCEL_OWNER_PRINCIPAL,
+        f"operator:afi08:{afi_subject}",
+        f"owner-delegation:afi08:{afi_subject}",
+    )
+    wire_scope = WireScope(
+        _CANCEL_DOMAIN,
+        account_ref=risk_account_id,
+        strategy_ref=strategy_ref,
+        run_id=run_id,
+    )
+    target_scope = WireScope(
+        _CANCEL_DOMAIN,
+        account_ref=risk_account_id,
+        strategy_ref=strategy_ref,
+    )
+    execution_scope = ExecutionScope(
+        "PAPER", "simulation", risk_account_id, strategy_ref, "afi08-http-cancel-session"
+    )
+    config = _cancel_execution_service_config(endpoint)
+    authority = TrustedServiceAuthority(
+        identity=service_identity,
+        scope=WireScope(_CANCEL_DOMAIN),
+        scope_ref=config.scope_ref,
+        scope_version="afi08-http-cancel-scope-v1",
+        security_ref=_CANCEL_SERVER_SECURITY_REF,
+        security_version="curve-v1",
+        registration_policy_ref=config.registration_policy_ref,
+        registration_policy_version="afi08-http-cancel-registration-v1",
+        service_requirements_ref=config.service_requirements_ref,
+        service_requirements_version="afi08-http-cancel-requirements-v1",
+        curve_public_key=server_public,
+        curve_secret_key=server_secret,
+        principals={
+            strategy_public: _CANCEL_STRATEGY_PRINCIPAL,
+            owner_public: _CANCEL_OWNER_PRINCIPAL,
+        },
+        grants={
+            _CANCEL_STRATEGY_PRINCIPAL: (
+                PrincipalGrant(
+                    strategy_identity,
+                    (
+                        ResourceGrant(
+                            _CANCEL_INSTANCE_ID,
+                            "service.order_entry",
+                            _CANCEL_SCOPE_REF,
+                            target_scope,
+                            frozenset({"orders.submit"}),
+                        ),
+                    ),
+                ),
+            ),
+            _CANCEL_OWNER_PRINCIPAL: (
+                PrincipalGrant(
+                    owner_identity,
+                    (
+                        ResourceGrant(
+                            _CANCEL_INSTANCE_ID,
+                            "service.owner_control",
+                            _CANCEL_SCOPE_REF,
+                            wire_scope,
+                            frozenset({"owner.cancel"}),
+                        ),
+                    ),
+                ),
+            ),
+        },
+    )
+    execution_store = SqliteExecutionStore(tmp_path / "http-cancel-execution.sqlite3")
+    risk_journal = RiskOrderJournal(
+        tmp_path / "http-cancel-risk-journal.sqlite3", writer_id="afi08-http-cancel-journal"
+    )
+    risk_scope = AccountScope("PAPER", risk_account_id, "simulation")
+    risk_gate = DurableRiskGate(
+        tmp_path / "http-cancel-risk.sqlite3",
+        RiskPolicy(
+            "afi08-http-cancel-risk-v1",
+            Decimal("0"),
+            max_increase_count=0,
+            permit_ttl_seconds=30,
+            notional_unit="USD",
+        ),
+        execution_journal_authority=risk_journal,
+    )
+    cancel_gate = RiskExecutionCancelAdmissionGate(
+        risk_gate,
+        risk_journal,
+        execution_store,
+        risk_scope=risk_scope,
+        execution_scope=execution_scope,
+        wire_scope_template=target_scope,
+    )
+    provider = _HttpCancelProvider()
+    quota_calls: list[tuple[object, ...]] = []
+
+    def quota_admission(*args: object) -> None:
+        quota_calls.append(args)
+        return None
+
+    def resource_provider(component: str, instance_id: str, _options: Any, _scope: Any):
+        assert component == "execution" and instance_id == _CANCEL_INSTANCE_ID
+        return ComponentResources.borrowed(
+            {
+                "store": execution_store,
+                "targets": {target_scope: execution_scope},
+                "dispatch": provider,
+                "admission": {
+                    "cancel_gate": cancel_gate,
+                    "cancel_quota_admission": quota_admission,
+                    "allow_unprotected": True,
+                },
+            },
+            ready=lambda: True,
+        )
+
+    host = ServiceHost(
+        config,
+        authority,
+        tmp_path / "http-cancel-registry.sqlite3",
+        resource_provider,
+    )
+    stopped = threading.Event()
+    ready = threading.Event()
+    host_result: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
+    refs: dict[str, Any] = {
+        "host": host,
+        "host_result": host_result,
+        "ready": ready,
+        "provider": provider,
+        "quota_calls": quota_calls,
+        "execution_store": execution_store,
+        "risk_gate": risk_gate,
+    }
+
+    def serve() -> None:
+        try:
+            refs["owner_thread"] = threading.get_ident()
+            host.start()
+            ready.set()
+            while not stopped.is_set():
+                host.serve_once(timeout_ms=15)
+            host.close()
+            host_result.put(("closed", host.state))
+        except BaseException as error:
+            ready.set()
+            host_result.put(
+                (
+                    "error",
+                    getattr(error, "code", type(error).__name__),
+                    host.summary,
+                )
+            )
+            try:
+                if host.state != "closed":
+                    host.close()
+            except BaseException:
+                pass
+
+    thread = threading.Thread(target=serve, name="afi08-http-cancel-execution-host", daemon=True)
+    thread.start()
+    if not ready.wait(10):
+        stopped.set()
+        thread.join(5)
+        raise AssertionError("synthetic Execution ServiceHost did not become ready")
+    host_result_value = host_result.get_nowait() if not host_result.empty() else None
+    if host_result_value is not None:
+        stopped.set()
+        thread.join(5)
+        risk_gate.close()
+        execution_store.close()
+        raise AssertionError(f"synthetic Execution ServiceHost failed: {host_result_value}")
+
+    now = time.time()
+    client_config = _cancel_owner_client_config(
+        endpoint, strategy=False, account_ref=risk_account_id
+    ).to_public_dict()
+    server_public_z85 = server_public.decode("ascii")
+    owner_public_z85 = owner_public.decode("ascii")
+    owner_secret_z85 = owner_secret.decode("ascii")
+    issuer = f"operator:afi08:{afi_subject}:cancel"
+    binding = {
+        "subject": afi_subject,
+        "afi_account_id": afi_account_id,
+        "portfolio_ref": None,
+        "account_id": risk_account_id,
+        "mode": "simulation",
+        "command_scope": f"strategy:{strategy_ref}:{run_id}:cancel",
+        "issuer": issuer,
+        "key_ref": f"afi08-cancel-key-{uuid.uuid4().hex}",
+        "key_material_b64": base64.b64encode(
+            hashlib.sha256(f"AFI08 cancel key:{afi_subject}".encode()).digest()
+        ).decode("ascii"),
+        "issuer_policy_version": "afi08-cancel-policy-v1",
+        "authority_receipt_digest": hashlib.sha256(b"AFI08 exact-run cancel receipt").hexdigest(),
+        "not_before_utc": now - 60,
+        "expires_at_utc": now + 3600,
+        "issuer_sequence_start": 0,
+        "allowed_actions": ["CANCEL"],
+        "service_id": _CANCEL_SERVICE_ID,
+        "instance_id": _CANCEL_INSTANCE_ID,
+        "scope_ref": _CANCEL_SCOPE_REF,
+        "wire_account_ref": risk_account_id,
+        "wire_portfolio_ref": None,
+        "wire_scope": {
+            "execution_domain_ref": _CANCEL_DOMAIN,
+            "account_ref": risk_account_id,
+            "strategy_ref": strategy_ref,
+            "run_id": run_id,
+        },
+        "client_identity": {
+            "principal_ref": _CANCEL_OWNER_PRINCIPAL,
+            "actor_ref": owner_identity.actor_ref,
+            "delegate_ref": owner_identity.delegate_ref,
+        },
+        "peer_identity": {
+            "principal_ref": service_identity.principal_ref,
+            "actor_ref": service_identity.actor_ref,
+            "delegate_ref": service_identity.delegate_ref,
+        },
+        "client_config": client_config,
+        "curve_keys": {
+            _CANCEL_OWNER_SECURITY_REF: {
+                "server_key_z85": server_public_z85,
+                "public_key_z85": owner_public_z85,
+                "secret_key_z85": owner_secret_z85,
+            }
+        },
+    }
+    deployment_json = {
+        "schema_version": 1,
+        "deployment_id": f"afi08-cancel-deployment-{uuid.uuid4().hex}",
+        "deployment_version": "test-cancel-v1",
+        "not_before_utc": now - 60,
+        "expires_at_utc": now + 3600,
+        "issuer_state_path": str((tmp_path / "afi08-cancel-issuer.sqlite3").resolve()),
+        "bindings": [binding],
+    }
+    deployment = OwnerControlDeployment.from_secret(
+        SecretStr(json.dumps(deployment_json, sort_keys=True, separators=(",", ":")))
+    )
+    assert deployment is not None
+    refs["deployment"] = deployment
+    refs["strategy_runtime_config"] = _cancel_owner_client_config(
+        endpoint,
+        strategy=True,
+        account_ref=risk_account_id,
+        strategy_ref=strategy_ref,
+    )
+    refs["strategy_identity"] = strategy_identity
+    refs["strategy_public"] = strategy_public
+    refs["strategy_secret"] = strategy_secret
+    refs["server_public"] = server_public
+    refs["service_identity"] = service_identity
+    refs["target_scope"] = target_scope
+    refs["wire_scope"] = wire_scope
+    return deployment, thread, stopped, refs
+
+
+@pytest.mark.asyncio
+async def test_cancel_http_projects_partial_unknown_without_redispatch(
+    client: AsyncClient, auth_user, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_data, headers = auth_user
+    alert_id = f"afi08-cancel-alert-{uuid.uuid4().hex}"
+    afi_account_id = f"afi08-cancel-account-{uuid.uuid4().hex}"
+    risk_account_id = f"risk-afi08-cancel-account-{uuid.uuid4().hex}"
+    strategy_ref = f"strategy:afi08-cancel-{uuid.uuid4().hex}"
+    run_id = f"run:afi08-cancel-{uuid.uuid4().hex}"
+    endpoint = _endpoint()
+    subject = await _create_owned_alert(
+        user_data, alert_id=alert_id, afi_account_id=afi_account_id
+    )
+    foreign_headers = await _register_second_user(client)
+    deployment, host_thread, stopped, refs = _start_cancel_execution_host(
+        tmp_path,
+        afi_subject=subject,
+        afi_account_id=afi_account_id,
+        risk_account_id=risk_account_id,
+        strategy_ref=strategy_ref,
+        run_id=run_id,
+        endpoint=endpoint,
+    )
+    app.dependency_overrides[monitoring_api.get_owner_control_deployment] = lambda: deployment
+    owner_rpc_observations: list[dict[str, Any]] = []
+    original_load_sdk = monitoring_control_service._load_sdk
+
+    def load_traced_sdk() -> Any:
+        sdk = original_load_sdk()
+        runtime_type = sdk.ServiceClientRuntime
+
+        class TracedServiceClientRuntime(runtime_type):
+            def start(self):
+                summary = super().start()
+                owner_rpc_observations.append(
+                    {
+                        "phase": "runtime_started",
+                        "degraded_count": summary.degraded_count,
+                        "binding_count": len(summary.bindings),
+                    }
+                )
+                return summary
+
+            def call(self, mount: str, operation: str, arguments: Any, **kwargs: Any):
+                try:
+                    reply = super().call(mount, operation, arguments, **kwargs)
+                except Exception as error:
+                    if operation == "owner.cancel":
+                        owner_rpc_observations.append(
+                            {
+                                "phase": "owner_call_error",
+                                "error_type": type(error).__name__,
+                                "error_code": getattr(error, "code", None),
+                            }
+                        )
+                    raise
+                if operation == "owner.cancel":
+                    result = reply.get("result") if isinstance(reply, Mapping) else None
+                    owner_rpc_observations.append(
+                        {
+                            "phase": "owner_reply",
+                            "reply_type": type(reply).__name__,
+                            "reply_fields": sorted(reply) if isinstance(reply, Mapping) else None,
+                            "reply_code": reply.get("code") if isinstance(reply, Mapping) else None,
+                            "result_fields": sorted(result) if isinstance(result, Mapping) else None,
+                            "outcome": result.get("outcome") if isinstance(result, Mapping) else None,
+                            "item_count": len(result.get("items", ()))
+                            if isinstance(result, Mapping)
+                            and type(result.get("items")) in (list, tuple)
+                            else None,
+                        }
+                    )
+                return reply
+
+        return type("_TracedSdk", (), sdk.__dict__ | {"ServiceClientRuntime": TracedServiceClientRuntime})
+
+    monkeypatch.setattr(monitoring_control_service, "_load_sdk", load_traced_sdk)
+    strategy_runtime: ServiceClientRuntime | None = None
+    try:
+        foreign_submit = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**foreign_headers, "Idempotency-Key": "foreign-cancel"},
+            json={"action": "CANCEL", "portfolio_ref": None},
+        )
+        assert foreign_submit.status_code == 404
+
+        caller_selected_orders = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**headers, "Idempotency-Key": "caller-selected-cancel"},
+            json={"action": "CANCEL", "portfolio_ref": None, "order_ids": ["forged"]},
+        )
+        assert caller_selected_orders.status_code == 422
+
+        strategy_identity = refs["strategy_identity"]
+        target_scope = refs["target_scope"]
+        service_identity = refs["service_identity"]
+        strategy_runtime = ServiceClientRuntime(
+            refs["strategy_runtime_config"],
+            identity=strategy_identity,
+            scope_resolver=lambda _scope_ref: target_scope,
+            peer_resolver=lambda _service_id: service_identity,
+            transport_factory=ZmqTransportFactory(
+                {
+                    _CANCEL_STRATEGY_SECURITY_REF: ClientCurveKeys(
+                        refs["server_public"], refs["strategy_public"], refs["strategy_secret"]
+                    )
+                }
+            ),
+            run_id=run_id,
+            requested_operations={"broker.orders": frozenset({"orders.submit"})},
+        )
+        summary = strategy_runtime.start()
+        assert summary.degraded_count == 0 and len(summary.bindings) == 1
+        for suffix in ("-ack", "-unknown"):
+            intent_id = f"afi08-http-cancel-order{suffix}"
+            submitted = strategy_runtime.call(
+                "broker.orders",
+                "orders.submit",
+                {
+                    "intent_id": intent_id,
+                    "signal_id": f"signal:{intent_id}",
+                    "instrument": "BTC-USDT",
+                    "side": "BUY",
+                    "position_effect": "OPEN",
+                    "order_type": "LIMIT",
+                    "quantity": "1",
+                    "price": "50000",
+                    "time_in_force": "GTC",
+                    "reduce_only": False,
+                    "metadata_version": "afi08-http-cancel-v1",
+                    "deadline_ns": None,
+                    "tags": {},
+                },
+                account_ref=risk_account_id,
+                scope_ref=_CANCEL_SCOPE_REF,
+            )
+            assert submitted["ok"] is True and submitted["result"]["found"] is True
+            assert submitted["result"]["record"]["state"] == "ACKED"
+        assert refs["provider"].submitted == [
+            "afi08-http-cancel-order-ack",
+            "afi08-http-cancel-order-unknown",
+        ]
+
+        response = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**headers, "Idempotency-Key": "cancel-exact-run-once"},
+            json={"action": "CANCEL", "portfolio_ref": None},
+        )
+        assert response.status_code == 202, response.text
+        projection = response.json()
+        assert projection["action"] == "cancel"
+        assert projection["status"] == "unknown"
+        assert projection["outcome"] == "unknown"
+        assert projection["owner_final"] is False
+        assert projection["reconciliation_required"] is True
+        assert "scope_key" not in json.dumps(projection)
+        assert "synthetic provider secret detail" not in response.text
+        items = projection["effect_result"]["items"]
+        assert len(items) == 2, {
+            "projection": projection,
+            "owner_rpc_observations": owner_rpc_observations,
+            "host_state": refs["host"].state,
+            "host_thread_alive": host_thread.is_alive(),
+            "host_provider_cancel_count": len(refs["provider"].cancelled),
+        }
+        by_suffix = {item["intent_id"].rsplit("-", 1)[-1]: item for item in items}
+        assert by_suffix["ack"]["cancel_state"] == "ACKED"
+        assert by_suffix["ack"]["dispatch_attempts"] == 1
+        assert by_suffix["unknown"]["cancel_state"] == "UNKNOWN"
+        assert by_suffix["unknown"]["dispatch_attempts"] == 1
+        assert by_suffix["unknown"]["unknown_reason"] == "outcome_unknown"
+        assert len(refs["provider"].cancelled) == 2
+        assert len(refs["quota_calls"]) == 2
+        for call in refs["quota_calls"]:
+            assert call[:5] == (risk_account_id, strategy_ref, run_id, "BTC-USDT", "CANCEL")
+            assert type(call[5]) is int and call[5] > 0
+
+        command_id = projection["command_id"]
+        foreign_status = await client.get(
+            f"/api/v1/monitoring/control/commands/{command_id}", headers=foreign_headers
+        )
+        assert foreign_status.status_code == 404
+        status_response = await client.get(
+            f"/api/v1/monitoring/control/commands/{command_id}", headers=headers
+        )
+        assert status_response.status_code == 202, status_response.text
+        assert status_response.json() == projection
+
+        replay = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**headers, "Idempotency-Key": "cancel-exact-run-once"},
+            json={"action": "CANCEL", "portfolio_ref": None},
+        )
+        assert replay.status_code == 202, replay.text
+        assert replay.json() == projection
+        assert refs["provider"].cancelled == [item["cancel_id"] for item in items]
+        assert len(refs["quota_calls"]) == 2
+        issued = deployment._issuance_row(command_id)
+        assert issued is not None and issued["owner_final"] == 0
+        saved = json.loads(issued["owner_projection_json"])
+        assert saved == projection
+    finally:
+        app.dependency_overrides.pop(monitoring_api.get_owner_control_deployment, None)
+        if strategy_runtime is not None:
+            strategy_runtime.close()
+        await _stop_host(host_thread, stopped, refs)
+        refs["risk_gate"].close()
+        refs["execution_store"].close()
 
 
 @pytest.mark.asyncio
