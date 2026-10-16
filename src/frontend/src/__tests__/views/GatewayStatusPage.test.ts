@@ -12,6 +12,12 @@ const liveTradingApiMocks = vi.hoisted(() => ({
   disconnectGateway: vi.fn(),
 }))
 
+const serviceGatewayOperatorApiMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  status: vi.fn(),
+  act: vi.fn(),
+}))
+
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
@@ -34,6 +40,10 @@ vi.mock('@/api/liveTrading', () => ({
     connectGateway: liveTradingApiMocks.connectGateway,
     disconnectGateway: liveTradingApiMocks.disconnectGateway,
   },
+}))
+
+vi.mock('@/api/serviceGatewayOperator', () => ({
+  serviceGatewayOperatorApi: serviceGatewayOperatorApiMocks,
 }))
 
 function makeGateway(overrides: Record<string, unknown> = {}) {
@@ -108,6 +118,9 @@ describe('GatewayStatusPage', () => {
     liveTradingApiMocks.getGatewayCredentials.mockResolvedValue({})
     liveTradingApiMocks.connectGateway.mockResolvedValue({ message: 'ok' })
     liveTradingApiMocks.disconnectGateway.mockResolvedValue({ message: 'ok' })
+    serviceGatewayOperatorApiMocks.list.mockResolvedValue({ operators: [] })
+    serviceGatewayOperatorApiMocks.status.mockResolvedValue({})
+    serviceGatewayOperatorApiMocks.act.mockResolvedValue({})
   })
 
   afterEach(() => {
@@ -131,6 +144,7 @@ describe('GatewayStatusPage', () => {
     expect(wrapper.find('[data-test="gateway-hero"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="gateway-metrics"]').findAll('.gateway-metric')).toHaveLength(4)
     expect(wrapper.find('[data-test="gateway-workbench"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="service-gateway-operators"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="gateway-card-grid"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('交易网关控制台')
     expect(wrapper.text()).toContain('088888')
@@ -200,6 +214,18 @@ describe('GatewayStatusPage', () => {
     expect(wrapper.find('[data-test="gateway-alert"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="gateway-empty"]').text()).toBeTruthy()
     expect(liveTradingApiMocks.listGatewayHealth).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('does not start a trusted operator or connect a legacy Gateway when the page opens', async () => {
+    const wrapper = doMount()
+    await flushUi()
+
+    expect(serviceGatewayOperatorApiMocks.list).toHaveBeenCalledOnce()
+    expect(serviceGatewayOperatorApiMocks.status).not.toHaveBeenCalled()
+    expect(serviceGatewayOperatorApiMocks.act).not.toHaveBeenCalled()
+    expect(liveTradingApiMocks.connectGateway).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-test="operator-empty"]').text()).toContain('没有已授权的 Service Gateway operator')
     wrapper.unmount()
   })
 })

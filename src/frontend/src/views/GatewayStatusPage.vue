@@ -43,7 +43,7 @@
           :icon="Connection"
           @click="openConnectDialog"
         >
-          {{ t('gatewayStatus.btnConnect') }}
+          {{ t('gatewayStatus.btnLegacyConnect') }}
         </el-button>
       </div>
 
@@ -81,6 +81,8 @@
         </article>
       </div>
     </section>
+
+    <ServiceGatewayOperatorsPanel />
 
     <el-alert
       v-if="loadError"
@@ -189,7 +191,7 @@
           :icon="Connection"
           @click="openConnectDialog"
         >
-          {{ t('gatewayStatus.btnConnect') }}
+          {{ t('gatewayStatus.btnLegacyConnect') }}
         </el-button>
       </div>
 
@@ -470,6 +472,7 @@ import {
   Search,
 } from '@element-plus/icons-vue'
 import GatewayConnectDialog from './GatewayConnectDialog.vue'
+import ServiceGatewayOperatorsPanel from './gateway/ServiceGatewayOperatorsPanel.vue'
 import { useGatewayStatusPage } from './gateway/useGatewayStatusPage'
 
 const gatewayStatusPage = useGatewayStatusPage()
