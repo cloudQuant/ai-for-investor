@@ -544,7 +544,6 @@ def test_get_data_sources_keeps_legacy_receivers_only_for_unconfigured_symbols(m
 
     service._service_market_loaded = True
     service._service_market_deployment = _Directory()
-    monkeypatch.setattr(service, "_ensure_mt5_gateway_connected", lambda _manager: None)
     monkeypatch.setattr(
         service,
         "_get_running_workspace_context",

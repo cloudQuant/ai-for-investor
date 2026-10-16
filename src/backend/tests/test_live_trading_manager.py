@@ -824,7 +824,7 @@ class TestGatewayLifecycle:
         assert result["status"] == "disconnected"
         mock_save.assert_called_once_with([])
 
-    def test_disconnect_gateway_suppresses_mt5_auto_connect(self):
+    def test_disconnect_gateway_does_not_trigger_quote_service(self):
         with (
             patch("app.services.live_trading_manager._load_instances", return_value={}),
             patch(
@@ -843,9 +843,9 @@ class TestGatewayLifecycle:
             result = manager.disconnect_gateway("manual:MT5:123456")
 
         assert result["status"] == "disconnected"
-        mock_quote_service.return_value.suppress_auto_connect.assert_called_once_with("MT5")
+        mock_quote_service.assert_not_called()
 
-    def test_connect_gateway_resumes_mt5_auto_connect(self):
+    def test_connect_gateway_does_not_trigger_quote_service(self):
         with (
             patch("app.services.live_trading_manager._load_instances", return_value={}),
             patch(
@@ -864,7 +864,7 @@ class TestGatewayLifecycle:
             result = manager.connect_gateway("MT5", {"login": 123456, "password": "secret"})
 
         assert result["status"] == "connected"
-        mock_quote_service.return_value.resume_auto_connect.assert_called_once_with("MT5")
+        mock_quote_service.assert_not_called()
 
     def test_connect_gateway_returns_error_result_when_manual_service_raises(self):
         with (

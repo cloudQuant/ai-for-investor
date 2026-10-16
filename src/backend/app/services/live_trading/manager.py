@@ -518,15 +518,6 @@ class LiveTradingManager:
             return _build_gateway_connect_error_result(normalized_exchange_type, exc)
         if result.get("status") != "error":
             gateway_key = str(result.get("gateway_key") or "").strip()
-            if normalized_exchange_type == "MT5":
-                try:
-                    from app.services.quote_service import QuoteService
-
-                    QuoteService().resume_auto_connect("MT5")
-                except Exception:
-                    logger.debug(
-                        "Failed to resume MT5 auto-connect after manual connect", exc_info=True
-                    )
             try:
                 self._persist_manual_gateway(gateway_key, normalized_exchange_type, credentials)
             except Exception:
@@ -894,16 +885,6 @@ class LiveTradingManager:
         with self._gateway_lock:
             result = manual_gateway_service.disconnect_gateway(self._gateways, gateway_key)
         if result.get("status") != "error":
-            normalized_gateway_key = str(gateway_key or "").strip()
-            if normalized_gateway_key.startswith("manual:MT5:"):
-                try:
-                    from app.services.quote_service import QuoteService
-
-                    QuoteService().suppress_auto_connect("MT5")
-                except Exception:
-                    logger.debug(
-                        "Failed to suppress MT5 auto-connect after manual disconnect", exc_info=True
-                    )
             try:
                 self._remove_persisted_manual_gateway(gateway_key)
             except Exception:

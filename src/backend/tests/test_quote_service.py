@@ -106,7 +106,6 @@ def test_mt5_native_bid_and_ask_are_exposed_in_quote_ticks(monkeypatch):
     manager = SimpleNamespace()
     runtime = SimpleNamespace(adapter=SimpleNamespace(feed=_FakeFeed()))
     monkeypatch.setattr(service, "_get_live_trading_manager", lambda: manager)
-    monkeypatch.setattr(service, "_ensure_mt5_gateway_connected", lambda mgr: None)
     monkeypatch.setattr(service, "_get_running_workspace_context", lambda *args, **kwargs: {})
     monkeypatch.setattr(service, "_ensure_receiver", lambda source, mgr: None)
     monkeypatch.setattr(service, "_subscribe_symbols_on_gateway", lambda source, symbols: None)
@@ -277,64 +276,33 @@ def test_snapshot_hydration_limits_gateway_requests(monkeypatch):
     assert list(hydrated) == ["AAPL"]
 
 
-def test_ensure_mt5_gateway_connected_skips_when_auto_connect_is_suppressed(monkeypatch):
+def test_quote_reads_do_not_start_or_auto_connect_legacy_gateway(monkeypatch):
     QuoteService._instance = None
     service = QuoteService()
-    service.suppress_auto_connect("MT5")
-    manager = SimpleNamespace(
-        connect_gateway=lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("should not connect")
-        )
-    )
-
-    monkeypatch.setattr(service, "_find_gateway_state", lambda mgr, source: None)
-
-    service._ensure_mt5_gateway_connected(manager)
-
-
-def test_ensure_mt5_gateway_connected_defers_during_gateway_recovery(monkeypatch):
-    QuoteService._instance = None
-    service = QuoteService()
-    manager = SimpleNamespace(
-        is_gateway_restore_in_progress=lambda: True,
-        connect_gateway=lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("should not connect")
-        ),
-    )
-
-    monkeypatch.setattr(service, "_find_gateway_state", lambda mgr, source: None)
-
-    service._ensure_mt5_gateway_connected(manager)
-
-
-def test_ensure_mt5_gateway_connected_resumes_after_resume_auto_connect(monkeypatch):
-    QuoteService._instance = None
-    service = QuoteService()
-    service.suppress_auto_connect("MT5")
-    service.resume_auto_connect("MT5")
-
     calls = []
 
-    class _Manager:
-        def connect_gateway(self, exchange_type, credentials):
-            calls.append((exchange_type, credentials))
-            return {"status": "connected", "gateway_key": "manual:MT5:123456"}
+    def fail_connect(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("quote reads must not connect a gateway")
 
-    monkeypatch.setattr(service, "_find_gateway_state", lambda mgr, source: None)
-    monkeypatch.setattr(
-        "app.services.quote_service.get_settings",
-        lambda: SimpleNamespace(
-            MT5_LOGIN="123456",
-            MT5_PASSWORD="secret",
-            MT5_WS_URI="wss://web.metatrader.app/terminal",
-            MT5_SYMBOL_SUFFIX="",
-        ),
-    )
+    manager = SimpleNamespace(_gateways={}, connect_gateway=fail_connect)
 
-    service._ensure_mt5_gateway_connected(_Manager())
+    from app.services.live_trading import manager as live_manager
 
-    assert len(calls) == 1
-    assert calls[0][0] == "MT5"
+    def fail_manager_creation():
+        raise AssertionError("quote reads must not create the legacy manager")
+
+    monkeypatch.setattr(live_manager, "get_live_trading_manager", fail_manager_creation)
+    monkeypatch.setattr(live_manager, "get_existing_live_trading_manager", lambda: manager)
+    monkeypatch.setattr(service, "_get_running_workspace_context", lambda *args, **kwargs: {})
+
+    sources = service.get_data_sources("user-1")
+    quotes = service.get_quotes("MT5", "user-1", symbols=[])
+
+    mt5 = next(item for item in sources if item["source"] == "MT5")
+    assert mt5["status"] == "not_connected"
+    assert quotes["ticks"] == []
+    assert calls == []
 
 
 def test_match_cached_tick_matches_mt5_broker_symbol_via_instrument_id_prefix():
@@ -482,7 +450,6 @@ def test_workspace_gateway_marks_quote_source_available(monkeypatch):
         ],
     )
     monkeypatch.setattr(service, "_get_live_trading_manager", lambda: manager)
-    monkeypatch.setattr(service, "_ensure_mt5_gateway_connected", lambda value: None)
     monkeypatch.setattr(service, "_is_gateway_state_ready", lambda value: True)
     monkeypatch.setattr(service, "_ensure_receiver_for_gateway", lambda *args: None)
     subscriptions: list[tuple[str, str, list[str]]] = []

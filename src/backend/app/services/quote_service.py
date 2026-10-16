@@ -13,7 +13,6 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from app.config import get_settings
 from app.services.quote.cache import (
     get_cached_tick_metrics,
     load_custom_symbols,
@@ -183,24 +182,10 @@ class QuoteService:
         # on the same exchange may use independent sessions, while a shared
         # gateway must never receive the same subscription twice.
         self._subscribed_symbols: dict[str, set[str]] = {}
-        # Sources explicitly disconnected by the user; auto-connect should stay paused
-        self._auto_connect_suppressed_sources: set[str] = set()
         self._service_market_loaded = False
         self._service_market_deployment: _ServiceMarketDeployment | None = None
         self._service_market_error: str | None = None
         self._service_market_load_lock = threading.Lock()
-
-    def suppress_auto_connect(self, source: str) -> None:
-        normalized = str(source or "").strip().upper()
-        if not normalized:
-            return
-        self._auto_connect_suppressed_sources.add(normalized)
-
-    def resume_auto_connect(self, source: str) -> None:
-        normalized = str(source or "").strip().upper()
-        if not normalized:
-            return
-        self._auto_connect_suppressed_sources.discard(normalized)
 
     def get_cached_tick_metrics(self, source: str) -> dict[str, Any]:
         return get_cached_tick_metrics(self._receivers, source)
@@ -216,7 +201,6 @@ class QuoteService:
     ) -> list[dict[str, Any]]:
         """Return all data sources with their current status."""
         manager = self._get_live_trading_manager()
-        self._ensure_mt5_gateway_connected(manager)
         workspace_context = self._get_running_workspace_context(
             manager,
             user_id,
@@ -487,9 +471,6 @@ class QuoteService:
         source = str(source or "").strip().upper()
         label = _SOURCE_TO_LABEL.get(source, source)
         manager = self._get_live_trading_manager()
-        if source == "MT5":
-            self._ensure_mt5_gateway_connected(manager)
-
         if symbols is None:
             hidden = self._hidden_symbol_set(source, user_id)
             subscription_symbols = [
@@ -1066,11 +1047,11 @@ class QuoteService:
 
     @staticmethod
     def _get_live_trading_manager():
-        """Lazily import LiveTradingManager to avoid circular imports."""
+        """Read an existing manager without starting legacy session restoration."""
         try:
-            from app.services.live_trading_manager import get_live_trading_manager
+            from app.services.live_trading_manager import get_existing_live_trading_manager
 
-            return get_live_trading_manager()
+            return get_existing_live_trading_manager()
         except Exception:
             return None
 
@@ -1245,45 +1226,6 @@ class QuoteService:
                     }
                 )
         return sorted(runs, key=lambda item: (item["workspace_name"], item["gateway_key"]))
-
-    def _ensure_mt5_gateway_connected(self, manager: Any) -> None:
-        if manager is None:
-            return
-        restore_in_progress = getattr(manager, "is_gateway_restore_in_progress", None)
-        if callable(restore_in_progress) and restore_in_progress():
-            logger.info("Deferring MT5 quote auto-connect while gateway recovery is in progress")
-            return
-        if "MT5" in self._auto_connect_suppressed_sources:
-            return
-        if self._find_gateway_state(manager, "MT5") is not None:
-            return
-        settings = get_settings()
-        login = str(settings.MT5_LOGIN or "").strip()
-        password = str(settings.MT5_PASSWORD or "").strip()
-        if not login or not password:
-            return
-        credentials = {
-            "login": login,
-            "password": password,
-            "ws_uri": str(settings.MT5_WS_URI or "").strip(),
-            "symbol_suffix": str(settings.MT5_SYMBOL_SUFFIX or "").strip(),
-        }
-        try:
-            result = manager.connect_gateway("MT5", credentials)
-        except Exception as exc:
-            logger.warning(
-                "Auto-connect MT5 gateway failed: %s: %s",
-                type(exc).__name__,
-                exc,
-            )
-            return
-        if result.get("status") == "error":
-            logger.warning(
-                "Auto-connect MT5 gateway failed: %s",
-                result.get("message", "unknown error"),
-            )
-            return
-        logger.info("Auto-connected MT5 gateway for quote service")
 
     def _get_default_symbols_for_source(self, source: str) -> list[dict[str, str]]:
         manager = self._get_live_trading_manager()
