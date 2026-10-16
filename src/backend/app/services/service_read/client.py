@@ -424,6 +424,7 @@ class AuthorizedServiceReadClient:
                 currency,
                 "ACCOUNT_OBSERVATION_MISSING",
             )
+        provider_observation = _provider_observation_projection(observation)
         fresh_until = getattr(state, "fresh_until_monotonic", None)
         now = self._clock()
         quality = ReadQuality.STALE
@@ -447,6 +448,7 @@ class AuthorizedServiceReadClient:
                 open_orders_count=_count(getattr(observation, "open_orders", None)),
                 account_key=account_key,
                 account_key_id=account_key_id,
+                provider_observation=provider_observation,
             )
         return AccountReadView(
             account_ref=account_ref,
@@ -464,6 +466,7 @@ class AuthorizedServiceReadClient:
             open_orders_count=_count(getattr(observation, "open_orders", None)),
             account_key=account_key,
             account_key_id=account_key_id,
+            provider_observation=provider_observation,
         )
 
     def _degraded_account_view(
@@ -692,6 +695,30 @@ def _valuation_for(
         if total is not None or available is not None:
             return available, total, observed_at
     return None, None, None
+
+
+def _provider_observation_projection(observation: Any) -> Mapping[str, Any] | None:
+    """Copy only the public provider account facts from an authorized SDK view."""
+
+    to_dict = getattr(observation, "to_dict", None)
+    if not callable(to_dict):
+        return None
+    raw = to_dict()
+    if not isinstance(raw, Mapping):
+        raise ServiceReadContractError("INVALID_PROVIDER_ACCOUNT_OBSERVATION")
+    fields = (
+        "observation_id",
+        "coverage",
+        "balances",
+        "positions",
+        "valuation",
+        "started_at_utc",
+        "completed_at_utc",
+        "consistency",
+        "balances_complete",
+        "positions_complete",
+    )
+    return {name: raw[name] for name in fields if name in raw}
 
 
 def _execution_domain_ref(observation: Any) -> str:

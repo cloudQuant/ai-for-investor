@@ -264,6 +264,7 @@ class PortfolioCompositionService:
         account_rows, account_total, account_snapshot_consistency = _project_account_total(
             reads, row.base_currency
         )
+        provider_snapshot_consistency = _provider_snapshot_consistency(reads)
         account_facts_complete = account_total["status"] == "current"
         strategy_members = [member for member in row.members if member["kind"] == "strategy"]
         strategy_rows = _strategy_views(row.members)
@@ -459,6 +460,7 @@ class PortfolioCompositionService:
             "source_status": "projected" if account_members else "no_account_members",
             "accounts": account_rows,
             "account_snapshot_consistency": account_snapshot_consistency,
+            "provider_snapshot_consistency": provider_snapshot_consistency,
             "strategies": strategy_rows,
             "account_book_sources": list(book_sources.values()),
             "account_total": account_total,
@@ -941,6 +943,78 @@ def _account_snapshot_consistency(
     return result
 
 
+def _provider_snapshot_consistency(
+    reads: list[tuple[str, AccountReadView | None, str | None]],
+) -> dict[str, Any]:
+    """Report independent Gateway observation cuts without claiming atomicity."""
+
+    observations: list[tuple[int, str, str]] = []
+    missing_observation = False
+    missing_time = False
+    consistency_modes: set[str] = set()
+    coverage_states: list[bool] = []
+    for member_ref, view, _ in reads:
+        observation = view.provider_observation if view is not None else None
+        if not isinstance(observation, Mapping):
+            missing_observation = True
+            continue
+        coverage_states.append(
+            observation["balances_complete"] and observation["positions_complete"]
+        )
+        completed_at = observation["completed_at_utc"]
+        completed_at_ns = _account_observed_at_ns(completed_at)
+        if completed_at_ns is None:
+            missing_time = True
+        else:
+            observations.append((completed_at_ns, completed_at, member_ref))
+        consistency_modes.add(observation["consistency"])
+
+    earliest = min(observations, key=lambda item: item[0]) if observations else None
+    latest = max(observations, key=lambda item: item[0]) if observations else None
+    result: dict[str, Any] = {
+        "cut_model": "independent_provider_observation_per_account",
+        "atomic": False,
+        "member_read_count": len(reads),
+        "observation_count": len(observations),
+        "consistency_modes": sorted(consistency_modes),
+        "coverage_status": (
+            "not_established"
+            if not reads or missing_observation
+            else "complete"
+            if all(coverage_states) and len(coverage_states) == len(reads)
+            else "incomplete"
+        ),
+        "coverage_complete": (
+            all(coverage_states) and len(coverage_states) == len(reads)
+            if reads and not missing_observation
+            else None
+        ),
+        "earliest_completed_at_utc": earliest[1] if earliest else None,
+        "latest_completed_at_utc": latest[1] if latest else None,
+        "skew_ns": None,
+        "skew_policy": "reported_without_threshold",
+    }
+    if not reads:
+        result["status"] = "not_collected"
+    elif missing_observation:
+        result["status"] = "observation_absent_or_unavailable"
+    elif missing_time or len(observations) != len(reads):
+        result["status"] = "observation_time_incomplete"
+    elif len(reads) == 1:
+        result["status"] = "single_account_observation_cut"
+    else:
+        skew_ns = max(item[0] for item in observations) - min(
+            item[0] for item in observations
+        )
+        result["skew_ns"] = str(skew_ns)
+        result["status"] = (
+            "same_completion_time_independent_cuts"
+            if skew_ns == 0
+            else "different_completion_times_independent_cuts"
+        )
+    return result
+
+
 def _account_observed_at_ns(value: str | None) -> int | None:
     """Parse an aware ISO timestamp exactly to nanoseconds, without defaulting."""
 
@@ -998,6 +1072,99 @@ def _account_row(
         "included_in_total": included,
         "duplicate_of_ref": duplicate_of,
         "detail_code": detail_code,
+        "provider_observation": _public_provider_observation_projection(view),
+    }
+
+
+def _public_provider_observation_projection(view: AccountReadView) -> dict[str, Any]:
+    """Expose account observations and their coverage while omitting account keys."""
+
+    observation = view.provider_observation
+    if not isinstance(observation, Mapping):
+        if view.quality is ReadQuality.UNAVAILABLE:
+            return {
+                "status": "unavailable",
+                "code": view.detail_code or "ACCOUNT_OBSERVATION_UNAVAILABLE",
+            }
+        return {"status": "absent", "code": "PROVIDER_OBSERVATION_NOT_PROJECTED"}
+
+    row_times = [
+        row["observed_at_utc"]
+        for row in (*observation["balances"], *observation["positions"])
+    ]
+    if observation["valuation"] is not None:
+        row_times.append(observation["valuation"]["observed_at_utc"])
+    parsed_times = [
+        (observed_ns, observed_at)
+        for observed_at in row_times
+        if (observed_ns := _account_observed_at_ns(observed_at)) is not None
+    ]
+    earliest = min(parsed_times, key=lambda item: item[0]) if parsed_times else None
+    latest = max(parsed_times, key=lambda item: item[0]) if parsed_times else None
+    row_skew_ns = (
+        str(latest[0] - earliest[0]) if earliest is not None and latest is not None else None
+    )
+    positions = [
+        {
+            "resource": dict(position["resource"]),
+            "instrument": dict(position["instrument"]),
+            "side": position["side"],
+            "quantity": position["quantity"],
+            "qty_unit": position["qty_unit"],
+            "average_price": position["average_price"],
+            "price_currency": position["price_currency"],
+            "observed_at_utc": position["observed_at_utc"],
+            "valuation_inputs": {
+                "mark_price": {"status": "missing", "value": None},
+                "contract_multiplier": {"status": "unsupported", "value": None},
+                "fx_rate": {"status": "unsupported", "value": None},
+                "market_value": {"status": "not_calculated", "value": None},
+            },
+        }
+        for position in observation["positions"]
+    ]
+    return {
+        "status": "stale" if view.quality is ReadQuality.STALE else "available",
+        "quality": view.quality.value,
+        "source": "AUTHORIZED_PROVIDER_ACCOUNT_OBSERVATION",
+        "observation_id": observation["observation_id"],
+        "session_generation": view.session_generation,
+        "cursor": view.cursor,
+        "consistency": observation["consistency"],
+        "cut": {
+            "started_at_utc": observation["started_at_utc"],
+            "completed_at_utc": observation["completed_at_utc"],
+            "earliest_row_observed_at_utc": earliest[1] if earliest else None,
+            "latest_row_observed_at_utc": latest[1] if latest else None,
+            "row_skew_ns": row_skew_ns,
+            "row_observed_at_count": len(parsed_times),
+            "row_count": len(row_times),
+        },
+        "coverage": {
+            "resources": [dict(resource) for resource in observation["coverage"]],
+            "balances_complete": observation["balances_complete"],
+            "positions_complete": observation["positions_complete"],
+            "state": (
+                "complete"
+                if observation["balances_complete"] and observation["positions_complete"]
+                else "incomplete"
+            ),
+        },
+        "valuation": (
+            dict(observation["valuation"]) if observation["valuation"] is not None else None
+        ),
+        "balances": [
+            {
+                "resource": dict(balance["resource"]),
+                "currency": balance["currency"],
+                "total": balance["total"],
+                "available": balance["available"],
+                "locked": balance["locked"],
+                "observed_at_utc": balance["observed_at_utc"],
+            }
+            for balance in observation["balances"]
+        ],
+        "positions": positions,
     }
 
 

@@ -14,8 +14,10 @@ this yet" and "the observed value is zero" are different product statements.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import MappingProxyType
@@ -308,6 +310,187 @@ def _financial_text(value: Any, code: str, *, maximum: int = 256) -> str:
     return value
 
 
+_PROVIDER_OBSERVATION_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?Z\Z",
+    re.ASCII,
+)
+_PROVIDER_RESOURCE_FIELDS = frozenset({"product_type", "margin_pool"})
+_PROVIDER_INSTRUMENT_FIELDS = frozenset(
+    {"provider", "venue", "environment", "product_type", "instrument_id", "native_symbol"}
+)
+
+
+def _provider_observation_time(value: Any, code: str) -> datetime:
+    if (
+        type(value) is not str
+        or len(value) > 32
+        or _PROVIDER_OBSERVATION_TIMESTAMP.fullmatch(value) is None
+    ):
+        raise ServiceReadContractError(code)
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        raise ServiceReadContractError(code) from None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ServiceReadContractError(code)
+    return parsed
+
+
+def _validate_provider_resource(value: Any, code: str) -> tuple[str, str]:
+    if not isinstance(value, Mapping) or set(value) != _PROVIDER_RESOURCE_FIELDS:
+        raise ServiceReadContractError(code)
+    return (
+        _text(value["product_type"], code),
+        _text(value["margin_pool"], code),
+    )
+
+
+def _validate_provider_account_observation(
+    value: Any, account_key: Mapping[str, Any] | None
+) -> None:
+    code = "INVALID_PROVIDER_ACCOUNT_OBSERVATION"
+    expected = {
+        "observation_id",
+        "coverage",
+        "balances",
+        "positions",
+        "valuation",
+        "started_at_utc",
+        "completed_at_utc",
+        "consistency",
+        "balances_complete",
+        "positions_complete",
+    }
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise ServiceReadContractError(code)
+    _text(value["observation_id"], code)
+    if type(value["consistency"]) is not str or value["consistency"] not in {
+        "provider_atomic",
+        "multi_query",
+    }:
+        raise ServiceReadContractError(code)
+    started = _provider_observation_time(value["started_at_utc"], code)
+    completed = _provider_observation_time(value["completed_at_utc"], code)
+    if started > completed or any(
+        type(value[name]) is not bool for name in ("balances_complete", "positions_complete")
+    ):
+        raise ServiceReadContractError(code)
+
+    coverage = value["coverage"]
+    if type(coverage) is not tuple or not coverage:
+        raise ServiceReadContractError(code)
+    resource_keys = [_validate_provider_resource(item, code) for item in coverage]
+    if len(resource_keys) != len(set(resource_keys)):
+        raise ServiceReadContractError(code)
+    allowed_resources = set(resource_keys)
+
+    balances = value["balances"]
+    if type(balances) is not tuple:
+        raise ServiceReadContractError(code)
+    balance_keys: set[tuple[tuple[str, str], str]] = set()
+    for row in balances:
+        if not isinstance(row, Mapping) or set(row) != {
+            "resource",
+            "currency",
+            "total",
+            "available",
+            "locked",
+            "observed_at_utc",
+        }:
+            raise ServiceReadContractError(code)
+        resource_key = _validate_provider_resource(row["resource"], code)
+        if resource_key not in allowed_resources:
+            raise ServiceReadContractError(code)
+        currency = _text(row["currency"], code, maximum=16)
+        for name in ("total", "available", "locked"):
+            if row[name] is not None:
+                _financial_decimal(row[name], code)
+        if _provider_observation_time(row["observed_at_utc"], code) > completed:
+            raise ServiceReadContractError(code)
+        balance_key = (resource_key, currency)
+        if balance_key in balance_keys:
+            raise ServiceReadContractError(code)
+        balance_keys.add(balance_key)
+
+    positions = value["positions"]
+    if type(positions) is not tuple:
+        raise ServiceReadContractError(code)
+    position_keys: set[tuple[tuple[str, str], tuple[str, ...], str]] = set()
+    for row in positions:
+        if not isinstance(row, Mapping) or set(row) != {
+            "resource",
+            "instrument",
+            "side",
+            "quantity",
+            "qty_unit",
+            "average_price",
+            "price_currency",
+            "observed_at_utc",
+        }:
+            raise ServiceReadContractError(code)
+        resource_key = _validate_provider_resource(row["resource"], code)
+        if resource_key not in allowed_resources:
+            raise ServiceReadContractError(code)
+        instrument = row["instrument"]
+        if not isinstance(instrument, Mapping) or set(instrument) != _PROVIDER_INSTRUMENT_FIELDS:
+            raise ServiceReadContractError(code)
+        normalized_instrument = tuple(
+            _text(instrument[name], code)
+            for name in (
+                "provider",
+                "venue",
+                "environment",
+                "product_type",
+                "instrument_id",
+                "native_symbol",
+            )
+        )
+        if normalized_instrument[3] != resource_key[0]:
+            raise ServiceReadContractError(code)
+        if account_key is not None and any(
+            instrument[name] != account_key[key_name]
+            for name, key_name in (
+                ("provider", "provider"),
+                ("venue", "venue"),
+                ("environment", "environment"),
+            )
+        ):
+            raise ServiceReadContractError(code)
+        if type(row["side"]) is not str or row["side"] not in {"net", "long", "short"}:
+            raise ServiceReadContractError(code)
+        quantity = _financial_decimal(row["quantity"], code)
+        if row["side"] in {"long", "short"} and quantity < 0:
+            raise ServiceReadContractError(code)
+        _text(row["qty_unit"], code)
+        if row["average_price"] is not None:
+            _financial_decimal(row["average_price"], code)
+        if row["price_currency"] is not None:
+            _text(row["price_currency"], code, maximum=16)
+        if _provider_observation_time(row["observed_at_utc"], code) > completed:
+            raise ServiceReadContractError(code)
+        position_key = (resource_key, normalized_instrument, row["side"])
+        if position_key in position_keys:
+            raise ServiceReadContractError(code)
+        position_keys.add(position_key)
+
+    valuation = value["valuation"]
+    if valuation is not None:
+        if not isinstance(valuation, Mapping) or set(valuation) != {
+            "currency",
+            "available_cash",
+            "equity",
+            "observed_at_utc",
+        }:
+            raise ServiceReadContractError(code)
+        _text(valuation["currency"], code, maximum=16)
+        for name in ("available_cash", "equity"):
+            if valuation[name] is not None:
+                _financial_decimal(valuation[name], code)
+        if _provider_observation_time(valuation["observed_at_utc"], code) > completed:
+            raise ServiceReadContractError(code)
+
+
 def _validate_financial_money_rows(value: Any, code: str) -> None:
     if type(value) is not tuple:
         raise ServiceReadContractError(code)
@@ -574,6 +757,7 @@ class AccountReadView:
     open_orders_count: int | None = None
     account_key: Mapping[str, Any] | None = None
     account_key_id: str | None = None
+    provider_observation: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         _text(self.account_ref, "INVALID_ACCOUNT_REF")
@@ -618,6 +802,12 @@ class AccountReadView:
             ):
                 raise ServiceReadContractError("INVALID_ACCOUNT_KEY_ID")
             object.__setattr__(self, "account_key", MappingProxyType(normalized))
+        if self.provider_observation is not None:
+            observation = _freeze_json(
+                self.provider_observation, "INVALID_PROVIDER_ACCOUNT_OBSERVATION"
+            )
+            _validate_provider_account_observation(observation, self.account_key)
+            object.__setattr__(self, "provider_observation", observation)
 
     @property
     def has_current_facts(self) -> bool:

@@ -85,7 +85,14 @@ class _SyntheticReadSession:
         self.closed = True
 
 
-def _account_view(account_ref: str, key: object, *, value: str, cash: str) -> AccountReadView:
+def _account_view(
+    account_ref: str,
+    key: object,
+    *,
+    value: str,
+    cash: str,
+    provider_observation: dict | None = None,
+) -> AccountReadView:
     return AccountReadView(
         account_ref=account_ref,
         execution_domain_ref="live:synthetic-venue",
@@ -96,6 +103,7 @@ def _account_view(account_ref: str, key: object, *, value: str, cash: str) -> Ac
         observed_at_utc="2026-10-15T00:00:00Z",
         account_key=key.to_dict(),
         account_key_id=key.account_key_id,
+        provider_observation=provider_observation,
     )
 
 
@@ -369,6 +377,261 @@ def test_financial_projection_reaches_composition_http_response():
             }
             assert source_session.account_book_reads == [account_ref]
             for private_value in ("private-book-key-a", "synthetic-account-a"):
+                assert private_value not in response.text
+        finally:
+            configure_service_read(None)
+            await worker.aclose()
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_provider_observations_reach_live_composition_http_without_fx_or_account_key():
+    try:
+        from bt_api_base.account_protocol import AccountKey
+    except ImportError:
+        pytest.skip("the service SDK account protocol is not installed")
+
+    async def scenario() -> None:
+        owner = TokenPayload(sub="observation-owner", username="owner")
+        resource = {"product_type": "SPOT", "margin_pool": "cash"}
+        funding_resource = {"product_type": "SPOT", "margin_pool": "funding"}
+        account_a_key = AccountKey(
+            provider="synthetic-provider",
+            venue="synthetic-venue",
+            environment="live",
+            account_id="private-synthetic-account-a",
+            subaccount_id=None,
+        )
+        account_b_key = AccountKey(
+            provider="synthetic-provider",
+            venue="synthetic-venue",
+            environment="live",
+            account_id="private-synthetic-account-b",
+            subaccount_id=None,
+        )
+        observation_a = {
+            "observation_id": "observation-a",
+            "coverage": [resource, funding_resource],
+            "balances": [
+                {
+                    "resource": resource,
+                    "currency": "USD",
+                    "total": "100",
+                    "available": "20",
+                    "locked": "80",
+                    "observed_at_utc": "2026-10-15T00:00:00Z",
+                },
+                {
+                    "resource": resource,
+                    "currency": "EUR",
+                    "total": "12.5",
+                    "available": None,
+                    "locked": "0",
+                    "observed_at_utc": "2026-10-15T00:00:00.5Z",
+                },
+                {
+                    "resource": funding_resource,
+                    "currency": "USDT",
+                    "total": "0",
+                    "available": "0",
+                    "locked": "0",
+                    "observed_at_utc": "2026-10-15T00:00:00Z",
+                },
+            ],
+            "positions": [
+                {
+                    "resource": resource,
+                    "instrument": {
+                        "provider": account_a_key.provider,
+                        "venue": account_a_key.venue,
+                        "environment": account_a_key.environment,
+                        "product_type": "SPOT",
+                        "instrument_id": "instrument-zero",
+                        "native_symbol": "ZERO/EUR",
+                    },
+                    "side": "net",
+                    "quantity": "0",
+                    "qty_unit": "base_asset",
+                    "average_price": "0",
+                    "price_currency": "EUR",
+                    "observed_at_utc": "2026-10-15T00:00:01Z",
+                },
+                {
+                    "resource": resource,
+                    "instrument": {
+                        "provider": account_a_key.provider,
+                        "venue": account_a_key.venue,
+                        "environment": account_a_key.environment,
+                        "product_type": "SPOT",
+                        "instrument_id": "instrument-missing-price",
+                        "native_symbol": "NO-MARK/EUR",
+                    },
+                    "side": "long",
+                    "quantity": "2",
+                    "qty_unit": "contracts",
+                    "average_price": None,
+                    "price_currency": None,
+                    "observed_at_utc": "2026-10-15T00:00:01Z",
+                },
+            ],
+            "valuation": None,
+            "started_at_utc": "2026-10-15T00:00:00Z",
+            "completed_at_utc": "2026-10-15T00:00:01Z",
+            "consistency": "multi_query",
+            "balances_complete": False,
+            "positions_complete": True,
+        }
+        observation_b = {
+            "observation_id": "observation-b",
+            "coverage": [resource],
+            "balances": [
+                {
+                    "resource": resource,
+                    "currency": "USD",
+                    "total": "5",
+                    "available": "1",
+                    "locked": "4",
+                    "observed_at_utc": "2026-10-15T00:00:02Z",
+                }
+            ],
+            "positions": [],
+            "valuation": None,
+            "started_at_utc": "2026-10-15T00:00:02Z",
+            "completed_at_utc": "2026-10-15T00:00:03Z",
+            "consistency": "provider_atomic",
+            "balances_complete": True,
+            "positions_complete": True,
+        }
+        views = {
+            "account-a": _account_view(
+                "account-a",
+                account_a_key,
+                value="100",
+                cash="20",
+                provider_observation=observation_a,
+            ),
+            "account-b": _account_view(
+                "account-b",
+                account_b_key,
+                value="5",
+                cash="1",
+                provider_observation=observation_b,
+            ),
+        }
+        source_session = _SyntheticReadSession(views)
+        worker = ServiceReadWorker(
+            lambda: source_session,
+            maintenance_interval_seconds=60,
+            name="afi-provider-observation-http-synthetic",
+        )
+        engine = create_async_engine(
+            "sqlite+aiosqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        async with engine.begin() as connection:
+            await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_maker() as db:
+            db.add(
+                PortfolioCompositionVersion(
+                    owner_subject=owner.sub,
+                    portfolio_ref="provider-observation-http",
+                    membership_version=1,
+                    source_type="live",
+                    base_currency="USD",
+                    members=[
+                        {"kind": "account", "ref": "account-a"},
+                        {"kind": "account", "ref": "account-b"},
+                    ],
+                    membership_sha256="b" * 64,
+                )
+            )
+            await db.commit()
+
+        app = FastAPI()
+        app.include_router(portfolio_router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: owner
+
+        async def override_db():
+            async with session_maker() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_db
+        configure_service_read(
+            ServiceReadAccessDirectory(
+                {
+                    owner.sub: ReadAccess(
+                        worker,
+                        allow_account_refs={"account-a", "account-b"},
+                    )
+                }
+            )
+        )
+        try:
+            await worker.start()
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                response = await client.get(
+                    "/api/v1/portfolio/compositions/provider-observation-http/versions/1/projection"
+                )
+            assert response.status_code == 200, response.text
+            projected = response.json()
+            # The portfolio total remains the authorized account-level USD figure.
+            # EUR balance rows and position facts never enter this aggregate.
+            assert projected["account_total"] == {
+                "status": "current",
+                "currency": "USD",
+                "value": "105",
+            }
+            account_a = projected["accounts"][0]["provider_observation"]
+            assert "account_key" not in account_a
+            assert "account_key_id" not in account_a
+            assert account_a["status"] == "available"
+            assert account_a["coverage"]["state"] == "incomplete"
+            assert [row["currency"] for row in account_a["balances"]] == [
+                "USD",
+                "EUR",
+                "USDT",
+            ]
+            assert account_a["balances"][0]["total"] == "100"
+            assert account_a["balances"][1]["total"] == "12.5"
+            assert account_a["balances"][1]["available"] is None
+            assert account_a["balances"][2]["total"] == "0"
+            assert account_a["positions"][0]["quantity"] == "0"
+            assert account_a["positions"][0]["average_price"] == "0"
+            assert account_a["positions"][1]["quantity"] == "2"
+            assert account_a["positions"][1]["average_price"] is None
+            assert account_a["positions"][1]["instrument"] == {
+                "provider": "synthetic-provider",
+                "venue": "synthetic-venue",
+                "environment": "live",
+                "product_type": "SPOT",
+                "instrument_id": "instrument-missing-price",
+                "native_symbol": "NO-MARK/EUR",
+            }
+            assert account_a["positions"][1]["valuation_inputs"] == {
+                "mark_price": {"status": "missing", "value": None},
+                "contract_multiplier": {"status": "unsupported", "value": None},
+                "fx_rate": {"status": "unsupported", "value": None},
+                "market_value": {"status": "not_calculated", "value": None},
+            }
+            consistency = projected["provider_snapshot_consistency"]
+            assert consistency["cut_model"] == "independent_provider_observation_per_account"
+            assert consistency["atomic"] is False
+            assert consistency["skew_ns"] == "2000000000"
+            assert consistency["coverage_status"] == "incomplete"
+            assert consistency["status"] == "different_completion_times_independent_cuts"
+            assert source_session.account_book_reads == []
+            for private_value in (
+                account_a_key.account_id,
+                account_b_key.account_id,
+                account_a_key.account_key_id,
+                account_b_key.account_key_id,
+            ):
                 assert private_value not in response.text
         finally:
             configure_service_read(None)

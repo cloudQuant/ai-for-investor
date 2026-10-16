@@ -496,6 +496,16 @@
 
           <section class="portfolio-composition__section">
             <h2>{{ t('portfolio.compositionAccountMembers') }}</h2>
+            <p
+              v-if="compositionProjection.provider_snapshot_consistency"
+              data-test="portfolio-provider-snapshot-consistency"
+            >
+              授权账户快照偏差 / Authorized account snapshot skew:
+              {{ compositionProjection.provider_snapshot_consistency.status }}
+              · coverage {{ compositionProjection.provider_snapshot_consistency.coverage_status }}
+              · {{ compositionProjection.provider_snapshot_consistency.skew_ns ?? '未建立 / Not established' }} ns
+              · {{ compositionProjection.provider_snapshot_consistency.skew_policy }}
+            </p>
             <p v-if="compositionProjection.accounts.length === 0">
               {{ t('portfolio.compositionNoAccountMembers') }}
             </p>
@@ -505,6 +515,9 @@
                 :key="account.member_ref"
               >
                 {{ account.member_ref }} — {{ compositionAmount(account.value, account.currency) }}
+                <span data-test="portfolio-composition-account-quality">
+                  ({{ account.quality }})
+                </span>
                 <span v-if="account.duplicate_of_ref">
                   ({{ t('portfolio.compositionDuplicateOf', { ref: account.duplicate_of_ref }) }})
                 </span>
@@ -518,6 +531,136 @@
                   {{ t('portfolio.compositionDiagnosticCode') }}:
                   <code>{{ account.detail_code }}</code>
                 </span>
+                <details
+                  v-if="account.provider_observation"
+                  data-test="portfolio-provider-account-observation"
+                >
+                  <summary>
+                    授权账户事实 / Authorized provider facts:
+                    {{ account.provider_observation.status }}
+                  </summary>
+                  <p
+                    v-if="account.provider_observation.status === 'absent'
+                      || account.provider_observation.status === 'unavailable'"
+                  >
+                    {{ account.provider_observation.code }}
+                  </p>
+                  <template
+                    v-else-if="account.provider_observation.status === 'available'
+                      || account.provider_observation.status === 'stale'"
+                  >
+                    <dl data-test="portfolio-provider-account-cut">
+                      <div>
+                        <dt>观测质量 / Observation quality</dt>
+                        <dd>{{ account.provider_observation.quality }}</dd>
+                      </div>
+                      <div>
+                        <dt>Provider observation</dt>
+                        <dd><code>{{ account.provider_observation.observation_id }}</code></dd>
+                      </div>
+                      <div>
+                        <dt>Session generation / cursor</dt>
+                        <dd>
+                          <code>{{ account.provider_observation.session_generation ?? '缺失 / Missing' }}</code>
+                          · {{ account.provider_observation.cursor ?? '缺失 / Missing' }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>一致性 / Consistency</dt>
+                        <dd>
+                          {{ account.provider_observation.consistency }}
+                          · {{ account.provider_observation.consistency === 'multi_query'
+                            ? '原子性未建立 / atomicity not established'
+                            : 'Provider atomic' }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>独立 cut / Independent cut</dt>
+                        <dd>
+                          <code>{{ account.provider_observation.cut.started_at_utc }}</code>
+                          → <code>{{ account.provider_observation.cut.completed_at_utc }}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>行时间偏差 / Row time spread</dt>
+                        <dd>
+                          {{ account.provider_observation.cut.row_skew_ns ?? '未建立 / Not established' }} ns
+                          · {{ account.provider_observation.cut.row_observed_at_count }}/{{ account.provider_observation.cut.row_count }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>覆盖完整性 / Coverage</dt>
+                        <dd>
+                          {{ account.provider_observation.coverage.state }}
+                          · balances {{ account.provider_observation.coverage.balances_complete ? '完整 / complete' : '不完整 / incomplete' }}
+                          · positions {{ account.provider_observation.coverage.positions_complete ? '完整 / complete' : '不完整 / incomplete' }}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p data-test="portfolio-provider-account-reconciliation">
+                      账户观察与执行账簿为独立来源；未声明已对账。
+                      / Provider account facts and execution books are independent sources; reconciliation is not established.
+                    </p>
+                    <p>账户估值来源数值 / Provider account valuation (unconverted)</p>
+                    <p v-if="account.provider_observation.valuation">
+                      {{ compositionAmount(
+                        account.provider_observation.valuation.available_cash,
+                        account.provider_observation.valuation.currency,
+                      ) }} available ·
+                      {{ compositionAmount(
+                        account.provider_observation.valuation.equity,
+                        account.provider_observation.valuation.currency,
+                      ) }} equity ·
+                      <code>{{ account.provider_observation.valuation.observed_at_utc }}</code>
+                    </p>
+                    <p v-else>估值字段缺失 / Provider valuation missing.</p>
+                    <p>逐币种余额（不换汇）/ Balances by original currency (no FX conversion)</p>
+                    <ul data-test="portfolio-provider-account-balances">
+                      <li
+                        v-for="(balance, index) in account.provider_observation.balances"
+                        :key="`${balance.resource.product_type}/${balance.resource.margin_pool}/${balance.currency}/${index}`"
+                      >
+                        {{ balance.resource.product_type }}/{{ balance.resource.margin_pool }}
+                        · {{ balance.currency }}
+                        · total {{ compositionAmount(balance.total, balance.currency) }}
+                        · available {{ compositionAmount(balance.available, balance.currency) }}
+                        · locked {{ compositionAmount(balance.locked, balance.currency) }}
+                        · <code>{{ balance.observed_at_utc }}</code>
+                      </li>
+                      <li v-if="account.provider_observation.balances.length === 0">
+                        余额行缺失 / No balance rows reported.
+                      </li>
+                    </ul>
+                    <p>Provider 持仓（均价不是 mark）/ Provider positions (average price is not a mark)</p>
+                    <ul data-test="portfolio-provider-account-positions">
+                      <li
+                        v-for="(position, index) in account.provider_observation.positions"
+                        :key="`${position.instrument.provider}/${position.instrument.venue}/${position.instrument.environment}/${position.instrument.product_type}/${position.instrument.instrument_id}/${position.side}/${index}`"
+                      >
+                        <code>
+                          {{ position.instrument.provider }}/{{ position.instrument.venue }}/{{ position.instrument.environment }}/{{ position.instrument.product_type }}/{{ position.instrument.instrument_id }} · {{ position.instrument.native_symbol }}
+                        </code>
+                        · {{ position.resource.product_type }}/{{ position.resource.margin_pool }}
+                        · {{ position.side }} {{ position.quantity }} {{ position.qty_unit }}
+                        · average {{ compositionAmount(position.average_price, position.price_currency) }}
+                        · <code>{{ position.observed_at_utc }}</code>
+                        · mark {{ position.valuation_inputs.mark_price.status }}
+                        · multiplier {{ position.valuation_inputs.contract_multiplier.status }}
+                        · FX {{ position.valuation_inputs.fx_rate.status }}
+                      </li>
+                      <li v-if="account.provider_observation.positions.length === 0">
+                        持仓行缺失 / No position rows reported.
+                      </li>
+                    </ul>
+                    <p>
+                      估值仅供展示，缺少 mark、合约乘数或 FX 时不计算市值；不进入现金、授信或交易准入。
+                      / Display only: no market value is calculated without a mark, contract multiplier, and FX fact; these facts do not affect cash, credit, or admission.
+                    </p>
+                  </template>
+                  <p v-else data-test="portfolio-provider-observation-unsupported">
+                    Unsupported provider observation state.
+                  </p>
+                </details>
               </li>
             </ul>
           </section>

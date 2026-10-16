@@ -320,6 +320,181 @@ def test_account_read_preserves_the_complete_sdk_account_key(monkeypatch):
 
     assert dict(view.account_key) == sdk_key.to_dict()
     assert view.account_key_id == sdk_key.account_key_id
+    assert view.provider_observation is None
+
+
+def test_account_read_projects_authorized_provider_observation_without_filling_missing_facts(
+    monkeypatch,
+):
+    try:
+        from bt_api_base.account_protocol import (
+            AccountBalance,
+            AccountKey,
+            AccountObservation,
+            AccountPosition,
+            AccountResourceKey,
+            AccountValuation,
+        )
+        from bt_api_base.market_protocol import MarketInstrumentKey
+    except ImportError:
+        pytest.skip("bt_api_base account protocol is not installed")
+
+    sdk_key = AccountKey(
+        provider="synthetic-provider",
+        venue="synthetic-venue",
+        environment="paper",
+        account_id="synthetic-private-account",
+        subaccount_id=None,
+    )
+    spot = AccountResourceKey(product_type="SPOT", margin_pool="cash")
+    zero_instrument = MarketInstrumentKey(
+        provider=sdk_key.provider,
+        venue=sdk_key.venue,
+        environment=sdk_key.environment,
+        product_type="SPOT",
+        instrument_id="instrument-zero",
+        native_symbol="ZERO/EUR",
+    )
+    missing_instrument = MarketInstrumentKey(
+        provider=sdk_key.provider,
+        venue=sdk_key.venue,
+        environment=sdk_key.environment,
+        product_type="SPOT",
+        instrument_id="instrument-missing",
+        native_symbol="MISSING/EUR",
+    )
+    observation = AccountObservation(
+        account_key=sdk_key,
+        observation_id="synthetic-observation-1",
+        coverage=(spot,),
+        balances=(
+            AccountBalance(
+                resource=spot,
+                currency="USD",
+                total="0",
+                available="0",
+                locked="0",
+                observed_at_utc="2026-10-15T00:00:00Z",
+            ),
+            AccountBalance(
+                resource=spot,
+                currency="EUR",
+                total="12.5",
+                available=None,
+                locked="0",
+                observed_at_utc="2026-10-15T00:00:00.5Z",
+            ),
+        ),
+        positions=(
+            AccountPosition(
+                resource=spot,
+                instrument=zero_instrument,
+                side="net",
+                quantity="0",
+                qty_unit="base_asset",
+                average_price="0",
+                price_currency="EUR",
+                observed_at_utc="2026-10-15T00:00:00Z",
+            ),
+            AccountPosition(
+                resource=spot,
+                instrument=missing_instrument,
+                side="long",
+                quantity="2",
+                qty_unit="contracts",
+                average_price=None,
+                price_currency=None,
+                observed_at_utc="2026-10-15T00:00:01Z",
+            ),
+        ),
+        valuation=AccountValuation(
+            currency="USD",
+            available_cash="0",
+            equity=None,
+            observed_at_utc="2026-10-15T00:00:01Z",
+        ),
+        started_at_utc="2026-10-15T00:00:00Z",
+        completed_at_utc="2026-10-15T00:00:02Z",
+        consistency="multi_query",
+        balances_complete=False,
+        positions_complete=True,
+    )
+
+    fresh_client = AuthorizedServiceReadClient(
+        _FakeRuntime(), account_bindings={"account-a": _binding()}, clock=lambda: 150.0
+    )
+    monkeypatch.setattr(
+        fresh_client,
+        "_account_clients",
+        {"account-a": _FakeAccountClient(state=_FakeState(observation=observation))},
+    )
+    fresh_view = fresh_client.read_account("account-a")
+
+    assert fresh_view.quality is ReadQuality.FRESH
+    projected = fresh_view.provider_observation
+    assert projected is not None
+    assert projected["observation_id"] == "synthetic-observation-1"
+    assert projected["balances"][0]["total"] == "0"
+    assert projected["balances"][1]["total"] == "12.5"
+    assert projected["balances"][1]["available"] is None
+    assert projected["positions"][0]["quantity"] == "0"
+    assert projected["positions"][0]["average_price"] == "0"
+    assert projected["positions"][1]["quantity"] == "2"
+    assert projected["positions"][1]["average_price"] is None
+    assert projected["positions"][1]["qty_unit"] == "contracts"
+    assert projected["balances_complete"] is False
+    assert projected["positions_complete"] is True
+    assert "account_key" not in projected
+
+    uncollected_view = fresh_client.read_account("account-a", currency="JPY")
+    assert uncollected_view.quality is ReadQuality.NOT_COLLECTED
+    assert uncollected_view.cash is None and uncollected_view.value is None
+    assert uncollected_view.provider_observation is not None
+    assert uncollected_view.detail_code == "CURRENCY_NOT_OBSERVED"
+
+    stale_client = AuthorizedServiceReadClient(
+        _FakeRuntime(), account_bindings={"account-a": _binding()}, clock=lambda: 500.0
+    )
+    monkeypatch.setattr(
+        stale_client,
+        "_account_clients",
+        {
+            "account-a": _FakeAccountClient(
+                state=_FakeState(observation=observation, fresh_until_monotonic=200.0)
+            )
+        },
+    )
+    stale_view = stale_client.read_account("account-a")
+    assert stale_view.quality is ReadQuality.STALE
+    assert stale_view.cash == Decimal("0")
+    assert stale_view.provider_observation is not None
+    assert stale_view.provider_observation["positions"][1]["average_price"] is None
+
+    class _MalformedObservation:
+        def __init__(self, account_key):
+            self.account_key = account_key
+            self.valuation = None
+            self.balances = ()
+            self.positions = ()
+            self.open_orders = ()
+
+        def to_dict(self):
+            return {"observation_id": "malformed"}
+
+    malformed_client = AuthorizedServiceReadClient(
+        _FakeRuntime(), account_bindings={"account-a": _binding()}, clock=lambda: 150.0
+    )
+    monkeypatch.setattr(
+        malformed_client,
+        "_account_clients",
+        {
+            "account-a": _FakeAccountClient(
+                state=_FakeState(observation=_MalformedObservation(sdk_key))
+            )
+        },
+    )
+    with pytest.raises(ServiceReadContractError, match="INVALID_PROVIDER_ACCOUNT_OBSERVATION"):
+        malformed_client.read_account("account-a")
 
 
 def test_stale_observation_keeps_its_figures_but_is_not_current(monkeypatch):
@@ -389,6 +564,7 @@ def test_transport_failure_degrades_explicitly(monkeypatch):
     assert view.quality is ReadQuality.UNAVAILABLE
     assert view.cash is None and view.value is None
     assert view.detail_code == "BUSINESS_OUTCOME_UNKNOWN"
+    assert view.provider_observation is None
 
 
 def test_unconfigured_account_is_refused_without_any_read():

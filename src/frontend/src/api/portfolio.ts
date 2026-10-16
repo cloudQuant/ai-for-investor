@@ -190,6 +190,88 @@ export type PortfolioFinancialProjection = {
   }
 }
 
+export interface PortfolioProviderAccountResource {
+  product_type: string
+  margin_pool: string
+}
+
+export interface PortfolioProviderAccountBalance {
+  resource: PortfolioProviderAccountResource
+  currency: string
+  total: string | null
+  available: string | null
+  locked: string | null
+  observed_at_utc: string
+}
+
+export interface PortfolioProviderAccountPosition {
+  resource: PortfolioProviderAccountResource
+  instrument: {
+    provider: string
+    venue: string
+    environment: string
+    product_type: string
+    instrument_id: string
+    native_symbol: string
+  }
+  side: 'net' | 'long' | 'short'
+  quantity: string
+  qty_unit: string
+  average_price: string | null
+  price_currency: string | null
+  observed_at_utc: string
+  valuation_inputs: {
+    mark_price: { status: 'missing'; value: null }
+    contract_multiplier: { status: 'unsupported'; value: null }
+    fx_rate: { status: 'unsupported'; value: null }
+    market_value: { status: 'not_calculated'; value: null }
+  }
+}
+
+type PortfolioProviderAccountObservationDetails = {
+  quality: 'fresh' | 'stale' | 'not_collected' | 'unavailable'
+  source: 'AUTHORIZED_PROVIDER_ACCOUNT_OBSERVATION'
+  observation_id: string
+  session_generation: string | null
+  cursor: number | null
+  consistency: 'provider_atomic' | 'multi_query'
+  cut: {
+    started_at_utc: string
+    completed_at_utc: string
+    earliest_row_observed_at_utc: string | null
+    latest_row_observed_at_utc: string | null
+    row_skew_ns: string | null
+    row_observed_at_count: number
+    row_count: number
+  }
+  coverage: {
+    resources: PortfolioProviderAccountResource[]
+    balances_complete: boolean
+    positions_complete: boolean
+    state: 'complete' | 'incomplete'
+  }
+  valuation: {
+    currency: string
+    available_cash: string | null
+    equity: string | null
+    observed_at_utc: string
+  } | null
+  balances: PortfolioProviderAccountBalance[]
+  positions: PortfolioProviderAccountPosition[]
+}
+
+export type PortfolioProviderAccountObservation = {
+  status: 'absent'
+  code: string
+} | {
+  status: 'unavailable'
+  code: string
+} | (PortfolioProviderAccountObservationDetails & {
+  status: 'available'
+}) | (PortfolioProviderAccountObservationDetails & {
+  status: 'stale'
+})
+
 export interface PortfolioExecutionOwnerBook {
   owner_kind: 'STRATEGY' | 'MANUAL_BOOK' | 'UNALLOCATED'
   owner_ref: string
@@ -247,7 +329,22 @@ export interface PortfolioCompositionProjection {
     included_in_total: boolean
     duplicate_of_ref: string | null
     detail_code: string | null
+    provider_observation?: PortfolioProviderAccountObservation
   }>
+  provider_snapshot_consistency?: {
+    cut_model: 'independent_provider_observation_per_account'
+    atomic: false
+    member_read_count: number
+    observation_count: number
+    consistency_modes: string[]
+    coverage_status: string
+    coverage_complete: boolean | null
+    earliest_completed_at_utc: string | null
+    latest_completed_at_utc: string | null
+    skew_ns: string | null
+    skew_policy: 'reported_without_threshold'
+    status: string
+  }
   /** Optional so older servers remain readable while the live book projection rolls out. */
   account_book_sources?: PortfolioAccountBookSource[]
   strategies: Array<{
