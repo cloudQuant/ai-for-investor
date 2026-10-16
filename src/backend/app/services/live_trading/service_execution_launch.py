@@ -27,9 +27,20 @@ SERVICE_EXECUTION_SUBJECT_ENV = f"{SERVICE_EXECUTION_ENV_PREFIX}SUBJECT_REF"
 SERVICE_EXECUTION_STRATEGY_ENV = f"{SERVICE_EXECUTION_ENV_PREFIX}STRATEGY_ID"
 SERVICE_EXECUTION_RUN_ENV = f"{SERVICE_EXECUTION_ENV_PREFIX}RUN_ID"
 SERVICE_EXECUTION_PROFILE_MAP_ENV = f"{SERVICE_EXECUTION_ENV_PREFIX}PROFILE_MAP_JSON"
+SERVICE_EXECUTION_AI_RESEARCH_PROFILE_ENV = (
+    f"{SERVICE_EXECUTION_ENV_PREFIX}AI_RESEARCH_PROFILE_REF"
+)
+SERVICE_EXECUTION_PAPER_RUNTIME_DIGEST_ENV = (
+    f"{SERVICE_EXECUTION_ENV_PREFIX}PAPER_RUNTIME_SHA256"
+)
+SERVICE_EXECUTION_PAPER_STRATEGY_SOURCE_DIGEST_ENV = (
+    f"{SERVICE_EXECUTION_ENV_PREFIX}PAPER_STRATEGY_SOURCE_SHA256"
+)
 SERVICE_EXECUTION_READY_ENV = f"{SERVICE_EXECUTION_ENV_PREFIX}READY_MARKER"
 SERVICE_EXECUTION_STOP_COMMAND = b"STOP\n"
 SERVICE_EXECUTION_READY_MARKER = "AFI_SERVICE_EXECUTION_READY"
+SERVER_ATTESTED_AI_RESEARCH_STRATEGY_ID = "__server_attested_ai_research_paper__"
+AI_RESEARCH_SERVICE_INTENT_CONTRACT_REF = "bt-cerebro-fill-metadata-r1"
 _SERVICE_STRATEGY_PROFILE_MAP_MAX_BYTES = 16_384
 _SERVICE_STRATEGY_SCRIPT_MAX_BYTES = 2_097_152
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -155,6 +166,7 @@ class TrustedServiceStrategyProfile:
     order_query_operations: frozenset[str]
     client_config_factory: Callable[[ServiceStrategyLaunchContext], Mapping[str, Any]]
     runtime_factory: Callable[[Any, ServiceStrategyLaunchContext], Any]
+    server_attested_ai_research_strategy_ids: bool = False
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -177,6 +189,15 @@ class TrustedServiceStrategyProfile:
                 raise ServiceStrategyProfileError("INVALID_TRUSTED_PROFILE")
         if (
             _SHA256_RE.fullmatch(self.script_sha256) is None
+            or type(self.server_attested_ai_research_strategy_ids) is not bool
+            or (
+                self.server_attested_ai_research_strategy_ids
+                and self.strategy_id != SERVER_ATTESTED_AI_RESEARCH_STRATEGY_ID
+            )
+            or (
+                not self.server_attested_ai_research_strategy_ids
+                and self.strategy_id == SERVER_ATTESTED_AI_RESEARCH_STRATEGY_ID
+            )
             or
             type(self.authorized_subjects) is not frozenset
             or not self.authorized_subjects
@@ -297,11 +318,20 @@ class ServiceStrategyProfileRegistry:
         instance: Mapping[str, Any],
         *,
         run_id: str | None = None,
+        allow_server_attested_ai_research_strategy_ids: bool = False,
     ) -> tuple[TrustedServiceStrategyProfile, ServiceStrategyLaunchContext] | None:
         strategy_id = instance.get("strategy_id")
         if type(strategy_id) is not str or not strategy_id:
             return None
-        candidates = tuple(item for item in self._profiles if item.strategy_id == strategy_id)
+        candidates = tuple(
+            item
+            for item in self._profiles
+            if item.strategy_id == strategy_id
+            or (
+                allow_server_attested_ai_research_strategy_ids
+                and item.server_attested_ai_research_strategy_ids
+            )
+        )
         if not candidates:
             return None
         instance_id = instance.get("id")
@@ -342,7 +372,16 @@ class ServiceStrategyProfileRegistry:
             run_id=environ.get(SERVICE_EXECUTION_RUN_ENV, ""),
         )
         if (
-            context.strategy_id != profile.strategy_id
+            (
+                context.strategy_id != profile.strategy_id
+                and not profile.server_attested_ai_research_strategy_ids
+            )
+            or (
+                profile.server_attested_ai_research_strategy_ids
+                and not _SHA256_RE.fullmatch(
+                    environ.get(SERVICE_EXECUTION_PAPER_RUNTIME_DIGEST_ENV, "")
+                )
+            )
             or context.subject_ref not in profile.authorized_subjects
             or not context.instance_id
             or not context.run_id
@@ -370,6 +409,7 @@ def build_service_strategy_environment(
     sdk_source_root: Path | None,
     backtrader_root: Path,
     trusted_import_roots: Iterable[Path] = (),
+    paper_runtime_digest: str | None = None,
 ) -> dict[str, str]:
     """Create a child environment without inheriting server configuration secrets."""
 
@@ -397,7 +437,125 @@ def build_service_strategy_environment(
     environment[SERVICE_EXECUTION_STRATEGY_ENV] = context.strategy_id
     environment[SERVICE_EXECUTION_RUN_ENV] = context.run_id
     environment[SERVICE_EXECUTION_READY_ENV] = f"{SERVICE_EXECUTION_READY_MARKER}:{context.run_id}"
+    if profile.server_attested_ai_research_strategy_ids:
+        if _SHA256_RE.fullmatch(str(paper_runtime_digest or "")) is None:
+            raise ServiceStrategyProfileError("PAPER_RUNTIME_DIGEST_UNAVAILABLE")
+        environment[SERVICE_EXECUTION_PAPER_RUNTIME_DIGEST_ENV] = str(
+            paper_runtime_digest
+        )
     return environment
+
+
+def _validate_server_attested_ai_research_strategy_source(
+    profile: TrustedServiceStrategyProfile,
+    script_path: Path,
+    expected_runtime_digest: str,
+) -> str:
+    """Bind the signed paper module and its managed order contract before execution."""
+
+    if (
+        not profile.server_attested_ai_research_strategy_ids
+        or profile.intent_contract_ref != AI_RESEARCH_SERVICE_INTENT_CONTRACT_REF
+        or _SHA256_RE.fullmatch(expected_runtime_digest) is None
+    ):
+        raise ServiceStrategyProfileError("PAPER_RUNTIME_PROFILE_INVALID")
+    try:
+        from app.services.ai_research_provenance import (
+            ai_research_paper_materialized_runtime_digest,
+            _runtime_config_payload,
+            _runtime_python_file_digests,
+        )
+
+        runtime_dir = script_path.parent.resolve(strict=True)
+        if ai_research_paper_materialized_runtime_digest(runtime_dir) != expected_runtime_digest:
+            raise ServiceStrategyProfileError("PAPER_RUNTIME_SOURCE_NOT_AUTHORIZED")
+        config = _runtime_config_payload(runtime_dir)
+        workspace_unit = config.get("workspace_unit") if isinstance(config, Mapping) else None
+        module_name = (
+            workspace_unit.get("strategy_module")
+            if isinstance(workspace_unit, Mapping)
+            else None
+        )
+        if (
+            type(module_name) is not str
+            or not module_name
+            or Path(module_name).name != module_name
+            or not module_name.startswith("strategy_")
+            or Path(module_name).suffix != ".py"
+        ):
+            raise ServiceStrategyProfileError("PAPER_STRATEGY_SOURCE_UNAVAILABLE")
+        module_path = runtime_dir / module_name
+        if module_path.is_symlink() or not module_path.is_file():
+            raise ServiceStrategyProfileError("PAPER_STRATEGY_SOURCE_UNAVAILABLE")
+        source = module_path.read_bytes()
+        source_digest = hashlib.sha256(source).hexdigest()
+        source_files = _runtime_python_file_digests(runtime_dir)
+        if (
+            source_files.get(module_name) != source_digest
+            or ai_research_paper_materialized_runtime_digest(runtime_dir)
+            != expected_runtime_digest
+        ):
+            raise ServiceStrategyProfileError("PAPER_RUNTIME_SOURCE_NOT_AUTHORIZED")
+    except ServiceStrategyProfileError:
+        raise
+    except (OSError, RuntimeError, TypeError, ValueError, ImportError):
+        raise ServiceStrategyProfileError("PAPER_STRATEGY_SOURCE_UNAVAILABLE") from None
+    if len(source) > _SERVICE_STRATEGY_SCRIPT_MAX_BYTES:
+        raise ServiceStrategyProfileError("PAPER_STRATEGY_SOURCE_INVALID")
+    try:
+        import ast
+
+        syntax_tree = ast.parse(source, filename=str(module_path))
+    except (SyntaxError, UnicodeError, ValueError):
+        raise ServiceStrategyProfileError("PAPER_STRATEGY_SOURCE_INVALID") from None
+    contract_values = []
+    for statement in syntax_tree.body:
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name)
+            and target.id == "AFI_SERVICE_INTENT_CONTRACT_REF"
+            for target in statement.targets
+        ):
+            contract_values.append(statement.value)
+        elif (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.target.id == "AFI_SERVICE_INTENT_CONTRACT_REF"
+        ):
+            contract_values.append(statement.value)
+    if (
+        len(contract_values) != 1
+        or not isinstance(contract_values[0], ast.Constant)
+        or type(contract_values[0].value) is not str
+        or contract_values[0].value != profile.intent_contract_ref
+    ):
+        raise ServiceStrategyProfileError("PAPER_STRATEGY_INTENT_CONTRACT_MISMATCH")
+    # ``ServiceExecutionSession`` routes these source orders through the
+    # Backtrader ``ServiceExecutionAdapter``.  Its actual wire identity is
+    # built from these fields; CTP-only ``managed_order_type``, instrument
+    # digest and ``offset`` are not part of this path's payload contract.
+    required_order_keywords = {
+        "managed_intent_id",
+        "managed_signal_id",
+        "managed_instrument",
+        "managed_position_effect",
+        "managed_metadata_version",
+        "reduce_only",
+    }
+    managed_order_calls = 0
+    for node in ast.walk(syntax_tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr not in {"buy", "sell"}:
+            continue
+        keywords = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
+        if not required_order_keywords.issubset(keywords):
+            raise ServiceStrategyProfileError(
+                "PAPER_STRATEGY_MANAGED_ORDER_CONTRACT_REQUIRED"
+            )
+        managed_order_calls += 1
+    if managed_order_calls == 0:
+        raise ServiceStrategyProfileError("PAPER_STRATEGY_MANAGED_ORDER_CONTRACT_REQUIRED")
+    return source_digest
 
 
 def validate_profile_owner_grant(
@@ -614,6 +772,15 @@ def run_profiled_strategy_script(
     except ImportError:
         raise ServiceStrategyProfileError("BACKTRADER_SERVICE_EXECUTION_UNAVAILABLE") from None
     source = validate_profile_strategy_source(profile, script_path)
+    if profile.server_attested_ai_research_strategy_ids:
+        strategy_source_digest = _validate_server_attested_ai_research_strategy_source(
+            profile,
+            script_path,
+            os.environ.get(SERVICE_EXECUTION_PAPER_RUNTIME_DIGEST_ENV, ""),
+        )
+        os.environ[SERVICE_EXECUTION_PAPER_STRATEGY_SOURCE_DIGEST_ENV] = (
+            strategy_source_digest
+        )
     try:
         import ast
 

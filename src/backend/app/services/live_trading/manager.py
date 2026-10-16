@@ -7,6 +7,7 @@ in subprocesses.
 
 import asyncio
 import contextlib
+import hashlib
 import hmac
 import importlib.util
 import json
@@ -30,6 +31,9 @@ from app.services.instance_store import InstanceStore
 from app.services.live_trading import execution as live_execution_service
 from app.services.live_trading import instance as live_instance_service
 from app.services.live_trading.service_execution_launch import (
+    AI_RESEARCH_SERVICE_INTENT_CONTRACT_REF,
+    SERVER_ATTESTED_AI_RESEARCH_STRATEGY_ID,
+    SERVICE_EXECUTION_AI_RESEARCH_PROFILE_ENV,
     SERVICE_EXECUTION_PROFILE_MAP_ENV,
     SERVICE_EXECUTION_STOP_COMMAND,
     ServiceStrategyProfileError,
@@ -1654,6 +1658,11 @@ class LiveTradingManager:
                 sdk_source_root=sdk_source_root,
                 backtrader_root=_BACKTRADER_DIR,
                 trusted_import_roots=(*sdk_package_roots, *profile_import_roots),
+                paper_runtime_digest=(
+                    str(instance.get(_SERVER_ATTESTED_PAPER_RUNTIME_DIGEST_FIELD) or "")
+                    if profile.server_attested_ai_research_strategy_ids
+                    else None
+                ),
             )
         # Reject a configured legacy Gateway before the fallback environment
         # builder loads strategy files, acquires a runtime, or imports the
@@ -1679,24 +1688,50 @@ class LiveTradingManager:
         instance: dict[str, Any],
         strategy_dir: Path,
     ) -> tuple[Any, Any, tuple[Path, ...]] | None:
+        server_attested_ai_research_paper = (
+            instance.get(_SERVER_ATTESTED_PAPER_RUNTIME_FIELD) is True
+        )
         if (
             str(instance.get("_server_execution_mode") or "live") != "live"
             or instance.get("_server_allow_service_strategy_execution") is False
+            and not server_attested_ai_research_paper
         ):
             return None
         profile_map = parse_service_strategy_profile_map(
             os.environ.get(SERVICE_EXECUTION_PROFILE_MAP_ENV)
         )
         strategy_id = str(instance.get("strategy_id") or "")
-        profile_ref = profile_map.get(strategy_id)
+        profile_ref = (
+            str(os.environ.get(SERVICE_EXECUTION_AI_RESEARCH_PROFILE_ENV) or "").strip()
+            if server_attested_ai_research_paper
+            else profile_map.get(strategy_id)
+        )
         if profile_ref is None:
+            raise ServiceStrategyProfileError(
+                "SERVICE_EXECUTION_PROFILE_REQUIRED",
+                _SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE,
+            )
+        if not profile_ref:
             raise ServiceStrategyProfileError(
                 "SERVICE_EXECUTION_PROFILE_REQUIRED",
                 _SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE,
             )
         registry = get_service_strategy_profile_registry({profile_ref})
         profile = registry.resolve(profile_ref)
-        if profile.strategy_id != strategy_id:
+        if server_attested_ai_research_paper:
+            from app.services.workspace_unit_runtime import _UNIT_RUN_PY
+
+            expected_runner_digest = hashlib.sha256(
+                _UNIT_RUN_PY.encode("utf-8")
+            ).hexdigest()
+            if (
+                not profile.server_attested_ai_research_strategy_ids
+                or profile.strategy_id != SERVER_ATTESTED_AI_RESEARCH_STRATEGY_ID
+                or profile.intent_contract_ref != AI_RESEARCH_SERVICE_INTENT_CONTRACT_REF
+                or profile.script_sha256 != expected_runner_digest
+            ):
+                raise ServiceStrategyProfileError("AI_RESEARCH_PROFILE_NOT_COMPATIBLE")
+        elif profile.strategy_id != strategy_id:
             raise ServiceStrategyProfileError("STRATEGY_PROFILE_MAPPING_MISMATCH")
         instance_id = str(instance.get("id") or "")
         subject_ref = str(instance.get("user_id") or "")
@@ -1707,6 +1742,9 @@ class LiveTradingManager:
                 "strategy_id": strategy_id,
             },
             run_id=uuid.uuid4().hex,
+            allow_server_attested_ai_research_strategy_ids=(
+                server_attested_ai_research_paper
+            ),
         )
         if resolved is None or resolved[0] is not profile:
             raise ServiceStrategyProfileError("STRATEGY_PROFILE_MAPPING_MISMATCH")

@@ -401,7 +401,9 @@ _UNIT_RUN_PY = textwrap.dedent(
     """
     from __future__ import annotations
 
-    import importlib.util
+    AFI_SERVICE_INTENT_CONTRACT_REF = "bt-cerebro-fill-metadata-r1"
+
+    import hashlib, importlib.util
     import logging, os, sys, time
     from pathlib import Path
 
@@ -1166,7 +1168,16 @@ _UNIT_RUN_PY = textwrap.dedent(
             raise ImportError(f'Cannot import strategy module: {module_path}')
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+        if os.environ.get('AFI_SERVICE_EXECUTION_PAPER_RUNTIME_SHA256'):
+            expected_source_digest = os.environ.get(
+                'AFI_SERVICE_EXECUTION_PAPER_STRATEGY_SOURCE_SHA256', ''
+            )
+            source = module_path.read_bytes()
+            if hashlib.sha256(source).hexdigest() != expected_source_digest:
+                raise RuntimeError('PAPER_STRATEGY_SOURCE_NOT_AUTHORIZED')
+            exec(compile(source, str(module_path), 'exec'), vars(module), vars(module))
+        else:
+            spec.loader.exec_module(module)
         return module
 
 
@@ -1190,7 +1201,12 @@ _UNIT_RUN_PY = textwrap.dedent(
         template_dir = Path(str(workspace_unit.get('template_dir') or '')).expanduser()
         if not template_dir.is_dir():
             raise FileNotFoundError(f'Template dir not found: {template_dir}')
-        module = _import_strategy_module(template_dir, workspace_unit.get('strategy_module'))
+        strategy_source_dir = (
+            BASE_DIR
+            if os.environ.get('AFI_SERVICE_EXECUTION_PROFILE_REF')
+            else template_dir
+        )
+        module = _import_strategy_module(strategy_source_dir, workspace_unit.get('strategy_module'))
         strategy_class = _pick_strategy_class(module)
         feed_class = _pick_feed_class(module)
         df, csv_path = load_dataframe(config)
