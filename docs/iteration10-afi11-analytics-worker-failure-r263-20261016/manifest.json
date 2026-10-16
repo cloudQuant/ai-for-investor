@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "round": "R263",
+  "title": "AFI11 analytics-worker startup-timeout isolation source packet",
+  "status": "READY_FOR_PARENT_SCOPED_REVIEW",
+  "evidence_level": "AUTHOR_QA_LOCAL_FIXED_EXPORT_SYNTHETIC_PROCESS_CHAIN_ONLY",
+  "repositories": {
+    "afi": {
+      "path": "D:/source_code/ai-for-investor",
+      "branch": "dev",
+      "head_at_author_run_and_packet_preparation": "8943fc0fe15c0c34ed33d7a20e42637e5831e2a3",
+      "accepted_afi04_r236_runtime_commit": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1",
+      "accepted_commit_parent": "4d11cffaee710e18ea48ee64430c80861aa7d3c2"
+    },
+    "sdk_runtime": {
+      "path": "D:/bt_api_py",
+      "accepted_root_commit": "00cd647b57defb533d43eeb8cca16be195d6489e",
+      "accepted_base_commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "accepted_execution_commit": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "accepted_transport_commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "source_export_manifest": "D:/temp/iteration10-afi11-app-failure-source-export-r3/manifest.json",
+      "source_export_manifest_bytes": 554943,
+      "source_export_manifest_sha256": "499738f13717d661b4ea6bbe70f340ea178a8b6860a8e868a07b8190b463fd28"
+    },
+    "risk_runtime": {
+      "accepted_r218_dependency_commit": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+      "risk_v2_service_export_root": "D:/temp/afi04-http-risk-r9/clean-source/vendor/risk",
+      "risk_r9_fixed_source_root": "D:/temp/afi04-http-risk-r9/clean-source/vendor/risk/src",
+      "r236_pre_ui_provenance_manifest": {
+        "path": "D:/bt_api_py/.codex-tmp/afi04-r236-pre-ui-20261016/manifest.json",
+        "bytes": 17036,
+        "sha256": "cac16ef085ccd8d65334348edccc89b4bd32dca050a5a3063da4193bc259cc6a",
+        "records_risk_v2_service_export_and_exact_worker_pin": true
+      },
+      "risk_r9_layout": "D:/temp/afi04-http-risk-r9/source-layout-r9.json",
+      "risk_r9_layout_bytes": 4548,
+      "risk_r9_layout_sha256": "b16830e6c66dbeb47ede4bf94f855dda5c0549520bbcf1d221b5bf2419c3d4ae",
+      "service_analytics_py": {
+        "bytes": 80802,
+        "sha256": "1b148a4a923081302e507829d540aa9e45fc8ae3aac37eeb8f7f8dd3f1bda9c8"
+      },
+      "provenance_boundary": "The R236 pre-UI provenance manifest records Risk R218 commit ae9075 as a dependency and separately binds the Risk V2 service export at the R9 path with this exact service_analytics.py digest; it explicitly says live Risk HEAD is metadata, not the imported source. R9 source-layout records a fixed R8 closure plus only the R9 synthetic unavailable-ref fixture correction. The worker file is not attributed to the ae9075 Git blob and this packet does not treat the R9 snapshot as a Git commit."
+    }
+  },
+  "source_candidate": {
+    "path": "src/backend/tests/test_afi11_analytics_worker_failure.py",
+    "absolute_path": "D:/source_code/ai-for-investor/src/backend/tests/test_afi11_analytics_worker_failure.py",
+    "bytes": 53949,
+    "sha256": "306959bea86723a148d855d4818005e93112df274919e27db1f27b06fd358669",
+    "git_blob_sha1": "8dfadaf9c26c9d28e4dae0e57cb1ac04a30ad22e",
+    "status_at_packet_preparation": "untracked; AFI index empty",
+    "source_kind": "one new AFI11 test file; no production source changes",
+    "node": "test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_owner"
+  },
+  "fixed_runtime_sources_used": {
+    "afi_r236_export_root": "D:/temp/iteration10-afi04-r236-fixed-source-4d11cffa-20261016/src/backend",
+    "afi_r236_files": [
+      {
+        "path": "app/main.py",
+        "bytes": 8784,
+        "sha256": "1b68af1c2e3326daf45e214aad438a45d97f57b01ea4c128fd1c62372ce455a9"
+      },
+      {
+        "path": "app/api/portfolio/analytics_tasks.py",
+        "bytes": 5923,
+        "sha256": "eaded05887df8cc25986f114c0b75c4ba58b47e7846cce6d6c3af299a160347e"
+      },
+      {
+        "path": "app/services/portfolio_analytics_tasks.py",
+        "bytes": 16698,
+        "sha256": "bd55fc3ceaf25c60ee46f075e72293a87504504f6d5b7ff74bb9bd41dd921459"
+      },
+      {
+        "path": "pytest.ini",
+        "bytes": 926,
+        "sha256": "c4a785907837db768a4a27bec657c993972438043910e00085bb9b4e41758d9e"
+      },
+      {
+        "path": "tests/conftest.py",
+        "bytes": 9506,
+        "sha256": "446e544f67dc9c50898ee687815006f8b568d8aeae63a3619483f77d3682a60c"
+      },
+      {
+        "path": "tests/test_service_read_portfolio_analytics_process.py",
+        "bytes": 43115,
+        "sha256": "f2680d4db91331cac35d77fad37e88144d51876255f3c3198d1ddfc8455321f1"
+      }
+    ],
+    "sdk_source_roots": [
+      "D:/temp/iteration10-afi11-app-failure-source-export-r3/sdk/base/src",
+      "D:/temp/iteration10-afi11-app-failure-source-export-r3/sdk/execution/src",
+      "D:/temp/iteration10-afi11-app-failure-source-export-r3/sdk/root",
+      "D:/temp/iteration10-afi11-app-failure-source-export-r3/sdk/transport/src"
+    ],
+    "risk_source_roots": [
+      "D:/temp/afi04-http-risk-r9/clean-source/vendor/risk/src"
+    ],
+    "source_pin_files": [
+      {
+        "path": "source-pins.json",
+        "bytes": 2907,
+        "sha256": "06be0bdc7cb9354d4abe5aae561fe7c528a95ea128c63eda193d42418904e213"
+      },
+      {
+        "path": "imported-source-pins.json",
+        "bytes": 3332,
+        "sha256": "4a395d2ba117f1d2ca8d91d4a22a5e61f10090114097d717ec09153e7b415710"
+      }
+    ],
+    "monitor_source_used": false
+  },
+  "author_run": {
+    "output_root": "D:/temp/afi11-analytics-worker-author-qa-r6-20261016",
+    "python": "D:/source_code/ai-for-investor/src/backend/.venv/Scripts/python.exe",
+    "python_version": "3.12.10",
+    "pytest": {
+      "collected": 1,
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "reported_seconds": 21.033
+    },
+    "author_result": {
+      "bytes": 4546,
+      "sha256": "142e2eed7fe2ef319a8a1fb8f993cf44866dbad07cb5edf9e82165f933d5d8f9"
+    },
+    "junit": {
+      "bytes": 360,
+      "sha256": "567bc92d6713b85088305f13f7c4c40d2a35653802c6ddc2a28baad155cb7f81"
+    },
+    "stdout": {
+      "bytes": 1037,
+      "sha256": "d6f6f7f1f1b9e71f0d40df99837e3069da24961275ad111a6dbc379ee0e3639f"
+    },
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "command_record_retained": false,
+    "full_path_by_path_runtime_tree_snapshot_retained": false
+  },
+  "observations": {
+    "analytics_http_tasks": {
+      "first": "failed",
+      "detail_code": "TASK_WORKER_START_TIMEOUT",
+      "worker_entry_marker": "entered",
+      "second": "succeeded",
+      "result_status": "AVAILABLE"
+    },
+    "host_and_spawned_worker": {
+      "risk_host_pid_marker": 46440,
+      "worker_pid": 62536,
+      "worker_parent_pid": 46440,
+      "worker_events": [
+        "start",
+        "terminate",
+        "join",
+        "join",
+        "close"
+      ],
+      "worker_exit_code": -15,
+      "worker_alive_after_join": false,
+      "worker_handle_closed": true,
+      "risk_host_ready_and_closed_markers": true,
+      "risk_host_failure_marker": false,
+      "host_shutdown_exit_zero_asserted": true
+    },
+    "strategy_owner_continuity": {
+      "runtime_started": true,
+      "same_session_and_policy_after_fault": true,
+      "missing_instrument_facts_denied_before_provider_dispatch": true,
+      "valid_synthetic_order_acked_after_fault": true,
+      "provider_construction_count": 1,
+      "provider_session_id": "afi11-synthetic-provider-session-1",
+      "cleanup_clean": true
+    }
+  },
+  "raw_archive": {
+    "file": "raw-r6.zip",
+    "bytes": 10683,
+    "sha256": "107ed8c00017607fdfd824924058c2dad076362f69671978d0a11c3b7ea77be0",
+    "member_count": 14,
+    "members": [
+      {
+        "path": "host/afi11-risk-host-closed.marker",
+        "bytes": 6,
+        "sha256": "c3eefb58d7c42440a9d4abec51d629544d635a6d936ff3c4d3fca96d611b3cf3"
+      },
+      {
+        "path": "host/afi11-risk-host-pid.marker",
+        "bytes": 5,
+        "sha256": "8554824a013395b1121eeda716f7525940a7789e7c59a7eface63892f6314c54"
+      },
+      {
+        "path": "host/afi11-risk-host-ready.marker",
+        "bytes": 5,
+        "sha256": "b24d6d33736ecd5604a4b17bc9c6481039fac362bb7df044ef1c10a2bfd21db6"
+      },
+      {
+        "path": "host/afi11-risk-host-stop.marker",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "provenance/afi04-r236-pre-ui-manifest.json",
+        "bytes": 17036,
+        "sha256": "cac16ef085ccd8d65334348edccc89b4bd32dca050a5a3063da4193bc259cc6a"
+      },
+      {
+        "path": "worker/afi11-v2-worker-entered.marker",
+        "bytes": 7,
+        "sha256": "e9b72a02344d78edf0dde7d94ebb8e07ddd699d602634019e0e842289c921a1e"
+      },
+      {
+        "path": "worker/afi11-v2-worker-events.json",
+        "bytes": 335,
+        "sha256": "0eac0a1dc5ca0d0f3246dc59d9916bf9569120820c98372f71f1c319ef83be37"
+      },
+      {
+        "path": "author-result.json",
+        "bytes": 4546,
+        "sha256": "142e2eed7fe2ef319a8a1fb8f993cf44866dbad07cb5edf9e82165f933d5d8f9"
+      },
+      {
+        "path": "imported-source-pins.json",
+        "bytes": 3332,
+        "sha256": "4a395d2ba117f1d2ca8d91d4a22a5e61f10090114097d717ec09153e7b415710"
+      },
+      {
+        "path": "junit.xml",
+        "bytes": 360,
+        "sha256": "567bc92d6713b85088305f13f7c4c40d2a35653802c6ddc2a28baad155cb7f81"
+      },
+      {
+        "path": "result-artifact-pins.json",
+        "bytes": 1512,
+        "sha256": "69e5609f80112d0d3755b88b2683b1f926fa43d9ff882f694bd014432dcb7680"
+      },
+      {
+        "path": "source-pins.json",
+        "bytes": 2907,
+        "sha256": "06be0bdc7cb9354d4abe5aae561fe7c528a95ea128c63eda193d42418904e213"
+      },
+      {
+        "path": "stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "stdout.log",
+        "bytes": 1037,
+        "sha256": "d6f6f7f1f1b9e71f0d40df99837e3069da24961275ad111a6dbc379ee0e3639f"
+      }
+    ],
+    "excludes": [
+      "SQLite databases and lock files",
+      "service logs",
+      "full source trees or source archives",
+      "full per-path source-before/source-after snapshot (not retained by this R6 run)"
+    ]
+  },
+  "packet": {
+    "files": [
+      "manifest.json",
+      "round-record.md",
+      "raw-r6.zip"
+    ],
+    "source_candidate_path": "src/backend/tests/test_afi11_analytics_worker_failure.py",
+    "parent_scoped_commit_paths": [
+      "src/backend/tests/test_afi11_analytics_worker_failure.py",
+      "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/manifest.json",
+      "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/round-record.md",
+      "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/raw-r6.zip"
+    ],
+    "staged": false,
+    "committed": false,
+    "progress_tracker_changed": false
+  },
+  "limitations": [
+    "One author-local synthetic process-chain node only; no Root QA was run or claimed.",
+    "No Monitor source was loaded and Monitor independent-failure/restart is untested.",
+    "Only the analytics worker startup-timeout phase is covered; other worker failures are not.",
+    "PID and lifecycle facts are emitted by the test-owned process fixture and assertions, not an independent OS supervisor receipt.",
+    "No real provider, account, customer facts, or external financial source was accessed.",
+    "The packet's raw evidence omits SQLite state, logs, and a full per-path source-tree snapshot."
+  ],
+  "parent_commit": "pending; not staged or committed"
+}
