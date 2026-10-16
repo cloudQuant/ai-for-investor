@@ -901,6 +901,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Separate operator-owned issuer and authenticated client grant for
+    # owner-side monitoring controls. This never inherits read-service grants.
+    SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret exact-scope deployment for signed monitor owner controls; "
+            "leave blank to keep owner controls disabled"
+        ),
+    )
+
     # Server-owned exact instrument/FX joins for the portfolio's display-only
     # market inputs. This configuration cannot grant market-data access; every
     # query still passes through the authenticated v2 authorization path.
@@ -1275,6 +1287,16 @@ class Settings(BaseSettings):
         """Keep the secret deployment document bounded before JSON parsing."""
         if len(value.get_secret_value().encode("utf-8")) > 262_144:
             raise ValueError("SERVICE_READ_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_monitor_control_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the separate operator-owned monitor control deployment."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError(
+                "SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON exceeds the 256 KiB limit"
+            )
         return value
 
     @field_validator("PORTFOLIO_VALUATION_BINDINGS_JSON")

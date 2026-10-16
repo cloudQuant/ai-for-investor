@@ -1,0 +1,879 @@
+"""Signed monitor controls issued through the authenticated SDK service host.
+
+AFI holds an operator-provisioned issuer grant and a constrained client
+runtime. It only signs, submits, and reads exact FREEZE commands. The existing
+MonitorRiskControlOwner applies the effect in the service host's maintenance
+cycle; this module never opens a Risk database or constructs a Risk policy.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import math
+import re
+import sqlite3
+import threading
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal, Mapping
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+
+_MAX_DEPLOYMENT_BYTES = 262_144
+_MAX_BINDINGS = 128
+_MAX_ISSUANCE_ROWS = 10_000
+_COMMAND_TTL_SECONDS = 30.0
+_MAX_IDEMPOTENCY_KEY_BYTES = 256
+_CONTROL_HMAC_DOMAIN = b"bt-api-monitor.control-command.hmac.v1\0"
+_KEY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_COMMAND_ID_RE = re.compile(r"^afi-monitor-freeze-v1-[0-9a-f]{32}$")
+_Z85_ALPHABET = frozenset(
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
+)
+
+
+class _StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+
+class _CurveKeyConfig(_StrictModel):
+    server_key_z85: SecretStr = Field(repr=False, exclude=True)
+    public_key_z85: SecretStr = Field(repr=False, exclude=True)
+    secret_key_z85: SecretStr = Field(repr=False, exclude=True)
+
+
+class _BindingConfig(_StrictModel):
+    subject: str = Field(min_length=1, max_length=256)
+    afi_account_id: str = Field(min_length=1, max_length=128)
+    portfolio_ref: str | None = Field(default=None, max_length=128)
+    account_id: str = Field(min_length=1, max_length=128)
+    mode: str = Field(min_length=1, max_length=128)
+    command_scope: str = Field(min_length=1, max_length=256)
+    issuer: str = Field(min_length=1, max_length=128)
+    key_ref: str = Field(min_length=1, max_length=128)
+    key_material_b64: SecretStr = Field(repr=False, exclude=True)
+    issuer_policy_version: str = Field(min_length=1, max_length=64)
+    authority_receipt_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    not_before_utc: float
+    expires_at_utc: float
+    issuer_sequence_start: int = Field(default=0, ge=0)
+    allowed_actions: list[Literal["FREEZE"]] = Field(min_length=1, max_length=1)
+    service_id: str = Field(min_length=1, max_length=128)
+    instance_id: str = Field(min_length=1, max_length=128)
+    scope_ref: str = Field(min_length=1, max_length=128)
+    wire_account_ref: str = Field(min_length=1, max_length=256)
+    wire_portfolio_ref: str | None = Field(default=None, max_length=128)
+    wire_scope: dict[str, Any] = Field(repr=False)
+    client_identity: dict[str, str]
+    peer_identity: dict[str, str]
+    client_config: dict[str, Any] = Field(repr=False)
+    curve_keys: dict[str, _CurveKeyConfig] = Field(repr=False, exclude=True)
+
+    @field_validator(
+        "subject",
+        "afi_account_id",
+        "account_id",
+        "mode",
+        "command_scope",
+        "issuer",
+        "key_ref",
+        "issuer_policy_version",
+        "service_id",
+        "instance_id",
+        "scope_ref",
+        "wire_account_ref",
+    )
+    @classmethod
+    def _required_trimmed_text(cls, value: str) -> str:
+        if value != value.strip() or not value.isprintable():
+            raise ValueError("control binding text must be trimmed printable text")
+        return value
+
+    @field_validator("portfolio_ref", "wire_portfolio_ref")
+    @classmethod
+    def _optional_trimmed_text(cls, value: str | None) -> str | None:
+        if value is not None and (value != value.strip() or not value.isprintable()):
+            raise ValueError("portfolio reference must be trimmed printable text")
+        return value
+
+
+class _DeploymentConfig(_StrictModel):
+    schema_version: Literal[1]
+    deployment_id: str = Field(min_length=1, max_length=128)
+    deployment_version: str = Field(min_length=1, max_length=64)
+    not_before_utc: float
+    expires_at_utc: float
+    issuer_state_path: str = Field(min_length=1, max_length=1024)
+    bindings: list[_BindingConfig] = Field(min_length=1, max_length=_MAX_BINDINGS)
+
+    @field_validator("deployment_id", "deployment_version", "issuer_state_path")
+    @classmethod
+    def _trimmed_text(cls, value: str) -> str:
+        if value != value.strip() or not value.isprintable():
+            raise ValueError("control deployment text must be trimmed printable text")
+        return value
+
+
+class OwnerControlRequest(_StrictModel):
+    """The request chooses an action only; it cannot carry authority or secrets."""
+
+    action: Literal["FREEZE", "DRAIN", "CLOSE"]
+    portfolio_ref: str | None = None
+
+    @field_validator("portfolio_ref")
+    @classmethod
+    def _portfolio_ref(cls, value: str | None) -> str | None:
+        if value is not None and (
+            not value or value != value.strip() or len(value) > 128 or not value.isprintable()
+        ):
+            raise ValueError("portfolio reference is invalid")
+        return value
+
+
+class OwnerControlError(ValueError):
+    """Finite public error code; never contains deployment data or secrets."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerControlBinding:
+    config: _BindingConfig = field(repr=False)
+    binding_id: str
+    wire_scope: Any = field(repr=False)
+    client_identity: Any = field(repr=False)
+    peer_identity: Any = field(repr=False)
+    client_config: Any = field(repr=False)
+    curve_keys: Mapping[str, Any] = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class _IssuedCommand:
+    command_id: str
+    sequence: int
+    expires_at: float
+    payload: bytes = field(repr=False)
+    signature: bytes = field(repr=False)
+
+
+class OwnerControlDeployment:
+    """Immutable operator grant and issuer-side idempotency store."""
+
+    def __init__(self, config: _DeploymentConfig, bindings: tuple[OwnerControlBinding, ...]):
+        self._config = config
+        self.bindings = bindings
+        self._state_path = Path(config.issuer_state_path)
+        self._by_id = {binding.binding_id: binding for binding in bindings}
+        self._lock = threading.RLock()
+
+    @classmethod
+    def from_secret(cls, value: SecretStr | str | None) -> OwnerControlDeployment | None:
+        if isinstance(value, SecretStr):
+            raw = value.get_secret_value()
+        elif type(value) is str:
+            raw = value
+        elif value is None:
+            raw = ""
+        else:
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        if not raw:
+            return None
+        try:
+            if len(raw.encode("utf-8", errors="strict")) > _MAX_DEPLOYMENT_BYTES:
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            json.loads(raw, object_pairs_hook=_reject_duplicate_pairs, parse_constant=_reject_constant)
+            config = _DeploymentConfig.model_validate_json(raw)
+            _validate_timestamp(config.not_before_utc)
+            _validate_timestamp(config.expires_at_utc)
+            if config.expires_at_utc <= config.not_before_utc:
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            sdk = _load_sdk()
+            bindings = tuple(_build_binding(item, sdk) for item in config.bindings)
+            if len({item.config.subject for item in bindings}) != len(bindings):
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            if len({item.config.issuer for item in bindings}) != len(bindings):
+                # A ledger row records the issuer, not a wire caller. A unique
+                # issuer per actor prevents same-route status disclosure.
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            if len({item.binding_id for item in bindings}) != len(bindings):
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            state_path = Path(config.issuer_state_path)
+            if not state_path.is_absolute() or state_path.parent.is_symlink():
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            if state_path.exists() and (state_path.is_symlink() or not state_path.is_file()):
+                raise OwnerControlError("DEPLOYMENT_INVALID")
+            return cls(config, bindings)
+        except OwnerControlError:
+            raise
+        except (ArithmeticError, OSError, UnicodeError, ValueError, TypeError, ValidationError, RecursionError):
+            raise OwnerControlError("DEPLOYMENT_INVALID") from None
+
+    def binding_for(
+        self,
+        *,
+        subject: str,
+        afi_account_id: str,
+        portfolio_ref: str | None,
+        require_active: bool = True,
+    ) -> OwnerControlBinding | None:
+        now = datetime.now(UTC).timestamp()
+        if require_active and not self._config.not_before_utc <= now < self._config.expires_at_utc:
+            raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
+        matches = [
+            binding
+            for binding in self.bindings
+            if binding.config.subject == subject
+            and binding.config.afi_account_id == afi_account_id
+            and binding.config.portfolio_ref == portfolio_ref
+            and binding.config.wire_portfolio_ref == portfolio_ref
+            and (
+                not require_active
+                or binding.config.not_before_utc <= now < binding.config.expires_at_utc
+            )
+        ]
+        if len(matches) > 1:
+            raise OwnerControlError("DEPLOYMENT_AMBIGUOUS")
+        return matches[0] if matches else None
+
+    def submit_freeze(
+        self,
+        binding: OwnerControlBinding,
+        *,
+        subject: str,
+        alert_id: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        if not any(item is binding for item in self.bindings):
+            raise OwnerControlError("CONTROL_BINDING_INVALID")
+        if subject != binding.config.subject:
+            raise OwnerControlError("CONTROL_BINDING_INVALID")
+        _validate_idempotency_key(idempotency_key)
+        with self._lock:
+            issued = self._reserve_or_replay(
+                binding,
+                subject=subject,
+                alert_id=alert_id,
+                idempotency_key=idempotency_key,
+            )
+            arguments = {
+                "schema_version": 1,
+                "payload_b64": base64.b64encode(issued.payload).decode("ascii"),
+                "signature_b64": base64.b64encode(issued.signature).decode("ascii"),
+            }
+            projection = self._query_status(
+                binding,
+                issued.command_id,
+                submit_arguments=arguments if datetime.now(UTC).timestamp() < issued.expires_at else None,
+            )
+            self._record_final(issued.command_id, projection)
+            return projection
+
+    def status_for_command(
+        self, command_id: str, *, subject: str
+    ) -> tuple[OwnerControlBinding, str, dict[str, Any]] | None:
+        if type(command_id) is not str or _COMMAND_ID_RE.fullmatch(command_id) is None:
+            return None
+        with self._lock:
+            row = self._issuance_row(command_id)
+            if row is None or row["subject"] != subject:
+                return None
+            binding = self._by_id.get(str(row["binding_id"]))
+            if binding is None:
+                return None
+            projection = self._query_status(binding, command_id)
+            self._record_final(command_id, projection)
+            return binding, str(row["alert_id"]), projection
+
+    def _query_status(
+        self,
+        binding: OwnerControlBinding,
+        command_id: str,
+        *,
+        submit_arguments: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        sdk = _load_sdk()
+        runtime = sdk.ServiceClientRuntime(
+            binding.client_config,
+            identity=binding.client_identity,
+            scope_resolver=lambda scope_ref: _fixed_lookup(
+                {binding.config.scope_ref: binding.wire_scope}, scope_ref
+            ),
+            peer_resolver=lambda service_id: _fixed_lookup(
+                {binding.config.service_id: binding.peer_identity}, service_id
+            ),
+            transport_factory=sdk.ZmqTransportFactory(binding.curve_keys),
+            requested_operations={
+                "application.monitor": frozenset(
+                    {"monitor.control", "monitor.control_status"}
+                )
+            },
+        )
+        try:
+            registered = runtime.start()
+            if registered.degraded_count or len(registered.bindings) != 1:
+                raise OwnerControlError("OWNER_SERVICE_UNAVAILABLE")
+            if submit_arguments is not None:
+                try:
+                    runtime.call("application.monitor", "monitor.control", submit_arguments)
+                except sdk.ServiceRuntimeError as error:
+                    # The request may have reached the owner before a reply
+                    # failed. Only the status RPC may settle that uncertainty.
+                    if error.code in {"SCOPE_DENIED", "ACTION_NOT_GRANTED"}:
+                        raise OwnerControlError("OWNER_CONTROL_NOT_AUTHORIZED") from None
+            status = runtime.call(
+                "application.monitor",
+                "monitor.control_status",
+                {"schema_version": 1, "command_id": command_id},
+            )
+            projection = _validate_owner_projection(status, command_id)
+            return projection | {
+                "action": "freeze",
+                "deployment_version": self._config.deployment_version,
+            }
+        except OwnerControlError:
+            raise
+        except Exception:
+            raise OwnerControlError("OWNER_SERVICE_UNAVAILABLE") from None
+        finally:
+            try:
+                runtime.close()
+            except Exception:
+                # A client cleanup failure never fabricates a terminal owner
+                # result; the next status call remains available for recovery.
+                raise OwnerControlError("OWNER_CLIENT_CLEANUP_UNCERTAIN") from None
+
+    def _reserve_or_replay(
+        self,
+        binding: OwnerControlBinding,
+        *,
+        subject: str,
+        alert_id: str,
+        idempotency_key: str,
+    ) -> _IssuedCommand:
+        config = binding.config
+        now = datetime.now(UTC).timestamp()
+        if not (
+            self._config.not_before_utc <= now < self._config.expires_at_utc
+            and config.not_before_utc <= now < config.expires_at_utc
+        ):
+            raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
+        key_digest = hashlib.sha256(
+            (subject + "\0" + binding.binding_id + "\0" + idempotency_key).encode("utf-8")
+        ).hexdigest()
+        facts = {
+            "action": "FREEZE",
+            "afi_account_id": config.afi_account_id,
+            "alert_id": alert_id,
+            "binding_id": binding.binding_id,
+            "deployment_id": self._config.deployment_id,
+            "deployment_version": self._config.deployment_version,
+            "issuer": config.issuer,
+            "portfolio_ref": config.portfolio_ref,
+            "subject": subject,
+        }
+        request_digest = _sha256_json(facts)
+        connection = self._connect_issuer_state()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT * FROM afi_monitor_control_issuance WHERE issuer = ? AND idempotency_digest = ?",
+                (config.issuer, key_digest),
+            ).fetchone()
+            if existing is not None:
+                if existing["request_digest"] != request_digest:
+                    raise OwnerControlError("IDEMPOTENCY_KEY_CONFLICT")
+                connection.commit()
+                return _IssuedCommand(
+                    str(existing["command_id"]),
+                    int(existing["issuer_sequence"]),
+                    float(existing["expires_at"]),
+                    bytes(existing["payload"]),
+                    bytes(existing["signature"]),
+                )
+            unresolved = connection.execute(
+                "SELECT 1 FROM afi_monitor_control_issuance "
+                "WHERE issuer = ? AND owner_final = 0 "
+                "AND (owner_status IS NULL OR owner_status <> 'expired') LIMIT 1",
+                (config.issuer,),
+            ).fetchone()
+            if unresolved is not None:
+                raise OwnerControlError("ISSUER_COMMAND_UNRESOLVED")
+            count = connection.execute(
+                "SELECT COUNT(*) FROM afi_monitor_control_issuance WHERE issuer = ?",
+                (config.issuer,),
+            ).fetchone()[0]
+            if int(count) >= _MAX_ISSUANCE_ROWS:
+                raise OwnerControlError("ISSUER_REPLAY_CAPACITY")
+            previous = connection.execute(
+                "SELECT MAX(issuer_sequence) FROM afi_monitor_control_issuance WHERE issuer = ?",
+                (config.issuer,),
+            ).fetchone()[0]
+            sequence = max(config.issuer_sequence_start, int(previous or 0)) + 1
+            command_id = "afi-monitor-freeze-v1-" + uuid.uuid4().hex
+            expires_at = min(
+                now + _COMMAND_TTL_SECONDS,
+                config.expires_at_utc,
+                self._config.expires_at_utc,
+            )
+            if expires_at <= now:
+                raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
+            claims = {
+                "schema_version": 1,
+                "key_id": config.key_ref,
+                "issuer": config.issuer,
+                "command_id": command_id,
+                "account_id": config.account_id,
+                "mode": config.mode,
+                "scope": config.command_scope,
+                "action": "freeze",
+                "reason": "AFI monitoring alert owner freeze",
+                "receipt_digest": config.authority_receipt_digest,
+                "issued_at": now,
+                "expires_at": expires_at,
+                "issuer_sequence": sequence,
+                "manual_resume_authorized": False,
+            }
+            payload = json.dumps(
+                claims,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            ).encode("utf-8")
+            key_bytes = _decode_secret(config.key_material_b64, minimum=32)
+            key_id = config.key_ref.encode("ascii")
+            signature = hmac.new(
+                key_bytes,
+                _CONTROL_HMAC_DOMAIN + len(key_id).to_bytes(2, "big") + key_id + payload,
+                hashlib.sha256,
+            ).digest()
+            connection.execute(
+                """INSERT INTO afi_monitor_control_issuance (
+                    issuer, idempotency_digest, request_digest, command_id,
+                    issuer_sequence, subject, binding_id, afi_account_id,
+                    portfolio_ref, alert_id, expires_at, payload, signature,
+                    owner_final, owner_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)""",
+                (
+                    config.issuer,
+                    key_digest,
+                    request_digest,
+                    command_id,
+                    sequence,
+                    subject,
+                    binding.binding_id,
+                    config.afi_account_id,
+                    config.portfolio_ref,
+                    alert_id,
+                    expires_at,
+                    payload,
+                    signature,
+                ),
+            )
+            connection.commit()
+            return _IssuedCommand(command_id, sequence, expires_at, payload, signature)
+        except OwnerControlError:
+            connection.rollback()
+            raise
+        except (OSError, sqlite3.Error, TypeError, ValueError):
+            connection.rollback()
+            raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+        finally:
+            connection.close()
+
+    def _connect_issuer_state(self) -> sqlite3.Connection:
+        path = self._state_path
+        if path.is_symlink() or (path.exists() and not path.is_file()) or not path.parent.is_dir():
+            raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
+        try:
+            connection = sqlite3.connect(path, timeout=5.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute(
+                """CREATE TABLE IF NOT EXISTS afi_monitor_control_issuance (
+                    issuer TEXT NOT NULL,
+                    idempotency_digest TEXT NOT NULL,
+                    request_digest TEXT NOT NULL,
+                    command_id TEXT NOT NULL UNIQUE,
+                    issuer_sequence INTEGER NOT NULL,
+                    subject TEXT NOT NULL,
+                    binding_id TEXT NOT NULL,
+                    afi_account_id TEXT NOT NULL,
+                    portfolio_ref TEXT,
+                    alert_id TEXT NOT NULL,
+                    expires_at REAL NOT NULL,
+                    payload BLOB NOT NULL,
+                    signature BLOB NOT NULL,
+                    owner_final INTEGER NOT NULL CHECK(owner_final IN (0, 1)),
+                    owner_status TEXT,
+                    PRIMARY KEY (issuer, idempotency_digest),
+                    UNIQUE (issuer, issuer_sequence)
+                )"""
+            )
+            return connection
+        except (OSError, sqlite3.Error):
+            raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+
+    def _issuance_row(self, command_id: str) -> sqlite3.Row | None:
+        connection = self._connect_issuer_state()
+        try:
+            return connection.execute(
+                "SELECT * FROM afi_monitor_control_issuance WHERE command_id = ?",
+                (command_id,),
+            ).fetchone()
+        except sqlite3.Error:
+            raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+        finally:
+            connection.close()
+
+    def _record_final(self, command_id: str, projection: Mapping[str, Any]) -> None:
+        final = projection.get("owner_final") is True
+        connection = self._connect_issuer_state()
+        try:
+            connection.execute(
+                "UPDATE afi_monitor_control_issuance SET owner_final = ?, owner_status = ? WHERE command_id = ?",
+                (1 if final else 0, projection.get("status"), command_id),
+            )
+            connection.commit()
+        except sqlite3.Error:
+            connection.rollback()
+            raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+        finally:
+            connection.close()
+
+
+def control_implementation_status(action: str) -> str:
+    if action == "FREEZE":
+        return "FREEZE_SUPPORTED"
+    if action == "DRAIN":
+        return "DRAIN_PENDING_IMPLEMENTATION"
+    if action == "CLOSE":
+        return "CLOSE_PENDING_DIM04_EXECUTION_JOURNAL_COORDINATION"
+    raise OwnerControlError("CONTROL_ACTION_INVALID")
+
+
+def get_deployment_setting() -> SecretStr:
+    """Read the separately configured owner-control deployment setting."""
+
+    from app.config import get_settings
+
+    return get_settings().SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON
+
+
+def _load_sdk() -> Any:
+    try:
+        from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+        from bt_api_py.service_config import parse_client_config
+        from bt_api_py.service_runtime import (
+            ClientCurveKeys,
+            ServiceClientRuntime,
+            ZmqTransportFactory,
+        )
+    except ImportError:
+        raise OwnerControlError("SDK_NOT_INSTALLED") from None
+    return type(
+        "_Sdk",
+        (),
+        {
+            "WireIdentity": WireIdentity,
+            "WireRole": WireRole,
+            "WireScope": WireScope,
+            "parse_client_config": parse_client_config,
+            "ClientCurveKeys": ClientCurveKeys,
+            "ServiceClientRuntime": ServiceClientRuntime,
+            "ZmqTransportFactory": ZmqTransportFactory,
+        },
+    )
+
+
+def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
+    _validate_timestamp(config.not_before_utc)
+    _validate_timestamp(config.expires_at_utc)
+    if config.expires_at_utc <= config.not_before_utc:
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    if config.allowed_actions != ["FREEZE"] or _KEY_ID_RE.fullmatch(config.key_ref) is None:
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    _decode_secret(config.key_material_b64, minimum=32)
+    identity = _parse_identity(config.client_identity, sdk, role=sdk.WireRole.APPLICATION_CLIENT)
+    peer = _parse_identity(config.peer_identity, sdk, role=sdk.WireRole.SERVICE)
+    if identity.delegate_ref is None:
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    try:
+        scope_values = dict(config.wire_scope)
+        scope_keys = {
+            "execution_domain_ref",
+            "account_ref",
+            "account_refs",
+            "strategy_ref",
+            "run_id",
+            "manual_book_ref",
+            "portfolio_ref",
+            "group_id",
+            "leg_id",
+        }
+        if not {"execution_domain_ref", "account_ref"} <= set(scope_values):
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        if set(scope_values) - scope_keys:
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        scope_values.setdefault("account_refs", ())
+        wire_scope = sdk.WireScope(**scope_values)
+        client_config = sdk.parse_client_config(config.client_config)
+        public_config = client_config.to_public_dict()
+        if public_config.get("process_role") != "application_client":
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        clients = public_config.get("clients")
+        if type(clients) is not dict or set(clients) != {"monitor"}:
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        monitor = clients["monitor"]
+        settings = monitor.get("settings") if type(monitor) is dict else None
+        bindings = settings.get("bindings") if type(settings) is dict else None
+        if type(bindings) is not list or len(bindings) != 1:
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        client_binding = bindings[0]
+        if (
+            client_binding.get("mount") != "application.monitor"
+            or client_binding.get("service_id") != config.service_id
+            or client_binding.get("instance_id") != config.instance_id
+            or client_binding.get("scope_ref") != config.scope_ref
+        ):
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        if (
+            wire_scope.account_ref != config.wire_account_ref
+            or wire_scope.portfolio_ref != config.wire_portfolio_ref
+            or config.portfolio_ref != config.wire_portfolio_ref
+        ):
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        communication = public_config.get("communication")
+        profiles = communication.get("profiles") if type(communication) is dict else None
+        if type(profiles) is not dict:
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        transport_ref = client_binding.get("transport_ref")
+        profile = profiles.get(transport_ref)
+        security_ref = profile.get("security_profile_ref") if type(profile) is dict else None
+        if type(security_ref) is not str or set(config.curve_keys) != {security_ref}:
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        keys_config = config.curve_keys[security_ref]
+        curves = {
+            security_ref: sdk.ClientCurveKeys(
+                _z85_bytes(keys_config.server_key_z85),
+                _z85_bytes(keys_config.public_key_z85),
+                _z85_bytes(keys_config.secret_key_z85),
+            )
+        }
+    except OwnerControlError:
+        raise
+    except Exception:
+        raise OwnerControlError("DEPLOYMENT_INVALID") from None
+    binding_id = _sha256_json(
+        {
+            "account_id": config.account_id,
+            "afi_account_id": config.afi_account_id,
+            "issuer": config.issuer,
+            "portfolio_ref": config.portfolio_ref,
+            "scope_ref": config.scope_ref,
+            "subject": config.subject,
+            "wire_scope": scope_values,
+        }
+    )
+    return OwnerControlBinding(
+        config=config,
+        binding_id=binding_id,
+        wire_scope=wire_scope,
+        client_identity=identity,
+        peer_identity=peer,
+        client_config=client_config,
+        curve_keys=curves,
+    )
+
+
+def _parse_identity(value: Mapping[str, str], sdk: Any, *, role: Any) -> Any:
+    if type(value) is not dict or set(value) != {"principal_ref", "actor_ref", "delegate_ref"}:
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    if any(type(item) is not str or not item or item != item.strip() for item in value.values()):
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    try:
+        return sdk.WireIdentity(role, value["principal_ref"], value["actor_ref"], value["delegate_ref"])
+    except Exception:
+        raise OwnerControlError("DEPLOYMENT_INVALID") from None
+
+
+def _validate_owner_projection(value: Mapping[str, Any], command_id: str) -> dict[str, Any]:
+    fields = {
+        "command_id",
+        "status",
+        "outcome",
+        "effect_ref",
+        "effect_result",
+        "request_recorded",
+        "owner_final",
+        "reconciliation_required",
+    }
+    if not isinstance(value, Mapping) or set(value) != fields or value.get("command_id") != command_id:
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    status = value.get("status")
+    if (
+        value.get("request_recorded") is not True
+        or type(value.get("owner_final")) is not bool
+        or type(value.get("reconciliation_required")) is not bool
+        or type(status) is not str
+        or status not in {"pending", "claimed", "acknowledged", "rejected", "expired", "unknown"}
+    ):
+        raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    outcome = value.get("outcome")
+    if status in {"pending", "claimed"}:
+        expected_reconciliation = status == "claimed"
+        if (
+            value["owner_final"]
+            or outcome is not None
+            or value.get("effect_ref") is not None
+            or value.get("effect_result") is not None
+            or value["reconciliation_required"] is not expected_reconciliation
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    elif status == "unknown":
+        if (
+            value["owner_final"]
+            or outcome != "unknown"
+            or value.get("effect_ref") is not None
+            or value.get("effect_result") is not None
+            or value["reconciliation_required"] is not True
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    elif status == "acknowledged":
+        effect = value.get("effect_result")
+        effect_fields = {
+            "action",
+            "cause_id",
+            "activation_status",
+            "cause_active",
+            "has_other_active_freezes",
+            "risk_state",
+        }
+        if (
+            value["owner_final"] is not True
+            or outcome != "applied"
+            or value["reconciliation_required"] is not False
+            or not isinstance(effect, Mapping)
+            or set(effect) != effect_fields
+            or effect.get("action") != "freeze"
+            or type(effect.get("cause_id")) is not str
+            or not effect.get("cause_id")
+            or value.get("effect_ref") != effect.get("cause_id")
+            or type(effect.get("activation_status")) is not str
+            or type(effect.get("cause_active")) is not bool
+            or type(effect.get("has_other_active_freezes")) is not bool
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        expected_state = {
+            "CREATED": (True, "active"),
+            "ALREADY_ACTIVE": (True, "active"),
+            "ALREADY_RESOLVED": (False, "resolved"),
+        }.get(effect["activation_status"])
+        if expected_state is None or (effect["cause_active"], effect["risk_state"]) != expected_state:
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    elif status == "rejected":
+        if (
+            value["owner_final"] is not True
+            or outcome != "rejected"
+            or value["reconciliation_required"] is not False
+            or value.get("effect_ref") is not None
+            or value.get("effect_result") is not None
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    elif status == "expired":
+        # The durable Monitor ledger can expire an unclaimed command without
+        # an owner effect. It is terminal for issuer sequencing, but it is not
+        # an owner-applied result and must carry no effect receipt.
+        if (
+            value["owner_final"] is not False
+            or outcome is not None
+            or value.get("effect_ref") is not None
+            or value.get("effect_result") is not None
+            or value["reconciliation_required"] is not False
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+    projection = dict(value)
+    if status == "acknowledged":
+        projection["effect_result"] = dict(value["effect_result"])
+    return projection
+
+
+def _validate_timestamp(value: float) -> float:
+    if isinstance(value, bool) or type(value) not in (int, float) or not math.isfinite(value):
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    return float(value)
+
+
+def _validate_idempotency_key(value: str) -> None:
+    if type(value) is not str or not value.strip() or value != value.strip():
+        raise OwnerControlError("IDEMPOTENCY_KEY_INVALID")
+    try:
+        if len(value.encode("utf-8", errors="strict")) > _MAX_IDEMPOTENCY_KEY_BYTES:
+            raise OwnerControlError("IDEMPOTENCY_KEY_INVALID")
+    except UnicodeEncodeError:
+        raise OwnerControlError("IDEMPOTENCY_KEY_INVALID") from None
+
+
+def _decode_secret(value: SecretStr, *, minimum: int) -> bytes:
+    try:
+        decoded = base64.b64decode(value.get_secret_value(), validate=True)
+    except (ValueError, TypeError):
+        raise OwnerControlError("DEPLOYMENT_INVALID") from None
+    if len(decoded) < minimum:
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    return decoded
+
+
+def _z85_bytes(value: SecretStr) -> bytes:
+    """Return the 40-byte Z85 spelling expected by the SDK transport adapter."""
+
+    encoded = value.get_secret_value()
+    if len(encoded) != 40 or any(char not in _Z85_ALPHABET for char in encoded):
+        raise OwnerControlError("DEPLOYMENT_INVALID")
+    try:
+        return encoded.encode("ascii", errors="strict")
+    except UnicodeError:
+        raise OwnerControlError("DEPLOYMENT_INVALID") from None
+
+
+def _fixed_lookup(mapping: Mapping[str, Any], key: str) -> Any:
+    try:
+        return mapping[key]
+    except (KeyError, TypeError):
+        raise KeyError("unconfigured fixed owner-control reference") from None
+
+
+def _sha256_json(value: object) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _reject_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _reject_constant(value: str) -> object:
+    raise ValueError("invalid JSON constant: " + value)
+
+
+__all__ = [
+    "OwnerControlBinding",
+    "OwnerControlDeployment",
+    "OwnerControlError",
+    "OwnerControlRequest",
+    "control_implementation_status",
+    "get_deployment_setting",
+]

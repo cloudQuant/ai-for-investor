@@ -11,9 +11,25 @@ import asyncio
 import logging
 import typing
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_websocket_current_user
+from app.db.database import get_db
+from app.models.alerts import Alert
+from app.models.paper_trading import Account
+from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.schemas.monitoring import (
     AlertListResponse,
     AlertResponse,
@@ -22,6 +38,13 @@ from app.schemas.monitoring import (
     AlertRuleResponse,
     AlertRuleUpdate,
 )
+from app.services.monitoring_control import (
+    OwnerControlDeployment,
+    OwnerControlError,
+    OwnerControlRequest,
+    control_implementation_status,
+    get_deployment_setting,
+)
 from app.services.monitoring_service import MonitoringService
 from app.websocket_manager import MessageType
 from app.websocket_manager import manager as ws_manager
@@ -29,6 +52,185 @@ from app.websocket_manager import manager as ws_manager
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def get_owner_control_deployment() -> OwnerControlDeployment:
+    """Load the dedicated operator-owned owner-control map, fail-closed."""
+    try:
+        deployment = OwnerControlDeployment.from_secret(get_deployment_setting())
+    except OwnerControlError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": exc.code},
+        ) from None
+    if deployment is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OWNER_CONTROL_NOT_CONFIGURED"},
+        )
+    return deployment
+
+
+def _raise_owner_control_error(error: OwnerControlError) -> typing.NoReturn:
+    conflict_codes = {"IDEMPOTENCY_KEY_CONFLICT", "ISSUER_COMMAND_UNRESOLVED"}
+    raise HTTPException(
+        status_code=(
+            status.HTTP_409_CONFLICT
+            if error.code in conflict_codes
+            else status.HTTP_503_SERVICE_UNAVAILABLE
+        ),
+        detail={"code": error.code},
+    ) from None
+
+
+async def _require_owned_control_target(
+    *,
+    alert_id: str,
+    subject: str,
+    portfolio_ref: str | None,
+    session: AsyncSession,
+    deployment: OwnerControlDeployment,
+    require_active: bool = True,
+) -> tuple[Alert, typing.Any]:
+    alert = await session.scalar(
+        select(Alert).where(Alert.id == alert_id, Alert.user_id == subject)
+    )
+    if alert is None or alert.account_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Control target not found"
+        )
+    account_id = await session.scalar(
+        select(Account.id).where(
+            Account.id == alert.account_id,
+            Account.user_id == subject,
+        )
+    )
+    if account_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Control target not found"
+        )
+    if portfolio_ref is not None:
+        owned_portfolio = await session.scalar(
+            select(PortfolioCompositionVersion.id)
+            .where(
+                PortfolioCompositionVersion.owner_subject == subject,
+                PortfolioCompositionVersion.portfolio_ref == portfolio_ref,
+            )
+            .limit(1)
+        )
+        if owned_portfolio is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Control target not found"
+            )
+    try:
+        binding = deployment.binding_for(
+            subject=subject,
+            afi_account_id=str(account_id),
+            portfolio_ref=portfolio_ref,
+            require_active=require_active,
+        )
+    except OwnerControlError as exc:
+        _raise_owner_control_error(exc)
+    if binding is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Control target not found"
+        )
+    return alert, binding
+
+
+@router.post(
+    "/control/alerts/{alert_id}",
+    summary="Submit a signed owner FREEZE command for an owned alert",
+)
+async def control_alert_risk(
+    alert_id: str,
+    request_body: OwnerControlRequest,
+    response: Response,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1, max_length=256),
+    current_user: typing.Any = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    deployment: OwnerControlDeployment = Depends(get_owner_control_deployment),
+) -> typing.Any:
+    """Run FREEZE through the signed monitor ledger and the separate owner thread.
+
+    Acknowledging or resolving this alert remains an independent operation and
+    does not alter any owner RiskGate cause.
+    """
+    _, binding = await _require_owned_control_target(
+        alert_id=alert_id,
+        subject=current_user.sub,
+        portfolio_ref=request_body.portfolio_ref,
+        session=session,
+        deployment=deployment,
+    )
+    try:
+        implementation = control_implementation_status(request_body.action)
+    except OwnerControlError as exc:
+        _raise_owner_control_error(exc)
+    if implementation != "FREEZE_SUPPORTED":
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"code": implementation},
+        )
+    try:
+        projected = await asyncio.to_thread(
+            deployment.submit_freeze,
+            binding,
+            subject=current_user.sub,
+            alert_id=alert_id,
+            idempotency_key=idempotency_key,
+        )
+    except OwnerControlError as exc:
+        _raise_owner_control_error(exc)
+    response.status_code = (
+        status.HTTP_200_OK
+        if projected.get("owner_final") is True or projected.get("status") == "expired"
+        else status.HTTP_202_ACCEPTED
+    )
+    return projected
+
+
+@router.get(
+    "/control/commands/{command_id}",
+    summary="Read the persisted owner-control result",
+)
+async def get_owner_control_status(
+    command_id: str,
+    response: Response,
+    current_user: typing.Any = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+    deployment: OwnerControlDeployment = Depends(get_owner_control_deployment),
+) -> typing.Any:
+    """Project only the exact persisted command receipt for its mapped owner."""
+    try:
+        found = await asyncio.to_thread(
+            deployment.status_for_command, command_id, subject=current_user.sub
+        )
+    except OwnerControlError as exc:
+        _raise_owner_control_error(exc)
+    if found is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Control command not found"
+        )
+    binding, alert_id, projected = found
+    _, authorized_binding = await _require_owned_control_target(
+        alert_id=alert_id,
+        subject=current_user.sub,
+        portfolio_ref=binding.config.portfolio_ref,
+        session=session,
+        deployment=deployment,
+        require_active=False,
+    )
+    if authorized_binding is not binding:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Control command not found"
+        )
+    response.status_code = (
+        status.HTTP_200_OK
+        if projected.get("owner_final") is True or projected.get("status") == "expired"
+        else status.HTTP_202_ACCEPTED
+    )
+    return projected
 
 
 def get_monitoring_service() -> MonitoringService:
