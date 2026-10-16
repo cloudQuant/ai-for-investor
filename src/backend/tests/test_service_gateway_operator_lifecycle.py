@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import threading
 from typing import Any
 
@@ -460,6 +461,230 @@ def test_lifespan_starts_only_explicit_profiles_and_closes_quote_before_operator
     assert order == ["quote", "operator"]
     assert _OrderedApplication.created[0].close_calls == 1
     assert app.state.service_gateway_operator_control is None
+
+
+def test_normal_fastapi_bootstrap_starts_and_closes_real_operator_host(
+    tmp_path, monkeypatch
+) -> None:
+    import zmq
+    from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+    from bt_api_py.gateway_operator import GatewayOkxMarketBinding, GatewayOperatorDeployment
+    from bt_api_py.gateway_operator_application import (
+        GatewayOperatorProfile,
+        GatewayOperatorProfileRegistry,
+    )
+    from bt_api_py.service_config import parse_service_config
+    from bt_api_py.service_host import TrustedServiceAuthority
+    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+    from fastapi.testclient import TestClient
+    from pydantic import SecretStr
+
+    service_id = "afi-normal-bootstrap-service"
+    instance_id = "afi-normal-bootstrap-market"
+    scope_ref = "afi-normal-bootstrap-scope"
+    transport_ref = "afi-normal-bootstrap-transport"
+    security_ref = "afi-normal-bootstrap-curve"
+    domain_ref = "afi-normal-bootstrap-domain"
+    principal_ref = "afi-normal-bootstrap-client"
+    application_ref = "afi-normal-bootstrap-application"
+    service_principal_ref = "afi-normal-bootstrap-service-principal"
+    profile_ref = "afi-normal-bootstrap-market-profile"
+    subject = "afi-normal-bootstrap-owner"
+    symbol = "BTC-USDT-SWAP"
+    operations = frozenset(
+        {
+            "market.subscribe",
+            "market.unsubscribe",
+            "market.snapshot",
+            "market.head",
+            "market.read_after",
+        }
+    )
+    key = MarketSubscriptionKey(
+        source_ref="okx-public-market-r1",
+        entitlement_ref="public-ticker-r1",
+        instrument=MarketInstrumentKey(
+            provider="okx",
+            venue="OKX",
+            environment="live",
+            product_type="SWAP",
+            instrument_id=symbol,
+            native_symbol=symbol,
+        ),
+        channel="tickers",
+    )
+
+    def _free_endpoint() -> str:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            probe.bind(("127.0.0.1", 0))
+            return f"tcp://127.0.0.1:{probe.getsockname()[1]}"
+        finally:
+            probe.close()
+
+    rpc_bind, market_bind = _free_endpoint(), _free_endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    client_public, _client_secret = zmq.curve_keypair()
+    config = parse_service_config(
+        {
+            "service_config_schema_version": 1,
+            "process_role": "service",
+            "service_id": service_id,
+            "scope_ref": scope_ref,
+            "transport_ref": transport_ref,
+            "registration_policy_ref": "afi-normal-bootstrap-policy",
+            "service_requirements_ref": "afi-normal-bootstrap-requirements",
+            "components": {
+                "gateway": {
+                    "config_schema_version": 2,
+                    "settings": {
+                        "instance_id": instance_id,
+                        "bind_ports": ["service.market_source"],
+                        "options": {"role": "market_hub"},
+                    },
+                }
+            },
+            "communication": {
+                "config_schema_version": 1,
+                "profiles": {
+                    transport_ref: {
+                        "backend": "zmq",
+                        "config_schema_version": 1,
+                        "endpoints": {"rpc_bind": rpc_bind, "market_bind": market_bind},
+                        "security_profile_ref": security_ref,
+                        "options": {
+                            "high_water_mark": 128,
+                            "max_message_bytes": 262_144,
+                        },
+                    }
+                },
+            },
+        }
+    )
+    scope = WireScope(domain_ref)
+    authority = TrustedServiceAuthority(
+        identity=WireIdentity(WireRole.SERVICE, service_principal_ref, service_id),
+        scope=scope,
+        scope_ref=scope_ref,
+        scope_version="afi-normal-bootstrap-scope-v1",
+        security_ref=security_ref,
+        security_version="afi-normal-bootstrap-curve-v1",
+        registration_policy_ref=config.registration_policy_ref,
+        registration_policy_version="afi-normal-bootstrap-policy-v1",
+        service_requirements_ref=config.service_requirements_ref,
+        service_requirements_version="afi-normal-bootstrap-requirements-v1",
+        curve_public_key=server_public,
+        curve_secret_key=server_secret,
+        principals={client_public: principal_ref},
+        grants={
+            principal_ref: (
+                PrincipalGrant(
+                    WireIdentity(WireRole.APPLICATION_CLIENT, principal_ref, application_ref),
+                    (
+                        ResourceGrant(
+                            instance_id,
+                            "service.market_source",
+                            scope_ref,
+                            scope,
+                            operations,
+                        ),
+                    ),
+                ),
+            )
+        },
+    )
+
+    class _UnopenedStream:
+        def start(self, *, connect_timeout: float) -> None:
+            assert connect_timeout == 1.0
+
+        def stop(self) -> None:
+            return None
+
+    market_binding = GatewayOkxMarketBinding(
+        key_universe=(key,),
+        principal_allowed_keys={principal_ref: frozenset({key})},
+        stream_factory=lambda _key, _ticker_queue: _UnopenedStream(),
+        connect_timeout_seconds=1.0,
+    )
+    deployment_threads: list[int] = []
+    deployments: list[GatewayOperatorDeployment] = []
+
+    def _deployment_factory() -> GatewayOperatorDeployment:
+        deployment_threads.append(threading.get_ident())
+        deployment = GatewayOperatorDeployment(
+            config,
+            authority,
+            tmp_path / "normal-bootstrap-operator.sqlite3",
+            resource_provider=lambda *_args: None,
+            okx_market=market_binding,
+        )
+        deployments.append(deployment)
+        return deployment
+
+    profile = GatewayOperatorProfile(profile_ref, "market_hub", _deployment_factory)
+    registry = GatewayOperatorProfileRegistry((profile,))
+    monkeypatch.setattr(
+        operator_sdk.GatewayOperatorProfileRegistry,
+        "from_entry_points",
+        classmethod(lambda _cls: registry),
+    )
+    deployment_json = json.dumps(
+        {
+            "schema_version": 1,
+            "operators": [
+                {
+                    "profile_ref": profile_ref,
+                    "account_ref": None,
+                    "authorized_subjects": [subject],
+                    "operations": ["status", "start", "stop"],
+                    "auto_start": True,
+                    "legacy_gateway_keys": [],
+                }
+            ],
+        }
+    )
+    normal_settings = main_module.settings.model_copy(
+        update={
+            "SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON": SecretStr(deployment_json),
+            "SERVICE_READ_DEPLOYMENT_JSON": SecretStr(""),
+            "PORTFOLIO_VALUATION_BINDINGS_JSON": SecretStr(""),
+            "AKSHARE_DATA_DATABASE_URL": "",
+            "DB_AUTO_CREATE_SCHEMA": True,
+            "DB_AUTO_CREATE_DEFAULT_ADMIN": False,
+            "RAG_VECTOR_ENABLED": False,
+            "MARKET_DATA_THS_SCHEDULER_ENABLED": False,
+            "STOCK_SIGNAL_SCHEDULE_ENABLED": False,
+            "ASSET_RESEARCH_TASK_RUNNER_ENABLED": False,
+            "ASSET_RESEARCH_SCHEDULE_ENABLED": False,
+            "ASSET_RESEARCH_OUTCOME_EVALUATOR_ENABLED": False,
+        }
+    )
+    import app.db.database as database_module
+
+    monkeypatch.setattr(main_module, "settings", normal_settings)
+    monkeypatch.setattr(database_module, "settings", normal_settings)
+
+    application = None
+    with TestClient(main_module.app) as client:
+        assert client.get("/openapi.json").status_code == 200
+        control = main_module.app.state.service_gateway_operator_control
+        status = control.status(profile_ref, subject)
+        assert status["state"] == "running"
+        assert status["ready"] is True
+        application = control._applications[profile_ref]
+        assert len(deployments) == 1
+        assert deployment_threads == [deployments[0]._owner_thread_id]
+        assert application._thread is not None
+        assert application._thread.ident == deployment_threads[0]
+        assert deployments[0].state == "started"
+
+    assert application is not None
+    assert application.status["state"] == "closed"
+    assert application._thread is not None and not application._thread.is_alive()
+    assert deployments[0].state == "closed"
+    assert main_module.app.state.service_gateway_operator_control is None
 
 
 def test_quote_shutdown_retains_uncertain_client_before_operator_can_close() -> None:

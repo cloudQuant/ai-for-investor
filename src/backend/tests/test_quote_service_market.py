@@ -9,6 +9,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+import app.services.quote.service_market as service_market_module
 from app.services.quote.service_market import (
     MarketQuoteResult,
     ServiceMarketDeployment,
@@ -606,23 +607,81 @@ def test_workspace_only_configured_v2_quote_avoids_legacy_path(monkeypatch):
     assert tick["workspace_names"] == ["Demo"]
 
 
-def test_uncertain_service_market_close_retains_closed_owner_and_fails_closed(monkeypatch):
+def test_uncertain_service_market_close_retains_production_owner_and_retries(monkeypatch):
     service = _quote_service(monkeypatch)
     key = _market_key()
+    directory = ServiceMarketDeployment.from_value(json.dumps(_deployment_document()))
+    assert directory is not None
 
-    class _UncertainDeployment:
+    class _Transport:
+        def __init__(self) -> None:
+            self.close_calls = 0
+            self.fail_first_close = True
+
         def close(self):
-            raise ServiceMarketDeploymentError("CLOSE_FAILED")
+            self.close_calls += 1
+            if self.fail_first_close:
+                self.fail_first_close = False
+                raise RuntimeError("transient transport close failure")
 
-        def configured_routes(self, _subject, _source, _symbols):
-            return {"BTC-USDT-SWAP": key}
+    class _Client:
+        healthy = False
 
-        def read_quotes(self, _subject, _routes, *, wait_ms):
-            raise ServiceMarketDeploymentError("DEPLOYMENT_CLOSED")
+        def __init__(self) -> None:
+            self.close_calls = 0
+            self.fail_close = True
 
-    deployment = _UncertainDeployment()
+        def poll(self, *, timeout_ms: int):
+            assert timeout_ms == 0
+            return None
+
+        def close(self):
+            self.close_calls += 1
+            if self.fail_close:
+                raise RuntimeError("transient client close failure")
+
+    transport = _Transport()
+    runtimes = []
+    client = _Client()
+
+    def _ensure_runtime(owner) -> None:
+        if owner._runtime is None:
+            from bt_api_py.service_runtime import ServiceClientRuntime
+
+            profile = owner._profile
+            runtime = ServiceClientRuntime(
+                profile.client_config,
+                identity=profile.identity,
+                scope_resolver=lambda _scope_ref: profile.scope,
+                peer_resolver=lambda _service_id: profile.peer,
+                transport_factory=lambda *_args: transport,
+            )
+            # Exercise the SDK runtime's exact transport-close retry path on
+            # the same owner thread without starting an RPC or provider.
+            runtime._transports[(profile.service_id, "okx-market-transport")] = transport
+            runtimes.append(runtime)
+            owner._runtime = runtime
+
+    def _ensure_client(owner, requested_key) -> None:
+        owner._clients[requested_key.stream_id] = (requested_key, client)
+
+    monkeypatch.setattr(
+        service_market_module._ServiceMarketOwner,
+        "_ensure_runtime",
+        _ensure_runtime,
+    )
+    monkeypatch.setattr(
+        service_market_module._ServiceMarketOwner,
+        "_ensure_client",
+        _ensure_client,
+    )
+    directory.read_quotes("jwt-subject-a", {"BTC-USDT-SWAP": key}, wait_ms=0)
+    owner = directory._workers["jwt-subject-a"]
+    assert len(runtimes) == 1
+    runtime = runtimes[0]
+
     service._service_market_loaded = True
-    service._service_market_deployment = deployment
+    service._service_market_deployment = directory
     service._service_market_error = None
     monkeypatch.setattr(
         service,
@@ -639,14 +698,41 @@ def test_uncertain_service_market_close_retains_closed_owner_and_fails_closed(mo
         ),
     )
 
-    service.shutdown()
+    assert service.shutdown() is False
 
-    assert service._service_market_deployment is deployment
+    assert service._service_market_deployment is directory
     assert service._service_market_loaded is True
     assert service._service_market_error is None
+    assert owner._clients == {key.stream_id: (key, client)}
+    assert owner._runtime is runtime
+    assert runtime.state == "new"
+    assert owner._thread is not None and owner._thread.is_alive()
     result = service.get_quotes("OKX", "jwt-subject-a", ["BTC-USDT-SWAP"])
     assert result["ticks"][0]["status"] == "error"
     assert result["ticks"][0]["error_message"] == "DEPLOYMENT_CLOSED"
+
+    client.fail_close = False
+    assert service.shutdown() is False
+    assert client.close_calls == 2
+    assert owner._clients == {}
+    assert owner._runtime is runtime
+    assert runtime.state == "close_failed"
+    assert runtime.cleanup_failures == 1
+    assert runtime.unregister_uncertainties == 0
+    assert owner._thread is not None and owner._thread.is_alive()
+    assert service._service_market_deployment is directory
+    assert service._service_market_loaded is True
+
+    assert service.shutdown() is True
+    assert client.close_calls == 2
+    assert runtime.state == "closed"
+    assert runtime.cleanup_failures == 1
+    assert transport.close_calls == 2
+    assert owner._clients == {}
+    assert owner._runtime is None
+    assert owner._thread is None
+    assert service._service_market_deployment is None
+    assert service._service_market_loaded is False
 
 
 def _projected_raw() -> dict:

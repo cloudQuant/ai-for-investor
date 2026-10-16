@@ -290,6 +290,9 @@ class _ServiceMarketOwner:
         self._stop = threading.Event()
         self._closed = False
         self._close_error: str | None = None
+        self._close_call_lock = threading.Lock()
+        self._close_retry_requested = threading.Event()
+        self._close_attempt_done = threading.Event()
         self._startup_error: str | None = None
         self._runtime: Any = None
         self._clients: dict[str, tuple[Any, Any]] = {}
@@ -330,11 +333,25 @@ class _ServiceMarketOwner:
             thread = self._thread
             if thread is None:
                 return
-        thread.join(timeout=_REQUEST_TIMEOUT_SECONDS)
-        if thread.is_alive():
-            raise ServiceMarketDeploymentError("OWNER_CLOSE_UNCERTAIN")
-        if self._close_error is not None:
-            raise ServiceMarketDeploymentError("OWNER_CLOSE_FAILED")
+        with self._close_call_lock:
+            with self._state_lock:
+                if self._thread is not thread:
+                    return
+                if self._close_error is not None:
+                    self._close_attempt_done.clear()
+                    self._close_retry_requested.set()
+            if not self._close_attempt_done.wait(timeout=_REQUEST_TIMEOUT_SECONDS):
+                raise ServiceMarketDeploymentError("OWNER_CLOSE_UNCERTAIN")
+            with self._state_lock:
+                close_error = self._close_error
+            if close_error is not None:
+                raise ServiceMarketDeploymentError("OWNER_CLOSE_FAILED")
+            thread.join(timeout=_REQUEST_TIMEOUT_SECONDS)
+            if thread.is_alive():
+                raise ServiceMarketDeploymentError("OWNER_CLOSE_UNCERTAIN")
+            with self._state_lock:
+                if self._thread is thread:
+                    self._thread = None
 
     def _run(self) -> None:
         try:
@@ -359,16 +376,27 @@ class _ServiceMarketOwner:
             else:
                 self._startup_error = _safe_error_code(error)
         finally:
-            self._close_owned_runtime()
+            with self._state_lock:
+                self._closed = True
             while True:
-                try:
-                    pending = self._requests.get_nowait()
-                except queue.Empty:
+                self._close_owned_runtime()
+                while True:
+                    try:
+                        pending = self._requests.get_nowait()
+                    except queue.Empty:
+                        break
+                    pending.results = _failed_results(
+                        pending.keys, self._startup_error or "SERVICE_MARKET_CLOSED"
+                    )
+                    pending.done.set()
+                self._close_attempt_done.set()
+                with self._state_lock:
+                    close_error = self._close_error
+                if close_error is None:
                     break
-                pending.results = _failed_results(
-                    pending.keys, self._startup_error or "SERVICE_MARKET_CLOSED"
-                )
-                pending.done.set()
+                self._close_retry_requested.wait()
+                self._close_retry_requested.clear()
+                self._close_attempt_done.clear()
 
     def _handle_request(self, request: _ReadRequest) -> None:
         if self._startup_error is not None:
@@ -493,22 +521,30 @@ class _ServiceMarketOwner:
 
     def _close_owned_runtime(self) -> None:
         failures = False
-        for _key, client in reversed(tuple(self._clients.values())):
+        for key_id, (_key, client) in reversed(tuple(self._clients.items())):
             try:
                 client.close()
             except BaseException:
                 failures = True
-        self._clients.clear()
-        if self._runtime is not None:
+            else:
+                self._clients.pop(key_id, None)
+        if self._runtime is not None and not self._clients:
             try:
                 self._runtime.close()
-                if self._runtime.cleanup_failures or self._runtime.unregister_uncertainties:
+                runtime_state = getattr(self._runtime, "state", None)
+                unregister_uncertainties = getattr(
+                    self._runtime, "unregister_uncertainties", None
+                )
+                if runtime_state == "closed" and type(unregister_uncertainties) is int and (
+                    unregister_uncertainties == 0
+                ):
+                    self._runtime = None
+                else:
                     failures = True
             except BaseException:
                 failures = True
-            self._runtime = None
-        if failures:
-            self._close_error = "OWNER_CLOSE_FAILED"
+        with self._state_lock:
+            self._close_error = "OWNER_CLOSE_FAILED" if failures else None
 
 
 def project_market_event(event: Any, *, expected_key: Any) -> dict[str, Any]:
