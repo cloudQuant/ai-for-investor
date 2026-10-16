@@ -1339,8 +1339,8 @@ class QuoteService:
         """Build a QuoteTick dict from a raw GatewayTick payload."""
         return _build_tick(source, label, symbol, meta, raw, now)
 
-    def shutdown(self) -> None:
-        """Stop service-market owners and legacy ZMQ receivers on app shutdown."""
+    def shutdown(self) -> bool:
+        """Stop quote owners and report whether service-market clients closed."""
         with self._service_market_load_lock:
             deployment = self._service_market_deployment
             market_owners_closed = deployment is None
@@ -1357,12 +1357,15 @@ class QuoteService:
                 self._service_market_deployment = None
                 self._service_market_error = None
                 self._service_market_loaded = False
-        for source, receiver in self._receivers.items():
+        for gateway_key, receiver in tuple(self._receivers.items()):
             try:
                 receiver.stop()
             except Exception:
-                logger.exception("Error stopping receiver for %s", source)
-        self._receivers.clear()
+                logger.exception("Error stopping receiver for %s", gateway_key)
+            else:
+                self._receivers.pop(gateway_key, None)
+                self._subscribed_symbols.pop(gateway_key, None)
+        return market_owners_closed
 
 
 def get_quote_service() -> QuoteService:

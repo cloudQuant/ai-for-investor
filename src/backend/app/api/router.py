@@ -173,6 +173,11 @@ _register_optional_router(
     tags=["Service Gateway"],
 )
 _register_optional_router(
+    "service_gateway_operator",
+    "app.api.service_gateway_operator",
+    tags=["Service Gateway Operator"],
+)
+_register_optional_router(
     "service_orders",
     "app.api.service_orders",
     tags=["Service Orders"],

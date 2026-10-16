@@ -901,6 +901,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Trusted, server-owned SDK Gateway profiles. The document selects only
+    # code-registered profiles and exact owner grants; it contains no factory,
+    # endpoint or credential material.
+    SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret exact-scope deployment for trusted service-v2 Gateway operator profiles; "
+            "leave blank to keep operator lifecycle control disabled"
+        ),
+    )
+
     # Separate operator-owned issuer and authenticated client grant for
     # owner-side monitoring controls. This never inherits read-service grants.
     SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON: SecretStr = Field(
@@ -1287,6 +1300,14 @@ class Settings(BaseSettings):
         """Keep the secret deployment document bounded before JSON parsing."""
         if len(value.get_secret_value().encode("utf-8")) > 262_144:
             raise ValueError("SERVICE_READ_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_gateway_operator_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the trusted operator profile grant document before parsing."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON exceeds the 256 KiB limit")
         return value
 
     @field_validator("SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON")

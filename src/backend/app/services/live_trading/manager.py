@@ -29,6 +29,11 @@ from app.services.gateway.preset import get_gateway_presets as _get_gateway_pres
 from app.services.instance_store import InstanceStore
 from app.services.live_trading import execution as live_execution_service
 from app.services.live_trading import instance as live_instance_service
+from app.services.live_trading.service_gateway_operator_guard import (
+    is_legacy_gateway_excluded,
+    is_legacy_manual_gateway_excluded,
+    legacy_gateway_owner_operation,
+)
 from app.services.process_supervisor import (
     is_pid_alive as _is_pid_alive_impl,
 )
@@ -242,6 +247,22 @@ def _build_gateway_connect_error_result(
     }
 
 
+def _manual_gateway_account_id_hint(
+    exchange_type: str,
+    credentials: dict[str, Any],
+) -> str | None:
+    """Derive a manual account key from request fields without loading local secrets."""
+
+    try:
+        account_id = manual_gateway_service._resolve_manual_account_id(
+            exchange_type,
+            dict(credentials),
+        )
+    except Exception:
+        return None
+    return str(account_id) if account_id else None
+
+
 def _find_latest_log_dir(strategy_dir: Path) -> str | None:
     """Find the latest log directory for a strategy.
 
@@ -442,18 +463,42 @@ class LiveTradingManager:
     def connect_gateway(self, exchange_type: str, credentials: GatewayCredentials) -> ConnectResult:
         normalized_exchange_type = self._normalize_gateway_exchange_type(exchange_type)
         try:
-            with self._gateway_lock:
-                result = manual_gateway_service.connect_gateway(
-                    gateways=self._gateways,
-                    exchange_type=exchange_type,
-                    credentials=cast("dict[str, Any]", credentials),
-                    normalize_exchange_type=self._normalize_gateway_exchange_type,
-                    coerce_bool=self._coerce_bool,
-                    coerce_float=self._coerce_float,
-                    import_gateway_runtime_classes=self._import_gateway_runtime_classes,
-                    default_transport=_DEFAULT_TRANSPORT,
-                    logger=logger,
+            with legacy_gateway_owner_operation():
+                account_id = _manual_gateway_account_id_hint(
+                    normalized_exchange_type,
+                    cast("dict[str, Any]", credentials),
                 )
+                if is_legacy_manual_gateway_excluded(normalized_exchange_type, account_id):
+                    return cast(
+                        ConnectResult,
+                        {
+                            "status": "error",
+                            "message": "This gateway account is assigned to the service-v2 operator.",
+                        },
+                    )
+                with self._gateway_lock:
+                    # The owner-operation lock closes the check/connect race
+                    # against service-v2 start; keep the check beside the
+                    # manager mutation as a local invariant too.
+                    if is_legacy_manual_gateway_excluded(normalized_exchange_type, account_id):
+                        return cast(
+                            ConnectResult,
+                            {
+                                "status": "error",
+                                "message": "This gateway account is assigned to the service-v2 operator.",
+                            },
+                        )
+                    result = manual_gateway_service.connect_gateway(
+                        gateways=self._gateways,
+                        exchange_type=exchange_type,
+                        credentials=cast("dict[str, Any]", credentials),
+                        normalize_exchange_type=self._normalize_gateway_exchange_type,
+                        coerce_bool=self._coerce_bool,
+                        coerce_float=self._coerce_float,
+                        import_gateway_runtime_classes=self._import_gateway_runtime_classes,
+                        default_transport=_DEFAULT_TRANSPORT,
+                        logger=logger,
+                    )
         except Exception as exc:
             logger.exception(
                 "Unhandled exception while connecting gateway %s", normalized_exchange_type
@@ -868,12 +913,27 @@ class LiveTradingManager:
             self._gateway_restore_in_progress.clear()
 
     def _restore_manual_gateways(self) -> None:
+        with legacy_gateway_owner_operation():
+            self._restore_manual_gateways_under_owner_lock()
+
+    def _restore_manual_gateways_under_owner_lock(self) -> None:
         restored_gateways: dict[str, dict[str, Any]] = {}
         for entry in _load_manual_gateways():
             exchange_type = str(entry.get("exchange_type") or "").strip()
             credentials = entry.get("credentials")
             gateway_key = str(entry.get("gateway_key") or "").strip()
             if not exchange_type or not isinstance(credentials, dict):
+                continue
+            normalized_exchange_type = self._normalize_gateway_exchange_type(exchange_type)
+            account_id = _manual_gateway_account_id_hint(normalized_exchange_type, credentials)
+            if is_legacy_gateway_excluded(gateway_key) or is_legacy_manual_gateway_excluded(
+                normalized_exchange_type,
+                account_id,
+            ):
+                logger.info(
+                    "Skipping configured service-v2 gateway during legacy restore: %s",
+                    gateway_key or normalized_exchange_type,
+                )
                 continue
             result = manual_gateway_service.connect_gateway(
                 gateways=restored_gateways,
@@ -920,6 +980,10 @@ class LiveTradingManager:
         return self._gateway_restore_in_progress.is_set()
 
     def _restore_running_instance_gateways(self) -> None:
+        with legacy_gateway_owner_operation():
+            self._restore_running_instance_gateways_under_owner_lock()
+
+    def _restore_running_instance_gateways_under_owner_lock(self) -> None:
         """Recreate in-process gateways after an API-process restart.
 
         Strategy ``run.py`` subprocesses are intentionally independent from
@@ -1627,24 +1691,28 @@ class LiveTradingManager:
     def _acquire_gateway_for_instance(
         self, instance_id: str, instance: dict[str, Any], strategy_dir: Path
     ) -> dict[str, Any] | None:
-        return gateway_runtime_service.acquire_gateway_for_instance(
-            instance_id=instance_id,
-            instance=instance,
-            strategy_dir=strategy_dir,
-            get_gateway_params=self._get_gateway_params,
-            build_gateway_launch=self._build_gateway_launch,
-            gateways=self._gateways,
-            instance_gateways=self._instance_gateways,
-            logger=logger,
-        )
+        with legacy_gateway_owner_operation():
+            with self._gateway_lock:
+                return gateway_runtime_service.acquire_gateway_for_instance(
+                    instance_id=instance_id,
+                    instance=instance,
+                    strategy_dir=strategy_dir,
+                    get_gateway_params=self._get_gateway_params,
+                    build_gateway_launch=self._build_gateway_launch,
+                    gateways=self._gateways,
+                    instance_gateways=self._instance_gateways,
+                    logger=logger,
+                )
 
     def _release_gateway_for_instance(self, instance_id: str) -> None:
-        gateway_runtime_service.release_gateway_for_instance(
-            instance_id=instance_id,
-            gateways=self._gateways,
-            instance_gateways=self._instance_gateways,
-            logger=logger,
-        )
+        with legacy_gateway_owner_operation():
+            with self._gateway_lock:
+                gateway_runtime_service.release_gateway_for_instance(
+                    instance_id=instance_id,
+                    gateways=self._gateways,
+                    instance_gateways=self._instance_gateways,
+                    logger=logger,
+                )
 
     @staticmethod
     def _infer_gateway_params(strategy_dir: Path) -> dict[str, Any] | None:
@@ -1659,7 +1727,7 @@ class LiveTradingManager:
         config_data = self._load_strategy_config(strategy_dir)
         env_data = self._load_strategy_env(strategy_dir)
         gateway_config_cls, gateway_runtime_cls = self._import_gateway_runtime_classes()
-        return gateway_launch_builder.build_gateway_launch(
+        launch = gateway_launch_builder.build_gateway_launch(
             config_data=config_data,
             env_data=env_data,
             gateway_params=gateway_params,
@@ -1667,6 +1735,10 @@ class LiveTradingManager:
             gateway_runtime_cls=gateway_runtime_cls,
             default_transport=_DEFAULT_TRANSPORT,
         )
+        gateway_key = str(getattr(launch.get("config"), "runtime_name", "") or "")
+        if gateway_key and is_legacy_gateway_excluded(gateway_key):
+            raise RuntimeError("SERVICE_V2_ACCOUNT_OWNER_CONFIGURED")
+        return launch
 
     def _build_ctp_gateway_runtime_kwargs(
         self,
@@ -1789,6 +1861,14 @@ class LiveTradingManager:
 
 # Global singleton
 _manager: LiveTradingManager | None = None
+_manager_lock = threading.RLock()
+
+
+def get_existing_live_trading_manager() -> LiveTradingManager | None:
+    """Return the current singleton without triggering legacy restoration."""
+
+    with _manager_lock:
+        return _manager
 
 
 def get_live_trading_manager() -> LiveTradingManager:
@@ -1798,6 +1878,7 @@ def get_live_trading_manager() -> LiveTradingManager:
         The LiveTradingManager instance.
     """
     global _manager
-    if _manager is None:
-        _manager = LiveTradingManager()
-    return _manager
+    with _manager_lock:
+        if _manager is None:
+            _manager = LiveTradingManager()
+        return _manager

@@ -5,6 +5,7 @@ Includes API routing, logging, rate limiting, security headers, and WebSocket
 streaming for backtest progress updates.
 """
 
+import asyncio
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Concatenate, ParamSpec
@@ -30,11 +31,15 @@ from app.middleware.logging import (
 from app.middleware.rate_limit_headers import RateLimitHeadersMiddleware
 from app.middleware.security_headers import add_security_headers
 from app.rate_limit import limiter
+from app.services.portfolio_valuation_bindings import PortfolioValuationBindingRegistry
+from app.services.service_gateway_operator import (
+    ServiceGatewayOperatorControl,
+    ServiceGatewayOperatorError,
+)
 from app.services.service_read.deployment import (
     ServiceReadDeploymentError,
     start_service_read_deployment,
 )
-from app.services.portfolio_valuation_bindings import PortfolioValuationBindingRegistry
 from app.shutdown import GracefulShutdownManager
 from app.startup import run_shutdown, run_startup
 from app.telemetry import setup_telemetry
@@ -65,6 +70,13 @@ _logging_middleware_factory = _adapt_middleware_factory(LoggingMiddleware)
 _audit_logging_middleware_factory = _adapt_middleware_factory(AuditLoggingMiddleware)
 _performance_logging_middleware_factory = _adapt_middleware_factory(PerformanceLoggingMiddleware)
 
+
+def _setting_secret_value(settings_object: object, name: str) -> object:
+    value = getattr(settings_object, name, None)
+    getter = getattr(value, "get_secret_value", None)
+    return getter() if callable(getter) else value
+
+
 APP_DESCRIPTION = """
 # ai-for-investor API
 
@@ -91,18 +103,30 @@ monitoring, with AI-assisted quantitative research workflows.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
+    previous_operator = getattr(app.state, "service_gateway_operator_control", None)
+    if previous_operator is not None and not previous_operator.closed:
+        raise ServiceGatewayOperatorError("OPERATOR_CLOSE_UNCERTAIN")
+    app.state.service_gateway_operator_control = None
     previous_service_read = getattr(app.state, "service_read_deployment", None)
     if previous_service_read is not None and not previous_service_read.closed:
         raise ServiceReadDeploymentError("PRIOR_CLOSE_UNCERTAIN")
     app.state.service_read_deployment = None
     app.state.portfolio_valuation_bindings = None
     configure_service_read(None)
+    operator_control = ServiceGatewayOperatorControl.from_value(
+        _setting_secret_value(settings, "SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON")
+    )
+    app.state.service_gateway_operator_control = operator_control
     logger.info("Starting ai-for-investor API...")
     app.state.startup_logger = logger
     app.state.ensure_database_ready = ensure_database_ready
-    await run_startup(app, settings)
     service_read_deployment = None
     try:
+        if operator_control is not None:
+            # Block old manager restoration before startup hooks or requests can
+            # create the singleton. This does not start an SDK profile.
+            operator_control.protect_configured_legacy_owners()
+        await run_startup(app, settings)
         app.state.portfolio_valuation_bindings = PortfolioValuationBindingRegistry.from_json(
             settings.PORTFOLIO_VALUATION_BINDINGS_JSON.get_secret_value()
         )
@@ -118,6 +142,11 @@ async def lifespan(app: FastAPI):
         if service_read_deployment is not None:
             configure_service_read(service_read_deployment.directory)
             app.state.service_read_deployment = service_read_deployment
+
+        if operator_control is not None:
+            # Only the trusted deployment's explicit auto_start grants reach
+            # this path; profile status reads and page opens never start owners.
+            await asyncio.to_thread(operator_control.start_auto_profiles)
 
         if settings.RAG_VECTOR_ENABLED:
             try:
@@ -141,38 +170,57 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down ai-for-investor API...")
 
         try:
-            shutdown_mgr = GracefulShutdownManager()
-            await shutdown_mgr.initiate(app)
-        finally:
-            if service_read_deployment is not None:
-                try:
-                    await service_read_deployment.aclose()
-                except Exception:
-                    # Keep the owner object attached when cleanup is uncertain
-                    # so a later lifespan cannot silently start duplicate owners.
-                    app.state.service_read_deployment = service_read_deployment
-                    logger.exception("Failed to close the authorized service-read workers")
-                else:
-                    app.state.service_read_deployment = None
-
-        await run_shutdown(app, settings)
-
-        try:
-            from app.services.quote_service import get_quote_service
-
-            get_quote_service().shutdown()
-        except Exception:
-            logger.debug("Failed to shut down quote service cleanly", exc_info=True)
-
-        # Reset the feature-flags cache so a subsequent in-process startup (e.g.
-        # tests, ASGI reload) recomputes flags after router registration rather
-        # than serving a stale snapshot. Computed once per process otherwise.
-        reset_feature_flags = globals().get("_reset_feature_flags_cache")
-        if callable(reset_feature_flags):
             try:
-                reset_feature_flags()
-            except Exception:
-                logger.debug("Failed to reset feature-flags cache on shutdown", exc_info=True)
+                shutdown_mgr = GracefulShutdownManager()
+                await shutdown_mgr.initiate(app)
+            finally:
+                if service_read_deployment is not None:
+                    try:
+                        await service_read_deployment.aclose()
+                    except Exception:
+                        # Keep the owner object attached when cleanup is uncertain
+                        # so a later lifespan cannot silently start duplicate owners.
+                        app.state.service_read_deployment = service_read_deployment
+                        logger.exception("Failed to close the authorized service-read workers")
+                    else:
+                        app.state.service_read_deployment = None
+        finally:
+            try:
+                await run_shutdown(app, settings)
+            finally:
+                market_clients_closed = True
+                try:
+                    from app.services.quote_service import get_quote_service
+
+                    market_clients_closed = get_quote_service().shutdown() is not False
+                except Exception:
+                    market_clients_closed = False
+                    logger.exception("Failed to shut down quote service cleanly")
+                if operator_control is not None:
+                    if not market_clients_closed:
+                        logger.error(
+                            "Keeping Gateway operator owners because quote clients did not close"
+                        )
+                    else:
+                        try:
+                            await asyncio.to_thread(operator_control.close)
+                        except Exception:
+                            # A later lifespan must not create a second owner
+                            # while the prior SDK owner has uncertain cleanup.
+                            logger.exception("Failed to close service Gateway operators")
+                        else:
+                            app.state.service_gateway_operator_control = None
+
+                # Reset the feature-flags cache so a subsequent in-process startup
+                # recomputes flags after router registration.
+                reset_feature_flags = globals().get("_reset_feature_flags_cache")
+                if callable(reset_feature_flags):
+                    try:
+                        reset_feature_flags()
+                    except Exception:
+                        logger.debug(
+                            "Failed to reset feature-flags cache on shutdown", exc_info=True
+                        )
 
 
 app = FastAPI(
