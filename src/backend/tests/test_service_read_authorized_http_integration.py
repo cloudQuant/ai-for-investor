@@ -7051,3 +7051,1630 @@ def test_approved_target_operation_is_durable_across_concurrent_processes_and_re
         _run_approved_target_cross_process_integration(tmp_path)
     finally:
         _COMMAND_GUARD_STATE["active"] = False
+
+
+# ---------------------------------------------------------------------------
+# AFI07 remainder: one accountable owner for HTTP manual orders, HTTP
+# approved-target orders and direct strategy SDK orders; durable accepted-group
+# revocation disposition; and group-leg namespace isolation for ordinary
+# operations.
+# ---------------------------------------------------------------------------
+
+_AFI07_TRADING_DAY = "20261016"
+_AFI07_PROVIDER = "afi-synthetic-provider"
+_AFI07_ENVIRONMENT = "simulation"
+_AFI07_MANUAL_OPERATION_KEY = "afi07-combined-manual-operation-key"
+_AFI07_APPROVED_OPERATION_KEY = "afi07-combined-approved-operation-key"
+_AFI07_STRATEGY_SECURITY_REF = "strategy_b"
+_AFI07_STRATEGY_SELECTOR = "afi07-strategy-order-entry-b-v1"
+_AFI07_STRATEGY_INTENT_ID = "afi07-strategy-direct-intent-1"
+_AFI07_STRATEGY_SIGNAL_ID = "afi07-strategy-direct-signal-1"
+_AFI07_GROUP_ID = "afi07-accepted-group-a-1"
+_AFI07_GROUP_PORTFOLIO = "afi07-portfolio-a"
+_AFI07_GROUP_FIRST_LEG_ID = "afi07-group-leg-first"
+_AFI07_GROUP_HEDGE_LEG_ID = "afi07-group-leg-hedge"
+_AFI07_GROUP_FIRST_DIGEST = "a" * 64
+_AFI07_GROUP_HEDGE_DIGEST = "b" * 64
+_AFI07_GROUP_FIRST_ASSESSMENT = "c" * 64
+_AFI07_GROUP_HEDGE_ASSESSMENT = "d" * 64
+_AFI07_GROUP_DEADLINE_HORIZON_NS = 7_200_000_000_000
+
+_STRATEGY_B_IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, _STRATEGY_B_PRINCIPAL, _STRATEGY_B)
+_STRATEGY_B_GRANT_SCOPE = WireScope(_DOMAIN, account_ref=_ACCOUNT_A, strategy_ref=_STRATEGY_B)
+_AFI07_MANUAL_ORDER_BODY = {
+    "scope_ref": _MANUAL_SUBMIT_SELECTOR,
+    "instrument": "BTC-USDT",
+    "side": "BUY",
+    "position_effect": "OPEN",
+    "order_type": "LIMIT",
+    "quantity": "1",
+    "price": "50000",
+    "time_in_force": "GTC",
+    "reduce_only": False,
+}
+
+
+def _afi07_execution_scope(strategy_id: str) -> Any:
+    from bt_api_execution import ExecutionScope
+
+    return ExecutionScope(
+        _AFI07_PROVIDER, _AFI07_ENVIRONMENT, _ACCOUNT_A, strategy_id, _AFI07_TRADING_DAY
+    )
+
+
+def _afi07_group_budget_policy(*, generation: str = "primary") -> Any:
+    from decimal import Decimal
+
+    from bt_api_execution import PortfolioGroupBudgetPolicy
+
+    if generation == "primary":
+        return PortfolioGroupBudgetPolicy(
+            portfolio_ref=_AFI07_GROUP_PORTFOLIO,
+            policy_id="afi07-portfolio-budget-policy",
+            policy_version=1,
+            valuation_unit="USD",
+            max_group_gross_notional=Decimal("1000"),
+            max_active_gross_notional=Decimal("10000"),
+            max_active_groups=10,
+        )
+    if generation == "alternate":
+        return PortfolioGroupBudgetPolicy(
+            portfolio_ref=_AFI07_GROUP_PORTFOLIO,
+            policy_id="afi07-portfolio-budget-policy",
+            policy_version=2,
+            valuation_unit="USD",
+            max_group_gross_notional=Decimal("900"),
+            max_active_gross_notional=Decimal("10000"),
+            max_active_groups=10,
+        )
+    raise AssertionError("unknown afi07 budget policy generation")
+
+
+def _afi07_group_request(
+    *,
+    received_at_ns: int,
+    deadline_ns: int,
+    budget_policy: Any,
+    version: int = 2,
+) -> Any:
+    """Build one normalized two-leg group intent with an optional trusted quote."""
+
+    from decimal import Decimal
+
+    from bt_api_execution import (
+        GroupBudgetLegQuote,
+        GroupBudgetQuote,
+        GroupOrderIntent,
+        GroupOrderLegPlan,
+        OrderIntent,
+        OrderType,
+        PositionEffect,
+        Side,
+        TimeInForce,
+        group_leg_intent_id,
+    )
+
+    scope = _afi07_execution_scope(_STRATEGY_B)
+    plans = []
+    for leg_id, side, digest in (
+        (_AFI07_GROUP_FIRST_LEG_ID, Side.BUY, _AFI07_GROUP_FIRST_DIGEST),
+        (_AFI07_GROUP_HEDGE_LEG_ID, Side.SELL, _AFI07_GROUP_HEDGE_DIGEST),
+    ):
+        maximum_intent = OrderIntent(
+            intent_id=group_leg_intent_id(_AFI07_GROUP_ID, leg_id),
+            scope=scope,
+            signal_id=f"afi07-group-signal-{leg_id}",
+            instrument="BTC-USDT",
+            side=side,
+            position_effect=PositionEffect.OPEN,
+            order_type=OrderType.LIMIT,
+            quantity=Decimal("1"),
+            price=Decimal("50000"),
+            time_in_force=TimeInForce.IOC,
+            reduce_only=False,
+            deadline_ns=deadline_ns,
+            tags={"instrument_metadata_digest": digest},
+        )
+        plans.append(
+            GroupOrderLegPlan(
+                leg_id=leg_id,
+                account_ref=_ACCOUNT_A,
+                maximum_intent=maximum_intent,
+                base_units_per_order_unit=Decimal("1"),
+                quantity_step=Decimal("0.25"),
+                metadata_valid_until_ns=deadline_ns + 60_000_000_000,
+            )
+        )
+    quote = None
+    if version == 2:
+        leg_quotes = tuple(
+            GroupBudgetLegQuote(
+                leg_id=plan.leg_id,
+                account_ref=plan.account_ref,
+                intent_fingerprint=plan.maximum_intent.fingerprint,
+                metadata_digest=plan.maximum_intent.tags["instrument_metadata_digest"],
+                assessment_fingerprint=assessment,
+                valuation_unit="USD",
+                gross_notional=Decimal("50"),
+                assessed_at_ns=received_at_ns,
+                valid_until_ns=deadline_ns + 120_000_000_000,
+            )
+            for plan, assessment in (
+                (plans[0], _AFI07_GROUP_FIRST_ASSESSMENT),
+                (plans[1], _AFI07_GROUP_HEDGE_ASSESSMENT),
+            )
+        )
+        quote = GroupBudgetQuote(
+            policy_fingerprint=budget_policy.fingerprint,
+            valuation_unit="USD",
+            gross_notional=Decimal("100"),
+            legs=leg_quotes,
+        )
+    return GroupOrderIntent(
+        version=version,
+        group_id=_AFI07_GROUP_ID,
+        portfolio_ref=_AFI07_GROUP_PORTFOLIO,
+        strategy_id=_STRATEGY_B,
+        coordinator_principal_ref=_STRATEGY_B_PRINCIPAL,
+        received_at_ns=received_at_ns,
+        deadline_ns=deadline_ns,
+        first_leg_id=_AFI07_GROUP_FIRST_LEG_ID,
+        legs=tuple(plans),
+        budget_quote=quote,
+        recovery_policy="HOLD_AND_QUERY_ORIGINAL_IDS",
+    )
+
+
+def _afi07_group_fact(group_store: Any) -> dict[str, Any]:
+    """Project the durable group snapshot and event log into one comparable fact."""
+
+    from bt_api_execution import canonical_json
+
+    snapshot = group_store.get(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+    if snapshot is None:
+        raise AssertionError("afi07 group snapshot is missing")
+    events = group_store.events(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+    return {
+        "snapshot_json": canonical_json(snapshot.to_payload()),
+        "revision": snapshot.revision,
+        "state": snapshot.state.value,
+        "budget_state": (
+            None
+            if snapshot.budget_reservation is None
+            else snapshot.budget_reservation.state.value
+        ),
+        "reservation_phases": tuple(
+            reservation.phase.value for reservation in snapshot.reservations
+        ),
+        "event_types": tuple(event.event_type for event in events),
+        "event_sequences": tuple(event.sequence for event in events),
+    }
+
+
+async def _afi07_prepare_owner_database(engine: Any, session_factory: Any) -> None:
+    """Create the AFI authority tables used by the approved-target owner binding."""
+
+    import app.models  # noqa: F401 - register all mapped models before create_all
+    from sqlalchemy import insert
+
+    from app.db import database
+    from app.models.permission import Role, user_roles
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion, VersionBranch
+    from app.models.user import User
+
+    async with engine.begin() as connection:
+        await connection.run_sync(database.Base.metadata.create_all)
+    async with session_factory() as db:
+        db.add_all(
+            [
+                User(
+                    id=_SUBJECT_A,
+                    username="afi07-user-a",
+                    email="afi07-user-a@example.invalid",
+                    hashed_password="synthetic-only",
+                    is_active=True,
+                    principal_kind="HUMAN",
+                ),
+                User(
+                    id=_SUBJECT_B,
+                    username="afi07-user-b",
+                    email="afi07-user-b@example.invalid",
+                    hashed_password="synthetic-only",
+                    is_active=True,
+                    principal_kind="HUMAN",
+                ),
+            ]
+        )
+        await db.flush()
+        db.add_all(
+            [
+                Strategy(
+                    id=_STRATEGY_A,
+                    user_id=_SUBJECT_A,
+                    name="synthetic afi07 strategy",
+                    code="pass",
+                    params={},
+                ),
+                StrategyVersion(
+                    id="afi-approved-strategy-version-a",
+                    strategy_id=_STRATEGY_A,
+                    version_number=7,
+                    version_name="v7",
+                    branch="main",
+                    status="stable",
+                    tags=["synthetic"],
+                    code="pass",
+                    params={"period": 5},
+                    is_active=True,
+                    is_default=False,
+                    is_current=True,
+                    created_by=_SUBJECT_A,
+                ),
+            ]
+        )
+        await db.flush()
+        db.add(
+            VersionBranch(
+                id="afi-approved-strategy-main-branch",
+                strategy_id=_STRATEGY_A,
+                branch_name="main",
+                version_count=1,
+                last_version_id="afi-approved-strategy-version-a",
+                is_default=True,
+                created_by=_SUBJECT_A,
+            )
+        )
+        await db.flush()
+        await db.execute(
+            insert(user_roles),
+            [
+                {"user_id": _SUBJECT_A, "role": Role.USER.value},
+                {"user_id": _SUBJECT_A, "role": Role.TRADE_POLICY_ADMIN.value},
+                {"user_id": _SUBJECT_A, "role": Role.TRADE_APPROVER.value},
+                {"user_id": _SUBJECT_A, "role": Role.TRADE_OPERATOR.value},
+                {"user_id": _SUBJECT_B, "role": Role.USER.value},
+            ],
+        )
+        await db.commit()
+
+
+class _Afi07CombinedDispatchProvider:
+    """Synthetic provider leaf serving the one account owner.
+
+    This owner composes a trusted ExecutionBasicAdmissionGate (required by the
+    approved-target authority), so every successful manual, approved-target and
+    strategy dispatch consumes one Execution admission authorization and lands
+    on ``submit_authorized``.  The plain ``submit`` port exists only to prove
+    that no unprotected dispatch ever happens.
+    """
+
+    def __init__(self) -> None:
+        self.submitted: list[tuple[str, str]] = []
+        self.approved: list[tuple[str, bool, str]] = []
+        self.unauthorized: list[str] = []
+        self.cancelled: list[str] = []
+
+    def submit(self, intent: Any) -> Any:
+        from bt_api_execution import ProviderObservation
+
+        order_id = f"synthetic-ordinary-order-{len(self.submitted) + 1}"
+        self.submitted.append((intent.intent_id, order_id))
+        return ProviderObservation.accepted(intent.intent_id, order_id)
+
+    def submit_authorized(self, intent: Any, authorization: Any) -> Any:
+        from bt_api_execution import ProviderObservation
+
+        authorized = (
+            getattr(authorization, "intent_fingerprint", None) == intent.fingerprint
+            and getattr(getattr(authorization, "parameters", None), "intent_id", None)
+            == intent.intent_id
+        )
+        if not authorized:
+            self.unauthorized.append(intent.intent_id)
+            raise AssertionError("Execution supplied an invalid synthetic authorization")
+        order_id = f"synthetic-approved-order-{len(self.approved) + 1}"
+        self.approved.append((intent.intent_id, authorized, order_id))
+        return ProviderObservation.accepted(intent.intent_id, order_id)
+
+    def cancel(self, intent: Any) -> Any:
+        self.cancelled.append(
+            getattr(intent, "cancel_id", None) or getattr(intent, "intent_id", "unknown")
+        )
+        raise AssertionError("cancellation is outside the afi07 owner nodes")
+
+
+def _afi07_combined_owner_process(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    keys: dict[str, bytes],
+    store_path: str,
+    group_store_path: str,
+    database_url: str,
+) -> None:
+    """Serve manual, approved-target and direct strategy writes from one owner."""
+
+    import sys
+    from decimal import Decimal
+
+    from bt_api_execution import (
+        ExecutionAdmissionValidatorRegistry,
+        ExecutionBasicAdmissionGate,
+        ExecutionProviderValidatorV1,
+        OrderType,
+        PositionEffect,
+        Side,
+        SqliteExecutionStore,
+        SqliteOrderGroupStore,
+        TimeInForce,
+    )
+    from bt_api_execution.service_order_entry import ExecutionOrderEntryService
+    from bt_api_py.service_components import ComponentResources
+    from bt_api_py.service_config import parse_service_config
+    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+
+    from app.config import get_settings
+
+    get_settings().DATABASE_URL = database_url
+    config = parse_service_config(raw_config)
+    store = SqliteExecutionStore(store_path)
+    group_store = SqliteOrderGroupStore(group_store_path)
+    provider = _Afi07CombinedDispatchProvider()
+    gate = _order._Gate()
+    base_ns = time.time_ns()
+    group_policy = _afi07_group_budget_policy()
+    group_request = _afi07_group_request(
+        received_at_ns=base_ns,
+        deadline_ns=base_ns + _AFI07_GROUP_DEADLINE_HORIZON_NS,
+        budget_policy=group_policy,
+    )
+    group_store.create_or_get(group_request, budget_policy=group_policy, now_ns=base_ns)
+    group_fact_before = _afi07_group_fact(group_store)
+    targets = {
+        _MANUAL_SCOPE_A: _afi07_execution_scope(_MANUAL_BOOK_A),
+        _SCOPE_A: _afi07_execution_scope(_STRATEGY_A),
+        _STRATEGY_B_GRANT_SCOPE: _afi07_execution_scope(_STRATEGY_B),
+    }
+    instance_id = config.components["execution"]["settings"]["instance_id"]
+    authority_resources = None
+    resource_facts = {"authority_close_completed": False}
+    identity_facts: list[tuple[str, str, str, str, str, str, str, str]] = []
+    handle_code = ExecutionOrderEntryService.handle.__code__
+
+    def observe_service_call(frame: Any, event: str, _argument: Any) -> None:
+        if event != "call" or frame.f_code is not handle_code:
+            return
+        local = frame.f_locals
+        operation = local.get("operation")
+        if operation not in {"orders.submit", "orders.submit_approved_target", "orders.cancel"}:
+            return
+        identity = local.get("identity")
+        scope = local.get("scope")
+        if type(identity) is WireIdentity and type(scope) is WireScope:
+            identity_facts.append(
+                (
+                    local.get("principal_ref", ""),
+                    identity.role.value,
+                    identity.actor_ref,
+                    identity.delegate_ref or "",
+                    scope.account_ref or "",
+                    scope.strategy_ref or "",
+                    scope.manual_book_ref or "",
+                    operation,
+                )
+            )
+
+    def resource_provider(component: str, requested_instance: str, options: Any, _scope: Any):
+        nonlocal authority_resources
+        if (
+            component != "execution"
+            or requested_instance != instance_id
+            or options.get("role") != "account_owner"
+            or options.get("approved_target_required") is not True
+        ):
+            raise RuntimeError("AFI07_RESOURCE_PROFILE_INVALID")
+        from bt_api_execution.approved_target import ApprovedTargetOwnerBindingV1
+        from app.services.service_read.approved_target_authority import (
+            create_execution_approved_target_resources,
+        )
+
+        authority_resources = create_execution_approved_target_resources(
+            owner_bindings=(
+                ApprovedTargetOwnerBindingV1(
+                    principal_ref=_APP_PRINCIPAL,
+                    identity=_APPLICATION_IDENTITY_A,
+                    wire_scope=_SCOPE_A,
+                    owner_subject=_SUBJECT_A,
+                    expected_scope_ref=_APPROVED_TARGET_EXPECTED_SCOPE,
+                ),
+            ),
+            protected_scopes=(_SCOPE_A,),
+        )
+        base_resources = ComponentResources.borrowed(
+            {
+                "store": store,
+                "targets": targets,
+                "dispatch": provider,
+                "admission": {
+                    "order_gate": gate,
+                    "cancel_gate": gate,
+                    "basic_admission_gate": basic_gate,
+                },
+            },
+            ready=lambda: True,
+        )
+
+        def close_owned_authority() -> None:
+            authority_resources.close()
+            resource_facts["authority_close_completed"] = True
+
+        return ComponentResources.owned(
+            {**base_resources.values, **authority_resources.values},
+            ready=lambda: base_resources.ready() and authority_resources.ready(),
+            close=close_owned_authority,
+        )
+
+    host = None
+    sys.settrace(observe_service_call)
+    try:
+        validator = ExecutionProviderValidatorV1(
+            provider_id=_AFI07_PROVIDER,
+            validator_id="afi07-combined-synthetic-policy",
+            version="policy-v1",
+            dispatch_port=provider,
+            instrument_map={"BTC-USDT": "BTCUSDT"},
+            quantity_steps={"BTC-USDT": Decimal("0.25")},
+            max_quantities={"BTC-USDT": Decimal("100")},
+            price_ticks={"BTC-USDT": Decimal("0.5")},
+            supported_order_types=(OrderType.LIMIT,),
+            supported_time_in_force=(TimeInForce.GTC,),
+            supported_actions=((Side.BUY, PositionEffect.OPEN),),
+            supports_reduce_only=False,
+        )
+        basic_gate = ExecutionBasicAdmissionGate(
+            store, ExecutionAdmissionValidatorRegistry((validator,))
+        )
+        authority = TrustedServiceAuthority(
+            identity=_SERVICE_IDENTITY,
+            scope=WireScope(_DOMAIN),
+            scope_ref=config.scope_ref,
+            scope_version="afi07-combined-owner-scope-v1",
+            security_ref=_SERVER_SECURITY_REF,
+            security_version="afi07-combined-owner-curve-v1",
+            registration_policy_ref=config.registration_policy_ref,
+            registration_policy_version="afi07-combined-owner-registration-v1",
+            service_requirements_ref=config.service_requirements_ref,
+            service_requirements_version="afi07-combined-owner-requirements-v1",
+            curve_public_key=keys["server_public"],
+            curve_secret_key=keys["server_secret"],
+            principals={
+                keys["application_public"]: _APP_PRINCIPAL,
+                keys["strategy_b_public"]: _STRATEGY_B_PRINCIPAL,
+            },
+            grants={
+                _APP_PRINCIPAL: (
+                    PrincipalGrant(
+                        _APPLICATION_IDENTITY_A,
+                        (
+                            ResourceGrant(
+                                instance_id,
+                                "service.order_entry",
+                                _APPROVED_TARGET_SELECTOR,
+                                _SCOPE_A,
+                                frozenset({"orders.submit_approved_target"}),
+                            ),
+                        ),
+                    ),
+                    PrincipalGrant(
+                        _APPLICATION_IDENTITY_B,
+                        (
+                            ResourceGrant(
+                                instance_id,
+                                "service.order_entry",
+                                _MANUAL_SUBMIT_SELECTOR,
+                                _MANUAL_SCOPE_A,
+                                frozenset({"orders.submit"}),
+                            ),
+                        ),
+                    ),
+                ),
+                _STRATEGY_B_PRINCIPAL: (
+                    PrincipalGrant(
+                        _STRATEGY_B_IDENTITY,
+                        (
+                            ResourceGrant(
+                                instance_id,
+                                "service.order_entry",
+                                _AFI07_STRATEGY_SELECTOR,
+                                _STRATEGY_B_GRANT_SCOPE,
+                                frozenset({"orders.submit", "orders.cancel"}),
+                            ),
+                        ),
+                    ),
+                ),
+            },
+        )
+        host = ServiceHost(config, authority, registry_path, resource_provider)
+        host.start()
+        control.send(("ready", host.endpoint, host.state))
+        while True:
+            host.serve_once(timeout_ms=20)
+            if not control.poll():
+                continue
+            command = control.recv()
+            if command == ("close",):
+                host.close()
+                close_facts = (
+                    host.state,
+                    tuple(provider.submitted),
+                    tuple(provider.approved),
+                    tuple(provider.unauthorized),
+                    tuple(provider.cancelled),
+                    tuple(gate.reserved),
+                    _afi07_group_fact(group_store),
+                    tuple(identity_facts),
+                    bool(authority_resources and authority_resources.ready()),
+                    resource_facts["authority_close_completed"],
+                )
+                store.close()
+                group_store.close()
+                control.send(("closed", *close_facts))
+                return
+            if command == ("facts",):
+                control.send(
+                    (
+                        "facts",
+                        tuple(provider.submitted),
+                        tuple(provider.approved),
+                        tuple(provider.unauthorized),
+                        tuple(provider.cancelled),
+                        tuple(gate.reserved),
+                        _afi07_group_fact(group_store),
+                        tuple(identity_facts),
+                    )
+                )
+                continue
+            if command == ("group_facts",):
+                control.send(("group_facts", _afi07_group_fact(group_store), group_fact_before))
+                continue
+            raise RuntimeError("AFI07_HOST_COMMAND_INVALID")
+    except BaseException as error:
+        if host is not None and host.state not in {"closed", "failed"}:
+            with suppress(BaseException):
+                host.close()
+        if authority_resources is not None:
+            with suppress(BaseException):
+                authority_resources.close()
+        with suppress(BaseException):
+            store.close()
+        with suppress(BaseException):
+            group_store.close()
+        code = getattr(error, "code", None)
+        if type(code) is not str or not code.isidentifier() or len(code) > 64:
+            code = type(error).__name__
+        with suppress(Exception):
+            control.send(("error", code))
+        raise
+    finally:
+        sys.settrace(None)
+        control.close()
+
+
+def _afi07_combined_owner_process_synthetic_environment(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    keys: dict[str, bytes],
+    store_path: str,
+    group_store_path: str,
+    database_url: str,
+    synthetic_userprofile: str,
+) -> None:
+    """Keep child settings synthetic and preserve PATH for native runtime loading."""
+
+    previous_environment = os.environ
+    child_environment = dict(_SYNTHETIC_ENV)
+    child_environment["DATABASE_URL"] = database_url
+    if previous_environment.get("PATH"):
+        child_environment["PATH"] = previous_environment["PATH"]
+    child_environment["USERPROFILE"] = synthetic_userprofile
+    os.environ = child_environment  # noqa: B003 - exclude ambient credentials/config
+    try:
+        _afi07_combined_owner_process(
+            control, raw_config, registry_path, keys, store_path, group_store_path, database_url
+        )
+    finally:
+        os.environ = previous_environment  # noqa: B003 - restore child interpreter inputs
+
+
+def _afi07_owner_config(endpoint: str) -> dict[str, Any]:
+    raw_config = _order._service_config(endpoint)
+    raw_config["components"]["execution"]["settings"]["bind_ports"] = [
+        "service.order_entry"
+    ]
+    raw_config["components"]["execution"]["settings"]["options"] = {
+        "role": "account_owner",
+        "approved_target_required": True,
+    }
+    return raw_config
+
+
+def _afi07_start_owner_host(
+    tmp_path: Any, context: Any, keys: dict[str, bytes], endpoint: str
+) -> dict[str, Any]:
+    synthetic_userprofile = tmp_path / "afi07-owner-child-profile"
+    synthetic_userprofile.mkdir()
+    host = _order._start_process(
+        context,
+        _afi07_combined_owner_process_synthetic_environment,
+        (
+            _afi07_owner_config(endpoint),
+            str(tmp_path / "afi07-owner-registry.sqlite3"),
+            {
+                "server_public": keys["server_public"],
+                "server_secret": keys["server_secret"],
+                "application_public": keys["application_public"],
+                "strategy_b_public": keys["strategy_b_public"],
+            },
+            str(tmp_path / "afi07-owner-execution.sqlite3"),
+            str(tmp_path / "afi07-owner-group-journal.sqlite3"),
+            keys["database_url"],
+            str(synthetic_userprofile),
+        ),
+        "afi07-combined-owner-host",
+    )
+    host["startup_failed"] = True
+    ready = _order._receive(host["pipe"], timeout=25.0)
+    if ready[0] == "ready":
+        host["startup_failed"] = False
+    assert ready[0] == "ready", ready
+    assert host["process"].is_alive()
+    return host
+
+
+def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drive HTTP manual, HTTP approved-target and direct SDK strategy writes."""
+
+    import hashlib
+    from decimal import Decimal
+    from pathlib import Path
+
+    import httpx
+    from pydantic import SecretStr
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    original_is_file = Path.is_file
+    original_path_isfile = os.path.isfile
+
+    def _without_optional_dotenv_file(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".slowapi.env" or basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_is_file(path)
+
+    def _without_optional_dotenv_probe(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_path_isfile(path)
+
+    monkeypatch.setattr(Path, "is_file", _without_optional_dotenv_file)
+    monkeypatch.setattr(os.path, "isfile", _without_optional_dotenv_probe)
+    import app.main as main_module
+    import app.services.quote_service as quote_service
+    from app.api.service_read import configure_service_read
+    from app.db import database
+    from app.services.service_read.session import SdkServiceReadSession
+    from app.utils import security
+
+    from bt_api_execution import SqliteExecutionStore
+    from bt_api_py.service_execution import ServiceExecutionClient
+
+    monkeypatch.setattr(
+        security,
+        "settings",
+        SimpleNamespace(JWT_SECRET_KEY=_JWT_SECRET, JWT_ALGORITHM=_JWT_ALGORITHM),
+    )
+
+    async def _no_startup(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    class _NoopShutdownManager:
+        async def initiate(self, _app: Any) -> None:
+            return None
+
+    monkeypatch.setattr(main_module, "run_startup", _no_startup)
+    monkeypatch.setattr(main_module, "run_shutdown", _no_startup)
+    monkeypatch.setattr(main_module, "GracefulShutdownManager", _NoopShutdownManager)
+    monkeypatch.setattr(main_module.settings, "RAG_VECTOR_ENABLED", False)
+    monkeypatch.setattr(
+        quote_service,
+        "get_quote_service",
+        lambda: SimpleNamespace(shutdown=lambda: None),
+    )
+
+    context = multiprocessing.get_context("spawn")
+    endpoint = _order._endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    strategy_b_public, strategy_b_secret = zmq.curve_keypair()
+    keys: dict[str, Any] = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+        "strategy_b_public": strategy_b_public,
+        "strategy_b_secret": strategy_b_secret,
+    }
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{(Path(tmp_path) / 'afi07-owner-authority.sqlite3').as_posix()}",
+        poolclass=NullPool,
+    )
+    keys["database_url"] = str(engine.url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    previous_overrides = dict(main_module.app.dependency_overrides)
+    app = main_module.app
+    configure_service_read(None)
+    token_a = _make_token(_SUBJECT_A, _JWT_SECRET)
+    token_b = _make_token(_SUBJECT_B, _JWT_SECRET)
+    owner_method_codes = {
+        "manual": SdkServiceReadSession.submit_manual_order.__code__,
+        "approved": SdkServiceReadSession.submit_approved_target.__code__,
+    }
+    owner_facts: list[tuple[str, int, int, str, str]] = []
+    old_thread_profile = threading.getprofile()
+    host = None
+    host_close_attempted = False
+    producer = None
+    primary_error: BaseException | None = None
+    primary_traceback: Any = None
+    cleanup_failures: list[BaseException] = []
+    observed: dict[str, Any] = {}
+    _COMMAND_GUARD_STATE["active"] = True
+
+    def observe_owner_call(frame: Any, event: str, _argument: Any) -> None:
+        if event != "call":
+            return
+        for name, code in owner_method_codes.items():
+            if frame.f_code is not code:
+                continue
+            session = frame.f_locals.get("self")
+            if not isinstance(session, SdkServiceReadSession):
+                return
+            owner_facts.append(
+                (
+                    name,
+                    threading.get_ident(),
+                    session._owner_thread,
+                    session._expected_identity.actor_ref,
+                    session._expected_identity.delegate_ref or "",
+                )
+            )
+            return
+
+    async def _get_db():
+        async with session_factory() as db:
+            yield db
+
+    async def _exercise() -> None:
+        profile_manual = _manual_order_deployment_profile(
+            endpoint=endpoint,
+            subject=_SUBJECT_B,
+            identity=_APPLICATION_IDENTITY_B,
+            account_ref=_ACCOUNT_A,
+            manual_book_ref=_MANUAL_BOOK_A,
+            manual_scope=_MANUAL_SCOPE_A,
+            security_ref="afi07-manual-b-curve-v1",
+            keys=keys,
+        )
+        profile_approved = _approved_target_deployment_profile(endpoint=endpoint, keys=keys)
+        monkeypatch.setattr(
+            main_module.settings,
+            "SERVICE_READ_DEPLOYMENT_JSON",
+            SecretStr(
+                json.dumps({"schema_version": 1, "subjects": [profile_manual, profile_approved]})
+            ),
+        )
+        app.dependency_overrides[database.get_db] = _get_db
+        async with main_module.lifespan(app):
+            deployment = app.state.service_read_deployment
+            assert deployment is not None
+            assert len(deployment._workers) == 2
+            owner_threads = tuple(worker._thread for worker in deployment._workers)
+            assert all(thread is not None and thread.is_alive() for thread in owner_threads)
+            assert all(thread.ident != threading.get_ident() for thread in owner_threads)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://afi07-owner.synthetic.test",
+            ) as client:
+                manual_headers = {
+                    "Authorization": f"Bearer {token_b}",
+                    "Idempotency-Key": _AFI07_MANUAL_OPERATION_KEY,
+                }
+
+                async def manual_submit() -> Any:
+                    return await client.post(
+                        "/api/v1/service-orders/manual",
+                        json=_AFI07_MANUAL_ORDER_BODY,
+                        headers=manual_headers,
+                    )
+
+                manual_first = await manual_submit()
+                assert manual_first.status_code == 200, _manual_order_http_response_fact_from_response(
+                    "first-owner-A-submit", manual_first
+                )
+                manual_replay = await manual_submit()
+                assert manual_replay.status_code == 200, _manual_order_http_response_fact_from_response(
+                    "same-key-owner-A-replay", manual_replay
+                )
+                manual_payload = manual_first.json()
+                assert manual_payload["intent_id"] == manual_replay.json()["intent_id"]
+                assert manual_payload["actor_ref"] == _SUBJECT_B
+                assert manual_payload["delegate_ref"] == _DELEGATE_B
+                assert manual_payload["account_ref"] == _ACCOUNT_A
+                assert manual_payload["record"]["state"] == "ACKED"
+                assert (
+                    manual_payload["record"]["provider_order_id"]
+                    == "synthetic-approved-order-1"
+                )
+                observed["manual_intent"] = manual_payload["intent_id"]
+
+                auth_a = {"Authorization": f"Bearer {token_a}"}
+                policy = {
+                    "schema_id": "afi.strategy_order_approval_policy",
+                    "schema_version": 1,
+                    "allowed_instruments": ["BTC-USDT"],
+                    "allowed_sides": ["BUY", "SELL"],
+                    "allowed_position_effects": [
+                        "OPEN",
+                        "CLOSE",
+                        "CLOSE_TODAY",
+                        "CLOSE_YESTERDAY",
+                    ],
+                    "allowed_order_types": ["LIMIT"],
+                    "allowed_time_in_force": ["GTC"],
+                    "limits": {
+                        "max_quantity": "2",
+                        "max_notional": "200",
+                        "min_price": "1",
+                        "max_price": "200",
+                    },
+                }
+                publish = await client.post(
+                    f"/api/v1/service-orders/approved-targets/policies/{_APPROVED_TARGET_POLICY_REF}",
+                    json={"policy": policy},
+                    headers=auth_a,
+                )
+                assert publish.status_code == 201, _approved_target_http_fact(publish)
+                create_body = {
+                    "scope_ref": _APPROVED_TARGET_SELECTOR,
+                    "strategy_version": 7,
+                    "instrument": "BTC-USDT",
+                    "metadata_version": "instrument-v1",
+                    "side": "BUY",
+                    "position_effect": "OPEN",
+                    "order_type": "LIMIT",
+                    "quantity": "1",
+                    "price": "100",
+                    "time_in_force": "GTC",
+                    "reduce_only": False,
+                    "expires_in_seconds": 600,
+                }
+                created = await client.post(
+                    "/api/v1/service-orders/approved-targets",
+                    json=create_body,
+                    headers=auth_a,
+                )
+                assert created.status_code == 201, _approved_target_http_fact(created)
+                approved = created.json()
+                submit_body = {
+                    "scope_ref": _APPROVED_TARGET_SELECTOR,
+                    "approval_ref": approved["approval_ref"],
+                    "approval_version": approved["approval_version"],
+                    "target_sha256": approved["target_sha256"],
+                }
+
+                async def approved_submit() -> Any:
+                    return await client.post(
+                        "/api/v1/service-orders/approved-targets/submit",
+                        json=submit_body,
+                        headers={
+                            "Authorization": f"Bearer {token_a}",
+                            "Idempotency-Key": _AFI07_APPROVED_OPERATION_KEY,
+                        },
+                    )
+
+                approved_first = await approved_submit()
+                assert approved_first.status_code == 200, _approved_target_http_fact(
+                    approved_first
+                )
+                approved_replay = await approved_submit()
+                assert approved_replay.status_code == 200, _approved_target_http_fact(
+                    approved_replay
+                )
+                approved_payload = approved_first.json()
+                assert approved_payload["intent_id"] == approved_replay.json()["intent_id"]
+                assert approved_payload["operation_kind"] == "approved_strategy_target"
+                assert approved_payload["record"]["state"] == "ACKED"
+                assert (
+                    approved_payload["record"]["provider_order_id"]
+                    == "synthetic-approved-order-2"
+                )
+                observed["approved_intent"] = approved_payload["intent_id"]
+
+                first = producer_client.submit(
+                    intent_id=_AFI07_STRATEGY_INTENT_ID,
+                    signal_id=_AFI07_STRATEGY_SIGNAL_ID,
+                    instrument="BTC-USDT",
+                    side="BUY",
+                    position_effect="OPEN",
+                    order_type="LIMIT",
+                    quantity=Decimal("1"),
+                    price=Decimal("50000"),
+                    time_in_force="GTC",
+                    reduce_only=False,
+                    metadata_version="afi07-direct-v1",
+                )
+                assert first.state == "ACKED"
+                assert first.provider_order_id == "synthetic-approved-order-3"
+                replay = producer_client.submit(
+                    intent_id=_AFI07_STRATEGY_INTENT_ID,
+                    signal_id=_AFI07_STRATEGY_SIGNAL_ID,
+                    instrument="BTC-USDT",
+                    side="BUY",
+                    position_effect="OPEN",
+                    order_type="LIMIT",
+                    quantity=Decimal("1"),
+                    price=Decimal("50000"),
+                    time_in_force="GTC",
+                    reduce_only=False,
+                    metadata_version="afi07-direct-v1",
+                )
+                assert replay.provider_order_id == first.provider_order_id
+                assert replay.state == "ACKED"
+        assert deployment.closed
+        assert deployment.close_failures == ()
+        assert app.state.service_read_deployment is None
+        assert all(not thread.is_alive() for thread in owner_threads)
+
+    try:
+        asyncio.run(_afi07_prepare_owner_database(engine, session_factory))
+        host = _afi07_start_owner_host(Path(tmp_path), context, keys, endpoint)
+
+        producer = _new_runtime(
+            endpoint,
+            role="strategy_client",
+            security_ref=_AFI07_STRATEGY_SECURITY_REF,
+            keys=keys,
+            identity=_STRATEGY_B_IDENTITY,
+            scope_ref=_AFI07_STRATEGY_SELECTOR,
+            scope=_STRATEGY_B_GRANT_SCOPE,
+        )
+        producer_client = ServiceExecutionClient(
+            producer, "broker.orders", scope_ref=_AFI07_STRATEGY_SELECTOR
+        )
+        assert producer.start().degraded_count == 0
+
+        threading.setprofile(observe_owner_call)
+        asyncio.run(_exercise())
+        threading.setprofile(old_thread_profile)
+
+        group_now = _order._command(host, "group_facts")
+        assert group_now[0] == "group_facts"
+        assert group_now[1] == group_now[2], group_now[1]["event_types"]
+
+        _close_runtime(producer)
+        producer = None
+
+        host_close_attempted = True
+        _close_default_deployment_service_host(host)
+        closed = host.get("close_reply")
+        assert isinstance(closed, tuple) and closed[0] == "closed", closed
+        assert closed[1] == "closed"
+        submitted = closed[2]
+        approved_calls = closed[3]
+        # Basic admission is composed on this owner, so each accepted operation
+        # (manual, approved target, strategy) dispatches exactly once through
+        # the authorized provider port; plain submit is never used.
+        assert submitted == ()
+        assert approved_calls == (
+            (observed["manual_intent"], True, "synthetic-approved-order-1"),
+            (observed["approved_intent"], True, "synthetic-approved-order-2"),
+            (_AFI07_STRATEGY_INTENT_ID, True, "synthetic-approved-order-3"),
+        )
+        assert closed[4] == ()
+        assert closed[5] == ()
+        assert set(closed[6]) == {
+            observed["manual_intent"],
+            observed["approved_intent"],
+            _AFI07_STRATEGY_INTENT_ID,
+        }
+        assert len(closed[6]) == 3
+        final_group_fact = closed[7]
+        assert final_group_fact == group_now[2]
+        assert final_group_fact["event_types"] == ("GROUP_ACCEPTED",)
+        assert final_group_fact["revision"] == 0
+        assert final_group_fact["state"] == "PREPARING"
+        assert final_group_fact["budget_state"] == "RESERVED"
+        # Reservations are deduplicated per account_ref, not per leg: both
+        # legs of this two-leg group share one account owner.
+        assert final_group_fact["reservation_phases"] == ("NOT_STARTED",)
+        service_calls = closed[8]
+        assert len(service_calls) == 6
+        assert service_calls == (
+            (
+                _APP_PRINCIPAL,
+                WireRole.APPLICATION_CLIENT.value,
+                _SUBJECT_B,
+                _DELEGATE_B,
+                _ACCOUNT_A,
+                "",
+                _MANUAL_BOOK_A,
+                "orders.submit",
+            ),
+            (
+                _APP_PRINCIPAL,
+                WireRole.APPLICATION_CLIENT.value,
+                _SUBJECT_B,
+                _DELEGATE_B,
+                _ACCOUNT_A,
+                "",
+                _MANUAL_BOOK_A,
+                "orders.submit",
+            ),
+            (
+                _APP_PRINCIPAL,
+                WireRole.APPLICATION_CLIENT.value,
+                _SUBJECT_A,
+                _DELEGATE_A,
+                _ACCOUNT_A,
+                _STRATEGY_A,
+                "",
+                "orders.submit_approved_target",
+            ),
+            (
+                _APP_PRINCIPAL,
+                WireRole.APPLICATION_CLIENT.value,
+                _SUBJECT_A,
+                _DELEGATE_A,
+                _ACCOUNT_A,
+                _STRATEGY_A,
+                "",
+                "orders.submit_approved_target",
+            ),
+            (
+                _STRATEGY_B_PRINCIPAL,
+                WireRole.STRATEGY_CLIENT.value,
+                _STRATEGY_B,
+                "",
+                _ACCOUNT_A,
+                _STRATEGY_B,
+                "",
+                "orders.submit",
+            ),
+            (
+                _STRATEGY_B_PRINCIPAL,
+                WireRole.STRATEGY_CLIENT.value,
+                _STRATEGY_B,
+                "",
+                _ACCOUNT_A,
+                _STRATEGY_B,
+                "",
+                "orders.submit",
+            ),
+        )
+        assert closed[9] is False
+        assert closed[10] is True
+        assert host["cleanup_facts"]["graceful_close"] == "succeeded"
+        assert host["cleanup_facts"]["exit_code"] == 0
+
+        ordinary_ids = [intent_id for intent_id, _ in submitted]
+        assert all(not intent_id.startswith("group:") for intent_id in ordinary_ids)
+        assert all(
+            not intent_id.startswith("group:") for intent_id, _, _ in approved_calls
+        )
+
+        journal = SqliteExecutionStore(str(Path(tmp_path) / "afi07-owner-execution.sqlite3"))
+        try:
+            for intent_id, strategy_id, provider_order_id in (
+                (observed["manual_intent"], _MANUAL_BOOK_A, "synthetic-approved-order-1"),
+                (observed["approved_intent"], _STRATEGY_A, "synthetic-approved-order-2"),
+                (_AFI07_STRATEGY_INTENT_ID, _STRATEGY_B, "synthetic-approved-order-3"),
+            ):
+                record = journal.get(intent_id, scope=_afi07_execution_scope(strategy_id))
+                assert record is not None, intent_id
+                assert record.state.value == "ACKED", intent_id
+                assert record.provider_order_id == provider_order_id, intent_id
+        finally:
+            journal.close()
+
+        manual_rows = _manual_order_operation_rows(keys["database_url"])
+        assert len(manual_rows) == 1
+        manual_row = manual_rows[0]
+        assert manual_row["owner_subject"] == _SUBJECT_B
+        assert manual_row["actor_ref"] == _SUBJECT_B
+        assert manual_row["delegate_ref"] == _DELEGATE_B
+        assert manual_row["operation_key_sha256"] == hashlib.sha256(
+            _AFI07_MANUAL_OPERATION_KEY.encode("ascii")
+        ).hexdigest()
+        assert manual_row["intent_id"] == observed["manual_intent"]
+        assert manual_row["scope_ref"] == _MANUAL_SUBMIT_SELECTOR
+        assert manual_row["account_ref"] == _ACCOUNT_A
+        assert manual_row["manual_book_ref"] == _MANUAL_BOOK_A
+        assert manual_row["last_record_state"] == "ACKED"
+        approved_rows = _approved_target_operation_rows(keys["database_url"])
+        assert len(approved_rows) == 1
+        approved_row = approved_rows[0]
+        assert approved_row["owner_subject"] == _SUBJECT_A
+        assert approved_row["operation_key_sha256"] == hashlib.sha256(
+            _AFI07_APPROVED_OPERATION_KEY.encode("ascii")
+        ).hexdigest()
+        assert approved_row["intent_id"] == observed["approved_intent"]
+        assert approved_row["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
+        assert approved_row["account_ref"] == _ACCOUNT_A
+        assert approved_row["strategy_ref"] == _STRATEGY_A
+        assert len(owner_facts) == 4
+        assert {name for name, *_ in owner_facts} == {"manual", "approved"}
+        assert all(
+            call_thread == owner_thread and call_thread != threading.get_ident()
+            for _, call_thread, owner_thread, *_ in owner_facts
+        )
+        assert [
+            (row[3], row[4]) for row in owner_facts
+        ].count((_SUBJECT_B, _DELEGATE_B)) == 2
+        assert [
+            (row[3], row[4]) for row in owner_facts
+        ].count((_SUBJECT_A, _DELEGATE_A)) == 2
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+    finally:
+        threading.setprofile(old_thread_profile)
+        configure_service_read(None)
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
+        if producer is not None:
+            try:
+                _close_runtime(producer)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        if host is not None and not host_close_attempted:
+            try:
+                _close_default_deployment_service_host(host)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        try:
+            asyncio.run(engine.dispose())
+        except BaseException as error:
+            cleanup_failures.append(error)
+        _COMMAND_GUARD_STATE["active"] = False
+
+    if primary_error is not None:
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"afi07 single-owner cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]
+
+
+def _run_afi07_group_leg_namespace_isolation(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Attempt ordinary writes against the reserved group-leg namespace."""
+
+    from decimal import Decimal
+    from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from bt_api_execution import (
+        SqliteExecutionStore,
+        SqliteOrderGroupStore,
+        group_leg_intent_id,
+    )
+    from bt_api_py.service_execution import ServiceExecutionClient, ServiceExecutionError
+
+    context = multiprocessing.get_context("spawn")
+    endpoint = _order._endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    strategy_b_public, strategy_b_secret = zmq.curve_keypair()
+    keys: dict[str, Any] = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+        "strategy_b_public": strategy_b_public,
+        "strategy_b_secret": strategy_b_secret,
+    }
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{(Path(tmp_path) / 'afi07-namespace-authority.sqlite3').as_posix()}",
+        poolclass=NullPool,
+    )
+    keys["database_url"] = str(engine.url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    host = None
+    host_close_attempted = False
+    producer = None
+    primary_error: BaseException | None = None
+    primary_traceback: Any = None
+    cleanup_failures: list[BaseException] = []
+    group_leg_intent_id_value = group_leg_intent_id(_AFI07_GROUP_ID, _AFI07_GROUP_FIRST_LEG_ID)
+    _COMMAND_GUARD_STATE["active"] = True
+
+    try:
+        asyncio.run(_afi07_prepare_owner_database(engine, session_factory))
+        host = _afi07_start_owner_host(Path(tmp_path), context, keys, endpoint)
+
+        producer = _new_runtime(
+            endpoint,
+            role="strategy_client",
+            security_ref=_AFI07_STRATEGY_SECURITY_REF,
+            keys=keys,
+            identity=_STRATEGY_B_IDENTITY,
+            scope_ref=_AFI07_STRATEGY_SELECTOR,
+            scope=_STRATEGY_B_GRANT_SCOPE,
+        )
+        producer_client = ServiceExecutionClient(
+            producer, "broker.orders", scope_ref=_AFI07_STRATEGY_SELECTOR
+        )
+        assert producer.start().degraded_count == 0
+
+        group_start = _order._command(host, "group_facts")
+        assert group_start[0] == "group_facts"
+        assert group_start[1] == group_start[2]
+        assert group_start[1]["state"] == "PREPARING"
+
+        with pytest.raises(ServiceExecutionError) as target_refusal:
+            producer_client.cancel(
+                cancel_id="afi07-cancel-group-leg-target-1",
+                target_intent_id=group_leg_intent_id_value,
+                provider_order_id="synthetic-provider-order-group-leg",
+            )
+        assert target_refusal.value.code == "INVALID_REQUEST"
+        with pytest.raises(ServiceExecutionError) as cancel_id_refusal:
+            producer_client.cancel(
+                cancel_id=group_leg_intent_id_value,
+                target_intent_id=_AFI07_STRATEGY_INTENT_ID,
+                provider_order_id="synthetic-provider-order-unused",
+            )
+        assert cancel_id_refusal.value.code == "INVALID_REQUEST"
+        with pytest.raises(ServiceExecutionError) as submit_refusal:
+            producer_client.submit(
+                intent_id=group_leg_intent_id_value,
+                signal_id="afi07-forged-group-signal-1",
+                instrument="BTC-USDT",
+                side="BUY",
+                position_effect="OPEN",
+                order_type="LIMIT",
+                quantity=Decimal("1"),
+                price=Decimal("50000"),
+                time_in_force="GTC",
+                reduce_only=False,
+            )
+        assert submit_refusal.value.code == "INVALID_REQUEST"
+
+        ordinary = producer_client.submit(
+            intent_id=_AFI07_STRATEGY_INTENT_ID,
+            signal_id=_AFI07_STRATEGY_SIGNAL_ID,
+            instrument="BTC-USDT",
+            side="BUY",
+            position_effect="OPEN",
+            order_type="LIMIT",
+            quantity=Decimal("1"),
+            price=Decimal("50000"),
+            time_in_force="GTC",
+            reduce_only=False,
+            metadata_version="afi07-direct-v1",
+        )
+        assert ordinary.state == "ACKED"
+        # The account owner composes Basic admission, so even this ordinary
+        # strategy write consumes one Execution authorization receipt.
+        assert ordinary.provider_order_id == "synthetic-approved-order-1"
+
+        with pytest.raises(ServiceExecutionError) as malformed_refusal:
+            producer_client.submit(
+                intent_id=group_leg_intent_id(_AFI07_GROUP_ID, _AFI07_GROUP_HEDGE_LEG_ID),
+                signal_id="afi07-forged-group-signal-2",
+                instrument="BTC-USDT",
+                side="SELL",
+                position_effect="OPEN",
+                order_type="LIMIT",
+                quantity=Decimal("1"),
+                price="not-a-decimal",
+            )
+        assert malformed_refusal.value.code == "INVALID_PRICE"
+
+        _close_runtime(producer)
+        producer = None
+
+        host_close_attempted = True
+        _close_default_deployment_service_host(host)
+        closed = host.get("close_reply")
+        assert isinstance(closed, tuple) and closed[0] == "closed", closed
+        assert closed[1] == "closed"
+        assert closed[2] == ()
+        assert closed[3] == (
+            (_AFI07_STRATEGY_INTENT_ID, True, "synthetic-approved-order-1"),
+        )
+        assert closed[4] == ()
+        assert closed[5] == ()
+        assert closed[6] == (_AFI07_STRATEGY_INTENT_ID,)
+        assert closed[7] == group_start[1]
+        service_calls = closed[8]
+        assert [call[7] for call in service_calls] == [
+            "orders.cancel",
+            "orders.cancel",
+            "orders.submit",
+            "orders.submit",
+        ]
+        assert all(
+            call
+            == (
+                _STRATEGY_B_PRINCIPAL,
+                WireRole.STRATEGY_CLIENT.value,
+                _STRATEGY_B,
+                "",
+                _ACCOUNT_A,
+                _STRATEGY_B,
+                "",
+                call[7],
+            )
+            for call in service_calls
+        )
+        assert closed[9] is False
+        assert closed[10] is True
+        assert host["cleanup_facts"]["graceful_close"] == "succeeded"
+        assert host["cleanup_facts"]["exit_code"] == 0
+
+        journal = SqliteExecutionStore(str(Path(tmp_path) / "afi07-owner-execution.sqlite3"))
+        try:
+            record = journal.get(
+                _AFI07_STRATEGY_INTENT_ID, scope=_afi07_execution_scope(_STRATEGY_B)
+            )
+            assert record is not None and record.state.value == "ACKED"
+            for reserved in (
+                group_leg_intent_id_value,
+                group_leg_intent_id(_AFI07_GROUP_ID, _AFI07_GROUP_HEDGE_LEG_ID),
+            ):
+                assert (
+                    journal.get(reserved, scope=_afi07_execution_scope(_STRATEGY_B)) is None
+                ), reserved
+        finally:
+            journal.close()
+
+        reopened = SqliteOrderGroupStore(str(Path(tmp_path) / "afi07-owner-group-journal.sqlite3"))
+        try:
+            assert _afi07_group_fact(reopened) == group_start[1]
+        finally:
+            reopened.close()
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+    finally:
+        if producer is not None:
+            try:
+                _close_runtime(producer)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        if host is not None and not host_close_attempted:
+            try:
+                _close_default_deployment_service_host(host)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        try:
+            asyncio.run(engine.dispose())
+        except BaseException as error:
+            cleanup_failures.append(error)
+        _COMMAND_GUARD_STATE["active"] = False
+
+    if primary_error is not None:
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"afi07 group-leg namespace cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]
+
+
+def test_afi07_strategy_and_http_orders_share_one_owner_with_exactly_once_dispatch(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_afi07_strategy_and_http_one_owner(tmp_path, monkeypatch)
+
+
+def test_afi07_ordinary_operations_do_not_modify_group_legs(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_afi07_group_leg_namespace_isolation(tmp_path, monkeypatch)
+
+
+def test_afi07_accepted_group_revocation_disposition_is_durable(tmp_path: Any) -> None:
+    """Refuse an unsafe release, then persist the safe revocation disposition."""
+
+    import sqlite3
+    from dataclasses import replace as dataclass_replace
+
+    from bt_api_execution import (
+        ContractValidationError,
+        GroupOrderState,
+        GroupReservationPhase,
+        SqliteOrderGroupStore,
+    )
+
+    store_path = tmp_path / "afi07-group-revocation.sqlite3"
+    base_ns = time.time_ns()
+    policy = _afi07_group_budget_policy()
+    request = _afi07_group_request(
+        received_at_ns=base_ns,
+        deadline_ns=base_ns + _AFI07_GROUP_DEADLINE_HORIZON_NS,
+        budget_policy=policy,
+    )
+    store = SqliteOrderGroupStore(store_path)
+    try:
+        legacy_request = _afi07_group_request(
+            received_at_ns=base_ns,
+            deadline_ns=base_ns + _AFI07_GROUP_DEADLINE_HORIZON_NS,
+            budget_policy=policy,
+            version=1,
+        )
+        with pytest.raises(ContractValidationError) as legacy_refusal:
+            store.create_or_get(legacy_request, budget_policy=policy, now_ns=base_ns)
+        assert str(legacy_refusal.value) == "legacy group request cannot receive a budget policy"
+        with pytest.raises(ContractValidationError) as policy_refusal:
+            store.create_or_get(
+                request,
+                budget_policy=_afi07_group_budget_policy(generation="alternate"),
+                now_ns=base_ns,
+            )
+        assert str(policy_refusal.value) == "group quote does not match trusted budget policy"
+        with pytest.raises(ContractValidationError):
+            dataclass_replace(request, budget_quote=None)
+
+        admitted = store.create_or_get(request, budget_policy=policy, now_ns=base_ns)
+        assert admitted.state is GroupOrderState.PREPARING
+        assert admitted.revision == 0
+        assert admitted.error_code is None
+        assert admitted.budget_reservation is not None
+        assert admitted.budget_reservation.state.value == "RESERVED"
+        assert tuple(item.phase.value for item in admitted.reservations) == (
+            "NOT_STARTED",
+        )
+        admitted_events = store.events(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+        assert [event.event_type for event in admitted_events] == ["GROUP_ACCEPTED"]
+        assert admitted_events[0].payload["budget"]["decision"] == "RESERVED"
+        assert admitted_events[0].payload["budget"]["denial_code"] is None
+
+        replay_admission = store.create_or_get(
+            request, budget_policy=policy, now_ns=base_ns + 1
+        )
+        assert replay_admission.to_payload() == admitted.to_payload()
+
+        querying = store.update(
+            admitted,
+            event_type="RESERVATION_QUERY_STARTED",
+            event_payload={"phase": "REQUESTING"},
+            reservations=tuple(
+                dataclass_replace(item, phase=GroupReservationPhase.REQUESTING)
+                for item in admitted.reservations
+            ),
+            now_ns=base_ns + 2,
+        )
+        assert querying.revision == 1
+        assert tuple(item.phase.value for item in querying.reservations) == (
+            "REQUESTING",
+        )
+
+        with pytest.raises(ContractValidationError) as unsafe_refusal:
+            store.update(
+                querying,
+                event_type="GROUP_REJECTED_BEFORE_DISPATCH",
+                event_payload={"reason": "synthetic_revocations_pending"},
+                state=GroupOrderState.REJECTED_BEFORE_DISPATCH,
+                error_code="group_revoked",
+                now_ns=base_ns + 3,
+            )
+        assert str(unsafe_refusal.value) == (
+            "group budget cannot release before all remote reservations are safe"
+        )
+        after_refusal = store.get(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+        assert after_refusal is not None
+        assert after_refusal.to_payload() == querying.to_payload()
+        assert len(store.events(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)) == 2
+
+        releasing = store.update(
+            querying,
+            event_type="RESERVATION_RELEASE_STARTED",
+            event_payload={"reason": "synthetic_revocation_confirmed"},
+            reservations=tuple(
+                dataclass_replace(item, phase=GroupReservationPhase.RELEASE_REQUESTED)
+                for item in querying.reservations
+            ),
+            now_ns=base_ns + 4,
+        )
+        released = store.update(
+            releasing,
+            event_type="RESERVATION_RELEASED",
+            event_payload={"reason": "synthetic_release_confirmed"},
+            reservations=tuple(
+                dataclass_replace(item, phase=GroupReservationPhase.RELEASED)
+                for item in releasing.reservations
+            ),
+            now_ns=base_ns + 5,
+        )
+        rejected = store.update(
+            released,
+            event_type="GROUP_REJECTED_BEFORE_DISPATCH",
+            event_payload={"reason": "revocation_confirmed_before_dispatch"},
+            state=GroupOrderState.REJECTED_BEFORE_DISPATCH,
+            error_code="group_revoked_before_dispatch",
+            now_ns=base_ns + 6,
+        )
+        assert rejected.state is GroupOrderState.REJECTED_BEFORE_DISPATCH
+        assert rejected.revision == 4
+        assert rejected.error_code == "group_revoked_before_dispatch"
+        assert rejected.budget_reservation is not None
+        assert rejected.budget_reservation.state.value == "RELEASED"
+
+        final_events = store.events(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+        assert [event.event_type for event in final_events] == [
+            "GROUP_ACCEPTED",
+            "RESERVATION_QUERY_STARTED",
+            "RESERVATION_RELEASE_STARTED",
+            "RESERVATION_RELEASED",
+            "GROUP_REJECTED_BEFORE_DISPATCH",
+        ]
+        assert [event.sequence for event in final_events] == [1, 2, 3, 4, 5]
+        assert final_events[-1].payload["budget_transition"] == {
+            "from": "RESERVED",
+            "to": "RELEASED",
+            "policy_fingerprint": policy.fingerprint,
+            "quote_fingerprint": request.budget_quote.fingerprint,
+            "valuation_unit": "USD",
+            "gross_notional": "100",
+        }
+        assert store.list_recoverable() == ()
+        with pytest.raises(ContractValidationError):
+            store.update(
+                rejected,
+                event_type="RESERVATION_QUERY_STARTED",
+                event_payload={"phase": "REQUESTING"},
+                now_ns=base_ns + 7,
+            )
+    finally:
+        store.close()
+
+    reopened = SqliteOrderGroupStore(store_path)
+    try:
+        persisted = reopened.get(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+        assert persisted is not None
+        assert persisted.to_payload() == rejected.to_payload()
+        assert persisted.budget_reservation is not None
+        assert persisted.budget_reservation.state.value == "RELEASED"
+        reopened_events = reopened.events(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
+        assert tuple((event.sequence, event.event_type) for event in reopened_events) == tuple(
+            (event.sequence, event.event_type) for event in final_events
+        )
+        assert reopened_events[-1].payload["budget_transition"]["to"] == "RELEASED"
+        assert reopened.list_recoverable() == ()
+    finally:
+        reopened.close()
+
+    connection = sqlite3.connect(store_path)
+    try:
+        row = connection.execute(
+            "SELECT state, budget_state, revision FROM order_group_snapshots "
+            "WHERE group_id = ?",
+            (_AFI07_GROUP_ID,),
+        ).fetchone()
+        event_count = connection.execute(
+            "SELECT COUNT(*) FROM order_group_events WHERE group_id = ?",
+            (_AFI07_GROUP_ID,),
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    assert row == ("REJECTED_BEFORE_DISPATCH", "RELEASED", 4)
+    assert event_count == 5
