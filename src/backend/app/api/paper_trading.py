@@ -6,7 +6,7 @@ Provides a full paper trading workflow: accounts, orders, positions, trades, and
 
 import typing
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 
 from app.api.deps import get_current_user, get_websocket_current_user
@@ -14,6 +14,7 @@ from app.schemas.paper_trading import (
     AccountCreate,
     AccountListResponse,
     AccountResponse,
+    ManagedPaperCutoverRequest,
     OrderListResponse,
     OrderRequest,
     OrderResponse,
@@ -22,6 +23,11 @@ from app.schemas.paper_trading import (
     TradeListResponse,
 )
 from app.services.paper_trading_service import PaperTradingService
+from app.services.managed_paper_adapter import (
+    ManagedPaperOrderAdapter,
+    ManagedPaperOrderError,
+)
+from app.services.legacy_paper_migration import LegacyPaperInventoryError
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,12 +44,44 @@ def get_paper_trading_service() -> typing.Any:
     return PaperTradingService()
 
 
+def get_managed_paper_order_adapter() -> ManagedPaperOrderAdapter:
+    """Return the application adapter over the configured service-read owner."""
+    return ManagedPaperOrderAdapter()
+
+
+def _legacy_source(response: Response) -> None:
+    """Make the source of historical ledger views explicit to clients."""
+    response.headers["X-Paper-Data-Source"] = "legacy"
+
+
+def _managed_source(response: Response) -> None:
+    response.headers["X-Paper-Data-Source"] = "managed_paper"
+
+
+def _managed_order_http_error(error: ManagedPaperOrderError) -> HTTPException:
+    return HTTPException(
+        status_code=error.status_code,
+        detail={"code": error.code, **error.details},
+    )
+
+
+def _legacy_writer_http_error(error: LegacyPaperInventoryError) -> HTTPException:
+    code = error.code
+    error_status = (
+        status.HTTP_503_SERVICE_UNAVAILABLE
+        if code.endswith("UNAVAILABLE")
+        else status.HTTP_409_CONFLICT
+    )
+    return HTTPException(status_code=error_status, detail={"code": code, **error.details})
+
+
 # ==================== Paper Account API ====================
 
 
 @router.post("/accounts", response_model=AccountResponse, summary="Create paper trading account")
 async def create_paper_account(
     request: AccountCreate,
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
 ) -> typing.Any:
@@ -58,6 +96,7 @@ async def create_paper_account(
     Returns:
         AccountResponse: The created account details.
     """
+    _legacy_source(response)
     account = await service.create_account(
         user_id=current_user.sub,
         name=request.name,
@@ -68,8 +107,39 @@ async def create_paper_account(
     return account
 
 
+@router.post(
+    "/accounts/{account_id}/managed-cutover",
+    response_model=None,
+    summary="Fence an empty legacy paper account for managed execution",
+)
+async def cutover_managed_paper_account(
+    account_id: str,
+    request: ManagedPaperCutoverRequest,
+    response: Response,
+    current_user: typing.Any = Depends(get_current_user),
+    adapter: ManagedPaperOrderAdapter = Depends(get_managed_paper_order_adapter),
+) -> dict[str, typing.Any]:
+    """Persist the only supported cutover: a verified empty account."""
+
+    if request.confirmed is not True:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "EXPLICIT_CUTOVER_CONFIRMATION_REQUIRED"},
+        )
+    try:
+        result = await adapter.prepare_cutover(
+            subject=current_user.sub,
+            legacy_account_id=account_id,
+        )
+    except ManagedPaperOrderError as error:
+        raise _managed_order_http_error(error) from error
+    response.headers["X-Paper-Data-Source"] = "managed_paper"
+    return result
+
+
 @router.get("/accounts", response_model=AccountListResponse, summary="List paper trading accounts")
 async def list_paper_accounts(
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
     limit: int = Query(20, ge=1, le=100),
@@ -86,6 +156,7 @@ async def list_paper_accounts(
     Returns:
         AccountListResponse: Response containing total count and account list.
     """
+    _legacy_source(response)
     accounts, total = await service.list_accounts(
         user_id=current_user.sub,
         limit=limit,
@@ -101,6 +172,7 @@ async def list_paper_accounts(
 )
 async def get_paper_account(
     account_id: str,
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
 ) -> typing.Any:
@@ -118,6 +190,7 @@ async def get_paper_account(
         HTTPException: If the account does not exist (404) or user lacks
             permission to access it (403).
     """
+    _legacy_source(response)
     account = await service.get_account(account_id)
     if not account:
         raise HTTPException(
@@ -138,6 +211,7 @@ async def get_paper_account(
 )
 async def delete_paper_account(
     account_id: str,
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
 ) -> typing.Any:
@@ -154,7 +228,11 @@ async def delete_paper_account(
     Raises:
         HTTPException: If the account does not exist or user lacks permission (404).
     """
-    success = await service.delete_account(account_id, current_user.sub)
+    try:
+        success = await service.delete_account(account_id, current_user.sub)
+    except LegacyPaperInventoryError as error:
+        raise _legacy_writer_http_error(error) from None
+    _legacy_source(response)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -166,13 +244,16 @@ async def delete_paper_account(
 # ==================== Paper Order API ====================
 
 
-@router.post("/orders", response_model=OrderResponse, summary="Submit paper trading order")
+@router.post("/orders", response_model=None, summary="Submit managed paper trading order")
 async def submit_paper_order(
     request: OrderRequest,
+    http_request: Request,
+    response: Response,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1, max_length=256),
     current_user: typing.Any = Depends(get_current_user),
-    service: PaperTradingService = Depends(get_paper_trading_service),
+    adapter: ManagedPaperOrderAdapter = Depends(get_managed_paper_order_adapter),
 ) -> typing.Any:
-    """Submit a paper trading order.
+    """Submit a manual order through the configured managed-paper owner.
 
     Args:
         request: The order request containing account_id, symbol, side,
@@ -181,36 +262,28 @@ async def submit_paper_order(
         service: The paper trading service.
 
     Returns:
-        OrderResponse: The created order details.
+        The durable managed order state, linked to the legacy selector account.
     """
-    # Verify the target account belongs to the requesting user before trading.
-    account = await service.get_account(request.account_id)
-    if account is None or account.user_id != current_user.sub:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Paper trading account not found",
-        )
     try:
-        order = await service.submit_order(
-            account_id=request.account_id,
-            symbol=request.symbol,
-            order_type=request.order_type,
-            side=request.side,
-            size=request.size,
-            price=request.price,
-            stop_price=request.stop_price,
-            limit_price=request.limit_price,
+        result = await adapter.submit_manual(
+            subject=current_user.sub,
+            request=request,
+            idempotency_key=idempotency_key,
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    return order
+    except ManagedPaperOrderError as error:
+        raise _managed_order_http_error(error) from error
+    _managed_source(response)
+    result["status_url"] = str(
+        http_request.url_for(
+            "get_managed_paper_order", intent_id=result["intent_id"]
+        ).include_query_params(account_id=request.account_id)
+    )
+    return result
 
 
 @router.get("/orders", response_model=OrderListResponse, summary="List paper trading orders")
 async def list_paper_orders(
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
     account_id: str | None = Query(None, description="Account ID"),
@@ -233,6 +306,7 @@ async def list_paper_orders(
     Returns:
         OrderListResponse: Response containing total count and order list.
     """
+    _legacy_source(response)
     filters = {"user_id": current_user.sub}
     if account_id:
         filters["account_id"] = account_id
@@ -254,6 +328,7 @@ async def list_paper_orders(
 )
 async def get_paper_order(
     order_id: str,
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
 ) -> typing.Any:
@@ -271,6 +346,7 @@ async def get_paper_order(
         HTTPException: If the order does not exist (404) or user lacks
             permission to access it (403).
     """
+    _legacy_source(response)
     order = await service.get_order(order_id)
     if not order:
         raise HTTPException(
@@ -287,9 +363,31 @@ async def get_paper_order(
     return order
 
 
+@router.get("/managed-orders/{intent_id}", response_model=None, summary="Read managed paper order")
+async def get_managed_paper_order(
+    intent_id: str,
+    response: Response,
+    account_id: str = Query(..., min_length=1, max_length=256, description="Legacy account selector"),
+    current_user: typing.Any = Depends(get_current_user),
+    adapter: ManagedPaperOrderAdapter = Depends(get_managed_paper_order_adapter),
+) -> typing.Any:
+    """Read a managed journal record without mutating or migrating either ledger."""
+    try:
+        result = await adapter.read_order(
+            subject=current_user.sub,
+            legacy_account_id=account_id,
+            intent_id=intent_id,
+        )
+    except ManagedPaperOrderError as error:
+        raise _managed_order_http_error(error) from error
+    _managed_source(response)
+    return result
+
+
 @router.delete("/orders/{order_id}", summary="Cancel paper trading order", response_model=None)
 async def cancel_paper_order(
     order_id: str,
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
 ) -> typing.Any:
@@ -307,7 +405,11 @@ async def cancel_paper_order(
         HTTPException: If the order does not exist, is already filled,
             or user lacks permission (404).
     """
-    success = await service.cancel_order(order_id, current_user.sub)
+    try:
+        success = await service.cancel_order(order_id, current_user.sub)
+    except LegacyPaperInventoryError as error:
+        raise _legacy_writer_http_error(error) from None
+    _legacy_source(response)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -323,6 +425,7 @@ async def cancel_paper_order(
     "/positions", response_model=PositionListResponse, summary="List paper trading positions"
 )
 async def list_paper_positions(
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
     account_id: str | None = Query(None, description="Account ID"),
@@ -343,6 +446,7 @@ async def list_paper_positions(
     Returns:
         PositionListResponse: Response containing total count and position list.
     """
+    _legacy_source(response)
     filters = {"user_id": current_user.sub}
     if account_id:
         filters["account_id"] = account_id
@@ -364,6 +468,7 @@ async def list_paper_positions(
 )
 async def get_paper_position(
     position_id: str,
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
 ) -> typing.Any:
@@ -381,6 +486,7 @@ async def get_paper_position(
         HTTPException: If the position does not exist (404) or user lacks
             permission to access it (403).
     """
+    _legacy_source(response)
     position = await service.get_position(position_id)
     if not position:
         raise HTTPException(
@@ -402,6 +508,7 @@ async def get_paper_position(
 
 @router.get("/trades", response_model=TradeListResponse, summary="List paper trading trades")
 async def list_paper_trades(
+    response: Response,
     current_user: typing.Any = Depends(get_current_user),
     service: PaperTradingService = Depends(get_paper_trading_service),
     account_id: str | None = Query(None, description="Account ID"),
@@ -424,6 +531,7 @@ async def list_paper_trades(
     Returns:
         TradeListResponse: Response containing total count and trade list.
     """
+    _legacy_source(response)
     filters = {"user_id": current_user.sub}
     if account_id:
         filters["account_id"] = account_id

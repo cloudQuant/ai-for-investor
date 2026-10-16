@@ -22,6 +22,7 @@ from .client import (
     PortfolioAnalyticsBinding,
     OrderBinding,
     OrderSubmitBinding,
+    PaperSubmitBinding,
     ServiceReadUnavailableError,
 )
 from .contracts import (
@@ -89,6 +90,8 @@ class SdkServiceReadSession:
         }
     )
 
+    _PAPER_SUBMIT_ARGUMENTS = frozenset(_MANUAL_SUBMIT_ARGUMENTS)
+
     def __init__(
         self,
         runtime_factory: Callable[[], Any],
@@ -98,6 +101,7 @@ class SdkServiceReadSession:
         account_book_bindings: Mapping[str, AccountBookBinding] | None = None,
         order_bindings: Mapping[str, OrderBinding] | None = None,
         order_submit_bindings: Mapping[str, OrderSubmitBinding] | None = None,
+        paper_submit_bindings: Mapping[str, PaperSubmitBinding] | None = None,
         approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
         portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] | None = None,
@@ -106,6 +110,15 @@ class SdkServiceReadSession:
         self._account_book_bindings = dict(account_book_bindings or {})
         self._order_bindings = dict(order_bindings or {})
         self._order_submit_bindings = dict(order_submit_bindings or {})
+        self._paper_submit_bindings = dict(paper_submit_bindings or {})
+        self._paper_submit_bindings_by_scope = {
+            binding.scope_ref: binding for binding in self._paper_submit_bindings.values()
+        }
+        if len(self._paper_submit_bindings_by_scope) != len(self._paper_submit_bindings):
+            raise ServiceReadSessionError(
+                "SERVICE_READ_BINDING_MISMATCH",
+                "paper submit scopes must be unique within a session",
+            )
         self._approved_target_bindings = dict(approved_target_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
         self._portfolio_analytics_bindings = dict(portfolio_analytics_bindings or {})
@@ -114,6 +127,7 @@ class SdkServiceReadSession:
             or self._account_book_bindings
             or self._order_bindings
             or self._order_submit_bindings
+            or self._paper_submit_bindings
             or self._approved_target_bindings
             or self._monitor_bindings
             or self._portfolio_analytics_bindings
@@ -232,6 +246,8 @@ class SdkServiceReadSession:
             expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
         for binding in self._order_submit_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
+        for binding in self._paper_submit_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
         for binding in self._approved_target_bindings.values():
             expected.add(
                 (binding.mount, binding.scope_ref, frozenset({"orders.submit_approved_target"}))
@@ -285,6 +301,33 @@ class SdkServiceReadSession:
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "manual-order scope does not match its configured account and book",
+                )
+
+        for configured in self._paper_submit_bindings.values():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            scope = binding.scope
+            try:
+                configured.paper_owner_domain.validate_binding(
+                    configured.wire_scope, configured.execution_scope
+                )
+            except Exception:
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "paper owner domain no longer validates against its trusted scope",
+                ) from None
+            if (
+                type(scope) is not type(configured.wire_scope)
+                or scope != configured.wire_scope
+                or not self._scope_is_paper_order_scope(
+                    scope,
+                    configured.account_ref,
+                    configured.execution_domain_ref,
+                    configured.strategy_ref,
+                )
+            ):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "paper submit scope does not match its configured owner domain",
                 )
 
         for configured in self._approved_target_bindings.values():
@@ -393,6 +436,22 @@ class SdkServiceReadSession:
             getattr(scope, "account_ref", None) == account_ref
             and not getattr(scope, "account_refs", ())
             and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "portfolio_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
+
+    @staticmethod
+    def _scope_is_paper_order_scope(
+        scope: Any, account_ref: str, execution_domain_ref: str, strategy_ref: str
+    ) -> bool:
+        return (
+            getattr(scope, "execution_domain_ref", None) == execution_domain_ref
+            and getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and getattr(scope, "strategy_ref", None) == strategy_ref
             and getattr(scope, "run_id", None) is None
             and getattr(scope, "manual_book_ref", None) is None
             and getattr(scope, "portfolio_ref", None) is None
@@ -539,6 +598,36 @@ class SdkServiceReadSession:
             or set(arguments) != self._MANUAL_SUBMIT_ARGUMENTS
         ):
             raise ServiceReadUnavailableError("INVALID_ORDER_SUBMIT_ARGUMENTS")
+        self._validate_runtime()
+        assert self._runtime is not None
+        return self._runtime.call(
+            configured.mount,
+            "orders.submit",
+            dict(arguments),
+            scope_ref=configured.scope_ref,
+        )
+
+    def submit_paper_order(
+        self, scope_ref: str, arguments: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """Submit one exact paper-owner intent through the existing runtime."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        configured = self._paper_submit_bindings_by_scope.get(scope_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("PAPER_SUBMIT_SCOPE_NOT_CONFIGURED")
+        if (
+            not isinstance(arguments, Mapping)
+            or any(type(key) is not str for key in arguments)
+            or set(arguments) != self._PAPER_SUBMIT_ARGUMENTS
+        ):
+            raise ServiceReadUnavailableError("INVALID_PAPER_SUBMIT_ARGUMENTS")
         self._validate_runtime()
         assert self._runtime is not None
         return self._runtime.call(

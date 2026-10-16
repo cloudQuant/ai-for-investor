@@ -20,6 +20,8 @@ from app.services.service_read.client import (
     ApprovedTargetSubmitBinding,
     OrderSubmitBinding,
     PortfolioAnalyticsBinding,
+
+    PaperSubmitBinding,
 )
 
 __all__ = [
@@ -65,6 +67,7 @@ class ReadAccess:
     allow_account_book_refs: frozenset[str] = frozenset()
     allow_order_scope_refs: frozenset[str] = frozenset()
     allow_order_submit_scope_refs: frozenset[str] = frozenset()
+    allow_paper_submit_account_ids: frozenset[str] = frozenset()
     allow_approved_target_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
     allow_portfolio_refs: frozenset[str] = frozenset()
@@ -78,6 +81,9 @@ class ReadAccess:
         default_factory=dict, repr=False
     )
     approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] = field(
+        default_factory=dict, repr=False
+    )
+    paper_submit_bindings: Mapping[str, PaperSubmitBinding] = field(
         default_factory=dict, repr=False
     )
     application_identity: Any = field(default=None, repr=False, compare=False)
@@ -94,6 +100,7 @@ class ReadAccess:
             "allow_account_book_refs",
             "allow_order_scope_refs",
             "allow_order_submit_scope_refs",
+            "allow_paper_submit_account_ids",
             "allow_approved_target_scope_refs",
             "allow_monitor_scope_refs",
             "allow_portfolio_refs",
@@ -155,6 +162,52 @@ class ReadAccess:
             ):
                 raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
         object.__setattr__(self, "order_submit_bindings", MappingProxyType(normalized_submit))
+
+        paper_bindings = self.paper_submit_bindings
+        if not isinstance(paper_bindings, Mapping) or len(paper_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
+        normalized_paper: dict[str, PaperSubmitBinding] = {}
+        for selector, binding in paper_bindings.items():
+            if (
+                not _valid_identifier(selector)
+                or type(binding) is not PaperSubmitBinding
+                or binding.legacy_account_id != selector
+                or binding.scope_ref in self.allow_order_submit_scope_refs
+            ):
+                raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
+            normalized_paper[selector] = binding
+        if set(normalized_paper) != set(self.allow_paper_submit_account_ids):
+            raise ServiceReadAccessError("PAPER_SUBMIT_BINDING_MISMATCH")
+        if normalized_paper:
+            if not inspect.iscoroutinefunction(getattr(self.worker, "submit_paper_order", None)):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            if not inspect.iscoroutinefunction(getattr(self.worker, "read_order", None)):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            if any(
+                binding.query_scope_ref not in self.allow_order_scope_refs
+                for binding in normalized_paper.values()
+            ):
+                raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
+            if (
+                len({binding.scope_ref for binding in normalized_paper.values()})
+                != len(normalized_paper)
+                or len({binding.account_ref for binding in normalized_paper.values()})
+                != len(normalized_paper)
+            ):
+                raise ServiceReadAccessError("DUPLICATE_PAPER_OWNER_DOMAIN")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+                or (
+                    getattr(identity, "delegate_ref", None) is not None
+                    and not _valid_identifier(identity.delegate_ref)
+                )
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(self, "paper_submit_bindings", MappingProxyType(normalized_paper))
 
         approved_bindings = self.approved_target_bindings
         if not isinstance(approved_bindings, Mapping) or len(approved_bindings) > 4096:
@@ -313,6 +366,16 @@ class ServiceReadAccessDirectory:
         """Resolve one deployment-owned manual submit scope for an exact subject."""
 
         return self._resolve(subject, scope_ref, "allow_order_submit_scope_refs")
+
+    def resolve_paper_submit_account(self, subject: str, legacy_account_id: str) -> ReadAccess:
+        """Resolve a legacy account selector to one configured paper owner."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(legacy_account_id):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or legacy_account_id not in access.paper_submit_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
 
     def resolve_approved_target_scope(self, subject: str, scope_ref: str) -> ReadAccess:
         """Resolve one explicitly configured approved-target selector."""

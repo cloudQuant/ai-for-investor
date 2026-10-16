@@ -65,6 +65,8 @@ class ServiceReadSession(Protocol):
 
     def submit_manual_order(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
 
+    def submit_paper_order(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
+
     def submit_approved_target(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
 
     def upload_portfolio_analytics_input(
@@ -98,6 +100,7 @@ class _Kind(Enum):
     ORDER = auto()
     STRATEGY_HEALTH = auto()
     MANUAL_ORDER = auto()
+    PAPER_ORDER = auto()
     APPROVED_TARGET = auto()
     ANALYTICS_INPUT = auto()
     ANALYTICS_SUBMIT = auto()
@@ -124,8 +127,8 @@ class ServiceReadWorker:
     """Dispatch bounded configured work through one session-owning thread.
 
     Construction is inert. ``start`` creates the thread and resolves only
-    after factory/session startup completes. Reads and the one explicitly
-    configured manual-order operation enqueue fixed operations. Application
+    after factory/session startup completes. Reads and explicitly configured
+    manual or paper-order operations enqueue fixed operations. Application
     routes remain responsible for authenticating and authorizing each request.
     """
 
@@ -239,6 +242,11 @@ class ServiceReadWorker:
         """Queue a deployment-authorized manual submit on the session owner thread."""
 
         return await self._submit(_Kind.MANUAL_ORDER, scope_ref, arguments)
+
+    async def submit_paper_order(self, scope_ref: str, arguments: dict[str, Any]) -> Any:
+        """Queue one paper-owner order on the existing SDK owner thread."""
+
+        return await self._submit(_Kind.PAPER_ORDER, scope_ref, arguments)
 
     async def submit_approved_target(
         self, scope_ref: str, arguments: dict[str, Any]
@@ -444,6 +452,10 @@ class ServiceReadWorker:
                 result = session.read_order(request.arguments[0], request.arguments[1])
             elif request.kind is _Kind.MANUAL_ORDER:
                 result = session.submit_manual_order(
+                    request.arguments[0], request.arguments[1]
+                )
+            elif request.kind is _Kind.PAPER_ORDER:
+                result = session.submit_paper_order(
                     request.arguments[0], request.arguments[1]
                 )
             elif request.kind is _Kind.APPROVED_TARGET:

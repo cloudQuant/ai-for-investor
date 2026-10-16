@@ -3,6 +3,7 @@ Paper trading schemas.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -23,6 +24,17 @@ class AccountCreate(BaseModel):
         ge=0,
         le=0.01,
         description="Slippage rate (default 0.1%), e.g., 0.001 means 0.1% slippage per trade",
+    )
+
+
+class ManagedPaperCutoverRequest(BaseModel):
+    """Require an explicit owner confirmation for the empty-account cutover."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: Literal[True] = Field(
+        ...,
+        description="Must be true to fence this empty legacy paper account for managed execution.",
     )
 
 
@@ -58,6 +70,8 @@ class AccountListResponse(BaseModel):
 
 class OrderRequest(BaseModel):
     """Paper trading order request schema."""
+
+    model_config = ConfigDict(extra="forbid")
 
     account_id: str = Field(..., description="Account ID")
     symbol: str = Field(

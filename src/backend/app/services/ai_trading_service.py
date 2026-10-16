@@ -211,8 +211,10 @@ class AITradingService:
             )
 
         # Real execution
-        execution_result = await self._execute_trade(user_id, intent, request)
-        status = TradeStatus.FILLED if execution_result.get("success") else TradeStatus.FAILED
+        execution_result = await self._execute_trade(
+            user_id, intent, request, operation_id=trade_id
+        )
+        status = self._execution_status(execution_result)
 
         return AITradingResponse(
             trade_id=trade_id,
@@ -313,8 +315,10 @@ class AITradingService:
         # Remove from pending immediately before execution to prevent double-submit.
         del _pending_trades[request.trade_id]
 
-        execution_result = await self._execute_trade(user_id, intent, original_request)
-        status = TradeStatus.FILLED if execution_result.get("success") else TradeStatus.FAILED
+        execution_result = await self._execute_trade(
+            user_id, intent, original_request, operation_id=request.trade_id
+        )
+        status = self._execution_status(execution_result)
 
         return TradeConfirmResponse(
             trade_id=request.trade_id,
@@ -356,6 +360,8 @@ class AITradingService:
         user_id: str,
         intent: TradingIntent,
         request: AITradingRequest,
+        *,
+        operation_id: str | None = None,
     ) -> dict[str, Any]:
         """Execute a trade through the appropriate execution channel.
 
@@ -372,6 +378,7 @@ class AITradingService:
                     intent=intent,
                     user_id=user_id,
                     account_id=request.account_id,
+                    operation_id=operation_id,
                 )
             else:
                 # A legacy gateway selector is not an authorized service-v2 scope.
@@ -385,6 +392,25 @@ class AITradingService:
                 "error": str(e),
                 "message": f"交易执行失败: {e}",
             }
+
+    @staticmethod
+    def _execution_status(result: dict[str, Any]) -> TradeStatus:
+        """Preserve the durable managed state instead of treating an ack as a fill."""
+        state = result.get("state")
+        if result.get("type") == "managed_paper_trade" and isinstance(state, str):
+            return {
+                "PENDING_ADMISSION": TradeStatus.EXECUTING,
+                "PENDING_DISPATCH": TradeStatus.EXECUTING,
+                "DISPATCHING": TradeStatus.EXECUTING,
+                "FILLED": TradeStatus.FILLED,
+                "PARTIALLY_FILLED": TradeStatus.PARTIALLY_FILLED,
+                "REJECTED": TradeStatus.REJECTED,
+                "BLOCKED": TradeStatus.REJECTED,
+                "CANCELLED": TradeStatus.CANCELLED,
+                "ACKED": TradeStatus.EXECUTING,
+                "UNKNOWN": TradeStatus.EXECUTING,
+            }.get(state, TradeStatus.EXECUTING)
+        return TradeStatus.FILLED if result.get("success") else TradeStatus.FAILED
 
     async def _persist_trade_log(
         self,
@@ -718,6 +744,22 @@ class AITradingService:
 
     def _build_execution_message(self, intent: TradingIntent, result: dict[str, Any]) -> str:
         """Build execution result message."""
+        if result.get("type") == "managed_paper_trade":
+            state = result.get("state")
+            if state in {"UNKNOWN", None}:
+                return "托管纸面订单状态未知。请查询该托管订单，核对完成前不要再次提交。"
+            if state == "ACKED":
+                return "托管纸面订单已受理，等待执行服务更新成交状态。"
+            if state == "PARTIALLY_FILLED":
+                return "托管纸面订单已部分成交；详情以执行服务记录为准。"
+            if state == "REJECTED":
+                return "托管纸面执行服务已拒绝此订单。"
+            if state == "BLOCKED":
+                return "托管纸面风控或执行门禁已阻止此订单。"
+            if state == "CANCELLED":
+                return "托管纸面订单已取消。"
+            if state == "FILLED":
+                return "托管纸面订单已成交。"
         return _build_execution_message(intent, result)
 
     def _build_suggestions(self, intent: TradingIntent, risk: RiskAssessment) -> list[str]:

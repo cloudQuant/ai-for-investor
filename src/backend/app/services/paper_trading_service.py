@@ -5,12 +5,14 @@ Provides a Backtrader-based paper trading environment.
 """
 
 import asyncio
+import inspect
 import logging
 import math
 import os
 from array import array
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone, tzinfo
+from functools import wraps
 from typing import Literal, SupportsFloat, SupportsIndex
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -44,6 +46,44 @@ from app.websocket_manager import MessageType
 from app.websocket_manager import manager as ws_manager
 
 logger = logging.getLogger(__name__)
+
+
+def _legacy_paper_writer_fence(
+    *,
+    account_id_parameter: str | None = None,
+    order_id_parameter: str | None = None,
+    owner_parameter: str | None = None,
+):
+    """Fence every legacy mutation against a durable managed-paper cutover."""
+
+    def decorate(method):
+        signature = inspect.signature(method)
+
+        @wraps(method)
+        async def wrapped(self, *args, **kwargs):
+            bound = signature.bind_partial(self, *args, **kwargs).arguments
+            account_id = bound.get(account_id_parameter) if account_id_parameter else None
+            if order_id_parameter:
+                order_id = bound.get(order_id_parameter)
+                order = await self.order_repo.get_by_id(order_id) if order_id else None
+                if order is None:
+                    return await method(self, *args, **kwargs)
+                account_id = order.account_id
+            owner_id = bound.get(owner_parameter) if owner_parameter else None
+            if account_id and owner_id:
+                account = await self.account_repo.get_by_id(account_id)
+                if account is None or account.user_id != owner_id:
+                    return await method(self, *args, **kwargs)
+            if not account_id:
+                return await method(self, *args, **kwargs)
+            from app.services.legacy_paper_migration import legacy_paper_writer_lease
+
+            async with legacy_paper_writer_lease(str(account_id)):
+                return await method(self, *args, **kwargs)
+
+        return wrapped
+
+    return decorate
 
 _MIN_SIZE_KEYS = (
     "min_order_size",
@@ -850,6 +890,7 @@ class PaperTradingService:
             raise ValueError("stop_limit orders require stop_price and limit_price")
         return order_type_value, side_value, normalized_size
 
+    @_legacy_paper_writer_fence(account_id_parameter="account_id")
     async def submit_order(
         self,
         account_id: str,
@@ -948,6 +989,7 @@ class PaperTradingService:
 
             return order
 
+    @_legacy_paper_writer_fence(account_id_parameter="account_id")
     async def _process_order(self, order_id: str, account_id: str, account: Account) -> None:
         """Process order execution (simulated).
 
@@ -1666,6 +1708,7 @@ class PaperTradingService:
             scoped_filters["account_id"] = account_ids
         return scoped_filters
 
+    @_legacy_paper_writer_fence(account_id_parameter="account_id", owner_parameter="user_id")
     async def delete_account(self, account_id: str, user_id: str) -> bool:
         """Delete a paper trading account.
 
@@ -1684,6 +1727,7 @@ class PaperTradingService:
         await self.account_repo.update(account_id, {"is_active": False})
         return True
 
+    @_legacy_paper_writer_fence(order_id_parameter="order_id", owner_parameter="user_id")
     async def cancel_order(self, order_id: str, user_id: str) -> bool:
         """Cancel an order.
 

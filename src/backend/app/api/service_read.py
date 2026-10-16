@@ -20,6 +20,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.afi_owner_scope import require_persisted_owner_scope
+
 from app.api.deps import get_current_user
 from app.schemas.auth import TokenPayload
 from app.services.service_read.access import (
@@ -108,6 +109,7 @@ def _resolve_access(
         "order",
         "order_submit",
         "approved_target",
+        "paper_submit",
         "monitor",
         "portfolio_analytics",
     ],
@@ -130,6 +132,8 @@ def _resolve_access(
             return directory.resolve_order_submit_scope(current_user.sub, selector)
         if selector_kind == "approved_target":
             return directory.resolve_approved_target_scope(current_user.sub, selector)
+        if selector_kind == "paper_submit":
+            return directory.resolve_paper_submit_account(current_user.sub, selector)
         if selector_kind == "monitor":
             return directory.resolve_monitor_scope(current_user.sub, selector)
         if selector_kind == "portfolio_analytics":
@@ -152,6 +156,25 @@ def resolve_portfolio_analytics_access(
 
     return _resolve_access(current_user, portfolio_ref, "portfolio_analytics")
 
+
+def resolve_paper_submit_access(
+    subject: str, legacy_account_id: str
+) -> tuple[ReadAccess, Any]:
+    """Resolve a legacy account selector to its server-owned paper binding.
+
+    Callers pass only the authenticated subject and public legacy account ID.
+    Scope references and the paper domain remain deployment-owned.
+    """
+
+    directory = _require_directory()
+    try:
+        access = directory.resolve_paper_submit_account(subject, legacy_account_id)
+    except ServiceReadAccessError:
+        raise _access_denied() from None
+    binding = access.paper_submit_bindings.get(legacy_account_id)
+    if binding is None:
+        raise _access_denied() from None
+    return access, binding
 
 
 def _access_denied() -> HTTPException:

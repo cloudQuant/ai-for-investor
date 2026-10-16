@@ -31,6 +31,8 @@ from app.services.service_read.client import (
     OrderBinding,
     OrderSubmitBinding,
     PortfolioAnalyticsBinding,
+
+    PaperSubmitBinding,
 )
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
@@ -100,6 +102,7 @@ class _SubjectProfile:
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(repr=False, compare=False)
     order_bindings: Mapping[str, OrderBinding] = field(repr=False, compare=False)
     order_submit_bindings: Mapping[str, OrderSubmitBinding] = field(repr=False, compare=False)
+    paper_submit_bindings: Mapping[str, PaperSubmitBinding] = field(repr=False, compare=False)
     approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] = field(
         repr=False, compare=False
     )
@@ -112,6 +115,7 @@ class _SubjectProfile:
     strategy_book_grants: frozenset[str]
     order_grants: frozenset[str]
     order_submit_grants: frozenset[str]
+    paper_submit_grants: frozenset[str]
     approved_target_grants: frozenset[str]
     monitor_grants: frozenset[str]
     portfolio_grants: frozenset[str]
@@ -186,12 +190,14 @@ async def start_service_read_deployment(
                 allow_account_book_refs=profile.account_book_grants,
                 allow_order_scope_refs=profile.order_grants,
                 allow_order_submit_scope_refs=profile.order_submit_grants,
+                allow_paper_submit_account_ids=profile.paper_submit_grants,
                 allow_approved_target_scope_refs=profile.approved_target_grants,
                 allow_monitor_scope_refs=profile.monitor_grants,
                 allow_portfolio_refs=profile.portfolio_grants,
                 portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
                 strategy_book_bindings=profile.strategy_book_bindings,
                 order_submit_bindings=profile.order_submit_bindings,
+                paper_submit_bindings=profile.paper_submit_bindings,
                 approved_target_bindings=profile.approved_target_bindings,
                 application_identity=profile.identity,
             )
@@ -222,6 +228,7 @@ def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
             account_book_bindings=profile.account_book_bindings,
             order_bindings=profile.order_bindings,
             order_submit_bindings=profile.order_submit_bindings,
+            paper_submit_bindings=profile.paper_submit_bindings,
             approved_target_bindings=profile.approved_target_bindings,
             monitor_bindings=profile.monitor_bindings,
             portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
@@ -257,17 +264,20 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
         requested_operations["application.account"] = frozenset(
             {"account.snapshot", "account.head"}
         )
-    if profile.account_book_bindings:
-        operations = {"execution.account_books.query"}
+    if profile.order_bindings or profile.account_book_bindings:
+        operations: set[str] = set()
         if profile.order_bindings:
             operations.add("orders.query")
+        if profile.account_book_bindings:
+            operations.add("execution.account_books.query")
         requested_operations["application.order_query"] = frozenset(operations)
-    if profile.order_submit_bindings and profile.approved_target_bindings:
+    has_submit = bool(profile.order_submit_bindings or profile.paper_submit_bindings)
+    if has_submit and profile.approved_target_bindings:
         # Runtime requests operations per mount, so a mixed write profile would
         # widen each selector to both operations. Keep the trusted selectors
         # in separate application identities instead.
         raise ServiceReadDeploymentError("MIXED_ORDER_WRITE_PROFILE")
-    if profile.order_submit_bindings:
+    if has_submit:
         requested_operations["application.orders"] = frozenset({"orders.submit"})
     if profile.approved_target_bindings:
         requested_operations["application.orders"] = frozenset(
@@ -332,7 +342,10 @@ def _parse_deployment(value: SecretStr | str | None) -> tuple[_SubjectProfile, .
     if type(subjects) is not list or not subjects or len(subjects) > _MAX_SUBJECTS:
         raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
 
-    sdk = _load_sdk_types()
+    has_paper_bindings = any(
+        type(profile) is dict and "paper_submit_bindings" in profile for profile in subjects
+    )
+    sdk = _load_sdk_types(include_paper=has_paper_bindings)
     profiles: list[_SubjectProfile] = []
     seen_subjects: set[str] = set()
     seen_identities: set[tuple[str, str, str | None]] = set()
@@ -358,7 +371,7 @@ def _parse_deployment(value: SecretStr | str | None) -> tuple[_SubjectProfile, .
     return tuple(sorted(profiles, key=lambda item: item.subject))
 
 
-def _load_sdk_types() -> Mapping[str, Any]:
+def _load_sdk_types(*, include_paper: bool = False) -> Mapping[str, Any]:
     """Import optional SDK schemas only when an explicit deployment is present."""
 
     try:
@@ -367,7 +380,7 @@ def _load_sdk_types() -> Mapping[str, Any]:
         from bt_api_py.service_config import parse_client_config
     except ImportError:
         raise ServiceReadDeploymentError("SDK_NOT_INSTALLED") from None
-    return {
+    result = {
         "AccountKey": AccountKey,
         "AccountResourceKey": AccountResourceKey,
         "WireIdentity": WireIdentity,
@@ -375,6 +388,21 @@ def _load_sdk_types() -> Mapping[str, Any]:
         "WireScope": WireScope,
         "parse_client_config": parse_client_config,
     }
+    if include_paper:
+        try:
+            from bt_api_execution import ExecutionScope, PaperOwnerDomainV1
+            from bt_api_execution.paper_execution import PAPER_ENVIRONMENT, PAPER_PROVIDER
+        except ImportError:
+            raise ServiceReadDeploymentError("PAPER_EXECUTION_NOT_INSTALLED") from None
+        result.update(
+            {
+                "ExecutionScope": ExecutionScope,
+                "PaperOwnerDomainV1": PaperOwnerDomainV1,
+                "PAPER_ENVIRONMENT": PAPER_ENVIRONMENT,
+                "PAPER_PROVIDER": PAPER_PROVIDER,
+            }
+        )
+    return result
 
 
 def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
@@ -397,6 +425,8 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "order_submit_bindings",
         "approved_target_bindings",
         "portfolio_analytics_bindings",
+
+        "paper_submit_bindings",
     }
     if (
         type(raw) is not dict
@@ -497,7 +527,16 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     approved_target_bindings = _parse_approved_target_bindings(
         profile.get("approved_target_bindings", {}), scopes
     )
+    paper_submit_bindings = _parse_paper_submit_bindings(
+        profile.get("paper_submit_bindings", {}), scopes, order_bindings, sdk
+    )
     if set(order_submit_bindings) & set(approved_target_bindings):
+        raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
+    if paper_submit_bindings and (order_submit_bindings or approved_target_bindings):
+        raise ServiceReadDeploymentError("MIXED_PAPER_ORDER_WRITE_PROFILE")
+    if set(binding.scope_ref for binding in paper_submit_bindings.values()) & set(
+        order_submit_bindings
+    ):
         raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
     monitor_bindings = _parse_monitor_bindings(profile["monitor_bindings"])
     portfolio_analytics_bindings = _parse_portfolio_analytics_bindings(
@@ -509,6 +548,8 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "order_submit_scope_refs",
         "approved_target_scope_refs",
         "portfolio_refs",
+
+        "paper_submit_account_ids",
     }
     grants_raw = profile["grants"]
     if (
@@ -528,6 +569,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     approved_target_grants = frozenset(
         _string_list(grants_raw.get("approved_target_scope_refs", []))
     )
+    paper_submit_grants = frozenset(
+        _string_list(grants_raw.get("paper_submit_account_ids", []))
+    )
     monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
     portfolio_grants = frozenset(_string_list(grants_raw.get("portfolio_refs", [])))
     if (
@@ -537,6 +581,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         or order_grants != frozenset(order_bindings)
         or order_submit_grants != frozenset(order_submit_bindings)
         or approved_target_grants != frozenset(approved_target_bindings)
+        or paper_submit_grants != frozenset(paper_submit_bindings)
         or monitor_grants != frozenset(monitor_bindings)
         or portfolio_grants != frozenset(portfolio_analytics_bindings)
         or not (
@@ -546,6 +591,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
             or order_grants
             or order_submit_grants
             or approved_target_grants
+            or paper_submit_grants
             or monitor_grants
             or portfolio_grants
         )
@@ -587,6 +633,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_bindings,
         order_submit_bindings,
         approved_target_bindings,
+        paper_submit_bindings,
         monitor_bindings,
         portfolio_analytics_bindings,
     )
@@ -602,6 +649,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         strategy_book_bindings=MappingProxyType(strategy_book_bindings),
         order_bindings=MappingProxyType(order_bindings),
         order_submit_bindings=MappingProxyType(order_submit_bindings),
+        paper_submit_bindings=MappingProxyType(paper_submit_bindings),
         approved_target_bindings=MappingProxyType(approved_target_bindings),
         monitor_bindings=MappingProxyType(monitor_bindings),
         portfolio_analytics_bindings=MappingProxyType(portfolio_analytics_bindings),
@@ -610,6 +658,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         strategy_book_grants=strategy_book_grants,
         order_grants=order_grants,
         order_submit_grants=order_submit_grants,
+        paper_submit_grants=paper_submit_grants,
         approved_target_grants=approved_target_grants,
         monitor_grants=monitor_grants,
         portfolio_grants=portfolio_grants,
@@ -748,6 +797,124 @@ def _parse_order_submit_bindings(
     return result
 
 
+def _parse_paper_submit_bindings(
+    raw: object,
+    scopes: Mapping[str, Any],
+    order_bindings: Mapping[str, OrderBinding],
+    sdk: Mapping[str, Any],
+) -> dict[str, PaperSubmitBinding]:
+    """Parse only server-owned paper domains and exact authenticated scopes."""
+
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_PAPER_SUBMIT_BINDINGS")
+    result: dict[str, PaperSubmitBinding] = {}
+    for legacy_account_id, raw_binding in raw.items():
+        if type(raw_binding) is dict and _paper_risk_monitor_selected(raw_binding):
+            raise ServiceReadDeploymentError("PAPER_RISK_MONITOR_UNSUPPORTED")
+        if type(raw_binding) is dict and "control_mode" not in raw_binding:
+            raise ServiceReadDeploymentError("PAPER_CONTROL_MODE_REQUIRED")
+        legacy_account_id = _identifier(legacy_account_id)
+        binding = _exact_mapping(
+            raw_binding,
+            {
+                "control_mode",
+                "mount",
+                "scope_ref",
+                "query_scope_ref",
+                "account_ref",
+                "execution_domain_ref",
+                "strategy_ref",
+                "paper_owner_domain",
+                "execution_scope",
+            },
+        )
+        try:
+            if type(binding["control_mode"]) is not str:
+                raise ServiceReadDeploymentError("INVALID_PAPER_CONTROL_MODE")
+            control_mode = _identifier(binding["control_mode"])
+            if control_mode != "execution_only":
+                if "risk" in control_mode.lower() or "monitor" in control_mode.lower():
+                    raise ServiceReadDeploymentError("PAPER_RISK_MONITOR_UNSUPPORTED")
+                raise ServiceReadDeploymentError("INVALID_PAPER_CONTROL_MODE")
+            mount = _identifier(binding["mount"])
+            scope_ref = _identifier(binding["scope_ref"])
+            query_scope_ref = _identifier(binding["query_scope_ref"])
+            account_ref = _identifier(binding["account_ref"])
+            execution_domain_ref = _identifier(binding["execution_domain_ref"])
+            strategy_ref = _identifier(binding["strategy_ref"])
+            if mount != "application.orders" or query_scope_ref not in order_bindings:
+                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+            domain = sdk["PaperOwnerDomainV1"].from_payload(binding["paper_owner_domain"])
+            wire_scope = scopes.get(scope_ref)
+            query_scope = scopes.get(query_scope_ref)
+            if wire_scope is None or query_scope is None:
+                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+            execution_fields = _exact_mapping(
+                binding["execution_scope"],
+                {"provider", "environment", "account_ref", "strategy_id", "trading_day"},
+            )
+            execution_scope = sdk["ExecutionScope"](
+                _identifier(execution_fields["provider"]),
+                _identifier(execution_fields["environment"]),
+                _identifier(execution_fields["account_ref"]),
+                _identifier(execution_fields["strategy_id"]),
+                None
+                if execution_fields["trading_day"] is None
+                else _identifier(execution_fields["trading_day"]),
+            )
+            parsed = PaperSubmitBinding(
+                control_mode=control_mode,
+                mount=mount,
+                scope_ref=scope_ref,
+                query_scope_ref=query_scope_ref,
+                legacy_account_id=legacy_account_id,
+                account_ref=account_ref,
+                execution_domain_ref=execution_domain_ref,
+                strategy_ref=strategy_ref,
+                paper_owner_domain=domain,
+                wire_scope=wire_scope,
+                execution_scope=execution_scope,
+            )
+            if (
+                execution_scope.provider != sdk["PAPER_PROVIDER"]
+                or execution_scope.environment != sdk["PAPER_ENVIRONMENT"]
+                or query_scope.execution_domain_ref != execution_domain_ref
+                or query_scope.account_ref != account_ref
+                or query_scope.account_refs
+                or query_scope.strategy_ref != strategy_ref
+                or query_scope.run_id is not None
+                or query_scope.manual_book_ref is not None
+                or query_scope.portfolio_ref is not None
+                or query_scope.group_id is not None
+                or query_scope.leg_id is not None
+            ):
+                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+            result[legacy_account_id] = parsed
+        except ServiceReadDeploymentError:
+            raise
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_PAPER_SUBMIT_BINDINGS") from None
+    if len({item.account_ref for item in result.values()}) != len(result):
+        raise ServiceReadDeploymentError("DUPLICATE_PAPER_OWNER_DOMAIN")
+    return result
+
+
+def _paper_risk_monitor_selected(binding: Mapping[str, Any]) -> bool:
+    for key, value in binding.items():
+        if type(key) is str and (
+            key in {"risk", "monitor"}
+            or key.startswith(("risk_", "monitor_"))
+        ):
+            return True
+        if key in {"controls", "required_controls", "enabled_components"}:
+            if type(value) is list and any(
+                type(item) is str and item.lower() in {"risk", "monitor"}
+                for item in value
+            ):
+                return True
+    return False
+
+
 def _parse_approved_target_bindings(
     raw: object, scopes: Mapping[str, Any]
 ) -> dict[str, ApprovedTargetSubmitBinding]:
@@ -840,6 +1007,7 @@ def _validate_profile_bindings(
     order_bindings: Mapping[str, OrderBinding],
     order_submit_bindings: Mapping[str, OrderSubmitBinding],
     approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding],
+    paper_submit_bindings: Mapping[str, PaperSubmitBinding],
     monitor_bindings: Mapping[str, MonitorBinding],
     portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding],
 ) -> None:
@@ -884,6 +1052,36 @@ def _validate_profile_bindings(
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
+    for legacy_account_id, binding in paper_submit_bindings.items():
+        scope = scopes.get(binding.scope_ref)
+        query = scopes.get(binding.query_scope_ref)
+        if (
+            legacy_account_id != binding.legacy_account_id
+            or binding.mount != "application.orders"
+            or scope is None
+            or query is None
+            or scope != binding.wire_scope
+            or scope.account_ref != binding.account_ref
+            or scope.execution_domain_ref != binding.execution_domain_ref
+            or scope.strategy_ref != binding.strategy_ref
+            or scope.account_refs
+            or scope.run_id is not None
+            or scope.manual_book_ref is not None
+            or scope.portfolio_ref is not None
+            or scope.group_id is not None
+            or scope.leg_id is not None
+            or query.execution_domain_ref != binding.execution_domain_ref
+            or query.account_ref != binding.account_ref
+            or query.account_refs
+            or query.strategy_ref != binding.strategy_ref
+            or query.run_id is not None
+            or query.manual_book_ref is not None
+            or query.portfolio_ref is not None
+            or query.group_id is not None
+            or query.leg_id is not None
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, binding.scope_ref, binding.account_ref)
     for scope_ref, binding in approved_target_bindings.items():
         scope = scopes.get(scope_ref)
         if (

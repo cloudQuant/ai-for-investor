@@ -36,6 +36,7 @@ __all__ = [
     "PortfolioAnalyticsBinding",
     "OrderBinding",
     "OrderSubmitBinding",
+    "PaperSubmitBinding",
     "ApprovedTargetSubmitBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
@@ -179,6 +180,110 @@ class OrderSubmitBinding:
         ):
             if type(value) is not str or not value or value != value.strip():
                 raise ServiceReadContractError(code)
+
+
+@dataclass(frozen=True, slots=True)
+class PaperSubmitBinding:
+    """One trusted E-only paper owner and its exact query/domain bindings."""
+
+    control_mode: str
+    mount: str
+    scope_ref: str
+    query_scope_ref: str
+    legacy_account_id: str
+    account_ref: str
+    execution_domain_ref: str
+    strategy_ref: str
+    paper_owner_domain: Any = field(repr=False, compare=False)
+    wire_scope: Any = field(repr=False, compare=False)
+    execution_scope: Any = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.control_mode != "execution_only":
+            raise ServiceReadContractError("PAPER_RISK_MONITOR_UNSUPPORTED")
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+            (self.query_scope_ref, "INVALID_SCOPE_REF"),
+            (self.legacy_account_id, "INVALID_LEGACY_ACCOUNT_ID"),
+            (self.account_ref, "INVALID_ACCOUNT_REF"),
+            (self.execution_domain_ref, "INVALID_EXECUTION_DOMAIN_REF"),
+            (self.strategy_ref, "INVALID_STRATEGY_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if self.mount != "application.orders":
+            raise ServiceReadContractError("INVALID_PAPER_SUBMIT_MOUNT")
+        domain = self.paper_owner_domain
+        if (
+            not callable(getattr(domain, "validate_binding", None))
+            or type(getattr(domain, "fingerprint", None)) is not str
+            or getattr(domain, "simulation_account_ref", None) != self.account_ref
+            or getattr(domain, "execution_domain_ref", None) != self.execution_domain_ref
+            or getattr(domain, "strategy_ref", None) != self.strategy_ref
+        ):
+            raise ServiceReadContractError("INVALID_PAPER_OWNER_DOMAIN")
+        try:
+            domain.validate_binding(self.wire_scope, self.execution_scope)
+        except Exception:
+            raise ServiceReadContractError("INVALID_PAPER_SCOPE_BINDING") from None
+
+    @property
+    def paper_domain_sha256(self) -> str:
+        """Return the digest of the parsed trusted SDK paper domain."""
+
+        return self.paper_owner_domain.fingerprint
+
+    @property
+    def initial_cash(self) -> Decimal:
+        return self.paper_owner_domain.initial_cash
+
+    @property
+    def experiment_ref(self) -> str:
+        return self.paper_owner_domain.experiment_ref
+
+    @property
+    def model_ref(self) -> str:
+        return self.paper_owner_domain.model_ref
+
+    @property
+    def model_version(self) -> str:
+        return self.paper_owner_domain.model_version
+
+    @property
+    def quote_source_ref(self) -> str:
+        return self.paper_owner_domain.quote_source_ref
+
+    @property
+    def cash_currency(self) -> str:
+        return self.paper_owner_domain.cash_currency
+
+    @property
+    def initial_fees(self) -> Decimal:
+        return self.paper_owner_domain.initial_fees
+
+    @property
+    def fee_rate(self) -> Decimal:
+        return self.paper_owner_domain.fee_rate
+
+    @property
+    def fee_quantum(self) -> Decimal:
+        return self.paper_owner_domain.fee_quantum
+
+    @property
+    def max_quote_age_ns(self) -> int:
+        return self.paper_owner_domain.max_quote_age_ns
+
+    @property
+    def instrument_metadata_versions(self) -> Mapping[str, str]:
+        return {
+            instrument.instrument: instrument.metadata_version
+            for instrument in self.paper_owner_domain.instruments
+        }
+
+    @property
+    def opening_positions(self) -> tuple[Any, ...]:
+        return tuple(item.to_payload() for item in self.paper_owner_domain.opening_positions)
 
 
 @dataclass(frozen=True)
