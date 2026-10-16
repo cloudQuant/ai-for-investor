@@ -5228,6 +5228,9 @@ def _manual_order_http_cleanup_facts(servers: list[dict[str, Any]]) -> tuple[dic
                     "afi07-manual-order-app-1",
                     "afi07-manual-order-app-2",
                     "afi07-manual-order-app-restarted",
+                    "afi07-approved-target-app-1",
+                    "afi07-approved-target-app-2",
+                    "afi07-approved-target-app-restarted",
                 }
                 else "other",
                 "pid": pid if type(pid) is int else None,
@@ -5568,6 +5571,7 @@ def test_manual_order_operation_is_durable_across_concurrent_processes_and_resta
 _APPROVED_TARGET_SELECTOR = "afi-approved-target-a-v1"
 _APPROVED_TARGET_EXPECTED_SCOPE = "afi-approved-target-scope-a-v1"
 _APPROVED_TARGET_POLICY_REF = "afi-approved-target-policy-a-v1"
+_APPROVED_TARGET_SHARED_OPERATION_KEY = "afi07-approved-target-shared-operation-key"
 
 
 class _ApprovedTargetSyntheticProvider:
@@ -6508,3 +6512,542 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
         raise AssertionError(
             f"approved-target integration cleanup had {len(cleanup_failures)} failure(s)"
         ) from cleanup_failures[0]
+
+
+def _approved_target_operation_rows(database_url: str) -> list[dict[str, Any]]:
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
+
+    async def _read_rows() -> list[dict[str, Any]]:
+        engine = create_async_engine(database_url)
+        try:
+            session_factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with session_factory() as db:
+                rows = (await db.scalars(select(ApprovedTargetHttpOperation))).all()
+                return [
+                    {
+                        "owner_subject": row.owner_subject,
+                        "principal_ref": row.principal_ref,
+                        "actor_ref": row.actor_ref,
+                        "delegate_ref": row.delegate_ref,
+                        "operation_key_sha256": row.operation_key_sha256,
+                        "request_sha256": row.request_sha256,
+                        "approval_ref": row.approval_ref,
+                        "approval_version": row.approval_version,
+                        "target_sha256": row.target_sha256,
+                        "intent_id": row.intent_id,
+                        "selector_ref": row.selector_ref,
+                        "scope_ref": row.scope_ref,
+                        "account_ref": row.account_ref,
+                        "strategy_ref": row.strategy_ref,
+                    }
+                    for row in rows
+                ]
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_read_rows())
+
+
+def _run_approved_target_cross_process_integration(tmp_path: Any) -> None:
+    """Exercise approved-target HTTP idempotency across app processes and restart."""
+
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import httpx
+    from sqlalchemy import insert
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from app.db import database
+    from app.models.permission import Role, user_roles
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion, VersionBranch
+    from app.models.user import User
+
+    context = multiprocessing.get_context("spawn")
+    database_path = Path(tmp_path) / "afi-approved-target-operations.sqlite3"
+    database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
+    initialization_engine = create_async_engine(database_url, poolclass=NullPool)
+    primary_error: BaseException | None = None
+    primary_traceback: Any = None
+    cleanup_failures: list[BaseException] = []
+    app_servers: list[dict[str, Any]] = []
+    all_app_servers: list[dict[str, Any]] = []
+    operation_rows_after_race: list[dict[str, Any]] = []
+    operation_rows_after_restart: list[dict[str, Any]] = []
+    request_results: tuple[Any, Any] | None = None
+    old_app_pids: tuple[int, ...] = ()
+    initialization_disposed = False
+    host = None
+    host_close_attempted = False
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    keys = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+    }
+    host_keys = {
+        key: value
+        for key, value in keys.items()
+        if key.endswith("_public") or key == "server_secret"
+    }
+    endpoint = _order._endpoint()
+    raw_config = _order._service_config(endpoint)
+    raw_config["components"]["execution"]["settings"]["bind_ports"] = [
+        "service.order_entry"
+    ]
+    raw_config["components"]["execution"]["settings"]["options"] = {
+        "role": "account_owner",
+        "approved_target_required": True,
+    }
+    profile = _approved_target_deployment_profile(endpoint=endpoint, keys=keys)
+    deployment_json = json.dumps({"schema_version": 1, "subjects": [profile]})
+    synthetic_userprofile = Path(tmp_path) / "approved-target-child-profile"
+    synthetic_userprofile.mkdir()
+    token_a = _make_token(_SUBJECT_A, _JWT_SECRET)
+    primary_error_phase = "database_setup"
+
+    async def _prepare_database() -> None:
+        nonlocal initialization_disposed
+        import app.models  # noqa: F401 - register all mapped models before create_all
+
+        try:
+            async with initialization_engine.begin() as connection:
+                await connection.run_sync(database.Base.metadata.create_all)
+            async with async_sessionmaker(initialization_engine, expire_on_commit=False)() as db:
+                db.add(
+                    User(
+                        id=_SUBJECT_A,
+                        username="approved-target-process-user-a",
+                        email="approved-target-process-a@example.invalid",
+                        hashed_password="synthetic-only",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    )
+                )
+                await db.flush()
+                db.add(
+                    Strategy(
+                        id=_STRATEGY_A,
+                        user_id=_SUBJECT_A,
+                        name="synthetic approved process strategy",
+                        code="pass",
+                        params={},
+                    )
+                )
+                await db.flush()
+                db.add(
+                    StrategyVersion(
+                        id="afi-approved-strategy-version-a",
+                        strategy_id=_STRATEGY_A,
+                        version_number=7,
+                        version_name="v7",
+                        branch="main",
+                        status="stable",
+                        tags=["synthetic"],
+                        code="pass",
+                        params={"period": 5},
+                        is_active=True,
+                        is_default=False,
+                        is_current=True,
+                        created_by=_SUBJECT_A,
+                    )
+                )
+                await db.flush()
+                db.add(
+                    VersionBranch(
+                        id="afi-approved-strategy-main-branch",
+                        strategy_id=_STRATEGY_A,
+                        branch_name="main",
+                        version_count=1,
+                        last_version_id="afi-approved-strategy-version-a",
+                        is_default=True,
+                        created_by=_SUBJECT_A,
+                    )
+                )
+                await db.flush()
+                await db.execute(
+                    insert(user_roles),
+                    [
+                        {"user_id": _SUBJECT_A, "role": Role.USER.value},
+                        {"user_id": _SUBJECT_A, "role": Role.TRADE_POLICY_ADMIN.value},
+                        {"user_id": _SUBJECT_A, "role": Role.TRADE_APPROVER.value},
+                        {"user_id": _SUBJECT_A, "role": Role.TRADE_OPERATOR.value},
+                    ],
+                )
+                await db.commit()
+        finally:
+            await initialization_engine.dispose()
+            initialization_disposed = True
+
+    async def _post(
+        app_server: dict[str, Any],
+        path: str,
+        body: dict[str, Any],
+        *,
+        idempotency_key: str | None = None,
+    ) -> Any:
+        _, process_id, port = app_server["ready"]
+        assert process_id == app_server["process"].pid
+        headers = {"Authorization": f"Bearer {token_a}"}
+        if idempotency_key is not None:
+            headers["Idempotency-Key"] = idempotency_key
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            return await client.post(
+                f"http://127.0.0.1:{port}{path}", json=body, headers=headers
+            )
+
+    try:
+        asyncio.run(_prepare_database())
+        assert database_path.is_file()
+        assert ":memory:" not in database_url
+        primary_error_phase = "execution_host_startup"
+        host = _order._start_process(
+            context,
+            _approved_target_service_process_synthetic_environment,
+            (
+                raw_config,
+                str(Path(tmp_path) / "afi-approved-target-registry.sqlite3"),
+                host_keys,
+                str(Path(tmp_path) / "afi-approved-target-execution.sqlite3"),
+                database_url,
+                str(synthetic_userprofile),
+            ),
+            "afi07-approved-target-execution-host",
+        )
+        host["startup_failed"] = True
+        ready = _order._receive(host["pipe"], timeout=25.0)
+        if ready[0] == "ready":
+            host["startup_failed"] = False
+        assert ready[0] == "ready", ready
+        assert host["process"].is_alive()
+
+        primary_error_phase = "app_process_generation_start"
+        for index in (1, 2):
+            app_server = _start_manual_order_http_app_process(
+                context,
+                database_url=database_url,
+                deployment_json=deployment_json,
+                label=f"afi07-approved-target-app-{index}",
+            )
+            app_servers.append(app_server)
+            all_app_servers.append(app_server)
+        for app_server in app_servers:
+            ready_message = _receive_manual_order_app_message(app_server)
+            assert ready_message[0] == "ready", ready_message
+            app_server["ready"] = ready_message
+        old_app_pids = tuple(server["process"].pid for server in app_servers)
+        assert len(set(old_app_pids)) == 2
+        assert all(pid != os.getpid() for pid in old_app_pids)
+
+        primary_error_phase = "approval_policy_publish_and_target_create"
+        policy = {
+            "schema_id": "afi.strategy_order_approval_policy",
+            "schema_version": 1,
+            "allowed_instruments": ["BTC-USDT"],
+            "allowed_sides": ["BUY", "SELL"],
+            "allowed_position_effects": [
+                "OPEN",
+                "CLOSE",
+                "CLOSE_TODAY",
+                "CLOSE_YESTERDAY",
+            ],
+            "allowed_order_types": ["LIMIT"],
+            "allowed_time_in_force": ["GTC"],
+            "limits": {
+                "max_quantity": "2",
+                "max_notional": "200",
+                "min_price": "1",
+                "max_price": "200",
+            },
+        }
+        create_body = {
+            "scope_ref": _APPROVED_TARGET_SELECTOR,
+            "strategy_version": 7,
+            "instrument": "BTC-USDT",
+            "metadata_version": "instrument-v1",
+            "side": "BUY",
+            "position_effect": "OPEN",
+            "order_type": "LIMIT",
+            "quantity": "1",
+            "price": "100",
+            "time_in_force": "GTC",
+            "reduce_only": False,
+            "expires_in_seconds": 600,
+        }
+
+        async def _create_approval() -> dict[str, Any]:
+            publish = await _post(
+                app_servers[0],
+                f"/api/v1/service-orders/approved-targets/policies/{_APPROVED_TARGET_POLICY_REF}",
+                {"policy": policy},
+            )
+            assert publish.status_code == 201, _approved_target_http_fact(publish)
+            created = await _post(
+                app_servers[0],
+                "/api/v1/service-orders/approved-targets",
+                create_body,
+            )
+            assert created.status_code == 201, _approved_target_http_fact(created)
+            return created.json()
+
+        approved = asyncio.run(_create_approval())
+        assert approved["state"] == "APPROVED"
+        submit_body = {
+            "scope_ref": _APPROVED_TARGET_SELECTOR,
+            "approval_ref": approved["approval_ref"],
+            "approval_version": approved["approval_version"],
+            "target_sha256": approved["target_sha256"],
+        }
+
+        primary_error_phase = "same_key_concurrent_http"
+
+        async def _concurrent_submits() -> tuple[Any, Any]:
+            # Synchronize only the two HTTP request starts; the AFI reservation,
+            # SQL transactions and SDK dispatch stay real.
+            start_barrier = asyncio.Barrier(2)
+
+            async def submit_after_common_start(app_server: dict[str, Any]) -> Any:
+                await start_barrier.wait()
+                return await _post(
+                    app_server,
+                    "/api/v1/service-orders/approved-targets/submit",
+                    submit_body,
+                    idempotency_key=_APPROVED_TARGET_SHARED_OPERATION_KEY,
+                )
+
+            return await asyncio.gather(
+                submit_after_common_start(app_servers[0]),
+                submit_after_common_start(app_servers[1]),
+            )
+
+        request_results = asyncio.run(_concurrent_submits())
+        assert request_results[0].status_code == request_results[1].status_code == 200, (
+            _approved_target_http_fact(request_results[0]),
+            _approved_target_http_fact(request_results[1]),
+        )
+        first_payload, second_payload = (response.json() for response in request_results)
+        assert first_payload["intent_id"] == second_payload["intent_id"]
+        assert first_payload["record"]["intent_id"] == first_payload["intent_id"]
+        assert first_payload["record"]["state"] == second_payload["record"]["state"] == "ACKED"
+        assert first_payload["operation_kind"] == "approved_strategy_target"
+        assert first_payload["approval_ref"] == approved["approval_ref"]
+        assert first_payload["target_sha256"] == approved["target_sha256"]
+        assert (
+            first_payload["record"]["provider_order_id"]
+            == second_payload["record"]["provider_order_id"]
+            == "synthetic-approved-order-1"
+        )
+        operation_rows_after_race = _approved_target_operation_rows(database_url)
+        assert len(operation_rows_after_race) == 1
+        race_row = operation_rows_after_race[0]
+        assert race_row["owner_subject"] == _SUBJECT_A
+        assert race_row["principal_ref"] == _APP_PRINCIPAL
+        assert race_row["actor_ref"] == _SUBJECT_A
+        assert race_row["delegate_ref"] == _DELEGATE_A
+        assert (
+            race_row["operation_key_sha256"]
+            == hashlib.sha256(_APPROVED_TARGET_SHARED_OPERATION_KEY.encode("ascii")).hexdigest()
+        )
+        assert len(race_row["request_sha256"]) == 64
+        assert race_row["approval_ref"] == approved["approval_ref"]
+        assert race_row["intent_id"] == first_payload["intent_id"]
+        assert race_row["selector_ref"] == _APPROVED_TARGET_SELECTOR
+        assert race_row["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
+        assert race_row["account_ref"] == _ACCOUNT_A
+        assert race_row["strategy_ref"] == _STRATEGY_A
+
+        primary_error_phase = "same_key_changed_target_http"
+        changed_result = asyncio.run(
+            _post(
+                app_servers[1],
+                "/api/v1/service-orders/approved-targets/submit",
+                {**submit_body, "target_sha256": "0" * 64},
+                idempotency_key=_APPROVED_TARGET_SHARED_OPERATION_KEY,
+            )
+        )
+        assert _approved_target_http_fact(changed_result) == (
+            409,
+            "HTTP_409",
+            "IDEMPOTENCY_CONFLICT",
+        )
+        assert _approved_target_operation_rows(database_url) == operation_rows_after_race
+
+        primary_error_phase = "first_process_generation_close"
+        first_generation_servers = app_servers
+        cleanup_failures.extend(_stop_manual_order_http_servers(first_generation_servers))
+        app_servers = [
+            server
+            for server in first_generation_servers
+            if _manual_order_http_server_needs_cleanup(server)
+        ]
+        assert not cleanup_failures, tuple(type(error).__name__ for error in cleanup_failures)
+        assert all(server["cleanup"]["exit_code"] == 0 for server in first_generation_servers)
+        assert all(
+            server["cleanup"]["terminate_attempted"] is False
+            for server in first_generation_servers
+        )
+
+        primary_error_phase = "restart_generation_start"
+        restarted_server = _start_manual_order_http_app_process(
+            context,
+            database_url=database_url,
+            deployment_json=deployment_json,
+            label="afi07-approved-target-app-restarted",
+        )
+        app_servers = [restarted_server]
+        all_app_servers.append(restarted_server)
+        restarted_ready = _receive_manual_order_app_message(restarted_server)
+        assert restarted_ready[0] == "ready", restarted_ready
+        restarted_server["ready"] = restarted_ready
+        assert restarted_server["process"].pid is not None
+        assert restarted_server["process"].pid not in old_app_pids
+
+        primary_error_phase = "post_restart_same_key_http"
+        restarted_result = asyncio.run(
+            _post(
+                restarted_server,
+                "/api/v1/service-orders/approved-targets/submit",
+                submit_body,
+                idempotency_key=_APPROVED_TARGET_SHARED_OPERATION_KEY,
+            )
+        )
+        assert restarted_result.status_code == 200, _approved_target_http_fact(
+            restarted_result
+        )
+        restarted_payload = restarted_result.json()
+        assert restarted_payload["intent_id"] == first_payload["intent_id"]
+        assert restarted_payload["record"]["intent_id"] == first_payload["intent_id"]
+        assert restarted_payload["record"]["state"] == "ACKED"
+        assert (
+            restarted_payload["record"]["provider_order_id"] == "synthetic-approved-order-1"
+        )
+        operation_rows_after_restart = _approved_target_operation_rows(database_url)
+        assert operation_rows_after_restart == operation_rows_after_race
+
+        primary_error_phase = "restarted_process_generation_close"
+        cleanup_failures.extend(_stop_manual_order_http_servers(app_servers))
+        app_servers = [
+            server for server in app_servers if _manual_order_http_server_needs_cleanup(server)
+        ]
+        assert not cleanup_failures, tuple(type(error).__name__ for error in cleanup_failures)
+
+        primary_error_phase = "execution_provider_observation"
+        execution_facts = _order._command(host, "facts")
+        assert execution_facts[0] == "facts"
+        (
+            _,
+            submitted,
+            unauthorized,
+            synthetic_risk_permits,
+            released_risk_permits,
+            service_calls,
+            authority_ready,
+        ) = execution_facts
+        assert len(submitted) == 1 and submitted[0][1] is True
+        assert unauthorized == ()
+        # One admitted approved-target intent reserves exactly one synthetic
+        # Risk permit; every replayed HTTP/SDK submission is served from the
+        # durable record without a second admission or provider call.
+        assert len(synthetic_risk_permits) == 1
+        assert synthetic_risk_permits[0] == submitted[0][0]
+        assert released_risk_permits == ()
+        assert len(service_calls) == 3
+        assert all(
+            call
+            == (
+                _APP_PRINCIPAL,
+                WireRole.APPLICATION_CLIENT.value,
+                _APPLICATION_IDENTITY_A.actor_ref,
+                _APPLICATION_IDENTITY_A.delegate_ref,
+                _ACCOUNT_A,
+                _STRATEGY_A,
+                "orders.submit_approved_target",
+            )
+            for call in service_calls
+        )
+        assert authority_ready is True
+
+        primary_error_phase = "execution_host_graceful_close"
+        host_close_attempted = True
+        _close_default_deployment_service_host(host)
+        closed = host.get("close_reply")
+        assert isinstance(closed, tuple) and closed[0] == "closed", closed
+        assert closed[1] == "closed"
+        assert len(closed[2]) == 1 and closed[2][0][1] is True
+        assert closed[3] == ()
+        assert closed[4] == (closed[2][0][0],)
+        assert closed[5] == ()
+        assert len(closed[6]) == 3
+        assert closed[7] is False
+        assert closed[8] is True
+        assert host["cleanup_facts"]["graceful_close"] == "succeeded"
+        assert host["cleanup_facts"]["exit_code"] == 0
+        assert host["cleanup_facts"]["process_reaped"] is True
+        assert host["cleanup_facts"]["pipe_closed"] is True
+        assert host["cleanup_facts"]["process_closed"] is True
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+        error.__dict__["approved_target_failure_phase"] = primary_error_phase
+        error.add_note(f"approved-target cross-process integration phase: {primary_error_phase}")
+    finally:
+        if app_servers:
+            cleanup_failures.extend(_stop_manual_order_http_servers(app_servers))
+        if host is not None and not host_close_attempted:
+            try:
+                _close_default_deployment_service_host(host)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        if not initialization_disposed:
+            try:
+                asyncio.run(initialization_engine.dispose())
+            except BaseException as error:
+                cleanup_failures.append(error)
+
+    if primary_error is not None:
+        child_cleanup_facts = _manual_order_http_cleanup_facts(all_app_servers)
+        if child_cleanup_facts:
+            primary_error.__dict__["approved_target_http_child_cleanup_facts"] = (
+                child_cleanup_facts
+            )
+            primary_error.add_note(
+                "approved-target HTTP child cleanup facts: "
+                + json.dumps(child_cleanup_facts, sort_keys=True)
+            )
+        host_cleanup_facts = host.get("cleanup_facts") if isinstance(host, dict) else None
+        if isinstance(host_cleanup_facts, dict):
+            primary_error.__dict__["approved_target_execution_host_cleanup_facts"] = (
+                host_cleanup_facts
+            )
+            primary_error.add_note(
+                "approved-target Execution Host cleanup facts: "
+                + json.dumps(host_cleanup_facts, sort_keys=True)
+            )
+        if cleanup_failures:
+            primary_error.__dict__["approved_target_cleanup_failures"] = tuple(cleanup_failures)
+            primary_error.add_note(
+                f"approved-target cross-process cleanup reported {len(cleanup_failures)} failure(s)"
+            )
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"approved-target cross-process cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]
+
+
+def test_approved_target_operation_is_durable_across_concurrent_processes_and_restart(
+    tmp_path: Any,
+) -> None:
+    _COMMAND_GUARD_STATE["active"] = True
+    try:
+        _run_approved_target_cross_process_integration(tmp_path)
+    finally:
+        _COMMAND_GUARD_STATE["active"] = False
