@@ -223,29 +223,6 @@ class QuoteService:
                 for gateway_key, state in gateway_states.items()
                 if self._is_gateway_state_ready(state)
             ]
-            for gateway_key, state in ready_gateways:
-                workspace_gateway = source_context.get(gateway_key, {})
-                workspace_symbols = [
-                    metadata["symbol"] for metadata in workspace_gateway.get("symbols", {}).values()
-                ]
-                market_routes, market_config_error, _deployment = (
-                    self._configured_service_market_routes(source, user_id, workspace_symbols)
-                )
-                if market_config_error is not None:
-                    legacy_workspace_symbols: list[str] = []
-                else:
-                    configured_symbols = set(market_routes)
-                    legacy_workspace_symbols = [
-                        symbol for symbol in workspace_symbols if symbol not in configured_symbols
-                    ]
-                if legacy_workspace_symbols:
-                    self._ensure_receiver_for_gateway(source, gateway_key, state)
-                    self._subscribe_symbols_on_gateway_state(
-                        source,
-                        gateway_key,
-                        state,
-                        legacy_workspace_symbols,
-                    )
             workspace_runs = self._build_workspace_runs(source_context)
             running_symbol_count = len(
                 {

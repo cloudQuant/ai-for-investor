@@ -509,7 +509,7 @@ def test_quote_service_does_not_fallback_when_configured_v2_route_fails(monkeypa
     assert result["refresh_mode"] == "polling"
 
 
-def test_get_data_sources_keeps_legacy_receivers_only_for_unconfigured_symbols(monkeypatch):
+def test_get_data_sources_does_not_start_legacy_market_consumers(monkeypatch):
     service = _quote_service(monkeypatch)
     state = {"exchange_type": "OKX", "manual": False}
     mixed_gateway = {
@@ -536,14 +536,6 @@ def test_get_data_sources_keeps_legacy_receivers_only_for_unconfigured_symbols(m
     }
     workspace_context = {"OKX": {"gateway-1": mixed_gateway}}
 
-    class _Directory:
-        def configured_routes(self, subject, source, symbols):
-            assert subject == "jwt-subject-a"
-            assert source == "OKX"
-            return {"BTC-USDT-SWAP": _market_key()} if "BTC-USDT-SWAP" in symbols else {}
-
-    service._service_market_loaded = True
-    service._service_market_deployment = _Directory()
     monkeypatch.setattr(
         service,
         "_get_running_workspace_context",
@@ -555,34 +547,26 @@ def test_get_data_sources_keeps_legacy_receivers_only_for_unconfigured_symbols(m
         lambda _manager, source, _context: {"gateway-1": state} if source == "OKX" else {},
     )
     monkeypatch.setattr(service, "_is_gateway_state_ready", lambda _state: True)
-    legacy_ensures: list[tuple[str, str]] = []
-    legacy_subscriptions: list[list[str]] = []
+
+    def fail_legacy_start(*_args, **_kwargs):
+        raise AssertionError("source status must not start or subscribe a market consumer")
+
     monkeypatch.setattr(
         service,
         "_ensure_receiver_for_gateway",
-        lambda source, gateway_key, _state: legacy_ensures.append((source, gateway_key)),
+        fail_legacy_start,
     )
     monkeypatch.setattr(
         service,
         "_subscribe_symbols_on_gateway_state",
-        lambda _source, _gateway_key, _state, symbols: legacy_subscriptions.append(list(symbols)),
+        fail_legacy_start,
     )
 
-    service.get_data_sources("jwt-subject-a")
+    sources = service.get_data_sources("jwt-subject-a")
 
-    assert legacy_ensures == [("OKX", "gateway-1")]
-    assert legacy_subscriptions == [["ETH-USDT-SWAP"]]
-
-    workspace_context["OKX"]["gateway-1"]["symbols"] = {
-        "BTC-USDT-SWAP": mixed_gateway["symbols"]["BTC-USDT-SWAP"]
-    }
-    workspace_context["OKX"]["gateway-1"]["workspaces"]["workspace-1"]["symbols"] = {
-        "BTC-USDT-SWAP"
-    }
-    service.get_data_sources("jwt-subject-a")
-
-    assert legacy_ensures == [("OKX", "gateway-1")]
-    assert legacy_subscriptions == [["ETH-USDT-SWAP"]]
+    okx = next(item for item in sources if item["source"] == "OKX")
+    assert okx["status"] == "available"
+    assert okx["workspaces"][0]["symbols"] == ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
 
 
 def test_workspace_only_configured_v2_quote_avoids_legacy_path(monkeypatch):

@@ -469,4 +469,66 @@ def test_workspace_gateway_marks_quote_source_available(monkeypatch):
     assert ctp["workspace_count"] == 1
     assert ctp["running_symbol_count"] == 1
     assert ctp["workspaces"][0]["symbols"] == ["RB2510"]
+    assert subscriptions == []
+
+
+def test_quote_read_still_subscribes_unconfigured_workspace_symbols(monkeypatch):
+    QuoteService._instance = None
+    service = QuoteService()
+    state = {
+        "config": SimpleNamespace(command_endpoint="tcp://127.0.0.1:5555"),
+        "exchange_type": "CTP",
+        "instances": {"instance-ctp"},
+        "manual": False,
+    }
+    manager = SimpleNamespace(
+        _gateway_lock=threading.RLock(),
+        _gateways={"ctp-workspace-gateway": state},
+        _instance_gateways={"instance-ctp": "ctp-workspace-gateway"},
+        list_instances=lambda user_id: [
+            {
+                "id": "instance-ctp",
+                "status": "running",
+                "params": {
+                    "symbol": "RB2510",
+                    "workspace_unit": {"workspace_id": "workspace-ctp"},
+                },
+            }
+        ],
+    )
+    monkeypatch.setattr(service, "_get_live_trading_manager", lambda: manager)
+    monkeypatch.setattr(service, "_is_gateway_state_ready", lambda _state: True)
+    monkeypatch.setattr(service, "_get_default_symbols_for_source", lambda _source: [])
+    monkeypatch.setattr(
+        "app.services.quote_service.wait_for_initial_ticks",
+        lambda _receiver, _symbols: {},
+    )
+    monkeypatch.setattr(service, "_ensure_receiver", lambda _source, _manager: None)
+
+    class _Receiver:
+        is_alive = False
+
+    receiver = _Receiver()
+    ensured: list[tuple[str, str]] = []
+    subscriptions: list[tuple[str, str, list[str]]] = []
+
+    def ensure_gateway_receiver(source, gateway_key, _state):
+        ensured.append((source, gateway_key))
+        service._receivers[gateway_key] = receiver
+
+    def subscribe_gateway_symbols(source, gateway_key, _state, symbols):
+        if symbols:
+            subscriptions.append((source, gateway_key, list(symbols)))
+
+    monkeypatch.setattr(service, "_ensure_receiver_for_gateway", ensure_gateway_receiver)
+    monkeypatch.setattr(
+        service,
+        "_subscribe_symbols_on_gateway_state",
+        subscribe_gateway_symbols,
+    )
+
+    result = service.get_quotes("CTP", user_id="user-1", symbols=[])
+
+    assert result["total"] == 1
+    assert ensured == [("CTP", "ctp-workspace-gateway")]
     assert subscriptions == [("CTP", "ctp-workspace-gateway", ["RB2510"])]
