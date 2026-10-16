@@ -11,9 +11,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
+
+from bt_api_risk.portfolio_analytics import FxObservationV1
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _VERSIONED_POLICY_REF_RE = re.compile(
@@ -27,6 +31,7 @@ _SUPPORTED_METRIC = "max_increase_notional"
 _MAX_ACCOUNT_ALLOCATIONS = 256
 _MAX_DECIMAL_DIGITS = 38
 _MAX_DECIMAL_SCALE = 18
+_MAX_BUDGET_FX_AGE_NS = 86_400_000_000_000  # One conservative 24-hour v1 window.
 
 
 class RiskPolicyBudgetError(ValueError):
@@ -39,7 +44,7 @@ class RiskPolicyBudgetError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class AccountBudgetAllocation:
-    """One static Risk notional cap assigned to an exact account member."""
+    """One source-currency Risk notional cap assigned to an exact account."""
 
     account_ref: str
     amount: Decimal
@@ -50,7 +55,7 @@ class AccountBudgetAllocation:
 
 @dataclass(frozen=True, slots=True)
 class StaticPortfolioBudgetPlan:
-    """A single-currency, single-metric budget bound to one membership version."""
+    """A single-valuation-currency, single-metric plan for one member version."""
 
     portfolio_ref: str
     membership_version: int
@@ -105,13 +110,17 @@ def compile_static_portfolio_budget(
     plan: StaticPortfolioBudgetPlan,
     *,
     policy_refs: Mapping[str, str],
+    fx_observations: Mapping[str, FxObservationV1] | None = None,
 ) -> CompiledStaticPortfolioBudget:
     """Build per-account Risk policy drafts after strict conservation checks.
 
     The amount dimension is deliberately limited to Risk's
-    ``max_increase_notional`` in one explicit currency. FX conversion and
-    mixing another metric are rejected before catalog access. ``unallocated``
-    remains explicit, so allocated limits plus withheld budget equal the
+    ``max_increase_notional`` in one explicit valuation currency. Cross-
+    currency members require source-bound Risk FX observations that are current
+    and no older than the fixed 24-hour v1 limit. Conversion and conservation
+    use exact rational arithmetic; mixed metrics and unpriced currencies fail
+    before a caller can draft anything in the Risk catalog. ``unallocated``
+    remains explicit, so converted limits plus withheld budget equal the
     declared portfolio total exactly.
     """
 
@@ -139,8 +148,21 @@ def compile_static_portfolio_budget(
     if total_amount <= 0:
         raise RiskPolicyBudgetError("INVALID_TOTAL_AMOUNT")
 
-    normalized: list[tuple[AccountBudgetAllocation, str, str]] = []
+    if fx_observations is None:
+        fx_by_currency: Mapping[str, FxObservationV1] = {}
+    elif isinstance(fx_observations, Mapping) and all(
+        type(key) is str for key in fx_observations
+    ):
+        fx_by_currency = fx_observations
+    else:
+        raise RiskPolicyBudgetError("INVALID_BUDGET_FX_FACTS")
+
+    normalized: list[
+        tuple[AccountBudgetAllocation, str, str, str, str, dict[str, object] | None]
+    ] = []
     seen_accounts: set[str] = set()
+    required_fx_currencies: set[str] = set()
+    now_ns: int | None = None
     for allocation in plan.allocations:
         if type(allocation) is not AccountBudgetAllocation:
             raise RiskPolicyBudgetError("INVALID_ALLOCATION")
@@ -150,17 +172,67 @@ def compile_static_portfolio_budget(
         seen_accounts.add(account_ref)
         if allocation.metric != plan.metric:
             raise RiskPolicyBudgetError("MIXED_BUDGET_METRIC")
-        if _currency(allocation.currency) != currency:
-            raise RiskPolicyBudgetError("MIXED_BUDGET_CURRENCY")
-        amount = _amount(allocation.amount, "INVALID_ALLOCATION_AMOUNT")
-        if amount <= 0:
+        source_currency = _currency(allocation.currency)
+        source_amount = _amount(allocation.amount, "INVALID_ALLOCATION_AMOUNT")
+        if source_amount <= 0:
             raise RiskPolicyBudgetError("INVALID_ALLOCATION_AMOUNT")
         if (
             type(allocation.max_increase_count) is not int
             or allocation.max_increase_count < 0
         ):
             raise RiskPolicyBudgetError("INVALID_INCREASE_COUNT")
-        normalized.append((allocation, account_ref, _decimal_text(amount)))
+
+        fx_payload: dict[str, object] | None = None
+        if source_currency == currency:
+            if source_currency in fx_by_currency:
+                raise RiskPolicyBudgetError("UNEXPECTED_BUDGET_FX_FACT")
+            amount = source_amount
+        else:
+            required_fx_currencies.add(source_currency)
+            fx_observation = fx_by_currency.get(source_currency)
+            if type(fx_observation) is not FxObservationV1:
+                raise RiskPolicyBudgetError("BUDGET_FX_REQUIRED")
+            if (
+                fx_observation.base_currency != source_currency
+                or fx_observation.quote_currency != currency
+                or fx_observation.direction != "BASE_TO_QUOTE"
+                or fx_observation.rate_unit != "QUOTE_PER_BASE"
+            ):
+                raise RiskPolicyBudgetError("BUDGET_FX_PAIR_MISMATCH")
+            if now_ns is None:
+                now_ns = time.time_ns()
+                if type(now_ns) is not int or now_ns <= 0:
+                    raise RiskPolicyBudgetError("INVALID_BUDGET_FX_CLOCK")
+            if not fx_observation.as_of_ns <= now_ns < fx_observation.valid_until_ns:
+                raise RiskPolicyBudgetError("BUDGET_FX_NOT_CURRENT")
+            if now_ns - fx_observation.as_of_ns > _MAX_BUDGET_FX_AGE_NS:
+                raise RiskPolicyBudgetError("BUDGET_FX_STALE")
+            rate = _amount(fx_observation.rate, "INVALID_BUDGET_FX_RATE")
+            if rate <= 0:
+                raise RiskPolicyBudgetError("INVALID_BUDGET_FX_RATE")
+            amount = _amount(
+                _fraction_as_decimal(Fraction(source_amount) * Fraction(rate)),
+                "INVALID_CONVERTED_ALLOCATION_AMOUNT",
+            )
+            if amount <= 0:
+                raise RiskPolicyBudgetError("INVALID_CONVERTED_ALLOCATION_AMOUNT")
+            fx_payload = _fx_observation_payload(fx_observation, rate)
+
+        normalized.append(
+            (
+                allocation,
+                account_ref,
+                _decimal_text(source_amount),
+                source_currency,
+                _decimal_text(amount),
+                fx_payload,
+            )
+        )
+
+    if set(fx_by_currency) != required_fx_currencies:
+        if required_fx_currencies - set(fx_by_currency):
+            raise RiskPolicyBudgetError("BUDGET_FX_REQUIRED")
+        raise RiskPolicyBudgetError("UNEXPECTED_BUDGET_FX_FACT")
 
     if not isinstance(policy_refs, Mapping):
         raise RiskPolicyBudgetError("INVALID_POLICY_REFS")
@@ -184,8 +256,8 @@ def compile_static_portfolio_budget(
         refs_by_account[account_ref] = policy_ref
 
     all_amounts = [total_amount, unallocated_amount] + [
-        _amount(allocation.amount, "INVALID_ALLOCATION_AMOUNT")
-        for allocation, _, _ in normalized
+        _amount(amount_text, "INVALID_CONVERTED_ALLOCATION_AMOUNT")
+        for _, _, _, _, amount_text, _ in normalized
     ]
     scale = max(max(0, -amount.as_tuple().exponent) for amount in all_amounts)
     conserved_units = sum(_amount_units(amount, scale) for amount in all_amounts[1:])
@@ -197,11 +269,14 @@ def compile_static_portfolio_budget(
             "account_ref": account_ref,
             "policy_ref": refs_by_account[account_ref],
             "amount": amount_text,
+            "source_amount": source_amount_text,
+            "source_currency": source_currency,
+            "fx_observation": fx_payload,
             "max_increase_count": allocation.max_increase_count,
             "metric": allocation.metric,
             "currency": currency,
         }
-        for allocation, account_ref, amount_text in sorted(
+        for allocation, account_ref, source_amount_text, source_currency, amount_text, fx_payload in sorted(
             normalized, key=lambda row: row[1]
         )
     ]
@@ -220,7 +295,14 @@ def compile_static_portfolio_budget(
     allocation_set_sha256 = _canonical_sha256(allocation_manifest)
 
     drafts: list[AccountRiskPolicyDraft] = []
-    for allocation, account_ref, amount_text in sorted(normalized, key=lambda row: row[1]):
+    for (
+        allocation,
+        account_ref,
+        source_amount_text,
+        source_currency,
+        amount_text,
+        fx_payload,
+    ) in sorted(normalized, key=lambda row: row[1]):
         policy_ref = refs_by_account[account_ref]
         risk_policy = {
             "policy_id": policy_ref,
@@ -243,7 +325,10 @@ def compile_static_portfolio_budget(
                 "total_amount": _decimal_text(total_amount),
                 "unallocated_amount": _decimal_text(unallocated_amount),
                 "account_ref": account_ref,
+                "source_amount": source_amount_text,
+                "source_currency": source_currency,
                 "allocated_amount": amount_text,
+                "fx_observation": fx_payload,
             },
             "risk_policy": risk_policy,
         }
@@ -326,6 +411,51 @@ def _amount_units(amount: Decimal, scale: int) -> int:
     if sign:
         coefficient = -coefficient
     return coefficient * (10 ** (exponent + scale))
+
+
+def _fraction_as_decimal(value: Fraction) -> Decimal:
+    """Convert a finite base-10 rational to Decimal without context rounding."""
+
+    numerator = value.numerator
+    denominator = value.denominator
+    twos = 0
+    fives = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        twos += 1
+    while denominator % 5 == 0:
+        denominator //= 5
+        fives += 1
+    if denominator != 1:
+        raise RiskPolicyBudgetError("NON_TERMINATING_BUDGET_FX_RESULT")
+    scale = max(twos, fives)
+    coefficient = numerator * (2 ** (scale - twos)) * (5 ** (scale - fives))
+    sign = 1 if coefficient < 0 else 0
+    digits_text = str(abs(coefficient))
+    digits = tuple(int(character) for character in digits_text)
+    return Decimal((sign, digits, -scale))
+
+
+def _fx_observation_payload(
+    observation: FxObservationV1,
+    rate: Decimal,
+) -> dict[str, object]:
+    """Keep the exact source and freshness facts in the immutable policy draft."""
+
+    return {
+        "observation_ref": observation.observation_ref,
+        "base_currency": observation.base_currency,
+        "quote_currency": observation.quote_currency,
+        "direction": observation.direction,
+        "rate_unit": observation.rate_unit,
+        "rate": _decimal_text(rate),
+        "as_of_ns": observation.as_of_ns,
+        "valid_until_ns": observation.valid_until_ns,
+        "source_ref": observation.source_ref,
+        "source_version": observation.source_version,
+        "source_generation": observation.source_generation,
+        "source_cursor": observation.source_cursor,
+    }
 
 
 def _canonical_json(value: object) -> str:
