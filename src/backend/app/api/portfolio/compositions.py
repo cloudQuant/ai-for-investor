@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.afi_owner_scope import require_persisted_owner_scope
 from app.api.deps import get_current_user
 from app.api.service_read import _resolve_access
 from app.db.database import get_db
@@ -18,7 +19,11 @@ from app.services.portfolio_valuation_bindings import (
     attach_market_valuation_inputs,
 )
 
-router = APIRouter(prefix="/portfolio/compositions", tags=["Portfolio Compositions"])
+router = APIRouter(
+    prefix="/portfolio/compositions",
+    tags=["Portfolio Compositions"],
+    dependencies=[Depends(require_persisted_owner_scope)],
+)
 
 
 @router.get("")

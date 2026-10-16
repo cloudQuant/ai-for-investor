@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.afi_owner_scope import require_persisted_owner_scope
 from app.api.deps import require_permission
 from app.api.service_read import _order_payload, _resolve_access
 from app.db.database import get_db
@@ -29,7 +30,11 @@ from app.services.service_read.client import (
 )
 from app.services.service_read.contracts import ServiceReadContractError
 
-router = APIRouter(prefix="/service-orders", tags=["Service Orders"])
+router = APIRouter(
+    prefix="/service-orders",
+    tags=["Service Orders"],
+    dependencies=[Depends(require_persisted_owner_scope)],
+)
 
 _KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _INSTRUMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,191}$")

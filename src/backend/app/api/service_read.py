@@ -19,6 +19,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.afi_owner_scope import require_persisted_owner_scope
 from app.api.deps import get_current_user
 from app.schemas.auth import TokenPayload
 from app.services.service_read.access import (
@@ -36,7 +37,7 @@ from app.services.service_read.contracts import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_persisted_owner_scope)])
 
 _access_directory: ServiceReadAccessDirectory | None = None
 

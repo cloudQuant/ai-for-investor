@@ -12,6 +12,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from app.api.afi_owner_scope import PersistedOwnerScope, require_persisted_owner_scope
 from app.api.deps import get_current_user
 from app.api.service_read import configure_service_read, router
 from app.schemas.auth import TokenPayload
@@ -42,6 +43,13 @@ def _app(*, authenticated=True, token=None):
     if authenticated:
         current = token or TokenPayload(sub="test-user", username="tester")
         app.dependency_overrides[get_current_user] = lambda: current
+        # These bare-router unit tests exercise the read projection and use
+        # synthetic subjects. Persisted owner authorization is covered by the
+        # separate HTTP integration test, so replace only that boundary here.
+        app.dependency_overrides[require_persisted_owner_scope] = lambda: PersistedOwnerScope(
+            owner_subject=current.sub,
+            principal_kind="UNKNOWN",
+        )
     return app
 
 

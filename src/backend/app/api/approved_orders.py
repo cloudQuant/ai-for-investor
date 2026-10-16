@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.afi_owner_scope import require_persisted_human_principal
 from app.api.deps import require_permission
 from app.api.service_read import _resolve_access
 from app.db.database import get_db
@@ -46,7 +47,11 @@ from app.services.strategy_target_approvals import (
     revoke_approved_order_target,
 )
 
-router = APIRouter(prefix="/service-orders/approved-targets", tags=["Approved Orders"])
+router = APIRouter(
+    prefix="/service-orders/approved-targets",
+    tags=["Approved Orders"],
+    dependencies=[Depends(require_persisted_human_principal)],
+)
 
 _KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")

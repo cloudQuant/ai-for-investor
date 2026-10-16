@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from app.api.afi_owner_scope import require_persisted_owner_scope
 from app.api.deps import get_current_user
 from app.api.service_read import _resolve_access, _unavailable, _worker_failure
 from app.schemas.auth import TokenPayload
@@ -13,7 +14,7 @@ from app.services.service_read.client import ServiceReadUnavailableError
 from app.services.service_read.contracts import AccountReadView, ReadQuality
 from app.services.service_read.gateway_health import GatewayHealthView
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_persisted_owner_scope)])
 
 
 def _gateway_health_payload(view: GatewayHealthView) -> dict[str, Any]:
