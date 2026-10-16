@@ -42,7 +42,6 @@ from app.services.live_trading.service_execution_launch import (
 )
 from app.services.live_trading.service_gateway_operator_guard import (
     is_legacy_gateway_excluded,
-    is_legacy_manual_gateway_excluded,
     legacy_gateway_exclusions,
     legacy_gateway_owner_operation,
 )
@@ -81,6 +80,10 @@ except ImportError:
 _SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE = (
     "SERVICE_EXECUTION_PROFILE_REQUIRED: configure a trusted service strategy profile "
     "and service-v2 owner grant (ServiceExecutionSession) for live execution."
+)
+_LEGACY_GATEWAY_MIGRATION_REQUIRED_MESSAGE = (
+    "LEGACY_GATEWAY_MIGRATION_REQUIRED: use an authorized Service Gateway profile; "
+    "legacy credential-based Gateway startup is retired."
 )
 
 logger: Any = _logger
@@ -479,59 +482,17 @@ class LiveTradingManager:
         return merged
 
     def connect_gateway(self, exchange_type: str, credentials: GatewayCredentials) -> ConnectResult:
-        normalized_exchange_type = self._normalize_gateway_exchange_type(exchange_type)
-        try:
-            with legacy_gateway_owner_operation():
-                account_id = _manual_gateway_account_id_hint(
-                    normalized_exchange_type,
-                    cast("dict[str, Any]", credentials),
-                )
-                if is_legacy_manual_gateway_excluded(normalized_exchange_type, account_id):
-                    return cast(
-                        ConnectResult,
-                        {
-                            "status": "error",
-                            "message": "This gateway account is assigned to the service-v2 operator.",
-                        },
-                    )
-                with self._gateway_lock:
-                    # The owner-operation lock closes the check/connect race
-                    # against service-v2 start; keep the check beside the
-                    # manager mutation as a local invariant too.
-                    if is_legacy_manual_gateway_excluded(normalized_exchange_type, account_id):
-                        return cast(
-                            ConnectResult,
-                            {
-                                "status": "error",
-                                "message": "This gateway account is assigned to the service-v2 operator.",
-                            },
-                        )
-                    result = manual_gateway_service.connect_gateway(
-                        gateways=self._gateways,
-                        exchange_type=exchange_type,
-                        credentials=cast("dict[str, Any]", credentials),
-                        normalize_exchange_type=self._normalize_gateway_exchange_type,
-                        coerce_bool=self._coerce_bool,
-                        coerce_float=self._coerce_float,
-                        import_gateway_runtime_classes=self._import_gateway_runtime_classes,
-                        default_transport=_DEFAULT_TRANSPORT,
-                        logger=logger,
-                    )
-        except Exception as exc:
-            logger.exception(
-                "Unhandled exception while connecting gateway %s", normalized_exchange_type
-            )
-            return _build_gateway_connect_error_result(normalized_exchange_type, exc)
-        if result.get("status") != "error":
-            gateway_key = str(result.get("gateway_key") or "").strip()
-            try:
-                self._persist_manual_gateway(gateway_key, normalized_exchange_type, credentials)
-            except Exception:
-                logger.exception("Failed to persist manual gateway %s", gateway_key)
-                message = str(result.get("message") or "").strip() or "网关已连接"
-                result = dict(result)
-                result["message"] = f"{message}；本地保存失败，重启后需要重新连接"
-        return cast(ConnectResult, result)
+        # Keep the old manager method as a finite migration boundary for
+        # in-process callers. Do not inspect, normalize, persist, or pass the
+        # request credentials to the legacy runtime path.
+        del exchange_type, credentials
+        return cast(
+            ConnectResult,
+            {
+                "status": "error",
+                "message": _LEGACY_GATEWAY_MIGRATION_REQUIRED_MESSAGE,
+            },
+        )
 
     def _connect_ctp_gateway(self, key: str, credentials: GatewayCredentials) -> ConnectResult:
         return cast(
@@ -888,14 +849,16 @@ class LiveTradingManager:
             )
 
     def disconnect_gateway(self, gateway_key: str) -> OperationResult:
-        with self._gateway_lock:
-            result = manual_gateway_service.disconnect_gateway(self._gateways, gateway_key)
-        if result.get("status") != "error":
-            try:
-                self._remove_persisted_manual_gateway(gateway_key)
-            except Exception:
-                logger.exception("Failed to remove persisted manual gateway %s", gateway_key)
-        return cast(OperationResult, result)
+        # Historical records are retained for an explicit operator migration;
+        # the old endpoint must not stop a legacy runtime or delete saved data.
+        del gateway_key
+        return cast(
+            OperationResult,
+            {
+                "status": "error",
+                "message": _LEGACY_GATEWAY_MIGRATION_REQUIRED_MESSAGE,
+            },
+        )
 
     def _start_restore_manual_gateways_background(self) -> None:
         self._gateway_restore_in_progress.set()
@@ -916,47 +879,8 @@ class LiveTradingManager:
             self._restore_manual_gateways_under_owner_lock()
 
     def _restore_manual_gateways_under_owner_lock(self) -> None:
-        restored_gateways: dict[str, dict[str, Any]] = {}
-        for entry in _load_manual_gateways():
-            exchange_type = str(entry.get("exchange_type") or "").strip()
-            credentials = entry.get("credentials")
-            gateway_key = str(entry.get("gateway_key") or "").strip()
-            if not exchange_type or not isinstance(credentials, dict):
-                continue
-            normalized_exchange_type = self._normalize_gateway_exchange_type(exchange_type)
-            account_id = _manual_gateway_account_id_hint(normalized_exchange_type, credentials)
-            if is_legacy_gateway_excluded(gateway_key) or is_legacy_manual_gateway_excluded(
-                normalized_exchange_type,
-                account_id,
-            ):
-                logger.info(
-                    "Skipping configured service-v2 gateway during legacy restore: %s",
-                    gateway_key or normalized_exchange_type,
-                )
-                continue
-            result = manual_gateway_service.connect_gateway(
-                gateways=restored_gateways,
-                exchange_type=exchange_type,
-                credentials=credentials,
-                normalize_exchange_type=self._normalize_gateway_exchange_type,
-                coerce_bool=self._coerce_bool,
-                coerce_float=self._coerce_float,
-                import_gateway_runtime_classes=self._import_gateway_runtime_classes,
-                default_transport=_DEFAULT_TRANSPORT,
-                logger=logger,
-                allow_interactive_login=False,
-            )
-            if result.get("status") == "error":
-                target = gateway_key or exchange_type
-                logger.warning(
-                    "Failed to restore manual gateway %s: %s",
-                    target,
-                    result.get("message", "unknown error"),
-                )
-        if restored_gateways:
-            with self._gateway_lock:
-                for key, state in restored_gateways.items():
-                    self._gateways.setdefault(key, state)
+        # Manual Gateway records include credentials but have no persisted owner
+        # binding. Preserve them in place and never deserialize them during boot.
         self._restore_running_instance_gateways()
 
     def _start_restore_running_gateway_background(self) -> None:
@@ -983,21 +907,13 @@ class LiveTradingManager:
             self._restore_running_instance_gateways_under_owner_lock()
 
     def _restore_running_instance_gateways_under_owner_lock(self) -> None:
-        """Recreate in-process gateways after an API-process restart.
-
-        Strategy ``run.py`` subprocesses are intentionally independent from
-        Uvicorn and can survive an API restart.  Their IPC endpoint names are
-        deterministic, but the gateway runtime itself lives in the API
-        process.  Re-acquiring each enabled gateway restores that runtime and
-        its instance mapping without spawning duplicate strategy processes.
-        """
+        """Do not recreate retired manager-owned gateway runtimes on restart."""
         try:
             instances = self.list_instances()
         except Exception:
             logger.exception("Unable to inspect live instances for gateway recovery")
             return
 
-        restored = 0
         for instance in instances:
             if str(instance.get("status") or "").lower() != "running":
                 continue
@@ -1007,6 +923,16 @@ class LiveTradingManager:
             try:
                 if instance.get("_server_service_execution_managed") is True:
                     continue
+                execution_mode = str(instance.get("_server_execution_mode") or "live").strip().lower()
+                if execution_mode == "simulation":
+                    continue
+                if execution_mode != "live":
+                    logger.warning(
+                        "Skipping Gateway restore for surviving instance %s: "
+                        "unsupported execution mode requires migration",
+                        instance_id,
+                    )
+                    continue
                 profile_map = parse_service_strategy_profile_map(
                     os.environ.get(SERVICE_EXECUTION_PROFILE_MAP_ENV)
                 )
@@ -1015,38 +941,17 @@ class LiveTradingManager:
                     # manager-owned Gateway path, even if its service profile
                     # is currently unavailable.
                     continue
-                runtime_dir = str(instance.get("runtime_dir") or "").strip()
-                strategy_dir = (
-                    Path(runtime_dir).expanduser()
-                    if runtime_dir
-                    else self._resolve_strategy_dir(str(instance.get("strategy_id") or ""))
+                logger.warning(
+                    "Skipping legacy Gateway restore for surviving live instance %s: "
+                    "SERVICE_GATEWAY_PROFILE_REQUIRED",
+                    instance_id,
                 )
-                if not (strategy_dir / "run.py").is_file():
-                    continue
-                with self._gateway_lock:
-                    if self._gateway_key_for_instance_unlocked(instance_id):
-                        continue
-                    gateway = self._acquire_gateway_for_instance(
-                        instance_id,
-                        instance,
-                        strategy_dir,
-                    )
-                if gateway is not None:
-                    gateway_runtime_service.restore_gateway_subscription(
-                        instance_id,
-                        instance,
-                        strategy_dir,
-                        gateway,
-                    )
-                    restored += 1
             except Exception:
                 logger.warning(
                     "Failed to restore gateway for surviving instance %s",
                     instance_id,
                     exc_info=True,
                 )
-        if restored:
-            logger.info("Restored gateway mappings for %d surviving live instances", restored)
 
     def _persist_manual_gateway(
         self,

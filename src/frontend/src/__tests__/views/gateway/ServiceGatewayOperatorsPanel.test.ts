@@ -6,6 +6,7 @@ import type { ServiceGatewayOperatorStatus } from '@/api/serviceGatewayOperator'
 
 const apiMocks = vi.hoisted(() => ({
   list: vi.fn(),
+  legacyGateways: vi.fn(),
   status: vi.fn(),
   act: vi.fn(),
 }))
@@ -73,6 +74,7 @@ describe('ServiceGatewayOperatorsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.list.mockResolvedValue({ operators: [profile] })
+    apiMocks.legacyGateways.mockResolvedValue({ gateways: [] })
     apiMocks.status.mockResolvedValue(makeStatus())
     apiMocks.act.mockResolvedValue(makeStatus({ state: 'running', ready: true }))
   })
@@ -112,6 +114,49 @@ describe('ServiceGatewayOperatorsPanel', () => {
 
     expect(wrapper.get('[data-test="operator-list-error"]').text()).toContain('服务端未配置 Service Gateway operator')
     expect(apiMocks.status).not.toHaveBeenCalled()
+    expect(apiMocks.act).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('shows only exact owner-authorized legacy profile mappings and never starts automatically', async () => {
+    apiMocks.legacyGateways.mockResolvedValue({
+      gateways: [
+        {
+          gateway_key: 'manual:OKX:account-1',
+          migration_status: 'profile_available',
+          profile_ref: 'account-owner-r1',
+        },
+      ],
+    })
+    const wrapper = mountPanel()
+    await flushUi()
+
+    expect(apiMocks.legacyGateways).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('manual:OKX:account-1')
+    expect(wrapper.text()).toContain('account-owner-r1')
+    expect(wrapper.text()).toContain('已绑定授权 profile')
+    expect(wrapper.text()).toContain('未映射的旧 key 不会在此显示；管理员需要配置 owner 映射')
+    expect(wrapper.text()).not.toContain('manual:CTP:unmapped')
+    expect(apiMocks.act).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('fails closed on an unexpected legacy projection without hiding authorized operator controls', async () => {
+    apiMocks.legacyGateways.mockResolvedValue({
+      gateways: [{
+        gateway_key: 'manual:OKX:account-1',
+        migration_status: 'profile_available',
+        profile_ref: 'account-owner-r1',
+        credentials: { api_key: 'must-not-render' },
+      }],
+    })
+    const wrapper = mountPanel()
+    await flushUi()
+
+    expect(wrapper.find('[data-test="operator-card-account-owner-r1"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="legacy-gateway-error"]').text()).toContain('Service Gateway 状态不可用')
+    expect(wrapper.text()).not.toContain('must-not-render')
+    expect(apiMocks.status).toHaveBeenCalledWith(profile.profile_ref)
     expect(apiMocks.act).not.toHaveBeenCalled()
     wrapper.unmount()
   })

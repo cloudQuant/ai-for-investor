@@ -208,6 +208,75 @@ class ServiceGatewayOperatorControl:
                 if owner_subject in grant.authorized_subjects
             ]
 
+    def authorized_legacy_gateway_mapping(
+        self,
+        legacy_gateway_key: str | None,
+        owner_subject: str,
+    ) -> dict[str, str | None] | None:
+        """Return a safe start target only for an exact, owner-authorized key.
+
+        This is a read-only migration hint. It does not resolve credentials,
+        construct a profile application, or start the service.
+        """
+        if (
+            type(legacy_gateway_key) is not str
+            or not legacy_gateway_key
+            or len(legacy_gateway_key) > 256
+            or type(owner_subject) is not str
+            or not owner_subject
+        ):
+            return None
+        with self._lock:
+            if self._closed:
+                raise ServiceGatewayOperatorError("OPERATOR_CONTROL_CLOSED")
+            grant = next(
+                (
+                    item
+                    for item in self._grants.values()
+                    if item.role == "account_session_worker"
+                    if legacy_gateway_key in item.legacy_gateway_keys
+                    and owner_subject in item.authorized_subjects
+                    and "start" in item.operations
+                ),
+                None,
+            )
+        if grant is None:
+            return None
+        return {
+            "profile_ref": grant.profile_ref,
+            "role": grant.role,
+            "account_ref": grant.account_ref,
+        }
+
+    def authorized_legacy_gateway_mappings(
+        self,
+        owner_subject: str,
+    ) -> list[dict[str, str]]:
+        """List only migration keys explicitly granted to this owner.
+
+        Legacy credential records have no persisted owner field and are never
+        read here. A key is visible only when the trusted deployment binds it
+        to a profile that authorizes this exact owner.
+        """
+        if type(owner_subject) is not str or not owner_subject:
+            return []
+        with self._lock:
+            if self._closed:
+                raise ServiceGatewayOperatorError("OPERATOR_CONTROL_CLOSED")
+            mappings = [
+                {
+                    "gateway_key": key,
+                    "profile_ref": grant.profile_ref,
+                }
+                for grant in self._grants.values()
+                if grant.role == "account_session_worker"
+                and owner_subject in grant.authorized_subjects
+                and "status" in grant.operations
+                and "start" in grant.operations
+                for key in grant.legacy_gateway_keys
+            ]
+        return sorted(mappings, key=lambda item: (item["profile_ref"], item["gateway_key"]))
+
     def status(self, profile_ref: str, owner_subject: str) -> dict[str, Any]:
         grant = self._authorized_grant(profile_ref, owner_subject, "status")
         with self._lock:

@@ -35,8 +35,18 @@ export interface ServiceGatewayOperatorStatus {
   }
 }
 
+export interface LegacyGatewayMigrationRecord {
+  gateway_key: string
+  migration_status: 'profile_available'
+  profile_ref: string
+}
+
 interface ServiceGatewayOperatorList {
   operators: ServiceGatewayOperatorProfile[]
+}
+
+interface LegacyGatewayMigrationList {
+  gateways: LegacyGatewayMigrationRecord[]
 }
 
 const operatorPath = (profileRef: string) =>
@@ -45,6 +55,10 @@ const operatorPath = (profileRef: string) =>
 export const serviceGatewayOperatorApi = {
   list(): Promise<ServiceGatewayOperatorList> {
     return request.get('/service-gateway/operators', { suppressErrorToast: true })
+  },
+
+  legacyGateways(): Promise<LegacyGatewayMigrationList> {
+    return request.get('/service-gateway/legacy-gateways', { suppressErrorToast: true })
   },
 
   status(profileRef: string): Promise<ServiceGatewayOperatorStatus> {

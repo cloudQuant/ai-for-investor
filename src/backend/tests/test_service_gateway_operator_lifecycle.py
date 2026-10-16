@@ -6,6 +6,7 @@ import asyncio
 import json
 import socket
 import threading
+from pathlib import Path
 from typing import Any
 
 import bt_api_py.gateway_operator_application as operator_sdk
@@ -30,6 +31,7 @@ from app.services.service_gateway_operator import ServiceGatewayOperatorControl
 _OWNER = "operator-owner-1"
 _ACCOUNT_PROFILE = "test.account-session"
 _MARKET_PROFILE = "test.market-hub"
+_OTHER_ACCOUNT_PROFILE = "test.other-account-session"
 
 
 class _ProfileRegistry:
@@ -43,6 +45,11 @@ class _ProfileRegistry:
             _MARKET_PROFILE: operator_sdk.GatewayOperatorProfile(
                 _MARKET_PROFILE,
                 "market_hub",
+                lambda: None,
+            ),
+            _OTHER_ACCOUNT_PROFILE: operator_sdk.GatewayOperatorProfile(
+                _OTHER_ACCOUNT_PROFILE,
+                "account_session_worker",
                 lambda: None,
             ),
         }
@@ -103,7 +110,7 @@ class _FakeOperatorApplication:
         return self._status
 
 
-def _deployment(*, auto_start_account: bool = False) -> str:
+def _deployment(*, auto_start_account: bool = False, include_other_owner: bool = False) -> str:
     return json.dumps(
         {
             "schema_version": 1,
@@ -124,14 +131,29 @@ def _deployment(*, auto_start_account: bool = False) -> str:
                     "auto_start": True,
                     "legacy_gateway_keys": [],
                 },
-            ],
+            ]
+            + ([
+                {
+                    "profile_ref": _OTHER_ACCOUNT_PROFILE,
+                    "account_ref": "account-2",
+                    "authorized_subjects": ["other-owner"],
+                    "operations": ["status", "start", "stop"],
+                    "auto_start": False,
+                    "legacy_gateway_keys": ["manual:IB:account-2"],
+                }
+            ] if include_other_owner else []),
         }
     )
 
 
-def _control(*, auto_start_account: bool = False) -> ServiceGatewayOperatorControl:
+def _control(
+    *, auto_start_account: bool = False, include_other_owner: bool = False
+) -> ServiceGatewayOperatorControl:
     control = ServiceGatewayOperatorControl.from_value(
-        _deployment(auto_start_account=auto_start_account),
+        _deployment(
+            auto_start_account=auto_start_account,
+            include_other_owner=include_other_owner,
+        ),
         profile_registry=_ProfileRegistry(),
     )
     assert control is not None
@@ -139,7 +161,7 @@ def _control(*, auto_start_account: bool = False) -> ServiceGatewayOperatorContr
 
 
 def test_status_page_does_not_start_owner_and_account_start_blocks_legacy_manager(
-    monkeypatch,
+    monkeypatch, tmp_path
 ) -> None:
     _FakeOperatorApplication.created = []
     monkeypatch.setattr(
@@ -148,9 +170,25 @@ def test_status_page_does_not_start_owner_and_account_start_blocks_legacy_manage
         _FakeOperatorApplication,
     )
     monkeypatch.setattr(live_manager_module, "get_existing_live_trading_manager", lambda: None)
-    control = _control()
+    control = _control(include_other_owner=True)
     control.protect_configured_legacy_owners()
     assert is_legacy_manual_gateway_excluded("OKX", "account-1")
+
+    legacy_file = tmp_path / "manual-gateways.json"
+    legacy_bytes = (
+        b'[{"gateway_key":"manual:CTP:unmapped","credentials":{"api_key":"must-not-read"}},'
+        b'{"gateway_key":"manual:IB:account-2","credentials":{"api_key":"other-secret"}}]'
+    )
+    legacy_file.write_bytes(legacy_bytes)
+    monkeypatch.setattr(live_manager_module, "_MANUAL_GATEWAYS_FILE", legacy_file)
+    original_read_text = Path.read_text
+
+    def fail_if_legacy_records_are_loaded(path, *args, **kwargs):
+        if path == legacy_file:
+            raise AssertionError("owner migration endpoint must not read global credentials")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_if_legacy_records_are_loaded)
 
     connect_calls: list[str] = []
 
@@ -190,6 +228,45 @@ def test_status_page_does_not_start_owner_and_account_start_blocks_legacy_manage
             assert status_response.json()["state"] == "new"
             assert _FakeOperatorApplication.created == []
 
+            legacy = await client.get("/api/v1/service-gateway/legacy-gateways")
+            assert legacy.status_code == 200
+            assert legacy.json() == {
+                "gateways": [
+                    {
+                        "gateway_key": "manual:OKX:account-1",
+                        "migration_status": "profile_available",
+                        "profile_ref": _ACCOUNT_PROFILE,
+                    }
+                ]
+            }
+            assert "manual:CTP:unmapped" not in legacy.text
+            assert "must-not-read" not in legacy.text
+            assert _FakeOperatorApplication.created == []
+
+            app.dependency_overrides[require_persisted_owner_scope] = lambda: PersistedOwnerScope(
+                "other-owner",
+                "HUMAN",
+            )
+            other_owner = await client.get("/api/v1/service-gateway/legacy-gateways")
+            assert other_owner.status_code == 200
+            assert other_owner.json() == {
+                "gateways": [
+                    {
+                        "gateway_key": "manual:IB:account-2",
+                        "migration_status": "profile_available",
+                        "profile_ref": _OTHER_ACCOUNT_PROFILE,
+                    }
+                ]
+            }
+            assert "manual:OKX:account-1" not in other_owner.text
+            assert "manual:CTP:unmapped" not in other_owner.text
+            assert "other-secret" not in other_owner.text
+            assert _FakeOperatorApplication.created == []
+
+            app.dependency_overrides[require_persisted_owner_scope] = lambda: PersistedOwnerScope(
+                _OWNER,
+                "HUMAN",
+            )
             ungranted_cleanup = await client.post(
                 f"/api/v1/service-gateway/operators/{_MARKET_PROFILE}/cleanup"
             )
@@ -289,10 +366,9 @@ def test_status_page_does_not_start_owner_and_account_start_blocks_legacy_manage
     assert _FakeOperatorApplication.created[0].close_calls == 1
 
 
-def test_service_v2_start_serializes_with_legacy_manual_connect(monkeypatch) -> None:
+def test_service_v2_start_never_calls_retired_legacy_manual_connect(monkeypatch) -> None:
     started = threading.Event()
     release_start = threading.Event()
-    connect_finished = threading.Event()
     connect_calls: list[str] = []
 
     class _BlockingApplication(_FakeOperatorApplication):
@@ -311,16 +387,6 @@ def test_service_v2_start_serializes_with_legacy_manual_connect(monkeypatch) -> 
     )
     monkeypatch.setattr(live_manager_module, "get_existing_live_trading_manager", lambda: None)
     manager = object.__new__(live_manager_module.LiveTradingManager)
-    manager._gateway_lock = threading.RLock()
-    manager._gateways = {}
-    manager._normalize_gateway_exchange_type = lambda exchange: str(exchange).upper()
-    manager._coerce_bool = lambda value, default=False: bool(value)
-    manager._coerce_float = lambda value, default=0.0: float(value or default)
-    monkeypatch.setattr(
-        live_manager_module,
-        "_manual_gateway_account_id_hint",
-        lambda _exchange, credentials: str(credentials.get("account_id") or ""),
-    )
 
     def legacy_connect(**_kwargs: Any) -> dict[str, str]:
         connect_calls.append("called")
@@ -342,24 +408,14 @@ def test_service_v2_start_serializes_with_legacy_manual_connect(monkeypatch) -> 
     operator_thread.start()
     try:
         assert started.wait(timeout=5)
-        legacy_result: list[dict[str, str]] = []
-
-        def connect_legacy() -> None:
-            try:
-                legacy_result.append(manager.connect_gateway("OKX", {"account_id": "account-1"}))
-            finally:
-                connect_finished.set()
-
-        connect_thread = threading.Thread(target=connect_legacy)
-        connect_thread.start()
-        assert not connect_finished.wait(timeout=0.05)
+        legacy_result = manager.connect_gateway("OKX", {"account_id": "account-1"})
+        assert legacy_result["status"] == "error"
+        assert "LEGACY_GATEWAY_MIGRATION_REQUIRED" in legacy_result["message"]
+        assert connect_calls == []
         release_start.set()
         operator_thread.join(timeout=5)
-        connect_thread.join(timeout=5)
         assert not operator_thread.is_alive()
-        assert not connect_thread.is_alive()
         assert start_error == []
-        assert legacy_result[0]["status"] == "error"
         assert connect_calls == []
     finally:
         release_start.set()

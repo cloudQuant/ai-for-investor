@@ -38,13 +38,6 @@
         >
           {{ t('gatewayStatus.btnRefresh') }}
         </el-button>
-        <el-button
-          type="primary"
-          :icon="Connection"
-          @click="openConnectDialog"
-        >
-          {{ t('gatewayStatus.btnLegacyConnect') }}
-        </el-button>
       </div>
 
       <div
@@ -186,13 +179,6 @@
         </el-icon>
         <strong>{{ t('gatewayStatus.emptyTitle') }}</strong>
         <span>{{ t('gatewayStatus.emptyDesc') }}</span>
-        <el-button
-          type="primary"
-          :icon="Connection"
-          @click="openConnectDialog"
-        >
-          {{ t('gatewayStatus.btnLegacyConnect') }}
-        </el-button>
       </div>
 
       <template v-else>
@@ -310,24 +296,6 @@
               </span>
             </div>
 
-            <div class="gateway-card-actions">
-              <el-popconfirm
-                v-if="gw.gateway_key.startsWith('manual:')"
-                :title="t('gatewayStatus.tagDisconnect')"
-                @confirm="handleDisconnect(gw.gateway_key)"
-              >
-                <template #reference>
-                  <el-button
-                    type="danger"
-                    size="small"
-                    plain
-                    :loading="disconnecting === gw.gateway_key"
-                  >
-                    {{ t('gatewayStatus.btnDisconnect') }}
-                  </el-button>
-                </template>
-              </el-popconfirm>
-            </div>
           </article>
         </div>
 
@@ -409,53 +377,10 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column
-            :label="t('gatewayStatus.colActions')"
-            fixed="right"
-            width="110"
-          >
-            <template #default="{ row }">
-              <el-popconfirm
-                v-if="row.gateway_key.startsWith('manual:')"
-                :title="t('gatewayStatus.tagDisconnect')"
-                @confirm="handleDisconnect(row.gateway_key)"
-              >
-                <template #reference>
-                  <el-button
-                    type="danger"
-                    size="small"
-                    plain
-                    :loading="disconnecting === row.gateway_key"
-                  >
-                    {{ t('gatewayStatus.btnDisconnect') }}
-                  </el-button>
-                </template>
-              </el-popconfirm>
-              <span
-                v-else
-                class="gateway-muted"
-              >-</span>
-            </template>
-          </el-table-column>
         </el-table>
       </template>
     </el-card>
 
-    <GatewayConnectDialog
-      v-model:visible="showConnectDialog"
-      v-model:ctp-env="ctpEnv"
-      v-model:ctp-group="ctpGroup"
-      v-model:mt5-env="mt5Env"
-      v-model:ib-env="ibEnv"
-      :connect-form="connectForm"
-      :connecting="connecting"
-      :on-exchange-change="onExchangeChange"
-      :on-ctp-env-change="onCtpEnvChange"
-      :on-ctp-group-change="onCtpGroupChange"
-      :on-mt5-env-change="onMt5EnvChange"
-      :on-ib-env-change="onIbEnvChange"
-      :on-connect="handleConnect"
-    />
   </div>
 </template>
 
@@ -471,7 +396,6 @@ import {
   List,
   Search,
 } from '@element-plus/icons-vue'
-import GatewayConnectDialog from './GatewayConnectDialog.vue'
 import ServiceGatewayOperatorsPanel from './gateway/ServiceGatewayOperatorsPanel.vue'
 import { useGatewayStatusPage } from './gateway/useGatewayStatusPage'
 
@@ -479,35 +403,19 @@ const gatewayStatusPage = useGatewayStatusPage()
 const {
   connLabel,
   connTagType,
-  connectForm,
-  connecting,
-  ctpEnv,
-  ctpGroup,
-  disconnecting,
   fetchHealth,
   formatHeartbeatAge,
   formatNumber,
   formatUptime,
   gatewaySearch,
   getHeartbeatAge,
-  handleConnect,
-  handleDisconnect,
   healthFilter,
   healthyCount,
   heartbeatClass,
-  ibEnv,
   lastHealthFetchMs,
   loadError,
   loading,
-  mt5Env,
   nowMs,
-  onCtpEnvChange,
-  onCtpGroupChange,
-  onExchangeChange,
-  onIbEnvChange,
-  onMt5EnvChange,
-  openConnectDialog,
-  showConnectDialog,
   staleHeartbeatCount,
   stateFilter,
   stateLabel,

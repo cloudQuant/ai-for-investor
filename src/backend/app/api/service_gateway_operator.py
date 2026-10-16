@@ -59,6 +59,34 @@ def list_service_gateway_operators(
         _raise_http(error)
 
 
+@router.get("/service-gateway/legacy-gateways")
+def list_legacy_gateway_migration_records(
+    request: Request,
+    owner: PersistedOwnerScope = Depends(require_persisted_owner_scope),
+) -> dict[str, Any]:
+    """List exact legacy keys configured for this persisted owner only.
+
+    The legacy credential file has no owner field, so it is never read or
+    projected here. Unmapped records remain stored and are not exposed across
+    owner boundaries. Starting remains an explicit action on the operator API.
+    """
+    control = _control(request)
+    try:
+        mappings = control.authorized_legacy_gateway_mappings(owner.owner_subject)
+    except ServiceGatewayOperatorError as error:
+        _raise_http(error)
+    return {
+        "gateways": [
+            {
+                "gateway_key": mapping["gateway_key"],
+                "migration_status": "profile_available",
+                "profile_ref": mapping["profile_ref"],
+            }
+            for mapping in mappings
+        ]
+    }
+
+
 @router.get("/service-gateway/operators/{profile_ref}")
 def read_service_gateway_operator_status(
     profile_ref: str,

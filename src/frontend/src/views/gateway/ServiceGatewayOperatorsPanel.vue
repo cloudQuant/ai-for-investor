@@ -160,6 +160,42 @@
         </div>
       </article>
     </div>
+
+    <section class="legacy-gateway-history" data-test="legacy-gateway-history">
+      <h3>{{ t('gatewayStatus.legacyHistoryTitle') }}</h3>
+      <p>{{ t('gatewayStatus.legacyHistoryDesc') }}</p>
+      <p
+        v-if="legacyGatewayErrorKey"
+        class="operator-error"
+        role="alert"
+        data-test="legacy-gateway-error"
+      >
+        {{ t(legacyGatewayErrorKey) }}
+      </p>
+      <div
+        v-else-if="legacyGateways.length === 0"
+        class="operator-message"
+        data-test="legacy-gateway-empty"
+      >
+        {{ t('gatewayStatus.legacyHistoryEmpty') }}
+      </div>
+      <div v-else class="legacy-gateway-list">
+        <article
+          v-for="record in legacyGateways"
+          :key="record.gateway_key"
+          class="legacy-gateway-record"
+          :data-test="`legacy-gateway-${record.gateway_key}`"
+        >
+          <div class="operator-identity">
+            <strong>{{ record.gateway_key }}</strong>
+          </div>
+          <div class="legacy-gateway-status">
+            <span>{{ t('gatewayStatus.legacyProfileAvailable') }}</span>
+            <strong>{{ record.profile_ref }}</strong>
+          </div>
+        </article>
+      </div>
+    </section>
   </section>
 </template>
 
@@ -169,6 +205,7 @@ import { useI18n } from 'vue-i18n'
 import {
   serviceGatewayOperatorApi,
   type ServiceGatewayOperatorAction,
+  type LegacyGatewayMigrationRecord,
   type ServiceGatewayOperatorProfile,
   type ServiceGatewayOperatorRole,
   type ServiceGatewayOperatorStatus,
@@ -179,6 +216,8 @@ const profiles = ref<ServiceGatewayOperatorProfile[]>([])
 const statuses = ref<Record<string, ServiceGatewayOperatorStatus | undefined>>({})
 const statusErrorKeys = ref<Record<string, string | undefined>>({})
 const listErrorKey = ref('')
+const legacyGateways = ref<LegacyGatewayMigrationRecord[]>([])
+const legacyGatewayErrorKey = ref('')
 const loading = ref(false)
 const busyProfile = ref<string | null>(null)
 
@@ -211,6 +250,20 @@ function isStatusForProfile(
     && status.account_ref === profile.account_ref
 }
 
+function isLegacyGatewayRecord(value: unknown): value is LegacyGatewayMigrationRecord {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Partial<LegacyGatewayMigrationRecord>
+  const keys = Object.keys(value).sort()
+  return keys.length === 3
+    && keys.join(',') === 'gateway_key,migration_status,profile_ref'
+    && typeof record.gateway_key === 'string'
+    && record.gateway_key.length > 0
+    && record.gateway_key.length <= 256
+    && record.migration_status === 'profile_available'
+    && typeof record.profile_ref === 'string'
+    && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(record.profile_ref)
+}
+
 function getOperatorErrorKey(error: unknown): string {
   if (!error || typeof error !== 'object' || !('response' in error)) {
     return 'gatewayStatus.operatorUnavailable'
@@ -228,10 +281,25 @@ async function refresh() {
   if (loading.value || busyProfile.value !== null) return
   loading.value = true
   listErrorKey.value = ''
+  legacyGatewayErrorKey.value = ''
   try {
-    const result = await serviceGatewayOperatorApi.list()
+    const [result, legacyResult] = await Promise.all([
+      serviceGatewayOperatorApi.list(),
+      serviceGatewayOperatorApi.legacyGateways().catch((error: unknown) => {
+        legacyGatewayErrorKey.value = getOperatorErrorKey(error)
+        return null
+      }),
+    ])
     if (!result || !Array.isArray(result.operators) || !result.operators.every(isProfile)) {
       throw new Error('INVALID_OPERATOR_LIST')
+    }
+    if (legacyResult === null) {
+      legacyGateways.value = []
+    } else if (!legacyResult || !Array.isArray(legacyResult.gateways) || !legacyResult.gateways.every(isLegacyGatewayRecord)) {
+      legacyGateways.value = []
+      legacyGatewayErrorKey.value = 'gatewayStatus.operatorUnavailable'
+    } else {
+      legacyGateways.value = legacyResult.gateways
     }
     profiles.value = result.operators
     statuses.value = {}
@@ -367,6 +435,52 @@ onMounted(() => {
   gap: 12px;
 }
 
+.legacy-gateway-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color-light);
+}
+
+.legacy-gateway-history h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.legacy-gateway-history > p {
+  margin: 0;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
+}
+
+.legacy-gateway-list {
+  display: grid;
+  gap: 8px;
+}
+
+.legacy-gateway-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 6px;
+}
+
+.legacy-gateway-status {
+  display: grid;
+  gap: 3px;
+  color: var(--text-color-secondary);
+  text-align: right;
+}
+
+.legacy-gateway-status strong {
+  color: var(--text-color-primary);
+  overflow-wrap: anywhere;
+}
+
 .operator-card {
   display: grid;
   gap: 12px;
@@ -418,6 +532,15 @@ onMounted(() => {
 
   .operator-status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .legacy-gateway-record {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .legacy-gateway-status {
+    text-align: left;
   }
 
   .operator-actions {
