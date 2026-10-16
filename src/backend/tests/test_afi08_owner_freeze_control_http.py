@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import queue
+import re
 import socket
 import threading
 import time
@@ -30,7 +31,7 @@ from app.main import app
 from app.models.alerts import Alert, AlertSeverity, AlertStatus, AlertType
 from app.models.paper_trading import Account
 from app.models.user import User
-from app.services.monitoring_control import OwnerControlDeployment
+from app.services.monitoring_control import OwnerControlDeployment, OwnerControlError
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_monitor.control import (
     ControlAction,
@@ -176,7 +177,9 @@ def _start_owner_host(
     subject: str,
     afi_account_id: str,
     risk_account_id: str,
+    owner_action: ControlAction = ControlAction.FREEZE,
     lose_final_receipt: bool = False,
+    command_scope_override: str | None = None,
 ) -> tuple[OwnerControlDeployment, threading.Thread, threading.Event, dict[str, Any]]:
     endpoint = _endpoint()
     server_public, server_secret = zmq.curve_keypair()
@@ -199,7 +202,23 @@ def _start_owner_host(
         f"risk-owner:{risk_account_id}",
         f"monitor-owner-delegation:{risk_account_id}",
     )
-    wire_scope = WireScope("paper:afi08-synthetic", account_ref=risk_account_id)
+    stop_new = owner_action is ControlAction.STOP_NEW
+    strategy_ref = f"strategy:afi08-{uuid.uuid4().hex}" if stop_new else None
+    run_id = f"run:afi08-{uuid.uuid4().hex}" if stop_new else None
+    wire_scope = WireScope(
+        "paper:afi08-synthetic",
+        account_ref=risk_account_id,
+        strategy_ref=strategy_ref,
+        run_id=run_id,
+    )
+    command_scope = (
+        f"strategy:{strategy_ref}:{run_id}:stop_new"
+        if stop_new
+        else f"account:{risk_account_id}:freeze"
+    )
+    if command_scope_override is not None:
+        command_scope = command_scope_override
+    action_label = "stop-new" if stop_new else "freeze"
     issuer = f"operator:afi08:{subject}"
     key_ref = f"afi08-key-{uuid.uuid4().hex}"
     key_material = hashlib.sha256(f"afi08 synthetic key:{subject}".encode()).digest()
@@ -219,16 +238,16 @@ def _start_owner_host(
                 "portfolio_ref": None,
                 "account_id": risk_account_id,
                 "mode": _MODE,
-                "command_scope": f"account:{risk_account_id}:freeze",
+                "command_scope": command_scope,
                 "issuer": issuer,
                 "key_ref": key_ref,
                 "key_material_b64": base64.b64encode(key_material).decode("ascii"),
-                "issuer_policy_version": "afi08-freeze-policy-v1",
+                "issuer_policy_version": f"afi08-{action_label}-policy-v1",
                 "authority_receipt_digest": _RECEIPT,
                 "not_before_utc": now - 60.0,
                 "expires_at_utc": now + 3600.0,
                 "issuer_sequence_start": 0,
-                "allowed_actions": ["FREEZE"],
+                "allowed_actions": [owner_action.name],
                 "service_id": _SERVICE_ID,
                 "instance_id": _SERVICE_INSTANCE,
                 "scope_ref": _SERVICE_SCOPE_REF,
@@ -237,6 +256,11 @@ def _start_owner_host(
                 "wire_scope": {
                     "execution_domain_ref": wire_scope.execution_domain_ref,
                     "account_ref": wire_scope.account_ref,
+                    **(
+                        {"strategy_ref": strategy_ref, "run_id": run_id}
+                        if stop_new
+                        else {}
+                    ),
                 },
                 "client_identity": {
                     "principal_ref": client_identity.principal_ref,
@@ -266,13 +290,13 @@ def _start_owner_host(
 
     authority_policy = ControlIssuerPolicy(
         issuer=issuer,
-        policy_id="afi08-freeze-policy-v1",
+        policy_id=f"afi08-{action_label}-policy-v1",
         grants=(
             ControlScopeGrant(
                 account_id=risk_account_id,
                 mode=_MODE,
-                scope=f"account:{risk_account_id}:freeze",
-                actions=(ControlAction.FREEZE,),
+                scope=command_scope,
+                actions=(owner_action,),
                 receipt_digests=(_RECEIPT,),
                 manual_resume_allowed=False,
             ),
@@ -318,8 +342,8 @@ def _start_owner_host(
             issuer=issuer,
             account_id=risk_account_id,
             mode=_MODE,
-            scope=f"account:{risk_account_id}:freeze",
-            actions=frozenset({ControlAction.FREEZE}),
+            scope=command_scope,
+            actions=frozenset({owner_action}),
         )
         target = MonitorControlTarget(
             ingress=ingress,
@@ -337,7 +361,7 @@ def _start_owner_host(
             executor_id=f"risk-owner:{risk_account_id}",
             account_id=risk_account_id,
             mode=_MODE,
-            command_scope=f"account:{risk_account_id}:freeze",
+            command_scope=command_scope,
         )
         runtime = MonitorControlRuntime(service, {wire_scope: owner})
         refs.update(gate=gate, ledger=ledger, service=service, owner=owner, runtime=runtime)
@@ -385,6 +409,20 @@ def _start_owner_host(
                 resource_provider,
             )
             host.start()
+            if stop_new:
+                registry = host._registry
+                if registry is None:
+                    raise AssertionError("synthetic ServiceHost has no owner Registry")
+                with registry._transaction():
+                    claim = registry._claim_strategy_write(
+                        wire_scope,
+                        registry._now(),
+                        f"afi08-seed-{uuid.uuid4().hex}",
+                        frozenset({"orders.submit"}),
+                    )
+                if claim is not None:
+                    raise AssertionError(f"synthetic strategy run was not claimed: {claim}")
+                refs.update(registry=registry, wire_scope=wire_scope)
             refs["ready"].set()
             while not stopped.is_set():
                 host.serve_once(25)
@@ -408,6 +446,19 @@ def _start_owner_host(
     if "gate" not in refs:
         raise AssertionError(f"synthetic Monitor ServiceHost failed: {host_result.get(timeout=1)}")
     return deployment, thread, stopped, refs
+
+
+def test_stop_new_deployment_rejects_scope_label_not_bound_to_exact_run(tmp_path: Path) -> None:
+    with pytest.raises(OwnerControlError) as raised:
+        _start_owner_host(
+            tmp_path,
+            subject="operator:afi08-scope-binding",
+            afi_account_id="afi08-account-scope-binding",
+            risk_account_id="risk-account-scope-binding",
+            owner_action=ControlAction.STOP_NEW,
+            command_scope_override="strategy:some-other-run:stop_new",
+        )
+    assert raised.value.code == "DEPLOYMENT_INVALID"
 
 
 async def _register_second_user(client: AsyncClient) -> dict[str, str]:
@@ -754,4 +805,112 @@ async def test_unclaimed_expired_freeze_resolves_issuer_and_allows_next_command(
         ]
     finally:
         owner.run_next = owner_run_next
+        await _stop_host(host_thread, stopped, refs)
+
+
+@pytest.mark.asyncio
+async def test_stop_new_http_fences_exact_owner_run_and_returns_persisted_receipt(
+    client: AsyncClient, auth_user, tmp_path: Path
+) -> None:
+    user_data, headers = auth_user
+    alert_id = f"afi08-alert-{uuid.uuid4().hex}"
+    afi_account_id = f"afi08-account-{uuid.uuid4().hex}"
+    risk_account_id = f"risk-account-{uuid.uuid4().hex}"
+    subject = await _create_owned_alert(user_data, alert_id=alert_id, afi_account_id=afi_account_id)
+    foreign_headers = await _register_second_user(client)
+    deployment, host_thread, stopped, refs = _start_owner_host(
+        tmp_path,
+        subject=subject,
+        afi_account_id=afi_account_id,
+        risk_account_id=risk_account_id,
+        owner_action=ControlAction.STOP_NEW,
+    )
+    app.dependency_overrides[monitoring_api.get_owner_control_deployment] = lambda: deployment
+    try:
+        foreign = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**foreign_headers, "Idempotency-Key": "foreign-stop-new"},
+            json={"action": "STOP_NEW", "portfolio_ref": None},
+        )
+        assert foreign.status_code == 404
+
+        response = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**headers, "Idempotency-Key": "stop-new-exact-run"},
+            json={"action": "STOP_NEW", "portfolio_ref": None},
+        )
+        assert response.status_code in {200, 202}, response.text
+        submitted = response.json()
+        command_id = submitted["command_id"]
+        assert command_id.startswith("afi-monitor-stop-new-v1-")
+        assert submitted["action"] == "stop_new"
+        if submitted.get("status") == ControlStatus.ACKNOWLEDGED.value:
+            applied = submitted
+        else:
+            completed = await _wait_for_owner_status(
+                client, command_id, headers, ControlStatus.ACKNOWLEDGED.value
+            )
+            assert completed.status_code == 200
+            applied = completed.json()
+        assert applied["status"] == ControlStatus.ACKNOWLEDGED.value
+        assert applied["outcome"] == "applied"
+        assert applied["owner_final"] is True
+        assert applied["reconciliation_required"] is False
+        assert applied["effect_result"] == {"action": "stop_new", "result": "fenced"}
+        assert re.fullmatch(r"strategy-stop-new-v1:[0-9a-f]{64}", applied["effect_ref"])
+
+        status_response = await client.get(
+            f"/api/v1/monitoring/control/commands/{command_id}", headers=headers
+        )
+        assert status_response.status_code == 200
+        assert status_response.json() == applied
+        repeat = await client.post(
+            f"/api/v1/monitoring/control/alerts/{alert_id}",
+            headers={**headers, "Idempotency-Key": "stop-new-exact-run"},
+            json={"action": "STOP_NEW", "portfolio_ref": None},
+        )
+        assert repeat.status_code == 200
+        assert repeat.json() == applied
+
+        registry = refs["registry"]
+        scope = refs["wire_scope"]
+        assert registry._strategy_write_is_stopped(scope) is True
+        with registry._transaction():
+            fence = registry._db.execute(
+                "SELECT stop_new_command_id FROM strategy_write_claims "
+                "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
+                (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
+            ).fetchone()
+            receipt = registry._db.execute(
+                "SELECT status, effect_ref, effect_result_json FROM strategy_stop_new_receipts "
+                "WHERE command_id=?",
+                (command_id,),
+            ).fetchone()
+            denied_reentry = registry._claim_strategy_write(
+                scope,
+                registry._now(),
+                f"afi08-late-registration-{uuid.uuid4().hex}",
+                frozenset({"orders.submit"}),
+            )
+        assert fence is not None and fence["stop_new_command_id"] == command_id
+        assert receipt is not None and receipt["status"] == "applied"
+        assert json.loads(receipt["effect_result_json"]) == applied["effect_result"]
+        assert denied_reentry == "STRATEGY_STOPPED"
+        assert refs["ledger"].get(command_id).status is ControlStatus.ACKNOWLEDGED
+        assert refs["gate"].active_freeze_reasons(
+            AccountScope("synthetic", risk_account_id, _MODE)
+        ) == []
+
+        for action, code in (
+            ("DRAIN", "DRAIN_PENDING_IMPLEMENTATION"),
+            ("CLOSE", "CLOSE_PENDING_DIM04_EXECUTION_JOURNAL_COORDINATION"),
+        ):
+            pending = await client.post(
+                f"/api/v1/monitoring/control/alerts/{alert_id}",
+                headers={**headers, "Idempotency-Key": f"unsupported-{action.lower()}"},
+                json={"action": action, "portfolio_ref": None},
+            )
+            assert pending.status_code == 501
+            assert pending.json()["details"]["code"] == code
+    finally:
         await _stop_host(host_thread, stopped, refs)

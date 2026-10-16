@@ -140,7 +140,7 @@ async def _require_owned_control_target(
 
 @router.post(
     "/control/alerts/{alert_id}",
-    summary="Submit a signed owner FREEZE command for an owned alert",
+    summary="Submit a signed owner control command for an owned alert",
 )
 async def control_alert_risk(
     alert_id: str,
@@ -151,7 +151,7 @@ async def control_alert_risk(
     session: AsyncSession = Depends(get_db),
     deployment: OwnerControlDeployment = Depends(get_owner_control_deployment),
 ) -> typing.Any:
-    """Run FREEZE through the signed monitor ledger and the separate owner thread.
+    """Run a supported control through the signed Monitor ledger and owner thread.
 
     Acknowledging or resolving this alert remains an independent operation and
     does not alter any owner RiskGate cause.
@@ -167,15 +167,16 @@ async def control_alert_risk(
         implementation = control_implementation_status(request_body.action)
     except OwnerControlError as exc:
         _raise_owner_control_error(exc)
-    if implementation != "FREEZE_SUPPORTED":
+    if implementation not in {"FREEZE_SUPPORTED", "STOP_NEW_SUPPORTED"}:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail={"code": implementation},
         )
     try:
         projected = await asyncio.to_thread(
-            deployment.submit_freeze,
+            deployment.submit_control,
             binding,
+            action=request_body.action,
             subject=current_user.sub,
             alert_id=alert_id,
             idempotency_key=idempotency_key,

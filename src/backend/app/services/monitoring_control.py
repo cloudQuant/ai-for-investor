@@ -1,9 +1,10 @@
 """Signed monitor controls issued through the authenticated SDK service host.
 
 AFI holds an operator-provisioned issuer grant and a constrained client
-runtime. It only signs, submits, and reads exact FREEZE commands. The existing
-MonitorRiskControlOwner applies the effect in the service host's maintenance
-cycle; this module never opens a Risk database or constructs a Risk policy.
+runtime. It signs, submits, and reads exact FREEZE or STOP_NEW commands. The
+existing MonitorRiskControlOwner applies effects in the service host's
+maintenance cycle; this module never opens a Risk database or constructs a
+Risk policy.
 """
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ _COMMAND_TTL_SECONDS = 30.0
 _MAX_IDEMPOTENCY_KEY_BYTES = 256
 _CONTROL_HMAC_DOMAIN = b"bt-api-monitor.control-command.hmac.v1\0"
 _KEY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_COMMAND_ID_RE = re.compile(r"^afi-monitor-freeze-v1-[0-9a-f]{32}$")
+_COMMAND_ID_RE = re.compile(r"^afi-monitor-(?P<action>freeze|stop-new)-v1-[0-9a-f]{32}$")
+_STOP_NEW_EFFECT_REF_RE = re.compile(r"^strategy-stop-new-v1:[0-9a-f]{64}$")
 _Z85_ALPHABET = frozenset(
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
 )
@@ -62,7 +64,7 @@ class _BindingConfig(_StrictModel):
     not_before_utc: float
     expires_at_utc: float
     issuer_sequence_start: int = Field(default=0, ge=0)
-    allowed_actions: list[Literal["FREEZE"]] = Field(min_length=1, max_length=1)
+    allowed_actions: list[Literal["FREEZE", "STOP_NEW"]] = Field(min_length=1, max_length=2)
     service_id: str = Field(min_length=1, max_length=128)
     instance_id: str = Field(min_length=1, max_length=128)
     scope_ref: str = Field(min_length=1, max_length=128)
@@ -122,7 +124,7 @@ class _DeploymentConfig(_StrictModel):
 class OwnerControlRequest(_StrictModel):
     """The request chooses an action only; it cannot carry authority or secrets."""
 
-    action: Literal["FREEZE", "DRAIN", "CLOSE"]
+    action: Literal["FREEZE", "STOP_NEW", "DRAIN", "CLOSE"]
     portfolio_ref: str | None = None
 
     @field_validator("portfolio_ref")
@@ -250,14 +252,38 @@ class OwnerControlDeployment:
         alert_id: str,
         idempotency_key: str,
     ) -> dict[str, Any]:
+        return self.submit_control(
+            binding,
+            action="FREEZE",
+            subject=subject,
+            alert_id=alert_id,
+            idempotency_key=idempotency_key,
+        )
+
+    def submit_control(
+        self,
+        binding: OwnerControlBinding,
+        *,
+        action: str,
+        subject: str,
+        alert_id: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
         if not any(item is binding for item in self.bindings):
             raise OwnerControlError("CONTROL_BINDING_INVALID")
         if subject != binding.config.subject:
             raise OwnerControlError("CONTROL_BINDING_INVALID")
+        if (
+            type(action) is not str
+            or action not in {"FREEZE", "STOP_NEW"}
+            or action not in binding.config.allowed_actions
+        ):
+            raise OwnerControlError("OWNER_CONTROL_NOT_AUTHORIZED")
         _validate_idempotency_key(idempotency_key)
         with self._lock:
             issued = self._reserve_or_replay(
                 binding,
+                action=action,
                 subject=subject,
                 alert_id=alert_id,
                 idempotency_key=idempotency_key,
@@ -270,6 +296,7 @@ class OwnerControlDeployment:
             projection = self._query_status(
                 binding,
                 issued.command_id,
+                action=action,
                 submit_arguments=arguments if datetime.now(UTC).timestamp() < issued.expires_at else None,
             )
             self._record_final(issued.command_id, projection)
@@ -278,16 +305,32 @@ class OwnerControlDeployment:
     def status_for_command(
         self, command_id: str, *, subject: str
     ) -> tuple[OwnerControlBinding, str, dict[str, Any]] | None:
-        if type(command_id) is not str or _COMMAND_ID_RE.fullmatch(command_id) is None:
+        if type(command_id) is not str:
+            return None
+        command_match = _COMMAND_ID_RE.fullmatch(command_id)
+        if command_match is None:
             return None
         with self._lock:
             row = self._issuance_row(command_id)
             if row is None or row["subject"] != subject:
                 return None
+            action = "FREEZE" if command_match.group("action") == "freeze" else "STOP_NEW"
+            try:
+                raw_payload = row["payload"]
+                claims = json.loads(bytes(raw_payload).decode("utf-8", errors="strict"))
+            except (TypeError, ValueError, UnicodeError, json.JSONDecodeError):
+                raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
+            expected_wire_action = "freeze" if action == "FREEZE" else "stop_new"
+            if (
+                not isinstance(claims, Mapping)
+                or claims.get("command_id") != command_id
+                or claims.get("action") != expected_wire_action
+            ):
+                raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
             binding = self._by_id.get(str(row["binding_id"]))
             if binding is None:
                 return None
-            projection = self._query_status(binding, command_id)
+            projection = self._query_status(binding, command_id, action=action)
             self._record_final(command_id, projection)
             return binding, str(row["alert_id"]), projection
 
@@ -296,6 +339,7 @@ class OwnerControlDeployment:
         binding: OwnerControlBinding,
         command_id: str,
         *,
+        action: str,
         submit_arguments: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         sdk = _load_sdk()
@@ -332,9 +376,9 @@ class OwnerControlDeployment:
                 "monitor.control_status",
                 {"schema_version": 1, "command_id": command_id},
             )
-            projection = _validate_owner_projection(status, command_id)
+            projection = _validate_owner_projection(status, command_id, action=action)
             return projection | {
-                "action": "freeze",
+                "action": "freeze" if action == "FREEZE" else "stop_new",
                 "deployment_version": self._config.deployment_version,
             }
         except OwnerControlError:
@@ -353,6 +397,7 @@ class OwnerControlDeployment:
         self,
         binding: OwnerControlBinding,
         *,
+        action: str,
         subject: str,
         alert_id: str,
         idempotency_key: str,
@@ -364,11 +409,13 @@ class OwnerControlDeployment:
             and config.not_before_utc <= now < config.expires_at_utc
         ):
             raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
+        action_slug = "freeze" if action == "FREEZE" else "stop-new"
+        wire_action = "freeze" if action == "FREEZE" else "stop_new"
         key_digest = hashlib.sha256(
             (subject + "\0" + binding.binding_id + "\0" + idempotency_key).encode("utf-8")
         ).hexdigest()
         facts = {
-            "action": "FREEZE",
+            "action": action,
             "afi_account_id": config.afi_account_id,
             "alert_id": alert_id,
             "binding_id": binding.binding_id,
@@ -416,7 +463,7 @@ class OwnerControlDeployment:
                 (config.issuer,),
             ).fetchone()[0]
             sequence = max(config.issuer_sequence_start, int(previous or 0)) + 1
-            command_id = "afi-monitor-freeze-v1-" + uuid.uuid4().hex
+            command_id = f"afi-monitor-{action_slug}-v1-" + uuid.uuid4().hex
             expires_at = min(
                 now + _COMMAND_TTL_SECONDS,
                 config.expires_at_utc,
@@ -432,8 +479,12 @@ class OwnerControlDeployment:
                 "account_id": config.account_id,
                 "mode": config.mode,
                 "scope": config.command_scope,
-                "action": "freeze",
-                "reason": "AFI monitoring alert owner freeze",
+                "action": wire_action,
+                "reason": (
+                    "AFI monitoring alert owner freeze"
+                    if action == "FREEZE"
+                    else "AFI monitoring alert strategy stop new"
+                ),
                 "receipt_digest": config.authority_receipt_digest,
                 "issued_at": now,
                 "expires_at": expires_at,
@@ -551,6 +602,8 @@ class OwnerControlDeployment:
 def control_implementation_status(action: str) -> str:
     if action == "FREEZE":
         return "FREEZE_SUPPORTED"
+    if action == "STOP_NEW":
+        return "STOP_NEW_SUPPORTED"
     if action == "DRAIN":
         return "DRAIN_PENDING_IMPLEMENTATION"
     if action == "CLOSE":
@@ -597,7 +650,11 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
     _validate_timestamp(config.expires_at_utc)
     if config.expires_at_utc <= config.not_before_utc:
         raise OwnerControlError("DEPLOYMENT_INVALID")
-    if config.allowed_actions != ["FREEZE"] or _KEY_ID_RE.fullmatch(config.key_ref) is None:
+    if (
+        not config.allowed_actions
+        or len(set(config.allowed_actions)) != len(config.allowed_actions)
+        or _KEY_ID_RE.fullmatch(config.key_ref) is None
+    ):
         raise OwnerControlError("DEPLOYMENT_INVALID")
     _decode_secret(config.key_material_b64, minimum=32)
     identity = _parse_identity(config.client_identity, sdk, role=sdk.WireRole.APPLICATION_CLIENT)
@@ -623,6 +680,23 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
             raise OwnerControlError("DEPLOYMENT_INVALID")
         scope_values.setdefault("account_refs", ())
         wire_scope = sdk.WireScope(**scope_values)
+        if "STOP_NEW" in config.allowed_actions and (
+            wire_scope.account_ref is None
+            or wire_scope.account_refs
+            or wire_scope.strategy_ref is None
+            or wire_scope.run_id is None
+            or wire_scope.manual_book_ref is not None
+            or wire_scope.group_id is not None
+            or wire_scope.leg_id is not None
+        ):
+            raise OwnerControlError("DEPLOYMENT_INVALID")
+        if "STOP_NEW" in config.allowed_actions and config.command_scope != (
+            f"strategy:{wire_scope.strategy_ref}:{wire_scope.run_id}:stop_new"
+        ):
+            # The issuer's readable scope label is a secondary operator check.
+            # The exact WireScope is separately pinned in the deployment and
+            # Monitor owner route; this label is never parsed to select a run.
+            raise OwnerControlError("DEPLOYMENT_INVALID")
         client_config = sdk.parse_client_config(config.client_config)
         public_config = client_config.to_public_dict()
         if public_config.get("process_role") != "application_client":
@@ -703,7 +777,12 @@ def _parse_identity(value: Mapping[str, str], sdk: Any, *, role: Any) -> Any:
         raise OwnerControlError("DEPLOYMENT_INVALID") from None
 
 
-def _validate_owner_projection(value: Mapping[str, Any], command_id: str) -> dict[str, Any]:
+def _validate_owner_projection(
+    value: Mapping[str, Any],
+    command_id: str,
+    *,
+    action: str,
+) -> dict[str, Any]:
     fields = {
         "command_id",
         "status",
@@ -714,7 +793,12 @@ def _validate_owner_projection(value: Mapping[str, Any], command_id: str) -> dic
         "owner_final",
         "reconciliation_required",
     }
-    if not isinstance(value, Mapping) or set(value) != fields or value.get("command_id") != command_id:
+    if (
+        action not in {"FREEZE", "STOP_NEW"}
+        or not isinstance(value, Mapping)
+        or set(value) != fields
+        or value.get("command_id") != command_id
+    ):
         raise OwnerControlError("OWNER_RECEIPT_INVALID")
     status = value.get("status")
     if (
@@ -747,43 +831,71 @@ def _validate_owner_projection(value: Mapping[str, Any], command_id: str) -> dic
             raise OwnerControlError("OWNER_RECEIPT_INVALID")
     elif status == "acknowledged":
         effect = value.get("effect_result")
-        effect_fields = {
-            "action",
-            "cause_id",
-            "activation_status",
-            "cause_active",
-            "has_other_active_freezes",
-            "risk_state",
-        }
-        if (
-            value["owner_final"] is not True
-            or outcome != "applied"
-            or value["reconciliation_required"] is not False
-            or not isinstance(effect, Mapping)
-            or set(effect) != effect_fields
-            or effect.get("action") != "freeze"
-            or type(effect.get("cause_id")) is not str
-            or not effect.get("cause_id")
-            or value.get("effect_ref") != effect.get("cause_id")
-            or type(effect.get("activation_status")) is not str
-            or type(effect.get("cause_active")) is not bool
-            or type(effect.get("has_other_active_freezes")) is not bool
-        ):
-            raise OwnerControlError("OWNER_RECEIPT_INVALID")
-        expected_state = {
-            "CREATED": (True, "active"),
-            "ALREADY_ACTIVE": (True, "active"),
-            "ALREADY_RESOLVED": (False, "resolved"),
-        }.get(effect["activation_status"])
-        if expected_state is None or (effect["cause_active"], effect["risk_state"]) != expected_state:
-            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        common_applied = (
+            value["owner_final"] is True
+            and outcome == "applied"
+            and value["reconciliation_required"] is False
+            and isinstance(effect, Mapping)
+        )
+        if action == "FREEZE":
+            effect_fields = {
+                "action",
+                "cause_id",
+                "activation_status",
+                "cause_active",
+                "has_other_active_freezes",
+                "risk_state",
+            }
+            if (
+                not common_applied
+                or set(effect) != effect_fields
+                or effect.get("action") != "freeze"
+                or type(effect.get("cause_id")) is not str
+                or not effect.get("cause_id")
+                or value.get("effect_ref") != effect.get("cause_id")
+                or type(effect.get("activation_status")) is not str
+                or type(effect.get("cause_active")) is not bool
+                or type(effect.get("has_other_active_freezes")) is not bool
+            ):
+                raise OwnerControlError("OWNER_RECEIPT_INVALID")
+            expected_state = {
+                "CREATED": (True, "active"),
+                "ALREADY_ACTIVE": (True, "active"),
+                "ALREADY_RESOLVED": (False, "resolved"),
+            }.get(effect["activation_status"])
+            if expected_state is None or (
+                effect["cause_active"], effect["risk_state"]
+            ) != expected_state:
+                raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        else:
+            effect_ref = value.get("effect_ref")
+            if (
+                not common_applied
+                or set(effect) != {"action", "result"}
+                or effect.get("action") != "stop_new"
+                or type(effect.get("result")) is not str
+                or effect.get("result") not in {"fenced", "already_fenced"}
+                or type(effect_ref) is not str
+                or _STOP_NEW_EFFECT_REF_RE.fullmatch(effect_ref) is None
+            ):
+                raise OwnerControlError("OWNER_RECEIPT_INVALID")
     elif status == "rejected":
         if (
             value["owner_final"] is not True
             or outcome != "rejected"
             or value["reconciliation_required"] is not False
-            or value.get("effect_ref") is not None
-            or value.get("effect_result") is not None
+        ):
+            raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        effect = value.get("effect_result")
+        if action == "FREEZE":
+            if value.get("effect_ref") is not None or effect is not None:
+                raise OwnerControlError("OWNER_RECEIPT_INVALID")
+        elif (
+            value.get("effect_ref") is not None
+            or not isinstance(effect, Mapping)
+            or set(effect) != {"action", "result"}
+            or effect.get("action") != "stop_new"
+            or effect.get("result") not in {"run_not_active", "migration_write_disabled"}
         ):
             raise OwnerControlError("OWNER_RECEIPT_INVALID")
     elif status == "expired":
