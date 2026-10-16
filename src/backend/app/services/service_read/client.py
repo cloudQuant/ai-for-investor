@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
@@ -35,6 +35,7 @@ __all__ = [
     "MonitorBinding",
     "OrderBinding",
     "OrderSubmitBinding",
+    "ApprovedTargetSubmitBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
 ]
@@ -177,6 +178,41 @@ class OrderSubmitBinding:
         ):
             if type(value) is not str or not value or value != value.strip():
                 raise ServiceReadContractError(code)
+
+
+@dataclass(frozen=True)
+class ApprovedTargetSubmitBinding:
+    """One trusted strategy/account scope for approved-target submission."""
+
+    mount: str
+    scope_ref: str
+    account_ref: str
+    strategy_ref: str
+    expected_scope_ref: str
+    wire_scope: Any = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+            (self.account_ref, "INVALID_ACCOUNT_REF"),
+            (self.strategy_ref, "INVALID_STRATEGY_REF"),
+            (self.expected_scope_ref, "INVALID_SCOPE_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if self.mount != "application.orders":
+            raise ServiceReadContractError("INVALID_MOUNT")
+        scope = self.wire_scope
+        if (
+            getattr(scope, "account_ref", None) != self.account_ref
+            or getattr(scope, "account_refs", ())
+            or getattr(scope, "strategy_ref", None) != self.strategy_ref
+            or getattr(scope, "manual_book_ref", None) is not None
+            or getattr(scope, "group_id", None) is not None
+            or getattr(scope, "leg_id", None) is not None
+        ):
+            raise ServiceReadContractError("INVALID_APPROVED_TARGET_SCOPE")
 
 
 @dataclass(frozen=True)

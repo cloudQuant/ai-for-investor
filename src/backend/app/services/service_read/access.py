@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-from app.services.service_read.client import OrderSubmitBinding
+from app.services.service_read.client import ApprovedTargetSubmitBinding, OrderSubmitBinding
 
 __all__ = [
     "ReadAccess",
@@ -60,11 +60,15 @@ class ReadAccess:
     allow_account_book_refs: frozenset[str] = frozenset()
     allow_order_scope_refs: frozenset[str] = frozenset()
     allow_order_submit_scope_refs: frozenset[str] = frozenset()
+    allow_approved_target_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(
         default_factory=dict, repr=False
     )
     order_submit_bindings: Mapping[str, OrderSubmitBinding] = field(
+        default_factory=dict, repr=False
+    )
+    approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] = field(
         default_factory=dict, repr=False
     )
     application_identity: Any = field(default=None, repr=False, compare=False)
@@ -81,6 +85,7 @@ class ReadAccess:
             "allow_account_book_refs",
             "allow_order_scope_refs",
             "allow_order_submit_scope_refs",
+            "allow_approved_target_scope_refs",
             "allow_monitor_scope_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
@@ -140,6 +145,45 @@ class ReadAccess:
             ):
                 raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
         object.__setattr__(self, "order_submit_bindings", MappingProxyType(normalized_submit))
+
+        approved_bindings = self.approved_target_bindings
+        if not isinstance(approved_bindings, Mapping) or len(approved_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
+        normalized_approved: dict[str, ApprovedTargetSubmitBinding] = {}
+        for selector, binding in approved_bindings.items():
+            if (
+                not _valid_identifier(selector)
+                or type(binding) is not ApprovedTargetSubmitBinding
+                or binding.scope_ref != selector
+            ):
+                raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
+            normalized_approved[selector] = binding
+        if normalized_approved:
+            if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
+                raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
+            if set(normalized_approved) & set(self.allow_order_submit_scope_refs):
+                raise ServiceReadAccessError("GRANT_BINDING_MISMATCH")
+            if not inspect.iscoroutinefunction(
+                getattr(self.worker, "submit_approved_target", None)
+            ):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+                or (
+                    getattr(identity, "delegate_ref", None) is not None
+                    and not _valid_identifier(identity.delegate_ref)
+                )
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(
+            self, "approved_target_bindings", MappingProxyType(normalized_approved)
+        )
+        if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
+            raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -217,6 +261,16 @@ class ServiceReadAccessDirectory:
         """Resolve one deployment-owned manual submit scope for an exact subject."""
 
         return self._resolve(subject, scope_ref, "allow_order_submit_scope_refs")
+
+    def resolve_approved_target_scope(self, subject: str, scope_ref: str) -> ReadAccess:
+        """Resolve one explicitly configured approved-target selector."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(scope_ref):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or scope_ref not in access.approved_target_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
 
     def resolve_monitor_scope(self, subject: str, scope_ref: str) -> ReadAccess:
         """Resolve one telemetry scope for an exact authenticated subject."""

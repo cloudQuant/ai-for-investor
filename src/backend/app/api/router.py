@@ -167,3 +167,8 @@ _register_optional_router(
     "app.api.service_orders",
     tags=["Service Orders"],
 )
+_register_optional_router(
+    "approved_orders",
+    "app.api.approved_orders",
+    tags=["Approved Orders"],
+)

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from .client import (
     AccountBinding,
     AccountBookBinding,
+    ApprovedTargetSubmitBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
     OrderBinding,
@@ -89,18 +90,21 @@ class SdkServiceReadSession:
         account_book_bindings: Mapping[str, AccountBookBinding] | None = None,
         order_bindings: Mapping[str, OrderBinding] | None = None,
         order_submit_bindings: Mapping[str, OrderSubmitBinding] | None = None,
+        approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
     ) -> None:
         self._account_bindings = dict(account_bindings)
         self._account_book_bindings = dict(account_book_bindings or {})
         self._order_bindings = dict(order_bindings or {})
         self._order_submit_bindings = dict(order_submit_bindings or {})
+        self._approved_target_bindings = dict(approved_target_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
         if not (
             self._account_bindings
             or self._account_book_bindings
             or self._order_bindings
             or self._order_submit_bindings
+            or self._approved_target_bindings
             or self._monitor_bindings
         ):
             raise ServiceReadSessionError(
@@ -211,6 +215,10 @@ class SdkServiceReadSession:
             expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
         for binding in self._order_submit_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
+        for binding in self._approved_target_bindings.values():
+            expected.add(
+                (binding.mount, binding.scope_ref, frozenset({"orders.submit_approved_target"}))
+            )
         for binding in self._monitor_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"telemetry.snapshot"})))
         return expected
@@ -250,6 +258,19 @@ class SdkServiceReadSession:
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "manual-order scope does not match its configured account and book",
+                )
+
+        for configured in self._approved_target_bindings.values():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            if not self._scope_is_approved_target_scope(
+                binding.scope,
+                configured.account_ref,
+                configured.strategy_ref,
+                configured.wire_scope,
+            ):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "approved-target scope does not match its configured owner binding",
                 )
 
         for account_ref, configured in self._account_book_bindings.items():
@@ -343,6 +364,21 @@ class SdkServiceReadSession:
             and getattr(scope, "leg_id", None) is None
         )
 
+    @staticmethod
+    def _scope_is_approved_target_scope(
+        scope: Any, account_ref: str, strategy_ref: str, expected_scope: Any
+    ) -> bool:
+        return (
+            type(scope) is type(expected_scope)
+            and scope == expected_scope
+            and getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and getattr(scope, "strategy_ref", None) == strategy_ref
+            and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
+
     def start(self) -> None:
         self._assert_owner()
         self._require_open()
@@ -427,6 +463,37 @@ class SdkServiceReadSession:
         return self._runtime.call(
             configured.mount,
             "orders.submit",
+            dict(arguments),
+            scope_ref=configured.scope_ref,
+        )
+
+    def submit_approved_target(
+        self, scope_ref: str, arguments: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """Submit one approved target through the configured SDK owner."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        configured = self._approved_target_bindings.get(scope_ref)
+        if configured is None:
+            raise ServiceReadUnavailableError("APPROVED_TARGET_SCOPE_NOT_CONFIGURED")
+        if (
+            not isinstance(arguments, Mapping)
+            or any(type(key) is not str for key in arguments)
+            or set(arguments)
+            != {"approval_ref", "approval_version", "target_sha256", "intent_id"}
+        ):
+            raise ServiceReadUnavailableError("INVALID_APPROVED_TARGET_ARGUMENTS")
+        self._validate_runtime()
+        assert self._runtime is not None
+        return self._runtime.call(
+            configured.mount,
+            "orders.submit_approved_target",
             dict(arguments),
             scope_ref=configured.scope_ref,
         )

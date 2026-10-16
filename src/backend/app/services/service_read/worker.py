@@ -62,6 +62,8 @@ class ServiceReadSession(Protocol):
 
     def submit_manual_order(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
 
+    def submit_approved_target(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
+
     def close(self) -> None: ...
 
 
@@ -80,6 +82,7 @@ class _Kind(Enum):
     ORDER = auto()
     STRATEGY_HEALTH = auto()
     MANUAL_ORDER = auto()
+    APPROVED_TARGET = auto()
 
 
 class _Request:
@@ -211,6 +214,13 @@ class ServiceReadWorker:
         """Queue a deployment-authorized manual submit on the session owner thread."""
 
         return await self._submit(_Kind.MANUAL_ORDER, scope_ref, arguments)
+
+    async def submit_approved_target(
+        self, scope_ref: str, arguments: dict[str, Any]
+    ) -> Any:
+        """Queue one approved target on the existing SDK owner thread."""
+
+        return await self._submit(_Kind.APPROVED_TARGET, scope_ref, arguments)
 
     async def aclose(self) -> None:
         """Reject new reads, discard queued reads, and close on the owner thread."""
@@ -387,6 +397,10 @@ class ServiceReadWorker:
                 result = session.read_order(request.arguments[0], request.arguments[1])
             elif request.kind is _Kind.MANUAL_ORDER:
                 result = session.submit_manual_order(
+                    request.arguments[0], request.arguments[1]
+                )
+            elif request.kind is _Kind.APPROVED_TARGET:
+                result = session.submit_approved_target(
                     request.arguments[0], request.arguments[1]
                 )
             else:

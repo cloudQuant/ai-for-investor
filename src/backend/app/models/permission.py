@@ -37,6 +37,7 @@ class Permission(str, enum.Enum):
     # inherited from research approval, manual order, USER, PREMIUM, or ADMIN.
     APPROVE_STRATEGY_ORDER_TARGET = "orders:approve-strategy-target"
     MANAGE_STRATEGY_ORDER_APPROVAL_POLICY = "orders:manage-strategy-approval-policy"
+    SUBMIT_APPROVED_STRATEGY_TARGET = "orders:submit-approved-target"
 
     # Data permissions
     UPLOAD_DATA = "data:upload"
@@ -56,6 +57,9 @@ class Role(str, enum.Enum):
     PREMIUM = "premium"
     ADMIN = "admin"
     RESEARCH_APPROVAL_ADMIN = "approval_admin"
+    TRADE_OPERATOR = "trade_operator"
+    TRADE_APPROVER = "trade_approver"
+    TRADE_POLICY_ADMIN = "trade_policy_admin"
 
 
 # Permission mapping
@@ -107,6 +111,10 @@ ROLE_PERMISSIONS = {
         Permission.SUBMIT_MANUAL_ORDER,
     ],
     Role.RESEARCH_APPROVAL_ADMIN: [Permission.MANAGE_APPROVAL_GRANTS],
+    # These roles are opt-in only and are not inherited by USER/PREMIUM/ADMIN.
+    Role.TRADE_OPERATOR: [Permission.SUBMIT_APPROVED_STRATEGY_TARGET],
+    Role.TRADE_APPROVER: [Permission.APPROVE_STRATEGY_ORDER_TARGET],
+    Role.TRADE_POLICY_ADMIN: [Permission.MANAGE_STRATEGY_ORDER_APPROVAL_POLICY],
 }
 
 

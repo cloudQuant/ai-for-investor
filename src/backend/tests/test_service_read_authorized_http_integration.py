@@ -1,14 +1,17 @@
 """Real HTTP, SDK-worker, and service-grant isolation for service reads.
 
-The local execution service and its SQLite journal run in an independent
-process.  Orders are submitted only to a synthetic provider leaf; two verified
-JWT subjects read their own durable records through separate owner-thread SDK
-sessions and the production service-read router.
+The local Execution service and SQLite journal run in an independent process.
+The approved-target path uses the real AFI authority, SDK session, ServiceHost,
+OrderEntry, and basic admission code. Risk admission and provider dispatch are
+synthetic leaves in this fixture, so it does not prove live Risk-policy
+admission. Two verified JWT subjects exercise the production service-read
+router and separate owner-thread SDK sessions.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import multiprocessing
 import ntpath
 import os
@@ -1378,6 +1381,7 @@ def _close_default_deployment_service_host(host: dict[str, Any]) -> None:
         try:
             pipe.send(("close",))
             closed = _order._receive(pipe, timeout=10.0)
+            host["close_reply"] = closed
             assert closed[0] == "closed", closed
             graceful_close = "succeeded"
         except BaseException as error:
@@ -5559,3 +5563,948 @@ def test_manual_order_operation_is_durable_across_concurrent_processes_and_resta
         _run_manual_order_cross_process_integration(tmp_path)
     finally:
         _COMMAND_GUARD_STATE["active"] = False
+
+
+_APPROVED_TARGET_SELECTOR = "afi-approved-target-a-v1"
+_APPROVED_TARGET_EXPECTED_SCOPE = "afi-approved-target-scope-a-v1"
+_APPROVED_TARGET_POLICY_REF = "afi-approved-target-policy-a-v1"
+
+
+class _ApprovedTargetSyntheticProvider:
+    """Synthetic provider leaf that accepts only Execution-authorized calls."""
+
+    def __init__(self) -> None:
+        self.submitted: list[tuple[str, bool]] = []
+        self.unauthorized: list[str] = []
+
+    def submit_authorized(self, intent: Any, authorization: Any) -> Any:
+        from bt_api_execution import ProviderObservation
+
+        authorized = (
+            getattr(authorization, "intent_fingerprint", None) == intent.fingerprint
+            and getattr(getattr(authorization, "parameters", None), "intent_id", None)
+            == intent.intent_id
+        )
+        if not authorized:
+            raise AssertionError("Execution supplied an invalid synthetic authorization")
+        self.submitted.append((intent.intent_id, authorized))
+        return ProviderObservation.accepted(
+            intent.intent_id, f"synthetic-approved-order-{len(self.submitted)}"
+        )
+
+    def submit(self, intent: Any) -> Any:
+        self.unauthorized.append(intent.intent_id)
+        raise AssertionError("approved target must use authorized dispatch")
+
+    def cancel(self, _intent: Any) -> Any:
+        raise AssertionError("cancellation is outside the approved-target node")
+
+
+def _approved_target_service_process(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    keys: dict[str, bytes],
+    store_path: str,
+    database_url: str,
+) -> None:
+    """Run real account-owner SDK/Execution services and the child-owned AFI bridge."""
+
+    import sys
+    from decimal import Decimal
+
+    from bt_api_execution import (
+        ExecutionAdmissionValidatorRegistry,
+        ExecutionBasicAdmissionGate,
+        ExecutionProviderValidatorV1,
+        ExecutionScope,
+        OrderType,
+        PositionEffect,
+        Side,
+        SqliteExecutionStore,
+        TimeInForce,
+    )
+    from bt_api_execution.service_order_entry import ExecutionOrderEntryService
+    from bt_api_py.service_components import ComponentResources
+    from bt_api_py.service_config import parse_service_config
+    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+
+    from app.config import get_settings
+
+    get_settings().DATABASE_URL = database_url
+    config = parse_service_config(raw_config)
+    store = SqliteExecutionStore(store_path)
+    provider = _ApprovedTargetSyntheticProvider()
+    class _RecordingRiskGate(_order._Gate):
+        def __init__(self) -> None:
+            super().__init__()
+            self.released: list[tuple[str, str]] = []
+
+        def release(self, permit_id: str, reason: str) -> None:
+            self.released.append((permit_id, reason))
+            return super().release(permit_id, reason)
+
+    # Deliberately synthetic Risk leaf: this node does not bind the live Risk
+    # adapter or validate current Risk policy.
+    synthetic_risk_gate = _RecordingRiskGate()
+    wire_scope = _SCOPE_A
+    execution_scope = ExecutionScope(
+        "afi-synthetic-provider", "simulation", _ACCOUNT_A, _STRATEGY_A, "20261016"
+    )
+    targets = {wire_scope: execution_scope}
+    instance_id = config.components["execution"]["settings"]["instance_id"]
+    authority_resources = None
+    resource_facts = {"authority_close_completed": False}
+    identity_facts: list[tuple[str, str, str, str, str, str, str]] = []
+    handle_code = ExecutionOrderEntryService.handle.__code__
+
+    def observe_service_call(frame: Any, event: str, _argument: Any) -> None:
+        if event != "call" or frame.f_code is not handle_code:
+            return
+        local = frame.f_locals
+        if local.get("operation") != "orders.submit_approved_target":
+            return
+        identity = local.get("identity")
+        scope = local.get("scope")
+        if type(identity) is WireIdentity and type(scope) is WireScope:
+            identity_facts.append(
+                (
+                    local.get("principal_ref", ""),
+                    identity.role.value,
+                    identity.actor_ref,
+                    identity.delegate_ref or "",
+                    scope.account_ref or "",
+                    scope.strategy_ref or "",
+                    local["operation"],
+                )
+            )
+
+    def resource_provider(component: str, requested_instance: str, options: Any, _scope: Any):
+        nonlocal authority_resources
+        if (
+            component != "execution"
+            or requested_instance != instance_id
+            or options.get("role") != "account_owner"
+            or options.get("approved_target_required") is not True
+        ):
+            raise RuntimeError("APPROVED_TARGET_RESOURCE_PROFILE_INVALID")
+        base_resources = ComponentResources.borrowed(
+            {
+                "store": store,
+                "targets": targets,
+                "dispatch": provider,
+                "admission": {
+                    "order_gate": synthetic_risk_gate,
+                    "cancel_gate": synthetic_risk_gate,
+                    "basic_admission_gate": basic_gate,
+                },
+            },
+            ready=lambda: True,
+        )
+        from bt_api_execution.approved_target import (
+            ApprovedTargetOwnerBindingV1,
+        )
+        from app.services.service_read.approved_target_authority import (
+            create_execution_approved_target_resources,
+        )
+
+        authority_resources = create_execution_approved_target_resources(
+            owner_bindings=(
+                ApprovedTargetOwnerBindingV1(
+                    principal_ref=_APP_PRINCIPAL,
+                    identity=_APPLICATION_IDENTITY_A,
+                    wire_scope=wire_scope,
+                    owner_subject=_SUBJECT_A,
+                    expected_scope_ref=_APPROVED_TARGET_EXPECTED_SCOPE,
+                ),
+            ),
+            protected_scopes=(wire_scope,),
+        )
+
+        def close_owned_authority() -> None:
+            authority_resources.close()
+            resource_facts["authority_close_completed"] = True
+
+        return ComponentResources.owned(
+            {**base_resources.values, **authority_resources.values},
+            ready=lambda: base_resources.ready() and authority_resources.ready(),
+            close=close_owned_authority,
+        )
+
+    host = None
+    sys.settrace(observe_service_call)
+    try:
+        validator = ExecutionProviderValidatorV1(
+            provider_id=execution_scope.provider,
+            validator_id="afi-approved-target-synthetic-policy",
+            version="policy-v1",
+            dispatch_port=provider,
+            instrument_map={"BTC-USDT": "BTCUSDT"},
+            quantity_steps={"BTC-USDT": Decimal("0.25")},
+            max_quantities={"BTC-USDT": Decimal("100")},
+            price_ticks={"BTC-USDT": Decimal("0.5")},
+            supported_order_types=(OrderType.LIMIT,),
+            supported_time_in_force=(TimeInForce.GTC,),
+            supported_actions=((Side.BUY, PositionEffect.OPEN),),
+            supports_reduce_only=False,
+        )
+        basic_gate = ExecutionBasicAdmissionGate(
+            store, ExecutionAdmissionValidatorRegistry((validator,))
+        )
+        authority = TrustedServiceAuthority(
+            identity=_SERVICE_IDENTITY,
+            scope=WireScope(_DOMAIN),
+            scope_ref=config.scope_ref,
+            scope_version="afi-approved-target-service-scope-v1",
+            security_ref=_SERVER_SECURITY_REF,
+            security_version="afi-approved-target-curve-v1",
+            registration_policy_ref=config.registration_policy_ref,
+            registration_policy_version="afi-approved-target-registration-v1",
+            service_requirements_ref=config.service_requirements_ref,
+            service_requirements_version="afi-approved-target-requirements-v1",
+            curve_public_key=keys["server_public"],
+            curve_secret_key=keys["server_secret"],
+            principals={keys["application_public"]: _APP_PRINCIPAL},
+            grants={
+                _APP_PRINCIPAL: (
+                    PrincipalGrant(
+                        _APPLICATION_IDENTITY_A,
+                        (
+                            ResourceGrant(
+                                instance_id,
+                                "service.order_entry",
+                                _APPROVED_TARGET_SELECTOR,
+                                wire_scope,
+                                frozenset({"orders.submit_approved_target"}),
+                            ),
+                        ),
+                    ),
+                )
+            },
+        )
+        host = ServiceHost(config, authority, registry_path, resource_provider)
+        host.start()
+        control.send(("ready", host.endpoint, host.state))
+        while True:
+            host.serve_once(timeout_ms=20)
+            if not control.poll():
+                continue
+            command = control.recv()
+            if command == ("close",):
+                host.close()
+                close_facts = (
+                    host.state,
+                    tuple(provider.submitted),
+                    tuple(provider.unauthorized),
+                    tuple(synthetic_risk_gate.reserved),
+                    tuple(synthetic_risk_gate.released),
+                    tuple(identity_facts),
+                    bool(authority_resources and authority_resources.ready()),
+                    resource_facts["authority_close_completed"],
+                )
+                store.close()
+                control.send(("closed", *close_facts))
+                return
+            if command == ("facts",):
+                control.send(
+                    (
+                        "facts",
+                        tuple(provider.submitted),
+                        tuple(provider.unauthorized),
+                        tuple(synthetic_risk_gate.reserved),
+                        tuple(synthetic_risk_gate.released),
+                        tuple(identity_facts),
+                        bool(authority_resources and authority_resources.ready()),
+                    )
+                )
+                continue
+            raise RuntimeError("APPROVED_TARGET_HOST_COMMAND_INVALID")
+    except BaseException as error:
+        if host is not None and host.state not in {"closed", "failed"}:
+            with suppress(BaseException):
+                host.close()
+        if authority_resources is not None:
+            with suppress(BaseException):
+                authority_resources.close()
+        with suppress(BaseException):
+            store.close()
+        code = getattr(error, "code", None)
+        if type(code) is not str or not code.isidentifier() or len(code) > 64:
+            code = type(error).__name__
+        with suppress(Exception):
+            control.send(("error", code))
+        raise
+    finally:
+        sys.settrace(None)
+        control.close()
+
+
+def _approved_target_service_process_synthetic_environment(
+    control: Any,
+    raw_config: dict[str, Any],
+    registry_path: str,
+    keys: dict[str, bytes],
+    store_path: str,
+    database_url: str,
+    synthetic_userprofile: str,
+) -> None:
+    """Keep child settings synthetic and preserve PATH for native runtime loading."""
+
+    previous_environment = os.environ
+    child_environment = dict(_SYNTHETIC_ENV)
+    child_environment["DATABASE_URL"] = database_url
+    if previous_environment.get("PATH"):
+        child_environment["PATH"] = previous_environment["PATH"]
+    child_environment["USERPROFILE"] = synthetic_userprofile
+    os.environ = child_environment  # noqa: B003 - exclude ambient credentials/config
+    try:
+        _approved_target_service_process(
+            control, raw_config, registry_path, keys, store_path, database_url
+        )
+    finally:
+        os.environ = previous_environment  # noqa: B003 - restore child interpreter inputs
+
+
+def _approved_target_deployment_profile(
+    *, endpoint: str, keys: dict[str, bytes]
+) -> dict[str, Any]:
+    client_config = _order._client_config(
+        endpoint,
+        "application_client",
+        "afi-approved-target-application-curve-v1",
+        application=_APPLICATION_IDENTITY_A.actor_ref,
+    )
+    client_binding = client_config["clients"]["execution"]["settings"]["bindings"][0]
+    client_binding.update(
+        mount="application.orders",
+        scope_ref=_APPROVED_TARGET_SELECTOR,
+        account_ref=_ACCOUNT_A,
+    )
+    return {
+        "subject": _SUBJECT_A,
+        "identity": {
+            "principal_ref": _APPLICATION_IDENTITY_A.principal_ref,
+            "actor_ref": _APPLICATION_IDENTITY_A.actor_ref,
+            "delegate_ref": _APPLICATION_IDENTITY_A.delegate_ref,
+        },
+        "client_config": client_config,
+        "scope_claims": {
+            _APPROVED_TARGET_SELECTOR: {
+                "execution_domain_ref": _DOMAIN,
+                "account_ref": _ACCOUNT_A,
+                "strategy_ref": _STRATEGY_A,
+            }
+        },
+        "peer_identities": {
+            _SERVICE_ID: {"principal_ref": _SERVICE_PRINCIPAL, "actor_ref": _SERVICE_ID}
+        },
+        "curve_keys": {
+            "afi-approved-target-application-curve-v1": {
+                "server_key": keys["server_public"].decode("ascii"),
+                "public_key": keys["application_public"].decode("ascii"),
+                "secret_key": keys["application_secret"].decode("ascii"),
+            }
+        },
+        "grants": {
+            "account_refs": [],
+            "order_scope_refs": [],
+            "monitor_scope_refs": [],
+            "approved_target_scope_refs": [_APPROVED_TARGET_SELECTOR],
+        },
+        "account_bindings": {},
+        "order_bindings": {},
+        "approved_target_bindings": {
+            _APPROVED_TARGET_SELECTOR: {
+                "mount": "application.orders",
+                "account_ref": _ACCOUNT_A,
+                "strategy_ref": _STRATEGY_A,
+                "expected_scope_ref": _APPROVED_TARGET_EXPECTED_SCOPE,
+            }
+        },
+        "monitor_bindings": {},
+        "worker": {"max_queue_size": 8, "maintenance_interval_seconds": 30.0},
+    }
+
+
+def _approved_target_http_fact(response: Any) -> tuple[int, str | None, str | None]:
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        payload = None
+    if not isinstance(payload, dict):
+        return response.status_code, None, None
+    details = payload.get("details", payload.get("detail"))
+    outer_error = payload.get("error")
+    code = details.get("code") if isinstance(details, dict) else None
+
+    def finite(value: Any) -> str | None:
+        if (
+            type(value) is str
+            and 1 <= len(value) <= 64
+            and value.isascii()
+            and value[0].isalpha()
+            and all(character.isupper() or character.isdigit() or character == "_" for character in value)
+        ):
+            return value
+        return None
+
+    return response.status_code, finite(outer_error), finite(code)
+
+
+def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run policy/approval/submit over HTTP, the real SDK worker and a CURVE Host."""
+
+    import httpx
+    from pathlib import Path
+    from pydantic import SecretStr
+    from sqlalchemy import insert
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    original_is_file = Path.is_file
+    original_path_isfile = os.path.isfile
+
+    def _without_optional_dotenv_file(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".slowapi.env" or basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_is_file(path)
+
+    def _without_optional_dotenv_probe(path: Any) -> bool:
+        basename = ntpath.basename(os.fsdecode(path)).casefold()
+        if basename == ".env" or basename.startswith(".env."):
+            return False
+        return original_path_isfile(path)
+
+    monkeypatch.setattr(Path, "is_file", _without_optional_dotenv_file)
+    monkeypatch.setattr(os.path, "isfile", _without_optional_dotenv_probe)
+    import app.main as main_module
+    import app.services.quote_service as quote_service
+    from app.api.service_read import configure_service_read
+    from app.db import database
+    from app.models.permission import Role, user_roles
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion, VersionBranch
+    from app.models.user import User
+    from app.services.service_read.session import SdkServiceReadSession
+    from app.utils import security
+
+    monkeypatch.setattr(
+        security,
+        "settings",
+        SimpleNamespace(JWT_SECRET_KEY=_JWT_SECRET, JWT_ALGORITHM=_JWT_ALGORITHM),
+    )
+
+    async def _no_startup(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    class _NoopShutdownManager:
+        async def initiate(self, _app: Any) -> None:
+            return None
+
+    monkeypatch.setattr(main_module, "run_startup", _no_startup)
+    monkeypatch.setattr(main_module, "run_shutdown", _no_startup)
+    monkeypatch.setattr(main_module, "GracefulShutdownManager", _NoopShutdownManager)
+    monkeypatch.setattr(main_module.settings, "RAG_VECTOR_ENABLED", False)
+    monkeypatch.setattr(
+        quote_service,
+        "get_quote_service",
+        lambda: SimpleNamespace(shutdown=lambda: None),
+    )
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{(tmp_path / 'afi-approved-target-authority.sqlite3').as_posix()}",
+        poolclass=NullPool,
+    )
+    database_url = str(engine.url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    previous_overrides = dict(main_module.app.dependency_overrides)
+    app = main_module.app
+    configure_service_read(None)
+    endpoint = _order._endpoint()
+    server_public, server_secret = zmq.curve_keypair()
+    application_public, application_secret = zmq.curve_keypair()
+    keys = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "application_public": application_public,
+        "application_secret": application_secret,
+    }
+    raw_config = _order._service_config(endpoint)
+    raw_config["components"]["execution"]["settings"]["bind_ports"] = [
+        "service.order_entry"
+    ]
+    raw_config["components"]["execution"]["settings"]["options"] = {
+        "role": "account_owner",
+        "approved_target_required": True,
+    }
+    synthetic_userprofile = tmp_path / "approved-target-child-profile"
+    synthetic_userprofile.mkdir()
+    token_a = _make_token(_SUBJECT_A, _JWT_SECRET)
+    token_b = _make_token(_SUBJECT_B, _JWT_SECRET)
+    identity_call_facts: list[tuple[int, int, str, str]] = []
+    old_thread_profile = threading.getprofile()
+    owner_method_code = SdkServiceReadSession.submit_approved_target.__code__
+    host = None
+    host_close_attempted = False
+    deployment = None
+    owner_threads: tuple[threading.Thread, ...] = ()
+    primary_error: BaseException | None = None
+    primary_traceback: Any = None
+    cleanup_failures: list[BaseException] = []
+    _COMMAND_GUARD_STATE["active"] = True
+
+    def observe_owner_call(frame: Any, event: str, _argument: Any) -> None:
+        if event != "call" or frame.f_code is not owner_method_code:
+            return
+        session = frame.f_locals.get("self")
+        if not isinstance(session, SdkServiceReadSession):
+            return
+        identity_call_facts.append(
+            (
+                threading.get_ident(),
+                session._owner_thread,
+                session._expected_identity.actor_ref,
+                session._expected_identity.delegate_ref or "",
+            )
+        )
+
+    async def _prepare_database() -> None:
+        import app.models  # noqa: F401 - register all ORM tables before create_all
+
+        async with engine.begin() as connection:
+            await connection.run_sync(database.Base.metadata.create_all)
+        async with session_factory() as db:
+            db.add_all(
+                [
+                    User(
+                        id=_SUBJECT_A,
+                        username="approved-target-user-a",
+                        email="approved-target-user-a@example.invalid",
+                        hashed_password="synthetic-only",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                    User(
+                        id=_SUBJECT_B,
+                        username="approved-target-user-b",
+                        email="approved-target-user-b@example.invalid",
+                        hashed_password="synthetic-only",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                ]
+            )
+            await db.flush()
+            db.add_all(
+                [
+                    Strategy(
+                        id=_STRATEGY_A,
+                        user_id=_SUBJECT_A,
+                        name="synthetic approved strategy",
+                        code="pass",
+                        params={},
+                    ),
+                    StrategyVersion(
+                        id="afi-approved-strategy-version-a",
+                        strategy_id=_STRATEGY_A,
+                        version_number=7,
+                        version_name="v7",
+                        branch="main",
+                        status="stable",
+                        tags=["synthetic"],
+                        code="pass",
+                        params={"period": 5},
+                        is_active=True,
+                        is_default=False,
+                        is_current=True,
+                        created_by=_SUBJECT_A,
+                    ),
+                ]
+            )
+            await db.flush()
+            db.add(
+                VersionBranch(
+                    id="afi-approved-strategy-main-branch",
+                    strategy_id=_STRATEGY_A,
+                    branch_name="main",
+                    version_count=1,
+                    last_version_id="afi-approved-strategy-version-a",
+                    is_default=True,
+                    created_by=_SUBJECT_A,
+                )
+            )
+            await db.flush()
+            await db.execute(
+                insert(user_roles),
+                [
+                    {"user_id": _SUBJECT_A, "role": Role.USER.value},
+                    {"user_id": _SUBJECT_A, "role": Role.TRADE_POLICY_ADMIN.value},
+                    {"user_id": _SUBJECT_A, "role": Role.TRADE_APPROVER.value},
+                    {"user_id": _SUBJECT_A, "role": Role.TRADE_OPERATOR.value},
+                    {"user_id": _SUBJECT_B, "role": Role.USER.value},
+                    {"user_id": _SUBJECT_B, "role": Role.TRADE_OPERATOR.value},
+                ],
+            )
+            await db.commit()
+
+    async def _get_db():
+        async with session_factory() as db:
+            yield db
+
+    async def _exercise() -> None:
+        nonlocal deployment, owner_threads
+        profile = _approved_target_deployment_profile(endpoint=endpoint, keys=keys)
+        monkeypatch.setattr(
+            main_module.settings,
+            "SERVICE_READ_DEPLOYMENT_JSON",
+            SecretStr(json.dumps({"schema_version": 1, "subjects": [profile]})),
+        )
+        app.dependency_overrides[database.get_db] = _get_db
+        async with main_module.lifespan(app):
+            deployment = app.state.service_read_deployment
+            assert deployment is not None
+            assert len(deployment._workers) == 1
+            owner_threads = tuple(worker._thread for worker in deployment._workers)
+            assert all(thread is not None and thread.is_alive() for thread in owner_threads)
+            assert all(thread.ident != threading.get_ident() for thread in owner_threads)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://approved-target.synthetic.test",
+            ) as client:
+                auth_a = {"Authorization": f"Bearer {token_a}"}
+                auth_b = {"Authorization": f"Bearer {token_b}"}
+                policy = {
+                    "schema_id": "afi.strategy_order_approval_policy",
+                    "schema_version": 1,
+                    "allowed_instruments": ["BTC-USDT"],
+                    "allowed_sides": ["BUY", "SELL"],
+                    "allowed_position_effects": [
+                        "OPEN",
+                        "CLOSE",
+                        "CLOSE_TODAY",
+                        "CLOSE_YESTERDAY",
+                    ],
+                    "allowed_order_types": ["LIMIT"],
+                    "allowed_time_in_force": ["GTC"],
+                    "limits": {
+                        "max_quantity": "2",
+                        "max_notional": "200",
+                        "min_price": "1",
+                        "max_price": "200",
+                    },
+                }
+                publish = await client.post(
+                    f"/api/v1/service-orders/approved-targets/policies/{_APPROVED_TARGET_POLICY_REF}",
+                    json={"policy": policy},
+                    headers=auth_a,
+                )
+                assert publish.status_code == 201, _approved_target_http_fact(publish)
+                create_body = {
+                    "scope_ref": _APPROVED_TARGET_SELECTOR,
+                    "strategy_version": 7,
+                    "instrument": "BTC-USDT",
+                    "metadata_version": "instrument-v1",
+                    "side": "BUY",
+                    "position_effect": "OPEN",
+                    "order_type": "LIMIT",
+                    "quantity": "1",
+                    "price": "100",
+                    "time_in_force": "GTC",
+                    "reduce_only": False,
+                }
+
+                async def create_target(*, expires_in_seconds: int = 120) -> dict[str, Any]:
+                    response = await client.post(
+                        "/api/v1/service-orders/approved-targets",
+                        json={**create_body, "expires_in_seconds": expires_in_seconds},
+                        headers=auth_a,
+                    )
+                    assert response.status_code == 201, _approved_target_http_fact(response)
+                    return response.json()
+
+                approved = await create_target()
+                submit_body = {
+                    "scope_ref": _APPROVED_TARGET_SELECTOR,
+                    "approval_ref": approved["approval_ref"],
+                    "approval_version": approved["approval_version"],
+                    "target_sha256": approved["target_sha256"],
+                }
+
+                async def submit(
+                    body: dict[str, Any] = submit_body,
+                    *,
+                    token: str = token_a,
+                    key: str = "approved-target-intent-key-a",
+                ):
+                    return await client.post(
+                        "/api/v1/service-orders/approved-targets/submit",
+                        json=body,
+                        headers={"Authorization": f"Bearer {token}", "Idempotency-Key": key},
+                    )
+
+                first = await submit()
+                assert first.status_code == 200, _approved_target_http_fact(first)
+                replay = await submit()
+                assert replay.status_code == 200, _approved_target_http_fact(replay)
+                first_result = first.json()
+                replay_result = replay.json()
+                assert first_result["intent_id"] == replay_result["intent_id"]
+                assert first_result["record"]["intent_id"] == first_result["intent_id"]
+                assert first_result["record"]["state"] == "ACKED"
+                assert replay_result["record"]["state"] == "ACKED"
+                changed_claim = await submit(
+                    {**submit_body, "target_sha256": "0" * 64}
+                )
+                assert _approved_target_http_fact(changed_claim) == (
+                    409,
+                    "HTTP_409",
+                    "IDEMPOTENCY_CONFLICT",
+                )
+
+                stale = await create_target()
+                newer_policy = {
+                    **policy,
+                    "limits": {**policy["limits"], "max_quantity": "1.5"},
+                }
+                newer_policy_response = await client.post(
+                    f"/api/v1/service-orders/approved-targets/policies/{_APPROVED_TARGET_POLICY_REF}",
+                    json={"policy": newer_policy},
+                    headers=auth_a,
+                )
+                assert newer_policy_response.status_code == 201, _approved_target_http_fact(
+                    newer_policy_response
+                )
+                assert newer_policy_response.json()["policy_version"] == 2
+                stale_submit = await submit(
+                    {
+                        "scope_ref": _APPROVED_TARGET_SELECTOR,
+                        "approval_ref": stale["approval_ref"],
+                        "approval_version": stale["approval_version"],
+                        "target_sha256": stale["target_sha256"],
+                    },
+                    key="approved-target-stale-policy-key",
+                )
+                assert _approved_target_http_fact(stale_submit) == (
+                    409,
+                    "HTTP_409",
+                    "APPROVAL_POLICY_STALE",
+                )
+                forged_authority = await submit(
+                    {
+                        **submit_body,
+                        "owner_subject": _SUBJECT_A,
+                        "actor_ref": _APPLICATION_IDENTITY_A.actor_ref,
+                        "intent_id": "client-forged-intent",
+                    }
+                )
+                assert _approved_target_http_fact(forged_authority) == (
+                    422,
+                    "VALIDATION_ERROR",
+                    None,
+                )
+                other_subject = await submit(
+                    token=token_b,
+                    key="approved-target-other-subject-key",
+                )
+                assert _approved_target_http_fact(other_subject) == (
+                    403,
+                    "HTTP_403",
+                    "SERVICE_READ_ACCESS_DENIED",
+                )
+
+                # These two requests are rejected by AFI HTTP reservation
+                # preflight; the stale-policy case above is the bridge denial.
+                revoked = await create_target()
+                revoked_refusal = await client.post(
+                    f"/api/v1/service-orders/approved-targets/{revoked['approval_ref']}/revoke",
+                    json={
+                        "scope_ref": _APPROVED_TARGET_SELECTOR,
+                        "approval_version": revoked["approval_version"],
+                        "reason_code": "synthetic_test_revocation",
+                    },
+                    headers=auth_a,
+                )
+                assert revoked_refusal.status_code == 200, _approved_target_http_fact(
+                    revoked_refusal
+                )
+                revoked_submit = await submit(
+                    {
+                        "scope_ref": _APPROVED_TARGET_SELECTOR,
+                        "approval_ref": revoked["approval_ref"],
+                        "approval_version": revoked["approval_version"],
+                        "target_sha256": revoked["target_sha256"],
+                    },
+                    key="approved-target-revoked-key",
+                )
+                assert _approved_target_http_fact(revoked_submit) == (
+                    409,
+                    "HTTP_409",
+                    "APPROVAL_REVOKED",
+                )
+
+                expired = await create_target(expires_in_seconds=1)
+                await asyncio.sleep(1.05)
+                expired_submit = await submit(
+                    {
+                        "scope_ref": _APPROVED_TARGET_SELECTOR,
+                        "approval_ref": expired["approval_ref"],
+                        "approval_version": expired["approval_version"],
+                        "target_sha256": expired["target_sha256"],
+                    },
+                    key="approved-target-expired-key",
+                )
+                assert _approved_target_http_fact(expired_submit) == (
+                    409,
+                    "HTTP_409",
+                    "APPROVAL_EXPIRED",
+                )
+
+                facts = _order._command(host, "facts")
+                assert facts[0] == "facts"
+                (
+                    _,
+                    submitted,
+                    unauthorized,
+                    synthetic_risk_permits,
+                    released_risk_permits,
+                    service_calls,
+                    authority_ready,
+                ) = facts
+                assert len(submitted) == 1 and submitted[0][1] is True
+                assert unauthorized == ()
+                # Synthetic Risk leaf. Both admitted intents reserve a permit
+                # before the durable dispatch claim; the stale-policy denial
+                # then blocks before any provider call and releases exactly
+                # the denied intent's permit. This does not prove live Risk
+                # adapter/policy admission.
+                assert len(synthetic_risk_permits) == 2
+                assert len(set(synthetic_risk_permits)) == 2
+                assert submitted[0][0] in synthetic_risk_permits
+                denied_risk_intent = next(
+                    reference
+                    for reference in synthetic_risk_permits
+                    if reference != submitted[0][0]
+                )
+                assert released_risk_permits == (
+                    (f"permit-{denied_risk_intent}", "APPROVAL_POLICY_STALE"),
+                )
+                assert len(service_calls) == 3
+                assert all(
+                    call
+                    == (
+                        _APP_PRINCIPAL,
+                        WireRole.APPLICATION_CLIENT.value,
+                        _APPLICATION_IDENTITY_A.actor_ref,
+                        _APPLICATION_IDENTITY_A.delegate_ref,
+                        _ACCOUNT_A,
+                        _STRATEGY_A,
+                        "orders.submit_approved_target",
+                    )
+                    for call in service_calls
+                )
+                assert authority_ready is True
+                assert len(identity_call_facts) == 3
+                assert all(call_thread == owner_thread for call_thread, owner_thread, *_ in identity_call_facts)
+                assert all(call_thread != threading.get_ident() for call_thread, *_ in identity_call_facts)
+                assert all(
+                    row[2:] == (_APPLICATION_IDENTITY_A.actor_ref, _DELEGATE_A)
+                    for row in identity_call_facts
+                )
+
+        assert deployment.closed
+        assert deployment.close_failures == ()
+        assert app.state.service_read_deployment is None
+        assert all(not thread.is_alive() for thread in owner_threads)
+
+    try:
+        asyncio.run(_prepare_database())
+        app.dependency_overrides[database.get_db] = _get_db
+        host = _order._start_process(
+            multiprocessing.get_context("spawn"),
+            _approved_target_service_process_synthetic_environment,
+            (
+                raw_config,
+                str(tmp_path / "afi-approved-target-registry.sqlite3"),
+                {
+                    "server_public": server_public,
+                    "server_secret": server_secret,
+                    "application_public": application_public,
+                },
+                str(tmp_path / "afi-approved-target-execution.sqlite3"),
+                database_url,
+                str(synthetic_userprofile),
+            ),
+            "afi-approved-target-execution-host",
+        )
+        host["startup_failed"] = True
+        ready = _order._receive(host["pipe"], timeout=25.0)
+        if ready[0] == "ready":
+            host["startup_failed"] = False
+        assert ready[0] == "ready", ready
+        assert host["process"].is_alive()
+
+        threading.setprofile(observe_owner_call)
+        asyncio.run(_exercise())
+        host_close_attempted = True
+        _close_default_deployment_service_host(host)
+        closed = host.get("close_reply")
+        assert isinstance(closed, tuple) and closed[0] == "closed", closed
+        assert closed[1] == "closed"
+        assert len(closed[2]) == 1 and closed[2][0][1] is True
+        assert closed[3] == ()
+        close_reserved_permits = closed[4]
+        assert len(close_reserved_permits) == 2
+        assert len(set(close_reserved_permits)) == 2
+        assert closed[2][0][0] in close_reserved_permits
+        close_denied_intent = next(
+            reference
+            for reference in close_reserved_permits
+            if reference != closed[2][0][0]
+        )
+        assert closed[5] == (
+            (f"permit-{close_denied_intent}", "APPROVAL_POLICY_STALE"),
+        )
+        assert len(closed[6]) == 3
+        assert closed[7] is False
+        assert closed[8] is True
+        assert host["cleanup_facts"]["graceful_close"] == "succeeded"
+        assert host["cleanup_facts"]["exit_code"] == 0
+        assert host["cleanup_facts"]["process_reaped"] is True
+        assert host["cleanup_facts"]["pipe_closed"] is True
+        assert host["cleanup_facts"]["process_closed"] is True
+    except BaseException as error:
+        primary_error = error
+        primary_traceback = error.__traceback__
+    finally:
+        threading.setprofile(old_thread_profile)
+        configure_service_read(None)
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
+        if host is not None and not host_close_attempted:
+            try:
+                _close_default_deployment_service_host(host)
+            except BaseException as error:
+                cleanup_failures.append(error)
+        try:
+            asyncio.run(engine.dispose())
+        except BaseException as error:
+            cleanup_failures.append(error)
+        _COMMAND_GUARD_STATE["active"] = False
+
+    if primary_error is not None:
+        if cleanup_failures:
+            primary_error.__dict__["approved_target_cleanup_failure_count"] = len(
+                cleanup_failures
+            )
+            primary_error.add_note(
+                f"approved-target integration cleanup reported {len(cleanup_failures)} failure(s)"
+            )
+        raise primary_error.with_traceback(primary_traceback)
+    if cleanup_failures:
+        raise AssertionError(
+            f"approved-target integration cleanup had {len(cleanup_failures)} failure(s)"
+        ) from cleanup_failures[0]

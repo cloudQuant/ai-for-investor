@@ -106,6 +106,7 @@ def _resolve_access(
         "strategy_book",
         "order",
         "order_submit",
+        "approved_target",
         "monitor",
     ],
 ) -> ReadAccess:
@@ -125,6 +126,8 @@ def _resolve_access(
             return directory.resolve_order_scope(current_user.sub, selector)
         if selector_kind == "order_submit":
             return directory.resolve_order_submit_scope(current_user.sub, selector)
+        if selector_kind == "approved_target":
+            return directory.resolve_approved_target_scope(current_user.sub, selector)
         if selector_kind == "monitor":
             return directory.resolve_monitor_scope(current_user.sub, selector)
     except ServiceReadAccessError:
