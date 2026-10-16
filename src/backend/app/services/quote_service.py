@@ -1,19 +1,8 @@
-"""
-Quote service for the unified quote display page.
+"""Quote service for the unified quote display page.
 
-Architecture
-~~~~~~~~~~~~
-bt_api_py  GatewayRuntime  (per exchange)
-   ├─ market_socket  (ZMQ PUB) → publishes GatewayTick as JSON
-   ├─ event_socket   (ZMQ PUB)
-   └─ command_socket (ZMQ ROUTER) → accepts subscribe / health / …
-
-ai-for-investor QuoteService
-   ├─ discovers active gateways via LiveTradingManager._gateways
-   ├─ connects ZMQ SUB to each gateway's market_endpoint
-   ├─ sends "subscribe" commands via ZMQ DEALER to command_endpoint
-   ├─ caches latest GatewayTick per (source, symbol) in memory
-   └─ serves cached ticks to the frontend via REST API
+Exact operator-configured OKX ticker keys can be read through SDK service-v2
+market clients. Other sources and unconfigured symbols retain the current
+workspace gateway subscriptions while their service-v2 replacements are built.
 """
 
 from __future__ import annotations
@@ -54,6 +43,15 @@ from app.services.quote.registry import (
 from app.services.quote.runtime import (
     send_gateway_command as _send_gateway_command_impl,
 )
+from app.services.quote.service_market import (
+    MarketQuoteResult as _MarketQuoteResult,
+)
+from app.services.quote.service_market import (
+    ServiceMarketDeployment as _ServiceMarketDeployment,
+)
+from app.services.quote.service_market import (
+    ServiceMarketDeploymentError as _ServiceMarketDeploymentError,
+)
 from app.services.quote.snapshots import (
     fetch_gateway_snapshot_tick as _fetch_gateway_snapshot_tick,
 )
@@ -93,12 +91,7 @@ _ZmqTickReceiver = ZmqTickReceiver
 
 
 class QuoteService:
-    """Singleton service for quote page operations.
-
-    Discovers active bt_api_py gateways via ``LiveTradingManager``,
-    attaches ZMQ SUB receivers to their ``market_endpoint``, caches
-    incoming ``GatewayTick`` payloads, and serves them to the frontend.
-    """
+    """Singleton quote-page service with a bounded service-v2 market slice."""
 
     _instance: QuoteService | None = None
     _lock = threading.Lock()
@@ -129,6 +122,10 @@ class QuoteService:
         self._subscribed_symbols: dict[str, set[str]] = {}
         # Sources explicitly disconnected by the user; auto-connect should stay paused
         self._auto_connect_suppressed_sources: set[str] = set()
+        self._service_market_loaded = False
+        self._service_market_deployment: _ServiceMarketDeployment | None = None
+        self._service_market_error: str | None = None
+        self._service_market_load_lock = threading.Lock()
 
     def suppress_auto_connect(self, source: str) -> None:
         normalized = str(source or "").strip().upper()
@@ -180,17 +177,28 @@ class QuoteService:
                 if self._is_gateway_state_ready(state)
             ]
             for gateway_key, state in ready_gateways:
-                self._ensure_receiver_for_gateway(source, gateway_key, state)
                 workspace_gateway = source_context.get(gateway_key, {})
                 workspace_symbols = [
                     metadata["symbol"] for metadata in workspace_gateway.get("symbols", {}).values()
                 ]
-                self._subscribe_symbols_on_gateway_state(
-                    source,
-                    gateway_key,
-                    state,
-                    workspace_symbols,
+                market_routes, market_config_error, _deployment = (
+                    self._configured_service_market_routes(source, user_id, workspace_symbols)
                 )
+                if market_config_error is not None:
+                    legacy_workspace_symbols: list[str] = []
+                else:
+                    configured_symbols = set(market_routes)
+                    legacy_workspace_symbols = [
+                        symbol for symbol in workspace_symbols if symbol not in configured_symbols
+                    ]
+                if legacy_workspace_symbols:
+                    self._ensure_receiver_for_gateway(source, gateway_key, state)
+                    self._subscribe_symbols_on_gateway_state(
+                        source,
+                        gateway_key,
+                        state,
+                        legacy_workspace_symbols,
+                    )
             workspace_runs = self._build_workspace_runs(source_context)
             running_symbol_count = len(
                 {
@@ -438,13 +446,41 @@ class QuoteService:
             user_id,
             workspace_names,
         ).get(source, {})
+        workspace_symbols = [
+            metadata["symbol"]
+            for gateway in workspace_context.values()
+            for metadata in gateway.get("symbols", {}).values()
+        ]
+        route_symbols = list(dict.fromkeys([*subscription_symbols, *workspace_symbols]))
+        service_market_results, service_market_config_error = self._read_service_market_quotes(
+            source,
+            user_id,
+            route_symbols,
+        )
+        service_market_symbols = set(service_market_results)
+        service_market_symbol_keys = {symbol.upper() for symbol in service_market_symbols}
+        if service_market_config_error is not None:
+            # A present but invalid operator deployment must not silently send
+            # the same request through the retired/legacy source path.
+            legacy_subscription_symbols: list[str] = []
+            legacy_path_disabled = True
+        else:
+            legacy_subscription_symbols = [
+                symbol for symbol in subscription_symbols if symbol not in service_market_symbols
+            ]
+            legacy_path_disabled = False
 
-        # Keep the original source-level calls for a manual subscription.  In
-        # normal operation these resolve to the selected gateway key; retaining
-        # this path also lets a source with no active workspace show its saved
-        # subscriptions as missing rather than silently disappearing.
-        self._ensure_receiver(source, manager)
-        self._subscribe_symbols_on_gateway(source, subscription_symbols)
+        # Symbols with an exact service-v2 binding leave the raw-ZMQ owner path.
+        # Symbols not selected for this migration slice retain the old behavior.
+        legacy_workspace_symbols = [
+            metadata["symbol"]
+            for gateway in workspace_context.values()
+            for metadata in gateway.get("symbols", {}).values()
+            if metadata["symbol"] not in service_market_symbols
+        ]
+        if not legacy_path_disabled and (legacy_subscription_symbols or legacy_workspace_symbols):
+            self._ensure_receiver(source, manager)
+            self._subscribe_symbols_on_gateway(source, legacy_subscription_symbols)
 
         defaults_map: dict[str, dict[str, str]] = {}
         for item in self._get_default_symbols_for_source(source):
@@ -453,13 +489,28 @@ class QuoteService:
         now = datetime.now(timezone.utc).isoformat()
         ticks: list[dict[str, Any]] = []
         has_receiver = False
+        has_service_market = any(result.healthy for result in service_market_results.values())
 
-        plans = self._build_quote_plans(
-            manager,
-            source,
-            subscription_symbols,
-            workspace_context,
+        plans = (
+            {}
+            if legacy_path_disabled
+            else self._build_quote_plans(
+                manager,
+                source,
+                legacy_subscription_symbols,
+                workspace_context,
+            )
         )
+        if service_market_symbols:
+            for plan in plans.values():
+                for symbol_key in tuple(plan["symbols"]):
+                    if symbol_key in service_market_symbol_keys:
+                        plan["symbols"].pop(symbol_key, None)
+            plans = {
+                gateway_key: plan
+                for gateway_key, plan in plans.items()
+                if plan["symbols"]
+            }
         for gateway_key, plan in plans.items():
             state = plan.get("state")
             plan_symbols = list(plan["symbols"].values())
@@ -503,6 +554,42 @@ class QuoteService:
                 tick["workspace_ids"] = sorted(item["workspace_ids"])
                 tick["workspace_names"] = sorted(item["workspace_names"])
                 ticks.append(tick)
+
+        workspace_symbol_metadata: dict[str, dict[str, set[str]]] = {}
+        for gateway in workspace_context.values():
+            for symbol_key, metadata in gateway.get("symbols", {}).items():
+                if symbol_key not in service_market_symbol_keys:
+                    continue
+                row = workspace_symbol_metadata.setdefault(
+                    symbol_key,
+                    {"workspace_ids": set(), "workspace_names": set()},
+                )
+                row["workspace_ids"].update(metadata["workspace_ids"])
+                row["workspace_names"].update(metadata["workspace_names"])
+        for symbol, result in service_market_results.items():
+            meta = defaults_map.get(
+                symbol,
+                {"symbol": symbol, "name": "", "exchange": "OKX", "category": ""},
+            )
+            raw = dict(result.data) if result.data is not None else None
+            tick = self._build_tick(source, label, symbol, meta, raw, now)
+            if result.error_code is not None:
+                tick["status"] = "error"
+                tick["error_message"] = result.error_code
+            tick["quote_key"] = f"service-market:{symbol}"
+            tick["gateway_key"] = "service-market"
+            origins = set()
+            if symbol in subscription_symbols:
+                origins.add("subscription")
+            if symbol.upper() in workspace_symbol_metadata:
+                origins.add("workspace")
+            tick["origins"] = sorted(origins)
+            metadata = workspace_symbol_metadata.get(
+                symbol.upper(), {"workspace_ids": set(), "workspace_names": set()}
+            )
+            tick["workspace_ids"] = sorted(metadata["workspace_ids"])
+            tick["workspace_names"] = sorted(metadata["workspace_names"])
+            ticks.append(tick)
         fields = _resolve_quote_fields(source, ticks)
 
         return {
@@ -512,8 +599,80 @@ class QuoteService:
             "ticks": ticks,
             "fields": fields,
             "update_time": now,
-            "refresh_mode": "push" if has_receiver else "polling",
+            "refresh_mode": "push" if has_receiver or has_service_market else "polling",
         }
+
+    def _read_service_market_quotes(
+        self,
+        source: str,
+        subject: str,
+        symbols: list[str],
+    ) -> tuple[dict[str, _MarketQuoteResult], str | None]:
+        """Read only keys selected by the exact configured JWT subject."""
+
+        if source != "OKX" or not symbols:
+            return {}, None
+        routes, config_error, deployment = self._configured_service_market_routes(
+            source,
+            subject,
+            symbols,
+        )
+        if config_error is not None:
+            return {
+                symbol: _MarketQuoteResult(None, config_error, False)
+                for symbol in symbols
+            }, config_error
+        if deployment is None or not routes:
+            return {}, None
+        try:
+            observations = deployment.read_quotes(subject, routes, wait_ms=250)
+        except _ServiceMarketDeploymentError as error:
+            return {
+                symbol: _MarketQuoteResult(None, error.code, False)
+                for symbol in routes
+            }, None
+        except Exception:
+            return {
+                symbol: _MarketQuoteResult(None, "SERVICE_MARKET_UNAVAILABLE", False)
+                for symbol in routes
+            }, None
+        by_stream = observations
+        return {
+            symbol: by_stream.get(
+                key.stream_id,
+                _MarketQuoteResult(None, "SERVICE_MARKET_RESULT_MISSING", False),
+            )
+            for symbol, key in routes.items()
+        }, None
+
+    def _configured_service_market_routes(
+        self,
+        source: str,
+        subject: str,
+        symbols: list[str],
+    ) -> tuple[dict[str, Any], str | None, _ServiceMarketDeployment | None]:
+        """Resolve configured keys without starting an owner or reading events."""
+
+        if source != "OKX" or not symbols:
+            return {}, None, None
+        with self._service_market_load_lock:
+            if not self._service_market_loaded:
+                try:
+                    self._service_market_deployment = (
+                        _ServiceMarketDeployment.from_environment()
+                    )
+                except _ServiceMarketDeploymentError as error:
+                    self._service_market_error = error.code
+                finally:
+                    self._service_market_loaded = True
+            config_error = self._service_market_error
+            deployment = self._service_market_deployment
+        if config_error is not None:
+            return {}, config_error, None
+        if deployment is None:
+            return {}, None, None
+        routes = deployment.configured_routes(subject, source, symbols)
+        return routes, None, deployment
 
     # ------------------------------------------------------------------
     # Chart data (P1)
@@ -1186,7 +1345,23 @@ class QuoteService:
         return _build_tick(source, label, symbol, meta, raw, now)
 
     def shutdown(self) -> None:
-        """Stop all ZMQ receivers (called on app shutdown)."""
+        """Stop service-market owners and legacy ZMQ receivers on app shutdown."""
+        with self._service_market_load_lock:
+            deployment = self._service_market_deployment
+            market_owners_closed = deployment is None
+            if deployment is not None:
+                try:
+                    deployment.close()
+                except _ServiceMarketDeploymentError as error:
+                    logger.error("Service-market shutdown reported %s", error.code)
+                except Exception:
+                    logger.exception("Unexpected service-market shutdown failure")
+                else:
+                    market_owners_closed = True
+            if market_owners_closed and self._service_market_deployment is deployment:
+                self._service_market_deployment = None
+                self._service_market_error = None
+                self._service_market_loaded = False
         for source, receiver in self._receivers.items():
             try:
                 receiver.stop()

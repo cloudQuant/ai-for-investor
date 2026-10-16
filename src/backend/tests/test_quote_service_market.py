@@ -1,0 +1,558 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import pytest
+
+from app.services.quote.service_market import (
+    MarketQuoteResult,
+    ServiceMarketDeployment,
+    ServiceMarketDeploymentError,
+    project_market_event,
+)
+from app.services.quote_service import QuoteService
+
+
+def _market_key(symbol: str = "BTC-USDT-SWAP"):
+    from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
+
+    return MarketSubscriptionKey(
+        source_ref="okx-public-market-r1",
+        entitlement_ref="public-ticker-r1",
+        instrument=MarketInstrumentKey(
+            provider="okx",
+            venue="OKX",
+            environment="live",
+            product_type="SWAP",
+            instrument_id=symbol,
+            native_symbol=symbol,
+        ),
+        channel="tickers",
+    )
+
+
+def _deployment_document(symbol: str = "BTC-USDT-SWAP") -> dict:
+    return {
+        "schema_version": 1,
+        "subjects": [
+            {
+                "subject": "jwt-subject-a",
+                "identity": {
+                    "principal_ref": "afi-market-principal-a",
+                    "actor_ref": "afi-market-application-a",
+                    "delegate_ref": None,
+                },
+                "client_config": {
+                    "client_config_schema_version": 1,
+                    "process_role": "application_client",
+                    "registration": {"application_ref": "afi-market-application-a"},
+                    "clients": {
+                        "gateway": {
+                            "config_schema_version": 1,
+                            "settings": {
+                                "bindings": [
+                                    {
+                                        "mount": "application.market",
+                                        "service_id": "okx-market-service",
+                                        "instance_id": "okx-market-hub",
+                                        "scope_ref": "public-market-scope",
+                                        "transport_ref": "okx-market-transport",
+                                    }
+                                ],
+                                "options": {"request_timeout_ms": 1_000},
+                            },
+                        }
+                    },
+                    "communication": {
+                        "config_schema_version": 1,
+                        "profiles": {
+                            "okx-market-transport": {
+                                "backend": "zmq",
+                                "config_schema_version": 1,
+                                "endpoints": {
+                                    "rpc_connect": "tcp://127.0.0.1:5500",
+                                    "market_connect": "tcp://127.0.0.1:5501",
+                                },
+                                "security_profile_ref": "okx-market-curve",
+                                "options": {
+                                    "request_timeout_ms": 1_000,
+                                    "high_water_mark": 128,
+                                    "max_message_bytes": 262_144,
+                                },
+                            }
+                        },
+                    },
+                },
+                "scope_claims": {
+                    "public-market-scope": {"execution_domain_ref": "afi-public-market"}
+                },
+                "peer_identities": {
+                    "okx-market-service": {
+                        "principal_ref": "okx-market-service-principal",
+                        "actor_ref": "okx-market-service",
+                    }
+                },
+                "curve_keys": {
+                    "okx-market-curve": {
+                        "server_key": "abcdefghijklmnopqrstuvwxyz0123456789ABCD",
+                        "public_key": "abcdefghijklmnopqrstuvwxyz0123456789ABCD",
+                        "secret_key": "abcdefghijklmnopqrstuvwxyz0123456789ABCD",
+                    }
+                },
+                "market_bindings": [
+                    {
+                        "source": "OKX",
+                        "symbol": symbol,
+                        "key": _market_key(symbol).to_dict(),
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def _projection(symbol: str = "BTC-USDT-SWAP") -> dict:
+    return {
+        "exchange_name": "OKX",
+        "symbol": symbol,
+        "instrument_id": symbol,
+        "asset_type": "SWAP",
+        "timestamp": 1_797_523_200.25,
+        "price": 67_001.5,
+        "last_price": 67_001.5,
+        "bid_price": 67_001.4,
+        "ask_price": 67_001.6,
+        "bid_volume": 2.0,
+        "ask_volume": 3.0,
+        "volume": 123.0,
+        "turnover": 8_250_000.0,
+        "high": 68_000.0,
+        "low": 66_000.0,
+        "open": 66_500.0,
+    }
+
+
+def test_service_market_directory_binds_only_exact_subject_source_and_symbol():
+    directory = ServiceMarketDeployment.from_value(json.dumps(_deployment_document()))
+
+    assert directory is not None
+    routes = directory.configured_routes("jwt-subject-a", "okx", ["BTC-USDT-SWAP", "ETH-USDT-SWAP"])
+    assert routes == {"BTC-USDT-SWAP": _market_key()}
+    assert directory.configured_routes("jwt-subject-b", "OKX", ["BTC-USDT-SWAP"]) == {}
+    assert directory.configured_routes("jwt-subject-a", "BINANCE", ["BTC-USDT-SWAP"]) == {}
+    assert directory.configured_routes("jwt-subject-a", "OKX", ["btc-usdt-swap"]) == {}
+    directory.close()
+
+
+def test_service_market_reads_only_configured_key_and_rejects_after_close():
+    directory = ServiceMarketDeployment.from_value(json.dumps(_deployment_document()))
+    assert directory is not None
+
+    with pytest.raises(ServiceMarketDeploymentError) as error:
+        directory.read_quotes(
+            "jwt-subject-a",
+            {"ETH-USDT-SWAP": _market_key("ETH-USDT-SWAP")},
+            wait_ms=0,
+        )
+    assert error.value.code == "MARKET_BINDING_NOT_CONFIGURED"
+
+    directory.close()
+    with pytest.raises(ServiceMarketDeploymentError) as error:
+        directory.read_quotes("jwt-subject-a", {"BTC-USDT-SWAP": _market_key()}, wait_ms=0)
+    assert error.value.code == "DEPLOYMENT_CLOSED"
+
+
+@pytest.mark.parametrize(
+    "mutate,code",
+    [
+        (lambda doc: doc["subjects"][0]["client_config"]["clients"]["gateway"]["settings"]["bindings"][0].update(mount="application.orders"), "INVALID_CLIENT_CONFIG"),
+        (lambda doc: doc["subjects"][0]["market_bindings"][0]["key"]["instrument"].update(provider="binance"), "UNSUPPORTED_MARKET_BINDING"),
+        (lambda doc: doc["subjects"][0]["scope_claims"]["public-market-scope"].update(account_ref="account-1"), "INVALID_DEPLOYMENT"),
+    ],
+)
+def test_service_market_directory_rejects_widened_or_mismatched_binding(mutate, code):
+    document = _deployment_document()
+    mutate(document)
+
+    with pytest.raises(ServiceMarketDeploymentError) as error:
+        ServiceMarketDeployment.from_value(json.dumps(document))
+
+    assert error.value.code == code
+
+
+def test_service_market_directory_rejects_duplicate_json_keys():
+    with pytest.raises(ServiceMarketDeploymentError) as error:
+        ServiceMarketDeployment.from_value('{"schema_version":1,"schema_version":1,"subjects":[] }')
+
+    assert error.value.code == "INVALID_DEPLOYMENT"
+
+
+def test_project_market_event_maps_established_okx_projection_to_quote_tick_input():
+    from bt_api_base.service_protocol import (
+        WireEnvelope,
+        WireHeader,
+        WireIdentity,
+        WireMessageKind,
+        WireRole,
+        WireScope,
+    )
+
+    key = _market_key()
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    event = WireEnvelope(
+        WireHeader(
+            protocol_version=2,
+            kind=WireMessageKind.EVENT,
+            message_id="synthetic-market-event-1",
+            correlation_id=None,
+            identity=WireIdentity(WireRole.SERVICE, "okx-market-service-principal", "okx-market-service"),
+            scope=WireScope("afi-public-market"),
+            operation="market.event",
+            schema_id="sdk.market.event",
+            schema_version=1,
+            sent_at_utc=now,
+            stream_id=key.stream_id,
+            stream_epoch="synthetic-market-epoch-1",
+            sequence=1,
+        ),
+        {"key": key.to_dict(), "data": _projection()},
+    )
+
+    projected = project_market_event(event, expected_key=key)
+
+    assert projected["symbol"] == "BTC-USDT-SWAP"
+    assert projected["price"] == 67_001.5
+    assert projected["bid_price"] == 67_001.4
+    assert projected["ask_price"] == 67_001.6
+    assert projected["volume"] == 123.0
+    assert projected["high_price"] == 68_000.0
+    assert projected["low_price"] == 66_000.0
+    assert projected["open_price"] == 66_500.0
+    assert projected["timestamp"] == 1_797_523_200.25
+
+
+def test_project_market_event_rejects_key_and_projection_mismatch():
+    from bt_api_base.service_protocol import (
+        WireEnvelope,
+        WireHeader,
+        WireIdentity,
+        WireMessageKind,
+        WireRole,
+        WireScope,
+    )
+
+    key = _market_key()
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    event = WireEnvelope(
+        WireHeader(
+            protocol_version=2,
+            kind=WireMessageKind.EVENT,
+            message_id="synthetic-market-event-2",
+            correlation_id=None,
+            identity=WireIdentity(WireRole.SERVICE, "okx-market-service-principal", "okx-market-service"),
+            scope=WireScope("afi-public-market"),
+            operation="market.event",
+            schema_id="sdk.market.event",
+            schema_version=1,
+            sent_at_utc=now,
+            stream_id=key.stream_id,
+            stream_epoch="synthetic-market-epoch-1",
+            sequence=1,
+        ),
+        {"key": key.to_dict(), "data": {**_projection(), "symbol": "ETH-USDT-SWAP"}},
+    )
+
+    with pytest.raises(ServiceMarketDeploymentError) as error:
+        project_market_event(event, expected_key=key)
+
+    assert error.value.code == "MARKET_INSTRUMENT_MISMATCH"
+
+
+def _quote_service(monkeypatch: pytest.MonkeyPatch) -> QuoteService:
+    QuoteService._instance = None
+    service = QuoteService()
+    monkeypatch.setattr(service, "_get_live_trading_manager", lambda: SimpleNamespace())
+    monkeypatch.setattr(service, "_get_running_workspace_context", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        service,
+        "_get_default_symbols_for_source",
+        lambda _source: [
+            {"symbol": "BTC-USDT-SWAP", "name": "BTC", "exchange": "OKX", "category": "crypto"},
+            {"symbol": "ETH-USDT-SWAP", "name": "ETH", "exchange": "OKX", "category": "crypto"},
+        ],
+    )
+    monkeypatch.setattr(service, "_build_quote_plans", lambda *args, **kwargs: {})
+    return service
+
+
+def test_quote_service_uses_configured_v2_key_without_opening_legacy_receiver(monkeypatch):
+    service = _quote_service(monkeypatch)
+    key = _market_key()
+
+    class _Directory:
+        def configured_routes(self, subject, source, symbols):
+            assert subject == "jwt-subject-a"
+            assert source == "OKX"
+            return {"BTC-USDT-SWAP": key}
+
+        def read_quotes(self, subject, routes, *, wait_ms):
+            assert wait_ms == 250
+            return {
+                key.stream_id: MarketQuoteResult(_projected_raw(), None, True),
+            }
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    monkeypatch.setattr(
+        service,
+        "_ensure_receiver",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy receiver opened")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_subscribe_symbols_on_gateway",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy subscribe sent")),
+    )
+
+    result = service.get_quotes("OKX", "jwt-subject-a", ["BTC-USDT-SWAP"])
+
+    assert result["refresh_mode"] == "push"
+    assert result["total"] == 1
+    tick = result["ticks"][0]
+    assert tick["gateway_key"] == "service-market"
+    assert tick["last_price"] == 67_001.5
+    assert tick["bid_price"] == 67_001.4
+    assert tick["status"] == "normal"
+
+
+def test_quote_service_does_not_fallback_when_configured_v2_route_fails(monkeypatch):
+    service = _quote_service(monkeypatch)
+    key = _market_key()
+
+    class _Directory:
+        def configured_routes(self, _subject, _source, _symbols):
+            return {"BTC-USDT-SWAP": key}
+
+        def read_quotes(self, _subject, _routes, *, wait_ms):
+            return {key.stream_id: MarketQuoteResult(None, "SERVICE_NOT_READY", False)}
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    monkeypatch.setattr(
+        service,
+        "_ensure_receiver",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy receiver opened")),
+    )
+    monkeypatch.setattr(
+        service,
+        "_subscribe_symbols_on_gateway",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy subscribe sent")),
+    )
+
+    result = service.get_quotes("OKX", "jwt-subject-a", ["BTC-USDT-SWAP"])
+
+    assert result["ticks"][0]["status"] == "error"
+    assert result["ticks"][0]["error_message"] == "SERVICE_NOT_READY"
+    assert result["refresh_mode"] == "polling"
+
+
+def test_get_data_sources_keeps_legacy_receivers_only_for_unconfigured_symbols(monkeypatch):
+    service = _quote_service(monkeypatch)
+    state = {"exchange_type": "OKX", "manual": False}
+    mixed_gateway = {
+        "state": state,
+        "symbols": {
+            "BTC-USDT-SWAP": {
+                "symbol": "BTC-USDT-SWAP",
+                "workspace_ids": {"workspace-1"},
+                "workspace_names": {"Demo"},
+            },
+            "ETH-USDT-SWAP": {
+                "symbol": "ETH-USDT-SWAP",
+                "workspace_ids": {"workspace-1"},
+                "workspace_names": {"Demo"},
+            },
+        },
+        "workspaces": {
+            "workspace-1": {
+                "workspace_id": "workspace-1",
+                "workspace_name": "Demo",
+                "symbols": {"BTC-USDT-SWAP", "ETH-USDT-SWAP"},
+            }
+        },
+    }
+    workspace_context = {"OKX": {"gateway-1": mixed_gateway}}
+
+    class _Directory:
+        def configured_routes(self, subject, source, symbols):
+            assert subject == "jwt-subject-a"
+            assert source == "OKX"
+            return {"BTC-USDT-SWAP": _market_key()} if "BTC-USDT-SWAP" in symbols else {}
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    monkeypatch.setattr(service, "_ensure_mt5_gateway_connected", lambda _manager: None)
+    monkeypatch.setattr(
+        service,
+        "_get_running_workspace_context",
+        lambda *_args, **_kwargs: workspace_context,
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_source_gateway_states",
+        lambda _manager, source, _context: {"gateway-1": state} if source == "OKX" else {},
+    )
+    monkeypatch.setattr(service, "_is_gateway_state_ready", lambda _state: True)
+    legacy_ensures: list[tuple[str, str]] = []
+    legacy_subscriptions: list[list[str]] = []
+    monkeypatch.setattr(
+        service,
+        "_ensure_receiver_for_gateway",
+        lambda source, gateway_key, _state: legacy_ensures.append((source, gateway_key)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_subscribe_symbols_on_gateway_state",
+        lambda _source, _gateway_key, _state, symbols: legacy_subscriptions.append(list(symbols)),
+    )
+
+    service.get_data_sources("jwt-subject-a")
+
+    assert legacy_ensures == [("OKX", "gateway-1")]
+    assert legacy_subscriptions == [["ETH-USDT-SWAP"]]
+
+    workspace_context["OKX"]["gateway-1"]["symbols"] = {
+        "BTC-USDT-SWAP": mixed_gateway["symbols"]["BTC-USDT-SWAP"]
+    }
+    workspace_context["OKX"]["gateway-1"]["workspaces"]["workspace-1"]["symbols"] = {
+        "BTC-USDT-SWAP"
+    }
+    service.get_data_sources("jwt-subject-a")
+
+    assert legacy_ensures == [("OKX", "gateway-1")]
+    assert legacy_subscriptions == [["ETH-USDT-SWAP"]]
+
+
+def test_workspace_only_configured_v2_quote_avoids_legacy_path(monkeypatch):
+    service = _quote_service(monkeypatch)
+    key = _market_key()
+    state = {"exchange_type": "OKX", "manual": False}
+    workspace_gateway = {
+        "state": state,
+        "symbols": {
+            "BTC-USDT-SWAP": {
+                "symbol": "BTC-USDT-SWAP",
+                "workspace_ids": {"workspace-1"},
+                "workspace_names": {"Demo"},
+            }
+        },
+        "workspaces": {},
+    }
+    service._get_running_workspace_context = lambda *_args, **_kwargs: {
+        "OKX": {"gateway-1": workspace_gateway}
+    }
+
+    class _Directory:
+        def configured_routes(self, subject, source, symbols):
+            assert subject == "jwt-subject-a"
+            assert source == "OKX"
+            assert symbols == ["ETH-USDT-SWAP", "BTC-USDT-SWAP"]
+            return {"BTC-USDT-SWAP": key}
+
+        def read_quotes(self, subject, routes, *, wait_ms):
+            assert subject == "jwt-subject-a"
+            assert routes == {"BTC-USDT-SWAP": key}
+            assert wait_ms == 250
+            return {key.stream_id: MarketQuoteResult(_projected_raw(), None, True)}
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    legacy_ensures: list[str] = []
+    legacy_subscriptions: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        service,
+        "_ensure_receiver",
+        lambda source, _manager: legacy_ensures.append(source),
+    )
+    monkeypatch.setattr(
+        service,
+        "_subscribe_symbols_on_gateway",
+        lambda source, symbols: legacy_subscriptions.append((source, list(symbols))),
+    )
+
+    result = service.get_quotes("OKX", "jwt-subject-a", ["ETH-USDT-SWAP"])
+
+    assert legacy_ensures == ["OKX"]
+    assert legacy_subscriptions == [("OKX", ["ETH-USDT-SWAP"])]
+    assert result["total"] == 1
+    tick = result["ticks"][0]
+    assert tick["gateway_key"] == "service-market"
+    assert tick["origins"] == ["workspace"]
+    assert tick["workspace_ids"] == ["workspace-1"]
+    assert tick["workspace_names"] == ["Demo"]
+
+
+def test_uncertain_service_market_close_retains_closed_owner_and_fails_closed(monkeypatch):
+    service = _quote_service(monkeypatch)
+    key = _market_key()
+
+    class _UncertainDeployment:
+        def close(self):
+            raise ServiceMarketDeploymentError("CLOSE_FAILED")
+
+        def configured_routes(self, _subject, _source, _symbols):
+            return {"BTC-USDT-SWAP": key}
+
+        def read_quotes(self, _subject, _routes, *, wait_ms):
+            raise ServiceMarketDeploymentError("DEPLOYMENT_CLOSED")
+
+    deployment = _UncertainDeployment()
+    service._service_market_loaded = True
+    service._service_market_deployment = deployment
+    service._service_market_error = None
+    monkeypatch.setattr(
+        service,
+        "_ensure_receiver",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("uncertain v2 owner fell back to legacy receiver")
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_subscribe_symbols_on_gateway",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("uncertain v2 owner fell back to legacy subscribe")
+        ),
+    )
+
+    service.shutdown()
+
+    assert service._service_market_deployment is deployment
+    assert service._service_market_loaded is True
+    assert service._service_market_error is None
+    result = service.get_quotes("OKX", "jwt-subject-a", ["BTC-USDT-SWAP"])
+    assert result["ticks"][0]["status"] == "error"
+    assert result["ticks"][0]["error_message"] == "DEPLOYMENT_CLOSED"
+
+
+def _projected_raw() -> dict:
+    return {
+        "symbol": "BTC-USDT-SWAP",
+        "instrument_id": "BTC-USDT-SWAP",
+        "exchange": "OKX",
+        "asset_type": "SWAP",
+        "timestamp": 1_797_523_200.25,
+        "price": 67_001.5,
+        "last_price": 67_001.5,
+        "bid_price": 67_001.4,
+        "ask_price": 67_001.6,
+        "bid_volume": 2.0,
+        "ask_volume": 3.0,
+        "volume": 123.0,
+        "turnover": 8_250_000.0,
+        "high_price": 68_000.0,
+        "low_price": 66_000.0,
+        "open_price": 66_500.0,
+    }
