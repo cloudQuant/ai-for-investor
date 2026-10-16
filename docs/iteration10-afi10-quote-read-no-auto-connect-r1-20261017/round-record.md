@@ -3,7 +3,8 @@
 - Repository/branch: `D:/source_code/ai-for-investor`, `dev`.
 - Source base: `9cfd98b9beece31288e59e45d987e52e0f79114a`.
 - Scope: `manager.py`, `quote_service.py`, `test_live_trading_manager.py`, `test_quote_service.py`, and `test_quote_service_market.py` under `src/backend/`.
-- Result: author-local focused checks passed; independent static review pending at record creation. This is not formal AFI10 acceptance.
+- Delivery: source commit `cd9185f1d46757d1008d89ee6e39f31a93a21c84` (parent `9cfd98b9beece31288e59e45d987e52e0f79114a`); record finalization is a separate docs-only commit.
+- Result: author-local focused checks passed; independent static review returned GO. This is not formal AFI10 acceptance.
 
 Quote reads no longer read MT5 credentials, create/restore the legacy live-trading manager, or connect an MT5 Gateway as a side effect. QuoteService consults only an already-existing manager, so an explicitly connected Gateway can continue to supply legacy quotes. Explicit manual connect/disconnect routes and manager operations remain available; their obsolete callbacks that toggled quote-page auto-connect state are removed. Tests cover a quote read with no manager creation or Gateway connect, and manual connect/disconnect without a QuoteService side effect.
 
