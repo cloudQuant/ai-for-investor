@@ -438,6 +438,11 @@ const routes: RouteRecordRaw[] = [
         meta: { workspaceType: 'trading' },
       },
       {
+        path: toAppChildPath(APP_PATHS.trading.gatewayHealth),
+        name: 'TradingGatewayHealth',
+        component: () => import('@/views/ServiceGatewayHealthPage.vue'),
+      },
+      {
         path: 'trading/brokers',
         redirect: { name: 'TradingWorkspaceList' },
       },

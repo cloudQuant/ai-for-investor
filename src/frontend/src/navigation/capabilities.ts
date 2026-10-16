@@ -219,6 +219,13 @@ export const capabilities: Capability[] = [
     icon: 'ChatDotRound',
     legacyPaths: ['/ai-trading'],
   },
+  {
+    id: 'trading.gatewayHealth',
+    domainId: 'trading',
+    path: APP_PATHS.trading.gatewayHealth,
+    labelKey: 'nav.gatewayHealth',
+    icon: 'Monitor',
+  },
 
   {
     id: 'portfolio.overview',
