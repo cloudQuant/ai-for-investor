@@ -21,6 +21,7 @@ from app.services.service_read.client import (
     OrderSubmitBinding,
     PortfolioAnalyticsBinding,
 
+    PaperLegacyImportBinding,
     PaperSubmitBinding,
 )
 
@@ -68,6 +69,7 @@ class ReadAccess:
     allow_order_scope_refs: frozenset[str] = frozenset()
     allow_order_submit_scope_refs: frozenset[str] = frozenset()
     allow_paper_submit_account_ids: frozenset[str] = frozenset()
+    allow_paper_legacy_import_account_ids: frozenset[str] = frozenset()
     allow_approved_target_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
     allow_portfolio_refs: frozenset[str] = frozenset()
@@ -86,6 +88,9 @@ class ReadAccess:
     paper_submit_bindings: Mapping[str, PaperSubmitBinding] = field(
         default_factory=dict, repr=False
     )
+    paper_legacy_import_bindings: Mapping[str, PaperLegacyImportBinding] = field(
+        default_factory=dict, repr=False
+    )
     application_identity: Any = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -101,6 +106,7 @@ class ReadAccess:
             "allow_order_scope_refs",
             "allow_order_submit_scope_refs",
             "allow_paper_submit_account_ids",
+            "allow_paper_legacy_import_account_ids",
             "allow_approved_target_scope_refs",
             "allow_monitor_scope_refs",
             "allow_portfolio_refs",
@@ -209,6 +215,45 @@ class ReadAccess:
                 raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
         object.__setattr__(self, "paper_submit_bindings", MappingProxyType(normalized_paper))
 
+        import_bindings = self.paper_legacy_import_bindings
+        if not isinstance(import_bindings, Mapping) or len(import_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_PAPER_LEGACY_IMPORT_BINDINGS")
+        normalized_imports: dict[str, PaperLegacyImportBinding] = {}
+        for selector, binding in import_bindings.items():
+            paper_binding = normalized_paper.get(selector)
+            if (
+                not _valid_identifier(selector)
+                or type(binding) is not PaperLegacyImportBinding
+                or binding.legacy_account_id != selector
+                or paper_binding is None
+                or binding.paper_binding is not paper_binding
+            ):
+                raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
+            normalized_imports[selector] = binding
+        if set(normalized_imports) != set(self.allow_paper_legacy_import_account_ids):
+            raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_GRANT_MISMATCH")
+        if normalized_imports:
+            if not inspect.iscoroutinefunction(
+                getattr(self.worker, "call_paper_legacy_import", None)
+            ):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            if any(
+                binding.paper_binding.query_scope_ref not in self.allow_order_scope_refs
+                for binding in normalized_imports.values()
+            ):
+                raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(
+            self, "paper_legacy_import_bindings", MappingProxyType(normalized_imports)
+        )
+
         approved_bindings = self.approved_target_bindings
         if not isinstance(approved_bindings, Mapping) or len(approved_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
@@ -312,6 +357,11 @@ class ServiceReadAccessDirectory:
                 raise ServiceReadAccessError("INVALID_SUBJECT")
             if type(access) is not ReadAccess:
                 raise ServiceReadAccessError("INVALID_READ_ACCESS")
+            if any(
+                binding.owner_subject != subject
+                for binding in access.paper_legacy_import_bindings.values()
+            ):
+                raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_OWNER_MISMATCH")
             worker_id = id(access.worker)
             if worker_id in worker_ids:
                 raise ServiceReadAccessError("WORKER_SHARED")
@@ -374,6 +424,19 @@ class ServiceReadAccessDirectory:
             raise ServiceReadAccessError("ACCESS_DENIED")
         access = self._access_by_subject.get(subject)
         if access is None or legacy_account_id not in access.paper_submit_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
+
+    def resolve_paper_legacy_import_account(
+        self, subject: str, legacy_account_id: str
+    ) -> ReadAccess:
+        """Resolve the separately granted import operation for an exact owner."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(legacy_account_id):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        binding = None if access is None else access.paper_legacy_import_bindings.get(legacy_account_id)
+        if access is None or binding is None or binding.owner_subject != subject:
             raise ServiceReadAccessError("ACCESS_DENIED")
         return access
 

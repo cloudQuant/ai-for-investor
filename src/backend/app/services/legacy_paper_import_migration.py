@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import or_, select, update
@@ -50,7 +50,6 @@ from app.services.legacy_paper_migration import (
 
 _MAX_PRESERVED_CONTEXT_BYTES = 8 * 1024 * 1024
 _MAX_CONTEXT_ROWS_PER_TABLE = 20_000
-_EXECUTION_WRITER_TTL_NS = 300_000_000_000
 
 
 class LegacyPaperImportError(RuntimeError):
@@ -354,8 +353,8 @@ async def _preserved_context(
         "activation": "retained_in_legacy_source_only",
         "categories": categories,
         "cursor_contract": {
-            "persistent_cursor_rows": 0,
-            "legacy_signed_cursor": "stateless_runtime_token_retained_source_only",
+            "legacy_cursor_format": "base64url_json_observed_at_id",
+            "legacy_cursor_retained": "stateless_runtime_source_only",
             "target_cursor_activated": False,
         },
     }
@@ -669,26 +668,169 @@ async def get_legacy_paper_import_receipt(
         raise LegacyPaperImportError("LEGACY_IMPORT_STORE_UNAVAILABLE") from None
 
 
-def _validate_execution_status(status: Any, *, account_key: str) -> None:
+async def inspect_legacy_paper_import_target(
+    legacy_account_id: str,
+    target_worker: Any,
+    *,
+    scope: Any,
+) -> Mapping[str, Any]:
+    """Read the exact configured Host target without opening a target store."""
+
+    if not _identifier(legacy_account_id):
+        raise LegacyPaperImportError("INVALID_SELECTOR")
+    status = await _execution_status(
+        target_worker,
+        legacy_account_id,
+        legacy_account_id,
+        account_key=scope.account_key,
+    )
+    receipt = status.source_receipt
+    return {
+        "owner_domain_exists": status.owner_domain_exists,
+        "active_account_import_state": status.active_account_import_state,
+        "source_receipt": None
+        if receipt is None
+        else {
+            "source_account_id": receipt.source_account_id,
+            "source_owner_id": receipt.source_owner_id,
+            "source_sha256": receipt.source_sha256,
+            "state": receipt.state,
+            "scope_key": receipt.scope_key,
+            "account_key": receipt.account_key,
+            "unallocated_equity_residual": format(
+                receipt.unallocated_equity_residual, "f"
+            ),
+            "import_sha256": receipt.import_sha256,
+            "domain_sha256": receipt.domain_sha256,
+        },
+    }
+
+
+async def _target_call(
+    target_worker: Any,
+    legacy_account_id: str,
+    operation: str,
+    arguments: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Call the configured ServiceRead worker; never open an E store here."""
+
+    method = getattr(target_worker, "call_paper_legacy_import", None)
+    if not callable(method):
+        raise LegacyPaperImportError("TARGET_IMPORT_CLIENT_UNAVAILABLE")
+    try:
+        reply = await method(legacy_account_id, operation, dict(arguments))
+    except Exception:
+        raise LegacyPaperImportError("TARGET_IMPORT_RPC_UNAVAILABLE") from None
     if (
-        type(getattr(status, "active_account_import_state", None))
-        not in {str, type(None)}
-        or type(getattr(status, "owner_domain_exists", None)) is not bool
-        or getattr(getattr(status, "source_receipt", None), "account_key", account_key)
-        not in {account_key}
+        not isinstance(reply, Mapping)
+        or set(reply) != {"ok", "code", "result"}
+        or type(reply.get("ok")) is not bool
+        or type(reply.get("code")) is not str
+        or not isinstance(reply.get("result"), Mapping)
+    ):
+        raise LegacyPaperImportError("TARGET_IMPORT_REPLY_INVALID")
+    if reply["ok"]:
+        if reply["code"] != "OK":
+            raise LegacyPaperImportError("TARGET_IMPORT_REPLY_INVALID")
+        return reply["result"]
+
+    code = reply["code"]
+    if code == "IMPORT_OWNER_BUSY":
+        raise LegacyPaperImportError("TARGET_WRITER_UNAVAILABLE")
+    if code == "IMPORT_RESIDUAL_UNREPRESENTABLE":
+        raise LegacyPaperImportError("LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE")
+    if code == "IMPORT_WRITE_UNCERTAIN":
+        action = operation.rsplit(".", 1)[-1].upper()
+        raise LegacyPaperImportError(f"TARGET_IMPORT_{action}_UNCERTAIN")
+    if code == "IMPORT_STORE_UNAVAILABLE":
+        suffix = "UNCERTAIN" if operation in {
+            "paper.import.prepare",
+            "paper.import.activate",
+            "paper.import.abort",
+        } else "UNAVAILABLE"
+        raise LegacyPaperImportError(f"TARGET_IMPORT_{suffix}")
+    if code in {"SCOPE_DENIED", "SOURCE_OWNER_MISMATCH"}:
+        raise LegacyPaperImportError("TARGET_IMPORT_BINDING_MISMATCH")
+    if code in {"IMPORT_INVALID", "INVALID_ARGUMENTS"}:
+        raise LegacyPaperImportError("TARGET_IMPORT_INVALID")
+    if code in {"IMPORT_STATE_CONFLICT", "UNSUPPORTED_OPERATION"}:
+        raise LegacyPaperImportError("TARGET_IMPORT_STATE_CONFLICT")
+    raise LegacyPaperImportError("TARGET_IMPORT_RPC_FAILED")
+
+
+def _execution_status_from_projection(
+    projection: Mapping[str, Any], *, account_key: str
+) -> Any:
+    if (
+        set(projection)
+        != {"source_receipt", "active_account_import_state", "owner_domain_exists"}
+        or type(projection.get("owner_domain_exists")) is not bool
+        or type(projection.get("active_account_import_state")) not in {str, type(None)}
+        or projection.get("active_account_import_state")
+        not in {None, "PREPARED", "ACTIVE", "ABORTED"}
     ):
         raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+    source_value = projection["source_receipt"]
+    source_receipt = None
+    if source_value is not None:
+        required = {
+            "source_account_id",
+            "source_owner_id",
+            "source_sha256",
+            "state",
+            "scope_key",
+            "account_key",
+            "unallocated_equity_residual",
+            "import_sha256",
+            "domain_sha256",
+        }
+        if not isinstance(source_value, Mapping) or set(source_value) != required:
+            raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+        for name in ("source_account_id", "source_owner_id", "state", "scope_key", "account_key"):
+            if type(source_value[name]) is not str:
+                raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+        if source_value["state"] not in {"PREPARED", "ACTIVE", "ABORTED"}:
+            raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+        for name in ("source_sha256", "import_sha256", "domain_sha256"):
+            value = source_value[name]
+            if (
+                type(value) is not str
+                or len(value) != 64
+                or any(character not in "0123456789abcdef" for character in value)
+            ):
+                raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+        try:
+            residual = Decimal(source_value["unallocated_equity_residual"])
+        except Exception:
+            raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID") from None
+        if not residual.is_finite() or source_value["account_key"] != account_key:
+            raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+        source_fields = dict(source_value)
+        source_fields["unallocated_equity_residual"] = residual
+        source_receipt = SimpleNamespace(**source_fields)
+    return SimpleNamespace(
+        source_receipt=source_receipt,
+        active_account_import_state=projection["active_account_import_state"],
+        owner_domain_exists=projection["owner_domain_exists"],
+    )
 
 
-def _execution_status(target_store: Any, scope: Any, source_account_id: str) -> Any:
-    try:
-        status = target_store.inspect_paper_legacy_import_account(
-            scope, source_account_id=source_account_id
-        )
-    except Exception:
-        raise LegacyPaperImportError("TARGET_IMPORT_STATUS_UNAVAILABLE") from None
-    _validate_execution_status(status, account_key=scope.account_key)
-    return status
+async def _execution_status(
+    target_worker: Any,
+    legacy_account_id: str,
+    source_account_id: str,
+    *,
+    account_key: str,
+) -> Any:
+    if source_account_id != legacy_account_id:
+        raise LegacyPaperImportError("TARGET_IMPORT_BINDING_MISMATCH")
+    projection = await _target_call(
+        target_worker,
+        legacy_account_id,
+        "paper.import.inspect_source",
+        {"source_account_id": source_account_id},
+    )
+    return _execution_status_from_projection(projection, account_key=account_key)
 
 
 def _check_execution_source_receipt(
@@ -717,43 +859,23 @@ def _check_execution_source_receipt(
     return receipt.state
 
 
-def _acquire_target_lease(target_store: Any, scope: Any, owner_id: str) -> Any:
-    try:
-        return target_store.acquire_or_renew_lease(
-            scope, owner_id, ttl_ns=_EXECUTION_WRITER_TTL_NS
-        )
-    except Exception:
-        raise LegacyPaperImportError("TARGET_WRITER_UNAVAILABLE") from None
-
-
-def _release_target_lease(target_store: Any, scope: Any, lease: Any) -> None:
-    try:
-        released = target_store.release_lease(
-            scope, lease.owner_id, fencing_token=lease.fencing_token
-        )
-        if released is not True:
-            raise LegacyPaperImportError("TARGET_WRITER_RELEASE_UNCERTAIN")
-    except LegacyPaperImportError:
-        raise
-    except Exception:
-        raise LegacyPaperImportError("TARGET_WRITER_RELEASE_UNCERTAIN") from None
-
-
 async def migrate_nonempty_legacy_paper_account(
     service: Any,
     owner_subject: str,
     binding: Any,
     *,
-    target_store: Any,
+    target_worker: Any,
     scope: Any,
     domain: Any,
     symbol_bindings: Sequence[Any],
 ) -> LegacyPaperImportResult:
-    """Freeze and import one complete legacy account into an existing E store.
+    """Freeze and import one complete legacy account through its Host worker.
 
     ``binding``, ``scope``, ``domain``, and symbol bindings must come from the
-    server's deployment registry.  This function is deliberately not an HTTP
-    request parser and never trusts a client-supplied target owner mapping.
+    server's deployment registry. ``target_worker`` is the configured
+    ServiceRead worker that calls the existing ServiceHost; this function is
+    deliberately not an HTTP request parser and never trusts a client-supplied
+    target owner mapping.
     """
 
     try:
@@ -829,8 +951,11 @@ async def migrate_nonempty_legacy_paper_account(
     except Exception:
         raise LegacyPaperImportError("LEGACY_IMPORT_NOT_REPRESENTABLE") from None
 
-    initial_status = _execution_status(
-        target_store, scope, imported.source_account_id
+    initial_status = await _execution_status(
+        target_worker,
+        binding_payload["legacy_account_id"],
+        imported.source_account_id,
+        account_key=scope.account_key,
     )
     source_row = await _read_source_receipt(imported.source_account_id)
     if source_row is None:
@@ -848,104 +973,117 @@ async def migrate_nonempty_legacy_paper_account(
             binding_sha256=paper_binding_fingerprint(binding),
         )
 
-    writer_owner_id = f"afi-legacy-import-{uuid.uuid4().hex}"
-    lease = _acquire_target_lease(target_store, scope, writer_owner_id)
-    operation_error: BaseException | None = None
-    try:
-        status = _execution_status(target_store, scope, imported.source_account_id)
-        if source_row is None or source_row.state == "ABORTED":
-            if status.owner_domain_exists or status.active_account_import_state is not None:
-                raise LegacyPaperImportError("TARGET_ACCOUNT_ALREADY_OWNED")
-            if status.source_receipt is not None and status.source_receipt.state != "ABORTED":
-                raise LegacyPaperImportError("TARGET_IMPORT_WITHOUT_SOURCE_RECEIPT")
-        _check_execution_source_receipt(status, imported=imported, domain=domain, scope=scope)
+    status = await _execution_status(
+        target_worker,
+        binding_payload["legacy_account_id"],
+        imported.source_account_id,
+        account_key=scope.account_key,
+    )
+    if source_row is None or source_row.state == "ABORTED":
+        if status.owner_domain_exists or status.active_account_import_state is not None:
+            raise LegacyPaperImportError("TARGET_ACCOUNT_ALREADY_OWNED")
+        if status.source_receipt is not None and status.source_receipt.state != "ABORTED":
+            raise LegacyPaperImportError("TARGET_IMPORT_WITHOUT_SOURCE_RECEIPT")
+    _check_execution_source_receipt(status, imported=imported, domain=domain, scope=scope)
 
-        source_row = await _freeze_source(
-            service=service,
-            owner_subject=owner_subject,
-            binding_payload=binding_payload,
-            binding_sha256=paper_binding_fingerprint(binding),
-            scope=scope,
-            domain=domain,
-            imported=imported,
+    source_row = await _freeze_source(
+        service=service,
+        owner_subject=owner_subject,
+        binding_payload=binding_payload,
+        binding_sha256=paper_binding_fingerprint(binding),
+        scope=scope,
+        domain=domain,
+        imported=imported,
+    )
+    if source_row.state == "ABORTED":
+        raise LegacyPaperImportError("LEGACY_IMPORT_GENERATION_ABORTED")
+    if imported.unallocated_equity_residual != Decimal(0):
+        # Keep the complete source snapshot frozen for operator review, but
+        # do not activate a target owner whose book cannot represent every
+        # unit of the source account's marked equity.
+        raise LegacyPaperImportError("LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE")
+
+    target_state = _check_execution_source_receipt(
+        await _execution_status(
+            target_worker,
+            binding_payload["legacy_account_id"],
+            imported.source_account_id,
+            account_key=scope.account_key,
+        ),
+        imported=imported,
+        domain=domain,
+        scope=scope,
+    )
+    if target_state is None:
+        if source_row.state != "PREPARED":
+            raise LegacyPaperImportError("TARGET_IMPORT_RECEIPT_MISSING")
+        await _target_call(
+            target_worker,
+            binding_payload["legacy_account_id"],
+            "paper.import.prepare",
+            {"imported": imported.to_payload()},
         )
-        if source_row.state == "ABORTED":
-            raise LegacyPaperImportError("LEGACY_IMPORT_GENERATION_ABORTED")
-        if imported.unallocated_equity_residual != Decimal(0):
-            # Keep the complete source snapshot frozen for operator review, but
-            # do not activate a target owner whose book cannot represent every
-            # unit of the source account's marked equity.
-            raise LegacyPaperImportError("LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE")
-
         target_state = _check_execution_source_receipt(
-            _execution_status(target_store, scope, imported.source_account_id),
+            await _execution_status(
+                target_worker,
+                binding_payload["legacy_account_id"],
+                imported.source_account_id,
+                account_key=scope.account_key,
+            ),
             imported=imported,
             domain=domain,
             scope=scope,
         )
-        if target_state is None:
-            if source_row.state != "PREPARED":
-                raise LegacyPaperImportError("TARGET_IMPORT_RECEIPT_MISSING")
-            try:
-                target_store.prepare_paper_legacy_import(
-                    scope, domain, imported, writer_lease=lease
-                )
-            except Exception:
-                raise LegacyPaperImportError("TARGET_IMPORT_PREPARE_UNCERTAIN") from None
-            target_state = _check_execution_source_receipt(
-                _execution_status(target_store, scope, imported.source_account_id),
-                imported=imported,
-                domain=domain,
-                scope=scope,
-            )
-        if target_state == "ABORTED":
-            raise LegacyPaperImportError("TARGET_IMPORT_GENERATION_ABORTED")
-        if target_state not in {"PREPARED", "ACTIVE"}:
-            raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
+    if target_state == "ABORTED":
+        raise LegacyPaperImportError("TARGET_IMPORT_GENERATION_ABORTED")
+    if target_state not in {"PREPARED", "ACTIVE"}:
+        raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
 
-        if source_row.state == "PREPARED":
-            source_row = await _transition_source(
-                account_id=imported.source_account_id,
-                owner_subject=owner_subject,
-                source_sha256=imported.source_sha256,
-                target_state="COMMITTED",
-            )
-        if source_row.state == "COMMITTED" and target_state == "PREPARED":
-            lease = _acquire_target_lease(target_store, scope, writer_owner_id)
-            try:
-                target_store.activate_paper_legacy_import(scope, writer_lease=lease)
-            except Exception:
-                raise LegacyPaperImportError("TARGET_IMPORT_ACTIVATION_UNCERTAIN") from None
-            target_state = _check_execution_source_receipt(
-                _execution_status(target_store, scope, imported.source_account_id),
-                imported=imported,
-                domain=domain,
-                scope=scope,
-            )
-        if target_state != "ACTIVE":
-            raise LegacyPaperImportError("TARGET_IMPORT_ACTIVATION_UNCERTAIN")
-        final_status = _execution_status(target_store, scope, imported.source_account_id)
-        if not final_status.owner_domain_exists or final_status.active_account_import_state != "ACTIVE":
-            raise LegacyPaperImportError("TARGET_IMPORT_OWNER_UNVERIFIED")
-        if source_row.state == "COMMITTED":
-            source_row = await _transition_source(
-                account_id=imported.source_account_id,
-                owner_subject=owner_subject,
-                source_sha256=imported.source_sha256,
-                target_state="ACTIVE",
-            )
-        if source_row.state != "ACTIVE":
-            raise LegacyPaperImportError("LEGACY_IMPORT_STATE_UNVERIFIED")
-        return LegacyPaperImportResult(_view(source_row))
-    except BaseException as error:
-        operation_error = error
-        raise
-    finally:
-        try:
-            _release_target_lease(target_store, scope, lease)
-        except Exception:
-            if operation_error is None:
-                raise
+    if source_row.state == "PREPARED":
+        source_row = await _transition_source(
+            account_id=imported.source_account_id,
+            owner_subject=owner_subject,
+            source_sha256=imported.source_sha256,
+            target_state="COMMITTED",
+        )
+    if source_row.state == "COMMITTED" and target_state == "PREPARED":
+        await _target_call(
+            target_worker,
+            binding_payload["legacy_account_id"],
+            "paper.import.activate",
+            {},
+        )
+        target_state = _check_execution_source_receipt(
+            await _execution_status(
+                target_worker,
+                binding_payload["legacy_account_id"],
+                imported.source_account_id,
+                account_key=scope.account_key,
+            ),
+            imported=imported,
+            domain=domain,
+            scope=scope,
+        )
+    if target_state != "ACTIVE":
+        raise LegacyPaperImportError("TARGET_IMPORT_ACTIVATION_UNCERTAIN")
+    final_status = await _execution_status(
+        target_worker,
+        binding_payload["legacy_account_id"],
+        imported.source_account_id,
+        account_key=scope.account_key,
+    )
+    if not final_status.owner_domain_exists or final_status.active_account_import_state != "ACTIVE":
+        raise LegacyPaperImportError("TARGET_IMPORT_OWNER_UNVERIFIED")
+    if source_row.state == "COMMITTED":
+        source_row = await _transition_source(
+            account_id=imported.source_account_id,
+            owner_subject=owner_subject,
+            source_sha256=imported.source_sha256,
+            target_state="ACTIVE",
+        )
+    if source_row.state != "ACTIVE":
+        raise LegacyPaperImportError("LEGACY_IMPORT_STATE_UNVERIFIED")
+    return LegacyPaperImportResult(_view(source_row))
 
 
 async def rollback_legacy_paper_import(
@@ -953,7 +1091,7 @@ async def rollback_legacy_paper_import(
     owner_subject: str,
     *,
     source_inventory_sha256: str,
-    target_store: Any,
+    target_worker: Any,
     scope: Any,
 ) -> LegacyPaperImportReceiptView:
     """Unfreeze only after target absence or an E PREPARED receipt is aborted.
@@ -982,7 +1120,12 @@ async def rollback_legacy_paper_import(
     if source_row.target_scope_key != scope.key or source_row.target_account_key != scope.account_key:
         raise LegacyPaperImportError("TARGET_SCOPE_MISMATCH")
 
-    status = _execution_status(target_store, scope, legacy_account_id)
+    status = await _execution_status(
+        target_worker,
+        legacy_account_id,
+        legacy_account_id,
+        account_key=scope.account_key,
+    )
     execution_state = getattr(status, "source_receipt", None)
     if execution_state is not None and (
         execution_state.scope_key != scope.key
@@ -1000,26 +1143,18 @@ async def rollback_legacy_paper_import(
     if status.active_account_import_state not in {None, "PREPARED"}:
         raise LegacyPaperImportError("TARGET_IMPORT_STATUS_INVALID")
     if execution_state is not None and execution_state.state == "PREPARED":
-        lease = _acquire_target_lease(
-            target_store, scope, f"afi-legacy-import-rollback-{uuid.uuid4().hex}"
+        await _target_call(
+            target_worker,
+            legacy_account_id,
+            "paper.import.abort",
+            {"source_sha256": source_inventory_sha256},
         )
-        operation_error: BaseException | None = None
-        try:
-            target_store.abort_paper_legacy_import(
-                scope,
-                source_sha256=source_inventory_sha256,
-                writer_lease=lease,
-            )
-        except BaseException as error:
-            operation_error = error
-            raise LegacyPaperImportError("TARGET_IMPORT_ABORT_UNCERTAIN") from None
-        finally:
-            try:
-                _release_target_lease(target_store, scope, lease)
-            except Exception:
-                if operation_error is None:
-                    raise
-        status = _execution_status(target_store, scope, legacy_account_id)
+        status = await _execution_status(
+            target_worker,
+            legacy_account_id,
+            legacy_account_id,
+            account_key=scope.account_key,
+        )
         execution_state = getattr(status, "source_receipt", None)
         if (
             status.owner_domain_exists
@@ -1047,6 +1182,7 @@ __all__ = [
     "LegacyPaperImportError",
     "LegacyPaperImportResult",
     "get_legacy_paper_import_receipt",
+    "inspect_legacy_paper_import_target",
     "migrate_nonempty_legacy_paper_account",
     "rollback_legacy_paper_import",
 ]

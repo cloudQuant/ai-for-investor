@@ -31,8 +31,10 @@ from app.services.service_read.client import (
     OrderBinding,
     OrderSubmitBinding,
     PortfolioAnalyticsBinding,
-
+    PaperLegacyImportBinding,
     PaperSubmitBinding,
+
+    PAPER_LEGACY_IMPORT_OPERATIONS,
 )
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
@@ -68,7 +70,10 @@ _SCOPE_FIELDS = frozenset(
 _READ_MOUNTS = frozenset(
     {"application.account", "application.order_query", "application.monitor", "application.risk_analysis"}
 )
-_DEPLOYMENT_MOUNTS = _READ_MOUNTS | {"application.orders"}
+_DEPLOYMENT_MOUNTS = _READ_MOUNTS | {
+    "application.orders",
+    "application.paper_legacy_import",
+}
 
 
 class ServiceReadDeploymentError(RuntimeError):
@@ -103,6 +108,9 @@ class _SubjectProfile:
     order_bindings: Mapping[str, OrderBinding] = field(repr=False, compare=False)
     order_submit_bindings: Mapping[str, OrderSubmitBinding] = field(repr=False, compare=False)
     paper_submit_bindings: Mapping[str, PaperSubmitBinding] = field(repr=False, compare=False)
+    paper_legacy_import_bindings: Mapping[str, PaperLegacyImportBinding] = field(
+        repr=False, compare=False
+    )
     approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] = field(
         repr=False, compare=False
     )
@@ -116,6 +124,7 @@ class _SubjectProfile:
     order_grants: frozenset[str]
     order_submit_grants: frozenset[str]
     paper_submit_grants: frozenset[str]
+    paper_legacy_import_grants: frozenset[str]
     approved_target_grants: frozenset[str]
     monitor_grants: frozenset[str]
     portfolio_grants: frozenset[str]
@@ -191,6 +200,7 @@ async def start_service_read_deployment(
                 allow_order_scope_refs=profile.order_grants,
                 allow_order_submit_scope_refs=profile.order_submit_grants,
                 allow_paper_submit_account_ids=profile.paper_submit_grants,
+                allow_paper_legacy_import_account_ids=profile.paper_legacy_import_grants,
                 allow_approved_target_scope_refs=profile.approved_target_grants,
                 allow_monitor_scope_refs=profile.monitor_grants,
                 allow_portfolio_refs=profile.portfolio_grants,
@@ -198,6 +208,7 @@ async def start_service_read_deployment(
                 strategy_book_bindings=profile.strategy_book_bindings,
                 order_submit_bindings=profile.order_submit_bindings,
                 paper_submit_bindings=profile.paper_submit_bindings,
+                paper_legacy_import_bindings=profile.paper_legacy_import_bindings,
                 approved_target_bindings=profile.approved_target_bindings,
                 application_identity=profile.identity,
             )
@@ -229,6 +240,7 @@ def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
             order_bindings=profile.order_bindings,
             order_submit_bindings=profile.order_submit_bindings,
             paper_submit_bindings=profile.paper_submit_bindings,
+            paper_legacy_import_bindings=profile.paper_legacy_import_bindings,
             approved_target_bindings=profile.approved_target_bindings,
             monitor_bindings=profile.monitor_bindings,
             portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
@@ -292,6 +304,10 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
                 "analysis.cancel",
             }
         )
+    if profile.paper_legacy_import_bindings:
+        requested_operations["application.paper_legacy_import"] = (
+            PAPER_LEGACY_IMPORT_OPERATIONS
+        )
     return ServiceClientRuntime(
         profile.client_config,
         identity=profile.identity,
@@ -345,7 +361,14 @@ def _parse_deployment(value: SecretStr | str | None) -> tuple[_SubjectProfile, .
     has_paper_bindings = any(
         type(profile) is dict and "paper_submit_bindings" in profile for profile in subjects
     )
-    sdk = _load_sdk_types(include_paper=has_paper_bindings)
+    has_paper_import_bindings = any(
+        type(profile) is dict and "paper_legacy_import_bindings" in profile
+        for profile in subjects
+    )
+    sdk = _load_sdk_types(
+        include_paper=has_paper_bindings or has_paper_import_bindings,
+        include_paper_import=has_paper_import_bindings,
+    )
     profiles: list[_SubjectProfile] = []
     seen_subjects: set[str] = set()
     seen_identities: set[tuple[str, str, str | None]] = set()
@@ -371,7 +394,9 @@ def _parse_deployment(value: SecretStr | str | None) -> tuple[_SubjectProfile, .
     return tuple(sorted(profiles, key=lambda item: item.subject))
 
 
-def _load_sdk_types(*, include_paper: bool = False) -> Mapping[str, Any]:
+def _load_sdk_types(
+    *, include_paper: bool = False, include_paper_import: bool = False
+) -> Mapping[str, Any]:
     """Import optional SDK schemas only when an explicit deployment is present."""
 
     try:
@@ -402,6 +427,12 @@ def _load_sdk_types(*, include_paper: bool = False) -> Mapping[str, Any]:
                 "PAPER_PROVIDER": PAPER_PROVIDER,
             }
         )
+    if include_paper_import:
+        try:
+            from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1
+        except ImportError:
+            raise ServiceReadDeploymentError("PAPER_EXECUTION_NOT_INSTALLED") from None
+        result["LegacyPaperSymbolBindingV1"] = LegacyPaperSymbolBindingV1
     return result
 
 
@@ -427,6 +458,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "portfolio_analytics_bindings",
 
         "paper_submit_bindings",
+        "paper_legacy_import_bindings",
     }
     if (
         type(raw) is not dict
@@ -530,6 +562,12 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     paper_submit_bindings = _parse_paper_submit_bindings(
         profile.get("paper_submit_bindings", {}), scopes, order_bindings, sdk
     )
+    paper_legacy_import_bindings = _parse_paper_legacy_import_bindings(
+        profile.get("paper_legacy_import_bindings", {}),
+        subject,
+        paper_submit_bindings,
+        sdk,
+    )
     if set(order_submit_bindings) & set(approved_target_bindings):
         raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
     if paper_submit_bindings and (order_submit_bindings or approved_target_bindings):
@@ -550,6 +588,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "portfolio_refs",
 
         "paper_submit_account_ids",
+        "paper_legacy_import_account_ids",
     }
     grants_raw = profile["grants"]
     if (
@@ -572,6 +611,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     paper_submit_grants = frozenset(
         _string_list(grants_raw.get("paper_submit_account_ids", []))
     )
+    paper_legacy_import_grants = frozenset(
+        _string_list(grants_raw.get("paper_legacy_import_account_ids", []))
+    )
     monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
     portfolio_grants = frozenset(_string_list(grants_raw.get("portfolio_refs", [])))
     if (
@@ -582,6 +624,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         or order_submit_grants != frozenset(order_submit_bindings)
         or approved_target_grants != frozenset(approved_target_bindings)
         or paper_submit_grants != frozenset(paper_submit_bindings)
+        or paper_legacy_import_grants != frozenset(paper_legacy_import_bindings)
         or monitor_grants != frozenset(monitor_bindings)
         or portfolio_grants != frozenset(portfolio_analytics_bindings)
         or not (
@@ -592,6 +635,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
             or order_submit_grants
             or approved_target_grants
             or paper_submit_grants
+            or paper_legacy_import_grants
             or monitor_grants
             or portfolio_grants
         )
@@ -625,6 +669,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     _validate_profile_bindings(
         client_public,
         identity,
+        subject,
         scopes,
         peers,
         curve_keys,
@@ -634,6 +679,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_submit_bindings,
         approved_target_bindings,
         paper_submit_bindings,
+        paper_legacy_import_bindings,
         monitor_bindings,
         portfolio_analytics_bindings,
     )
@@ -650,6 +696,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_bindings=MappingProxyType(order_bindings),
         order_submit_bindings=MappingProxyType(order_submit_bindings),
         paper_submit_bindings=MappingProxyType(paper_submit_bindings),
+        paper_legacy_import_bindings=MappingProxyType(paper_legacy_import_bindings),
         approved_target_bindings=MappingProxyType(approved_target_bindings),
         monitor_bindings=MappingProxyType(monitor_bindings),
         portfolio_analytics_bindings=MappingProxyType(portfolio_analytics_bindings),
@@ -659,6 +706,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_grants=order_grants,
         order_submit_grants=order_submit_grants,
         paper_submit_grants=paper_submit_grants,
+        paper_legacy_import_grants=paper_legacy_import_grants,
         approved_target_grants=approved_target_grants,
         monitor_grants=monitor_grants,
         portfolio_grants=portfolio_grants,
@@ -899,6 +947,63 @@ def _parse_paper_submit_bindings(
     return result
 
 
+def _parse_paper_legacy_import_bindings(
+    raw: object,
+    owner_subject: str,
+    paper_bindings: Mapping[str, PaperSubmitBinding],
+    sdk: Mapping[str, Any],
+) -> dict[str, PaperLegacyImportBinding]:
+    """Parse separately granted import scopes and server-owned symbol maps."""
+
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_PAPER_LEGACY_IMPORT_BINDINGS")
+    result: dict[str, PaperLegacyImportBinding] = {}
+    for legacy_account_id, raw_binding in raw.items():
+        legacy_account_id = _identifier(legacy_account_id)
+        paper_binding = paper_bindings.get(legacy_account_id)
+        if paper_binding is None:
+            raise ServiceReadDeploymentError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
+        fields = _exact_mapping(raw_binding, {"mount", "scope_ref", "symbol_bindings"})
+        mount = _identifier(fields["mount"])
+        scope_ref = _identifier(fields["scope_ref"])
+        raw_symbols = fields["symbol_bindings"]
+        if (
+            mount != "application.paper_legacy_import"
+            or scope_ref != paper_binding.scope_ref
+            or type(raw_symbols) is not list
+            or len(raw_symbols) > _MAX_BINDINGS_PER_SUBJECT
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        symbols: list[Any] = []
+        for raw_symbol in raw_symbols:
+            symbol = _exact_mapping(raw_symbol, {"legacy_symbol", "target_instrument"})
+            try:
+                symbols.append(
+                    sdk["LegacyPaperSymbolBindingV1"](
+                        _identifier(symbol["legacy_symbol"]),
+                        _identifier(symbol["target_instrument"]),
+                    )
+                )
+            except Exception:
+                raise ServiceReadDeploymentError(
+                    "INVALID_PAPER_LEGACY_SYMBOL_BINDINGS"
+                ) from None
+        try:
+            result[legacy_account_id] = PaperLegacyImportBinding(
+                mount=mount,
+                owner_subject=owner_subject,
+                legacy_account_id=legacy_account_id,
+                scope_ref=scope_ref,
+                paper_binding=paper_binding,
+                symbol_bindings=tuple(symbols),
+            )
+        except Exception:
+            raise ServiceReadDeploymentError(
+                "INVALID_PAPER_LEGACY_IMPORT_BINDINGS"
+            ) from None
+    return result
+
+
 def _paper_risk_monitor_selected(binding: Mapping[str, Any]) -> bool:
     for key, value in binding.items():
         if type(key) is str and (
@@ -999,6 +1104,7 @@ def _parse_portfolio_analytics_bindings(
 def _validate_profile_bindings(
     client_config: Mapping[str, Any],
     identity: Any,
+    subject: str,
     scopes: Mapping[str, Any],
     peers: Mapping[str, Any],
     curve_keys: Mapping[str, Any],
@@ -1008,6 +1114,7 @@ def _validate_profile_bindings(
     order_submit_bindings: Mapping[str, OrderSubmitBinding],
     approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding],
     paper_submit_bindings: Mapping[str, PaperSubmitBinding],
+    paper_legacy_import_bindings: Mapping[str, PaperLegacyImportBinding],
     monitor_bindings: Mapping[str, MonitorBinding],
     portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding],
 ) -> None:
@@ -1082,6 +1189,22 @@ def _validate_profile_bindings(
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         _add_declared(declared, binding.mount, binding.scope_ref, binding.account_ref)
+    for legacy_account_id, binding in paper_legacy_import_bindings.items():
+        paper = paper_submit_bindings.get(legacy_account_id)
+        scope = scopes.get(binding.scope_ref)
+        if (
+            binding.mount != "application.paper_legacy_import"
+            or binding.legacy_account_id != legacy_account_id
+            or binding.owner_subject != subject
+            or paper is None
+            or binding.paper_binding is not paper
+            or binding.scope_ref != paper.scope_ref
+            or scope is None
+            or scope != paper.wire_scope
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        paper.paper_owner_domain.validate_binding(paper.wire_scope, paper.execution_scope)
+        _add_declared(declared, binding.mount, binding.scope_ref, paper.account_ref)
     for scope_ref, binding in approved_target_bindings.items():
         scope = scopes.get(scope_ref)
         if (

@@ -81,6 +81,13 @@ class ServiceReadSession(Protocol):
 
     def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any: ...
 
+    def call_paper_legacy_import(
+        self,
+        legacy_account_id: str,
+        operation: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
     def close(self) -> None: ...
 
 
@@ -106,6 +113,7 @@ class _Kind(Enum):
     ANALYTICS_SUBMIT = auto()
     ANALYTICS_QUERY = auto()
     ANALYTICS_CANCEL = auto()
+    PAPER_LEGACY_IMPORT = auto()
 
 
 class _Request:
@@ -274,6 +282,15 @@ class ServiceReadWorker:
 
     async def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any:
         return await self._submit(_Kind.ANALYTICS_CANCEL, scope_ref, task_ref)
+
+    async def call_paper_legacy_import(
+        self, legacy_account_id: str, operation: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Queue one deployment-authorized import call on the SDK owner thread."""
+
+        return await self._submit(
+            _Kind.PAPER_LEGACY_IMPORT, legacy_account_id, operation, arguments
+        )
 
     async def aclose(self) -> None:
         """Reject new reads, discard queued reads, and close on the owner thread."""
@@ -480,6 +497,10 @@ class ServiceReadWorker:
             elif request.kind is _Kind.ANALYTICS_CANCEL:
                 result = session.cancel_portfolio_analytics_task(
                     request.arguments[0], request.arguments[1]
+                )
+            elif request.kind is _Kind.PAPER_LEGACY_IMPORT:
+                result = session.call_paper_legacy_import(
+                    request.arguments[0], request.arguments[1], request.arguments[2]
                 )
             else:
                 result = session.read_strategy_health(request.arguments[0])

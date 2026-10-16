@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 
 pytest.importorskip("bt_api_execution")
 
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
 from bt_api_execution import (  # noqa: E402
     PAPER_ENVIRONMENT,
     PAPER_MODEL_REF,
@@ -24,8 +25,12 @@ from bt_api_execution import (  # noqa: E402
 )
 from bt_api_execution.contracts import ExecutionScope  # noqa: E402
 from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1  # noqa: E402
+from bt_api_execution.service_paper_legacy_import import PaperLegacyImportService  # noqa: E402
 
+from app.api.deps import get_current_user  # noqa: E402
+from app.api.service_read import configure_service_read  # noqa: E402
 from app.db import database  # noqa: E402
+from app.main import app  # noqa: E402
 from app.models.paper_trading import Account, Order, PaperTrade, Position  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.legacy_paper_import_migration import (  # noqa: E402
@@ -40,6 +45,14 @@ from app.services.legacy_paper_migration import (  # noqa: E402
     legacy_paper_writer_lease,
 )
 from app.services.paper_trading_service import PaperTradingService  # noqa: E402
+from app.services.service_read.access import (  # noqa: E402
+    ReadAccess,
+    ServiceReadAccessDirectory,
+)
+from app.services.service_read.client import (  # noqa: E402
+    PaperLegacyImportBinding,
+    PaperSubmitBinding,
+)
 
 _SOURCE_ACCOUNT_ID = str(uuid.UUID("af120000-0000-4000-8000-000000000001"))
 _SOURCE_OWNER_ID = str(uuid.UUID("af120000-0000-4000-8000-000000000002"))
@@ -263,9 +276,57 @@ async def _seed_account(
             )
 
 
-def _target(tmp_path: Path) -> tuple[SqliteExecutionStore, ExecutionScope, PaperOwnerDomainV1]:
+class _TargetWorker:
+    """Exercise migration through the same typed worker-call contract as HTTP."""
+
+    def __init__(self, store: SqliteExecutionStore, scope: ExecutionScope, domain: PaperOwnerDomainV1):
+        wire_scope = WireScope(
+            _DOMAIN_REF,
+            account_ref=_ACCOUNT_REF,
+            strategy_ref=_STRATEGY_REF,
+        )
+        self._wire_scope = wire_scope
+        self._service = PaperLegacyImportService(
+            store,
+            {wire_scope: scope},
+            domain,
+            writer_id="afi12-unit-host-owner-v1",
+        )
+
+    async def call_paper_legacy_import(
+        self, legacy_account_id: str, operation: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        assert legacy_account_id == _SOURCE_ACCOUNT_ID
+        reply = self._service.handle(
+            operation,
+            scope=self._wire_scope,
+            arguments=arguments,
+        )
+        return {
+            "ok": reply["ok"],
+            "code": reply["code"],
+            "result": dict(reply["result"]),
+        }
+
+    async def read_account(self, account_ref: str, *, currency: str | None = None) -> Any:
+        raise AssertionError("legacy import API must not read a separate account projection")
+
+    async def read_order(self, scope_ref: str, intent_id: str) -> Any:
+        raise AssertionError("legacy import API must not read arbitrary target orders")
+
+    async def read_strategy_health(self, scope_ref: str) -> Any:
+        raise AssertionError("legacy import API must not read unrelated strategy health")
+
+    async def submit_paper_order(self, *args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("legacy import API must not submit a paper order")
+
+
+def _target(
+    tmp_path: Path,
+) -> tuple[SqliteExecutionStore, _TargetWorker, ExecutionScope, PaperOwnerDomainV1]:
     scope, domain = _domain()
-    return SqliteExecutionStore(tmp_path / "afi12-execution.sqlite3"), scope, domain
+    store = SqliteExecutionStore(tmp_path / "afi12-execution.sqlite3")
+    return store, _TargetWorker(store, scope, domain), scope, domain
 
 
 @pytest.mark.asyncio
@@ -278,13 +339,13 @@ async def test_nonempty_import_conserves_source_and_target_without_fabricating_e
     before = await inspect_stable_legacy_paper_account(service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID)
     assert before.complete and before.digest is not None
 
-    target_store, scope, domain = _target(tmp_path)
+    target_store, target_worker, scope, domain = _target(tmp_path)
     try:
         result = await migrate_nonempty_legacy_paper_account(
             service,
             _SOURCE_OWNER_ID,
             _binding(domain),
-            target_store=target_store,
+            target_worker=target_worker,
             scope=scope,
             domain=domain,
             symbol_bindings=(LegacyPaperSymbolBindingV1(_LEGACY_SYMBOL, _INSTRUMENT),),
@@ -330,14 +391,14 @@ async def test_nonzero_equity_residual_stays_frozen_until_safe_abort(tmp_path: P
     await _install_source_migrations()
     await _seed_account(total_equity=100.4, profit_loss=0.4, profit_loss_pct=0.4)
     service = PaperTradingService()
-    target_store, scope, domain = _target(tmp_path)
+    target_store, target_worker, scope, domain = _target(tmp_path)
     try:
         with pytest.raises(LegacyPaperImportError) as caught:
             await migrate_nonempty_legacy_paper_account(
                 service,
                 _SOURCE_OWNER_ID,
                 _binding(domain),
-                target_store=target_store,
+                target_worker=target_worker,
                 scope=scope,
                 domain=domain,
                 symbol_bindings=(LegacyPaperSymbolBindingV1(_LEGACY_SYMBOL, _INSTRUMENT),),
@@ -357,7 +418,7 @@ async def test_nonzero_equity_residual_stays_frozen_until_safe_abort(tmp_path: P
             _SOURCE_ACCOUNT_ID,
             _SOURCE_OWNER_ID,
             source_inventory_sha256=frozen.source_inventory_sha256,
-            target_store=target_store,
+            target_worker=target_worker,
             scope=scope,
         )
         assert aborted.state == "ABORTED"
@@ -378,14 +439,14 @@ async def test_unresolved_order_is_rejected_without_freeze_or_target_owner(tmp_p
     await _install_source_migrations()
     await _seed_account(pending_order=True)
     service = PaperTradingService()
-    target_store, scope, domain = _target(tmp_path)
+    target_store, target_worker, scope, domain = _target(tmp_path)
     try:
         with pytest.raises(LegacyPaperImportError) as caught:
             await migrate_nonempty_legacy_paper_account(
                 service,
                 _SOURCE_OWNER_ID,
                 _binding(domain),
-                target_store=target_store,
+                target_worker=target_worker,
                 scope=scope,
                 domain=domain,
                 symbol_bindings=(LegacyPaperSymbolBindingV1(_LEGACY_SYMBOL, _INSTRUMENT),),
@@ -410,14 +471,14 @@ async def test_inconsistent_account_pnl_is_rejected_before_source_freeze(tmp_pat
     await _install_source_migrations()
     await _seed_account(profit_loss=5.0, profit_loss_pct=5.0)
     service = PaperTradingService()
-    target_store, scope, domain = _target(tmp_path)
+    target_store, target_worker, scope, domain = _target(tmp_path)
     try:
         with pytest.raises(LegacyPaperImportError) as caught:
             await migrate_nonempty_legacy_paper_account(
                 service,
                 _SOURCE_OWNER_ID,
                 _binding(domain),
-                target_store=target_store,
+                target_worker=target_worker,
                 scope=scope,
                 domain=domain,
                 symbol_bindings=(LegacyPaperSymbolBindingV1(_LEGACY_SYMBOL, _INSTRUMENT),),
@@ -427,3 +488,172 @@ async def test_inconsistent_account_pnl_is_rejected_before_source_freeze(tmp_pat
         assert target_store.get_paper_legacy_import(scope) is None
     finally:
         target_store.close()
+
+
+@pytest.mark.asyncio
+async def test_authenticated_http_import_uses_configured_worker_and_keeps_source_read_only(
+    tmp_path: Path,
+    client: Any,
+) -> None:
+    await _install_source_migrations()
+    await _seed_account()
+    service = PaperTradingService()
+    target_store, target_worker, scope, domain = _target(tmp_path)
+    configure_service_read(_http_import_directory(target_worker, scope, domain))
+    app.dependency_overrides[get_current_user] = lambda: _http_user(_SOURCE_OWNER_ID)
+    try:
+        before = await inspect_stable_legacy_paper_account(
+            service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+        )
+        unconfirmed = await client.post(
+            f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}/migrate",
+            json={"confirmed": False},
+        )
+        assert unconfirmed.status_code == 422
+
+        inspected = await client.get(
+            f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}"
+        )
+        assert inspected.status_code == 200
+        assert inspected.json()["source_inventory"]["sha256"] == before.digest
+        assert inspected.json()["source_receipt"] is None
+        assert inspected.json()["target"]["source_receipt"] is None
+
+        migrated = await client.post(
+            f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}/migrate",
+            json={"confirmed": True},
+        )
+        assert migrated.status_code == 200, migrated.text
+        migrated_body = migrated.json()
+        assert migrated_body["receipt"]["state"] == "ACTIVE"
+        assert migrated_body["receipt"]["source_inventory_sha256"] == before.digest
+        assert migrated_body["receipt"]["source_order_count"] == 1
+        assert migrated_body["receipt"]["source_position_count"] == 1
+        assert migrated_body["receipt"]["source_trade_count"] == 1
+        assert migrated_body["receipt"]["unallocated_equity_residual"] == "0.0"
+        assert migrated_body["legacy_ledger_retained_read_only"] is True
+        assert migrated_body["imported_rows_are_exchange_facts"] is False
+        assert migrated_body["old_rules_approvals_alerts_activated"] is False
+        assert "source_snapshot_json" not in migrated_body["receipt"]
+        assert "source_document_json" not in migrated_body["receipt"]
+
+        after = await inspect_stable_legacy_paper_account(
+            service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+        )
+        assert after.complete and after.digest == before.digest
+        target_book = target_store.read_paper_book(scope)
+        assert target_book.cash == Decimal("89.9")
+        assert target_book.cumulative_fees == Decimal("0.1")
+        assert [
+            (row.instrument, row.quantity, row.average_cost)
+            for row in target_book.positions
+        ] == [(_INSTRUMENT, Decimal("1"), Decimal("10"))]
+        assert target_book.receipt_count == 0
+        assert target_book.execution_cursor == 0
+
+        denied = await client.post(
+            f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}/migrate",
+            json={"confirmed": True, "owner_subject": "client-selected"},
+        )
+        assert denied.status_code == 422
+    finally:
+        configure_service_read(None)
+        target_store.close()
+
+
+@pytest.mark.asyncio
+async def test_http_residual_refusal_requires_digest_bound_source_rollback(
+    tmp_path: Path,
+    client: Any,
+) -> None:
+    await _install_source_migrations()
+    await _seed_account(total_equity=100.4, profit_loss=0.4, profit_loss_pct=0.4)
+    target_store, target_worker, scope, domain = _target(tmp_path)
+    configure_service_read(_http_import_directory(target_worker, scope, domain))
+    app.dependency_overrides[get_current_user] = lambda: _http_user(_SOURCE_OWNER_ID)
+    base = f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}"
+    try:
+        refused = await client.post(f"{base}/migrate", json={"confirmed": True})
+        assert refused.status_code == 409
+        assert refused.json()["details"]["code"] == "LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE"
+
+        frozen = await client.get(base)
+        assert frozen.status_code == 200
+        receipt = frozen.json()["source_receipt"]
+        assert receipt is not None and receipt["state"] == "PREPARED"
+        assert receipt["unallocated_equity_residual"] == "0.5"
+        assert frozen.json()["target"]["source_receipt"] is None
+
+        aborted = await client.post(
+            f"{base}/rollback",
+            json={
+                "confirmed": True,
+                "source_inventory_sha256": receipt["source_inventory_sha256"],
+            },
+        )
+        assert aborted.status_code == 200, aborted.text
+        assert aborted.json()["receipt"]["state"] == "ABORTED"
+        async with legacy_paper_writer_lease(_SOURCE_ACCOUNT_ID):
+            async with database.async_session_maker() as session:
+                async with session.begin():
+                    await session.execute(
+                        update(Account)
+                        .where(Account.id == _SOURCE_ACCOUNT_ID)
+                        .values(current_cash=Account.current_cash)
+                    )
+    finally:
+        configure_service_read(None)
+        target_store.close()
+
+
+def _http_user(subject: str) -> Any:
+    from app.schemas.auth import TokenPayload
+
+    return TokenPayload(sub=subject, username="afi12-http-import-owner")
+
+
+def _http_import_directory(
+    worker: _TargetWorker, scope: ExecutionScope, domain: PaperOwnerDomainV1
+) -> ServiceReadAccessDirectory:
+    paper_wire_scope = WireScope(
+        _DOMAIN_REF,
+        account_ref=_ACCOUNT_REF,
+        strategy_ref=_STRATEGY_REF,
+    )
+    paper_binding = PaperSubmitBinding(
+        control_mode="execution_only",
+        mount="application.orders",
+        scope_ref="afi12-http-import-owner-scope-v1",
+        query_scope_ref="afi12-http-import-query-scope-v1",
+        legacy_account_id=_SOURCE_ACCOUNT_ID,
+        account_ref=_ACCOUNT_REF,
+        execution_domain_ref=_DOMAIN_REF,
+        strategy_ref=_STRATEGY_REF,
+        paper_owner_domain=domain,
+        wire_scope=paper_wire_scope,
+        execution_scope=scope,
+    )
+    import_binding = PaperLegacyImportBinding(
+        mount="application.paper_legacy_import",
+        owner_subject=_SOURCE_OWNER_ID,
+        legacy_account_id=_SOURCE_ACCOUNT_ID,
+        scope_ref=paper_binding.scope_ref,
+        paper_binding=paper_binding,
+        symbol_bindings=(LegacyPaperSymbolBindingV1(_LEGACY_SYMBOL, _INSTRUMENT),),
+    )
+    identity = WireIdentity(
+        WireRole.APPLICATION_CLIENT,
+        "afi12-http-import-principal",
+        _SOURCE_OWNER_ID,
+        "afi12-http-import-actor",
+    )
+    access = ReadAccess(
+        worker=worker,
+        allow_order_scope_refs=frozenset({paper_binding.query_scope_ref}),
+        allow_paper_submit_account_ids=frozenset({_SOURCE_ACCOUNT_ID}),
+        allow_paper_legacy_import_account_ids=frozenset({_SOURCE_ACCOUNT_ID}),
+        paper_submit_bindings={_SOURCE_ACCOUNT_ID: paper_binding},
+        paper_legacy_import_bindings={_SOURCE_ACCOUNT_ID: import_binding},
+        application_identity=identity,
+    )
+    return ServiceReadAccessDirectory({_SOURCE_OWNER_ID: access})

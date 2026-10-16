@@ -110,6 +110,7 @@ def _resolve_access(
         "order_submit",
         "approved_target",
         "paper_submit",
+        "paper_legacy_import",
         "monitor",
         "portfolio_analytics",
     ],
@@ -134,6 +135,8 @@ def _resolve_access(
             return directory.resolve_approved_target_scope(current_user.sub, selector)
         if selector_kind == "paper_submit":
             return directory.resolve_paper_submit_account(current_user.sub, selector)
+        if selector_kind == "paper_legacy_import":
+            return directory.resolve_paper_legacy_import_account(current_user.sub, selector)
         if selector_kind == "monitor":
             return directory.resolve_monitor_scope(current_user.sub, selector)
         if selector_kind == "portfolio_analytics":
@@ -173,6 +176,26 @@ def resolve_paper_submit_access(
         raise _access_denied() from None
     binding = access.paper_submit_bindings.get(legacy_account_id)
     if binding is None:
+        raise _access_denied() from None
+    return access, binding
+
+
+def resolve_paper_legacy_import_access(
+    current_user: TokenPayload, legacy_account_id: str
+) -> tuple[ReadAccess, Any]:
+    """Resolve one explicit import grant from the authenticated subject."""
+
+    if type(current_user) is not TokenPayload:
+        raise _access_denied() from None
+    directory = _require_directory()
+    try:
+        access = directory.resolve_paper_legacy_import_account(
+            current_user.sub, legacy_account_id
+        )
+    except ServiceReadAccessError:
+        raise _access_denied() from None
+    binding = access.paper_legacy_import_bindings.get(legacy_account_id)
+    if binding is None or binding.owner_subject != current_user.sub:
         raise _access_denied() from None
     return access, binding
 

@@ -20,6 +20,8 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, AsyncIterator, Mapping
 
+from sqlalchemy import inspect as sa_inspect
+
 MAX_INVENTORY_ROWS_PER_TABLE = 10_000
 
 
@@ -737,7 +739,13 @@ def _model_row(model: Any) -> dict[str, Any]:
     columns = getattr(getattr(type(model), "__table__", None), "columns", None)
     if columns is None:
         raise LegacyPaperInventoryError("INVENTORY_MODEL_UNSUPPORTED")
-    return {column.key: _canonical_value(getattr(model, column.key)) for column in columns}
+    mapper = sa_inspect(type(model))
+    return {
+        column.key: _canonical_value(
+            getattr(model, mapper.get_property_by_column(column).key)
+        )
+        for column in columns
+    }
 
 
 def _canonical_value(value: Any) -> Any:

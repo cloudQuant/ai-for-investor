@@ -187,3 +187,8 @@ _register_optional_router(
     "app.api.approved_orders",
     tags=["Approved Orders"],
 )
+_register_optional_router(
+    "legacy_paper_import",
+    "app.api.legacy_paper_import",
+    tags=["Legacy Paper Import"],
+)

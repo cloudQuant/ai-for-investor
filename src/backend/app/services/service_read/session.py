@@ -22,6 +22,8 @@ from .client import (
     PortfolioAnalyticsBinding,
     OrderBinding,
     OrderSubmitBinding,
+    PaperLegacyImportBinding,
+    PAPER_LEGACY_IMPORT_OPERATIONS,
     PaperSubmitBinding,
     ServiceReadUnavailableError,
 )
@@ -102,6 +104,7 @@ class SdkServiceReadSession:
         order_bindings: Mapping[str, OrderBinding] | None = None,
         order_submit_bindings: Mapping[str, OrderSubmitBinding] | None = None,
         paper_submit_bindings: Mapping[str, PaperSubmitBinding] | None = None,
+        paper_legacy_import_bindings: Mapping[str, PaperLegacyImportBinding] | None = None,
         approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
         portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] | None = None,
@@ -119,6 +122,7 @@ class SdkServiceReadSession:
                 "SERVICE_READ_BINDING_MISMATCH",
                 "paper submit scopes must be unique within a session",
             )
+        self._paper_legacy_import_bindings = dict(paper_legacy_import_bindings or {})
         self._approved_target_bindings = dict(approved_target_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
         self._portfolio_analytics_bindings = dict(portfolio_analytics_bindings or {})
@@ -128,6 +132,7 @@ class SdkServiceReadSession:
             or self._order_bindings
             or self._order_submit_bindings
             or self._paper_submit_bindings
+            or self._paper_legacy_import_bindings
             or self._approved_target_bindings
             or self._monitor_bindings
             or self._portfolio_analytics_bindings
@@ -248,6 +253,8 @@ class SdkServiceReadSession:
             expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
         for binding in self._paper_submit_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
+        for binding in self._paper_legacy_import_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, PAPER_LEGACY_IMPORT_OPERATIONS))
         for binding in self._approved_target_bindings.values():
             expected.add(
                 (binding.mount, binding.scope_ref, frozenset({"orders.submit_approved_target"}))
@@ -328,6 +335,34 @@ class SdkServiceReadSession:
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "paper submit scope does not match its configured owner domain",
+                )
+
+        for configured in self._paper_legacy_import_bindings.values():
+            paper = configured.paper_binding
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            scope = binding.scope
+            try:
+                paper.paper_owner_domain.validate_binding(paper.wire_scope, paper.execution_scope)
+            except Exception:
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "legacy import target no longer validates against its trusted paper owner",
+                ) from None
+            if (
+                type(scope) is not type(paper.wire_scope)
+                or scope != paper.wire_scope
+                or configured.scope_ref != paper.scope_ref
+                or configured.legacy_account_id != paper.legacy_account_id
+                or not self._scope_is_paper_order_scope(
+                    scope,
+                    paper.account_ref,
+                    paper.execution_domain_ref,
+                    paper.strategy_ref,
+                )
+            ):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "legacy import scope does not match its trusted paper owner",
                 )
 
         for configured in self._approved_target_bindings.values():
@@ -768,6 +803,98 @@ class SdkServiceReadSession:
         # SDK wire replies are recursively frozen as MappingProxyType/tuples.
         # The AFI task parser accepts the corresponding JSON dict/list shape.
         return _thaw_json(reply)
+
+    def call_paper_legacy_import(
+        self,
+        legacy_account_id: str,
+        operation: str,
+        arguments: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Call one explicit import operation through the trusted Host binding."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        configured = self._paper_legacy_import_bindings.get(legacy_account_id)
+        if configured is None:
+            raise ServiceReadUnavailableError("PAPER_LEGACY_IMPORT_NOT_CONFIGURED")
+        if type(operation) is not str or operation not in PAPER_LEGACY_IMPORT_OPERATIONS:
+            raise ServiceReadUnavailableError("INVALID_PAPER_LEGACY_IMPORT_OPERATION")
+        if not isinstance(arguments, Mapping) or any(type(key) is not str for key in arguments):
+            raise ServiceReadUnavailableError("INVALID_PAPER_LEGACY_IMPORT_ARGUMENTS")
+        expected_arguments = {
+            "paper.import.status": frozenset(),
+            "paper.import.inspect_source": frozenset({"source_account_id"}),
+            "paper.import.prepare": frozenset({"imported"}),
+            "paper.import.activate": frozenset(),
+            "paper.import.abort": frozenset({"source_sha256"}),
+        }
+        if set(arguments) != expected_arguments[operation]:
+            raise ServiceReadUnavailableError("INVALID_PAPER_LEGACY_IMPORT_ARGUMENTS")
+
+        imported = None
+        if operation == "paper.import.inspect_source":
+            if arguments.get("source_account_id") != configured.legacy_account_id:
+                raise ServiceReadUnavailableError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
+        elif operation == "paper.import.prepare":
+            try:
+                from bt_api_execution.paper_legacy_import import PaperLegacyImportV1
+
+                imported = PaperLegacyImportV1.from_payload(arguments["imported"])
+                imported.validate_new_import()
+                imported.validate_domain(
+                    configured.paper_binding.execution_scope,
+                    configured.paper_binding.paper_owner_domain,
+                )
+            except Exception:
+                raise ServiceReadUnavailableError("INVALID_PAPER_LEGACY_IMPORT_SNAPSHOT") from None
+            if (
+                imported.source_account_id != configured.legacy_account_id
+                or imported.source_owner_id != configured.owner_subject
+                or imported.symbol_bindings != configured.symbol_bindings
+            ):
+                raise ServiceReadUnavailableError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
+        elif operation == "paper.import.abort":
+            source_sha256 = arguments.get("source_sha256")
+            if (
+                type(source_sha256) is not str
+                or len(source_sha256) != 64
+                or any(character not in "0123456789abcdef" for character in source_sha256)
+            ):
+                raise ServiceReadUnavailableError("INVALID_PAPER_LEGACY_IMPORT_ARGUMENTS")
+
+        self._validate_runtime()
+        assert self._runtime is not None
+        try:
+            from bt_api_py.service_paper_legacy_import_client import PaperLegacyImportClient
+
+            client = PaperLegacyImportClient(
+                self._runtime,
+                account_ref=configured.paper_binding.account_ref,
+                scope_ref=configured.scope_ref,
+            )
+        except ImportError:
+            raise ServiceReadUnavailableError("PAPER_LEGACY_IMPORT_CLIENT_UNAVAILABLE") from None
+        if operation == "paper.import.status":
+            reply = client.status()
+        elif operation == "paper.import.inspect_source":
+            reply = client.inspect_source(configured.legacy_account_id)
+        elif operation == "paper.import.prepare":
+            assert imported is not None
+            reply = client.prepare(imported)
+        elif operation == "paper.import.activate":
+            reply = client.activate()
+        else:
+            reply = client.abort(arguments["source_sha256"])
+        return {
+            "ok": reply.ok,
+            "code": reply.code,
+            "result": _thaw_json(reply.result),
+        }
 
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
         self._assert_owner()

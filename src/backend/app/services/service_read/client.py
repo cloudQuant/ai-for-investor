@@ -37,11 +37,22 @@ __all__ = [
     "OrderBinding",
     "OrderSubmitBinding",
     "PaperSubmitBinding",
+    "PaperLegacyImportBinding",
     "ApprovedTargetSubmitBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
 ]
 
+
+PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
+    {
+        "paper.import.status",
+        "paper.import.inspect_source",
+        "paper.import.prepare",
+        "paper.import.activate",
+        "paper.import.abort",
+    }
+)
 
 class ServiceReadUnavailableError(RuntimeError):
     """The authorized read path refused or could not answer this request.
@@ -284,6 +295,52 @@ class PaperSubmitBinding:
     @property
     def opening_positions(self) -> tuple[Any, ...]:
         return tuple(item.to_payload() for item in self.paper_owner_domain.opening_positions)
+
+
+@dataclass(frozen=True, slots=True)
+class PaperLegacyImportBinding:
+    """A separately granted legacy-import route for one existing Paper owner."""
+
+    mount: str
+    owner_subject: str
+    legacy_account_id: str
+    scope_ref: str
+    paper_binding: PaperSubmitBinding = field(repr=False, compare=False)
+    symbol_bindings: tuple[Any, ...] = field(repr=False)
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.owner_subject, "INVALID_OWNER_SUBJECT"),
+            (self.legacy_account_id, "INVALID_LEGACY_ACCOUNT_ID"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if self.mount != "application.paper_legacy_import":
+            raise ServiceReadContractError("INVALID_PAPER_LEGACY_IMPORT_MOUNT")
+        binding = self.paper_binding
+        if (
+            type(binding) is not PaperSubmitBinding
+            or binding.legacy_account_id != self.legacy_account_id
+            or binding.scope_ref != self.scope_ref
+        ):
+            raise ServiceReadContractError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
+        if type(self.symbol_bindings) is not tuple:
+            raise ServiceReadContractError("INVALID_PAPER_LEGACY_SYMBOL_BINDINGS")
+        try:
+            from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1
+        except ImportError:
+            raise ServiceReadContractError("PAPER_EXECUTION_NOT_INSTALLED") from None
+        if any(type(item) is not LegacyPaperSymbolBindingV1 for item in self.symbol_bindings):
+            raise ServiceReadContractError("INVALID_PAPER_LEGACY_SYMBOL_BINDINGS")
+        legacy_symbols = [item.legacy_symbol for item in self.symbol_bindings]
+        instruments = {item.instrument for item in binding.paper_owner_domain.instruments}
+        if (
+            len(legacy_symbols) != len(set(legacy_symbols))
+            or any(item.target_instrument not in instruments for item in self.symbol_bindings)
+        ):
+            raise ServiceReadContractError("INVALID_PAPER_LEGACY_SYMBOL_BINDINGS")
 
 
 @dataclass(frozen=True)
