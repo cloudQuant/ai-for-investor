@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import secrets
-import subprocess
 import sys
 import threading
 import uuid
@@ -41,7 +40,6 @@ from app.services.live_trading.service_execution_launch import (
     validate_profile_strategy_source,
 )
 from app.services.live_trading.service_gateway_operator_guard import (
-    is_legacy_gateway_excluded,
     legacy_gateway_exclusions,
     legacy_gateway_owner_operation,
 )
@@ -1657,6 +1655,15 @@ class LiveTradingManager:
                 backtrader_root=_BACKTRADER_DIR,
                 trusted_import_roots=(*sdk_package_roots, *profile_import_roots),
             )
+        # Reject a configured legacy Gateway before the fallback environment
+        # builder loads strategy files, acquires a runtime, or imports the
+        # retired Base Gateway package. A no-Gateway simulation/research run
+        # still uses the ordinary direct environment path below.
+        if self._get_gateway_params(instance).get("enabled"):
+            raise ServiceStrategyProfileError(
+                "LEGACY_GATEWAY_MIGRATION_REQUIRED",
+                _LEGACY_GATEWAY_MIGRATION_REQUIRED_MESSAGE,
+            )
         return gateway_runtime_service.build_subprocess_env(
             instance_id=instance_id,
             instance=instance,
@@ -1827,29 +1834,11 @@ class LiveTradingManager:
     def _build_gateway_launch(
         self, instance: dict[str, Any], strategy_dir: Path, gateway_params: dict[str, Any]
     ) -> dict[str, Any]:
-        if (
-            str(instance.get("_server_execution_mode") or "live") == "live"
-            and instance.get("_server_allow_service_strategy_execution") is not False
-        ):
-            raise ServiceStrategyProfileError(
-                "SERVICE_EXECUTION_PROFILE_REQUIRED",
-                _SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE,
-            )
-        config_data = self._load_strategy_config(strategy_dir)
-        env_data = self._load_strategy_env(strategy_dir)
-        gateway_config_cls, gateway_runtime_cls = self._import_gateway_runtime_classes()
-        launch = gateway_launch_builder.build_gateway_launch(
-            config_data=config_data,
-            env_data=env_data,
-            gateway_params=gateway_params,
-            gateway_config_cls=gateway_config_cls,
-            gateway_runtime_cls=gateway_runtime_cls,
-            default_transport=_DEFAULT_TRANSPORT,
+        del instance, strategy_dir, gateway_params
+        raise ServiceStrategyProfileError(
+            "LEGACY_GATEWAY_MIGRATION_REQUIRED",
+            _LEGACY_GATEWAY_MIGRATION_REQUIRED_MESSAGE,
         )
-        gateway_key = str(getattr(launch.get("config"), "runtime_name", "") or "")
-        if gateway_key and is_legacy_gateway_excluded(gateway_key):
-            raise RuntimeError("SERVICE_V2_ACCOUNT_OWNER_CONFIGURED")
-        return launch
 
     def _build_ctp_gateway_runtime_kwargs(
         self,
@@ -1904,61 +1893,11 @@ class LiveTradingManager:
     def _parse_json_dict(self, value: Any) -> dict[str, Any] | None:
         return gateway_launch_builder.parse_json_dict(value)
 
-    _gateway_import_ok: bool | None = None
-
     def _import_gateway_runtime_classes(self) -> tuple[Any, Any]:
-        _configure_macos_ctp_runtime()
-        # Pre-flight: test import in an isolated subprocess to avoid crashing
-        # the main process if a native C extension (CTP SDK, spdlog, etc.) is
-        # broken or incompatible.  The check runs only once and is cached.
-        if LiveTradingManager._gateway_import_ok is None:
-            env = dict(os.environ)
-            try:
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        "-c",
-                        "import sys, types; "
-                        "sys.modules.setdefault('spdlog', types.ModuleType('spdlog')); "
-                        "from bt_api_base.gateway.config import GatewayConfig; "
-                        "from bt_api_base.gateway.runtime import GatewayRuntime; "
-                        "sys.stdout.write('ok')",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    env=env,
-                )
-                if result.returncode != 0 or "ok" not in result.stdout:
-                    stderr = (result.stderr or "").strip()[:500]
-                    LiveTradingManager._gateway_import_ok = False
-                    raise ImportError(
-                        f"bt_api_base 网关模块无法加载 (插件或原生扩展不可用/已损坏)。"
-                        f" stderr: {stderr}"
-                    )
-            except subprocess.TimeoutExpired:
-                LiveTradingManager._gateway_import_ok = False
-                raise ImportError(
-                    "bt_api_base 网关模块导入超时，插件或原生扩展可能已损坏"
-                ) from None
-            LiveTradingManager._gateway_import_ok = True
-
-        if LiveTradingManager._gateway_import_ok is False:
-            raise ImportError(
-                "bt_api_base 网关模块不可用 (之前的检测已失败)。请修复对应插件或原生扩展后重启后端。"
-            )
-
-        # Guard: the spdlog C extension causes a native segfault on this
-        # Windows environment.  Always use a lightweight stub – spdlog is only
-        # used for logging inside bt_api_py and is not essential.
-        if "spdlog" not in sys.modules:
-            import types
-
-            sys.modules["spdlog"] = types.ModuleType("spdlog")
-        from bt_api_base.gateway.config import GatewayConfig
-        from bt_api_base.gateway.runtime import GatewayRuntime
-
-        return GatewayConfig, GatewayRuntime
+        raise ServiceStrategyProfileError(
+            "LEGACY_GATEWAY_MIGRATION_REQUIRED",
+            _LEGACY_GATEWAY_MIGRATION_REQUIRED_MESSAGE,
+        )
 
     def _load_strategy_config(self, strategy_dir: Path) -> dict[str, Any]:
         return strategy_runtime_support.load_strategy_config(strategy_dir)

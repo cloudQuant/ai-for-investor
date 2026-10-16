@@ -23,6 +23,7 @@ import pytest
 import yaml
 
 from app.services.gateway import runtime as gateway_runtime_service
+from app.services.live_trading.service_execution_launch import ServiceStrategyProfileError
 from app.services.live_trading_manager import (
     _PROJECT_ROOT,
     LiveTradingManager,
@@ -955,7 +956,11 @@ class TestGatewayLifecycle:
             ):
                 env = manager._build_subprocess_env(
                     "inst1",
-                    {"params": {}},
+                    {
+                        "params": {},
+                        "_server_execution_mode": "simulation",
+                        "_server_allow_service_strategy_execution": False,
+                    },
                     strategy_dir,
                 )
 
@@ -968,41 +973,21 @@ class TestGatewayLifecycle:
     def test_build_subprocess_env_with_gateway(self):
         with patch("app.services.live_trading_manager._load_instances", return_value={}):
             manager = LiveTradingManager()
-            gateway_state = {
-                "config": MagicMock(
-                    command_endpoint="ipc://command",
-                    event_endpoint="ipc://event",
-                    market_endpoint="ipc://market",
-                    account_id="acc-1",
-                    exchange_type="CTP",
-                    asset_type="FUTURE",
-                )
-            }
             with patch.dict("os.environ", {}, clear=True):
-                with patch.object(
-                    manager, "_acquire_gateway_for_instance", return_value=gateway_state
-                ):
-                    env = manager._build_subprocess_env(
-                        "inst1",
-                        {"params": {"gateway": {"enabled": True}}},
-                        Path("/tmp/strategy"),
-                    )
+                with patch.object(manager, "_acquire_gateway_for_instance") as acquire:
+                    with pytest.raises(ServiceStrategyProfileError) as raised:
+                        manager._build_subprocess_env(
+                            "inst1",
+                            {
+                                "params": {"gateway": {"enabled": True}},
+                                "_server_execution_mode": "live",
+                                "_server_allow_service_strategy_execution": False,
+                            },
+                            Path("/tmp/strategy"),
+                        )
 
-        assert env["BT_STORE_PROVIDER"] == "ctp_gateway"
-        assert env["BT_GATEWAY_START_LOCAL_RUNTIME"] == "0"
-        assert env["BT_GATEWAY_COMMAND_ENDPOINT"] == "ipc://command"
-        assert env["BT_GATEWAY_EVENT_ENDPOINT"] == "ipc://event"
-        assert env["BT_GATEWAY_MARKET_ENDPOINT"] == "ipc://market"
-        assert env["BT_GATEWAY_ACCOUNT_ID"] == "acc-1"
-        assert env["BT_GATEWAY_EXCHANGE_TYPE"] == "CTP"
-        assert env["BT_GATEWAY_ASSET_TYPE"] == "FUTURE"
-        assert env["BT_TRADING_INSTANCE_ID"] == "inst1"
-        assert env["BACKTRADER_LIGHT_IMPORT"] == "1"
-        assert env["BT_API_PY_LIGHT_IMPORT"] == "1"
-        assert env["BT_FEED_ENABLE_LIGHT_COLUMNS"] == "1"
-        assert env["BT_STORE_LOCAL_TIMEZONE"] == "Asia/Shanghai"
-        assert env["OPENBLAS_NUM_THREADS"] == "1"
-        assert env["OMP_NUM_THREADS"] == "1"
+        assert raised.value.code == "LEGACY_GATEWAY_MIGRATION_REQUIRED"
+        assert acquire.call_count == 0
 
     @pytest.mark.asyncio
     async def test_stop_instance_aborts_when_open_order_cancel_fails(self):
@@ -1039,39 +1024,26 @@ class TestGatewayLifecycle:
     def test_build_subprocess_env_with_ib_web_gateway(self):
         with patch("app.services.live_trading_manager._load_instances", return_value={}):
             manager = LiveTradingManager()
-            gateway_state = {
-                "config": MagicMock(
-                    command_endpoint="ipc://command",
-                    event_endpoint="ipc://event",
-                    market_endpoint="ipc://market",
-                    account_id="du123456",
-                    exchange_type="IB_WEB",
-                    asset_type="STK",
-                )
-            }
             with patch.dict("os.environ", {}, clear=True):
-                with patch.object(
-                    manager, "_acquire_gateway_for_instance", return_value=gateway_state
-                ):
-                    env = manager._build_subprocess_env(
-                        "inst1",
-                        {"params": {"gateway": {"enabled": True, "exchange_type": "IB_WEB"}}},
-                        Path("/tmp/strategy"),
-                    )
+                with patch.object(manager, "_acquire_gateway_for_instance") as acquire:
+                    with pytest.raises(ServiceStrategyProfileError) as raised:
+                        manager._build_subprocess_env(
+                            "inst1",
+                            {
+                                "params": {
+                                    "gateway": {
+                                        "enabled": True,
+                                        "exchange_type": "IB_WEB",
+                                    }
+                                },
+                                "_server_execution_mode": "live",
+                                "_server_allow_service_strategy_execution": False,
+                            },
+                            Path("/tmp/strategy"),
+                        )
 
-        assert env["BT_STORE_PROVIDER"] == "ctp_gateway"
-        assert env["BT_GATEWAY_START_LOCAL_RUNTIME"] == "0"
-        assert env["BT_GATEWAY_COMMAND_ENDPOINT"] == "ipc://command"
-        assert env["BT_GATEWAY_EVENT_ENDPOINT"] == "ipc://event"
-        assert env["BT_GATEWAY_MARKET_ENDPOINT"] == "ipc://market"
-        assert env["BT_GATEWAY_ACCOUNT_ID"] == "du123456"
-        assert env["BT_GATEWAY_EXCHANGE_TYPE"] == "IB_WEB"
-        assert env["BACKTRADER_LIGHT_IMPORT"] == "1"
-        assert env["BT_API_PY_LIGHT_IMPORT"] == "1"
-        assert env["BT_FEED_ENABLE_LIGHT_COLUMNS"] == "1"
-        assert env["BT_STORE_LOCAL_TIMEZONE"] == "Asia/Shanghai"
-        assert env["OPENBLAS_NUM_THREADS"] == "1"
-        assert env["BT_GATEWAY_ASSET_TYPE"] == "STK"
+        assert raised.value.code == "LEGACY_GATEWAY_MIGRATION_REQUIRED"
+        assert acquire.call_count == 0
 
     def test_get_gateway_params_normalizes_ib_web(self):
         with patch("app.services.live_trading_manager._load_instances", return_value={}):
@@ -1097,100 +1069,22 @@ class TestGatewayLifecycle:
         assert params["account_id"] == "du123456"
         assert params["base_url"] == "https://localhost:5000"
 
-    def test_build_gateway_launch_for_ib_web(self, tmp_path):
-        strategy_dir = tmp_path / "test_strategy"
-        strategy_dir.mkdir()
-        (strategy_dir / "config.yaml").write_text(
-            "\n".join(
-                [
-                    "ib_web:",
-                    "  base_url: https://localhost:5000",
-                    "  account_id: config-acc",
-                    "  verify_ssl: false",
-                    "  timeout: 15",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        (strategy_dir / ".env").write_text(
-            "\n".join(
-                [
-                    "IB_WEB_ACCOUNT_ID=env-acc",
-                    "IB_WEB_BASE_URL=https://localhost:5000",
-                    "IB_WEB_ACCESS_TOKEN=test-token",
-                    "IB_WEB_VERIFY_SSL=true",
-                    "IB_WEB_USERNAME=test-user",
-                    "IB_WEB_PASSWORD=test-pass",
-                    "IB_WEB_LOGIN_MODE=paper",
-                    "IB_WEB_LOGIN_BROWSER=chrome",
-                    "IB_WEB_LOGIN_HEADLESS=false",
-                    "IB_WEB_LOGIN_TIMEOUT=180",
-                    "IB_WEB_TIMEOUT=15",
-                    "IB_WEB_COOKIE_SOURCE=file:../bt_api_py/configs/ibkr_cookies.json",
-                    "IB_WEB_COOKIE_OUTPUT=../bt_api_py/configs/ibkr_cookies.json",
-                ]
-            ),
-            encoding="utf-8",
-        )
-
-        class FakeGatewayConfig:
-            @classmethod
-            def from_kwargs(cls, **kwargs):
-                return kwargs
-
-        class FakeGatewayRuntime:
-            pass
-
+    def test_build_gateway_launch_rejects_retired_runtime_before_config_read(self, tmp_path):
         with patch("app.services.live_trading_manager._load_instances", return_value={}):
             manager = LiveTradingManager()
-
-        gateway_params = {
-            "enabled": True,
-            "provider": "ctp_gateway",
-            "exchange_type": "IB_WEB",
-            "asset_type": "stock",
-            "transport": "ipc",
-            "account_id": "",
-            "base_dir": str(tmp_path / "gateway"),
-            "base_url": "",
-            "access_token": "",
-            "verify_ssl": None,
-            "cookie_source": "",
-            "cookie_browser": "",
-            "cookie_path": "",
-            "cookies": None,
-        }
-
-        with patch.object(
-            manager,
-            "_import_gateway_runtime_classes",
-            return_value=(FakeGatewayConfig, FakeGatewayRuntime),
+        with (
+            patch.object(manager, "_load_strategy_config", side_effect=AssertionError),
+            patch.object(manager, "_load_strategy_env", side_effect=AssertionError),
+            patch.object(manager, "_import_gateway_runtime_classes", side_effect=AssertionError),
         ):
-            launch = manager._build_gateway_launch(
-                {"params": {"gateway": {"enabled": True, "exchange_type": "IB_WEB"}}},
-                strategy_dir,
-                gateway_params,
-            )
+            with pytest.raises(ServiceStrategyProfileError) as raised:
+                manager._build_gateway_launch(
+                    {"params": {"gateway": {"enabled": True}}},
+                    tmp_path,
+                    {"enabled": True, "exchange_type": "IB_WEB"},
+                )
 
-        runtime_kwargs = launch["runtime_kwargs"]
-        assert launch["runtime_cls"] is FakeGatewayRuntime
-        assert launch["config"] == runtime_kwargs
-        assert runtime_kwargs["exchange_type"] == "IB_WEB"
-        assert runtime_kwargs["asset_type"] == "STK"
-        assert runtime_kwargs["account_id"] == "env-acc"
-        assert runtime_kwargs["base_url"] == "https://localhost:5000"
-        assert runtime_kwargs["access_token"] == "test-token"
-        assert runtime_kwargs["verify_ssl"] is True
-        assert runtime_kwargs["timeout"] == 15.0
-        assert runtime_kwargs["username"] == "test-user"
-        assert runtime_kwargs["password"] == "test-pass"
-        assert runtime_kwargs["login_mode"] == "paper"
-        assert runtime_kwargs["login_browser"] == "chrome"
-        assert runtime_kwargs["login_headless"] is False
-        assert runtime_kwargs["login_timeout"] == 180
-        assert runtime_kwargs["cookie_source"] == "file:../bt_api_py/configs/ibkr_cookies.json"
-        assert runtime_kwargs["cookie_output"] == "../bt_api_py/configs/ibkr_cookies.json"
-        assert runtime_kwargs["cookie_base_dir"]
+        assert raised.value.code == "LEGACY_GATEWAY_MIGRATION_REQUIRED"
 
     def test_connect_ib_web_gateway_defaults_to_browser_cookie_source(self, tmp_path):
         with patch("app.services.live_trading_manager._load_instances", return_value={}):
