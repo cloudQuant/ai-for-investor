@@ -70,10 +70,15 @@ async def create_portfolio_composition_version(
         if subject_access is not None:
             for member in strategy_members:
                 binding = subject_access.strategy_book_bindings.get(member.ref)
-                # Keep old compositions selectable when no execution-book
-                # adapter is configured; their projection stays unavailable.
                 if binding is None:
-                    continue
+                    # A new live membership must bind every strategy selector
+                    # to this authenticated subject's deployment-owned scope.
+                    # Historical unbound versions remain readable and project
+                    # attribution as unavailable.
+                    subject_access = _resolve_access(
+                        current_user, member.ref, "strategy_book"
+                    )
+                    binding = subject_access.strategy_book_bindings[member.ref]
                 if binding.account_ref not in account_members:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,

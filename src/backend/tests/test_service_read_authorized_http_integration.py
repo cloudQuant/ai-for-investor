@@ -1744,6 +1744,7 @@ def _run_live_composition_projection(
 ) -> None:
     """Use the normal HTTP and AFI worker path for synthetic SDK account-book facts."""
 
+    import hashlib
     import json
     from pathlib import Path
 
@@ -1775,6 +1776,7 @@ def _run_live_composition_projection(
     import app.main as main_module
     from app.db.database import get_db
     from app.models.portfolio_composition import PortfolioCompositionVersion
+    from app.models.strategy_approval_authority import StrategyApprovalAuthorityEpoch
     from app.services.service_read.deployment import ServiceReadDeployment
 
     _COMMAND_GUARD_STATE["active"] = True
@@ -1811,8 +1813,45 @@ def _run_live_composition_projection(
     async def _create_tables() -> None:
         async with engine.begin() as connection:
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+            await connection.run_sync(StrategyApprovalAuthorityEpoch.__table__.create)
 
     asyncio.run(_create_tables())
+
+    legacy_members = [
+        {"kind": "account", "ref": _ACCOUNT_A},
+        {"kind": "strategy", "ref": _STRATEGY_B},
+    ]
+    legacy_members.sort(key=lambda member: (member["kind"], member["ref"]))
+    legacy_document = {
+        "source_type": "live",
+        "base_currency": "USDT",
+        "members": legacy_members,
+    }
+    legacy_membership_hash = hashlib.sha256(
+        json.dumps(
+            legacy_document,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    async def _seed_legacy_unbound_version() -> None:
+        async with app_db() as session:
+            session.add(
+                PortfolioCompositionVersion(
+                    owner_subject=_SUBJECT_A,
+                    portfolio_ref="unbound-owner-view",
+                    membership_version=1,
+                    source_type="live",
+                    base_currency="USDT",
+                    members=legacy_members,
+                    membership_sha256=legacy_membership_hash,
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_seed_legacy_unbound_version())
 
     async def _override_db():
         async with app_db() as session:
@@ -2130,7 +2169,18 @@ def _run_live_composition_projection(
                             ],
                         },
                     )
-                    assert unbound_owner.status_code == 201, unbound_owner.text
+                    assert unbound_owner.status_code == 403, unbound_owner.text
+                    assert (
+                        unbound_owner.json()["details"]["code"]
+                        == "SERVICE_READ_ACCESS_DENIED"
+                    )
+                    assert _STRATEGY_B not in unbound_owner.text
+                    unbound_version_two = await client.get(
+                        "/api/v1/portfolio/compositions/unbound-owner-view/versions/2/projection",
+                        headers=headers_a,
+                    )
+                    assert unbound_version_two.status_code == 404
+                    assert _STRATEGY_B not in unbound_version_two.text
                     unbound_response = await client.get(
                         "/api/v1/portfolio/overview",
                         params={"portfolio_ref": "unbound-owner-view", "membership_version": 1},

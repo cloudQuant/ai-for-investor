@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import defaultdict
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
@@ -260,7 +261,9 @@ class PortfolioCompositionService:
                 )
             reads.append((account_ref, view, _verified_account_key_id(view)))
 
-        account_rows, account_total = _project_account_total(reads, row.base_currency)
+        account_rows, account_total, account_snapshot_consistency = _project_account_total(
+            reads, row.base_currency
+        )
         account_facts_complete = account_total["status"] == "current"
         strategy_members = [member for member in row.members if member["kind"] == "strategy"]
         strategy_rows = _strategy_views(row.members)
@@ -455,6 +458,7 @@ class PortfolioCompositionService:
             **base,
             "source_status": "projected" if account_members else "no_account_members",
             "accounts": account_rows,
+            "account_snapshot_consistency": account_snapshot_consistency,
             "strategies": strategy_rows,
             "account_book_sources": list(book_sources.values()),
             "account_total": account_total,
@@ -811,7 +815,7 @@ def _published_research_decision(report_sections: Any) -> dict[str, Any] | None:
 
 def _project_account_total(
     reads: list[tuple[str, AccountReadView | None, str | None]], currency: str
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     grouped: dict[str, list[tuple[str, AccountReadView]]] = defaultdict(list)
     unresolved: list[tuple[str, AccountReadView]] = []
     for member_ref, view, identity in reads:
@@ -879,7 +883,90 @@ def _project_account_total(
     else:
         status_value = "incomplete"
         projected_total = None
-    return rows, {"status": status_value, "currency": currency, "value": projected_total}
+    return (
+        rows,
+        {"status": status_value, "currency": currency, "value": projected_total},
+        _account_snapshot_consistency(reads),
+    )
+
+
+_ACCOUNT_OBSERVED_AT_RE = re.compile(
+    r"^(?P<whole>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"
+    r"(?:\.(?P<fraction>\d+))?(?P<offset>Z|[+-]\d{2}:\d{2})$"
+)
+
+
+def _account_snapshot_consistency(
+    reads: list[tuple[str, AccountReadView | None, str | None]],
+) -> dict[str, Any]:
+    """Report independent account cuts and their exact observed-time spread."""
+
+    timed_reads: list[tuple[int, str]] = []
+    for _, view, _ in reads:
+        if view is None:
+            continue
+        observed_at = view.observed_at_utc
+        observed_at_ns = _account_observed_at_ns(observed_at)
+        if observed_at_ns is not None and observed_at is not None:
+            timed_reads.append((observed_at_ns, observed_at))
+
+    earliest = min(timed_reads, key=lambda item: item[0]) if timed_reads else None
+    latest = max(timed_reads, key=lambda item: item[0]) if timed_reads else None
+    result: dict[str, Any] = {
+        "cut_model": "independent_per_account",
+        "atomic": False,
+        "member_read_count": len(reads),
+        "observed_at_count": len(timed_reads),
+        "earliest_observed_at_utc": earliest[1] if earliest else None,
+        "latest_observed_at_utc": latest[1] if latest else None,
+        "skew_ns": None,
+        "skew_policy": "reported_without_threshold",
+    }
+    if not reads:
+        result["status"] = "not_collected"
+    elif len(timed_reads) != len(reads):
+        result["status"] = "observation_time_incomplete"
+    elif len(reads) == 1:
+        result["status"] = "single_account_cut"
+    else:
+        skew_ns = max(item[0] for item in timed_reads) - min(
+            item[0] for item in timed_reads
+        )
+        result["skew_ns"] = str(skew_ns)
+        result["status"] = (
+            "same_observation_time_independent_cuts"
+            if skew_ns == 0
+            else "different_observation_times_independent_cuts"
+        )
+    return result
+
+
+def _account_observed_at_ns(value: str | None) -> int | None:
+    """Parse an aware ISO timestamp exactly to nanoseconds, without defaulting."""
+
+    if not isinstance(value, str):
+        return None
+    match = _ACCOUNT_OBSERVED_AT_RE.fullmatch(value)
+    if match is None:
+        return None
+    fraction = match.group("fraction") or ""
+    if len(fraction) > 9 and any(digit != "0" for digit in fraction[9:]):
+        return None
+    offset = match.group("offset")
+    try:
+        parsed = datetime.fromisoformat(
+            match.group("whole") + ("+00:00" if offset == "Z" else offset)
+        )
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    utc_second = parsed.astimezone(timezone.utc).replace(microsecond=0)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    delta = utc_second - epoch
+    whole_seconds = delta.days * 86_400 + delta.seconds
+    fractional_ns = int(fraction[:9].ljust(9, "0")) if fraction else 0
+    return whole_seconds * 1_000_000_000 + fractional_ns
 
 
 def _account_row(
@@ -891,11 +978,23 @@ def _account_row(
 ) -> dict[str, Any]:
     return {
         "member_ref": member_ref,
+        "account_ref": view.account_ref,
+        # These public source coordinates identify this account read without
+        # returning the private AccountKey or its stable internal identifier.
+        "execution_domain_ref": view.execution_domain_ref,
+        "source_service_id": view.source_service_id,
+        "session_generation": view.session_generation,
+        "cursor": view.cursor,
         "currency": view.currency,
         "quality": view.quality.value,
+        "has_current_facts": view.has_current_facts,
         "cash": _decimal_text(view.cash),
         "value": _decimal_text(view.value),
         "observed_at_utc": view.observed_at_utc,
+        "received_age_seconds": view.received_age_seconds,
+        "fresh_for_seconds": view.fresh_for_seconds,
+        "positions_count": view.positions_count,
+        "open_orders_count": view.open_orders_count,
         "included_in_total": included,
         "duplicate_of_ref": duplicate_of,
         "detail_code": detail_code,

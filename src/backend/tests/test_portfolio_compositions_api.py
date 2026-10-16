@@ -32,6 +32,7 @@ from app.db.database import get_db  # noqa: E402
 from app.models.asset_research import AssetAnalysisReport, AssetAnalysisTask  # noqa: E402
 from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
 from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel  # noqa: E402
+from app.models.strategy_approval_authority import StrategyApprovalAuthorityEpoch  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 from app.services.asset_research.data import canonical_json_hash  # noqa: E402
 from app.services.portfolio_composition import _public_financial_projection  # noqa: E402
@@ -401,6 +402,7 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
         )
         async with engine.begin() as connection:
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+            await connection.run_sync(StrategyApprovalAuthorityEpoch.__table__.create)
             await connection.run_sync(AssetAnalysisTask.__table__.create)
             await connection.run_sync(AssetAnalysisReport.__table__.create)
             await connection.run_sync(PortfolioLedgerModel.__table__.create)
@@ -558,8 +560,6 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 {"kind": "account", "ref": "account-a"},
                 {"kind": "account", "ref": "account-a-alias"},
                 {"kind": "account", "ref": "account-b"},
-                {"kind": "strategy", "ref": "strategy-x"},
-                {"kind": "strategy", "ref": "strategy-y"},
             ],
         }
         try:
@@ -576,6 +576,9 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 rejected = await client.post("/api/v1/portfolio/compositions", json=forged_owner)
                 assert rejected.status_code == 422
 
+                versions_before_denial = await client.get("/api/v1/portfolio/compositions")
+                assert versions_before_denial.status_code == 200
+                assert versions_before_denial.json()["total"] == 1
                 unauthorized = {
                     **live_request,
                     "portfolio_ref": "not-authorized",
@@ -583,6 +586,39 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 }
                 denied = await client.post("/api/v1/portfolio/compositions", json=unauthorized)
                 assert denied.status_code == 403
+                assert denied.json() == {
+                    "detail": {
+                        "code": "SERVICE_READ_ACCESS_DENIED",
+                        "message": "The requested service-read scope is not authorized.",
+                    }
+                }
+                assert "account-outside-grant" not in denied.text
+                versions_after_denial = await client.get("/api/v1/portfolio/compositions")
+                assert versions_after_denial.status_code == 200
+                assert versions_after_denial.json()["total"] == 1
+                assert "not-authorized" not in versions_after_denial.text
+
+                unbound_strategy = {
+                    **live_request,
+                    "portfolio_ref": "unbound-strategy",
+                    "members": [
+                        {"kind": "account", "ref": "account-a"},
+                        {"kind": "strategy", "ref": "strategy-outside-grant"},
+                    ],
+                }
+                denied_strategy = await client.post(
+                    "/api/v1/portfolio/compositions", json=unbound_strategy
+                )
+                assert denied_strategy.status_code == 403
+                assert denied_strategy.json() == denied.json()
+                assert "strategy-outside-grant" not in denied_strategy.text
+                versions_after_strategy_denial = await client.get(
+                    "/api/v1/portfolio/compositions"
+                )
+                assert versions_after_strategy_denial.status_code == 200
+                assert versions_after_strategy_denial.json()["total"] == 1
+                assert "unbound-strategy" not in versions_after_strategy_denial.text
+                assert "strategy-outside-grant" not in versions_after_strategy_denial.text
 
                 reversed_request = {
                     **live_request,
@@ -620,20 +656,9 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 assert alias_row["duplicate_of_ref"] == "account-a"
                 assert first_key.account_id not in projection.text
                 assert first_key.account_key_id not in projection.text
-                assert live["strategy_attribution"] == {
-                    "status": "execution_attribution_not_collected",
-                    "strategy_count": 2,
-                    "attributed_value": None,
-                    "unattributed_account_value": "1500",
-                    "residual_basis": "account total only; no strategy shares inferred",
-                }
-                assert [row["attributed_value"] for row in live["strategies"]] == [None, None]
-                assert live["coverage"] == {
-                    "complete": False,
-                    "account_facts_complete": True,
-                    "strategy_attribution_complete": False,
-                    "code": "EXECUTION_ATTRIBUTION_NOT_COLLECTED",
-                }
+                assert live["strategies"] == []
+                assert live["strategy_attribution"]["strategy_count"] == 0
+                assert live["coverage"]["account_facts_complete"] is True
                 assert live["creditable"] is False
                 assert live["overlap_policy"] == "non_additive_display_only"
                 assert "credit_amount" not in live and "budget_credit" not in live
@@ -932,6 +957,208 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
         finally:
             configure_service_read(None)
             await worker.aclose()
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_live_composition_scope_denial_is_private_and_does_not_write():
+    """Exercise subject-owned HTTP scopes with real AFI services and synthetic facts only."""
+
+    try:
+        from bt_api_base.account_protocol import AccountKey
+    except ImportError:
+        pytest.skip("the service SDK account protocol is not installed")
+
+    async def scenario() -> None:
+        owner_a = TokenPayload(sub="scope-owner-a", username="operator-a")
+        owner_b = TokenPayload(sub="scope-owner-b", username="operator-b")
+        account_a = "scope-owner-a-account"
+        account_b = "scope-owner-b-account"
+        strategy_b = "scope-owner-b-strategy"
+        account_key_a = AccountKey(
+            provider="synthetic-provider",
+            venue="synthetic-venue",
+            environment="live",
+            account_id="private-owner-a-account-id",
+            subaccount_id=None,
+        )
+        source_a = _SyntheticReadSession(
+            {account_a: _account_view(account_a, account_key_a, value="100", cash="20")}
+        )
+        worker_a = ServiceReadWorker(
+            lambda: source_a,
+            maintenance_interval_seconds=60,
+            name="afi-scope-synthetic-owner-a",
+        )
+        worker_b = ServiceReadWorker(
+            lambda: _SyntheticReadSession({}),
+            maintenance_interval_seconds=60,
+            name="afi-scope-synthetic-owner-b",
+        )
+        engine = create_async_engine(
+            "sqlite+aiosqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        async with engine.begin() as connection:
+            await connection.run_sync(PortfolioCompositionVersion.__table__.create)
+        session_maker = async_sessionmaker(engine, expire_on_commit=False)
+
+        legacy_members = [
+            {"kind": "account", "ref": account_a},
+            {"kind": "strategy", "ref": "historical-unbound-strategy"},
+        ]
+
+        def version_hash(members: list[dict[str, str]]) -> str:
+            return canonical_json_hash(
+                {
+                    "source_type": "live",
+                    "base_currency": "USD",
+                    "members": sorted(
+                        members, key=lambda member: (member["kind"], member["ref"])
+                    ),
+                }
+            )
+
+        async with session_maker() as session:
+            session.add(
+                PortfolioCompositionVersion(
+                    owner_subject=owner_a.sub,
+                    portfolio_ref="legacy-unbound",
+                    membership_version=1,
+                    source_type="live",
+                    base_currency="USD",
+                    members=legacy_members,
+                    membership_sha256=version_hash(legacy_members),
+                )
+            )
+            await session.commit()
+
+        current_user = {"payload": owner_a}
+        app = FastAPI()
+        app.include_router(portfolio_router, prefix="/api/v1")
+        app.dependency_overrides[get_current_user] = lambda: current_user["payload"]
+
+        async def override_db():
+            async with session_maker() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_db
+        configure_service_read(
+            ServiceReadAccessDirectory(
+                {
+                    owner_a.sub: ReadAccess(worker_a, allow_account_refs={account_a}),
+                    owner_b.sub: ReadAccess(
+                        worker_b,
+                        allow_account_refs={account_b},
+                        allow_account_book_refs={account_b},
+                        strategy_book_bindings={
+                            strategy_b: StrategyBookBinding(
+                                account_ref=account_b,
+                                owner_ref="scope-owner-b-strategy-owner",
+                            )
+                        },
+                    ),
+                }
+            )
+        )
+        try:
+            await worker_a.start()
+            await worker_b.start()
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                before = await client.get("/api/v1/portfolio/compositions")
+                assert before.status_code == 200
+                assert before.json()["total"] == 1
+                async with session_maker() as session:
+                    initial_row_count = await session.scalar(
+                        select(func.count()).select_from(PortfolioCompositionVersion)
+                    )
+                assert initial_row_count == 1
+
+                attempts = (
+                    (
+                        "unknown-account",
+                        [{"kind": "account", "ref": "unknown-account-ref"}],
+                        ("unknown-account-ref",),
+                    ),
+                    (
+                        "foreign-account",
+                        [{"kind": "account", "ref": account_b}],
+                        (account_b,),
+                    ),
+                    (
+                        "foreign-strategy",
+                        [
+                            {"kind": "account", "ref": account_a},
+                            {"kind": "strategy", "ref": strategy_b},
+                        ],
+                        (strategy_b, account_b),
+                    ),
+                    (
+                        "unknown-strategy",
+                        [
+                            {"kind": "account", "ref": account_a},
+                            {"kind": "strategy", "ref": "unknown-strategy-ref"},
+                        ],
+                        ("unknown-strategy-ref",),
+                    ),
+                )
+                expected_denial = {
+                    "detail": {
+                        "code": "SERVICE_READ_ACCESS_DENIED",
+                        "message": "The requested service-read scope is not authorized.",
+                    }
+                }
+                for portfolio_ref, members, private_refs in attempts:
+                    denied = await client.post(
+                        "/api/v1/portfolio/compositions",
+                        json={
+                            "portfolio_ref": portfolio_ref,
+                            "source_type": "live",
+                            "base_currency": "USD",
+                            "members": members,
+                        },
+                    )
+                    assert denied.status_code == 403
+                    assert denied.json() == expected_denial
+                    assert all(reference not in denied.text for reference in private_refs)
+
+                after = await client.get("/api/v1/portfolio/compositions")
+                assert after.status_code == 200
+                assert after.json()["total"] == 1
+                assert [item["portfolio_ref"] for item in after.json()["items"]] == [
+                    "legacy-unbound"
+                ]
+                assert all(portfolio_ref not in after.text for portfolio_ref, *_ in attempts)
+                async with session_maker() as session:
+                    stored_row_count = await session.scalar(
+                        select(func.count()).select_from(PortfolioCompositionVersion)
+                    )
+                assert stored_row_count == 1
+                assert source_a.account_reads == []
+
+                historical_read = await client.get(
+                    "/api/v1/portfolio/compositions/legacy-unbound/versions/1/projection"
+                )
+                assert historical_read.status_code == 200, historical_read.text
+                historical = historical_read.json()
+                assert historical["strategy_attribution"]["status"] == (
+                    "execution_attribution_not_collected"
+                )
+                assert historical["strategies"][0]["strategy_ref"] == (
+                    "historical-unbound-strategy"
+                )
+                assert historical["account_total"]["value"] == "100"
+                assert account_key_a.account_id not in historical_read.text
+                assert account_key_a.account_key_id not in historical_read.text
+                assert source_a.account_reads == [(account_a, "USD")]
+                assert source_a.account_book_reads == []
+        finally:
+            configure_service_read(None)
+            await worker_a.aclose()
+            await worker_b.aclose()
             await engine.dispose()
 
     asyncio.run(scenario())
