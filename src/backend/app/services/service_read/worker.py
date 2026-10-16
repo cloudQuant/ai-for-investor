@@ -64,6 +64,18 @@ class ServiceReadSession(Protocol):
 
     def submit_approved_target(self, scope_ref: str, arguments: dict[str, Any]) -> Any: ...
 
+    def upload_portfolio_analytics_input(
+        self, scope_ref: str, input_snapshot_id: str, facts: dict[str, Any]
+    ) -> Any: ...
+
+    def submit_portfolio_analytics_task(
+        self, scope_ref: str, task_ref: str, input_snapshot_id: str, request: dict[str, Any]
+    ) -> Any: ...
+
+    def query_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any: ...
+
+    def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any: ...
+
     def close(self) -> None: ...
 
 
@@ -83,6 +95,10 @@ class _Kind(Enum):
     STRATEGY_HEALTH = auto()
     MANUAL_ORDER = auto()
     APPROVED_TARGET = auto()
+    ANALYTICS_INPUT = auto()
+    ANALYTICS_SUBMIT = auto()
+    ANALYTICS_QUERY = auto()
+    ANALYTICS_CANCEL = auto()
 
 
 class _Request:
@@ -221,6 +237,26 @@ class ServiceReadWorker:
         """Queue one approved target on the existing SDK owner thread."""
 
         return await self._submit(_Kind.APPROVED_TARGET, scope_ref, arguments)
+
+    async def upload_portfolio_analytics_input(
+        self, scope_ref: str, input_snapshot_id: str, facts: dict[str, Any]
+    ) -> Any:
+        return await self._submit(
+            _Kind.ANALYTICS_INPUT, scope_ref, input_snapshot_id, facts
+        )
+
+    async def submit_portfolio_analytics_task(
+        self, scope_ref: str, task_ref: str, input_snapshot_id: str, request: dict[str, Any]
+    ) -> Any:
+        return await self._submit(
+            _Kind.ANALYTICS_SUBMIT, scope_ref, task_ref, input_snapshot_id, request
+        )
+
+    async def query_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any:
+        return await self._submit(_Kind.ANALYTICS_QUERY, scope_ref, task_ref)
+
+    async def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any:
+        return await self._submit(_Kind.ANALYTICS_CANCEL, scope_ref, task_ref)
 
     async def aclose(self) -> None:
         """Reject new reads, discard queued reads, and close on the owner thread."""
@@ -401,6 +437,25 @@ class ServiceReadWorker:
                 )
             elif request.kind is _Kind.APPROVED_TARGET:
                 result = session.submit_approved_target(
+                    request.arguments[0], request.arguments[1]
+                )
+            elif request.kind is _Kind.ANALYTICS_INPUT:
+                result = session.upload_portfolio_analytics_input(
+                    request.arguments[0], request.arguments[1], request.arguments[2]
+                )
+            elif request.kind is _Kind.ANALYTICS_SUBMIT:
+                result = session.submit_portfolio_analytics_task(
+                    request.arguments[0],
+                    request.arguments[1],
+                    request.arguments[2],
+                    request.arguments[3],
+                )
+            elif request.kind is _Kind.ANALYTICS_QUERY:
+                result = session.query_portfolio_analytics_task(
+                    request.arguments[0], request.arguments[1]
+                )
+            elif request.kind is _Kind.ANALYTICS_CANCEL:
+                result = session.cancel_portfolio_analytics_task(
                     request.arguments[0], request.arguments[1]
                 )
             else:

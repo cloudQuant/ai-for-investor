@@ -108,6 +108,7 @@ def _resolve_access(
         "order_submit",
         "approved_target",
         "monitor",
+        "portfolio_analytics",
     ],
 ) -> ReadAccess:
     directory = _require_directory()
@@ -130,6 +131,8 @@ def _resolve_access(
             return directory.resolve_approved_target_scope(current_user.sub, selector)
         if selector_kind == "monitor":
             return directory.resolve_monitor_scope(current_user.sub, selector)
+        if selector_kind == "portfolio_analytics":
+            return directory.resolve_portfolio_analytics(current_user.sub, selector)
     except ServiceReadAccessError:
         raise _access_denied() from None
     raise HTTPException(
@@ -139,6 +142,15 @@ def _resolve_access(
             "message": "The authorized service could not answer.",
         },
     )
+
+
+def resolve_portfolio_analytics_access(
+    current_user: TokenPayload, portfolio_ref: str
+) -> ReadAccess:
+    """Resolve a deployment-owned offline analytics binding for this subject."""
+
+    return _resolve_access(current_user, portfolio_ref, "portfolio_analytics")
+
 
 
 def _access_denied() -> HTTPException:

@@ -30,6 +30,7 @@ from app.services.service_read.client import (
     MonitorBinding,
     OrderBinding,
     OrderSubmitBinding,
+    PortfolioAnalyticsBinding,
 )
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
@@ -62,7 +63,9 @@ _SCOPE_FIELDS = frozenset(
         "leg_id",
     }
 )
-_READ_MOUNTS = frozenset({"application.account", "application.order_query", "application.monitor"})
+_READ_MOUNTS = frozenset(
+    {"application.account", "application.order_query", "application.monitor", "application.risk_analysis"}
+)
 _DEPLOYMENT_MOUNTS = _READ_MOUNTS | {"application.orders"}
 
 
@@ -101,6 +104,9 @@ class _SubjectProfile:
         repr=False, compare=False
     )
     monitor_bindings: Mapping[str, MonitorBinding] = field(repr=False, compare=False)
+    portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] = field(
+        repr=False, compare=False
+    )
     account_grants: frozenset[str]
     account_book_grants: frozenset[str]
     strategy_book_grants: frozenset[str]
@@ -108,6 +114,7 @@ class _SubjectProfile:
     order_submit_grants: frozenset[str]
     approved_target_grants: frozenset[str]
     monitor_grants: frozenset[str]
+    portfolio_grants: frozenset[str]
     max_queue_size: int
     maintenance_interval_seconds: float
 
@@ -181,6 +188,8 @@ async def start_service_read_deployment(
                 allow_order_submit_scope_refs=profile.order_submit_grants,
                 allow_approved_target_scope_refs=profile.approved_target_grants,
                 allow_monitor_scope_refs=profile.monitor_grants,
+                allow_portfolio_refs=profile.portfolio_grants,
+                portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
                 strategy_book_bindings=profile.strategy_book_bindings,
                 order_submit_bindings=profile.order_submit_bindings,
                 approved_target_bindings=profile.approved_target_bindings,
@@ -215,6 +224,7 @@ def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
             order_submit_bindings=profile.order_submit_bindings,
             approved_target_bindings=profile.approved_target_bindings,
             monitor_bindings=profile.monitor_bindings,
+            portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
         )
 
     stable_name = hashlib.sha256(profile.subject.encode("utf-8")).hexdigest()[:12]
@@ -260,6 +270,15 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
     if profile.approved_target_bindings:
         requested_operations["application.orders"] = frozenset(
             {"orders.submit_approved_target"}
+        )
+    if profile.portfolio_analytics_bindings:
+        requested_operations["application.risk_analysis"] = frozenset(
+            {
+                "analysis.input_upload",
+                "analysis.submit",
+                "analysis.query",
+                "analysis.cancel",
+            }
         )
     return ServiceClientRuntime(
         profile.client_config,
@@ -375,6 +394,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "strategy_book_bindings",
         "order_submit_bindings",
         "approved_target_bindings",
+        "portfolio_analytics_bindings",
     }
     if (
         type(raw) is not dict
@@ -478,11 +498,15 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     if set(order_submit_bindings) & set(approved_target_bindings):
         raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
     monitor_bindings = _parse_monitor_bindings(profile["monitor_bindings"])
+    portfolio_analytics_bindings = _parse_portfolio_analytics_bindings(
+        profile.get("portfolio_analytics_bindings", {}), scopes
+    )
     grants_fields = {"account_refs", "order_scope_refs", "monitor_scope_refs"}
     book_grant_fields = {"account_book_refs", "strategy_book_refs"}
     optional_grant_fields = book_grant_fields | {
         "order_submit_scope_refs",
         "approved_target_scope_refs",
+        "portfolio_refs",
     }
     grants_raw = profile["grants"]
     if (
@@ -503,6 +527,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         _string_list(grants_raw.get("approved_target_scope_refs", []))
     )
     monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
+    portfolio_grants = frozenset(_string_list(grants_raw.get("portfolio_refs", [])))
     if (
         account_grants != frozenset(account_bindings)
         or account_book_grants != frozenset(account_book_bindings)
@@ -511,6 +536,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         or order_submit_grants != frozenset(order_submit_bindings)
         or approved_target_grants != frozenset(approved_target_bindings)
         or monitor_grants != frozenset(monitor_bindings)
+        or portfolio_grants != frozenset(portfolio_analytics_bindings)
         or not (
             account_grants
             or account_book_grants
@@ -519,6 +545,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
             or order_submit_grants
             or approved_target_grants
             or monitor_grants
+            or portfolio_grants
         )
     ):
         raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
@@ -559,6 +586,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_submit_bindings,
         approved_target_bindings,
         monitor_bindings,
+        portfolio_analytics_bindings,
     )
     return _SubjectProfile(
         subject=subject,
@@ -574,6 +602,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_submit_bindings=MappingProxyType(order_submit_bindings),
         approved_target_bindings=MappingProxyType(approved_target_bindings),
         monitor_bindings=MappingProxyType(monitor_bindings),
+        portfolio_analytics_bindings=MappingProxyType(portfolio_analytics_bindings),
         account_grants=account_grants,
         account_book_grants=account_book_grants,
         strategy_book_grants=strategy_book_grants,
@@ -581,6 +610,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         order_submit_grants=order_submit_grants,
         approved_target_grants=approved_target_grants,
         monitor_grants=monitor_grants,
+        portfolio_grants=portfolio_grants,
         max_queue_size=max_queue_size,
         maintenance_interval_seconds=float(interval),
     )
@@ -773,6 +803,30 @@ def _parse_monitor_bindings(raw: object) -> dict[str, MonitorBinding]:
     return result
 
 
+def _parse_portfolio_analytics_bindings(
+    raw: object, scopes: Mapping[str, Any]
+) -> dict[str, PortfolioAnalyticsBinding]:
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
+    result: dict[str, PortfolioAnalyticsBinding] = {}
+    for raw_portfolio_ref, raw_binding in raw.items():
+        portfolio_ref = _identifier(raw_portfolio_ref)
+        binding = _exact_mapping(raw_binding, {"mount", "scope_ref"})
+        try:
+            configured = PortfolioAnalyticsBinding(
+                mount=_identifier(binding["mount"]),
+                scope_ref=_identifier(binding["scope_ref"]),
+                portfolio_ref=portfolio_ref,
+            )
+        except Exception:
+            raise ServiceReadDeploymentError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS") from None
+        scope = scopes.get(configured.scope_ref)
+        if not _is_portfolio_analytics_scope(scope, portfolio_ref):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        result[portfolio_ref] = configured
+    return result
+
+
 def _validate_profile_bindings(
     client_config: Mapping[str, Any],
     identity: Any,
@@ -785,6 +839,7 @@ def _validate_profile_bindings(
     order_submit_bindings: Mapping[str, OrderSubmitBinding],
     approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding],
     monitor_bindings: Mapping[str, MonitorBinding],
+    portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding],
 ) -> None:
     declared: dict[tuple[str, str], tuple[str, str | None]] = {}
     for account_ref, binding in account_bindings.items():
@@ -838,7 +893,7 @@ def _validate_profile_bindings(
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
     for scope_ref, binding in monitor_bindings.items():
-        scope = scopes.get(scope_ref)
+        scope = scopes.get(binding.scope_ref)
         if (
             binding.mount != "application.monitor"
             or scope is None
@@ -847,6 +902,14 @@ def _validate_profile_bindings(
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         _add_declared(declared, binding.mount, scope_ref, None)
+    for portfolio_ref, binding in portfolio_analytics_bindings.items():
+        scope = scopes.get(binding.scope_ref)
+        if (
+            binding.mount != "application.risk_analysis"
+            or not _is_portfolio_analytics_scope(scope, portfolio_ref)
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, binding.scope_ref, portfolio_ref)
 
     if set(scopes) != {scope_ref for _, scope_ref in declared}:
         raise ServiceReadDeploymentError("UNUSED_SCOPE")
@@ -874,7 +937,13 @@ def _validate_profile_bindings(
             if pair in observed or pair not in declared:
                 raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
             account_ref = declared[pair][1]
-            if binding.get("account_ref") != account_ref:
+            if mount == "application.risk_analysis":
+                if (
+                    binding.get("portfolio_ref") != account_ref
+                    or binding.get("account_ref") is not None
+                ):
+                    raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+            elif binding.get("account_ref") != account_ref:
                 raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
             service_id = binding.get("service_id")
             transport_ref = binding.get("transport_ref")
@@ -939,6 +1008,20 @@ def _is_account_scope(scope: Any) -> bool:
         and scope.portfolio_ref is None
         and scope.group_id is None
         and scope.leg_id is None
+    )
+
+
+def _is_portfolio_analytics_scope(scope: Any, portfolio_ref: str) -> bool:
+    return (
+        scope is not None
+        and getattr(scope, "portfolio_ref", None) == portfolio_ref
+        and getattr(scope, "run_id", None) is None
+        and getattr(scope, "account_ref", None) is None
+        and not getattr(scope, "account_refs", ())
+        and getattr(scope, "strategy_ref", None) is None
+        and getattr(scope, "manual_book_ref", None) is None
+        and getattr(scope, "group_id", None) is None
+        and getattr(scope, "leg_id", None) is None
     )
 
 

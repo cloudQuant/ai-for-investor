@@ -1009,6 +1009,12 @@
             </article>
           </section>
         </template>
+        <PortfolioAnalyticsTaskPanel
+          v-if="selectedCompositionVersion"
+          :portfolio-ref="selectedCompositionVersion.portfolio_ref"
+          :membership-version="selectedCompositionVersion.membership_version"
+          :source-type="selectedCompositionVersion.source_type"
+        />
       </section>
 
       <section
@@ -1603,6 +1609,7 @@ import { ElMessage } from 'element-plus'
 import type * as echarts from 'echarts'
 import { getErrorMessage } from '@/api'
 import { portfolioApi } from '@/api/portfolio'
+import PortfolioAnalyticsTaskPanel from '@/components/portfolio/PortfolioAnalyticsTaskPanel.vue'
 import type { PortfolioLedgerImportSource, PortfolioLedgerImportSourceDetail } from '@/api/portfolioLedger'
 import { portfolioLedgerApi } from '@/api/portfolioLedger'
 import { workspaceApi } from '@/api/workspace'

@@ -16,11 +16,16 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-from app.services.service_read.client import ApprovedTargetSubmitBinding, OrderSubmitBinding
+from app.services.service_read.client import (
+    ApprovedTargetSubmitBinding,
+    OrderSubmitBinding,
+    PortfolioAnalyticsBinding,
+)
 
 __all__ = [
     "ReadAccess",
     "StrategyBookBinding",
+    "PortfolioAnalyticsBinding",
     "ServiceReadAccessDirectory",
     "ServiceReadAccessError",
 ]
@@ -62,6 +67,10 @@ class ReadAccess:
     allow_order_submit_scope_refs: frozenset[str] = frozenset()
     allow_approved_target_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
+    allow_portfolio_refs: frozenset[str] = frozenset()
+    portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] = field(
+        default_factory=dict, repr=False
+    )
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(
         default_factory=dict, repr=False
     )
@@ -87,6 +96,7 @@ class ReadAccess:
             "allow_order_submit_scope_refs",
             "allow_approved_target_scope_refs",
             "allow_monitor_scope_refs",
+            "allow_portfolio_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
         if self.allow_account_book_refs and not inspect.iscoroutinefunction(
@@ -185,6 +195,48 @@ class ReadAccess:
         if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
             raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
 
+        analytics_bindings = self.portfolio_analytics_bindings
+        if not isinstance(analytics_bindings, Mapping) or len(analytics_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
+        normalized_analytics: dict[str, PortfolioAnalyticsBinding] = {}
+        for portfolio_ref, binding in analytics_bindings.items():
+            if (
+                not _valid_identifier(portfolio_ref)
+                or type(binding) is not PortfolioAnalyticsBinding
+                or binding.portfolio_ref != portfolio_ref
+            ):
+                raise ServiceReadAccessError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
+            normalized_analytics[portfolio_ref] = binding
+        if set(normalized_analytics) != set(self.allow_portfolio_refs):
+            raise ServiceReadAccessError("PORTFOLIO_ANALYTICS_BINDING_MISMATCH")
+        if normalized_analytics:
+            required_analytics_methods = (
+                "upload_portfolio_analytics_input",
+                "submit_portfolio_analytics_task",
+                "query_portfolio_analytics_task",
+                "cancel_portfolio_analytics_task",
+            )
+            if any(
+                not inspect.iscoroutinefunction(getattr(self.worker, name, None))
+                for name in required_analytics_methods
+            ):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+                or (
+                    getattr(identity, "delegate_ref", None) is not None
+                    and not _valid_identifier(identity.delegate_ref)
+                )
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(
+            self, "portfolio_analytics_bindings", MappingProxyType(normalized_analytics)
+        )
+
 
 @dataclass(frozen=True, slots=True, init=False)
 class ServiceReadAccessDirectory:
@@ -276,6 +328,16 @@ class ServiceReadAccessDirectory:
         """Resolve one telemetry scope for an exact authenticated subject."""
 
         return self._resolve(subject, scope_ref, "allow_monitor_scope_refs")
+
+    def resolve_portfolio_analytics(self, subject: str, portfolio_ref: str) -> ReadAccess:
+        """Resolve one configured analytics portfolio for an exact JWT subject."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(portfolio_ref):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or portfolio_ref not in access.portfolio_analytics_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
 
     def _resolve(self, subject: str, selector: str, grant_field: str) -> ReadAccess:
         if not _valid_identifier(subject) or not _valid_identifier(selector):

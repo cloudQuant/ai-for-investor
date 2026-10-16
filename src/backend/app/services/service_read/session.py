@@ -19,11 +19,18 @@ from .client import (
     ApprovedTargetSubmitBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
+    PortfolioAnalyticsBinding,
     OrderBinding,
     OrderSubmitBinding,
     ServiceReadUnavailableError,
 )
-from .contracts import AccountBookReadView, AccountReadView, OrderReadView, StrategyHealthView
+from .contracts import (
+    AccountBookReadView,
+    AccountReadView,
+    OrderReadView,
+    StrategyHealthView,
+    _thaw_json,
+)
 
 if TYPE_CHECKING:
     from bt_api_base.service_protocol import WireIdentity
@@ -92,6 +99,7 @@ class SdkServiceReadSession:
         order_submit_bindings: Mapping[str, OrderSubmitBinding] | None = None,
         approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
+        portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] | None = None,
     ) -> None:
         self._account_bindings = dict(account_bindings)
         self._account_book_bindings = dict(account_book_bindings or {})
@@ -99,6 +107,7 @@ class SdkServiceReadSession:
         self._order_submit_bindings = dict(order_submit_bindings or {})
         self._approved_target_bindings = dict(approved_target_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
+        self._portfolio_analytics_bindings = dict(portfolio_analytics_bindings or {})
         if not (
             self._account_bindings
             or self._account_book_bindings
@@ -106,6 +115,7 @@ class SdkServiceReadSession:
             or self._order_submit_bindings
             or self._approved_target_bindings
             or self._monitor_bindings
+            or self._portfolio_analytics_bindings
         ):
             raise ServiceReadSessionError(
                 "SERVICE_READ_NOT_CONFIGURED",
@@ -221,6 +231,16 @@ class SdkServiceReadSession:
             )
         for binding in self._monitor_bindings.values():
             expected.add((binding.mount, binding.scope_ref, frozenset({"telemetry.snapshot"})))
+        analytics_operations = frozenset(
+            {
+                "analysis.input_upload",
+                "analysis.submit",
+                "analysis.query",
+                "analysis.cancel",
+            }
+        )
+        for binding in self._portfolio_analytics_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, analytics_operations))
         return expected
 
     def _validate_registered_bindings(self) -> None:
@@ -291,6 +311,29 @@ class SdkServiceReadSession:
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "monitor binding scope does not match its configured strategy",
                 )
+
+        for portfolio_ref, configured in self._portfolio_analytics_bindings.items():
+            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+            if not self._scope_is_portfolio_analytics_scope(
+                binding.scope, portfolio_ref
+            ):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "analytics scope does not match its configured portfolio",
+                )
+
+    @staticmethod
+    def _scope_is_portfolio_analytics_scope(scope: Any, portfolio_ref: str) -> bool:
+        return (
+            getattr(scope, "portfolio_ref", None) == portfolio_ref
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "account_ref", None) is None
+            and not getattr(scope, "account_refs", ())
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
 
     def _one_registered_binding(self, mount: str, scope_ref: str) -> Any:
         assert self._runtime is not None
@@ -512,6 +555,92 @@ class SdkServiceReadSession:
         self._validate_runtime()
         assert self._read_client is not None
         return self._read_client.read_account_book(account_ref)
+
+    def upload_portfolio_analytics_input(
+        self, scope_ref: str, input_snapshot_id: str, facts: dict[str, Any]
+    ) -> Mapping[str, Any]:
+        return self._portfolio_analytics_call(
+            scope_ref,
+            "analysis.input_upload",
+            {"input_snapshot_id": input_snapshot_id, "facts": facts},
+            {"input_snapshot_id", "facts"},
+        )
+
+    def submit_portfolio_analytics_task(
+        self, scope_ref: str, task_ref: str, input_snapshot_id: str, request: dict[str, Any]
+    ) -> Mapping[str, Any]:
+        return self._portfolio_analytics_call(
+            scope_ref,
+            "analysis.submit",
+            {
+                "task_ref": task_ref,
+                "input_snapshot_id": input_snapshot_id,
+                "request": request,
+            },
+            {"task_ref", "input_snapshot_id", "request"},
+        )
+
+    def query_portfolio_analytics_task(
+        self, scope_ref: str, task_ref: str
+    ) -> Mapping[str, Any]:
+        return self._portfolio_analytics_call(
+            scope_ref, "analysis.query", {"task_ref": task_ref}, {"task_ref"}
+        )
+
+    def cancel_portfolio_analytics_task(
+        self, scope_ref: str, task_ref: str
+    ) -> Mapping[str, Any]:
+        return self._portfolio_analytics_call(
+            scope_ref, "analysis.cancel", {"task_ref": task_ref}, {"task_ref"}
+        )
+
+    def _portfolio_analytics_call(
+        self,
+        scope_ref: str,
+        operation: str,
+        arguments: dict[str, Any],
+        expected_arguments: set[str],
+    ) -> Mapping[str, Any]:
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        if set(arguments) != expected_arguments:
+            raise ServiceReadUnavailableError("INVALID_ANALYTICS_ARGUMENTS")
+        for key in ("task_ref", "input_snapshot_id"):
+            if key in arguments and (
+                type(arguments[key]) is not str
+                or not arguments[key]
+                or arguments[key] != arguments[key].strip()
+                or len(arguments[key]) > 128
+            ):
+                raise ServiceReadUnavailableError("INVALID_ANALYTICS_ARGUMENTS")
+        for key in ("facts", "request"):
+            if key in arguments and type(arguments[key]) is not dict:
+                raise ServiceReadUnavailableError("INVALID_ANALYTICS_ARGUMENTS")
+        configured = next(
+            (
+                binding
+                for binding in self._portfolio_analytics_bindings.values()
+                if binding.scope_ref == scope_ref
+            ),
+            None,
+        )
+        if configured is None:
+            raise ServiceReadUnavailableError("PORTFOLIO_ANALYTICS_NOT_CONFIGURED")
+        self._validate_runtime()
+        assert self._runtime is not None
+        reply = self._runtime.call(
+            configured.mount, operation, arguments, scope_ref=configured.scope_ref
+        )
+        if not isinstance(reply, Mapping):
+            raise ServiceReadUnavailableError("INVALID_ANALYTICS_REPLY")
+        # SDK wire replies are recursively frozen as MappingProxyType/tuples.
+        # The AFI task parser accepts the corresponding JSON dict/list shape.
+        return _thaw_json(reply)
 
     def read_strategy_health(self, scope_ref: str) -> StrategyHealthView:
         self._assert_owner()

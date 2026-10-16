@@ -33,6 +33,7 @@ __all__ = [
     "AccountBinding",
     "AuthorizedServiceReadClient",
     "MonitorBinding",
+    "PortfolioAnalyticsBinding",
     "OrderBinding",
     "OrderSubmitBinding",
     "ApprovedTargetSubmitBinding",
@@ -213,6 +214,26 @@ class ApprovedTargetSubmitBinding:
             or getattr(scope, "leg_id", None) is not None
         ):
             raise ServiceReadContractError("INVALID_APPROVED_TARGET_SCOPE")
+
+
+@dataclass(frozen=True)
+class PortfolioAnalyticsBinding:
+    """One deployment-owned offline analytics scope for an exact portfolio."""
+
+    mount: str
+    scope_ref: str
+    portfolio_ref: str
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+            (self.portfolio_ref, "INVALID_PORTFOLIO_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if self.mount != "application.risk_analysis":
+            raise ServiceReadContractError("INVALID_MOUNT")
 
 
 @dataclass(frozen=True)
