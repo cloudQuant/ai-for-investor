@@ -410,20 +410,6 @@ def test_quote_http_route_reads_real_service_market_client_and_host(
                 {"symbol": _SYMBOL, "name": "BTC", "exchange": "OKX", "category": "crypto"}
             ],
         )
-        monkeypatch.setattr(
-            service,
-            "_ensure_receiver",
-            lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("configured service-market request opened raw-ZMQ receiver")
-            ),
-        )
-        monkeypatch.setattr(
-            service,
-            "_subscribe_symbols_on_gateway",
-            lambda *args, **kwargs: (_ for _ in ()).throw(
-                AssertionError("configured service-market request sent a legacy subscription")
-            ),
-        )
 
         class _Database:
             async def execute(self, *_args):

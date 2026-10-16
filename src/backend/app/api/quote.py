@@ -56,8 +56,7 @@ async def list_data_sources(
     db: AsyncSession = Depends(get_db),
     svc: QuoteService = Depends(get_quote_service),
 ) -> typing.Any:
-    """Return all data sources (CTP, IB, MT5, Binance, OKX) with their
-    current availability status derived from gateway connections."""
+    """Return source status from exact service-market profiles and workspace metadata."""
     workspace_names = await _get_workspace_names(db, current_user.sub)
     sources = await asyncio.to_thread(svc.get_data_sources, current_user.sub, workspace_names)
     return {"sources": sources}
@@ -188,7 +187,7 @@ async def get_chart_data(
     current_user: typing.Any = Depends(get_current_user),
     svc: QuoteService = Depends(get_quote_service),
 ) -> typing.Any:
-    """Fetch OHLCV bars for chart rendering via a configured service or legacy route."""
+    """Fetch OHLCV bars through an exact configured service-market history route."""
     return await asyncio.to_thread(
         svc.get_chart_data,
         source,

@@ -476,6 +476,10 @@
                     <span class="quote-symbol-cell">
                       <strong>{{ row.symbol }}</strong>
                       <small v-if="quoteOriginText(row)">{{ quoteOriginText(row) }}</small>
+                      <small
+                        v-if="row.status === 'error' && row.error_message"
+                        class="quote-error-code"
+                      >{{ row.error_message }}</small>
                     </span>
                   </template>
                 </el-table-column>
@@ -642,6 +646,10 @@
                     <span class="quote-mobile-card__identity">
                       <strong>{{ row.symbol }}</strong>
                       <span>{{ quoteOriginText(row) || row.name || row.category || '--' }}</span>
+                      <small
+                        v-if="row.status === 'error' && row.error_message"
+                        class="quote-error-code"
+                      >{{ row.error_message }}</small>
                     </span>
                     <span :class="priceClass(row)">{{ formatQuoteTickPrice(row.last_price, row) }}</span>
                   </button>
@@ -1042,7 +1050,7 @@ const sourceStatusText = computed(() => {
     case 'not_connected':
       return info.status_message || t('quote.sourceNotConnected')
     case 'not_configured':
-      return t('quote.sourceNotConfigured')
+      return info.status_message || t('quote.sourceNotConfigured')
     case 'unavailable':
       return info.status_message || t('quote.sourceUnavailable')
     default:
@@ -1902,6 +1910,15 @@ onUnmounted(() => {
   font-family: var(--font-family);
   font-size: 11px;
   font-weight: 500;
+}
+
+.quote-symbol-cell .quote-error-code,
+.quote-mobile-card__identity .quote-error-code {
+  color: var(--warning-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .quote-time-cell {

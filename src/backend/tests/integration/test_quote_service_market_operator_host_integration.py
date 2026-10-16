@@ -370,20 +370,6 @@ def test_quote_http_route_uses_operator_okx_queue_and_service_market_client(
                 {"symbol": _SYMBOL, "name": "BTC", "exchange": "OKX", "category": "crypto"}
             ],
         )
-        monkeypatch.setattr(
-            service,
-            "_ensure_receiver",
-            lambda *_a, **_k: (_ for _ in ()).throw(
-                AssertionError("configured service-market key opened raw-ZMQ receiver")
-            ),
-        )
-        monkeypatch.setattr(
-            service,
-            "_subscribe_symbols_on_gateway",
-            lambda *_a, **_k: (_ for _ in ()).throw(
-                AssertionError("configured service-market key used legacy subscription")
-            ),
-        )
 
         class _Database:
             async def execute(self, *_args):

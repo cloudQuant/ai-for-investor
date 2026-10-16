@@ -397,11 +397,7 @@ describe('QuotePage', () => {
     await flushPromises()
 
     const stateCard = wrapper.get('.quote-state-card')
-    if (status === 'not_configured') {
-      expect(stateCard.text()).toContain('数据源未配置，请先完成相关配置')
-    } else {
-      expect(stateCard.text()).toContain(statusMessage)
-    }
+    expect(stateCard.text()).toContain(statusMessage)
     expect(quoteApiMocks.getQuotes).not.toHaveBeenCalled()
 
     if (status === 'not_connected') {
@@ -443,6 +439,56 @@ describe('QuotePage', () => {
     expect(quoteApiMocks.getQuotes).toHaveBeenLastCalledWith('eastmoney')
     expect(wrapper.find('.quote-error-text').exists()).toBe(false)
     expect(wrapper.find('.quote-state-card').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows the finite capability code on an unbound quote row', async () => {
+    quoteApiMocks.getQuotes.mockResolvedValue({
+      source: 'eastmoney',
+      source_label: '东方财富',
+      total: 1,
+      ticks: [
+        {
+          source: 'eastmoney',
+          source_label: '东方财富',
+          symbol: 'RB2405',
+          name: '螺纹钢主力',
+          exchange: 'SHFE',
+          category: 'futures',
+          last_price: null,
+          change: null,
+          change_pct: null,
+          bid_price: null,
+          ask_price: null,
+          high_price: null,
+          low_price: null,
+          open_price: null,
+          prev_close: null,
+          volume: null,
+          turnover: null,
+          open_interest: null,
+          update_time: null,
+          status: 'error',
+          error_message: 'SERVICE_MARKET_PROFILE_REQUIRED',
+          quote_key: 'service-market:RB2405',
+          gateway_key: 'service-market',
+          origins: ['subscription'],
+          workspace_ids: [],
+          workspace_names: [],
+        },
+      ],
+      fields: [
+        { prop: 'symbol', label: '代码', visible: true, always_show: true },
+      ],
+      update_time: null,
+      refresh_mode: 'manual',
+    })
+
+    const wrapper = mountQuotePage()
+    await flushPromises()
+
+    expect(useQuoteStore().ticks[0]?.error_message).toBe('SERVICE_MARKET_PROFILE_REQUIRED')
+    expect(wrapper.find('.quote-error-code').text()).toBe('SERVICE_MARKET_PROFILE_REQUIRED')
     wrapper.unmount()
   })
 

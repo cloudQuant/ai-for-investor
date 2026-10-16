@@ -320,7 +320,11 @@ export const useQuoteStore = defineStore('quote', () => {
       const shouldRetry =
         res.ticks.length > 0 &&
         res.ticks.every(
-          (t) => t.last_price == null && t.bid_price == null && t.ask_price == null,
+          (t) =>
+            t.status !== 'error' &&
+            t.last_price == null &&
+            t.bid_price == null &&
+            t.ask_price == null,
         )
       if (shouldRetry) {
         await new Promise((resolve) => window.setTimeout(resolve, 1200))
@@ -550,6 +554,7 @@ export const useQuoteStore = defineStore('quote', () => {
         chartTimeframe.value,
       )
       chartBars.value = res.bars
+      chartError.value = res.error_code ?? null
     } catch (e: unknown) {
       chartError.value = e instanceof Error ? e.message : tt('quote.errorChartFailed')
       chartBars.value = []

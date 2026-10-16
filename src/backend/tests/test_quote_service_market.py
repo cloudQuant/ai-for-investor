@@ -6,7 +6,7 @@ import sys
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
@@ -164,6 +164,7 @@ import threading
 blocked = {
     "app.services.quote.runtime",
     "app.services.quote.zmq_receiver",
+    "app.services.quote.snapshots",
 }
 original_import = builtins.__import__
 
@@ -221,47 +222,6 @@ print("service-market-without-legacy-imports")
 
     assert result.returncode == 0, result.stderr or result.stdout
     assert "service-market-without-legacy-imports" in result.stdout
-
-
-def test_legacy_zmq_helpers_are_loaded_when_fallback_is_invoked(monkeypatch):
-    receiver_module = ModuleType("app.services.quote.zmq_receiver")
-    receiver_rows = []
-
-    class FakeReceiver:
-        def __init__(self, source, market_endpoint):
-            self.source = source
-            self.market_endpoint = market_endpoint
-            self.started = False
-
-        def start(self):
-            self.started = True
-            receiver_rows.append(self)
-
-        def stop(self):
-            self.started = False
-
-        @property
-        def is_alive(self):
-            return self.started
-
-    receiver_module.ZmqTickReceiver = FakeReceiver
-    runtime_module = ModuleType("app.services.quote.runtime")
-    command_result = {"accepted": ["BTC-USDT-SWAP"]}
-    runtime_module.send_gateway_command = lambda *args, **kwargs: command_result
-    monkeypatch.setitem(sys.modules, "app.services.quote.zmq_receiver", receiver_module)
-    monkeypatch.setitem(sys.modules, "app.services.quote.runtime", runtime_module)
-
-    QuoteService._instance = None
-    service = QuoteService()
-    state = {"config": SimpleNamespace(market_endpoint="tcp://127.0.0.1:5501")}
-    service._ensure_receiver_for_gateway("OKX", "gateway-1", state)
-
-    assert receiver_rows[0].source == "OKX"
-    assert receiver_rows[0].market_endpoint == "tcp://127.0.0.1:5501"
-    assert receiver_rows[0].started is True
-    assert service._send_gateway_command(
-        "tcp://127.0.0.1:5500", "subscribe", {"symbols": ["BTC-USDT-SWAP"]}
-    ) is command_result
 
 
 def _projection(symbol: str = "BTC-USDT-SWAP") -> dict:
@@ -434,7 +394,6 @@ def _quote_service(monkeypatch: pytest.MonkeyPatch) -> QuoteService:
             {"symbol": "ETH-USDT-SWAP", "name": "ETH", "exchange": "OKX", "category": "crypto"},
         ],
     )
-    monkeypatch.setattr(service, "_build_quote_plans", lambda *args, **kwargs: {})
     return service
 
 
@@ -456,16 +415,6 @@ def test_quote_service_uses_configured_v2_key_without_opening_legacy_receiver(mo
 
     service._service_market_loaded = True
     service._service_market_deployment = _Directory()
-    monkeypatch.setattr(
-        service,
-        "_ensure_receiver",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy receiver opened")),
-    )
-    monkeypatch.setattr(
-        service,
-        "_subscribe_symbols_on_gateway",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy subscribe sent")),
-    )
 
     result = service.get_quotes("OKX", "jwt-subject-a", ["BTC-USDT-SWAP"])
 
@@ -491,16 +440,6 @@ def test_quote_service_does_not_fallback_when_configured_v2_route_fails(monkeypa
 
     service._service_market_loaded = True
     service._service_market_deployment = _Directory()
-    monkeypatch.setattr(
-        service,
-        "_ensure_receiver",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy receiver opened")),
-    )
-    monkeypatch.setattr(
-        service,
-        "_subscribe_symbols_on_gateway",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy subscribe sent")),
-    )
 
     result = service.get_quotes("OKX", "jwt-subject-a", ["BTC-USDT-SWAP"])
 
@@ -509,7 +448,7 @@ def test_quote_service_does_not_fallback_when_configured_v2_route_fails(monkeypa
     assert result["refresh_mode"] == "polling"
 
 
-def test_get_data_sources_does_not_start_legacy_market_consumers(monkeypatch):
+def test_get_data_sources_uses_profile_without_starting_market_reader(monkeypatch):
     service = _quote_service(monkeypatch)
     state = {"exchange_type": "OKX", "manual": False}
     mixed_gateway = {
@@ -536,6 +475,15 @@ def test_get_data_sources_does_not_start_legacy_market_consumers(monkeypatch):
     }
     workspace_context = {"OKX": {"gateway-1": mixed_gateway}}
 
+    class _Directory:
+        def configured_routes(self, subject, source, symbols):
+            assert subject == "jwt-subject-a"
+            assert source == "OKX"
+            assert "BTC-USDT-SWAP" in symbols
+            return {"BTC-USDT-SWAP": _market_key()}
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
     monkeypatch.setattr(
         service,
         "_get_running_workspace_context",
@@ -546,30 +494,16 @@ def test_get_data_sources_does_not_start_legacy_market_consumers(monkeypatch):
         "_get_source_gateway_states",
         lambda _manager, source, _context: {"gateway-1": state} if source == "OKX" else {},
     )
-    monkeypatch.setattr(service, "_is_gateway_state_ready", lambda _state: True)
-
-    def fail_legacy_start(*_args, **_kwargs):
-        raise AssertionError("source status must not start or subscribe a market consumer")
-
-    monkeypatch.setattr(
-        service,
-        "_ensure_receiver_for_gateway",
-        fail_legacy_start,
-    )
-    monkeypatch.setattr(
-        service,
-        "_subscribe_symbols_on_gateway_state",
-        fail_legacy_start,
-    )
 
     sources = service.get_data_sources("jwt-subject-a")
 
     okx = next(item for item in sources if item["source"] == "OKX")
     assert okx["status"] == "available"
     assert okx["workspaces"][0]["symbols"] == ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
+    assert not hasattr(service, "_ensure_receiver_for_gateway")
+    assert not hasattr(service, "_subscribe_symbols_on_gateway_state")
 
-
-def test_workspace_only_configured_v2_quote_avoids_legacy_path(monkeypatch):
+def test_workspace_only_service_ticker_preserves_metadata_and_rejects_unbound_symbol(monkeypatch):
     service = _quote_service(monkeypatch)
     key = _market_key()
     state = {"exchange_type": "OKX", "manual": False}
@@ -603,30 +537,22 @@ def test_workspace_only_configured_v2_quote_avoids_legacy_path(monkeypatch):
 
     service._service_market_loaded = True
     service._service_market_deployment = _Directory()
-    legacy_ensures: list[str] = []
-    legacy_subscriptions: list[tuple[str, list[str]]] = []
-    monkeypatch.setattr(
-        service,
-        "_ensure_receiver",
-        lambda source, _manager: legacy_ensures.append(source),
-    )
-    monkeypatch.setattr(
-        service,
-        "_subscribe_symbols_on_gateway",
-        lambda source, symbols: legacy_subscriptions.append((source, list(symbols))),
-    )
 
     result = service.get_quotes("OKX", "jwt-subject-a", ["ETH-USDT-SWAP"])
 
-    assert legacy_ensures == ["OKX"]
-    assert legacy_subscriptions == [("OKX", ["ETH-USDT-SWAP"])]
-    assert result["total"] == 1
-    tick = result["ticks"][0]
-    assert tick["gateway_key"] == "service-market"
-    assert tick["origins"] == ["workspace"]
-    assert tick["workspace_ids"] == ["workspace-1"]
-    assert tick["workspace_names"] == ["Demo"]
-
+    assert result["total"] == 2
+    by_symbol = {tick["symbol"]: tick for tick in result["ticks"]}
+    bound = by_symbol["BTC-USDT-SWAP"]
+    assert bound["gateway_key"] == "service-market"
+    assert bound["origins"] == ["workspace"]
+    assert bound["workspace_ids"] == ["workspace-1"]
+    assert bound["workspace_names"] == ["Demo"]
+    assert bound["status"] == "normal"
+    unbound = by_symbol["ETH-USDT-SWAP"]
+    assert unbound["status"] == "error"
+    assert unbound["error_message"] == "SERVICE_MARKET_PROFILE_REQUIRED"
+    assert unbound["workspace_ids"] == []
+    assert service._receivers == {}
 
 def test_uncertain_service_market_close_retains_production_owner_and_retries(monkeypatch):
     service = _quote_service(monkeypatch)
@@ -704,20 +630,6 @@ def test_uncertain_service_market_close_retains_production_owner_and_retries(mon
     service._service_market_loaded = True
     service._service_market_deployment = directory
     service._service_market_error = None
-    monkeypatch.setattr(
-        service,
-        "_ensure_receiver",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("uncertain v2 owner fell back to legacy receiver")
-        ),
-    )
-    monkeypatch.setattr(
-        service,
-        "_subscribe_symbols_on_gateway",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("uncertain v2 owner fell back to legacy subscribe")
-        ),
-    )
 
     assert service.shutdown() is False
 
@@ -1019,7 +931,7 @@ def test_configured_chart_history_failure_does_not_fall_back(monkeypatch):
     assert result["error_code"] == "HISTORY_UNAVAILABLE"
 
 
-def test_unconfigured_chart_history_preserves_legacy_route(monkeypatch):
+def test_unconfigured_chart_history_returns_profile_required_without_legacy_command(monkeypatch):
     service = _quote_service(monkeypatch)
 
     class _Directory:
@@ -1030,20 +942,11 @@ def test_unconfigured_chart_history_preserves_legacy_route(monkeypatch):
     service._service_market_deployment = _Directory()
     service._service_market_error = None
     service._service_market_load_lock = threading.Lock()
-    config = SimpleNamespace(command_endpoint="tcp://127.0.0.1:5500")
-    monkeypatch.setattr(service, "_get_live_trading_manager", lambda: object())
-    monkeypatch.setattr(service, "_find_gateway_config", lambda *_args: config)
-    command_calls = []
-
-    def send_command(endpoint, operation, arguments, **kwargs):
-        command_calls.append((endpoint, operation, arguments, kwargs))
-        return [{"datetime": "2026-01-01T00:00:00Z", "open": 1, "high": 2, "low": 1, "close": 2, "volume": 3}]
-
-    monkeypatch.setattr(service, "_send_gateway_command", send_command)
 
     result = service.get_chart_data(
         "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
     )
 
-    assert result["bars"][0]["close"] == 2.0
-    assert command_calls[0][1] == "get_bars"
+    assert result["bars"] == []
+    assert result["error_code"] == "SERVICE_MARKET_PROFILE_REQUIRED"
+    assert not hasattr(service, "_send_gateway_command")
