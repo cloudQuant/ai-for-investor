@@ -9,4 +9,4 @@
 - Normal app bootstrap: author-local `TestClient` pytest node passed `1 passed`, with two existing Windows/TestClient warnings. It follows `main_module.app` lifespan through the real `GatewayOperatorApplication`, `GatewayOperatorDeployment`, and `ServiceHost`; the market stream is synthetic. After that run, only the new test's signature wrapping and local import ordering changed. This is local synthetic lifecycle evidence, not live WSS, venue, account, installed-wheel, or formal AFI10 acceptance.
 - Static checks: Ruff lint passed for the three source/test paths. CRLF-aware `git diff --check` passed. No full-file formatting rewrite was applied because the formatter reports older unrelated formatting in these files.
 - Independent reviewer result and scope: exact three-file pins matched the final candidate; `GO_STATIC`. The review did not run tests or Host.
-- Commit: pending Root's scoped commit.
+- Code commit: `b0b4a09161a3603ba7a11ddd502f8ec4c5000e09` (parent `fc27194e47cbc984431921bda9679c5112ed7e5d`).
