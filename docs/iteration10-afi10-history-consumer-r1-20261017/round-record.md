@@ -13,4 +13,4 @@
 - Acceptance: author focused quote-market tests passed 23/23. The new HTTP→operator→Gateway Host→CURVE client integration passed 1/1 with one existing Windows ZMQ Proactor warning. Ruff, `py_compile`, and CRLF-aware `git diff --check` passed. Independent reviewer returned `GO_STATIC` on the exact six AFI pins and did not rerun tests.
 - Evidence limits: local synthetic-provider composition only. The operator profile/auth directory is injected by the integration fixture; this does not establish real OKX WSS, real account behavior, installed-wheel QA, or formal AFI10 acceptance.
 - Committed paths: `src/backend/app/api/quote.py`, `src/backend/app/schemas/quote.py`, `src/backend/app/services/quote/service_market.py`, `src/backend/app/services/quote_service.py`, `src/backend/tests/test_quote_service_market.py`, and `src/backend/tests/integration/test_quote_history_service_market_operator_host_integration.py`.
-- Commit: pending scoped delivery.
+- Source round commit: `c16aea52cc1002e57e4c681c68e1412e63d58d75` on `dev` (parent `2054dc4c85db66222b59a90a2c013f247af3f32f`).
