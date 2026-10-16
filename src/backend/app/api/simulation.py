@@ -185,7 +185,11 @@ async def start_instance(
         HTTPException: If the instance cannot be started.
     """
     try:
-        return await mgr.start_instance(instance_id, user_id=current_user.sub)
+        return await mgr.start_instance(
+            instance_id,
+            user_id=current_user.sub,
+            execution_mode="simulation",
+        )
     except live_instance_service.InstanceAccessError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Instance not found"
@@ -248,7 +252,7 @@ async def start_all(
     Returns:
         A summary of the batch start operation.
     """
-    return await mgr.start_all(user_id=current_user.sub)
+    return await mgr.start_all(user_id=current_user.sub, execution_mode="simulation")
 
 
 @router.post("/stop-all", response_model=LiveBatchResponse, summary="Stop all simulation instances")

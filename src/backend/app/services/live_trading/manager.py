@@ -16,6 +16,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from types import TracebackType
@@ -29,9 +30,20 @@ from app.services.gateway.preset import get_gateway_presets as _get_gateway_pres
 from app.services.instance_store import InstanceStore
 from app.services.live_trading import execution as live_execution_service
 from app.services.live_trading import instance as live_instance_service
+from app.services.live_trading.service_execution_launch import (
+    SERVICE_EXECUTION_PROFILE_MAP_ENV,
+    SERVICE_EXECUTION_STOP_COMMAND,
+    ServiceStrategyProfileError,
+    build_service_strategy_environment,
+    get_service_strategy_profile_registry,
+    parse_service_strategy_profile_map,
+    validate_profile_owner_grant,
+    validate_profile_strategy_source,
+)
 from app.services.live_trading.service_gateway_operator_guard import (
     is_legacy_gateway_excluded,
     is_legacy_manual_gateway_excluded,
+    legacy_gateway_exclusions,
     legacy_gateway_owner_operation,
 )
 from app.services.process_supervisor import (
@@ -1006,6 +1018,16 @@ class LiveTradingManager:
             if not instance_id:
                 continue
             try:
+                if instance.get("_server_service_execution_managed") is True:
+                    continue
+                profile_map = parse_service_strategy_profile_map(
+                    os.environ.get(SERVICE_EXECUTION_PROFILE_MAP_ENV)
+                )
+                if str(instance.get("strategy_id") or "") in profile_map:
+                    # A selected strategy may never restart through the old
+                    # manager-owned Gateway path, even if its service profile
+                    # is currently unavailable.
+                    continue
                 runtime_dir = str(instance.get("runtime_dir") or "").strip()
                 strategy_dir = (
                     Path(runtime_dir).expanduser()
@@ -1199,6 +1221,15 @@ class LiveTradingManager:
 
     def remove_instance(self, instance_id: str, user_id: str | None = None) -> bool:
         with _instance_store_lock():
+            current = _load_instances().get(instance_id)
+            proc = self._processes.get(instance_id)
+            if (
+                isinstance(current, dict)
+                and current.get("_server_service_execution_managed") is True
+            ) or (proc is not None and getattr(proc, "_bt_service_execution", False)):
+                # A service client may still own live registrations.  Do not
+                # delete its only persisted stop-control marker or kill it.
+                return False
             return live_instance_service.remove_instance(
                 instance_id=instance_id,
                 user_id=user_id,
@@ -1257,7 +1288,10 @@ class LiveTradingManager:
         *,
         enforce_ai_research_paper_runtime: bool = False,
         server_attested_live_handoff_activation_token: str | None = None,
+        execution_mode: str = "live",
     ) -> StartResult:
+        if execution_mode not in {"live", "simulation"}:
+            raise ValueError("INVALID_EXECUTION_MODE")
         async with self._instance_op_lock:
             with business_span(
                 "backtrader.live.instance_start", user_id=user_id, instance_id=instance_id
@@ -1414,6 +1448,14 @@ class LiveTradingManager:
                         processes=self._processes,
                         stopping_instances=self._stopping_instances,
                         instance_lock=_AsyncInstanceStoreLock(),
+                        build_subprocess_command=self._build_service_strategy_command,
+                        execution_mode=execution_mode,
+                        allow_service_strategy_execution=(
+                            execution_mode == "live"
+                            and not enforce_ai_research_paper_runtime
+                            and not server_attested
+                            and not pending_managed_workspace_runtime
+                        ),
                     )
                     raw_result.pop(_SERVER_ATTESTED_PAPER_RUNTIME_FIELD, None)
                     raw_result.pop(_SERVER_ATTESTED_PAPER_RUNTIME_DIGEST_FIELD, None)
@@ -1482,6 +1524,7 @@ class LiveTradingManager:
                 open_order_cancel = (
                     self._cancel_open_orders_for_instance(instance_id, inst)
                     if isinstance(inst, dict)
+                    and not self._is_service_execution_instance(instance_id, inst)
                     else None
                 )
                 self._raise_on_failed_open_order_cancel(instance_id, open_order_cancel)
@@ -1500,6 +1543,7 @@ class LiveTradingManager:
                             processes=self._processes,
                             stopping_instances=self._stopping_instances,
                             instance_lock=_AsyncInstanceStoreLock(),
+                            graceful_stop_callback=self._gracefully_stop_service_execution,
                         ),
                         open_order_cancel,
                     ),
@@ -1526,23 +1570,24 @@ class LiveTradingManager:
         user_id: str | None = None,
         *,
         enforce_ai_research_paper_runtime: bool = False,
+        execution_mode: str = "live",
     ) -> dict[str, StartResult]:
-        start_instance_callback: Callable[[str], Awaitable[StartResult]] = self.start_instance
-        if user_id is not None or enforce_ai_research_paper_runtime:
+        if execution_mode not in {"live", "simulation"}:
+            raise ValueError("INVALID_EXECUTION_MODE")
 
-            async def start_owned_instance(instance_id: str) -> StartResult:
-                return await self.start_instance(
-                    instance_id,
-                    user_id=user_id,
-                    enforce_ai_research_paper_runtime=enforce_ai_research_paper_runtime,
-                )
+        async def start_selected_instance(instance_id: str) -> StartResult:
+            return await self.start_instance(
+                instance_id,
+                user_id=user_id,
+                enforce_ai_research_paper_runtime=enforce_ai_research_paper_runtime,
+                execution_mode=execution_mode,
+            )
 
-            start_instance_callback = start_owned_instance
         return await live_execution_service.start_all(
             user_id=user_id,
             load_instances=_load_instances,
             is_pid_alive=_is_pid_alive,
-            start_instance_callback=start_instance_callback,
+            start_instance_callback=start_selected_instance,
         )
 
     async def stop_all(
@@ -1678,6 +1723,19 @@ class LiveTradingManager:
     def _build_subprocess_env(
         self, instance_id: str, instance: dict[str, Any], strategy_dir: Path
     ) -> dict[str, str]:
+        profile_launch = self._service_strategy_launch(instance, strategy_dir)
+        if profile_launch is not None:
+            profile, context, profile_import_roots = profile_launch
+            sdk_source_root, sdk_package_roots = self._service_strategy_sdk_import_roots()
+            return build_service_strategy_environment(
+                dict(os.environ),
+                profile,
+                context,
+                backend_root=Path(__file__).resolve().parents[3],
+                sdk_source_root=sdk_source_root,
+                backtrader_root=_BACKTRADER_DIR,
+                trusted_import_roots=(*sdk_package_roots, *profile_import_roots),
+            )
         return gateway_runtime_service.build_subprocess_env(
             instance_id=instance_id,
             instance=instance,
@@ -1687,6 +1745,127 @@ class LiveTradingManager:
             bt_api_py_dir=_BT_API_PY_DIR,
             backtrader_dir=_BACKTRADER_DIR,
         )
+
+    def _service_strategy_launch(
+        self,
+        instance: dict[str, Any],
+        strategy_dir: Path,
+    ) -> tuple[Any, Any, tuple[Path, ...]] | None:
+        if (
+            str(instance.get("_server_execution_mode") or "live") != "live"
+            or instance.get("_server_allow_service_strategy_execution") is False
+        ):
+            return None
+        profile_map = parse_service_strategy_profile_map(
+            os.environ.get(SERVICE_EXECUTION_PROFILE_MAP_ENV)
+        )
+        strategy_id = str(instance.get("strategy_id") or "")
+        profile_ref = profile_map.get(strategy_id)
+        if profile_ref is None:
+            return None
+        registry = get_service_strategy_profile_registry({profile_ref})
+        profile = registry.resolve(profile_ref)
+        if profile.strategy_id != strategy_id:
+            raise ServiceStrategyProfileError("STRATEGY_PROFILE_MAPPING_MISMATCH")
+        instance_id = str(instance.get("id") or "")
+        subject_ref = str(instance.get("user_id") or "")
+        resolved = registry.resolve_for_instance(
+            {
+                "id": instance_id,
+                "user_id": subject_ref,
+                "strategy_id": strategy_id,
+            },
+            run_id=uuid.uuid4().hex,
+        )
+        if resolved is None or resolved[0] is not profile:
+            raise ServiceStrategyProfileError("STRATEGY_PROFILE_MAPPING_MISMATCH")
+        context = resolved[1]
+        try:
+            from app.config import get_settings
+
+            operator_setting = get_settings().SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON
+            operator_raw = (
+                operator_setting.get_secret_value()
+                if hasattr(operator_setting, "get_secret_value")
+                else operator_setting
+            )
+        except Exception:
+            raise ServiceStrategyProfileError("SERVICE_OWNER_GRANT_UNAVAILABLE") from None
+        validate_profile_owner_grant(profile, operator_raw, subject_ref)
+        if not set(profile.legacy_gateway_keys).issubset(legacy_gateway_exclusions()):
+            raise ServiceStrategyProfileError("SERVICE_OWNER_EXCLUSION_UNAVAILABLE")
+        with self._gateway_lock:
+            if set(profile.legacy_gateway_keys).intersection(self._gateways):
+                raise ServiceStrategyProfileError("LEGACY_GATEWAY_OWNER_ACTIVE")
+        validate_profile_strategy_source(profile, strategy_dir / "run.py")
+        return profile, context, registry.import_roots(profile_ref)
+
+    @staticmethod
+    def _service_strategy_sdk_import_roots() -> tuple[Path | None, tuple[Path, ...]]:
+        sdk_root = _BT_API_PY_DIR
+        candidate_root = _PROJECT_ROOT.parent.parent / "bt_api_py"
+        if sdk_root is None and (candidate_root / "bt_api_py" / "__init__.py").is_file():
+            sdk_root = candidate_root
+        package_roots: list[Path] = []
+        package_parent = candidate_root / "bt_api"
+        if package_parent.is_dir():
+            package_roots.extend(
+                child / "src"
+                for child in sorted(package_parent.iterdir(), key=lambda item: item.name)
+                if (child / "src").is_dir()
+            )
+        return sdk_root, tuple(package_roots)
+
+    @staticmethod
+    def _build_service_strategy_command(
+        instance_id: str,
+        instance: dict[str, Any],
+        strategy_dir: Path,
+        environment: dict[str, str],
+    ) -> tuple[str, ...]:
+        del instance_id, instance, environment
+        return (
+            sys.executable,
+            "-m",
+            "app.services.live_trading.service_execution_runner",
+            str(strategy_dir / "run.py"),
+        )
+
+    def _is_service_execution_instance(self, instance_id: str, instance: dict[str, Any]) -> bool:
+        proc = self._processes.get(instance_id)
+        return bool(
+            instance.get("_server_service_execution_managed") is True
+            or (proc is not None and getattr(proc, "_bt_service_execution", False))
+        )
+
+    @staticmethod
+    async def _gracefully_stop_service_execution(
+        _instance_id: str,
+        proc: asyncio.subprocess.Process,
+    ) -> None:
+        if proc.returncode is not None:
+            await proc.wait()
+            if proc.returncode != 0:
+                raise RuntimeError("SERVICE_EXECUTION_CLOSE_UNCERTAIN")
+            return
+        stream = proc.stdin
+        if stream is None:
+            raise RuntimeError("SERVICE_EXECUTION_STOP_CONTROL_UNAVAILABLE")
+        try:
+            stream.write(SERVICE_EXECUTION_STOP_COMMAND)
+            await asyncio.wait_for(stream.drain(), timeout=5.0)
+            await asyncio.wait_for(proc.wait(), timeout=30.0)
+        except (asyncio.TimeoutError, OSError, RuntimeError):
+            # Keep the process/pipe/instance record for an explicit retry; a
+            # timeout is not permission to terminate a client with uncertain
+            # ServiceExecutionSession cleanup.
+            raise RuntimeError("SERVICE_EXECUTION_CLOSE_UNCERTAIN") from None
+        finally:
+            if proc.returncode is not None:
+                with contextlib.suppress(Exception):
+                    stream.close()
+        if proc.returncode != 0:
+            raise RuntimeError("SERVICE_EXECUTION_CLOSE_UNCERTAIN")
 
     def _acquire_gateway_for_instance(
         self, instance_id: str, instance: dict[str, Any], strategy_dir: Path
