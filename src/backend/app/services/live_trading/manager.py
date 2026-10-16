@@ -77,6 +77,12 @@ try:
 except ImportError:
     _logger = logging.getLogger(__name__)
 
+
+_SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE = (
+    "SERVICE_EXECUTION_PROFILE_REQUIRED: configure a trusted service strategy profile "
+    "and service-v2 owner grant (ServiceExecutionSession) for live execution."
+)
+
 logger: Any = _logger
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[5]
@@ -1772,7 +1778,10 @@ class LiveTradingManager:
         strategy_id = str(instance.get("strategy_id") or "")
         profile_ref = profile_map.get(strategy_id)
         if profile_ref is None:
-            return None
+            raise ServiceStrategyProfileError(
+                "SERVICE_EXECUTION_PROFILE_REQUIRED",
+                _SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE,
+            )
         registry = get_service_strategy_profile_registry({profile_ref})
         profile = registry.resolve(profile_ref)
         if profile.strategy_id != strategy_id:
@@ -1913,6 +1922,14 @@ class LiveTradingManager:
     def _build_gateway_launch(
         self, instance: dict[str, Any], strategy_dir: Path, gateway_params: dict[str, Any]
     ) -> dict[str, Any]:
+        if (
+            str(instance.get("_server_execution_mode") or "live") == "live"
+            and instance.get("_server_allow_service_strategy_execution") is not False
+        ):
+            raise ServiceStrategyProfileError(
+                "SERVICE_EXECUTION_PROFILE_REQUIRED",
+                _SERVICE_EXECUTION_PROFILE_REQUIRED_MESSAGE,
+            )
         config_data = self._load_strategy_config(strategy_dir)
         env_data = self._load_strategy_env(strategy_dir)
         gateway_config_cls, gateway_runtime_cls = self._import_gateway_runtime_classes()

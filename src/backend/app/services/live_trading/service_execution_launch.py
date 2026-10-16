@@ -66,9 +66,9 @@ _CHILD_ENVIRONMENT_KEYS = frozenset(
 class ServiceStrategyProfileError(RuntimeError):
     """Finite, non-sensitive profile and launch diagnostics."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, message: str | None = None) -> None:
         self.code = code
-        super().__init__(code)
+        super().__init__(message or code)
 
 
 def parse_service_strategy_profile_map(raw: object) -> dict[str, str]:
