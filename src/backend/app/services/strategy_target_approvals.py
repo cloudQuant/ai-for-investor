@@ -4,7 +4,9 @@ The caller of these functions must already have passed the code-owned
 authenticated identity/scope-to-owner binding.  This module never derives an
 owner from an approval reference or a client field.  Execution's journal, not
 this store, remains authoritative for admission, provider dispatch, and order
-state.
+state. Target creation remains application-client-only. The trusted Execution
+owner may reserve, resolve, and consume an existing target, but a SERVICE
+identity is limited to CLOSE/reduce-only targets.
 """
 
 from __future__ import annotations
@@ -847,13 +849,24 @@ async def _load_bound_approval(
         raise StrategyTargetApprovalError("APPROVAL_OWNER_BINDING_MISMATCH")
     if row.scope_ref != expected_scope_ref:
         raise StrategyTargetApprovalError("APPROVAL_SCOPE_MISMATCH")
+    identity_role = _identity_role(identity)
+    service_close_use = False
+    if identity_role == "service":
+        persisted_target = _target_from_row(row)
+        service_close_use = (
+            persisted_target.get("position_effect") == "CLOSE"
+            and persisted_target.get("reduce_only") is True
+        )
     if (
         row.principal_ref != principal_ref
         or row.principal_ref != _identity_field(identity, "principal_ref")
         or row.actor_ref != _identity_field(identity, "actor_ref")
         or row.delegate_ref
         != _delegate_storage_value(_identity_field(identity, "delegate_ref"))
-        or _identity_role(identity) != "application_client"
+        or not (
+            identity_role == "application_client"
+            or (identity_role == "service" and service_close_use)
+        )
     ):
         raise StrategyTargetApprovalError("APPROVAL_IDENTITY_MISMATCH")
     actual_scope = _scope_payload(wire_scope)
