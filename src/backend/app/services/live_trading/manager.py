@@ -1470,6 +1470,9 @@ class LiveTradingManager:
         *,
         allow_server_owned_ai_research_stop: bool = False,
         allow_server_owned_ai_research_live_handoff_stop: bool = False,
+        expected_service_execution_profile_ref: str | None = None,
+        expected_service_execution_run_id: str | None = None,
+        expected_service_execution_process: asyncio.subprocess.Process | None = None,
     ) -> StopResult:
         async with self._instance_op_lock:
             with business_span(
@@ -1484,6 +1487,32 @@ class LiveTradingManager:
                     if user_id is not None
                     else _load_instances().get(instance_id)
                 )
+                if any(
+                    value is not None
+                    for value in (
+                        expected_service_execution_profile_ref,
+                        expected_service_execution_run_id,
+                        expected_service_execution_process,
+                    )
+                ):
+                    process = self._processes.get(instance_id)
+                    if (
+                        type(expected_service_execution_profile_ref) is not str
+                        or not expected_service_execution_profile_ref
+                        or type(expected_service_execution_run_id) is not str
+                        or not expected_service_execution_run_id
+                        or expected_service_execution_process is None
+                        or process is not expected_service_execution_process
+                        or getattr(process, "_bt_service_execution", False) is not True
+                        or not isinstance(inst, dict)
+                        or inst.get("_server_service_execution_managed") is not True
+                        or inst.get("_server_service_execution_profile_ref")
+                        != expected_service_execution_profile_ref
+                        or inst.get("_server_service_execution_run_id")
+                        != expected_service_execution_run_id
+                        or inst.get("pid") != getattr(process, "pid", None)
+                    ):
+                        raise RuntimeError("SERVICE_EXECUTION_RUN_IDENTITY_CHANGED")
                 # A direct stop leaves the mutable workspace unit untouched,
                 # so a stale signed paper review could otherwise keep counting
                 # wall-clock time after the process has been stopped.  Resolve

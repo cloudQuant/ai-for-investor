@@ -34,6 +34,9 @@ from app.services.live_trading.service_gateway_operator_guard import (  # noqa: 
     register_legacy_gateway_exclusions,
     unregister_legacy_gateway_exclusions,
 )
+from app.services.live_trading.strategy_process_stop import (  # noqa: E402
+    stop_service_strategy_process,
+)
 from app.services.workspace import units as workspace_units  # noqa: E402
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -525,9 +528,69 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
                 script_path.parent / "logs" / "subprocess.stdout.log", _ORDER_QUERY_MARKER
             )
             assert _ORDER_QUERY_MARKER in text
-            stopped = await manager.stop_instance(_INSTANCE_ID, user_id=_SUBJECT_REF)
-            assert stopped["status"] == "stopped"
-            assert stopped.get("_server_service_execution_managed") is None
+            run_id = instances[_INSTANCE_ID]["_server_service_execution_run_id"]
+            stop_calls = []
+            binding = SimpleNamespace(
+                config=SimpleNamespace(
+                    subject=_SUBJECT_REF,
+                    allowed_actions=["STOP_NEW"],
+                    wire_account_ref=_ACCOUNT_REF,
+                ),
+                wire_scope=SimpleNamespace(
+                    account_ref=_ACCOUNT_REF,
+                    strategy_ref=_STRATEGY_REF,
+                    run_id=run_id,
+                ),
+            )
+
+            class _OwnerControlDeployment:
+                def submit_control(self, selected_binding, **kwargs):
+                    assert selected_binding is binding
+                    assert kwargs["action"] == "STOP_NEW"
+                    assert kwargs["subject"] == _SUBJECT_REF
+                    assert process.returncode is None
+                    stop_calls.append("stop_new")
+                    return {
+                        "action": "stop_new",
+                        "deployment_version": "owner-profile-test-v1",
+                        "command_id": "afi-monitor-stop-new-v1-" + "a" * 32,
+                        "status": "acknowledged",
+                        "outcome": "applied",
+                        "effect_ref": "strategy-stop-new-v1:" + "b" * 64,
+                        "effect_result": {"action": "stop_new", "result": "fenced"},
+                        "request_recorded": True,
+                        "owner_final": True,
+                        "reconciliation_required": False,
+                    }
+
+            owner_control = _OwnerControlDeployment()
+            owner_control.bindings = (binding,)
+
+            graceful_stop = manager._gracefully_stop_service_execution
+
+            async def observe_process_stop(instance_id, stopped_process):
+                stop_calls.append("process_stop")
+                await graceful_stop(instance_id, stopped_process)
+
+            manager._gracefully_stop_service_execution = observe_process_stop
+            receipt = await stop_service_strategy_process(
+                manager,
+                owner_control,
+                subject=_SUBJECT_REF,
+                instance_id=_INSTANCE_ID,
+                binding=binding,
+                idempotency_key="afi08-stop-r1-test-key",
+                open_order_policy="leave_open_and_report",
+            )
+            assert receipt.status == "stopped"
+            assert receipt.stop_new_effect == "fenced"
+            assert receipt.process_status == "stopped"
+            assert receipt.process_exit_code == 0
+            assert receipt.subscription_status == "released"
+            assert receipt.open_orders_status == "left_open_unverified"
+            assert receipt.positions_status == "unobserved"
+            assert stop_calls == ["stop_new", "process_stop"]
+            assert instances[_INSTANCE_ID].get("_server_service_execution_managed") is None
             assert process.returncode == 0
 
         asyncio.run(exercise_manager_lifecycle())
