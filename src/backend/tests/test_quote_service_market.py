@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
+import threading
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -34,6 +35,25 @@ def _market_key(symbol: str = "BTC-USDT-SWAP"):
             native_symbol=symbol,
         ),
         channel="tickers",
+    )
+
+
+def _history_key(symbol: str = "BTC-USDT-SWAP", timeframe: str = "1m"):
+    from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
+
+    return MarketSubscriptionKey(
+        source_ref="okx-public-market-r1",
+        entitlement_ref="public-history-r1",
+        instrument=MarketInstrumentKey(
+            provider="okx",
+            venue="OKX",
+            environment="live",
+            product_type="SWAP",
+            instrument_id=symbol,
+            native_symbol=symbol,
+        ),
+        channel="bar",
+        timeframe=timeframe,
     )
 
 
@@ -115,6 +135,24 @@ def _deployment_document(symbol: str = "BTC-USDT-SWAP") -> dict:
             }
         ],
     }
+
+
+def _history_deployment_document(
+    *, symbol: str = "BTC-USDT-SWAP", timeframe: str = "1m", history_only: bool = False
+) -> dict:
+    document = _deployment_document(symbol)
+    profile = document["subjects"][0]
+    profile["history_bindings"] = [
+        {
+            "source": "OKX",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "key": _history_key(symbol, timeframe).to_dict(),
+        }
+    ]
+    if history_only:
+        profile["market_bindings"] = []
+    return document
 
 
 def test_configured_service_market_path_does_not_import_legacy_zmq_modules():
@@ -754,3 +792,275 @@ def _projected_raw() -> dict:
         "low_price": 66_000.0,
         "open_price": 66_500.0,
     }
+
+
+def test_history_bindings_are_exact_subject_timeframe_and_separate_from_tickers():
+    directory = ServiceMarketDeployment.from_value(
+        json.dumps(_history_deployment_document(history_only=True))
+    )
+    assert directory is not None
+    key = _history_key()
+
+    assert directory.configured_history_key(
+        "jwt-subject-a", "okx", "BTC-USDT-SWAP", "1m"
+    ) == key
+    assert directory.configured_history_key(
+        "jwt-subject-b", "OKX", "BTC-USDT-SWAP", "1m"
+    ) is None
+    assert directory.configured_history_key(
+        "jwt-subject-a", "OKX", "BTC-USDT-SWAP", "5m"
+    ) is None
+    assert directory.has_configured_history_symbol(
+        "jwt-subject-a", "OKX", "BTC-USDT-SWAP"
+    )
+    profile = directory._profiles["jwt-subject-a"]
+    assert profile.routes == {}
+    assert profile.requested_operations == frozenset({"market.history"})
+    directory.close()
+
+
+@pytest.mark.parametrize(
+    "mutation,code",
+    [
+        (
+            lambda doc: doc["subjects"][0]["history_bindings"][0].update(timeframe="1M"),
+            "UNSUPPORTED_HISTORY_TIMEFRAME",
+        ),
+        (
+            lambda doc: doc["subjects"][0]["history_bindings"][0]["key"]["instrument"].update(environment="demo"),
+            "UNSUPPORTED_HISTORY_BINDING",
+        ),
+        (
+            lambda doc: doc["subjects"][0]["history_bindings"][0]["key"].update(entitlement_ref="public-ticker-r1"),
+            "UNSUPPORTED_HISTORY_BINDING",
+        ),
+    ],
+)
+def test_history_binding_rejects_widened_or_inconsistent_key(mutation, code):
+    document = _history_deployment_document(history_only=True)
+    mutation(document)
+
+    with pytest.raises(ServiceMarketDeploymentError) as error:
+        ServiceMarketDeployment.from_value(json.dumps(document))
+
+    assert error.value.code == code
+
+
+def test_history_page_uses_owner_thread_client_without_stream_start(monkeypatch):
+    from bt_api_base.market_history_protocol import (
+        MarketBar,
+        MarketHistoryPage,
+        MarketHistoryRequest,
+    )
+
+    directory = ServiceMarketDeployment.from_value(
+        json.dumps(_history_deployment_document(history_only=True))
+    )
+    assert directory is not None
+    key = _history_key()
+    request = MarketHistoryRequest(
+        key,
+        "2026-01-01T00:00:00Z",
+        "2026-01-01T00:01:00Z",
+        1,
+    )
+    owner_thread_ids: list[int] = []
+    start_calls: list[int] = []
+
+    class _Client:
+        def history(self, actual_request):
+            owner_thread_ids.append(threading.get_ident())
+            assert actual_request == request
+            return MarketHistoryPage(
+                actual_request,
+                (
+                    MarketBar(
+                        "2026-01-01T00:00:00Z",
+                        "2026-01-01T00:01:00Z",
+                        "10",
+                        "12",
+                        "9",
+                        "11",
+                        "3",
+                    ),
+                ),
+                True,
+                None,
+                "2026-01-01T00:01:00Z",
+            )
+
+        def start(self):
+            start_calls.append(threading.get_ident())
+            raise AssertionError("history-only clients must not subscribe")
+
+    monkeypatch.setattr(
+        service_market_module._ServiceMarketOwner,
+        "_ensure_runtime",
+        lambda _owner: None,
+    )
+    monkeypatch.setattr(
+        service_market_module._ServiceMarketOwner,
+        "_ensure_history_client",
+        lambda _owner, _key: _Client(),
+    )
+    page = directory.read_history_page(
+        "jwt-subject-a", "OKX", "BTC-USDT-SWAP", "1m", key, request
+    )
+    owner = directory._workers["jwt-subject-a"]
+
+    assert type(page) is MarketHistoryPage
+    assert page.request == request
+    assert owner_thread_ids == [owner._thread.ident]
+    assert start_calls == []
+    directory.close()
+    assert owner._thread is None
+
+
+def test_configured_chart_history_projects_complete_page_without_legacy_fallback(monkeypatch):
+    from bt_api_base.market_history_protocol import (
+        MarketBar,
+        MarketHistoryPage,
+    )
+
+    service = _quote_service(monkeypatch)
+    key = _history_key()
+    calls = []
+
+    class _Directory:
+        def has_configured_history_symbol(self, subject, source, symbol):
+            assert (subject, source, symbol) == (
+                "jwt-subject-a",
+                "OKX",
+                "BTC-USDT-SWAP",
+            )
+            return True
+
+        def configured_history_key(self, subject, source, symbol, timeframe):
+            assert (subject, source, symbol, timeframe) == (
+                "jwt-subject-a",
+                "OKX",
+                "BTC-USDT-SWAP",
+                "1m",
+            )
+            return key
+
+        def read_history_page(self, subject, source, symbol, timeframe, actual_key, request):
+            calls.append(request)
+            assert (subject, source, symbol, timeframe, actual_key) == (
+                "jwt-subject-a",
+                "OKX",
+                "BTC-USDT-SWAP",
+                "1m",
+                key,
+            )
+            start = datetime.fromisoformat(request.start_time_utc.replace("Z", "+00:00"))
+            close = start + timedelta(minutes=1)
+            return MarketHistoryPage(
+                request,
+                (
+                    MarketBar(
+                        request.start_time_utc,
+                        close.isoformat(timespec="microseconds").replace("+00:00", "Z"),
+                        "10.5",
+                        "12.25",
+                        "9.5",
+                        "11.75",
+                        "3.125",
+                    ),
+                ),
+                True,
+                None,
+                request.end_time_utc,
+            )
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    service._service_market_error = None
+    service._service_market_load_lock = threading.Lock()
+    monkeypatch.setattr(
+        service,
+        "_get_live_trading_manager",
+        lambda: (_ for _ in ()).throw(AssertionError("configured history used legacy manager")),
+    )
+
+    result = service.get_chart_data(
+        "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
+    )
+
+    assert result["complete"] is True
+    assert result["error_code"] is None
+    assert result["total"] == 1
+    assert result["bars"] == [
+        {
+            "date": calls[0].start_time_utc,
+            "open": 10.5,
+            "high": 12.25,
+            "low": 9.5,
+            "close": 11.75,
+            "volume": 3.125,
+        }
+    ]
+    assert len(calls) == 1 and calls[0].limit == 10
+
+
+def test_configured_chart_history_failure_does_not_fall_back(monkeypatch):
+    service = _quote_service(monkeypatch)
+    key = _history_key()
+
+    class _Directory:
+        def has_configured_history_symbol(self, *_args):
+            return True
+
+        def configured_history_key(self, *_args):
+            return key
+
+        def read_history_page(self, *_args):
+            raise ServiceMarketDeploymentError("HISTORY_UNAVAILABLE")
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    service._service_market_error = None
+    service._service_market_load_lock = threading.Lock()
+    monkeypatch.setattr(
+        service,
+        "_get_live_trading_manager",
+        lambda: (_ for _ in ()).throw(AssertionError("configured history used legacy manager")),
+    )
+
+    result = service.get_chart_data(
+        "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
+    )
+
+    assert result["bars"] == []
+    assert result["complete"] is False
+    assert result["error_code"] == "HISTORY_UNAVAILABLE"
+
+
+def test_unconfigured_chart_history_preserves_legacy_route(monkeypatch):
+    service = _quote_service(monkeypatch)
+
+    class _Directory:
+        def has_configured_history_symbol(self, *_args):
+            return False
+
+    service._service_market_loaded = True
+    service._service_market_deployment = _Directory()
+    service._service_market_error = None
+    service._service_market_load_lock = threading.Lock()
+    config = SimpleNamespace(command_endpoint="tcp://127.0.0.1:5500")
+    monkeypatch.setattr(service, "_get_live_trading_manager", lambda: object())
+    monkeypatch.setattr(service, "_find_gateway_config", lambda *_args: config)
+    command_calls = []
+
+    def send_command(endpoint, operation, arguments, **kwargs):
+        command_calls.append((endpoint, operation, arguments, kwargs))
+        return [{"datetime": "2026-01-01T00:00:00Z", "open": 1, "high": 2, "low": 1, "close": 2, "volume": 3}]
+
+    monkeypatch.setattr(service, "_send_gateway_command", send_command)
+
+    result = service.get_chart_data(
+        "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
+    )
+
+    assert result["bars"][0]["close"] == 2.0
+    assert command_calls[0][1] == "get_bars"

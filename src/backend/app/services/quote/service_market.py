@@ -31,6 +31,7 @@ _ENVIRONMENT_VARIABLE = "SERVICE_MARKET_DEPLOYMENT_JSON"
 _MAX_DEPLOYMENT_BYTES = 262_144
 _MAX_SUBJECTS = 256
 _MAX_MARKET_BINDINGS_PER_SUBJECT = 512
+_MAX_MARKET_HISTORY_BINDINGS_PER_SUBJECT = 512
 _MAX_QUEUE_SIZE = 64
 _MAX_READ_KEYS = 64
 _MAX_WAIT_MS = 1_000
@@ -44,6 +45,10 @@ _MARKET_OPERATIONS = frozenset(
         "market.head",
         "market.read_after",
     }
+)
+_MARKET_HISTORY_OPERATION = "market.history"
+_MARKET_HISTORY_TIMEFRAMES = frozenset(
+    {"1s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "2d", "3d", "1w"}
 )
 _Z85_ALPHABET = frozenset(
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
@@ -115,6 +120,16 @@ class _MarketProfile:
     mount: str
     curve_keys: Mapping[str, tuple[bytes, bytes, bytes]] = field(repr=False, compare=False)
     routes: Mapping[tuple[str, str], Any] = field(repr=False, compare=False)
+    history_routes: Mapping[tuple[str, str, str], Any] = field(repr=False, compare=False)
+
+    @property
+    def requested_operations(self) -> frozenset[str]:
+        operations: set[str] = set()
+        if self.routes:
+            operations.update(_MARKET_OPERATIONS)
+        if self.history_routes:
+            operations.add(_MARKET_HISTORY_OPERATION)
+        return frozenset(operations)
 
 
 @dataclass(slots=True)
@@ -123,6 +138,15 @@ class _ReadRequest:
     wait_ms: int
     done: threading.Event = field(default_factory=threading.Event)
     results: dict[str, MarketQuoteResult] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class _HistoryReadRequest:
+    key: Any
+    request: Any
+    done: threading.Event = field(default_factory=threading.Event)
+    page: Any = None
+    error_code: str | None = None
 
 
 class ServiceMarketDeployment:
@@ -222,6 +246,82 @@ class ServiceMarketDeployment:
                 result[symbol] = key
         return result
 
+    def configured_history_key(
+        self, subject: str, source: str, symbol: str, timeframe: str
+    ) -> Any | None:
+        """Return one exact-subject, exact-timeframe read-only bar key."""
+
+        if (
+            type(subject) is not str
+            or not subject
+            or type(source) is not str
+            or type(symbol) is not str
+            or type(timeframe) is not str
+        ):
+            return None
+        profile = self._profiles.get(subject)
+        if profile is None:
+            return None
+        return profile.history_routes.get((source.strip().upper(), symbol, timeframe))
+
+    def has_configured_history_symbol(
+        self, subject: str, source: str, symbol: str
+    ) -> bool:
+        """Whether this exact subject has any history binding for the symbol."""
+
+        if (
+            type(subject) is not str
+            or not subject
+            or type(source) is not str
+            or type(symbol) is not str
+        ):
+            return False
+        profile = self._profiles.get(subject)
+        if profile is None:
+            return False
+        normalized_source = source.strip().upper()
+        return any(
+            route_source == normalized_source and route_symbol == symbol
+            for route_source, route_symbol, _timeframe in profile.history_routes
+        )
+
+    def read_history_page(
+        self,
+        subject: str,
+        source: str,
+        symbol: str,
+        timeframe: str,
+        key: Any,
+        request: Any,
+    ) -> Any:
+        """Read one configured bar page through the same serialized owner thread."""
+
+        try:
+            from bt_api_base.market_history_protocol import MarketHistoryRequest
+            from bt_api_base.market_protocol import MarketSubscriptionKey
+        except ImportError:
+            raise ServiceMarketDeploymentError("SDK_NOT_INSTALLED") from None
+        if type(request) is not MarketHistoryRequest or type(key) is not MarketSubscriptionKey:
+            raise ServiceMarketDeploymentError("INVALID_HISTORY_REQUEST")
+        if request.key != key:
+            raise ServiceMarketDeploymentError("HISTORY_KEY_MISMATCH")
+        with self._lock:
+            if self._closed:
+                raise ServiceMarketDeploymentError("DEPLOYMENT_CLOSED")
+            profile = self._profiles.get(subject)
+            if profile is None:
+                raise ServiceMarketDeploymentError("SUBJECT_NOT_CONFIGURED")
+            configured_key = profile.history_routes.get(
+                (source.strip().upper(), symbol, timeframe)
+            )
+            if configured_key is None or configured_key != key:
+                raise ServiceMarketDeploymentError("HISTORY_BINDING_NOT_CONFIGURED")
+            worker = self._workers.get(subject)
+            if worker is None:
+                worker = _ServiceMarketOwner(profile)
+                self._workers[subject] = worker
+        return worker.read_history(key, request)
+
     def read_quotes(
         self,
         subject: str,
@@ -284,7 +384,9 @@ class _ServiceMarketOwner:
 
     def __init__(self, profile: _MarketProfile) -> None:
         self._profile = profile
-        self._requests: queue.Queue[_ReadRequest] = queue.Queue(maxsize=_MAX_QUEUE_SIZE)
+        self._requests: queue.Queue[_ReadRequest | _HistoryReadRequest] = queue.Queue(
+            maxsize=_MAX_QUEUE_SIZE
+        )
         self._state_lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -296,6 +398,7 @@ class _ServiceMarketOwner:
         self._startup_error: str | None = None
         self._runtime: Any = None
         self._clients: dict[str, tuple[Any, Any]] = {}
+        self._history_clients: dict[str, tuple[Any, Any]] = {}
         self._latest: dict[str, Mapping[str, Any]] = {}
         self._client_errors: dict[str, str] = {}
 
@@ -323,6 +426,35 @@ class _ServiceMarketOwner:
         if not request.done.wait(_REQUEST_TIMEOUT_SECONDS):
             return _failed_results(keys, "SERVICE_MARKET_TIMEOUT")
         return request.results
+
+    def read_history(self, key: Any, history_request: Any) -> Any:
+        request = _HistoryReadRequest(key, history_request)
+        with self._state_lock:
+            if self._closed:
+                raise ServiceMarketDeploymentError("SERVICE_MARKET_CLOSED")
+            if self._thread is None:
+                stable = hashlib.sha256(self._profile.subject.encode("utf-8")).hexdigest()[:12]
+                thread = threading.Thread(
+                    target=self._run,
+                    name=f"afi-service-market-{stable}",
+                    daemon=False,
+                )
+                try:
+                    thread.start()
+                except Exception:
+                    raise ServiceMarketDeploymentError("OWNER_START_FAILED") from None
+                self._thread = thread
+            try:
+                self._requests.put_nowait(request)
+            except queue.Full:
+                raise ServiceMarketDeploymentError("SERVICE_MARKET_BUSY") from None
+        if not request.done.wait(_REQUEST_TIMEOUT_SECONDS):
+            raise ServiceMarketDeploymentError("SERVICE_MARKET_TIMEOUT")
+        if request.error_code is not None:
+            raise ServiceMarketDeploymentError(request.error_code)
+        if request.page is None:
+            raise ServiceMarketDeploymentError("SERVICE_MARKET_RESULT_MISSING")
+        return request.page
 
     def close(self) -> None:
         with self._state_lock:
@@ -366,9 +498,14 @@ class _ServiceMarketOwner:
                             request.keys, "SERVICE_MARKET_CLOSED"
                         )
                         request.done.set()
+                    elif isinstance(request, _HistoryReadRequest):
+                        request.error_code = "SERVICE_MARKET_CLOSED"
+                        request.done.set()
                     return
                 if isinstance(request, _ReadRequest):
                     self._handle_request(request)
+                elif isinstance(request, _HistoryReadRequest):
+                    self._handle_history_request(request)
                 self._poll_clients()
         except BaseException as error:
             if isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit)):
@@ -385,10 +522,14 @@ class _ServiceMarketOwner:
                         pending = self._requests.get_nowait()
                     except queue.Empty:
                         break
-                    pending.results = _failed_results(
-                        pending.keys, self._startup_error or "SERVICE_MARKET_CLOSED"
-                    )
-                    pending.done.set()
+                    if isinstance(pending, _ReadRequest):
+                        pending.results = _failed_results(
+                            pending.keys, self._startup_error or "SERVICE_MARKET_CLOSED"
+                        )
+                        pending.done.set()
+                    elif isinstance(pending, _HistoryReadRequest):
+                        pending.error_code = self._startup_error or "SERVICE_MARKET_CLOSED"
+                        pending.done.set()
                 self._close_attempt_done.set()
                 with self._state_lock:
                     close_error = self._close_error
@@ -433,6 +574,25 @@ class _ServiceMarketOwner:
         }
         request.done.set()
 
+    def _handle_history_request(self, request: _HistoryReadRequest) -> None:
+        if self._startup_error is not None:
+            request.error_code = self._startup_error
+            request.done.set()
+            return
+        try:
+            self._ensure_runtime()
+            client = self._ensure_history_client(request.key)
+            page = client.history(request.request)
+            if page.request != request.request:
+                raise ServiceMarketDeploymentError("HISTORY_REQUEST_MISMATCH")
+            request.page = page
+        except BaseException as error:
+            if isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                raise
+            request.error_code = _safe_error_code(error)
+        finally:
+            request.done.set()
+
     def _ensure_runtime(self) -> None:
         if self._runtime is not None:
             return
@@ -462,7 +622,7 @@ class _ServiceMarketOwner:
                 else _raise_unknown_peer()
             ),
             transport_factory=ZmqTransportFactory(transport_keys),
-            requested_operations={"application.market": _MARKET_OPERATIONS},
+            requested_operations={"application.market": self._profile.requested_operations},
         )
         self._runtime = runtime
         runtime.start()
@@ -490,6 +650,23 @@ class _ServiceMarketOwner:
         bootstrap = client.start()
         if bootstrap.snapshot is not None:
             self._cache_event(key, bootstrap.snapshot)
+
+    def _ensure_history_client(self, key: Any) -> Any:
+        existing = self._history_clients.get(key.stream_id)
+        if existing is not None:
+            return existing[1]
+        try:
+            from bt_api_py.service_market import ServiceMarketClient
+        except ImportError:
+            raise ServiceMarketDeploymentError("SDK_HISTORY_CLIENT_UNAVAILABLE") from None
+        client = ServiceMarketClient(
+            self._runtime,
+            self._profile.mount,
+            key,
+            stream_scope=self._profile.scope,
+        )
+        self._history_clients[key.stream_id] = (key, client)
+        return client
 
     def _poll_clients(self) -> None:
         for key_id, (key, client) in tuple(self._clients.items()):
@@ -528,7 +705,14 @@ class _ServiceMarketOwner:
                 failures = True
             else:
                 self._clients.pop(key_id, None)
-        if self._runtime is not None and not self._clients:
+        for key_id, (_key, client) in reversed(tuple(self._history_clients.items())):
+            try:
+                client.close()
+            except BaseException:
+                failures = True
+            else:
+                self._history_clients.pop(key_id, None)
+        if self._runtime is not None and not self._clients and not self._history_clients:
             try:
                 self._runtime.close()
                 runtime_state = getattr(self._runtime, "state", None)
@@ -637,9 +821,14 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
         "scope_claims",
         "peer_identities",
         "curve_keys",
-        "market_bindings",
     }
-    if type(raw) is not dict or set(raw) != required_fields:
+    optional_fields = {"market_bindings", "history_bindings"}
+    if (
+        type(raw) is not dict
+        or not required_fields <= set(raw)
+        or not set(raw) <= required_fields | optional_fields
+        or not (set(raw) & optional_fields)
+    ):
         raise ServiceMarketDeploymentError("INVALID_PROFILE")
     subject = _identifier(raw["subject"])
     identity_raw = _exact_mapping(
@@ -738,10 +927,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
         }
     )
 
-    market_raw = raw["market_bindings"]
+    market_raw = raw.get("market_bindings", [])
     if (
         type(market_raw) is not list
-        or not market_raw
         or len(market_raw) > _MAX_MARKET_BINDINGS_PER_SUBJECT
     ):
         raise ServiceMarketDeploymentError("INVALID_MARKET_BINDINGS")
@@ -771,6 +959,52 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
         if route in routes:
             raise ServiceMarketDeploymentError("DUPLICATE_MARKET_BINDING")
         routes[route] = key
+
+    history_raw = raw.get("history_bindings", [])
+    if (
+        type(history_raw) is not list
+        or len(history_raw) > _MAX_MARKET_HISTORY_BINDINGS_PER_SUBJECT
+        or not routes and not history_raw
+    ):
+        raise ServiceMarketDeploymentError("INVALID_MARKET_HISTORY_BINDINGS")
+    history_routes: dict[tuple[str, str, str], Any] = {}
+    for item in history_raw:
+        binding_raw = _exact_mapping(
+            item, {"source", "symbol", "timeframe", "key"}
+        )
+        source = _identifier(binding_raw["source"]).upper()
+        symbol = _identifier(binding_raw["symbol"])
+        timeframe = _identifier(binding_raw["timeframe"])
+        if timeframe not in _MARKET_HISTORY_TIMEFRAMES:
+            raise ServiceMarketDeploymentError("UNSUPPORTED_HISTORY_TIMEFRAME")
+        try:
+            key = sdk["MarketSubscriptionKey"].from_dict(binding_raw["key"])
+        except Exception:
+            raise ServiceMarketDeploymentError("INVALID_MARKET_KEY") from None
+        instrument = key.instrument
+        if (
+            source != "OKX"
+            or instrument.provider != "okx"
+            or instrument.venue != "OKX"
+            or instrument.environment != "live"
+            or instrument.product_type != "SWAP"
+            or instrument.instrument_id != symbol
+            or instrument.native_symbol != symbol
+            or key.source_ref != "okx-public-market-r1"
+            or key.entitlement_ref != "public-history-r1"
+            or key.channel != "bar"
+            or key.depth is not None
+            or key.timeframe != timeframe
+        ):
+            raise ServiceMarketDeploymentError("UNSUPPORTED_HISTORY_BINDING")
+        route = (source, symbol, timeframe)
+        if route in history_routes:
+            raise ServiceMarketDeploymentError("DUPLICATE_HISTORY_BINDING")
+        if key in routes.values():
+            raise ServiceMarketDeploymentError("STREAM_HISTORY_KEY_COLLISION")
+        history_routes[route] = key
+    if not routes and not history_routes:
+        raise ServiceMarketDeploymentError("EMPTY_MARKET_BINDINGS")
     return _MarketProfile(
         subject,
         identity,
@@ -782,6 +1016,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
         "application.market",
         curve_keys,
         MappingProxyType(routes),
+        MappingProxyType(history_routes),
     )
 
 

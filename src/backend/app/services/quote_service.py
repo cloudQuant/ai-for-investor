@@ -8,8 +8,9 @@ workspace gateway subscriptions while their service-v2 replacements are built.
 from __future__ import annotations
 
 import logging
+import math
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.config import get_settings
@@ -65,6 +66,82 @@ from app.services.quote.tick import (
 logger = logging.getLogger(__name__)
 
 _MAX_SNAPSHOT_HYDRATION_PER_GATEWAY = 10
+_SERVICE_MARKET_HISTORY_TIMEFRAMES = {
+    "M1": ("1m", 60),
+    "M3": ("3m", 3 * 60),
+    "M5": ("5m", 5 * 60),
+    "M15": ("15m", 15 * 60),
+    "M30": ("30m", 30 * 60),
+    "H1": ("1h", 60 * 60),
+    "H4": ("4h", 4 * 60 * 60),
+    "H2": ("2h", 2 * 60 * 60),
+    "H6": ("6h", 6 * 60 * 60),
+    "H12": ("12h", 12 * 60 * 60),
+    "D1": ("1d", 24 * 60 * 60),
+    "D2": ("2d", 2 * 24 * 60 * 60),
+    "D3": ("3d", 3 * 24 * 60 * 60),
+    "W1": ("1w", 7 * 24 * 60 * 60),
+    "S1": ("1s", 1),
+    "1s": ("1s", 1),
+    "1m": ("1m", 60),
+    "3m": ("3m", 3 * 60),
+    "5m": ("5m", 5 * 60),
+    "15m": ("15m", 15 * 60),
+    "30m": ("30m", 30 * 60),
+    "1h": ("1h", 60 * 60),
+    "2h": ("2h", 2 * 60 * 60),
+    "4h": ("4h", 4 * 60 * 60),
+    "6h": ("6h", 6 * 60 * 60),
+    "12h": ("12h", 12 * 60 * 60),
+    "1d": ("1d", 24 * 60 * 60),
+    "2d": ("2d", 2 * 24 * 60 * 60),
+    "3d": ("3d", 3 * 24 * 60 * 60),
+    "1w": ("1w", 7 * 24 * 60 * 60),
+}
+
+
+def _chart_error(
+    source: str, symbol: str, timeframe: str, error_code: str
+) -> dict[str, Any]:
+    return {
+        "source": source,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "bars": [],
+        "total": 0,
+        "complete": False,
+        "error_code": error_code,
+    }
+
+
+def _history_time_text(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def _parse_history_time(value: str) -> datetime:
+    if type(value) is not str or not value.endswith("Z"):
+        raise ValueError
+    parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    if parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+        raise ValueError
+    return parsed
+
+
+def _chart_bar_from_history(bar: Any) -> dict[str, Any]:
+    values: dict[str, float] = {}
+    for name in ("open", "high", "low", "close", "volume"):
+        value = getattr(bar, name, None)
+        if type(value) is not str:
+            raise ValueError
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError
+        values[name] = number
+    opened = getattr(bar, "open_time_utc", None)
+    _parse_history_time(opened)
+    return {"date": opened, **values}
 
 # ---------------------------------------------------------------------------
 # Persistent storage for custom symbols
@@ -660,6 +737,41 @@ class QuoteService:
         routes = deployment.configured_routes(subject, source, symbols)
         return routes, None, deployment
 
+    def _configured_service_market_history_route(
+        self,
+        source: str,
+        subject: str,
+        symbol: str,
+        timeframe: str,
+    ) -> tuple[Any | None, bool, str | None, _ServiceMarketDeployment | None]:
+        """Resolve one exact bar key without starting an operator or owner."""
+
+        if source.strip().upper() != "OKX" or type(symbol) is not str or not symbol:
+            return None, False, None, None
+        with self._service_market_load_lock:
+            if not self._service_market_loaded:
+                try:
+                    self._service_market_deployment = (
+                        _ServiceMarketDeployment.from_environment()
+                    )
+                except _ServiceMarketDeploymentError as error:
+                    self._service_market_error = error.code
+                finally:
+                    self._service_market_loaded = True
+            config_error = self._service_market_error
+            deployment = self._service_market_deployment
+        if config_error is not None or deployment is None:
+            return None, False, config_error, deployment
+        configured_symbol = deployment.has_configured_history_symbol(
+            subject, source, symbol
+        )
+        if not configured_symbol:
+            return None, False, None, deployment
+        key = deployment.configured_history_key(
+            subject, source, symbol, timeframe
+        )
+        return key, True, None, deployment
+
     # ------------------------------------------------------------------
     # Chart data (P1)
     # ------------------------------------------------------------------
@@ -670,12 +782,46 @@ class QuoteService:
         symbol: str,
         timeframe: str = "M1",
         count: int = 200,
+        subject: str | None = None,
     ) -> dict[str, Any]:
-        """Fetch OHLCV bars from gateway via ZMQ command channel.
+        """Fetch bars from an exact configured service-v2 route or legacy route.
 
-        Sends a ``get_bars`` command to the gateway runtime's command socket
-        and returns the bar data for chart rendering.
+        Configured history bindings use only ``market.history`` and fail closed.
+        Unconfigured symbols retain the existing legacy chart capability while
+        its production provider migration is completed.
         """
+        if subject is not None:
+            timeframe_value = timeframe.strip() if type(timeframe) is str else ""
+            service_timeframe = _SERVICE_MARKET_HISTORY_TIMEFRAMES.get(
+                timeframe_value
+            ) or _SERVICE_MARKET_HISTORY_TIMEFRAMES.get(timeframe_value.upper())
+            timeframe_key = service_timeframe[0] if service_timeframe else ""
+            key, configured_symbol, config_error, deployment = (
+                self._configured_service_market_history_route(
+                    source, subject, symbol, timeframe_key
+                )
+            )
+            if config_error is not None:
+                return _chart_error(source, symbol, timeframe, config_error)
+            if configured_symbol:
+                if service_timeframe is None or key is None or deployment is None:
+                    return _chart_error(
+                        source,
+                        symbol,
+                        timeframe,
+                        "HISTORY_TIMEFRAME_NOT_CONFIGURED",
+                    )
+                return self._read_service_market_chart_history(
+                    deployment,
+                    subject,
+                    source,
+                    symbol,
+                    timeframe,
+                    key,
+                    count,
+                    service_timeframe[1],
+                )
+
         manager = self._get_live_trading_manager()
         config = self._find_gateway_config(manager, source)
         if config is None:
@@ -731,6 +877,64 @@ class QuoteService:
             "timeframe": timeframe,
             "bars": normalized,
             "total": len(normalized),
+        }
+
+    def _read_service_market_chart_history(
+        self,
+        deployment: _ServiceMarketDeployment,
+        subject: str,
+        source: str,
+        symbol: str,
+        timeframe: str,
+        key: Any,
+        count: int,
+        bar_duration_seconds: int,
+    ) -> dict[str, Any]:
+        if type(count) is not int or isinstance(count, bool) or not 1 <= count <= 1_000:
+            return _chart_error(source, symbol, timeframe, "INVALID_HISTORY_LIMIT")
+        try:
+            from bt_api_base.market_history_protocol import (
+                MarketHistoryPage,
+                MarketHistoryRequest,
+            )
+        except ImportError:
+            return _chart_error(source, symbol, timeframe, "SDK_HISTORY_PROTOCOL_UNAVAILABLE")
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(seconds=bar_duration_seconds * count)
+        start_text = _history_time_text(start)
+        end_text = _history_time_text(end)
+        try:
+            request = MarketHistoryRequest(
+                key=key,
+                start_time_utc=start_text,
+                end_time_utc=end_text,
+                limit=count,
+            )
+            page = deployment.read_history_page(
+                subject,
+                source,
+                symbol,
+                key.timeframe,
+                key,
+                request,
+            )
+            if type(page) is not MarketHistoryPage or page.request != request:
+                raise _ServiceMarketDeploymentError("INVALID_HISTORY_PAGE")
+            normalized = [_chart_bar_from_history(bar) for bar in page.bars]
+        except _ServiceMarketDeploymentError as error:
+            return _chart_error(source, symbol, timeframe, error.code)
+        except Exception:
+            return _chart_error(source, symbol, timeframe, "SERVICE_MARKET_HISTORY_UNAVAILABLE")
+
+        return {
+            "source": source,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "bars": normalized,
+            "total": len(normalized),
+            "complete": page.complete,
+            "error_code": None if page.complete else "HISTORY_RESULT_INCOMPLETE",
         }
 
     # ------------------------------------------------------------------

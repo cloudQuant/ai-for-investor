@@ -188,5 +188,12 @@ async def get_chart_data(
     current_user: typing.Any = Depends(get_current_user),
     svc: QuoteService = Depends(get_quote_service),
 ) -> typing.Any:
-    """Fetch OHLCV bars for chart rendering via gateway command channel."""
-    return await asyncio.to_thread(svc.get_chart_data, source, symbol, timeframe, count)
+    """Fetch OHLCV bars for chart rendering via a configured service or legacy route."""
+    return await asyncio.to_thread(
+        svc.get_chart_data,
+        source,
+        symbol,
+        timeframe,
+        count,
+        current_user.sub,
+    )
