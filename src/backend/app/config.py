@@ -926,6 +926,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Separate, operator-owned grants for exact strategy-run reductions.
+    # Requests can name an approved target but cannot choose account/run/order
+    # terms or client credentials.
+    SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret exact-run deployment for approved strategy reductions; "
+            "leave blank to keep owner.reduce disabled"
+        ),
+    )
+
     # Server-owned exact instrument/FX joins for the portfolio's display-only
     # market inputs. This configuration cannot grant market-data access; every
     # query still passes through the authenticated v2 authorization path.
@@ -1317,6 +1330,18 @@ class Settings(BaseSettings):
         if len(value.get_secret_value().encode("utf-8")) > 262_144:
             raise ValueError(
                 "SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON exceeds the 256 KiB limit"
+            )
+        return value
+
+    @field_validator("SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_strategy_reduction_deployment_size(
+        cls, value: SecretStr
+    ) -> SecretStr:
+        """Bound the operator-owned exact-run reduction deployment."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError(
+                "SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON exceeds the 256 KiB limit"
             )
         return value
 

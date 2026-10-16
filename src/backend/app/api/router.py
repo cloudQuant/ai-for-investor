@@ -194,6 +194,11 @@ _register_optional_router(
     tags=["Live Trading Control"],
 )
 _register_optional_router(
+    "strategy_reduction",
+    "app.api.strategy_reduction",
+    tags=["Live Trading Control"],
+)
+_register_optional_router(
     "approved_orders",
     "app.api.approved_orders",
     tags=["Approved Orders"],
