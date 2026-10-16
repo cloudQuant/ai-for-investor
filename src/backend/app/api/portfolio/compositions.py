@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -13,6 +13,10 @@ from app.db.database import get_db
 from app.schemas.auth import TokenPayload
 from app.schemas.portfolio_composition import PortfolioCompositionCreate
 from app.services.portfolio_composition import PortfolioCompositionService
+from app.services.portfolio_valuation_bindings import (
+    PortfolioValuationBindingRegistry,
+    attach_market_valuation_inputs,
+)
 
 router = APIRouter(prefix="/portfolio/compositions", tags=["Portfolio Compositions"])
 
@@ -108,6 +112,7 @@ async def read_portfolio_composition_version(
 async def read_portfolio_composition_projection(
     portfolio_ref: str,
     membership_version: int,
+    request: Request,
     current_user: TokenPayload = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -115,7 +120,18 @@ async def read_portfolio_composition_projection(
 
     service = PortfolioCompositionService(db)
     row = await service.get_version(current_user.sub, portfolio_ref, membership_version)
-    return await service.project(current_user, row)
+    projection = await service.project(current_user, row)
+    if row.source_type != "live":
+        return projection
+    registry = getattr(request.app.state, "portfolio_valuation_bindings", None)
+    if type(registry) is not PortfolioValuationBindingRegistry:
+        registry = PortfolioValuationBindingRegistry.from_json(None)
+    return await attach_market_valuation_inputs(
+        projection,
+        registry=registry,
+        current_user=current_user,
+        db=db,
+    )
 
 
 def _membership_payload(row: Any) -> dict[str, Any]:

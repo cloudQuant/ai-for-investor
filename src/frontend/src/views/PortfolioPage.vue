@@ -497,6 +497,17 @@
           <section class="portfolio-composition__section">
             <h2>{{ t('portfolio.compositionAccountMembers') }}</h2>
             <p
+              v-if="compositionProjection.market_valuation"
+              data-test="portfolio-market-valuation-summary"
+            >
+              行情输入 / Market inputs:
+              {{ compositionProjection.market_valuation.status }}
+              · positions {{ compositionProjection.market_valuation.position_count }}
+              · market event skew {{ compositionProjection.market_valuation.market_event_skew_ns ?? '未建立 / Not established' }} ns
+              · reconciliation {{ compositionProjection.market_valuation.reconciliation_status }}
+              · market facts do not alter account totals, cash, credit, or admission.
+            </p>
+            <p
               v-if="compositionProjection.provider_snapshot_consistency"
               data-test="portfolio-provider-snapshot-consistency"
             >
@@ -640,13 +651,59 @@
                         <code>
                           {{ position.instrument.provider }}/{{ position.instrument.venue }}/{{ position.instrument.environment }}/{{ position.instrument.product_type }}/{{ position.instrument.instrument_id }} · {{ position.instrument.native_symbol }}
                         </code>
+                        · crosswalk {{ position.valuation_binding?.binding_ref ?? 'missing' }}@{{ position.valuation_binding?.binding_version ?? 'unknown' }}
                         · {{ position.resource.product_type }}/{{ position.resource.margin_pool }}
                         · {{ position.side }} {{ position.quantity }} {{ position.qty_unit }}
                         · average {{ compositionAmount(position.average_price, position.price_currency) }}
                         · <code>{{ position.observed_at_utc }}</code>
-                        · mark {{ position.valuation_inputs.mark_price.status }}
-                        · multiplier {{ position.valuation_inputs.contract_multiplier.status }}
-                        · FX {{ position.valuation_inputs.fx_rate.status }}
+                        · mark {{ portfolioValuationInputText(position.valuation_inputs.mark_price) }}
+                        · multiplier {{ portfolioValuationInputText(position.valuation_inputs.contract_multiplier) }}
+                        · FX {{ portfolioValuationInputText(position.valuation_inputs.fx_rate) }}
+                        · market value {{ position.valuation_inputs.market_value.status }}
+                        <details
+                          v-if="position.valuation_inputs.market_cut"
+                          data-test="portfolio-market-input-cut"
+                        >
+                          <summary>行情独立 cut / Independent market cut</summary>
+                          <p>
+                            account position {{ position.valuation_inputs.market_cut.account_position_observed_at_utc ?? 'missing' }}
+                            · market event {{ position.valuation_inputs.market_cut.market_event_at_utc ?? 'missing' }}
+                            · skew {{ position.valuation_inputs.market_cut.account_to_market_skew_ns ?? '未建立 / Not established' }} ns
+                            · cursor {{ position.valuation_inputs.market_cut.cursor_available ? 'available' : 'missing' }}
+                            · coverage {{ position.valuation_inputs.market_cut.coverage?.status ?? '未建立 / Not established' }}
+                            ({{ position.valuation_inputs.market_cut.coverage?.accepted_event_count ?? '—' }}/{{ position.valuation_inputs.market_cut.coverage?.expected_event_count ?? '—' }} accepted, {{ position.valuation_inputs.market_cut.coverage?.missing_event_count ?? '—' }} missing)
+                            · query {{ position.valuation_inputs.market_cut.query_id ?? 'missing' }}
+                            · identity metadata {{ position.valuation_inputs.market_cut.identity_metadata_version }}
+                            · knowledge cutoff {{ position.valuation_inputs.market_cut.knowledge_cutoff_utc ?? 'missing' }}
+                          </p>
+                          <p>
+                            available {{ position.valuation_inputs.mark_price.available_at_utc ?? 'missing' }}
+                            · committed {{ position.valuation_inputs.mark_price.committed_at_utc ?? 'missing' }}
+                            · revision {{ position.valuation_inputs.mark_price.revision_id ?? 'missing' }}
+                          </p>
+                        </details>
+                        <details
+                          v-if="position.valuation_inputs.fx_market_cut"
+                          data-test="portfolio-fx-input-cut"
+                        >
+                          <summary>汇率独立 cut / FX input cut</summary>
+                          <p>
+                            account position {{ position.valuation_inputs.fx_market_cut.account_position_observed_at_utc ?? 'missing' }}
+                            · FX event {{ position.valuation_inputs.fx_market_cut.market_event_at_utc ?? 'missing' }}
+                            · skew {{ position.valuation_inputs.fx_market_cut.account_to_market_skew_ns ?? '未建立 / Not established' }} ns
+                            · cursor {{ position.valuation_inputs.fx_market_cut.cursor_available ? 'available' : 'missing' }}
+                            · coverage {{ position.valuation_inputs.fx_market_cut.coverage?.status ?? '未建立 / Not established' }}
+                            ({{ position.valuation_inputs.fx_market_cut.coverage?.accepted_event_count ?? '—' }}/{{ position.valuation_inputs.fx_market_cut.coverage?.expected_event_count ?? '—' }} accepted, {{ position.valuation_inputs.fx_market_cut.coverage?.missing_event_count ?? '—' }} missing)
+                            · query {{ position.valuation_inputs.fx_market_cut.query_id ?? 'missing' }}
+                            · identity metadata {{ position.valuation_inputs.fx_market_cut.identity_metadata_version }}
+                            · knowledge cutoff {{ position.valuation_inputs.fx_market_cut.knowledge_cutoff_utc ?? 'missing' }}
+                          </p>
+                          <p>
+                            available {{ position.valuation_inputs.fx_rate.available_at_utc ?? 'missing' }}
+                            · committed {{ position.valuation_inputs.fx_rate.committed_at_utc ?? 'missing' }}
+                            · revision {{ position.valuation_inputs.fx_rate.revision_id ?? 'missing' }}
+                          </p>
+                        </details>
                       </li>
                       <li v-if="account.provider_observation.positions.length === 0">
                         持仓行缺失 / No position rows reported.
@@ -1559,6 +1616,7 @@ import type {
   PortfolioCompositionProjection,
   PortfolioCompositionSource,
   PortfolioCompositionVersionOption,
+  PortfolioValuationInput,
 } from '@/api/portfolio'
 import type {
   TradingPositionManagerItem,
@@ -1723,6 +1781,41 @@ function compositionAttributionStatusLabel(status: string) {
 function compositionAmount(value: string | null, currency: string | null) {
   if (value === null) return t('portfolio.compositionUnavailable')
   return currency ? `${value} ${currency}` : value
+}
+
+function portfolioValuationInputText(input: PortfolioValuationInput) {
+  const value = input.value === null
+    ? input.status === 'missing' ? 'value missing' : ''
+    : `value ${input.value}${input.currency ? ` ${input.currency}` : ''}${input.unit ? `/${input.unit}` : ''}`
+  const provenance = input.provenance_ref || input.source?.provenance_ref
+  const metadataVersion = input.metadata_version || input.source?.metadata_version
+  const binding = input.binding_ref
+    ? `${input.binding_ref}${input.binding_version ? `@${input.binding_version}` : ''}`
+    : undefined
+  const marketBinding = input.source?.binding_ref
+    ? `${input.source.binding_ref}@${input.source.binding_version}`
+    : undefined
+  return [
+    input.status,
+    input.code || undefined,
+    value || undefined,
+    input.from_currency && input.to_currency
+      ? `${input.from_currency}→${input.to_currency} ${input.rate_convention || ''}`
+      : undefined,
+    input.observed_at_utc ? `event ${input.observed_at_utc}` : undefined,
+    input.age_seconds === undefined ? undefined : `age ${input.age_seconds}s`,
+    binding ? `binding ${binding}` : undefined,
+    marketBinding ? `market binding ${marketBinding}` : undefined,
+    input.source?.canonical_id ? `identity ${input.source.canonical_id}` : undefined,
+    input.source?.query_id ? `query ${input.source.query_id}` : undefined,
+    input.source?.source_policy_id ? `policy ${input.source.source_policy_id}` : undefined,
+    provenance ? `source ${provenance}` : undefined,
+    metadataVersion ? `metadata ${metadataVersion}` : undefined,
+    input.quantity_unit ? `quantity ${input.quantity_unit}` : undefined,
+    input.position_quantity_unit ? `position quantity ${input.position_quantity_unit}` : undefined,
+    input.valid_from_utc ? `valid from ${input.valid_from_utc}` : undefined,
+    input.valid_to_utc ? `valid to ${input.valid_to_utc}` : undefined,
+  ].filter(Boolean).join(' · ')
 }
 
 function compositionResearchArtifactStatusLabel(status: string) {

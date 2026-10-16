@@ -34,6 +34,7 @@ from app.services.service_read.deployment import (
     ServiceReadDeploymentError,
     start_service_read_deployment,
 )
+from app.services.portfolio_valuation_bindings import PortfolioValuationBindingRegistry
 from app.shutdown import GracefulShutdownManager
 from app.startup import run_shutdown, run_startup
 from app.telemetry import setup_telemetry
@@ -94,6 +95,7 @@ async def lifespan(app: FastAPI):
     if previous_service_read is not None and not previous_service_read.closed:
         raise ServiceReadDeploymentError("PRIOR_CLOSE_UNCERTAIN")
     app.state.service_read_deployment = None
+    app.state.portfolio_valuation_bindings = None
     configure_service_read(None)
     logger.info("Starting ai-for-investor API...")
     app.state.startup_logger = logger
@@ -101,6 +103,9 @@ async def lifespan(app: FastAPI):
     await run_startup(app, settings)
     service_read_deployment = None
     try:
+        app.state.portfolio_valuation_bindings = PortfolioValuationBindingRegistry.from_json(
+            settings.PORTFOLIO_VALUATION_BINDINGS_JSON.get_secret_value()
+        )
         try:
             service_read_deployment = await start_service_read_deployment(
                 getattr(settings, "SERVICE_READ_DEPLOYMENT_JSON", None)
@@ -132,6 +137,7 @@ async def lifespan(app: FastAPI):
         # startup in this process remains unconfigured until its own workers
         # have all completed startup.
         configure_service_read(None)
+        app.state.portfolio_valuation_bindings = None
         logger.info("Shutting down ai-for-investor API...")
 
         try:

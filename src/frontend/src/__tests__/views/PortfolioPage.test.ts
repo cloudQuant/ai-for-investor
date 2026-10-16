@@ -4,7 +4,14 @@ import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
 import { ElMessage } from 'element-plus'
 import PortfolioPage from '@/views/PortfolioPage.vue'
-import { portfolioApi, type PortfolioProviderAccountObservation } from '@/api/portfolio'
+import {
+  portfolioApi,
+  type PortfolioCompositionProjection,
+  type PortfolioMarketCut,
+  type PortfolioProviderAccountObservation,
+  type PortfolioProviderAccountPosition,
+  type PortfolioValuationInput,
+} from '@/api/portfolio'
 import { portfolioLedgerApi } from '@/api/portfolioLedger'
 import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
@@ -1950,5 +1957,398 @@ describe('PortfolioPage', () => {
 
     expect(portfolioApi.getAllocation).toHaveBeenCalledTimes(2)
     expect(vm.allocationItems).toHaveLength(1)
+  })
+
+  it('shows market inputs and independent cuts without adding them to account totals', async () => {
+    const now = '2026-10-16T12:00:00Z'
+    const source = (
+      canonicalId: string,
+      bindingRef: string,
+      provenanceRef: string,
+      queryId: string,
+    ) => ({
+      binding_ref: bindingRef,
+      binding_version: 'v1',
+      provenance_ref: provenanceRef,
+      canonical_id: canonicalId,
+      metadata_version: canonicalId.startsWith('instrument:fx:')
+        ? 'fx-market-v1'
+        : 'futures-market-v1',
+      family_id: canonicalId.includes('EURUSD') ? 'fx.realtime' : 'futures.realtime',
+      family_contract_version: 'market-data-family-v1',
+      source_policy_id: 'market-default-v1',
+      query_id: queryId,
+    })
+    const coverage = (status: string, hasEvent = true) => ({
+      status,
+      expected_event_count: status === 'incomplete' ? 2 : hasEvent ? 1 : 0,
+      accepted_event_count: hasEvent ? 1 : 0,
+      missing_event_count: status === 'incomplete' ? 1 : 0,
+      coverage_ratio: status === 'incomplete' ? 0.5 : 1,
+      rejection_counts: {},
+      next_page_available: false,
+    })
+    const marketCut = (
+      eventAt: string | null,
+      status = 'complete',
+      identityMetadataVersion = 'futures-market-v1',
+      queryId: string | null = null,
+    ): PortfolioMarketCut => ({
+      cut_model: 'independent_account_and_market_data_cuts',
+      atomic: false,
+      account_position_observed_at_utc: '2026-10-16T11:59:00Z',
+      market_event_at_utc: eventAt,
+      market_available_at_utc: eventAt ? '2026-10-16T11:59:55Z' : null,
+      market_committed_at_utc: eventAt ? '2026-10-16T11:59:56Z' : null,
+      account_to_market_skew_ns: eventAt
+        ? String((Date.parse(eventAt) - Date.parse('2026-10-16T11:59:00Z')) * 1_000_000)
+        : null,
+      query_id: queryId,
+      knowledge_cutoff_utc: now,
+      identity_metadata_version: identityMetadataVersion,
+      cursor_available: false,
+      coverage: coverage(status, eventAt !== null),
+    })
+    const markInput = (
+      instrumentKey: string,
+      currency: string,
+      status: PortfolioValuationInput['status'],
+      value: string | null,
+      code: string | null,
+      provenance: string,
+      eventAt: string | undefined,
+      coverageStatus = 'complete',
+    ): PortfolioValuationInput => ({
+      status,
+      code,
+      value,
+      currency,
+      unit: 'contract',
+      price_basis: 'close',
+      source: source(
+        `instrument:futures:SYN-EX:${instrumentKey.toUpperCase()}`,
+        `mark:${instrumentKey}`,
+        provenance,
+        `query-market-${instrumentKey}`,
+      ),
+      observed_at_utc: eventAt,
+      available_at_utc: eventAt ? '2026-10-16T11:59:55Z' : undefined,
+      committed_at_utc: eventAt ? '2026-10-16T11:59:56Z' : undefined,
+      quality: eventAt ? 'pass' : undefined,
+      revision_id: eventAt
+        ? `revision:instrument:futures:SYN-EX:${instrumentKey.toUpperCase()}`
+        : undefined,
+      source_snapshot_id: eventAt
+        ? `snapshot:instrument:futures:SYN-EX:${instrumentKey.toUpperCase()}`
+        : undefined,
+      revision_number: eventAt ? 1 : undefined,
+      age_seconds: eventAt ? (Date.parse(now) - Date.parse(eventAt)) / 1000 : undefined,
+      freshness_max_age_seconds: 60,
+      coverage: coverage(coverageStatus, eventAt !== undefined),
+    })
+    const multiplier = (suffix: string): PortfolioValuationInput => ({
+      status: 'available',
+      code: null,
+      value: '10',
+      quantity_unit: 'contracts',
+      provenance_ref: `contract-spec:${suffix}:2026-v1`,
+      metadata_version: 'contract-spec-2026-v1',
+      valid_from_utc: '2020-01-01T00:00:00Z',
+      valid_to_utc: null,
+    })
+    const fxRate: PortfolioValuationInput = {
+      status: 'available',
+      code: null,
+      value: '1.08',
+      currency: 'USD',
+      unit: 'EUR',
+      source: source(
+        'instrument:fx:SYNTHETIC:EURUSD',
+        'mark:EUR-USD',
+        'reviewed-source:mark:EUR-USD',
+        'query-market-fx-eur-usd',
+      ),
+      from_currency: 'EUR',
+      to_currency: 'USD',
+      rate_convention: 'to_per_from',
+      binding_ref: 'fx:EUR-USD',
+      binding_version: 'v1',
+      provenance_ref: 'reviewed-source:mark:EUR-USD',
+      observed_at_utc: '2026-10-16T11:59:40Z',
+      available_at_utc: '2026-10-16T11:59:55Z',
+      committed_at_utc: '2026-10-16T11:59:56Z',
+      quality: 'pass',
+      revision_id: 'revision:instrument:fx:SYNTHETIC:EURUSD',
+      source_snapshot_id: 'snapshot:instrument:fx:SYNTHETIC:EURUSD',
+      revision_number: 1,
+      age_seconds: 20,
+      freshness_max_age_seconds: 60,
+      coverage: coverage('complete'),
+    }
+    const position = (
+      suffix: string,
+      currency: string,
+      mark: PortfolioValuationInput,
+      fx: PortfolioValuationInput = {
+        status: 'not_required',
+        code: null,
+        value: null,
+        from_currency: currency,
+        to_currency: currency,
+        rate_convention: 'to_per_from',
+      },
+      cut: PortfolioMarketCut = marketCut(
+        mark.observed_at_utc || null,
+        mark.coverage?.status,
+        mark.source?.metadata_version,
+        mark.source?.query_id,
+      ),
+    ): PortfolioProviderAccountPosition => ({
+      resource: { product_type: 'futures', margin_pool: 'cross' },
+      instrument: {
+        provider: 'PAPER',
+        venue: 'synthetic-venue',
+        environment: 'simulation',
+        product_type: 'futures',
+        instrument_id: `contract:${suffix}`,
+        native_symbol: `SYN-${suffix.toUpperCase()}-202612`,
+      },
+      side: 'long',
+      quantity: '2',
+      qty_unit: 'contracts',
+      average_price: '40',
+      price_currency: currency,
+      observed_at_utc: '2026-10-16T11:59:00Z',
+      valuation_binding: {
+        status: 'configured',
+        binding_ref: `account-market:${suffix}`,
+        binding_version: 'v1',
+        valid_from_utc: '2020-01-01T00:00:00Z',
+        valid_to_utc: null,
+      },
+      valuation_inputs: {
+        status: mark.status,
+        mark_price: mark,
+        contract_multiplier: multiplier(suffix),
+        fx_rate: fx,
+        market_value: {
+          status: 'not_calculated',
+          code: 'AFI04_VALUATION_NOT_CALCULATED',
+          value: null,
+        },
+        market_cut: cut,
+        ...(fx.status === 'available'
+          ? {
+              fx_market_cut: marketCut(
+                fx.observed_at_utc || null,
+                fx.coverage?.status,
+                fx.source?.metadata_version,
+                fx.source?.query_id,
+              ),
+            }
+          : {}),
+      },
+    })
+    const observedPositions = [
+      position(
+        'eur',
+        'EUR',
+        markInput(
+          'eur',
+          'EUR',
+          'available',
+          '42.5',
+          null,
+          'reviewed-source:mark:eur',
+          '2026-10-16T11:59:30Z',
+        ),
+        fxRate,
+      ),
+      position(
+        'zero',
+        'USD',
+        markInput(
+          'zero', 'USD', 'available', '0', null, 'reviewed-source:mark:zero', '2026-10-16T11:59:40Z',
+        ),
+      ),
+      position(
+        'missing',
+        'USD',
+        markInput(
+          'missing', 'USD', 'missing', null, 'MARKET_DATA_VALUE_MISSING', 'reviewed-source:mark:missing', undefined,
+        ),
+      ),
+      position(
+        'error',
+        'USD',
+        markInput(
+          'error', 'USD', 'error', null, 'MARKET_DATA_VALUE_INVALID', 'reviewed-source:mark:error', '2026-10-16T11:59:30Z',
+        ),
+      ),
+      position(
+        'stale',
+        'USD',
+        markInput(
+          'stale', 'USD', 'stale', '19.75', 'MARKET_DATA_OBSERVATION_STALE', 'reviewed-source:mark:stale', '2026-10-16T10:00:00Z',
+        ),
+      ),
+      position(
+        'coverage',
+        'USD',
+        markInput(
+          'coverage',
+          'USD',
+          'coverage_incomplete',
+          '17.25',
+          'MARKET_DATA_COVERAGE_INCOMPLETE',
+          'reviewed-source:mark:coverage',
+          '2026-10-16T11:59:50Z',
+          'incomplete',
+        ),
+      ),
+    ]
+    const availableObservation = {
+      status: 'available',
+      quality: 'fresh',
+      source: 'AUTHORIZED_PROVIDER_ACCOUNT_OBSERVATION',
+      observation_id: 'synthetic-observation-market-inputs',
+      session_generation: 'synthetic-generation-v1',
+      cursor: 7,
+      consistency: 'multi_query',
+      cut: {
+        started_at_utc: '2026-10-16T11:58:59Z',
+        completed_at_utc: '2026-10-16T11:59:00Z',
+        earliest_row_observed_at_utc: '2026-10-16T11:59:00Z',
+        latest_row_observed_at_utc: '2026-10-16T11:59:00Z',
+        row_skew_ns: '0',
+        row_observed_at_count: 8,
+        row_count: 8,
+      },
+      coverage: {
+        resources: [{ product_type: 'futures', margin_pool: 'cross' }],
+        balances_complete: true,
+        positions_complete: true,
+        state: 'complete',
+      },
+      valuation: null,
+      balances: [
+        {
+          resource: { product_type: 'futures', margin_pool: 'cross' },
+          currency: 'EUR',
+          total: '12.50',
+          available: '12.50',
+          locked: '0',
+          observed_at_utc: '2026-10-16T11:59:00Z',
+        },
+        {
+          resource: { product_type: 'futures', margin_pool: 'cross' },
+          currency: 'USD',
+          total: '0',
+          available: '0',
+          locked: '0',
+          observed_at_utc: '2026-10-16T11:59:00Z',
+        },
+      ],
+      positions: observedPositions,
+    } satisfies Extract<PortfolioProviderAccountObservation, { status: 'available' }>
+    const projection: PortfolioCompositionProjection = {
+      portfolio_ref: 'market-inputs-ui',
+      membership_version: 1,
+      source_type: 'live',
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only',
+      creditable: false,
+      overlap_policy: 'non_additive_display_only',
+      account_total: { status: 'current', currency: 'USD', value: '950' },
+      accounts: [{
+        member_ref: 'account-ui',
+        currency: 'USD',
+        quality: 'fresh',
+        cash: '120',
+        value: '950',
+        included_in_total: true,
+        duplicate_of_ref: null,
+        detail_code: null,
+        provider_observation: availableObservation,
+      }],
+      market_valuation: {
+        status: 'incomplete',
+        code: null,
+        position_count: observedPositions.length,
+        position_status_counts: { available: 2, missing: 1, error: 1, stale: 1, coverage_incomplete: 1 },
+        cut_model: 'independent_market_query_per_identity',
+        atomic: false,
+        market_event_skew_ns: '7190000000000',
+        reconciliation_status: 'not_established',
+        account_total_included: false,
+        creditable: false,
+      },
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED' },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [{
+        portfolio_ref: 'market-inputs-ui',
+        membership_version: 1,
+        source_type: 'live',
+        base_currency: 'USD',
+        created_at: now,
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(projection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text())
+      .toBe('950 USD')
+    expect(wrapper.get('[data-test="portfolio-market-valuation-summary"]').text())
+      .toContain('not_established')
+    const positions = wrapper.get('[data-test="portfolio-provider-account-positions"]').text()
+    expect(positions).toContain('42.5 EUR/contract')
+    expect(positions).toContain('crosswalk account-market:eur@v1')
+    expect(positions).toContain('value 10 · source contract-spec:eur:2026-v1 · metadata contract-spec-2026-v1 · quantity contracts')
+    expect(positions).toContain('1.08 USD/EUR · EUR→USD to_per_from · event 2026-10-16T11:59:40Z · age 20s')
+    expect(positions).toContain('binding fx:EUR-USD@v1 · market binding mark:EUR-USD@v1')
+    expect(positions).toContain('identity instrument:fx:SYNTHETIC:EURUSD')
+    expect(positions).toContain('source reviewed-source:mark:EUR-USD · metadata fx-market-v1')
+    expect(positions).toContain('identity instrument:futures:SYN-EX:EUR · query query-market-eur')
+    expect(positions).toContain('identity instrument:futures:SYN-EX:ZERO · query query-market-zero')
+    expect(positions).toContain('source reviewed-source:mark:eur · metadata futures-market-v1')
+    expect(positions).toContain('value 0 USD/contract')
+    expect(positions).toContain('mark missing · MARKET_DATA_VALUE_MISSING · value missing')
+    expect(positions).toContain('mark error · MARKET_DATA_VALUE_INVALID')
+    expect(positions).toContain('mark stale · MARKET_DATA_OBSERVATION_STALE')
+    expect(positions).toContain('mark coverage_incomplete · MARKET_DATA_COVERAGE_INCOMPLETE')
+    expect(wrapper.get('[data-test="portfolio-market-input-cut"]').text())
+      .toContain('revision revision:instrument:futures:SYN-EX:EUR')
+    expect(wrapper.get('[data-test="portfolio-market-input-cut"]').text())
+      .toContain('query query-market-eur · identity metadata futures-market-v1')
+    const coveragePosition = wrapper
+      .findAll('[data-test="portfolio-provider-account-positions"] > li')
+      .find((row) => row.text().includes('instrument:futures:SYN-EX:COVERAGE'))
+    expect(coveragePosition).toBeDefined()
+    expect(coveragePosition!.get('[data-test="portfolio-market-input-cut"]').text())
+      .toContain('coverage incomplete (1/2 accepted, 1 missing)')
+    expect(wrapper.get('[data-test="portfolio-fx-input-cut"]').text())
+      .toContain('FX event 2026-10-16T11:59:40Z')
+    expect(wrapper.get('[data-test="portfolio-fx-input-cut"]').text())
+      .toContain('query query-market-fx-eur-usd · identity metadata fx-market-v1')
+    expect(wrapper.text()).not.toContain('market value 85')
+    expect(wrapper.text()).toContain('account totals, cash, credit, or admission')
   })
 })

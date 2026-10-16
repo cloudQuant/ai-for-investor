@@ -901,6 +901,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Server-owned exact instrument/FX joins for the portfolio's display-only
+    # market inputs. This configuration cannot grant market-data access; every
+    # query still passes through the authenticated v2 authorization path.
+    PORTFOLIO_VALUATION_BINDINGS_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description="Bounded deployment-owned exact valuation input bindings",
+    )
+
     # Backtest subprocess timeout (seconds)
     BACKTEST_TIMEOUT: int = Field(default=300, description="Backtest subprocess timeout in seconds")
     AI_STRATEGY_SANDBOX_USE_DOCKER: bool = Field(
@@ -1265,6 +1275,14 @@ class Settings(BaseSettings):
         """Keep the secret deployment document bounded before JSON parsing."""
         if len(value.get_secret_value().encode("utf-8")) > 262_144:
             raise ValueError("SERVICE_READ_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("PORTFOLIO_VALUATION_BINDINGS_JSON")
+    @classmethod
+    def validate_portfolio_valuation_bindings_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the startup-owned exact instrument and FX crosswalk document."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("PORTFOLIO_VALUATION_BINDINGS_JSON exceeds the 256 KiB limit")
         return value
 
     @field_validator("AI_BUDGET_MODE")

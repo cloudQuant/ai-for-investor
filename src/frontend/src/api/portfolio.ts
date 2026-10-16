@@ -204,6 +204,96 @@ export interface PortfolioProviderAccountBalance {
   observed_at_utc: string
 }
 
+export type PortfolioValuationInputStatus =
+  | 'available'
+  | 'coverage_incomplete'
+  | 'error'
+  | 'missing'
+  | 'not_calculated'
+  | 'not_required'
+  | 'stale'
+  | 'unavailable'
+  | 'unsupported'
+
+export interface PortfolioValuationSource {
+  binding_ref: string
+  binding_version: string
+  provenance_ref: string
+  canonical_id: string
+  metadata_version: string
+  family_id: string
+  family_contract_version: string
+  source_policy_id: string
+  query_id: string | null
+}
+
+export interface PortfolioValuationCoverage {
+  status: string
+  expected_event_count: number
+  accepted_event_count: number
+  missing_event_count: number
+  coverage_ratio: number | null
+  rejection_counts: Record<string, number>
+  next_page_available: boolean
+}
+
+export interface PortfolioValuationInput {
+  status: PortfolioValuationInputStatus
+  code?: string | null
+  value: string | null
+  currency?: string
+  unit?: string
+  price_basis?: string
+  source?: PortfolioValuationSource
+  observed_at_utc?: string
+  available_at_utc?: string
+  committed_at_utc?: string
+  quality?: string
+  revision_id?: string
+  source_snapshot_id?: string
+  revision_number?: number
+  age_seconds?: number
+  freshness_max_age_seconds?: number
+  from_currency?: string
+  to_currency?: string
+  rate_convention?: 'to_per_from'
+  binding_ref?: string
+  binding_version?: string
+  provenance_ref?: string
+  metadata_version?: string
+  quantity_unit?: string
+  position_quantity_unit?: string
+  valid_from_utc?: string
+  valid_to_utc?: string | null
+  coverage?: PortfolioValuationCoverage
+  query_cut?: {
+    knowledge_cutoff_utc: string
+    identity_knowledge_cutoff_utc: string
+    cursor_available: boolean
+    fetches: Array<{
+      route_id: string
+      provider_id: string
+      source_snapshot_id: string
+    }>
+    warnings: string[]
+  }
+}
+
+export interface PortfolioMarketCut {
+  cut_model: 'independent_account_and_market_data_cuts'
+  atomic: false
+  account_position_observed_at_utc: string | null
+  market_event_at_utc: string | null
+  market_available_at_utc: string | null
+  market_committed_at_utc: string | null
+  account_to_market_skew_ns: string | null
+  query_id: string | null
+  knowledge_cutoff_utc: string | null
+  identity_metadata_version: string
+  cursor_available: boolean
+  coverage: PortfolioValuationCoverage | null
+}
+
 export interface PortfolioProviderAccountPosition {
   resource: PortfolioProviderAccountResource
   instrument: {
@@ -220,12 +310,35 @@ export interface PortfolioProviderAccountPosition {
   average_price: string | null
   price_currency: string | null
   observed_at_utc: string
-  valuation_inputs: {
-    mark_price: { status: 'missing'; value: null }
-    contract_multiplier: { status: 'unsupported'; value: null }
-    fx_rate: { status: 'unsupported'; value: null }
-    market_value: { status: 'not_calculated'; value: null }
+  valuation_binding?: {
+    status: 'configured'
+    binding_ref: string
+    binding_version: string
+    valid_from_utc: string | null
+    valid_to_utc: string | null
   }
+  valuation_inputs: {
+    status?: PortfolioValuationInputStatus
+    mark_price: PortfolioValuationInput
+    contract_multiplier: PortfolioValuationInput
+    fx_rate: PortfolioValuationInput
+    market_value: PortfolioValuationInput
+    market_cut?: PortfolioMarketCut
+    fx_market_cut?: PortfolioMarketCut
+  }
+}
+
+export interface PortfolioMarketValuationSummary {
+  status: 'not_collected' | 'current' | 'incomplete'
+  code: string | null
+  position_count: number
+  position_status_counts: Record<string, number>
+  cut_model: 'independent_market_query_per_identity'
+  atomic: false
+  market_event_skew_ns: string | null
+  reconciliation_status: 'not_established'
+  account_total_included: false
+  creditable: false
 }
 
 type PortfolioProviderAccountObservationDetails = {
@@ -345,6 +458,7 @@ export interface PortfolioCompositionProjection {
     skew_policy: 'reported_without_threshold'
     status: string
   }
+  market_valuation?: PortfolioMarketValuationSummary
   /** Optional so older servers remain readable while the live book projection rolls out. */
   account_book_sources?: PortfolioAccountBookSource[]
   strategies: Array<{
