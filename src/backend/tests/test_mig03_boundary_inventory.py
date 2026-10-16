@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
 from contextlib import suppress
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from sqlalchemy.orm import Session
 import app.services.mig03_boundary_inventory as boundary_inventory
 from app.db.database import Base
 from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
+from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.paper_trading import Account, Order, OrderStatus, PaperTrade, Position
 from app.models.service_order_operation import ServiceOrderOperation
@@ -56,6 +59,7 @@ def _models() -> tuple[type, ...]:
         Order,
         PaperTrade,
         PaperEquitySnapshot,
+        LegacyPaperImportReceipt,
     )
 
 
@@ -280,6 +284,118 @@ def _capture(session: Session):
     )
 
 
+def _insert_valid_import_receipt(engine) -> str:
+    from app.services.legacy_paper_migration import _model_row
+
+    receipt_id = "mig03-import-receipt-1"
+    with Session(engine) as session:
+        account = session.get(Account, _PAPER_ACCOUNT)
+        assert account is not None
+        source_document = {
+            "schema": "afi.legacy-paper-inventory.v1",
+            "account": _model_row(account),
+            "orders": [
+                _model_row(row)
+                for row in session.scalars(
+                    select(Order).where(Order.account_id == _PAPER_ACCOUNT).order_by(Order.id)
+                )
+            ],
+            "positions": [
+                _model_row(row)
+                for row in session.scalars(
+                    select(Position)
+                    .where(Position.account_id == _PAPER_ACCOUNT)
+                    .order_by(Position.id)
+                )
+            ],
+            "trades": [
+                _model_row(row)
+                for row in session.scalars(
+                    select(PaperTrade)
+                    .where(PaperTrade.account_id == _PAPER_ACCOUNT)
+                    .order_by(PaperTrade.id)
+                )
+            ],
+        }
+        source_json = json.dumps(
+            source_document,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        context_json = json.dumps(
+            {
+                "schema": "afi.legacy-paper-preserved-context.v1",
+                "source_account_id": _PAPER_ACCOUNT,
+                "owner_subject": account.user_id,
+                "activation": "retained_in_legacy_source_only",
+                "categories": {
+                    name: []
+                    for name in (
+                        "risk_rules",
+                        "alerts",
+                        "alert_rules",
+                        "alert_notifications",
+                        "strategy_target_approvals",
+                        "strategy_target_approval_events",
+                        "strategy_order_approval_policy_versions",
+                        "strategy_order_approval_policy_heads",
+                        "strategy_approval_authority_epoch",
+                        "paper_review_reports",
+                        "live_handoff_reviews",
+                        "paper_equity_snapshots",
+                    )
+                },
+                "cursor_contract": {
+                    "legacy_cursor_format": "base64url_json_observed_at_id",
+                    "legacy_cursor_retained": "stateless_runtime_source_only",
+                    "target_cursor_activated": False,
+                },
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        now = datetime.now(timezone.utc)
+        session.add(
+            LegacyPaperImportReceipt(
+                id=receipt_id,
+                legacy_account_id=_PAPER_ACCOUNT,
+                generation=1,
+                active_fence_key=_PAPER_ACCOUNT,
+                owner_subject=account.user_id,
+                state="ACTIVE",
+                receipt_version=1,
+                source_inventory_sha256=hashlib.sha256(
+                    source_json.encode("utf-8")
+                ).hexdigest(),
+                source_snapshot_json=source_json,
+                target_import_sha256=_HASH_1,
+                target_domain_sha256=_HASH_2,
+                binding_sha256=_HASH_3,
+                target_scope_key="execution-scope-mig03",
+                target_account_key="execution-account-mig03",
+                cash_currency="USD",
+                opening_cash="89.9",
+                cumulative_fees="0.1",
+                unallocated_equity_residual="0",
+                source_order_count=len(source_document["orders"]),
+                source_position_count=len(source_document["positions"]),
+                source_trade_count=len(source_document["trades"]),
+                preserved_context_sha256=hashlib.sha256(
+                    context_json.encode("utf-8")
+                ).hexdigest(),
+                preserved_context_json=context_json,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+    return receipt_id
+
+
 def test_mig03_afi_amount_projection_roundtrips_typed_numeric_values() -> None:
     original_float = 100_000.0
     adjacent_float = math.nextafter(original_float, math.inf)
@@ -446,6 +562,81 @@ def test_mig03_afi_inventory_rejects_unbound_paper_snapshot_account(tmp_path: Pa
             with pytest.raises(AfiMigrationBoundaryError) as unbound:
                 _capture(session)
         assert unbound.value.code == CODE_INVALID_BOUNDARY_SCOPE
+    finally:
+        engine.dispose()
+
+
+def test_mig03_afi_inventory_conserves_import_receipt_identity_and_financial_facts(
+    tmp_path: Path,
+) -> None:
+    engine = _seed_database(tmp_path / "afi-mig03-import-receipt.sqlite3")
+    try:
+        receipt_id = _insert_valid_import_receipt(engine)
+        with Session(engine) as before_session:
+            before = _capture(before_session)
+        assert before.paper_ledger.row_count == 7
+        assert (
+            "paper_import_receipt",
+            receipt_id,
+            "paper_account",
+            _PAPER_ACCOUNT,
+        ) in before.identity_links
+        assert (
+            "paper_import_receipt",
+            receipt_id,
+            "paper_import_target_scope",
+            "execution-scope-mig03",
+        ) in before.identity_links
+        assert (
+            f"legacy_import_receipt:{receipt_id}:cumulative_fees",
+            "0.1",
+        ) in before.amounts
+
+        with Session(engine) as changed_session:
+            receipt = changed_session.get(LegacyPaperImportReceipt, receipt_id)
+            assert receipt is not None
+            receipt.binding_sha256 = "4" * 64
+            changed_session.commit()
+        with Session(engine) as changed_session:
+            changed = _capture(changed_session)
+        with pytest.raises(AfiMigrationBoundaryError) as changed_receipt:
+            assert_afi_state_conserved(before, changed)
+        assert changed_receipt.value.code == CODE_BOUNDARY_NOT_CONSERVED
+
+        with Session(engine) as incomplete_session:
+            receipt = incomplete_session.get(LegacyPaperImportReceipt, receipt_id)
+            assert receipt is not None
+            incomplete_context = json.dumps(
+                {
+                    "schema": "afi.legacy-paper-preserved-context.v1",
+                    "source_account_id": _PAPER_ACCOUNT,
+                    "owner_subject": "owner-mig03",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            receipt.preserved_context_json = incomplete_context
+            receipt.preserved_context_sha256 = hashlib.sha256(
+                incomplete_context.encode("utf-8")
+            ).hexdigest()
+            incomplete_session.commit()
+        with Session(engine) as incomplete_session:
+            with pytest.raises(AfiMigrationBoundaryError) as incomplete_context_error:
+                _capture(incomplete_session)
+        assert incomplete_context_error.value.code == CODE_INVALID_BOUNDARY_SCOPE
+
+        with Session(engine) as missing_session:
+            receipt = missing_session.get(LegacyPaperImportReceipt, receipt_id)
+            assert receipt is not None
+            missing_session.delete(receipt)
+            missing_session.commit()
+        with Session(engine) as missing_session:
+            missing = _capture(missing_session)
+        with pytest.raises(AfiMigrationBoundaryError) as missing_receipt:
+            assert_afi_state_conserved(before, missing)
+        assert missing_receipt.value.code == CODE_BOUNDARY_NOT_CONSERVED
     finally:
         engine.dispose()
 

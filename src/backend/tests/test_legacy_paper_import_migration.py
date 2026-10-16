@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 pytest.importorskip("bt_api_execution")
 
@@ -31,6 +32,7 @@ from app.api.deps import get_current_user  # noqa: E402
 from app.api.service_read import configure_service_read  # noqa: E402
 from app.db import database  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.legacy_paper_import import LegacyPaperImportReceipt  # noqa: E402
 from app.models.paper_trading import Account, Order, PaperTrade, Position  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.legacy_paper_import_migration import (  # noqa: E402
@@ -43,6 +45,10 @@ from app.services.legacy_paper_migration import (  # noqa: E402
     LegacyPaperInventoryError,
     inspect_stable_legacy_paper_account,
     legacy_paper_writer_lease,
+)
+from app.services.mig03_boundary_inventory import (  # noqa: E402
+    assert_afi_state_conserved,
+    capture_afi_boundary,
 )
 from app.services.paper_trading_service import PaperTradingService  # noqa: E402
 from app.services.service_read.access import (  # noqa: E402
@@ -276,6 +282,66 @@ async def _seed_account(
             )
 
 
+async def _seed_empty_account() -> None:
+    async with database.async_session_maker() as session:
+        async with session.begin():
+            session.add(
+                User(
+                    id=_SOURCE_OWNER_ID,
+                    username="afi12-source-owner-empty",
+                    email="afi12-source-owner-empty@example.test",
+                    hashed_password="synthetic-test-only-unused",
+                )
+            )
+            session.add(
+                Account(
+                    id=_SOURCE_ACCOUNT_ID,
+                    user_id=_SOURCE_OWNER_ID,
+                    name="Legacy account filled by old matcher",
+                    initial_cash=100.0,
+                    current_cash=100.0,
+                    total_equity=100.0,
+                    profit_loss=0.0,
+                    profit_loss_pct=0.0,
+                    commission_rate=0.01,
+                    slippage_rate=0.0,
+                    is_active=True,
+                )
+            )
+
+
+async def _capture_afi_boundary_for_import_test():
+    async with database.engine.connect() as connection:
+        def capture(sync_connection):
+            with Session(sync_connection) as session:
+                return capture_afi_boundary(
+                    session,
+                    scope_ref="afi12-mig03-scope-v1",
+                    account_ref=_ACCOUNT_REF,
+                    strategy_refs=(_STRATEGY_REF,),
+                    account_paper_accounts={_ACCOUNT_REF: _SOURCE_ACCOUNT_ID},
+                    paper_account_instances={_SOURCE_ACCOUNT_ID: "afi12-paper-instance-v1"},
+                    source_ref="sqlite://afi12-mig03-synthetic-source",
+                    configuration_sha256="a" * 64,
+                )
+
+        return await connection.run_sync(capture)
+
+
+def _receipt_projection(receipt: LegacyPaperImportReceipt) -> tuple[Any, ...]:
+    return tuple(
+        getattr(receipt, column.key)
+        for column in LegacyPaperImportReceipt.__table__.columns
+    )
+
+
+async def _read_receipt_projection(receipt_id: str) -> tuple[Any, ...]:
+    async with database.async_session_maker() as session:
+        receipt = await session.get(LegacyPaperImportReceipt, receipt_id)
+        assert receipt is not None
+        return _receipt_projection(receipt)
+
+
 class _TargetWorker:
     """Exercise migration through the same typed worker-call contract as HTTP."""
 
@@ -382,6 +448,100 @@ async def test_nonempty_import_conserves_source_and_target_without_fabricating_e
         with pytest.raises(LegacyPaperInventoryError):
             async with legacy_paper_writer_lease(_SOURCE_ACCOUNT_ID):
                 pytest.fail("a legacy writer entered after the source fence committed")
+    finally:
+        target_store.close()
+
+
+@pytest.mark.asyncio
+async def test_real_legacy_matcher_is_fenced_and_receipt_stays_conserved_after_import(
+    tmp_path: Path,
+) -> None:
+    await _install_source_migrations()
+    await _seed_empty_account()
+    service = PaperTradingService()
+
+    # Exercise the complete old producer entry to create the source fill,
+    # position, fees, and account cash before the existing AFI12 import.
+    filled = await service.submit_order(
+        _SOURCE_ACCOUNT_ID,
+        _LEGACY_SYMBOL,
+        "market",
+        "buy",
+        1.0,
+    )
+    assert filled.status == "filled"
+    assert filled.filled_size == 1.0
+    assert filled.avg_fill_price == 10.0
+    source_before = await inspect_stable_legacy_paper_account(
+        service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+    )
+    assert source_before.complete and source_before.order_count == 1
+    assert source_before.position_count == 1 and source_before.trade_count == 1
+
+    target_store, target_worker, scope, domain = _target(tmp_path)
+    try:
+        migrated = await migrate_nonempty_legacy_paper_account(
+            service,
+            _SOURCE_OWNER_ID,
+            _binding(domain),
+            target_worker=target_worker,
+            scope=scope,
+            domain=domain,
+            symbol_bindings=(LegacyPaperSymbolBindingV1(_LEGACY_SYMBOL, _INSTRUMENT),),
+        )
+        assert migrated.receipt.state == "ACTIVE"
+        assert migrated.receipt.source_inventory_sha256 == source_before.digest
+        assert migrated.legacy_ledger_retained_read_only is True
+        assert migrated.imported_rows_are_exchange_facts is False
+        receipt_before = await _read_receipt_projection(migrated.receipt.receipt_id)
+
+        before_boundary = await _capture_afi_boundary_for_import_test()
+        assert before_boundary.paper_ledger.row_count == 5
+        assert (
+            "paper_import_receipt",
+            migrated.receipt.receipt_id,
+            "paper_account",
+            _SOURCE_ACCOUNT_ID,
+        ) in before_boundary.identity_links
+        assert (
+            "paper_import_receipt",
+            migrated.receipt.receipt_id,
+            "paper_import_source_sha256",
+            source_before.digest,
+        ) in before_boundary.identity_links
+
+        with pytest.raises(LegacyPaperInventoryError) as denied_submit:
+            await service.submit_order(
+                _SOURCE_ACCOUNT_ID,
+                _LEGACY_SYMBOL,
+                "market",
+                "buy",
+                1.0,
+            )
+        assert denied_submit.value.code == "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
+
+        account = await service.account_repo.get_by_id(_SOURCE_ACCOUNT_ID)
+        assert account is not None
+        with pytest.raises(LegacyPaperInventoryError) as denied_process:
+            await service._process_order(filled.id, _SOURCE_ACCOUNT_ID, account)
+        assert denied_process.value.code == "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
+
+        source_after = await inspect_stable_legacy_paper_account(
+            service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+        )
+        assert source_after.complete and source_after.digest == source_before.digest
+        after_boundary = await _capture_afi_boundary_for_import_test()
+        assert_afi_state_conserved(before_boundary, after_boundary)
+        assert await _read_receipt_projection(migrated.receipt.receipt_id) == receipt_before
+
+        imported = target_store.get_paper_legacy_import(scope)
+        assert imported is not None and imported.state == "ACTIVE"
+        assert target_store.read_paper_book(scope).cash == Decimal("89.9")
+        assert target_store.read_paper_book(scope).cumulative_fees == Decimal("0.1")
+        assert [
+            (row.instrument, row.quantity, row.average_cost)
+            for row in target_store.read_paper_book(scope).positions
+        ] == [(_INSTRUMENT, Decimal("1"), Decimal("10"))]
     finally:
         target_store.close()
 

@@ -3,8 +3,8 @@
 The SDK migration gate owns deployment epochs.  This module records the AFI
 facts that must accompany that gate: HTTP idempotency and approval links, plus
 the existing paper account, order, fill, fee, position, and equity snapshot
-rows.  It never imports, rewrites, or deletes those rows; the accepted
-MIG03 path retains the same database in place.
+rows, including AFI12 legacy-import receipts. It never imports, rewrites, or
+deletes those rows; the accepted MIG03 path retains the same database in place.
 """
 
 from __future__ import annotations
@@ -18,11 +18,12 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable
 
-from sqlalchemy import JSON, LargeBinary, String, Text, cast, func, inspect as sa_inspect
-from sqlalchemy import select
+from sqlalchemy import JSON, LargeBinary, String, Text, cast, func, select
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
+from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.paper_trading import Account, Order, PaperTrade, Position
 from app.models.service_order_operation import ServiceOrderOperation
@@ -41,6 +42,27 @@ _SCHEDULER_STOP_TIMEOUT_SECONDS = 5.0
 _PAPER_TERMINAL_STATES = frozenset({"filled", "cancelled", "rejected"})
 _MAX_BOUNDARY_ROWS = 100_000
 _MAX_BOUNDARY_BYTES = 32 * 1024 * 1024
+_LEGACY_IMPORT_CONTEXT_CATEGORIES = frozenset(
+    {
+        "risk_rules",
+        "alerts",
+        "alert_rules",
+        "alert_notifications",
+        "strategy_target_approvals",
+        "strategy_target_approval_events",
+        "strategy_order_approval_policy_versions",
+        "strategy_order_approval_policy_heads",
+        "strategy_approval_authority_epoch",
+        "paper_review_reports",
+        "live_handoff_reviews",
+        "paper_equity_snapshots",
+    }
+)
+_LEGACY_IMPORT_CURSOR_CONTRACT = {
+    "legacy_cursor_format": "base64url_json_observed_at_id",
+    "legacy_cursor_retained": "stateless_runtime_source_only",
+    "target_cursor_activated": False,
+}
 
 
 class AfiMigrationBoundaryError(RuntimeError):
@@ -258,6 +280,14 @@ def capture_afi_boundary(
             ),
             budget,
         )
+        import_receipts = _query_rows(
+            session,
+            LegacyPaperImportReceipt,
+            select(LegacyPaperImportReceipt).where(
+                LegacyPaperImportReceipt.legacy_account_id.in_(account_values)
+            ),
+            budget,
+        )
     except AfiMigrationBoundaryError:
         raise
     except Exception:
@@ -282,6 +312,7 @@ def capture_afi_boundary(
         for row in snapshots
     ):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    _validate_import_receipts(import_receipts, accounts, account_values)
     approvals_by_ref = {row["approval_ref"]: row for row in approvals}
     if any(
         row["approval_ref"] not in approvals_by_ref
@@ -299,6 +330,7 @@ def capture_afi_boundary(
         orders,
         trades,
         snapshots,
+        import_receipts,
     )
     _validate_approval_event_chains(approvals, approval_events)
 
@@ -314,6 +346,7 @@ def capture_afi_boundary(
         ("paper_trading_orders", orders),
         ("paper_trades", trades),
         ("paper_equity_snapshots", snapshots),
+        ("legacy_paper_import_receipts", import_receipts),
     )
     identity_links = _identity_links(
         account_ref,
@@ -327,8 +360,11 @@ def capture_afi_boundary(
         orders,
         trades,
         snapshots,
+        import_receipts,
     )
-    amounts = _financial_amounts(accounts, positions, orders, trades, snapshots)
+    amounts = _financial_amounts(
+        accounts, positions, orders, trades, snapshots, import_receipts
+    )
     position_amounts = _position_amounts(positions)
     unresolved_ids = tuple(
         sorted(
@@ -383,7 +419,14 @@ def capture_afi_boundary(
             configuration_sha256,
             paper_rows,
             identity_links,
-            (Account, Position, Order, PaperTrade, PaperEquitySnapshot),
+            (
+                Account,
+                Position,
+                Order,
+                PaperTrade,
+                PaperEquitySnapshot,
+                LegacyPaperImportReceipt,
+            ),
             session,
         ),
         identity_links=identity_links,
@@ -687,6 +730,7 @@ def _validate_identity_fields(
     orders: tuple[dict[str, Any], ...],
     trades: tuple[dict[str, Any], ...],
     snapshots: tuple[dict[str, Any], ...],
+    import_receipts: tuple[dict[str, Any], ...],
 ) -> None:
     fields = (
         (operations, ("operation_key_sha256", "intent_id", "scope_ref", "account_ref")),
@@ -708,6 +752,18 @@ def _validate_identity_fields(
         (orders, ("id", "account_id", "symbol", "status")),
         (trades, ("id", "account_id", "symbol")),
         (snapshots, ("id", "user_id", "instance_id")),
+        (
+            import_receipts,
+            (
+                "id",
+                "legacy_account_id",
+                "owner_subject",
+                "state",
+                "target_scope_key",
+                "target_account_key",
+                "cash_currency",
+            ),
+        ),
     )
     if any(
         type(row.get(field)) is not str or not row[field]
@@ -721,6 +777,16 @@ def _validate_identity_fields(
         (http_operations, ("operation_key_sha256", "request_sha256", "target_sha256")),
         (approvals, ("target_sha256", "policy_sha256")),
         (events, ("target_sha256",)),
+        (
+            import_receipts,
+            (
+                "source_inventory_sha256",
+                "target_import_sha256",
+                "target_domain_sha256",
+                "binding_sha256",
+                "preserved_context_sha256",
+            ),
+        ),
     )
     if any(
         not _valid_sha256(row[field])
@@ -756,6 +822,22 @@ def _validate_identity_fields(
     ):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
     if any(
+        type(row.get("receipt_version")) is not int
+        or row["receipt_version"] != 1
+        or type(row.get("generation")) is not int
+        or row["generation"] < 1
+        or any(
+            type(row.get(field)) is not int or row[field] < 0
+            for field in (
+                "source_order_count",
+                "source_position_count",
+                "source_trade_count",
+            )
+        )
+        for row in import_receipts
+    ):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    if any(
         type(row.get("manual_book_ref")) is not str or not row["manual_book_ref"]
         for row in operations
     ):
@@ -766,6 +848,158 @@ def _validate_identity_fields(
         for row in trades
     ):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+
+
+def _validate_import_receipts(
+    receipts: tuple[dict[str, Any], ...],
+    accounts: tuple[dict[str, Any], ...],
+    account_values: tuple[str, ...],
+) -> None:
+    """Validate AFI12 source-side handoff receipts before inventorying them."""
+
+    users_by_account = {row["id"]: row["user_id"] for row in accounts}
+    generations: set[tuple[str, int]] = set()
+    active_accounts: set[str] = set()
+    for row in receipts:
+        account_id = row.get("legacy_account_id")
+        state = row.get("state")
+        string_fields = (
+            "id",
+            "legacy_account_id",
+            "owner_subject",
+            "state",
+            "source_inventory_sha256",
+            "target_import_sha256",
+            "target_domain_sha256",
+            "binding_sha256",
+            "target_scope_key",
+            "target_account_key",
+            "cash_currency",
+            "opening_cash",
+            "cumulative_fees",
+            "unallocated_equity_residual",
+            "preserved_context_sha256",
+        )
+        if any(type(row.get(field)) is not str or not row[field] for field in string_fields):
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+        if (
+            account_id not in account_values
+            or row.get("owner_subject") != users_by_account.get(account_id)
+            or type(row.get("receipt_version")) is not int
+            or row["receipt_version"] != 1
+            or type(row.get("generation")) is not int
+            or row["generation"] < 1
+            or any(
+                type(row.get(field)) is not int or row[field] < 0
+                for field in (
+                    "source_order_count",
+                    "source_position_count",
+                    "source_trade_count",
+                )
+            )
+            or any(
+                not _valid_sha256(row[field])
+                for field in (
+                    "source_inventory_sha256",
+                    "target_import_sha256",
+                    "target_domain_sha256",
+                    "binding_sha256",
+                    "preserved_context_sha256",
+                )
+            )
+        ):
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+        generation_key = (account_id, row["generation"])
+        if generation_key in generations:
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+        generations.add(generation_key)
+        active_fence_key = row.get("active_fence_key")
+        if state in {"PREPARED", "COMMITTED", "ACTIVE"}:
+            if active_fence_key != account_id or account_id in active_accounts:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            active_accounts.add(account_id)
+        elif state == "ABORTED":
+            if active_fence_key is not None:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+        else:
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+
+        source_json = row.get("source_snapshot_json")
+        context_json = row.get("preserved_context_json")
+        try:
+            if type(source_json) is not str or type(context_json) is not str:
+                raise ValueError("invalid receipt payload type")
+            source_bytes = source_json.encode("utf-8")
+            context_bytes = context_json.encode("utf-8")
+            if len(context_bytes) > 8 * 1024 * 1024:
+                raise ValueError("preserved context exceeds producer limit")
+            source_document = json.loads(source_json)
+            context_document = json.loads(context_json)
+            if (
+                _canonical_json(source_document) != source_bytes
+                or hashlib.sha256(source_bytes).hexdigest() != row["source_inventory_sha256"]
+                or _canonical_json(context_document) != context_bytes
+                or hashlib.sha256(context_bytes).hexdigest()
+                != row["preserved_context_sha256"]
+            ):
+                raise ValueError("non-canonical receipt payload")
+        except (RecursionError, TypeError, ValueError, UnicodeError):
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
+        if (
+            type(source_document) is not dict
+            or set(source_document) != {"schema", "account", "orders", "positions", "trades"}
+            or source_document.get("schema") != "afi.legacy-paper-inventory.v1"
+            or type(source_document.get("account")) is not dict
+            or source_document["account"].get("id") != account_id
+            or source_document["account"].get("user_id") != row["owner_subject"]
+            or type(context_document) is not dict
+            or context_document.get("schema") != "afi.legacy-paper-preserved-context.v1"
+            or context_document.get("source_account_id") != account_id
+            or context_document.get("owner_subject") != row["owner_subject"]
+            or context_document.get("activation") != "retained_in_legacy_source_only"
+            or context_document.get("cursor_contract") != _LEGACY_IMPORT_CURSOR_CONTRACT
+            or type(context_document.get("categories")) is not dict
+            or set(context_document["categories"]) != _LEGACY_IMPORT_CONTEXT_CATEGORIES
+            or any(
+                type(category_rows) is not list
+                or any(type(category_row) is not dict for category_row in category_rows)
+                for category_rows in context_document["categories"].values()
+            )
+        ):
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+        for name, count_field in (
+            ("orders", "source_order_count"),
+            ("positions", "source_position_count"),
+            ("trades", "source_trade_count"),
+        ):
+            source_rows = source_document.get(name)
+            if type(source_rows) is not list or len(source_rows) != row[count_field]:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            row_ids: set[str] = set()
+            for source_row in source_rows:
+                if (
+                    type(source_row) is not dict
+                    or source_row.get("account_id") != account_id
+                    or type(source_row.get("id")) is not str
+                    or not source_row["id"]
+                    or source_row["id"] in row_ids
+                ):
+                    raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+                row_ids.add(source_row["id"])
+        for field in (
+            "opening_cash",
+            "cumulative_fees",
+            "unallocated_equity_residual",
+        ):
+            value = row.get(field)
+            if type(value) is not str:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            try:
+                decimal_value = Decimal(value)
+            except (InvalidOperation, ValueError):
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
+            if not decimal_value.is_finite():
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
 
 
 def _participant_facts(
@@ -884,6 +1118,7 @@ def _identity_links(
     orders: tuple[dict[str, Any], ...],
     trades: tuple[dict[str, Any], ...],
     snapshots: tuple[dict[str, Any], ...],
+    import_receipts: tuple[dict[str, Any], ...],
 ) -> tuple[tuple[str, str, str, str], ...]:
     links: list[tuple[str, str, str, str]] = [
         ("paper_account_ref", account_ref, "paper_account", paper_account_id)
@@ -975,6 +1210,41 @@ def _identity_links(
                 row["instance_id"],
             )
         )
+    for row in import_receipts:
+        links.extend(
+            (
+                (
+                    "paper_import_receipt",
+                    row["id"],
+                    "paper_account",
+                    row["legacy_account_id"],
+                ),
+                (
+                    "paper_import_receipt",
+                    row["id"],
+                    "paper_import_source_sha256",
+                    row["source_inventory_sha256"],
+                ),
+                (
+                    "paper_import_receipt",
+                    row["id"],
+                    "paper_import_target_scope",
+                    row["target_scope_key"],
+                ),
+                (
+                    "paper_import_receipt",
+                    row["id"],
+                    "paper_import_target_account",
+                    row["target_account_key"],
+                ),
+                (
+                    "paper_import_receipt",
+                    row["id"],
+                    "paper_import_fence",
+                    row["active_fence_key"] or "NO_ACTIVE_FENCE",
+                ),
+            )
+        )
     return tuple(sorted(links))
 
 
@@ -984,6 +1254,7 @@ def _financial_amounts(
     orders: tuple[dict[str, Any], ...],
     trades: tuple[dict[str, Any], ...],
     snapshots: tuple[dict[str, Any], ...],
+    import_receipts: tuple[dict[str, Any], ...],
 ) -> tuple[tuple[str, str], ...]:
     values: list[tuple[str, Decimal]] = []
     for row in accounts:
@@ -1008,6 +1279,11 @@ def _financial_amounts(
             "realized_pnl",
         ):
             values.append((f"equity_snapshot:{row['id']}:{key}", _decimal(row[key])))
+    for row in import_receipts:
+        for key in ("opening_cash", "cumulative_fees", "unallocated_equity_residual"):
+            values.append(
+                (f"legacy_import_receipt:{row['id']}:{key}", _decimal(row[key]))
+            )
     return tuple(sorted((key, _decimal_text(value)) for key, value in values))
 
 

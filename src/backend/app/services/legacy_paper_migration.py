@@ -540,16 +540,54 @@ async def legacy_paper_writer_lease(account_id: str) -> AsyncIterator[None]:
     except LegacyPaperInventoryError:
         raise
     except Exception:
+        receipt = None
+        import_fence_is_known = False
         try:
+            from app.models.legacy_paper_import import LegacyPaperImportReceipt
+
             async with async_session_maker() as session:
                 receipt = await session.scalar(
                     select(LegacyPaperCutoverReceipt).where(
                         LegacyPaperCutoverReceipt.legacy_account_id == account_id
                     )
                 )
+                if receipt is None:
+                    import_receipts = list(
+                        (
+                            await session.execute(
+                                select(LegacyPaperImportReceipt)
+                                .where(
+                                    LegacyPaperImportReceipt.legacy_account_id == account_id,
+                                    LegacyPaperImportReceipt.active_fence_key == account_id,
+                                    LegacyPaperImportReceipt.state.in_(
+                                        ("PREPARED", "COMMITTED", "ACTIVE")
+                                    ),
+                                )
+                                .limit(2)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    if len(import_receipts) == 1:
+                        imported_receipt = import_receipts[0]
+                        owner_subject = await session.scalar(
+                            select(Account.user_id).where(Account.id == account_id)
+                        )
+                        import_fence_is_known = (
+                            imported_receipt.legacy_account_id == account_id
+                            and imported_receipt.active_fence_key == account_id
+                            and imported_receipt.state in {"PREPARED", "COMMITTED", "ACTIVE"}
+                            and imported_receipt.receipt_version == 1
+                            and type(imported_receipt.generation) is int
+                            and imported_receipt.generation > 0
+                            and type(imported_receipt.owner_subject) is str
+                            and imported_receipt.owner_subject == owner_subject
+                        )
         except Exception:
             receipt = None
-        if receipt is not None:
+            import_fence_is_known = False
+        if receipt is not None or import_fence_is_known:
             raise LegacyPaperInventoryError(
                 "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
             ) from None
