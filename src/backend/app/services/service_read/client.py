@@ -17,6 +17,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Any
 
 from app.services.service_read.contracts import (
@@ -39,10 +40,30 @@ __all__ = [
     "PaperSubmitBinding",
     "PaperLegacyImportBinding",
     "ApprovedTargetSubmitBinding",
+    "RiskPolicyBudgetBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
 ]
 
+
+RISK_POLICY_BUDGET_MAKER_OPERATIONS = frozenset(
+    {
+        "policy.draft",
+        "policy.budget.propose",
+        "policy.budget.publish_member",
+        "policy.budget.owner_confirm_member",
+        "policy.budget.reject_member",
+        "policy.budget.mark_unknown",
+        "policy.budget.retract",
+        "policy.budget.read",
+    }
+)
+RISK_POLICY_BUDGET_CHECKER_OPERATIONS = frozenset(
+    {"policy.budget.approve", "policy.budget.read"}
+)
+RISK_POLICY_BUDGET_OPERATIONS = frozenset(
+    RISK_POLICY_BUDGET_MAKER_OPERATIONS | RISK_POLICY_BUDGET_CHECKER_OPERATIONS
+)
 
 PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
     {
@@ -396,6 +417,100 @@ class PortfolioAnalyticsBinding:
                 raise ServiceReadContractError(code)
         if self.mount != "application.risk_analysis":
             raise ServiceReadContractError("INVALID_MOUNT")
+
+
+@dataclass(frozen=True)
+class RiskPolicyBudgetBinding:
+    """One trusted actor's pool view and exact catalog/member scopes.
+
+    Actor roles and principal references come from service-read deployment
+    configuration, never from an HTTP request. Legacy single-maker profiles
+    omit delegation fields and cannot approve a generation.
+    """
+
+    mount: str
+    pool_ref: str
+    portfolio_ref: str
+    management_scope_ref: str
+    member_scope_refs: Mapping[str, str]
+    owner_subject: str | None = None
+    actor_role: str = "maker"
+    maker_principal_ref: str | None = None
+    checker_principal_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.pool_ref, "INVALID_POOL_REF"),
+            (self.portfolio_ref, "INVALID_PORTFOLIO_REF"),
+            (self.management_scope_ref, "INVALID_SCOPE_REF"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if self.mount != "application.risk_policy":
+            raise ServiceReadContractError("INVALID_MOUNT")
+        if self.actor_role not in {"maker", "checker"}:
+            raise ServiceReadContractError("INVALID_RISK_POLICY_BUDGET_ACTOR_ROLE")
+        explicit_actor_binding = any(
+            value is not None
+            for value in (
+                self.owner_subject,
+                self.maker_principal_ref,
+                self.checker_principal_ref,
+            )
+        )
+        if explicit_actor_binding:
+            for value, code in (
+                (self.owner_subject, "INVALID_OWNER_SUBJECT"),
+                (self.maker_principal_ref, "INVALID_MAKER_PRINCIPAL"),
+            ):
+                if type(value) is not str or not value or value != value.strip():
+                    raise ServiceReadContractError(code)
+            if self.checker_principal_ref is not None and (
+                type(self.checker_principal_ref) is not str
+                or not self.checker_principal_ref
+                or self.checker_principal_ref != self.checker_principal_ref.strip()
+            ):
+                raise ServiceReadContractError("INVALID_CHECKER_PRINCIPAL")
+            if self.actor_role == "checker" and self.checker_principal_ref is None:
+                raise ServiceReadContractError("INVALID_CHECKER_PRINCIPAL")
+            if (
+                self.checker_principal_ref is not None
+                and self.maker_principal_ref == self.checker_principal_ref
+            ):
+                raise ServiceReadContractError("MAKER_CHECKER_PRINCIPAL_MUST_DIFFER")
+        if not isinstance(self.member_scope_refs, Mapping) or not self.member_scope_refs:
+            raise ServiceReadContractError("INVALID_MEMBER_SCOPES")
+        members: dict[str, str] = {}
+        for account_ref, scope_ref in self.member_scope_refs.items():
+            if (
+                type(account_ref) is not str
+                or not account_ref
+                or account_ref != account_ref.strip()
+                or type(scope_ref) is not str
+                or not scope_ref
+                or scope_ref != scope_ref.strip()
+            ):
+                raise ServiceReadContractError("INVALID_MEMBER_SCOPES")
+            members[account_ref] = scope_ref
+        scope_refs = [self.management_scope_ref, *members.values()]
+        if len(set(scope_refs)) != len(scope_refs):
+            raise ServiceReadContractError("DUPLICATE_SCOPE_REF")
+        object.__setattr__(self, "member_scope_refs", MappingProxyType(dict(sorted(members.items()))))
+
+    @property
+    def operations(self) -> frozenset[str]:
+        return (
+            RISK_POLICY_BUDGET_CHECKER_OPERATIONS
+            if self.actor_role == "checker"
+            else RISK_POLICY_BUDGET_MAKER_OPERATIONS
+        )
+
+    @property
+    def expected_principal_ref(self) -> str | None:
+        if self.actor_role == "checker":
+            return self.checker_principal_ref
+        return self.maker_principal_ref
 
 
 @dataclass(frozen=True)

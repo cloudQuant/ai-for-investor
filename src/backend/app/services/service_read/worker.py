@@ -81,6 +81,15 @@ class ServiceReadSession(Protocol):
 
     def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any: ...
 
+    def call_risk_policy_budget(
+        self,
+        portfolio_ref: str,
+        operation: str,
+        arguments: dict[str, Any],
+        *,
+        member_account_ref: str | None = None,
+    ) -> dict[str, Any]: ...
+
     def call_paper_legacy_import(
         self,
         legacy_account_id: str,
@@ -113,6 +122,7 @@ class _Kind(Enum):
     ANALYTICS_SUBMIT = auto()
     ANALYTICS_QUERY = auto()
     ANALYTICS_CANCEL = auto()
+    RISK_POLICY_BUDGET = auto()
     PAPER_LEGACY_IMPORT = auto()
 
 
@@ -282,6 +292,24 @@ class ServiceReadWorker:
 
     async def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Any:
         return await self._submit(_Kind.ANALYTICS_CANCEL, scope_ref, task_ref)
+
+    async def call_risk_policy_budget(
+        self,
+        portfolio_ref: str,
+        operation: str,
+        arguments: dict[str, Any],
+        *,
+        member_account_ref: str | None = None,
+    ) -> dict[str, Any]:
+        """Queue one bounded Risk policy catalog call on the owner thread."""
+
+        return await self._submit(
+            _Kind.RISK_POLICY_BUDGET,
+            portfolio_ref,
+            operation,
+            arguments,
+            member_account_ref,
+        )
 
     async def call_paper_legacy_import(
         self, legacy_account_id: str, operation: str, arguments: dict[str, Any]
@@ -497,6 +525,13 @@ class ServiceReadWorker:
             elif request.kind is _Kind.ANALYTICS_CANCEL:
                 result = session.cancel_portfolio_analytics_task(
                     request.arguments[0], request.arguments[1]
+                )
+            elif request.kind is _Kind.RISK_POLICY_BUDGET:
+                result = session.call_risk_policy_budget(
+                    request.arguments[0],
+                    request.arguments[1],
+                    request.arguments[2],
+                    member_account_ref=request.arguments[3],
                 )
             elif request.kind is _Kind.PAPER_LEGACY_IMPORT:
                 result = session.call_paper_legacy_import(

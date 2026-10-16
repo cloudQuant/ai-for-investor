@@ -20,6 +20,7 @@ from app.services.service_read.client import (
     ApprovedTargetSubmitBinding,
     OrderSubmitBinding,
     PortfolioAnalyticsBinding,
+    RiskPolicyBudgetBinding,
 
     PaperLegacyImportBinding,
     PaperSubmitBinding,
@@ -29,6 +30,7 @@ __all__ = [
     "ReadAccess",
     "StrategyBookBinding",
     "PortfolioAnalyticsBinding",
+    "RiskPolicyBudgetBinding",
     "ServiceReadAccessDirectory",
     "ServiceReadAccessError",
 ]
@@ -73,7 +75,11 @@ class ReadAccess:
     allow_approved_target_scope_refs: frozenset[str] = frozenset()
     allow_monitor_scope_refs: frozenset[str] = frozenset()
     allow_portfolio_refs: frozenset[str] = frozenset()
+    allow_risk_policy_budget_refs: frozenset[str] = frozenset()
     portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] = field(
+        default_factory=dict, repr=False
+    )
+    risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding] = field(
         default_factory=dict, repr=False
     )
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(
@@ -110,6 +116,7 @@ class ReadAccess:
             "allow_approved_target_scope_refs",
             "allow_monitor_scope_refs",
             "allow_portfolio_refs",
+            "allow_risk_policy_budget_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
         if self.allow_account_book_refs and not inspect.iscoroutinefunction(
@@ -335,6 +342,41 @@ class ReadAccess:
             self, "portfolio_analytics_bindings", MappingProxyType(normalized_analytics)
         )
 
+        budget_bindings = self.risk_policy_budget_bindings
+        if not isinstance(budget_bindings, Mapping) or len(budget_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
+        normalized_budgets: dict[str, RiskPolicyBudgetBinding] = {}
+        for portfolio_ref, binding in budget_bindings.items():
+            if (
+                not _valid_identifier(portfolio_ref)
+                or type(binding) is not RiskPolicyBudgetBinding
+                or binding.portfolio_ref != portfolio_ref
+            ):
+                raise ServiceReadAccessError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
+            normalized_budgets[portfolio_ref] = binding
+        if set(normalized_budgets) != set(self.allow_risk_policy_budget_refs):
+            raise ServiceReadAccessError("RISK_POLICY_BUDGET_BINDING_MISMATCH")
+        if normalized_budgets:
+            if not inspect.iscoroutinefunction(
+                getattr(self.worker, "call_risk_policy_budget", None)
+            ):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+                or (
+                    getattr(identity, "delegate_ref", None) is not None
+                    and not _valid_identifier(identity.delegate_ref)
+                )
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(
+            self, "risk_policy_budget_bindings", MappingProxyType(normalized_budgets)
+        )
+
 
 @dataclass(frozen=True, slots=True, init=False)
 class ServiceReadAccessDirectory:
@@ -462,6 +504,16 @@ class ServiceReadAccessDirectory:
             raise ServiceReadAccessError("ACCESS_DENIED")
         access = self._access_by_subject.get(subject)
         if access is None or portfolio_ref not in access.portfolio_analytics_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
+
+    def resolve_risk_policy_budget(self, subject: str, portfolio_ref: str) -> ReadAccess:
+        """Resolve one trusted budget-control portfolio for an exact subject."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(portfolio_ref):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or portfolio_ref not in access.risk_policy_budget_bindings:
             raise ServiceReadAccessError("ACCESS_DENIED")
         return access
 

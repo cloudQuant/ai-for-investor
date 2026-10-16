@@ -163,6 +163,12 @@ _register_optional_router(
     tags=["Service Read"],
 )
 _register_optional_router(
+    "risk_policy_budget",
+    "app.api.risk_policy_budget",
+    prefix="/risk-policy-budgets",
+    tags=["Risk Policy Budget"],
+)
+_register_optional_router(
     "service_gateway",
     "app.api.service_gateway",
     tags=["Service Gateway"],

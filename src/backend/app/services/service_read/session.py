@@ -25,6 +25,7 @@ from .client import (
     PaperLegacyImportBinding,
     PAPER_LEGACY_IMPORT_OPERATIONS,
     PaperSubmitBinding,
+    RiskPolicyBudgetBinding,
     ServiceReadUnavailableError,
 )
 from .contracts import (
@@ -108,6 +109,7 @@ class SdkServiceReadSession:
         approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding] | None = None,
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
         portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] | None = None,
+        risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding] | None = None,
     ) -> None:
         self._account_bindings = dict(account_bindings)
         self._account_book_bindings = dict(account_book_bindings or {})
@@ -126,6 +128,7 @@ class SdkServiceReadSession:
         self._approved_target_bindings = dict(approved_target_bindings or {})
         self._monitor_bindings = dict(monitor_bindings or {})
         self._portfolio_analytics_bindings = dict(portfolio_analytics_bindings or {})
+        self._risk_policy_budget_bindings = dict(risk_policy_budget_bindings or {})
         if not (
             self._account_bindings
             or self._account_book_bindings
@@ -136,6 +139,7 @@ class SdkServiceReadSession:
             or self._approved_target_bindings
             or self._monitor_bindings
             or self._portfolio_analytics_bindings
+            or self._risk_policy_budget_bindings
         ):
             raise ServiceReadSessionError(
                 "SERVICE_READ_NOT_CONFIGURED",
@@ -271,6 +275,12 @@ class SdkServiceReadSession:
         )
         for binding in self._portfolio_analytics_bindings.values():
             expected.add((binding.mount, binding.scope_ref, analytics_operations))
+        for binding in self._risk_policy_budget_bindings.values():
+            expected.add(
+                (binding.mount, binding.management_scope_ref, binding.operations)
+            )
+            for scope_ref in binding.member_scope_refs.values():
+                expected.add((binding.mount, scope_ref, binding.operations))
         return expected
 
     def _validate_registered_bindings(self) -> None:
@@ -407,6 +417,32 @@ class SdkServiceReadSession:
                     "analytics scope does not match its configured portfolio",
                 )
 
+        for portfolio_ref, configured in self._risk_policy_budget_bindings.items():
+            if configured.portfolio_ref != portfolio_ref:
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "budget selector does not match its configured portfolio",
+                )
+            management = self._one_registered_binding(
+                configured.mount, configured.management_scope_ref
+            ).scope
+            if not self._scope_is_budget_management_scope(
+                management, portfolio_ref, frozenset(configured.member_scope_refs)
+            ):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "budget management scope does not match its configured members",
+                )
+            for account_ref, scope_ref in configured.member_scope_refs.items():
+                member = self._one_registered_binding(configured.mount, scope_ref).scope
+                if not self._scope_is_budget_member_scope(
+                    member, portfolio_ref, account_ref, management.execution_domain_ref
+                ):
+                    raise ServiceReadSessionError(
+                        "SERVICE_READ_SCOPE_MISMATCH",
+                        "budget member scope does not match its configured account",
+                    )
+
     @staticmethod
     def _scope_is_portfolio_analytics_scope(scope: Any, portfolio_ref: str) -> bool:
         return (
@@ -414,6 +450,38 @@ class SdkServiceReadSession:
             and getattr(scope, "run_id", None) is None
             and getattr(scope, "account_ref", None) is None
             and not getattr(scope, "account_refs", ())
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
+
+    @staticmethod
+    def _scope_is_budget_management_scope(
+        scope: Any, portfolio_ref: str, account_refs: frozenset[str]
+    ) -> bool:
+        return (
+            getattr(scope, "portfolio_ref", None) == portfolio_ref
+            and getattr(scope, "account_ref", None) is None
+            and frozenset(getattr(scope, "account_refs", ())) == account_refs
+            and bool(getattr(scope, "execution_domain_ref", None))
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
+
+    @staticmethod
+    def _scope_is_budget_member_scope(
+        scope: Any, portfolio_ref: str, account_ref: str, execution_domain_ref: str
+    ) -> bool:
+        return (
+            getattr(scope, "portfolio_ref", None) == portfolio_ref
+            and getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and getattr(scope, "execution_domain_ref", None) == execution_domain_ref
+            and getattr(scope, "run_id", None) is None
             and getattr(scope, "strategy_ref", None) is None
             and getattr(scope, "manual_book_ref", None) is None
             and getattr(scope, "group_id", None) is None
@@ -803,6 +871,116 @@ class SdkServiceReadSession:
         # SDK wire replies are recursively frozen as MappingProxyType/tuples.
         # The AFI task parser accepts the corresponding JSON dict/list shape.
         return _thaw_json(reply)
+
+    def call_risk_policy_budget(
+        self,
+        portfolio_ref: str,
+        operation: str,
+        arguments: dict[str, Any],
+        *,
+        member_account_ref: str | None = None,
+    ) -> dict[str, Any]:
+        """Call one fixed Risk catalog operation on its configured owner thread."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        binding = self._risk_policy_budget_bindings.get(portfolio_ref)
+        if binding is None:
+            raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_NOT_CONFIGURED")
+        if operation not in binding.operations:
+            raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_OPERATION_NOT_AUTHORIZED")
+        expected_arguments: dict[str, frozenset[str]] = {
+            "policy.draft": frozenset({"policy_ref", "content"}),
+            "policy.budget.propose": frozenset(
+                {
+                    "pool_ref",
+                    "generation_ref",
+                    "portfolio_ref",
+                    "membership_version",
+                    "membership_sha256",
+                    "allocation_set_sha256",
+                    "currency",
+                    "metric",
+                    "total_amount",
+                    "unallocated_amount",
+                    "allocations",
+                }
+            ),
+            "policy.budget.approve": frozenset({"generation_ref"}),
+            "policy.budget.publish_member": frozenset(
+                {"generation_ref", "account_ref"}
+            ),
+            "policy.budget.confirm_member": frozenset(
+                {"generation_ref", "account_ref"}
+            ),
+            "policy.budget.owner_confirm_member": frozenset(
+                {"generation_ref", "account_ref"}
+            ),
+            "policy.budget.reject_member": frozenset(
+                {"generation_ref", "account_ref"}
+            ),
+            "policy.budget.mark_unknown": frozenset({"generation_ref"}),
+            "policy.budget.retract": frozenset({"generation_ref"}),
+            "policy.budget.read": frozenset({"generation_ref"}),
+        }
+        required = expected_arguments.get(operation)
+        if required is None or set(arguments) != required:
+            raise ServiceReadUnavailableError("INVALID_RISK_POLICY_BUDGET_ARGUMENTS")
+        member_operations = {
+            "policy.draft",
+            "policy.budget.confirm_member",
+            "policy.budget.owner_confirm_member",
+            "policy.budget.reject_member",
+        }
+        if operation in member_operations:
+            if (
+                type(member_account_ref) is not str
+                or member_account_ref not in binding.member_scope_refs
+                or (
+                    operation
+                    in {
+                        "policy.budget.confirm_member",
+                        "policy.budget.owner_confirm_member",
+                        "policy.budget.reject_member",
+                    }
+                    and arguments.get("account_ref") != member_account_ref
+                )
+            ):
+                raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_MEMBER_NOT_CONFIGURED")
+            scope_ref = binding.member_scope_refs[member_account_ref]
+        else:
+            if member_account_ref is not None:
+                raise ServiceReadUnavailableError("INVALID_RISK_POLICY_BUDGET_SCOPE")
+            if operation in {
+                "policy.budget.publish_member",
+            } and arguments.get("account_ref") not in binding.member_scope_refs:
+                raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_MEMBER_NOT_CONFIGURED")
+            scope_ref = binding.management_scope_ref
+
+        self._validate_runtime()
+        assert self._runtime is not None
+        reply = _thaw_json(
+            self._runtime.call(
+                binding.mount,
+                operation,
+                dict(arguments),
+                scope_ref=scope_ref,
+            )
+        )
+        if (
+            type(reply) is not dict
+            or set(reply) != {"ok", "code", "result"}
+            or type(reply["ok"]) is not bool
+            or type(reply["code"]) is not str
+            or type(reply["result"]) is not dict
+        ):
+            raise ServiceReadUnavailableError("INVALID_RISK_POLICY_BUDGET_REPLY")
+        return reply
 
     def call_paper_legacy_import(
         self,
