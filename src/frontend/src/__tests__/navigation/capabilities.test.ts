@@ -49,6 +49,7 @@ describe('navigation capabilities', () => {
     expect(tradingIds).toContain('trading.gatewayHealth')
     const portfolioIds = getCapabilitiesForDomain('portfolio', true).map((item) => item.id)
     expect(portfolioIds).not.toContain('portfolio.ledger')
+    expect(portfolioIds).toContain('portfolio.riskPolicies')
     expect(getVisibleDomains(true).map((domain) => domain.id)).toContain('config')
     expect(getVisibleDomains(false).map((domain) => domain.id)).not.toContain('config')
     expect(getVisibleDomains(false).map((domain) => domain.id)).toEqual([
@@ -78,5 +79,6 @@ describe('navigation capabilities', () => {
     expect(getDomainByPath('/config/gateways').id).toBe('config')
     expect(getDomainByPath('/trading/gateways').id).toBe('config')
     expect(getDomainByPath('/trading/gateway-health').id).toBe('trading')
+    expect(getDomainByPath('/portfolio/policies').id).toBe('portfolio')
   })
 })

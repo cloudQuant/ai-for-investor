@@ -236,6 +236,13 @@ export const capabilities: Capability[] = [
     legacyPaths: ['/portfolio'],
   },
   {
+    id: 'portfolio.riskPolicies',
+    domainId: 'portfolio',
+    path: APP_PATHS.portfolio.policies,
+    labelKey: 'nav.riskPolicies',
+    icon: 'DataAnalysis',
+  },
+  {
     id: 'ai.chat',
     domainId: 'ai',
     path: APP_PATHS.ai.chat,

@@ -472,6 +472,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/PortfolioPage.vue'),
       },
       {
+        path: toAppChildPath(APP_PATHS.portfolio.policies),
+        name: 'PortfolioRiskPolicies',
+        component: () => import('@/views/RiskPolicyPage.vue'),
+      },
+      {
         path: 'brokers',
         redirect: { name: 'TradingWorkspaceList' },
       },

@@ -111,6 +111,7 @@ describe('router', () => {
     expect(names).toContain('DataQuote')
     expect(names).toContain('ConfigGateways')
     expect(names).toContain('PortfolioOverview')
+    expect(names).toContain('PortfolioRiskPolicies')
     expect(names).not.toContain('BrokerProfiles')
     expect(names).not.toContain('TradingBrokerProfiles')
     expect(names).not.toContain('PortfolioLedger')
