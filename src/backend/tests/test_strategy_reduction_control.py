@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_transport_zmq.server import CurveClientCredentials
 from fastapi import HTTPException, Response
 from pydantic import SecretStr, ValidationError
 
@@ -25,6 +26,27 @@ from app.services.strategy_reduction_control import (
     StrategyReductionDeployment,
 )
 from app.services.strategy_target_approvals import canonical_target_json, canonical_target_sha256
+
+
+def test_reduction_curve_keys_remain_z85_encoded_for_transport():
+    server_key, _server_secret = zmq.curve_keypair()
+    client_public_key, client_secret_key = zmq.curve_keypair()
+
+    resolved = tuple(
+        reduction_control._z85_bytes(SecretStr(key.decode("ascii")))
+        for key in (server_key, client_public_key, client_secret_key)
+    )
+
+    assert resolved == (server_key, client_public_key, client_secret_key)
+    assert all(len(key) == 40 for key in resolved)
+    credentials = CurveClientCredentials(*resolved)
+    assert credentials.server_key == server_key
+    assert credentials.public_key == client_public_key
+
+    for invalid_key in ("0" * 39, "0" * 39 + "_"):
+        with pytest.raises(StrategyReductionControlError) as error:
+            reduction_control._z85_bytes(SecretStr(invalid_key))
+        assert error.value.code == "DEPLOYMENT_INVALID"
 
 
 def _service_config(*, account_ref: str, service_id: str, instance_id: str, scope_ref: str, endpoint: str):

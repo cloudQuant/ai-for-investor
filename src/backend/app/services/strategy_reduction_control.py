@@ -470,7 +470,11 @@ def _z85_bytes(value: SecretStr) -> bytes:
     try:
         from zmq.utils import z85
 
-        return z85.decode(text.encode("ascii"))
+        # The SDK's ClientCurveKeys contract is the 40-byte Z85 form consumed
+        # by CurveClientCredentials and PyZMQ socket options. Decode once to
+        # validate the configured key, but retain its encoded representation.
+        z85.decode(text.encode("ascii"))
+        return text.encode("ascii")
     except Exception:
         raise StrategyReductionControlError("DEPLOYMENT_INVALID") from None
 
