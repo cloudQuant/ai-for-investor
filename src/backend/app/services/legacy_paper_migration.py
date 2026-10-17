@@ -395,6 +395,10 @@ async def prepare_empty_account_cutover(
                     state="ACTIVE",
                     receipt_version=1,
                     source_inventory_sha256=locked.digest,
+                    source_kind="empty_account",
+                    source_import_receipt_id=None,
+                    source_import_generation=None,
+                    target_import_sha256=None,
                     binding_sha256=paper_binding_fingerprint(binding),
                     paper_domain_sha256=payload["paper_domain_sha256"],
                     scope_ref=payload["scope_ref"],
@@ -456,8 +460,12 @@ async def require_active_paper_cutover_receipt(
     account_id: str,
     owner_subject: str,
     binding: Any,
+    *,
+    service_factory: Any | None = None,
+    import_binding: Any | None = None,
+    target_worker: Any | None = None,
 ) -> Any:
-    """Require the persisted receipt, its current binding, and no legacy lease."""
+    """Require the persisted qualification, current binding and no legacy lease."""
 
     from sqlalchemy import select
 
@@ -480,12 +488,6 @@ async def require_active_paper_cutover_receipt(
             )
             if receipt is None:
                 raise LegacyPaperInventoryError("LEGACY_PAPER_CUTOVER_REQUIRED")
-            _require_receipt_matches(
-                receipt,
-                owner_subject,
-                payload,
-                receipt.source_inventory_sha256,
-            )
             active_writer = await session.scalar(
                 select(LegacyPaperWriterLease.id)
                 .where(LegacyPaperWriterLease.account_id == account_id)
@@ -493,11 +495,48 @@ async def require_active_paper_cutover_receipt(
             )
             if active_writer is not None:
                 raise LegacyPaperInventoryError("LEGACY_WRITES_IN_PROGRESS")
-            return receipt
     except LegacyPaperInventoryError:
         raise
     except Exception:
         raise LegacyPaperInventoryError("LEGACY_PAPER_CUTOVER_STORE_UNAVAILABLE") from None
+
+    source_kind = getattr(receipt, "source_kind", "empty_account")
+    if source_kind == "empty_account":
+        _require_receipt_matches(
+            receipt,
+            owner_subject,
+            payload,
+            receipt.source_inventory_sha256,
+        )
+    elif source_kind == "imported_legacy":
+        if (
+            not callable(service_factory)
+            or import_binding is None
+            or target_worker is None
+        ):
+            raise LegacyPaperInventoryError("LEGACY_IMPORT_BINDING_REQUIRED")
+        try:
+            from app.services.legacy_paper_import_migration import (
+                require_imported_paper_cutover_qualification,
+            )
+
+            await require_imported_paper_cutover_qualification(
+                receipt,
+                service_factory(),
+                owner_subject,
+                binding,
+                import_binding,
+                target_worker=target_worker,
+            )
+        except LegacyPaperInventoryError:
+            raise
+        except Exception:
+            raise LegacyPaperInventoryError(
+                "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"
+            ) from None
+    else:
+        raise LegacyPaperInventoryError("MANAGED_PAPER_CUTOVER_BINDING_MISMATCH")
+    return receipt
 
 
 @asynccontextmanager
@@ -755,6 +794,13 @@ def _require_receipt_matches(
     if (
         getattr(receipt, "state", None) != "ACTIVE"
         or getattr(receipt, "receipt_version", None) != 1
+        or getattr(receipt, "source_kind", "empty_account") != "empty_account"
+        or getattr(receipt, "source_import_receipt_id", None) is not None
+        or getattr(receipt, "source_import_generation", None) is not None
+        or getattr(receipt, "target_import_sha256", None) is not None
+        or getattr(receipt, "source_order_count", None) != 0
+        or getattr(receipt, "source_position_count", None) != 0
+        or getattr(receipt, "source_trade_count", None) != 0
         or getattr(receipt, "owner_subject", None) != owner_subject
         or getattr(receipt, "source_inventory_sha256", None) != inventory_sha256
         or getattr(receipt, "binding_sha256", None)

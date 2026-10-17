@@ -110,7 +110,7 @@ async def create_paper_account(
 @router.post(
     "/accounts/{account_id}/managed-cutover",
     response_model=None,
-    summary="Fence an empty legacy paper account for managed execution",
+    summary="Confirm an eligible legacy paper account for managed execution",
 )
 async def cutover_managed_paper_account(
     account_id: str,
@@ -119,7 +119,7 @@ async def cutover_managed_paper_account(
     current_user: typing.Any = Depends(get_current_user),
     adapter: ManagedPaperOrderAdapter = Depends(get_managed_paper_order_adapter),
 ) -> dict[str, typing.Any]:
-    """Persist the only supported cutover: a verified empty account."""
+    """Persist explicit eligibility for an empty or imported legacy account."""
 
     if request.confirmed is not True:
         raise HTTPException(

@@ -12,17 +12,30 @@ from app.db.database import Base
 
 
 class LegacyPaperCutoverReceipt(Base):
-    """Immutable evidence that an empty legacy paper account was fenced."""
+    """Immutable evidence binding managed use to its exact legacy source."""
 
     __tablename__ = "legacy_paper_cutover_receipts"
     __table_args__ = (
-        CheckConstraint("receipt_version = 1", name="ck_legacy_paper_cutover_version"),
         CheckConstraint("state = 'ACTIVE'", name="ck_legacy_paper_cutover_active"),
-        CheckConstraint("source_order_count = 0", name="ck_legacy_paper_cutover_orders_empty"),
         CheckConstraint(
-            "source_position_count = 0", name="ck_legacy_paper_cutover_positions_empty"
+            "source_kind IN ('empty_account', 'imported_legacy')",
+            name="ck_legacy_paper_cutover_source_kind",
         ),
-        CheckConstraint("source_trade_count = 0", name="ck_legacy_paper_cutover_trades_empty"),
+        CheckConstraint(
+            "(source_kind = 'empty_account' AND receipt_version = 1 "
+            "AND source_import_receipt_id IS NULL AND source_import_generation IS NULL "
+            "AND target_import_sha256 IS NULL AND source_order_count = 0 "
+            "AND source_position_count = 0 AND source_trade_count = 0) "
+            "OR (source_kind = 'imported_legacy' AND receipt_version = 2 "
+            "AND source_import_receipt_id IS NOT NULL "
+            "AND source_import_generation IS NOT NULL AND source_import_generation > 0 "
+            "AND target_import_sha256 IS NOT NULL "
+            "AND length(target_import_sha256) = 64 "
+            "AND source_order_count >= 0 AND source_position_count >= 0 "
+            "AND source_trade_count >= 0 "
+            "AND source_order_count + source_position_count + source_trade_count > 0)",
+            name="ck_legacy_paper_cutover_source_profile",
+        ),
         CheckConstraint(
             "length(source_inventory_sha256) = 64", name="ck_legacy_paper_cutover_inventory_hash"
         ),
@@ -44,6 +57,16 @@ class LegacyPaperCutoverReceipt(Base):
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE")
     receipt_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     source_inventory_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="empty_account"
+    )
+    source_import_receipt_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("legacy_paper_import_receipts.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    source_import_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_import_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     binding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     paper_domain_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     scope_ref: Mapped[str] = mapped_column(String(128), nullable=False)

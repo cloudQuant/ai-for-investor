@@ -33,19 +33,30 @@ from app.api.service_read import configure_service_read  # noqa: E402
 from app.db import database  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.legacy_paper_import import LegacyPaperImportReceipt  # noqa: E402
+from app.models.legacy_paper_cutover import LegacyPaperCutoverReceipt  # noqa: E402
 from app.models.paper_trading import Account, Order, PaperTrade, Position  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.legacy_paper_import_migration import (  # noqa: E402
     LegacyPaperImportError,
+    _require_active_import_row_for_cutover,
     get_legacy_paper_import_receipt,
     migrate_nonempty_legacy_paper_account,
+    prepare_managed_paper_cutover,
     rollback_legacy_paper_import,
 )
 from app.services.legacy_paper_migration import (  # noqa: E402
     LegacyPaperInventoryError,
     inspect_stable_legacy_paper_account,
     legacy_paper_writer_lease,
+    paper_binding_fingerprint,
+    _paper_binding_payload,
+    require_active_paper_cutover_receipt,
 )
+from app.services.managed_paper_adapter import (  # noqa: E402
+    ManagedPaperOrderAdapter,
+    ManagedPaperOrderError,
+)
+from app.schemas.paper_trading import OrderRequest  # noqa: E402
 from app.services.mig03_boundary_inventory import (  # noqa: E402
     assert_afi_state_conserved,
     capture_afi_boundary,
@@ -159,18 +170,23 @@ async def _install_source_migrations() -> None:
         "afi12_test_legacy_paper_import_revision",
         versions / "20261016_legacy_paper_import.py",
     )
+    imported_cutover = _load_revision(
+        "afi13_test_legacy_paper_import_cutover_revision",
+        versions / "20261017_legacy_paper_import_cutover.py",
+    )
 
     def apply(sync_connection: Any) -> None:
         for table in (
+            "legacy_paper_cutover_receipts",
             "legacy_paper_import_receipts",
             "legacy_paper_writer_leases",
-            "legacy_paper_cutover_receipts",
         ):
             sync_connection.exec_driver_sql(f"DROP TABLE IF EXISTS {table}")
         context = _MigrationContext.configure(sync_connection)
         with _Operations.context(context):
             cutover.upgrade()
             importer.upgrade()
+            imported_cutover.upgrade()
 
     async with database.engine.begin() as connection:
         await connection.run_sync(apply)
@@ -387,6 +403,39 @@ class _TargetWorker:
         raise AssertionError("legacy import API must not submit a paper order")
 
 
+class _ManagedPaperTargetWorker(_TargetWorker):
+    """Keep import status real while stubbing only the order presentation edge."""
+
+    def __init__(self, store: SqliteExecutionStore, scope: ExecutionScope, domain: PaperOwnerDomainV1):
+        super().__init__(store, scope, domain)
+        self.submitted: list[tuple[str, dict[str, Any]]] = []
+        self.read_intents: list[str] = []
+
+    async def submit_paper_order(
+        self, scope_ref: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        self.submitted.append((scope_ref, dict(arguments)))
+        return {"ok": True, "code": "OK", "result": {}}
+
+    async def read_order(self, scope_ref: str, intent_id: str) -> Any:
+        from types import SimpleNamespace
+
+        self.read_intents.append(intent_id)
+        return SimpleNamespace(
+            intent_id=intent_id,
+            state="ACKED",
+            quality="fresh",
+            filled_quantity=Decimal("0"),
+            average_price=None,
+            cumulative_commission=Decimal("0"),
+            is_terminal=False,
+            unknown_reason=None,
+            review_required=False,
+            updated_at_ns=1,
+            detail_code=None,
+        )
+
+
 def _target(
     tmp_path: Path,
 ) -> tuple[SqliteExecutionStore, _TargetWorker, ExecutionScope, PaperOwnerDomainV1]:
@@ -450,6 +499,266 @@ async def test_nonempty_import_conserves_source_and_target_without_fabricating_e
                 pytest.fail("a legacy writer entered after the source fence committed")
     finally:
         target_store.close()
+
+
+@pytest.mark.asyncio
+async def test_active_import_requires_explicit_managed_cutover_before_order_read_or_submit(
+    tmp_path: Path,
+) -> None:
+    await _install_source_migrations()
+    await _seed_account()
+    service = PaperTradingService()
+    scope, domain = _domain()
+    target_store = SqliteExecutionStore(tmp_path / "afi13-import-cutover-execution.sqlite3")
+    worker = _ManagedPaperTargetWorker(target_store, scope, domain)
+    try:
+        directory = _http_import_directory(worker, scope, domain)
+        access = directory.resolve_paper_submit_account(_SOURCE_OWNER_ID, _SOURCE_ACCOUNT_ID)
+        paper_binding = access.paper_submit_bindings[_SOURCE_ACCOUNT_ID]
+        import_binding = access.paper_legacy_import_bindings[_SOURCE_ACCOUNT_ID]
+        imported = await migrate_nonempty_legacy_paper_account(
+            service,
+            _SOURCE_OWNER_ID,
+            paper_binding,
+            target_worker=worker,
+            scope=scope,
+            domain=domain,
+            symbol_bindings=import_binding.symbol_bindings,
+        )
+        assert imported.receipt.state == "ACTIVE"
+
+        adapter = ManagedPaperOrderAdapter(
+            legacy_service_factory=lambda: service,
+            access_resolver=lambda subject, account_id: (
+                access,
+                access.paper_submit_bindings[account_id],
+            ),
+        )
+        request = OrderRequest(
+            account_id=_SOURCE_ACCOUNT_ID,
+            symbol=_INSTRUMENT,
+            order_type="market",
+            side="buy",
+            size=0.25,
+        )
+
+        with pytest.raises(ManagedPaperOrderError) as unconfirmed:
+            await adapter.submit_manual(
+                subject=_SOURCE_OWNER_ID,
+                request=request,
+                idempotency_key="afi13-imported-before-confirm",
+            )
+        assert unconfirmed.value.code == "LEGACY_PAPER_CUTOVER_REQUIRED"
+        with pytest.raises(LegacyPaperInventoryError) as unconfirmed_read:
+            await require_active_paper_cutover_receipt(
+                _SOURCE_ACCOUNT_ID,
+                _SOURCE_OWNER_ID,
+                paper_binding,
+                service_factory=lambda: service,
+                import_binding=import_binding,
+                target_worker=worker,
+            )
+        assert unconfirmed_read.value.code == "LEGACY_PAPER_CUTOVER_REQUIRED"
+        assert worker.submitted == []
+
+        cutover = await adapter.prepare_cutover(
+            subject=_SOURCE_OWNER_ID,
+            legacy_account_id=_SOURCE_ACCOUNT_ID,
+        )
+        assert cutover["state"] == "ACTIVE"
+        assert cutover["receipt_version"] == 2
+        assert cutover["source_counts"] == {"orders": 1, "positions": 1, "trades": 1}
+        async with database.async_session_maker() as session:
+            persisted = await session.scalar(
+                select(LegacyPaperCutoverReceipt).where(
+                    LegacyPaperCutoverReceipt.legacy_account_id == _SOURCE_ACCOUNT_ID
+                )
+            )
+        assert persisted is not None
+        assert persisted.source_kind == "imported_legacy"
+        assert persisted.source_import_receipt_id == imported.receipt.receipt_id
+        assert persisted.source_import_generation == imported.receipt.generation
+        assert persisted.target_import_sha256 == imported.receipt.target_import_sha256
+
+        result = await adapter.submit_manual(
+            subject=_SOURCE_OWNER_ID,
+            request=request,
+            idempotency_key="afi13-imported-after-confirm",
+        )
+        assert result["state"] == "ACKED"
+        assert result["submission_acknowledged"] is True
+        assert worker.submitted[0][0] == paper_binding.scope_ref
+        assert worker.submitted[0][1]["position_effect"] == "OPEN"
+        assert worker.read_intents[0] == result["intent_id"]
+
+        readback = await adapter.read_order(
+            subject=_SOURCE_OWNER_ID,
+            legacy_account_id=_SOURCE_ACCOUNT_ID,
+            intent_id=result["intent_id"],
+        )
+        assert readback["state"] == "ACKED"
+        assert worker.read_intents[-1] == result["intent_id"]
+        source_after = await inspect_stable_legacy_paper_account(
+            service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+        )
+        assert source_after.digest == imported.receipt.source_inventory_sha256
+        assert target_store.read_paper_book(scope).cash == Decimal("89.9")
+        assert target_store.read_paper_book(scope).receipt_count == 0
+    finally:
+        target_store.close()
+
+
+@pytest.mark.asyncio
+async def test_empty_account_keeps_version_one_managed_cutover(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    await _install_source_migrations()
+    empty_owner = str(uuid.UUID("af130000-0000-4000-8000-000000000002"))
+    empty_account = str(uuid.UUID("af130000-0000-4000-8000-000000000001"))
+    async with database.async_session_maker() as session:
+        async with session.begin():
+            session.add(
+                User(
+                    id=empty_owner,
+                    username="afi13-empty-paper-owner",
+                    email="afi13-empty-paper-owner@example.test",
+                    hashed_password="synthetic-test-only-unused",
+                )
+            )
+            session.add(
+                Account(
+                    id=empty_account,
+                    user_id=empty_owner,
+                    name="Legacy empty paper account",
+                    initial_cash=100.0,
+                    current_cash=100.0,
+                    total_equity=100.0,
+                    profit_loss=0.0,
+                    profit_loss_pct=0.0,
+                    commission_rate=0.01,
+                    slippage_rate=0.0,
+                    is_active=True,
+                )
+            )
+
+    scope, imported_domain = _domain()
+    empty_domain = replace(
+        imported_domain,
+        initial_cash=Decimal("100"),
+        initial_fees=Decimal("0"),
+        opening_positions=(),
+    )
+    binding = _binding(empty_domain)
+    binding.legacy_account_id = empty_account
+    service = PaperTradingService()
+    receipt = await prepare_managed_paper_cutover(
+        service,
+        empty_owner,
+        binding,
+        None,
+        target_worker=object(),
+    )
+
+    assert receipt.source_kind == "empty_account"
+    assert receipt.receipt_version == 1
+    assert receipt.source_import_receipt_id is None
+    assert receipt.source_import_generation is None
+    assert receipt.target_import_sha256 is None
+    assert (
+        receipt.source_order_count,
+        receipt.source_position_count,
+        receipt.source_trade_count,
+    ) == (0, 0, 0)
+    validated = await require_active_paper_cutover_receipt(
+        empty_account,
+        empty_owner,
+        binding,
+    )
+    assert validated.id == receipt.id
+
+
+@pytest.mark.asyncio
+async def test_managed_cutover_rejects_nonactive_import_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.legacy_paper_import_migration as import_migration
+
+    async def prepared_receipt(account_id: str) -> Any:
+        assert account_id == _SOURCE_ACCOUNT_ID
+        return SimpleNamespace(state="PREPARED")
+
+    monkeypatch.setattr(import_migration, "_read_source_receipt", prepared_receipt)
+    _, domain = _domain()
+    with pytest.raises(LegacyPaperInventoryError) as caught:
+        await prepare_managed_paper_cutover(
+            None,
+            _SOURCE_OWNER_ID,
+            _binding(domain),
+            None,
+            target_worker=object(),
+        )
+    assert caught.value.code == "LEGACY_IMPORT_NOT_ACTIVE"
+
+
+def test_import_cutover_preflight_rejects_wrong_owner_domain_scope_and_residual() -> None:
+    scope, domain = _domain()
+    binding = _binding(domain)
+    payload = _paper_binding_payload(binding)
+    row_fields = {
+        "state": "ACTIVE",
+        "receipt_version": 1,
+        "active_fence_key": _SOURCE_ACCOUNT_ID,
+        "legacy_account_id": _SOURCE_ACCOUNT_ID,
+        "owner_subject": _SOURCE_OWNER_ID,
+        "generation": 1,
+        "source_inventory_sha256": "a" * 64,
+        "target_import_sha256": "b" * 64,
+        "target_domain_sha256": domain.fingerprint,
+        "binding_sha256": paper_binding_fingerprint(binding),
+        "target_scope_key": scope.key,
+        "target_account_key": scope.account_key,
+        "cash_currency": "USDT",
+        "source_order_count": 1,
+        "source_position_count": 1,
+        "source_trade_count": 1,
+        "unallocated_equity_residual": "0",
+    }
+
+    _require_active_import_row_for_cutover(
+        SimpleNamespace(**row_fields),
+        owner_subject=_SOURCE_OWNER_ID,
+        binding_payload=payload,
+        scope=scope,
+        domain=domain,
+    )
+    invalid_facts = (
+        ({"owner_subject": "different-owner"}, _SOURCE_OWNER_ID, scope, domain,
+         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        ({"target_scope_key": "different-scope"}, _SOURCE_OWNER_ID, scope, domain,
+         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        ({"target_domain_sha256": "c" * 64}, _SOURCE_OWNER_ID, scope, domain,
+         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        ({"state": "PREPARED"}, _SOURCE_OWNER_ID, scope, domain,
+         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        ({"unallocated_equity_residual": "0.5"}, _SOURCE_OWNER_ID, scope, domain,
+         "LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE"),
+        ({}, "different-owner", scope, domain,
+         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        ({}, _SOURCE_OWNER_ID, SimpleNamespace(key="different-scope", account_key=scope.account_key), domain,
+         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+    )
+    for changes, owner, candidate_scope, candidate_domain, expected_code in invalid_facts:
+        with pytest.raises(LegacyPaperInventoryError) as caught:
+            _require_active_import_row_for_cutover(
+                SimpleNamespace(**{**row_fields, **changes}),
+                owner_subject=owner,
+                binding_payload=payload,
+                scope=candidate_scope,
+                domain=candidate_domain,
+            )
+        assert caught.value.code == expected_code
 
 
 @pytest.mark.asyncio

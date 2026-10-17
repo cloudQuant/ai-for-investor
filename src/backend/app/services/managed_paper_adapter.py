@@ -21,7 +21,6 @@ from app.services.legacy_paper_migration import (
     LegacyPaperInventoryError,
     assess_empty_account_cutover,
     inspect_stable_legacy_paper_account,
-    prepare_empty_account_cutover,
     require_active_paper_cutover_receipt,
 )
 
@@ -149,10 +148,18 @@ class ManagedPaperOrderAdapter:
         legacy_account_id: str,
         intent_id: str,
     ) -> dict[str, Any]:
-        _, binding, worker = self._resolve_access(subject, legacy_account_id)
+        access, binding, worker = self._resolve_access(subject, legacy_account_id)
+        import_binding = _paper_import_binding(
+            access, subject=subject, legacy_account_id=legacy_account_id, paper_binding=binding
+        )
         try:
             await require_active_paper_cutover_receipt(
-                legacy_account_id, subject, binding
+                legacy_account_id,
+                subject,
+                binding,
+                service_factory=self._legacy_service,
+                import_binding=import_binding,
+                target_worker=worker,
             )
         except LegacyPaperInventoryError as error:
             raise _cutover_error(error) from None
@@ -185,12 +192,23 @@ class ManagedPaperOrderAdapter:
         subject: str,
         legacy_account_id: str,
     ) -> dict[str, Any]:
-        """Fence a verified empty legacy account with one durable receipt."""
+        """Explicitly qualify the verified empty or imported source for managed use."""
 
-        _, binding, _ = self._resolve_access(subject, legacy_account_id)
+        access, binding, worker = self._resolve_access(subject, legacy_account_id)
+        import_binding = _paper_import_binding(
+            access, subject=subject, legacy_account_id=legacy_account_id, paper_binding=binding
+        )
         try:
-            receipt = await prepare_empty_account_cutover(
-                self._legacy_service(), subject, binding
+            from app.services.legacy_paper_import_migration import (
+                prepare_managed_paper_cutover,
+            )
+
+            receipt = await prepare_managed_paper_cutover(
+                self._legacy_service(),
+                subject,
+                binding,
+                import_binding,
+                target_worker=worker,
             )
         except LegacyPaperInventoryError as error:
             raise _cutover_error(error) from None
@@ -237,36 +255,55 @@ class ManagedPaperOrderAdapter:
         if normalized_quantity is None:
             raise ManagedPaperOrderError("INVALID_QUANTITY", status_code=422)
 
-        _, binding, worker = self._resolve_access(subject, legacy_account_id)
+        access, binding, worker = self._resolve_access(subject, legacy_account_id)
+        import_binding = _paper_import_binding(
+            access, subject=subject, legacy_account_id=legacy_account_id, paper_binding=binding
+        )
+        legacy_service = self._legacy_service()
         try:
             receipt = await require_active_paper_cutover_receipt(
-                legacy_account_id, subject, binding
+                legacy_account_id,
+                subject,
+                binding,
+                service_factory=lambda: legacy_service,
+                import_binding=import_binding,
+                target_worker=worker,
             )
-            inventory = await inspect_stable_legacy_paper_account(
-                self._legacy_service(), legacy_account_id, subject
-            )
+            source_kind = getattr(receipt, "source_kind", "empty_account")
+            if source_kind == "empty_account":
+                inventory = await inspect_stable_legacy_paper_account(
+                    legacy_service, legacy_account_id, subject
+                )
+                assessment = assess_empty_account_cutover(inventory, binding)
+                if not assessment.ready:
+                    raise ManagedPaperOrderError(
+                        "LEGACY_PAPER_CUTOVER_NOT_READY",
+                        status_code=409,
+                        details={
+                            "source": "legacy",
+                            "inventory_sha256": assessment.inventory_sha256,
+                            "order_count": assessment.order_count,
+                            "position_count": assessment.position_count,
+                            "trade_count": assessment.trade_count,
+                            "reasons": list(assessment.reasons),
+                        },
+                    )
+                if inventory.digest != receipt.source_inventory_sha256:
+                    raise ManagedPaperOrderError(
+                        "MANAGED_PAPER_LEGACY_INVENTORY_CHANGED",
+                        status_code=409,
+                        details={"source": "legacy", "receipt_id": receipt.id},
+                    )
+            elif source_kind == "imported_legacy":
+                # Imported source rows are retained read-only and already
+                # independently verified with the persisted AFI12/E handoff.
+                # The legacy service remains fail-closed; only the configured
+                # managed owner can receive the next order.
+                pass
+            else:
+                raise LegacyPaperInventoryError("MANAGED_PAPER_CUTOVER_BINDING_MISMATCH")
         except LegacyPaperInventoryError as error:
             raise _cutover_error(error) from None
-        assessment = assess_empty_account_cutover(inventory, binding)
-        if not assessment.ready:
-            raise ManagedPaperOrderError(
-                "LEGACY_PAPER_CUTOVER_NOT_READY",
-                status_code=409,
-                details={
-                    "source": "legacy",
-                    "inventory_sha256": assessment.inventory_sha256,
-                    "order_count": assessment.order_count,
-                    "position_count": assessment.position_count,
-                    "trade_count": assessment.trade_count,
-                    "reasons": list(assessment.reasons),
-                },
-            )
-        if inventory.digest != receipt.source_inventory_sha256:
-            raise ManagedPaperOrderError(
-                "MANAGED_PAPER_LEGACY_INVENTORY_CHANGED",
-                status_code=409,
-                details={"source": "legacy", "receipt_id": receipt.id},
-            )
 
         metadata_versions = _binding_value(binding, "instrument_metadata_versions")
         if not isinstance(metadata_versions, Mapping):
@@ -405,6 +442,38 @@ class ManagedPaperOrderAdapter:
 
             factory = PaperTradingService
         return factory()
+
+
+def _paper_import_binding(
+    access: Any,
+    *,
+    subject: str,
+    legacy_account_id: str,
+    paper_binding: Any,
+) -> Any | None:
+    """Return only the separate server-configured import binding, if present."""
+
+    bindings = getattr(access, "paper_legacy_import_bindings", None)
+    if bindings is None:
+        return None
+    if not isinstance(bindings, Mapping):
+        raise ManagedPaperOrderError("PAPER_SERVICE_NOT_CONFIGURED", status_code=503)
+    configured = bindings.get(legacy_account_id)
+    if configured is None:
+        return None
+    try:
+        from app.services.service_read.client import PaperLegacyImportBinding
+    except ImportError:
+        raise ManagedPaperOrderError("PAPER_SERVICE_NOT_CONFIGURED", status_code=503) from None
+    if (
+        type(configured) is not PaperLegacyImportBinding
+        or configured.owner_subject != subject
+        or configured.legacy_account_id != legacy_account_id
+        or configured.paper_binding is not paper_binding
+        or configured.scope_ref != _binding_value(paper_binding, "scope_ref")
+    ):
+        raise ManagedPaperOrderError("PAPER_SERVICE_NOT_CONFIGURED", status_code=503)
+    return configured
 
 
 def _project_managed_view(

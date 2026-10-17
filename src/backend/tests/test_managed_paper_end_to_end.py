@@ -884,14 +884,41 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
     assert migration_spec is not None and migration_spec.loader is not None
     migration = importlib.util.module_from_spec(migration_spec)
     migration_spec.loader.exec_module(migration)
+    import_migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20261016_legacy_paper_import.py"
+    )
+    import_migration_spec = importlib.util.spec_from_file_location(
+        "afi_test_legacy_paper_import_migration", import_migration_path
+    )
+    assert import_migration_spec is not None and import_migration_spec.loader is not None
+    import_migration = importlib.util.module_from_spec(import_migration_spec)
+    import_migration_spec.loader.exec_module(import_migration)
+    imported_cutover_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20261017_legacy_paper_import_cutover.py"
+    )
+    imported_cutover_spec = importlib.util.spec_from_file_location(
+        "afi_test_legacy_paper_import_cutover_migration", imported_cutover_path
+    )
+    assert imported_cutover_spec is not None and imported_cutover_spec.loader is not None
+    imported_cutover_migration = importlib.util.module_from_spec(imported_cutover_spec)
+    imported_cutover_spec.loader.exec_module(imported_cutover_migration)
 
     def apply_cutover_migration(sync_connection: Any) -> None:
         # create_all includes the ORM tables; exercise the actual revision DDL.
-        sync_connection.exec_driver_sql("DROP TABLE legacy_paper_writer_leases")
         sync_connection.exec_driver_sql("DROP TABLE legacy_paper_cutover_receipts")
+        sync_connection.exec_driver_sql("DROP TABLE legacy_paper_writer_leases")
+        sync_connection.exec_driver_sql("DROP TABLE legacy_paper_import_receipts")
         context = MigrationContext.configure(sync_connection)
         with Operations.context(context):
             migration.upgrade()
+            import_migration.upgrade()
+            imported_cutover_migration.upgrade()
 
     async with account_engine.begin() as connection:
         await connection.run_sync(apply_cutover_migration)

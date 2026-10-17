@@ -28,13 +28,16 @@ class AccountCreate(BaseModel):
 
 
 class ManagedPaperCutoverRequest(BaseModel):
-    """Require an explicit owner confirmation for the empty-account cutover."""
+    """Require explicit owner confirmation before managed-paper cutover."""
 
     model_config = ConfigDict(extra="forbid")
 
     confirmed: Literal[True] = Field(
         ...,
-        description="Must be true to fence this empty legacy paper account for managed execution.",
+        description=(
+            "Must be true to qualify either an empty legacy account or a previously imported, "
+            "zero-residual legacy paper account for managed execution."
+        ),
     )
 
 

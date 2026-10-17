@@ -45,9 +45,11 @@ from app.services.legacy_paper_migration import (
     _decimal,
     _identifier,
     _model_row,
+    _binding_value,
     _paper_binding_payload,
     inspect_stable_legacy_paper_account,
     paper_binding_fingerprint,
+    prepare_empty_account_cutover,
 )
 
 _MAX_PRESERVED_CONTEXT_BYTES = 8 * 1024 * 1024
@@ -967,6 +969,478 @@ def _check_execution_source_receipt(
     ):
         raise LegacyPaperImportError("TARGET_IMPORT_BINDING_MISMATCH")
     return receipt.state
+
+
+def _require_active_import_row_for_cutover(
+    row: Any,
+    *,
+    owner_subject: str,
+    binding_payload: Mapping[str, Any],
+    scope: Any,
+    domain: Any,
+) -> None:
+    account_id = binding_payload["legacy_account_id"]
+    residual = _decimal(getattr(row, "unallocated_equity_residual", None))
+    counts = tuple(
+        getattr(row, name, None)
+        for name in ("source_order_count", "source_position_count", "source_trade_count")
+    )
+    if (
+        getattr(row, "state", None) != "ACTIVE"
+        or getattr(row, "receipt_version", None) != 1
+        or getattr(row, "active_fence_key", None) != account_id
+        or getattr(row, "legacy_account_id", None) != account_id
+        or getattr(row, "owner_subject", None) != owner_subject
+        or type(getattr(row, "generation", None)) is not int
+        or row.generation <= 0
+        or type(getattr(row, "source_inventory_sha256", None)) is not str
+        or len(row.source_inventory_sha256) != 64
+        or type(getattr(row, "target_import_sha256", None)) is not str
+        or len(row.target_import_sha256) != 64
+        or type(getattr(row, "target_domain_sha256", None)) is not str
+        or row.target_domain_sha256 != domain.fingerprint
+        or type(getattr(row, "binding_sha256", None)) is not str
+        or type(getattr(row, "target_scope_key", None)) is not str
+        or row.target_scope_key != scope.key
+        or type(getattr(row, "target_account_key", None)) is not str
+        or row.target_account_key != scope.account_key
+        or getattr(row, "binding_sha256", None)
+        != hashlib.sha256(
+            _canonical_json(dict(binding_payload)).encode("utf-8")
+        ).hexdigest()
+        or row.cash_currency != binding_payload["cash_currency"]
+        or any(type(value) is not int or value < 0 for value in counts)
+        or sum(counts) <= 0
+    ):
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH")
+    if residual is None:
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH")
+    if residual != Decimal(0):
+        raise LegacyPaperInventoryError("LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE")
+
+
+def _require_target_import_active_for_cutover(
+    status: Any,
+    *,
+    imported: Any,
+    domain: Any,
+    scope: Any,
+) -> None:
+    if (
+        getattr(status, "owner_domain_exists", None) is not True
+        or getattr(status, "active_account_import_state", None) != "ACTIVE"
+    ):
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_TARGET_NOT_ACTIVE")
+    try:
+        state = _check_execution_source_receipt(
+            status, imported=imported, domain=domain, scope=scope
+        )
+        target_receipt = status.source_receipt
+        if target_receipt is None:
+            raise LegacyPaperInventoryError("LEGACY_IMPORT_TARGET_NOT_ACTIVE")
+        residual = _decimal(target_receipt.unallocated_equity_residual)
+    except LegacyPaperInventoryError:
+        raise
+    except LegacyPaperImportError as error:
+        raise LegacyPaperInventoryError(error.code) from None
+    if state != "ACTIVE" or residual != Decimal(0):
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_TARGET_NOT_ACTIVE")
+
+
+def _require_imported_cutover_receipt_matches(
+    cutover_receipt: Any,
+    import_receipt: Any,
+    *,
+    owner_subject: str,
+    binding_payload: Mapping[str, Any],
+    binding_sha256: str,
+    scope: Any,
+    domain: Any,
+) -> None:
+    """Bind explicit cutover permission to the exact active imported baseline."""
+
+    _require_active_import_row_for_cutover(
+        import_receipt,
+        owner_subject=owner_subject,
+        binding_payload=binding_payload,
+        scope=scope,
+        domain=domain,
+    )
+    source_counts = (
+        import_receipt.source_order_count,
+        import_receipt.source_position_count,
+        import_receipt.source_trade_count,
+    )
+    if (
+        getattr(cutover_receipt, "source_kind", None) != "imported_legacy"
+        or getattr(cutover_receipt, "state", None) != "ACTIVE"
+        or getattr(cutover_receipt, "receipt_version", None) != 2
+        or getattr(cutover_receipt, "legacy_account_id", None)
+        != binding_payload["legacy_account_id"]
+        or getattr(cutover_receipt, "owner_subject", None) != owner_subject
+        or getattr(cutover_receipt, "source_inventory_sha256", None)
+        != import_receipt.source_inventory_sha256
+        or getattr(import_receipt, "binding_sha256", None) != binding_sha256
+        or getattr(import_receipt, "target_domain_sha256", None)
+        != binding_payload["paper_domain_sha256"]
+        or getattr(cutover_receipt, "source_import_receipt_id", None) != import_receipt.id
+        or getattr(cutover_receipt, "source_import_generation", None)
+        != import_receipt.generation
+        or getattr(cutover_receipt, "target_import_sha256", None)
+        != import_receipt.target_import_sha256
+        or getattr(cutover_receipt, "source_order_count", None) != source_counts[0]
+        or getattr(cutover_receipt, "source_position_count", None) != source_counts[1]
+        or getattr(cutover_receipt, "source_trade_count", None) != source_counts[2]
+        or getattr(cutover_receipt, "binding_sha256", None) != binding_sha256
+        or getattr(cutover_receipt, "paper_domain_sha256", None)
+        != binding_payload["paper_domain_sha256"]
+        or getattr(cutover_receipt, "scope_ref", None) != binding_payload["scope_ref"]
+        or getattr(cutover_receipt, "account_ref", None) != binding_payload["account_ref"]
+        or getattr(cutover_receipt, "execution_domain_ref", None)
+        != binding_payload["execution_domain_ref"]
+        or getattr(cutover_receipt, "strategy_ref", None) != binding_payload["strategy_ref"]
+        or getattr(cutover_receipt, "initial_cash", None) != binding_payload["initial_cash"]
+        or getattr(cutover_receipt, "initial_fees", None) != binding_payload["initial_fees"]
+        or getattr(cutover_receipt, "fee_rate", None) != binding_payload["fee_rate"]
+    ):
+        raise LegacyPaperInventoryError("MANAGED_PAPER_CUTOVER_BINDING_MISMATCH")
+
+
+@dataclass(frozen=True, slots=True)
+class _VerifiedImportedPaperCutover:
+    import_receipt: LegacyPaperImportReceipt
+    imported: Any
+    binding_payload: Mapping[str, Any]
+    binding_sha256: str
+    scope: Any
+    domain: Any
+    inventory: LegacyPaperInventory
+
+
+async def _load_verified_import_for_cutover(
+    service: Any,
+    owner_subject: str,
+    paper_binding: Any,
+    import_binding: Any,
+    *,
+    target_worker: Any,
+) -> _VerifiedImportedPaperCutover:
+    """Revalidate the source receipt, target owner and immutable source rows."""
+
+    try:
+        from bt_api_execution.paper_legacy_import import PaperLegacyImportV1
+        from app.services.service_read.client import PaperLegacyImportBinding
+    except Exception:
+        raise LegacyPaperInventoryError("EXECUTION_IMPORT_CONTRACT_UNAVAILABLE") from None
+    if type(import_binding) is not PaperLegacyImportBinding:
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_BINDING_REQUIRED")
+    account_id = _binding_value(paper_binding, "legacy_account_id")
+    scope = _binding_value(paper_binding, "execution_scope")
+    domain = _binding_value(paper_binding, "paper_owner_domain")
+    if (
+        import_binding.owner_subject != owner_subject
+        or import_binding.legacy_account_id != account_id
+        or import_binding.paper_binding is not paper_binding
+        or import_binding.scope_ref != _binding_value(paper_binding, "scope_ref")
+    ):
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_BINDING_MISMATCH")
+    try:
+        binding_payload = _require_server_binding(paper_binding, scope, domain)
+    except LegacyPaperImportError as error:
+        raise LegacyPaperInventoryError(error.code) from None
+    binding_sha256 = paper_binding_fingerprint(paper_binding)
+    try:
+        row = await _read_source_receipt(account_id)
+    except LegacyPaperImportError as error:
+        raise LegacyPaperInventoryError(error.code) from None
+    if row is None:
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_RECEIPT_NOT_FOUND")
+    _require_active_import_row_for_cutover(
+        row,
+        owner_subject=owner_subject,
+        binding_payload=binding_payload,
+        scope=scope,
+        domain=domain,
+    )
+    try:
+        source_document = json.loads(row.source_snapshot_json)
+        imported = PaperLegacyImportV1.from_source_document(
+            source_account_id=row.legacy_account_id,
+            source_owner_id=row.owner_subject,
+            source_document=source_document,
+            cash_currency=row.cash_currency,
+            symbol_bindings=import_binding.symbol_bindings,
+        )
+        imported.validate_domain(scope, domain)
+        _require_source_receipt_matches(
+            row,
+            owner_subject=owner_subject,
+            imported=imported,
+            domain=domain,
+            scope=scope,
+            binding_sha256=binding_sha256,
+        )
+        counts_match = (
+            row.source_order_count == len(source_document["orders"])
+            and row.source_position_count == len(source_document["positions"])
+            and row.source_trade_count == len(source_document["trades"])
+        )
+        amounts_match = (
+            row.opening_cash == format(imported.opening_cash, "f")
+            and row.cumulative_fees == format(imported.cumulative_fees, "f")
+            and _decimal(row.unallocated_equity_residual)
+            == imported.unallocated_equity_residual
+            and imported.unallocated_equity_residual == Decimal(0)
+        )
+        if not counts_match or not amounts_match:
+            raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH")
+    except LegacyPaperInventoryError:
+        raise
+    except Exception:
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH") from None
+
+    inventory = await inspect_stable_legacy_paper_account(
+        service, account_id, owner_subject
+    )
+    if (
+        not inventory.complete
+        or inventory.digest != row.source_inventory_sha256
+        or inventory.order_count != row.source_order_count
+        or inventory.position_count != row.source_position_count
+        or inventory.trade_count != row.source_trade_count
+    ):
+        raise LegacyPaperInventoryError("MANAGED_PAPER_LEGACY_INVENTORY_CHANGED")
+    try:
+        status = await _execution_status(
+            target_worker,
+            account_id,
+            account_id,
+            account_key=scope.account_key,
+        )
+    except LegacyPaperImportError as error:
+        raise LegacyPaperInventoryError(error.code) from None
+    _require_target_import_active_for_cutover(
+        status, imported=imported, domain=domain, scope=scope
+    )
+    return _VerifiedImportedPaperCutover(
+        import_receipt=row,
+        imported=imported,
+        binding_payload=binding_payload,
+        binding_sha256=binding_sha256,
+        scope=scope,
+        domain=domain,
+        inventory=inventory,
+    )
+
+
+async def prepare_imported_legacy_paper_cutover(
+    service: Any,
+    owner_subject: str,
+    paper_binding: Any,
+    import_binding: Any,
+    *,
+    target_worker: Any,
+) -> LegacyPaperCutoverReceipt:
+    """Persist explicit confirmation for one already-active legacy import."""
+
+    facts = await _load_verified_import_for_cutover(
+        service,
+        owner_subject,
+        paper_binding,
+        import_binding,
+        target_worker=target_worker,
+    )
+    account_id = facts.import_receipt.legacy_account_id
+    try:
+        async with database.async_session_maker() as session:
+            async with session.begin():
+                account = await session.scalar(
+                    select(Account).where(Account.id == account_id).with_for_update()
+                )
+                if account is None:
+                    raise LegacyPaperInventoryError("LEGACY_ACCOUNT_NOT_FOUND")
+                if account.user_id != owner_subject:
+                    raise LegacyPaperInventoryError("LEGACY_OWNER_MISMATCH")
+
+                import_row = await session.scalar(
+                    select(LegacyPaperImportReceipt)
+                    .where(
+                        LegacyPaperImportReceipt.id == facts.import_receipt.id,
+                        LegacyPaperImportReceipt.legacy_account_id == account_id,
+                    )
+                    .with_for_update()
+                )
+                if import_row is None:
+                    raise LegacyPaperInventoryError("LEGACY_IMPORT_RECEIPT_NOT_FOUND")
+                _require_active_import_row_for_cutover(
+                    import_row,
+                    owner_subject=owner_subject,
+                    binding_payload=facts.binding_payload,
+                    scope=facts.scope,
+                    domain=facts.domain,
+                )
+                if (
+                    import_row.id != facts.import_receipt.id
+                    or import_row.source_inventory_sha256
+                    != facts.import_receipt.source_inventory_sha256
+                    or import_row.target_import_sha256
+                    != facts.import_receipt.target_import_sha256
+                    or import_row.generation != facts.import_receipt.generation
+                ):
+                    raise LegacyPaperInventoryError(
+                        "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"
+                    )
+                if await session.scalar(
+                    select(LegacyPaperWriterLease.id)
+                    .where(LegacyPaperWriterLease.account_id == account_id)
+                    .limit(1)
+                ) is not None:
+                    raise LegacyPaperInventoryError("LEGACY_WRITES_IN_PROGRESS")
+
+                locked, _, _ = await _source_snapshot_in_session(
+                    session, account, owner_subject=owner_subject
+                )
+                if (
+                    not locked.complete
+                    or locked.digest != facts.import_receipt.source_inventory_sha256
+                    or locked.digest != facts.inventory.digest
+                    or locked.order_count != import_row.source_order_count
+                    or locked.position_count != import_row.source_position_count
+                    or locked.trade_count != import_row.source_trade_count
+                ):
+                    raise LegacyPaperInventoryError("MANAGED_PAPER_LEGACY_INVENTORY_CHANGED")
+
+                existing = await session.scalar(
+                    select(LegacyPaperCutoverReceipt).where(
+                        LegacyPaperCutoverReceipt.legacy_account_id == account_id
+                    )
+                )
+                if existing is not None:
+                    _require_imported_cutover_receipt_matches(
+                        existing,
+                        import_row,
+                        owner_subject=owner_subject,
+                        binding_payload=facts.binding_payload,
+                        binding_sha256=facts.binding_sha256,
+                        scope=facts.scope,
+                        domain=facts.domain,
+                    )
+                    return existing
+
+                receipt = LegacyPaperCutoverReceipt(
+                    legacy_account_id=account_id,
+                    owner_subject=owner_subject,
+                    state="ACTIVE",
+                    receipt_version=2,
+                    source_inventory_sha256=import_row.source_inventory_sha256,
+                    source_kind="imported_legacy",
+                    source_import_receipt_id=import_row.id,
+                    source_import_generation=import_row.generation,
+                    target_import_sha256=import_row.target_import_sha256,
+                    binding_sha256=facts.binding_sha256,
+                    paper_domain_sha256=facts.binding_payload["paper_domain_sha256"],
+                    scope_ref=facts.binding_payload["scope_ref"],
+                    account_ref=facts.binding_payload["account_ref"],
+                    execution_domain_ref=facts.binding_payload["execution_domain_ref"],
+                    strategy_ref=facts.binding_payload["strategy_ref"],
+                    initial_cash=facts.binding_payload["initial_cash"],
+                    initial_fees=facts.binding_payload["initial_fees"],
+                    fee_rate=facts.binding_payload["fee_rate"],
+                    source_order_count=import_row.source_order_count,
+                    source_position_count=import_row.source_position_count,
+                    source_trade_count=import_row.source_trade_count,
+                )
+                session.add(receipt)
+                await session.flush()
+                return receipt
+    except LegacyPaperInventoryError:
+        raise
+    except IntegrityError:
+        existing = await _read_cutover_receipt(account_id)
+        if existing is None:
+            raise LegacyPaperInventoryError("LEGACY_PAPER_CUTOVER_CONFLICT") from None
+        _require_imported_cutover_receipt_matches(
+            existing,
+            facts.import_receipt,
+            owner_subject=owner_subject,
+            binding_payload=facts.binding_payload,
+            binding_sha256=facts.binding_sha256,
+            scope=facts.scope,
+            domain=facts.domain,
+        )
+        return existing
+    except Exception:
+        raise LegacyPaperInventoryError("LEGACY_PAPER_CUTOVER_STORE_UNAVAILABLE") from None
+
+
+async def require_imported_paper_cutover_qualification(
+    cutover_receipt: Any,
+    service: Any,
+    owner_subject: str,
+    paper_binding: Any,
+    import_binding: Any,
+    *,
+    target_worker: Any,
+) -> None:
+    """Recheck an explicit imported cutover against source and current E owner."""
+
+    facts = await _load_verified_import_for_cutover(
+        service,
+        owner_subject,
+        paper_binding,
+        import_binding,
+        target_worker=target_worker,
+    )
+    _require_imported_cutover_receipt_matches(
+        cutover_receipt,
+        facts.import_receipt,
+        owner_subject=owner_subject,
+        binding_payload=facts.binding_payload,
+        binding_sha256=facts.binding_sha256,
+        scope=facts.scope,
+        domain=facts.domain,
+    )
+
+
+async def prepare_managed_paper_cutover(
+    service: Any,
+    owner_subject: str,
+    paper_binding: Any,
+    import_binding: Any | None,
+    *,
+    target_worker: Any,
+) -> Any:
+    """Preserve empty cutover and explicitly confirm an ACTIVE import only."""
+
+    account_id = _binding_value(paper_binding, "legacy_account_id")
+    try:
+        row = await _read_source_receipt(account_id)
+    except LegacyPaperImportError as error:
+        raise LegacyPaperInventoryError(error.code) from None
+    if row is None:
+        return await prepare_empty_account_cutover(service, owner_subject, paper_binding)
+    if row.state != "ACTIVE":
+        raise LegacyPaperInventoryError("LEGACY_IMPORT_NOT_ACTIVE")
+    return await prepare_imported_legacy_paper_cutover(
+        service,
+        owner_subject,
+        paper_binding,
+        import_binding,
+        target_worker=target_worker,
+    )
+
+
+async def _read_cutover_receipt(account_id: str) -> LegacyPaperCutoverReceipt | None:
+    try:
+        async with database.async_session_maker() as session:
+            return await session.scalar(
+                select(LegacyPaperCutoverReceipt).where(
+                    LegacyPaperCutoverReceipt.legacy_account_id == account_id,
+                    LegacyPaperCutoverReceipt.state == "ACTIVE",
+                )
+            )
+    except Exception:
+        raise LegacyPaperInventoryError("LEGACY_PAPER_CUTOVER_STORE_UNAVAILABLE") from None
 
 
 async def migrate_nonempty_legacy_paper_account(
