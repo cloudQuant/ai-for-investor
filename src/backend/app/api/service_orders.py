@@ -105,12 +105,22 @@ async def submit_manual_order(
     identity = access.application_identity
     if binding is None or identity is None:
         raise _not_configured()
+    metadata_version = binding.instrument_metadata_versions.get(request.instrument)
+    if metadata_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "INSTRUMENT_METADATA_VERSION_NOT_CONFIGURED",
+                "message": "The trusted order deployment has no metadata version for this instrument.",
+            },
+        )
 
     intent_facts: dict[str, object] = {
         "scope_ref": request.scope_ref,
         "account_ref": binding.account_ref,
         "manual_book_ref": binding.manual_book_ref,
         "instrument": request.instrument,
+        "metadata_version": metadata_version,
         "side": request.side,
         "position_effect": request.position_effect,
         "order_type": request.order_type,
@@ -153,7 +163,7 @@ async def submit_manual_order(
         "price": decimal_text(request.price),
         "time_in_force": request.time_in_force,
         "reduce_only": request.reduce_only,
-        "metadata_version": "unknown",
+        "metadata_version": metadata_version,
         "deadline_ns": None,
         "tags": {},
     }

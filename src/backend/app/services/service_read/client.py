@@ -13,6 +13,7 @@ like its other optional integrations.
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -135,6 +136,8 @@ _STREAM_FIELDS = frozenset(
     }
 )
 _METRIC_NAME_LIMIT = 64
+_MAX_ORDER_INSTRUMENT_METADATA_VERSIONS = 256
+_ORDER_INSTRUMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,191}$")
 
 
 @dataclass(frozen=True)
@@ -207,6 +210,9 @@ class OrderSubmitBinding:
     scope_ref: str
     account_ref: str
     manual_book_ref: str
+    instrument_metadata_versions: Mapping[str, str] = field(
+        default_factory=dict, repr=False, hash=False
+    )
 
     def __post_init__(self) -> None:
         for value, code in (
@@ -217,6 +223,31 @@ class OrderSubmitBinding:
         ):
             if type(value) is not str or not value or value != value.strip():
                 raise ServiceReadContractError(code)
+        raw_versions = self.instrument_metadata_versions
+        if (
+            not isinstance(raw_versions, Mapping)
+            or len(raw_versions) > _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS
+        ):
+            raise ServiceReadContractError("INVALID_INSTRUMENT_METADATA_VERSIONS")
+        copied_versions: dict[str, str] = {}
+        for instrument, version in raw_versions.items():
+            if (
+                type(instrument) is not str
+                or not _ORDER_INSTRUMENT_RE.fullmatch(instrument)
+                or type(version) is not str
+                or not version
+                or version != version.strip()
+                or len(version) > 256
+                or not version.isprintable()
+                or version == "*"
+            ):
+                raise ServiceReadContractError("INVALID_INSTRUMENT_METADATA_VERSIONS")
+            copied_versions[instrument] = version
+        object.__setattr__(
+            self,
+            "instrument_metadata_versions",
+            MappingProxyType(copied_versions),
+        )
 
 
 @dataclass(frozen=True, slots=True)

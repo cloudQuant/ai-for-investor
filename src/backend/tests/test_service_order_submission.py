@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import os
 import tempfile
 
@@ -40,7 +41,11 @@ _BaseSettings.__init__ = _settings_without_dotenv
 os.environ = dict(_SYNTHETIC_ENV)  # noqa: B003 - prevent ambient/private settings reads
 try:
     import app.models  # noqa: F401,E402
-    from app.api.service_orders import ManualOrderRequest, _parse_submit_reply  # noqa: E402
+    from app.api.service_orders import (  # noqa: E402
+        ManualOrderRequest,
+        _parse_submit_reply,
+        submit_manual_order,
+    )
     from app.db.database import Base, async_session_maker, engine  # noqa: E402
     from app.models.permission import ROLE_PERMISSIONS, Permission, Role  # noqa: E402
     from app.models.service_order_operation import ServiceOrderOperation  # noqa: E402
@@ -55,6 +60,7 @@ try:
         _create_runtime,
         _parse_deployment,
     )
+    from app.services.service_read.client import OrderSubmitBinding  # noqa: E402
 finally:
     _BaseSettings.__init__ = _ORIGINAL_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore process environment
@@ -164,6 +170,7 @@ def _manual_order_profile() -> dict:
             "mount": "application.orders",
             "account_ref": "account-a",
             "manual_book_ref": "manual-book-a",
+            "instrument_metadata_versions": {"BTC-USDT": "manual-order-instrument-v1"},
         }
     }
     profile["client_config"]["clients"]["execution"]["settings"]["bindings"][0][
@@ -181,6 +188,30 @@ def test_manual_order_profile_requests_only_normal_submit_operation():
     assert configured.scope_ref == "manual-current"
     assert configured.account_ref == "account-a"
     assert configured.manual_book_ref == "manual-book-a"
+    assert configured.instrument_metadata_versions == {
+        "BTC-USDT": "manual-order-instrument-v1"
+    }
+    profile["order_submit_bindings"]["manual-current"]["instrument_metadata_versions"][
+        "BTC-USDT"
+    ] = "mutated-after-parse"
+    assert configured.instrument_metadata_versions["BTC-USDT"] == (
+        "manual-order-instrument-v1"
+    )
+    with pytest.raises(TypeError):
+        configured.instrument_metadata_versions["BTC-USDT"] = "caller-mutation"
+
+    mutable_versions = {"BTC-USDT": "manual-order-instrument-v1"}
+    direct_binding = OrderSubmitBinding(
+        mount="application.orders",
+        scope_ref="manual-current",
+        account_ref="account-a",
+        manual_book_ref="manual-book-a",
+        instrument_metadata_versions=mutable_versions,
+    )
+    mutable_versions["BTC-USDT"] = "mutated-after-construction"
+    assert direct_binding.instrument_metadata_versions["BTC-USDT"] == (
+        "manual-order-instrument-v1"
+    )
 
     runtime = _create_runtime(parsed[0])
     try:
@@ -221,6 +252,39 @@ def test_manual_order_profile_rejects_nonmanual_or_expanded_grants(mutate, expec
     assert error.value.code == expected_code
 
 
+def test_manual_order_profile_keeps_empty_metadata_map_startup_compatible():
+    profile = _manual_order_profile()
+    profile["order_submit_bindings"]["manual-current"].pop(
+        "instrument_metadata_versions"
+    )
+    parsed = _parse_deployment(_document([profile]))
+    assert (
+        parsed[0]
+        .order_submit_bindings["manual-current"]
+        .instrument_metadata_versions
+        == {}
+    )
+
+
+@pytest.mark.parametrize(
+    "versions",
+    (
+        "BTC-USDT",
+        {"*": "manual-order-instrument-v1"},
+        {"BTC-USDT": ""},
+        {"BTC USDT": "manual-order-instrument-v1"},
+        {f"SYNTH-{index}": "manual-order-instrument-v1" for index in range(257)},
+    ),
+)
+def test_manual_order_profile_rejects_invalid_instrument_metadata_versions(versions):
+    profile = _manual_order_profile()
+    profile["order_submit_bindings"]["manual-current"][
+        "instrument_metadata_versions"
+    ] = versions
+    with pytest.raises(ServiceReadDeploymentError):
+        _parse_deployment(_document([profile]))
+
+
 def test_manual_order_request_rejects_client_authority_and_requires_valid_terms():
     request = ManualOrderRequest.model_validate(
         {
@@ -245,6 +309,19 @@ def test_manual_order_request_rejects_client_authority_and_requires_valid_terms(
                 "quantity": "1",
                 "price": "50000",
                 "actor_ref": "forged-actor",
+            }
+        )
+    with pytest.raises(ValidationError):
+        ManualOrderRequest.model_validate(
+            {
+                "scope_ref": "manual-current",
+                "instrument": "BTC-USDT",
+                "side": "BUY",
+                "position_effect": "OPEN",
+                "order_type": "LIMIT",
+                "quantity": "1",
+                "price": "50000",
+                "metadata_version": "forged-version",
             }
         )
     with pytest.raises(ValidationError):
@@ -417,6 +494,179 @@ def test_manual_order_parser_accepts_actual_sdk_call_result(tmp_path):
     finally:
         runtime.close()
         registry.close()
+
+
+@pytest.mark.asyncio
+async def test_manual_submit_uses_trusted_metadata_and_binds_it_to_idempotency(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    import app.api.service_orders as service_orders
+
+    class Worker:
+        def __init__(self):
+            self.calls = []
+
+        async def submit_manual_order(self, scope_ref, arguments):
+            self.calls.append((scope_ref, dict(arguments)))
+            intent_id = arguments["intent_id"]
+            return {
+                "ok": True,
+                "code": "OK",
+                "result": {
+                    "found": True,
+                    "record": {
+                        "intent_id": intent_id,
+                        "state": "ACKED",
+                        "provider_order_id": f"provider-{intent_id}",
+                    },
+                },
+            }
+
+    worker = Worker()
+    identity = SimpleNamespace(
+        principal_ref="manual-order-principal",
+        actor_ref="application-a",
+        delegate_ref="manual-order-delegate",
+    )
+    access = SimpleNamespace(
+        order_submit_bindings={
+            "manual-current": OrderSubmitBinding(
+                mount="application.orders",
+                scope_ref="manual-current",
+                account_ref="account-a",
+                manual_book_ref="manual-book-a",
+                instrument_metadata_versions={
+                    "BTC-USDT": "manual-order-instrument-v1"
+                },
+            )
+        },
+        application_identity=identity,
+        worker=worker,
+    )
+    monkeypatch.setattr(service_orders, "_resolve_access", lambda *_args: access)
+    request = ManualOrderRequest.model_validate(
+        {
+            "scope_ref": "manual-current",
+            "instrument": "BTC-USDT",
+            "side": "BUY",
+            "position_effect": "OPEN",
+            "order_type": "LIMIT",
+            "quantity": "1",
+            "price": "10",
+        }
+    )
+    current_user = type("User", (), {"sub": "owner-subject"})()
+
+    async with async_session_maker() as db:
+        first = await submit_manual_order(
+            request,
+            idempotency_key="metadata-version-replay",
+            current_user=current_user,
+            db=db,
+        )
+        assert first["service_code"] == "OK"
+        assert worker.calls[0][1]["metadata_version"] == "manual-order-instrument-v1"
+        first_operation = (
+            await db.execute(select(ServiceOrderOperation))
+        ).scalar_one()
+        first_fingerprint = first_operation.request_sha256
+        first_intent_id = first_operation.intent_id
+
+        access.order_submit_bindings["manual-current"] = OrderSubmitBinding(
+            mount="application.orders",
+            scope_ref="manual-current",
+            account_ref="account-a",
+            manual_book_ref="manual-book-a",
+            instrument_metadata_versions={"BTC-USDT": "manual-order-instrument-v2"},
+        )
+        with pytest.raises(HTTPException) as conflict:
+            await submit_manual_order(
+                request,
+                idempotency_key="metadata-version-replay",
+                current_user=current_user,
+                db=db,
+            )
+        assert conflict.value.status_code == 409
+        assert conflict.value.detail["code"] == "IDEMPOTENCY_CONFLICT"
+        assert len(worker.calls) == 1
+        persisted = (
+            await db.execute(select(ServiceOrderOperation))
+        ).scalar_one()
+        assert persisted.intent_id == first_intent_id
+        assert persisted.request_sha256 == first_fingerprint
+
+
+@pytest.mark.parametrize(
+    "versions",
+    ({}, {"ETH-USDT": "manual-order-instrument-v1"}),
+)
+@pytest.mark.asyncio
+async def test_manual_submit_missing_metadata_fails_before_reservation_or_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    versions: Mapping[str, str],
+):
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    import app.api.service_orders as service_orders
+
+    class Worker:
+        calls = 0
+
+        async def submit_manual_order(self, _scope_ref, _arguments):
+            self.calls += 1
+            raise AssertionError("missing trusted metadata must fail before SDK dispatch")
+
+    worker = Worker()
+    access = SimpleNamespace(
+        order_submit_bindings={
+            "manual-current": OrderSubmitBinding(
+                mount="application.orders",
+                scope_ref="manual-current",
+                account_ref="account-a",
+                manual_book_ref="manual-book-a",
+                instrument_metadata_versions=versions,
+            )
+        },
+        application_identity=SimpleNamespace(
+            principal_ref="manual-order-principal",
+            actor_ref="application-a",
+            delegate_ref="manual-order-delegate",
+        ),
+        worker=worker,
+    )
+    monkeypatch.setattr(service_orders, "_resolve_access", lambda *_args: access)
+    request = ManualOrderRequest.model_validate(
+        {
+            "scope_ref": "manual-current",
+            "instrument": "BTC-USDT",
+            "side": "BUY",
+            "position_effect": "OPEN",
+            "order_type": "LIMIT",
+            "quantity": "1",
+            "price": "10",
+        }
+    )
+    current_user = type("User", (), {"sub": "owner-subject"})()
+    async with async_session_maker() as db:
+        with pytest.raises(HTTPException) as missing:
+            await submit_manual_order(
+                request,
+                idempotency_key="missing-metadata",
+                current_user=current_user,
+                db=db,
+            )
+        assert missing.value.status_code == 503
+        assert missing.value.detail["code"] == (
+            "INSTRUMENT_METADATA_VERSION_NOT_CONFIGURED"
+        )
+        assert worker.calls == 0
+        assert (await db.execute(select(ServiceOrderOperation))).scalars().all() == []
 
 
 def test_manual_submission_permission_excludes_guest_and_approval_admin():

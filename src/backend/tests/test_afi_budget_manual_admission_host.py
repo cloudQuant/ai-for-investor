@@ -84,7 +84,7 @@ _SERVICE_TRANSPORT_REF = "afi-budget-risk-listener-v1"
 _APP_TRANSPORT_REF = "afi-budget-application-connect-v1"
 _EXCHANGE = "PAPER___SPOT"
 _INSTRUMENT = "BTC-USDT"
-_METADATA_VERSION = "unknown"
+_METADATA_VERSION = "afi-budget-risk-metadata-v1"
 _CURRENCY = "USD"
 _METRIC = "max_increase_notional"
 _MEMBERSHIP_SHA256 = "1" * 64
@@ -470,6 +470,9 @@ def _application_profile(
                 "mount": "application.orders",
                 "account_ref": _ACCOUNT,
                 "manual_book_ref": _MANUAL_BOOK,
+                "instrument_metadata_versions": {
+                    _INSTRUMENT: _METADATA_VERSION
+                },
             }
         },
         "monitor_bindings": {},

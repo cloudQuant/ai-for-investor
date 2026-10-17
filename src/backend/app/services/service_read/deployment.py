@@ -35,6 +35,7 @@ from app.services.service_read.client import (
     PaperSubmitBinding,
     PAPER_CONTROL_MODES,
     RiskPolicyBudgetBinding,
+    _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS,
     PAPER_LEGACY_IMPORT_OPERATIONS,
 )
 from app.services.service_read.session import SdkServiceReadSession
@@ -854,13 +855,31 @@ def _parse_order_submit_bindings(
     result: dict[str, OrderSubmitBinding] = {}
     for scope_ref, raw_binding in raw.items():
         scope_ref = _identifier(scope_ref)
-        binding = _exact_mapping(raw_binding, {"mount", "account_ref", "manual_book_ref"})
+        base_fields = {"mount", "account_ref", "manual_book_ref"}
+        fields_with_metadata = base_fields | {"instrument_metadata_versions"}
+        if type(raw_binding) is not dict or set(raw_binding) not in (
+            base_fields,
+            fields_with_metadata,
+        ):
+            raise ServiceReadDeploymentError("INVALID_ORDER_SUBMIT_BINDINGS")
+        binding = raw_binding
         try:
+            raw_versions = binding.get("instrument_metadata_versions", {})
+            if (
+                type(raw_versions) is not dict
+                or len(raw_versions) > _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS
+            ):
+                raise ServiceReadDeploymentError("INVALID_ORDER_SUBMIT_BINDINGS")
+            metadata_versions = {
+                _identifier(instrument): _identifier(version)
+                for instrument, version in raw_versions.items()
+            }
             parsed = OrderSubmitBinding(
                 mount=_identifier(binding["mount"]),
                 scope_ref=scope_ref,
                 account_ref=_identifier(binding["account_ref"]),
                 manual_book_ref=_identifier(binding["manual_book_ref"]),
+                instrument_metadata_versions=metadata_versions,
             )
             scope = scopes.get(scope_ref)
             if (

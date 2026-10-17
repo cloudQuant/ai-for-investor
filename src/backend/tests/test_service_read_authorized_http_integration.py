@@ -4638,6 +4638,7 @@ def _manual_order_deployment_profile(
                 "mount": "application.orders",
                 "account_ref": account_ref,
                 "manual_book_ref": manual_book_ref,
+                "instrument_metadata_versions": {"BTC-USDT": "instrument-v1"},
             }
         },
         "monitor_bindings": {},
