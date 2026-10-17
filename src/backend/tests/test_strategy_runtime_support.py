@@ -1041,6 +1041,124 @@ class TestWorkspaceUnitRuntime:
         assert list(dataframe.index.strftime("%Y-%m-%d")) == ["2024-01-01", "2024-01-02"]
         assert len(csv_sources) == 1
 
+    def test_generated_runner_uses_managed_store_only_for_server_profile(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Service runs build the normal managed broker; offline runs keep cash config."""
+        import backtrader as bt
+        from backtrader.brokers.bbroker import BackBroker
+        from backtrader.brokers.btapibroker import BtApiBroker
+        from backtrader.stores.btapistore import BtApiStore
+
+        runtime_dir = tmp_path / "workspace_units" / "ws" / "unit"
+        template_dir = tmp_path / "template"
+        csv_dir = tmp_path / "csv"
+        runtime_dir.mkdir(parents=True)
+        template_dir.mkdir()
+        csv_dir.mkdir()
+        (csv_dir / "SYNTH.csv").write_text(
+            "datetime,open,high,low,close,volume,openinterest\n"
+            "2024-01-01T00:00:00Z,10,11,9,10,1,0\n"
+            "2024-01-02T00:00:00Z,10,12,9,11,1,0\n",
+            encoding="utf-8",
+        )
+        strategy_source = (
+            "import backtrader as bt\n"
+            "class GeneratedStrategy(bt.Strategy):\n"
+            "    pass\n"
+        )
+        (runtime_dir / "strategy_generated.py").write_text(
+            strategy_source, encoding="utf-8"
+        )
+        (template_dir / "strategy_offline.py").write_text(
+            strategy_source, encoding="utf-8"
+        )
+
+        def write_config(strategy_module: str, initial_cash: float) -> None:
+            (runtime_dir / "config.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "workspace_unit": {
+                            "template_dir": str(template_dir),
+                            "strategy_module": strategy_module,
+                        },
+                        "data": {
+                            "directory_path": str(csv_dir),
+                            "symbol": "SYNTH",
+                            "timeframe": "1d",
+                            "use_end_date": False,
+                        },
+                        "backtest": {"initial_cash": initial_cash},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        captured: list[tuple[object, object, float, float]] = []
+
+        def capture_before_run(cerebro: object, *args: object, **kwargs: object) -> list[object]:
+            broker = cerebro.getbroker()
+            store = getattr(broker, "store", None)
+            captured.append((broker, store, broker.getcash(), broker.getvalue()))
+            return []
+
+        monkeypatch.setattr(bt.Cerebro, "run", capture_before_run)
+        autostart_values: list[object] = []
+        original_store_init = BtApiStore.__init__
+
+        def record_store_init(self: object, *args: object, **kwargs: object) -> None:
+            autostart_values.append(kwargs.get("autostart"))
+            original_store_init(self, *args, **kwargs)
+
+        monkeypatch.setattr(BtApiStore, "__init__", record_store_init)
+        monkeypatch.setenv("AFI_SERVICE_EXECUTION_PROFILE_REF", "server-selected-profile")
+        monkeypatch.delenv("AFI_SERVICE_EXECUTION_PAPER_RUNTIME_SHA256", raising=False)
+        monkeypatch.delenv("AFI_SERVICE_EXECUTION_PAPER_STRATEGY_SOURCE_SHA256", raising=False)
+        write_config("strategy_generated.py", 987654.0)
+
+        def execute_runner(module_name: str) -> tuple[object, float]:
+            runner_module = ModuleType(module_name)
+            runner_module.__file__ = str(runtime_dir / "run.py")
+            sys.modules[module_name] = runner_module
+            try:
+                exec(workspace_unit_runtime._UNIT_RUN_PY, runner_module.__dict__)
+                return runner_module.__dict__["run"]()
+            finally:
+                sys.modules.pop(module_name, None)
+                sys.modules.pop("strategy_generated", None)
+                sys.modules.pop("strategy_offline", None)
+
+        service_results, service_final_value = execute_runner("managed_runner_test")
+
+        assert service_results == []
+        assert service_final_value == 0.0
+        service_broker, service_store, service_cash, service_value = captured[-1]
+        assert isinstance(service_broker, BtApiBroker)
+        assert isinstance(service_store, BtApiStore)
+        assert service_broker.store is service_store
+        assert service_store.provider == "okx"
+        assert autostart_values == [False]
+        assert service_store._started is False
+        assert service_store.is_connected is False
+        assert service_store._api.connected is False
+        assert not hasattr(service_store._api, "get_balance")
+        assert not hasattr(service_store._api, "make_order")
+        assert service_store._cash == service_store._value == 0.0
+        assert service_broker._cash == service_broker._value == 0.0
+        assert service_cash == service_value == 0.0
+        assert service_broker._service_execution_session is None
+
+        monkeypatch.delenv("AFI_SERVICE_EXECUTION_PROFILE_REF")
+        write_config("strategy_offline.py", 1234.0)
+        offline_results, offline_final_value = execute_runner("offline_runner_test")
+
+        assert offline_results == []
+        offline_broker, offline_store, offline_cash, offline_value = captured[-1]
+        assert isinstance(offline_broker, BackBroker)
+        assert offline_store is None
+        assert offline_cash == offline_value == 1234.0
+        assert offline_final_value == 1234.0
+
     def test_verified_binding_descriptor_survives_path_replacement(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):

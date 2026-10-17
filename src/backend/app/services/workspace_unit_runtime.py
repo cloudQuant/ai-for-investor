@@ -434,6 +434,61 @@ _UNIT_RUN_PY = textwrap.dedent(
         )
 
 
+    class _ServiceExecutionLocalClient:
+        '''Inert local Store leaf for a trusted managed-execution profile.
+
+        ServiceExecutionAdapter owns order writes.  This object only lets the
+        ordinary BtApiStore/BtApiBroker lifecycle run without creating a
+        direct provider client or inventing an account balance.
+        '''
+
+        def __init__(self):
+            self.connected = False
+
+        def connect(self):
+            self.connected = True
+
+        def disconnect(self):
+            self.connected = False
+
+        def get_positions(self):
+            return []
+
+        def fetch_open_orders(self):
+            return []
+
+
+    def _configure_service_execution_broker(cerebro):
+        '''Attach the managed Backtrader broker only for a server profile run.'''
+
+        if not os.environ.get('AFI_SERVICE_EXECUTION_PROFILE_REF', '').strip():
+            return None
+        from backtrader.stores.btapistore import BtApiStore
+
+        # The server-selected profile supplies the SDK runtime later, through
+        # run_configured_cerebro.  Keep this Store local and unstarted until
+        # ServiceExecutionSession attaches its validated adapter.
+        store = BtApiStore(
+            provider='okx',
+            api=_ServiceExecutionLocalClient(),
+            cash=0.0,
+            value=0.0,
+            autostart=False,
+        )
+        broker = store.getbroker(
+            cash=0.0,
+            value=0.0,
+            validation_enabled=False,
+            cash_check_enabled=False,
+            flatten_on_stop=False,
+            account_refresh_interval=3600.0,
+            positions_refresh_interval=3600.0,
+            open_orders_refresh_interval=3600.0,
+        )
+        cerebro.setbroker(broker)
+        return broker
+
+
     def load_config() -> dict:
         with (BASE_DIR / 'config.yaml').open('r', encoding='utf-8') as handle:
             return yaml.safe_load(handle) or {}
@@ -1217,11 +1272,13 @@ _UNIT_RUN_PY = textwrap.dedent(
         cerebro = bt.Cerebro(
             stdstats=_safe_bool(live_cfg.get('stdstats', simulate_cfg.get('stdstats')), False)
         )
+        service_execution_broker = _configure_service_execution_broker(cerebro)
         name = str(data_cfg.get('symbol') or 'DATA')
         cerebro.adddata(feed_class(dataname=df), name=name)
         _apply_commission_info(cerebro, config, name)
         backtest_cfg = config.get('backtest') or {}
-        cerebro.broker.setcash(_safe_float(backtest_cfg.get('initial_cash'), 100000.0))
+        if service_execution_broker is None:
+            cerebro.broker.setcash(_safe_float(backtest_cfg.get('initial_cash'), 100000.0))
         cerebro.addstrategy(strategy_class, **params)
         forced_log_dir = os.environ.get('BACKTRADER_LOG_DIR', '').strip()
         log_dir = Path(forced_log_dir) if forced_log_dir else (BASE_DIR / 'logs')
