@@ -13,7 +13,10 @@ import copy
 import hashlib
 import importlib
 import json
+import os
+import subprocess
 import sys
+import sysconfig
 import threading
 import time
 import uuid
@@ -42,6 +45,46 @@ from app.services.workspace import units as workspace_units  # noqa: E402
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _BACKTRADER_ROOT = _REPOSITORY_ROOT.parent / "backtrader"
 _BT_FIXTURE_MODULE = "test_btapi_strategy_execution_callbacks_local_process"
+_BT_SOURCE_COMMIT = "4f3e6a1ca3c41c1e5a726d11cce162faec25b140"
+_BT_FIXTURE_SOURCE = (
+    "tests/integration/test_btapi_strategy_execution_callbacks_local_process.py",
+    28_459,
+    "4cf0f713aceeaa7b1b7d4ac2820aa1dd4b6eb3a9b2ecfd5504a25ff846e70ea0",
+)
+_BT_FAKE_CLIENT_SOURCE = (
+    "tests/fixtures/fake_btapi.py",
+    7_619,
+    "2668398f779b51196c7c4c249fc502a2d2eb7a81c5fe1c8d56b5572c3770f14b",
+)
+_BT_FIXTURE_TRANSFORMED_SIZE = 29_805
+_BT_FIXTURE_TRANSFORMED_SHA256 = (
+    "ea906a96c9735d8d4602daf0d3605c1474a27d5337954bd5fde9c7a167fc5616"
+)
+_BT_FIXTURE_ORIGIN_EXTENSION = (
+    b"\n\n# AFI's isolated-wheel acceptance adds an exact Backtrader origin assertion.\n"
+    b"_afi_original_loaded_source_origins = _loaded_source_origins\n"
+    b"_afi_original_assert_source_origins = _assert_source_origins\n\n"
+    b"def _loaded_source_origins():\n"
+    b"    origins = _afi_original_loaded_source_origins()\n"
+    b"    origins['backtrader'] = {'package': str(Path(bt.__file__).resolve())}\n"
+    b"    return origins\n\n"
+    b"def _assert_source_origins(origins):\n"
+    b"    expected = os.environ.get('AFI_TEST_BACKTRADER_SITE_ROOT')\n"
+    b"    actual = origins.get('backtrader', {}).get('package')\n"
+    b"    if not expected or not actual:\n"
+    b"        raise AssertionError('the isolated Backtrader site-packages root is unavailable')\n"
+    b"    if not Path(actual).resolve().is_relative_to(Path(expected).resolve()):\n"
+    b"        raise AssertionError('the ServiceHost child imported Backtrader "
+    b"outside site-packages')\n"
+    b"    inherited = {name: value for name, value in origins.items() if name != 'backtrader'}\n"
+    b"    for package, modules in inherited.items():\n"
+    b"        for name, source_path in modules.items():\n"
+    b"            if not Path(source_path).resolve().is_relative_to(Path(expected).resolve()):\n"
+    b"                raise AssertionError(f'{package}.{name} did not load from site-packages')\n"
+    b"    _afi_original_assert_source_origins(inherited)\n"
+    b"    return origins\n"
+)
+_BT_ORIGIN_MARKER = "AFI_INSTALLED_PACKAGE_ORIGINS:"
 _PROFILE_REF = "afi-test-profile"
 _OWNER_PROFILE_REF = "afi-test-owner"
 _STRATEGY_ID = "strategy.synthetic.afi-service"
@@ -66,20 +109,48 @@ _INTENT_CONTRACT_REF = "bt-cerebro-fill-metadata-r1"
 _ORDER_QUERY_MARKER = "AFI_SERVICE_ORDER_QUERY_OK:FILLED"
 
 
-def _load_r249_host_fixture():
-    if not (_BACKTRADER_ROOT / "tests" / "integration" / f"{_BT_FIXTURE_MODULE}.py").is_file():
-        pytest.skip("the accepted Backtrader local ServiceHost fixture is unavailable")
+def _pinned_bt_test_source(relative_path: str, size: int, sha256: str) -> bytes:
+    source_path = _BACKTRADER_ROOT / Path(relative_path)
+    if not source_path.is_file():
+        raise AssertionError(f"pinned Backtrader test helper is unavailable: {relative_path}")
+    source = source_path.read_bytes().replace(b"\r\n", b"\n")
+    if b"\r" in source or len(source) != size or hashlib.sha256(source).hexdigest() != sha256:
+        raise AssertionError(f"pinned Backtrader test helper changed: {relative_path}")
+    return source
 
-    for candidate in reversed(
-        (
-            _BACKTRADER_ROOT,
-            _BACKTRADER_ROOT / "tests" / "integration",
-        )
+
+def _load_r249_host_fixture(tmp_path, monkeypatch):
+    helper_root = tmp_path / "bt-test-helpers"
+    helper_tests = helper_root / "tests"
+    fixture_dir = helper_tests / "fixtures"
+    integration_dir = helper_tests / "integration"
+    fixture_dir.mkdir(parents=True)
+    integration_dir.mkdir(parents=True)
+    (helper_tests / "__init__.py").write_text("", encoding="utf-8")
+    (fixture_dir / "__init__.py").write_text("", encoding="utf-8")
+    (integration_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    fixture_relative, fixture_size, fixture_sha256 = _BT_FIXTURE_SOURCE
+    fixture_source = (
+        f"# AFI test-only copy from Backtrader {_BT_SOURCE_COMMIT}\n".encode("ascii")
+        + _pinned_bt_test_source(fixture_relative, fixture_size, fixture_sha256)
+        + _BT_FIXTURE_ORIGIN_EXTENSION
+    )
+    if (
+        len(fixture_source) != _BT_FIXTURE_TRANSFORMED_SIZE
+        or hashlib.sha256(fixture_source).hexdigest() != _BT_FIXTURE_TRANSFORMED_SHA256
     ):
-        text = str(candidate)
-        with contextlib.suppress(ValueError):
-            sys.path.remove(text)
-        sys.path.insert(0, text)
+        raise AssertionError("the pinned Backtrader host-helper transformation changed")
+    fake_relative, fake_size, fake_sha256 = _BT_FAKE_CLIENT_SOURCE
+    fake_source = _pinned_bt_test_source(fake_relative, fake_size, fake_sha256)
+    (integration_dir / f"{_BT_FIXTURE_MODULE}.py").write_bytes(fixture_source)
+    (fixture_dir / "fake_btapi.py").write_bytes(fake_source)
+    if (helper_root / "backtrader").exists():
+        raise AssertionError("the test-only helper root must not contain production Backtrader")
+
+    monkeypatch.syspath_prepend(str(integration_dir))
+    monkeypatch.syspath_prepend(str(helper_root))
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
 
     saved_test_modules = {
         name: module
@@ -88,8 +159,12 @@ def _load_r249_host_fixture():
     }
     for name in saved_test_modules:
         sys.modules.pop(name, None)
+    sys.modules.pop(_BT_FIXTURE_MODULE, None)
     try:
-        return importlib.import_module(_BT_FIXTURE_MODULE)
+        fixture = importlib.import_module(_BT_FIXTURE_MODULE)
+        if not Path(fixture.__file__).resolve().is_relative_to(integration_dir.resolve()):
+            raise AssertionError("the Backtrader host helper did not load from its test-only root")
+        return fixture, helper_root
     finally:
         for name in tuple(sys.modules):
             if name == "tests" or name.startswith("tests."):
@@ -97,14 +172,81 @@ def _load_r249_host_fixture():
         sys.modules.update(saved_test_modules)
 
 
+def _assert_installed_package_origins():
+    purelib = Path(sysconfig.get_paths()["purelib"]).resolve()
+    module_names = (
+        "app.services.live_trading.manager",
+        "app.services.live_trading.service_execution_launch",
+        "app.services.live_trading.service_execution_runner",
+        "app.services.service_gateway_operator",
+        "backtrader.stores.service_execution_session",
+        "bt_api_base.service_protocol",
+        "bt_api_execution.service_order_entry",
+        "bt_api_py.gateway_operator_application",
+        "bt_api_py.gateway_operator",
+        "bt_api_py.service_host",
+        "bt_api_py.service_runtime",
+        "bt_api_transport_zmq.service_v2",
+    )
+    origins = {}
+    for name in module_names:
+        module = importlib.import_module(name)
+        origin = Path(module.__file__).resolve()
+        if not origin.is_relative_to(purelib):
+            raise AssertionError(f"{name} did not load from the isolated environment")
+        origins[name] = str(origin)
+    return purelib, origins
+
+
 def _strategy_source() -> str:
     return '''
 import datetime as dt
+import importlib
+import json
+import sys
+import sysconfig
 import time
+from pathlib import Path
 
 import backtrader as bt
 import pandas as pd
 from tests.fixtures.fake_btapi import FakeBtApiClient, make_store
+
+_purelib = Path(sysconfig.get_paths()["purelib"]).resolve()
+_origin_modules = {
+    "app.service_execution_launch": importlib.import_module(
+        "app.services.live_trading.service_execution_launch"
+    ),
+    "app.service_execution_runner": importlib.import_module(
+        "app.services.live_trading.service_execution_runner"
+    ),
+    "backtrader.service_execution_session": importlib.import_module(
+        "backtrader.stores.service_execution_session"
+    ),
+    "bt_api_base.service_protocol": importlib.import_module(
+        "bt_api_base.service_protocol"
+    ),
+    "bt_api_execution.service_order_entry": importlib.import_module(
+        "bt_api_execution.service_order_entry"
+    ),
+    "bt_api_py.gateway_operator_application": importlib.import_module(
+        "bt_api_py.gateway_operator_application"
+    ),
+    "bt_api_py.service_runtime": importlib.import_module("bt_api_py.service_runtime"),
+    "bt_api_transport_zmq.service_v2": importlib.import_module(
+        "bt_api_transport_zmq.service_v2"
+    ),
+}
+_origin_paths = {
+    name: str(Path(module.__file__).resolve()) for name, module in _origin_modules.items()
+}
+_origin_paths["backtrader"] = str(Path(bt.__file__).resolve())
+_origin_paths["app.service_execution_runner.__main__"] = str(
+    Path(sys.modules["__main__"].__file__).resolve()
+)
+if any(not Path(value).is_relative_to(_purelib) for value in _origin_paths.values()):
+    raise RuntimeError("AFI_SERVICE_DEPENDENCY_NOT_INSTALLED")
+print("AFI_INSTALLED_PACKAGE_ORIGINS:" + json.dumps(_origin_paths, sort_keys=True), flush=True)
 
 AFI_SERVICE_INTENT_CONTRACT_REF = "bt-cerebro-fill-metadata-r1"
 _SYMBOL = "PAPER:SIM:BTC-USDT"
@@ -366,30 +508,235 @@ def _wait_for_log_marker(path: Path, marker: str, timeout_seconds: float = 20.0)
     raise TimeoutError(f"strategy child missed expected service query marker: {marker}")
 
 
+def test_r249_fixture_relocation_uses_installed_packages_only(tmp_path, monkeypatch):
+    purelib, origins = _assert_installed_package_origins()
+    monkeypatch.setenv("AFI_TEST_BACKTRADER_SITE_ROOT", str(purelib))
+    fixture, helper_root = _load_r249_host_fixture(tmp_path, monkeypatch)
+    try:
+        assert not (helper_root / "backtrader").exists()
+        copied_paths = {
+            str(path.relative_to(helper_root)).replace("\\", "/")
+            for path in helper_root.rglob("*")
+            if path.is_file() and path.suffix == ".py"
+        }
+        assert copied_paths == {
+            "tests/__init__.py",
+            "tests/fixtures/__init__.py",
+            "tests/fixtures/fake_btapi.py",
+            "tests/integration/__init__.py",
+            f"tests/integration/{_BT_FIXTURE_MODULE}.py",
+        }
+        copied_fixture = (
+            helper_root / "tests" / "integration" / f"{_BT_FIXTURE_MODULE}.py"
+        ).read_bytes()
+        assert len(copied_fixture) == _BT_FIXTURE_TRANSFORMED_SIZE
+        assert hashlib.sha256(copied_fixture).hexdigest() == _BT_FIXTURE_TRANSFORMED_SHA256
+        copied_fake = (helper_root / "tests" / "fixtures" / "fake_btapi.py").read_bytes()
+        assert hashlib.sha256(copied_fake).hexdigest() == _BT_FAKE_CLIENT_SOURCE[2]
+        assert Path(fixture.__file__).resolve().is_relative_to(
+            (helper_root / "tests" / "integration").resolve()
+        )
+        host_origins = fixture._assert_source_origins(fixture._loaded_source_origins())
+        bt_origin = Path(host_origins["backtrader"]["package"]).resolve()
+        assert bt_origin.is_relative_to(purelib)
+        assert origins["app.services.live_trading.manager"].startswith(str(purelib))
+    finally:
+        sys.modules.pop(_BT_FIXTURE_MODULE, None)
+
+
+def test_service_strategy_child_import_prefix_uses_installed_packages_without_host(
+    tmp_path, monkeypatch
+):
+    purelib, _ = _assert_installed_package_origins()
+    fixture, helper_root = _load_r249_host_fixture(tmp_path, monkeypatch)
+    del fixture
+    script_dir = tmp_path / "strategy"
+    script_dir.mkdir()
+    strategy_path = script_dir / "run.py"
+    source = _strategy_source().lstrip()
+    strategy_path.write_text(source, encoding="utf-8")
+    runner_path = purelib / "app" / "services" / "live_trading" / "service_execution_runner.py"
+    preflight_path = tmp_path / "child-import-preflight.py"
+    preflight_path.write_text(
+        "\n".join(
+            (
+                "import sys",
+                "from pathlib import Path",
+                f"script_path = Path({str(strategy_path)!r})",
+                f"runner_path = Path({str(runner_path)!r})",
+                "source = script_path.read_text(encoding='utf-8')",
+                "marker = 'AFI_SERVICE_INTENT_CONTRACT_REF ='",
+                "prefix, remainder = source.split(marker, 1)",
+                "sys.modules['__main__'].__file__ = str(runner_path)",
+                "sys.path.insert(0, str(script_path.parent))",
+                "namespace = {'__name__': '__main__', '__file__': str(runner_path), '__builtins__': __builtins__}",
+                "exec(compile(prefix, str(script_path), 'exec'), namespace, namespace)",
+                "print('AFI_NOHOST_CHILD_IMPORT_PREFIX:PASS', flush=True)",
+                "import backtrader as bt",
+                "original_run = bt.Cerebro.run",
+                "bt.Cerebro.run = lambda self, *args, **kwargs: None",
+                "try:",
+                "    exec(compile(marker + remainder, str(script_path), 'exec'), namespace, namespace)",
+                "finally:",
+                "    bt.Cerebro.run = original_run",
+                "assert namespace['_store']._api.connected is False",
+                "assert namespace['_cerebro'].datas",
+                "print('AFI_NOHOST_FAKE_STORE_CEREBRO_CONSTRUCTION:PASS', flush=True)",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    child_env = {
+        name: os.environ[name]
+        for name in ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "PYTHONUTF8")
+        if name in os.environ
+    }
+    child_env["PYTHONPATH"] = os.pathsep.join((str(helper_root), str(purelib)))
+    completed = subprocess.run(
+        [sys.executable, str(preflight_path)],
+        cwd=script_dir,
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    assert "AFI_NOHOST_CHILD_IMPORT_PREFIX:PASS" in completed.stdout
+    assert "AFI_NOHOST_FAKE_STORE_CEREBRO_CONSTRUCTION:PASS" in completed.stdout
+    origin_line = next(
+        line for line in completed.stdout.splitlines() if _BT_ORIGIN_MARKER in line
+    )
+    child_origins = json.loads(origin_line.split(_BT_ORIGIN_MARKER, 1)[1])
+    assert all(Path(origin).resolve().is_relative_to(purelib) for origin in child_origins.values())
+
+
 def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
     tmp_path, monkeypatch, request
 ):
-    host_fixture = _load_r249_host_fixture()
+    purelib, _ = _assert_installed_package_origins()
+    monkeypatch.setenv("AFI_TEST_BACKTRADER_SITE_ROOT", str(purelib))
+    host_fixture, helper_root = _load_r249_host_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(manager_module, "_BACKTRADER_DIR", helper_root)
     endpoint, keys, host = host_fixture._start_host(tmp_path)
     owner_token = object()
     owner_registered = False
     host_cleanup = None
+    host_pid_before_cleanup = None
+    host_alive_before_cleanup = None
+    phase = "host_started"
+    cleanup_receipt_path = tmp_path / "service-host-cleanup.json"
+    process = None
+    manager = None
+    instances = {}
     plugin_root = tmp_path / "trusted-profiles"
     profile_module_name = f"afi_service_strategy_{uuid.uuid4().hex}"
     owner_module_name = f"afi_service_owner_{uuid.uuid4().hex}"
 
-    def cleanup_host_and_owner():
-        nonlocal host_cleanup, owner_registered
+    def cleanup_host_and_owner(
+        *, phase_name: str = "pytest_finalizer", primary_error=None, strategy_stop_error=None
+    ):
+        nonlocal host_cleanup, owner_registered, host_pid_before_cleanup, host_alive_before_cleanup
+        if primary_error is None and cleanup_receipt_path.is_file():
+            try:
+                previous_facts = json.loads(
+                    cleanup_receipt_path.read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError):
+                previous_facts = None
+            if (
+                isinstance(previous_facts, dict)
+                and previous_facts.get("phase") != "pytest_finalizer"
+            ):
+                return previous_facts
+        cleanup_error_types = []
         if owner_registered:
-            unregister_legacy_gateway_exclusions(owner_token)
-            owner_registered = False
+            try:
+                unregister_legacy_gateway_exclusions(owner_token)
+                owner_registered = False
+            except BaseException as error:
+                cleanup_error_types.append(type(error).__name__)
         if host_cleanup is None:
-            host_cleanup = host_fixture._close_host(host)
+            host_process = host.get("process")
+            host_pid_before_cleanup = getattr(host_process, "pid", None)
+            try:
+                host_alive_before_cleanup = bool(host_process.is_alive())
+            except BaseException as error:
+                host_alive_before_cleanup = None
+                cleanup_error_types.append(type(error).__name__)
+            try:
+                host_cleanup = host_fixture._close_host(host)
+            except BaseException as error:
+                host_cleanup = {
+                    "close_reply": None,
+                    "close_error": type(error).__name__,
+                    "exitcode": None,
+                    "forced_cleanup": None,
+                    "normal_close": False,
+                }
+                cleanup_error_types.append(type(error).__name__)
         for module_name in (profile_module_name, owner_module_name):
-            sys.modules.pop(module_name, None)
+            try:
+                sys.modules.pop(module_name, None)
+            except BaseException as error:
+                cleanup_error_types.append(type(error).__name__)
+        try:
+            sys.modules.pop(_BT_FIXTURE_MODULE, None)
+        except BaseException as error:
+            cleanup_error_types.append(type(error).__name__)
         with contextlib.suppress(ValueError):
             sys.path.remove(str(plugin_root))
-        return host_cleanup
+
+        owned_process = process
+        if owned_process is None and manager is not None:
+            owned_process = manager._processes.get(_INSTANCE_ID)
+        process_pid = getattr(owned_process, "pid", None)
+        process_returncode = getattr(owned_process, "returncode", None)
+        raw_instance_pid = instances.get(_INSTANCE_ID, {}).get("pid")
+        instance_pid = raw_instance_pid if type(raw_instance_pid) is int else None
+        facts = dict(host_cleanup)
+        facts.update(
+            {
+                "phase": phase_name,
+                "primary_error_type": (
+                    type(primary_error).__name__ if primary_error is not None else None
+                ),
+                "primary_error_code": (
+                    "SERVICE_EXECUTION_START_FAILED"
+                    if type(primary_error) is RuntimeError
+                    and str(primary_error) == "SERVICE_EXECUTION_START_FAILED"
+                    else None
+                ),
+                "strategy_stop_error_type": strategy_stop_error,
+                "strategy_process_tracked": owned_process is not None,
+                "strategy_process_pid": process_pid if type(process_pid) is int else None,
+                "strategy_process_returncode": (
+                    process_returncode if type(process_returncode) is int else None
+                ),
+                "strategy_instance_pid": instance_pid,
+                "host_process_pid": (
+                    host_pid_before_cleanup
+                    if type(host_pid_before_cleanup) is int
+                    else None
+                ),
+                "host_alive_before_cleanup": host_alive_before_cleanup,
+                "owner_exclusion_still_registered": owner_registered,
+                "cleanup_error_types": cleanup_error_types,
+            }
+        )
+        try:
+            facts["receipt_written"] = True
+            cleanup_receipt_path.write_text(
+                json.dumps(facts, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+        except BaseException as error:
+            facts["receipt_written"] = False
+            facts["receipt_write_error_type"] = type(error).__name__
+        host_cleanup = facts
+        return facts
 
     request.addfinalizer(cleanup_host_and_owner)
     script_path = tmp_path / "strategy" / "run.py"
@@ -514,18 +861,43 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
     released_legacy = []
     manager._release_gateway_for_instance = released_legacy.append
 
-    process = None
     try:
         async def exercise_manager_lifecycle():
-            nonlocal process
+            nonlocal phase, process
+            phase = "manager_start"
             started = await manager.start_instance(_INSTANCE_ID, user_id=_SUBJECT_REF)
+            phase = "strategy_ready"
             assert started["status"] == "running"
             assert started["_server_service_execution_managed"] is True
             assert started["_server_service_execution_profile_ref"] == _PROFILE_REF
             process = manager._processes[_INSTANCE_ID]
             assert getattr(process, "_bt_service_execution", False) is True
+            log_path = script_path.parent / "logs" / "subprocess.stdout.log"
+            origin_text = _wait_for_log_marker(log_path, _BT_ORIGIN_MARKER)
+            origin_line = next(
+                line for line in origin_text.splitlines() if _BT_ORIGIN_MARKER in line
+            )
+            child_origins = json.loads(origin_line.split(_BT_ORIGIN_MARKER, 1)[1])
+            assert set(child_origins) == {
+                "app.service_execution_launch",
+                "app.service_execution_runner",
+                "app.service_execution_runner.__main__",
+                "backtrader",
+                "backtrader.service_execution_session",
+                "bt_api_base.service_protocol",
+                "bt_api_execution.service_order_entry",
+                "bt_api_py.gateway_operator_application",
+                "bt_api_py.service_runtime",
+                "bt_api_transport_zmq.service_v2",
+            }
+            assert all(
+                Path(origin).resolve().is_relative_to(purelib)
+                for origin in child_origins.values()
+            )
+            host_bt_origin = Path(host["source_origins"]["backtrader"]["package"]).resolve()
+            assert host_bt_origin.is_relative_to(purelib)
             text = _wait_for_log_marker(
-                script_path.parent / "logs" / "subprocess.stdout.log", _ORDER_QUERY_MARKER
+                log_path, _ORDER_QUERY_MARKER
             )
             assert _ORDER_QUERY_MARKER in text
             run_id = instances[_INSTANCE_ID]["_server_service_execution_run_id"]
@@ -535,6 +907,7 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
                     subject=_SUBJECT_REF,
                     allowed_actions=["STOP_NEW"],
                     wire_account_ref=_ACCOUNT_REF,
+                    command_scope=f"strategy:{_STRATEGY_REF}:{run_id}:stop_new",
                 ),
                 wire_scope=SimpleNamespace(
                     account_ref=_ACCOUNT_REF,
@@ -573,6 +946,7 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
                 await graceful_stop(instance_id, stopped_process)
 
             manager._gracefully_stop_service_execution = observe_process_stop
+            phase = "strategy_stop"
             receipt = await stop_service_strategy_process(
                 manager,
                 owner_control,
@@ -607,10 +981,21 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
         assert metrics[5] == ("bt-cerebro-fill-intent-r1",)
         assert metrics[6:8] == ("FILLED", 1)
     finally:
+        primary_error = sys.exc_info()[1]
+        strategy_stop_error = None
         if process is not None and process.returncode is None:
-            with contextlib.suppress(Exception):
+            try:
                 asyncio.run(manager.stop_instance(_INSTANCE_ID))
-        cleanup = cleanup_host_and_owner()
+            except BaseException as error:
+                strategy_stop_error = type(error).__name__
+        cleanup = cleanup_host_and_owner(
+            phase_name=phase,
+            primary_error=primary_error,
+            strategy_stop_error=strategy_stop_error,
+        )
 
     assert cleanup["normal_close"] is True
     assert cleanup["forced_cleanup"] is False
+    assert cleanup["owner_exclusion_still_registered"] is False
+    assert cleanup["cleanup_error_types"] == []
+    assert cleanup["receipt_written"] is True
