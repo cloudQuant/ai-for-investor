@@ -1700,7 +1700,7 @@ def sync_unit_runtime(
     )
     with (target_dir / "config.yaml").open("w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, allow_unicode=True, sort_keys=False)
-    (target_dir / "run.py").write_text(_UNIT_RUN_PY, encoding="utf-8")
+    (target_dir / "run.py").write_bytes(_UNIT_RUN_PY.encode("utf-8"))
     return target_dir
 
 
@@ -1968,7 +1968,7 @@ def sync_trading_unit_runtime(unit: StrategyUnit, workspace_settings: dict[str, 
     template_has_run_py = (template_dir / "run.py").is_file()
     _sync_trading_runtime_sources(template_dir, target_dir)
     if not template_has_run_py:
-        (target_dir / "run.py").write_text(_UNIT_RUN_PY, encoding="utf-8")
+        (target_dir / "run.py").write_bytes(_UNIT_RUN_PY.encode("utf-8"))
     config = _build_trading_unit_config(unit, workspace_settings)
     with (target_dir / "config.yaml").open("w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, allow_unicode=True, sort_keys=False)
