@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
+from app.services.service_read.client import PaperSubmitBinding
+from app.services.service_read.contracts import ServiceReadContractError
 from app.services.service_read.deployment import (
     ServiceReadDeploymentError,
     _parse_paper_submit_bindings,
@@ -121,12 +124,35 @@ def test_paper_binding_exposes_cutover_facts_from_its_typed_owner_domain():
     assert binding.opening_positions == ()
 
 
-@pytest.mark.parametrize("mode", ["risk", "monitor", "risk_and_monitor", "execution_with_monitor"])
-def test_paper_binding_rejects_risk_or_monitor_control_modes(mode: str):
+@pytest.mark.parametrize(
+    "mode", ["execution_only", "execution_risk", "execution_risk_monitor"]
+)
+def test_paper_binding_accepts_only_the_three_server_owned_composition_modes(mode: str):
+    binding = _parse({"legacy-account-1": _paper_config(control_mode=mode)})[
+        "legacy-account-1"
+    ]
+
+    assert binding.control_mode == mode
+
+
+@pytest.mark.parametrize(
+    "mode", ["risk", "monitor", "risk_and_monitor", "execution_with_monitor"]
+)
+def test_paper_binding_rejects_unregistered_composition_modes(mode: str):
     with pytest.raises(ServiceReadDeploymentError) as error:
         _parse({"legacy-account-1": _paper_config(control_mode=mode)})
 
     assert error.value.code == "PAPER_RISK_MONITOR_UNSUPPORTED"
+
+
+def test_paper_typed_binding_rejects_non_string_or_unlisted_mode():
+    binding = _parse({"legacy-account-1": _paper_config()})["legacy-account-1"]
+
+    for invalid_mode in ([], "execution_risk_monitor_extra"):
+        with pytest.raises(ServiceReadContractError) as error:
+            replace(binding, control_mode=invalid_mode)
+
+        assert error.value.code == "INVALID_PAPER_CONTROL_MODE"
 
 
 def test_paper_binding_rejects_an_unknown_control_mode():

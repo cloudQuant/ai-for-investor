@@ -43,7 +43,12 @@ __all__ = [
     "RiskPolicyBudgetBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
+    "PAPER_CONTROL_MODES",
 ]
+
+PAPER_CONTROL_MODES = frozenset(
+    {"execution_only", "execution_risk", "execution_risk_monitor"}
+)
 
 
 RISK_POLICY_BUDGET_MAKER_OPERATIONS = frozenset(
@@ -216,7 +221,7 @@ class OrderSubmitBinding:
 
 @dataclass(frozen=True, slots=True)
 class PaperSubmitBinding:
-    """One trusted E-only paper owner and its exact query/domain bindings."""
+    """One trusted paper composition and its exact query/domain bindings."""
 
     control_mode: str
     mount: str
@@ -231,8 +236,11 @@ class PaperSubmitBinding:
     execution_scope: Any = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if self.control_mode != "execution_only":
-            raise ServiceReadContractError("PAPER_RISK_MONITOR_UNSUPPORTED")
+        if (
+            type(self.control_mode) is not str
+            or self.control_mode not in PAPER_CONTROL_MODES
+        ):
+            raise ServiceReadContractError("INVALID_PAPER_CONTROL_MODE")
         for value, code in (
             (self.mount, "INVALID_MOUNT"),
             (self.scope_ref, "INVALID_SCOPE_REF"),

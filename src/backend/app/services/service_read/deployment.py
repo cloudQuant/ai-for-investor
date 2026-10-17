@@ -33,6 +33,7 @@ from app.services.service_read.client import (
     PortfolioAnalyticsBinding,
     PaperLegacyImportBinding,
     PaperSubmitBinding,
+    PAPER_CONTROL_MODES,
     RiskPolicyBudgetBinding,
     PAPER_LEGACY_IMPORT_OPERATIONS,
 )
@@ -911,7 +912,7 @@ def _parse_paper_submit_bindings(
             if type(binding["control_mode"]) is not str:
                 raise ServiceReadDeploymentError("INVALID_PAPER_CONTROL_MODE")
             control_mode = _identifier(binding["control_mode"])
-            if control_mode != "execution_only":
+            if control_mode not in PAPER_CONTROL_MODES:
                 if "risk" in control_mode.lower() or "monitor" in control_mode.lower():
                     raise ServiceReadDeploymentError("PAPER_RISK_MONITOR_UNSUPPORTED")
                 raise ServiceReadDeploymentError("INVALID_PAPER_CONTROL_MODE")
