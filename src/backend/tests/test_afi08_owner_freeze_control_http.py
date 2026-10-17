@@ -9,6 +9,7 @@ import json
 import queue
 import re
 import socket
+import sys
 import threading
 import time
 import uuid
@@ -191,6 +192,7 @@ def _start_owner_host(
     owner_action: ControlAction = ControlAction.FREEZE,
     lose_final_receipt: bool = False,
     command_scope_override: str | None = None,
+    setup_resources: dict[str, Any] | None = None,
 ) -> tuple[OwnerControlDeployment, threading.Thread, threading.Event, dict[str, Any]]:
     endpoint = _endpoint()
     server_public, server_secret = zmq.curve_keypair()
@@ -382,6 +384,18 @@ def _start_owner_host(
             close=gate.close,
         )
 
+    def finite_error_code(error: BaseException) -> str:
+        code = getattr(error, "code", None)
+        if (
+            type(code) is str
+            and code
+            and code.isascii()
+            and code.replace("_", "").isalnum()
+            and code.isupper()
+        ):
+            return code
+        return type(error).__name__
+
     def serve() -> None:
         host = None
         try:
@@ -419,6 +433,7 @@ def _start_owner_host(
                 str(tmp_path / "service-registry.sqlite"),
                 resource_provider,
             )
+            refs["host"] = host
             host.start()
             if stop_new:
                 registry = host._registry
@@ -440,23 +455,123 @@ def _start_owner_host(
             host.close()
             host_result.put(("closed", host.state))
         except BaseException as error:
-            refs["ready"].set()
-            host_result.put(("error", getattr(error, "code", type(error).__name__)))
+            cleanup_result: tuple[str, Any]
             if host is not None:
                 try:
                     host.close()
-                except BaseException:
-                    pass
+                    cleanup_result = ("closed", getattr(host, "state", None))
+                except BaseException as close_error:
+                    cleanup_result = ("close_error", type(close_error).__name__)
+            else:
+                cleanup_result = ("not_created", None)
+            host_result.put(("error", finite_error_code(error), cleanup_result))
+            # `ready` means startup completed or failed with cleanup attempted.  It is
+            # never a signal that a partially constructed owner is usable.
+            refs["ready"].set()
 
     thread = threading.Thread(target=serve, name="afi08-synthetic-monitor-owner", daemon=True)
+    if setup_resources is not None:
+        # The test owns the thread/queue/refs before startup can block or fail.
+        setup_resources["owner"] = (sys.modules[__name__], thread, stopped, refs)
     thread.start()
     if not refs["ready"].wait(10):
         stopped.set()
-        thread.join(5)
+        thread.join(10)
+        if thread.is_alive():
+            raise AssertionError(
+                "synthetic Monitor ServiceHost remained alive after startup timeout"
+            )
+        try:
+            startup_result = host_result.get(timeout=1)
+        except queue.Empty:
+            startup_result = None
+        refs["_owner_startup_result"] = startup_result
+        if startup_result == ("closed", "closed") or (
+            isinstance(startup_result, tuple)
+            and len(startup_result) >= 3
+            and startup_result[0] == "error"
+            and startup_result[2] == ("closed", "closed")
+        ):
+            refs["_owner_close_result"] = ("closed", "closed")
         raise AssertionError("synthetic Monitor ServiceHost did not become ready")
-    if "gate" not in refs:
-        raise AssertionError(f"synthetic Monitor ServiceHost failed: {host_result.get(timeout=1)}")
+    if not thread.is_alive():
+        result = host_result.get(timeout=1)
+        refs["_owner_startup_result"] = result
+        if result == ("closed", "closed") or (
+            isinstance(result, tuple)
+            and len(result) >= 3
+            and result[0] == "error"
+            and result[2] == ("closed", "closed")
+        ):
+            refs["_owner_close_result"] = ("closed", "closed")
+        if result[0] == "error":
+            raise AssertionError(
+                "synthetic Monitor ServiceHost failed before readiness: "
+                f"{result[1]} cleanup={result[2]}"
+            )
+        raise AssertionError(f"synthetic Monitor ServiceHost exited before readiness: {result}")
+    try:
+        unexpected = host_result.get_nowait()
+    except queue.Empty:
+        unexpected = None
+    if unexpected is not None:
+        stopped.set()
+        thread.join(10)
+        refs["_owner_startup_result"] = unexpected
+        if not thread.is_alive() and (
+            unexpected == ("closed", "closed")
+            or (
+                isinstance(unexpected, tuple)
+                and len(unexpected) >= 3
+                and unexpected[0] == "error"
+                and unexpected[2] == ("closed", "closed")
+            )
+        ):
+            refs["_owner_close_result"] = ("closed", "closed")
+        raise AssertionError(
+            f"synthetic Monitor ServiceHost produced an early result: {unexpected}"
+        )
+    required_refs = {"owner_thread", "gate", "ledger", "service", "owner", "runtime"}
+    if stop_new:
+        required_refs.update({"registry", "wire_scope"})
+    missing_refs = sorted(required_refs.difference(refs))
+    if missing_refs:
+        stopped.set()
+        thread.join(10)
+        if thread.is_alive():
+            raise AssertionError(
+                "synthetic Monitor ServiceHost missed required readiness fields and remained alive: "
+                f"{missing_refs}"
+            )
+        result = host_result.get(timeout=1)
+        refs["_owner_startup_result"] = result
+        if result == ("closed", "closed") or (
+            isinstance(result, tuple)
+            and len(result) >= 3
+            and result[0] == "error"
+            and result[2] == ("closed", "closed")
+        ):
+            refs["_owner_close_result"] = ("closed", "closed")
+        raise AssertionError(
+            "synthetic Monitor ServiceHost missed required readiness fields: "
+            f"{missing_refs}; shutdown={result}"
+        )
     return deployment, thread, stopped, refs
+
+
+def close_owner_host_thread(
+    thread: threading.Thread, stopped: threading.Event, refs: dict[str, Any]
+) -> None:
+    prior_result = refs.get("_owner_close_result")
+    if prior_result is not None:
+        assert prior_result == ("closed", "closed"), prior_result
+        return
+    stopped.set()
+    thread.join(10)
+    assert not thread.is_alive(), "synthetic Monitor ServiceHost did not close"
+    result = refs["host_result"].get(timeout=1)
+    refs["_owner_close_result"] = result
+    assert result == ("closed", "closed"), result
 
 
 def test_stop_new_deployment_rejects_scope_label_not_bound_to_exact_run(tmp_path: Path) -> None:
@@ -513,11 +628,7 @@ async def _create_owned_alert(
 async def _stop_host(
     thread: threading.Thread, stopped: threading.Event, refs: dict[str, Any]
 ) -> None:
-    stopped.set()
-    thread.join(10)
-    assert not thread.is_alive(), "synthetic Monitor ServiceHost did not close"
-    result = refs["host_result"].get(timeout=1)
-    assert result == ("closed", "closed"), result
+    close_owner_host_thread(thread, stopped, refs)
 
 
 async def _wait_for_owner_status(
