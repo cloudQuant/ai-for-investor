@@ -35,6 +35,7 @@ from app.services.service_read.client import (
     PaperSubmitBinding,
     PAPER_CONTROL_MODES,
     RiskPolicyBudgetBinding,
+    RiskAccountPolicyBinding,
     _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS,
     PAPER_LEGACY_IMPORT_OPERATIONS,
 )
@@ -124,6 +125,9 @@ class _SubjectProfile:
     risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding] = field(
         repr=False, compare=False
     )
+    risk_account_policy_bindings: Mapping[str, RiskAccountPolicyBinding] = field(
+        repr=False, compare=False
+    )
     account_grants: frozenset[str]
     account_book_grants: frozenset[str]
     strategy_book_grants: frozenset[str]
@@ -135,6 +139,7 @@ class _SubjectProfile:
     monitor_grants: frozenset[str]
     portfolio_grants: frozenset[str]
     risk_policy_budget_grants: frozenset[str]
+    risk_account_policy_grants: frozenset[str]
     max_queue_size: int
     maintenance_interval_seconds: float
 
@@ -214,6 +219,8 @@ async def start_service_read_deployment(
                 portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
                 allow_risk_policy_budget_refs=profile.risk_policy_budget_grants,
                 risk_policy_budget_bindings=profile.risk_policy_budget_bindings,
+                allow_risk_account_policy_refs=profile.risk_account_policy_grants,
+                risk_account_policy_bindings=profile.risk_account_policy_bindings,
                 strategy_book_bindings=profile.strategy_book_bindings,
                 order_submit_bindings=profile.order_submit_bindings,
                 paper_submit_bindings=profile.paper_submit_bindings,
@@ -254,6 +261,7 @@ def _build_worker(profile: _SubjectProfile) -> ServiceReadWorker:
             monitor_bindings=profile.monitor_bindings,
             portfolio_analytics_bindings=profile.portfolio_analytics_bindings,
             risk_policy_budget_bindings=profile.risk_policy_budget_bindings,
+            risk_account_policy_bindings=profile.risk_account_policy_bindings,
         )
 
     stable_name = hashlib.sha256(profile.subject.encode("utf-8")).hexdigest()[:12]
@@ -314,13 +322,24 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
                 "analysis.cancel",
             }
         )
-    if profile.risk_policy_budget_bindings:
+    if profile.risk_policy_budget_bindings or profile.risk_account_policy_bindings:
+        risk_policy_operation_sets = {
+            binding.operations for binding in profile.risk_policy_budget_bindings.values()
+        }
+        risk_policy_operation_sets.update(
+            binding.operations for binding in profile.risk_account_policy_bindings.values()
+        )
         budget_operation_sets = {
             binding.operations for binding in profile.risk_policy_budget_bindings.values()
         }
-        if len(budget_operation_sets) != 1:
+        account_operation_sets = {
+            binding.operations for binding in profile.risk_account_policy_bindings.values()
+        }
+        if len(budget_operation_sets) > 1 or len(account_operation_sets) > 1:
             raise ServiceReadDeploymentError("MIXED_RISK_POLICY_BUDGET_ACTOR_ROLES")
-        requested_operations["application.risk_policy"] = next(iter(budget_operation_sets))
+        requested_operations["application.risk_policy"] = frozenset().union(
+            *risk_policy_operation_sets
+        )
     if profile.paper_legacy_import_bindings:
         requested_operations["application.paper_legacy_import"] = (
             PAPER_LEGACY_IMPORT_OPERATIONS
@@ -477,6 +496,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "paper_submit_bindings",
         "paper_legacy_import_bindings",
         "risk_policy_budget_bindings",
+        "risk_account_policy_bindings",
     }
     if (
         type(raw) is not dict
@@ -604,6 +624,12 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         subject=subject,
         principal_ref=identity.principal_ref,
     )
+    risk_account_policy_bindings = _parse_risk_account_policy_bindings(
+        profile.get("risk_account_policy_bindings", {}),
+        scopes,
+        subject=subject,
+        principal_ref=identity.principal_ref,
+    )
     grants_fields = {"account_refs", "order_scope_refs", "monitor_scope_refs"}
     book_grant_fields = {"account_book_refs", "strategy_book_refs"}
     optional_grant_fields = book_grant_fields | {
@@ -614,6 +640,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "paper_submit_account_ids",
         "paper_legacy_import_account_ids",
         "risk_policy_budget_refs",
+        "risk_account_policy_refs",
     }
     grants_raw = profile["grants"]
     if (
@@ -644,6 +671,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     risk_policy_budget_grants = frozenset(
         _string_list(grants_raw.get("risk_policy_budget_refs", []))
     )
+    risk_account_policy_grants = frozenset(
+        _string_list(grants_raw.get("risk_account_policy_refs", []))
+    )
     if (
         account_grants != frozenset(account_bindings)
         or account_book_grants != frozenset(account_book_bindings)
@@ -656,6 +686,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         or monitor_grants != frozenset(monitor_bindings)
         or portfolio_grants != frozenset(portfolio_analytics_bindings)
         or risk_policy_budget_grants != frozenset(risk_policy_budget_bindings)
+        or risk_account_policy_grants != frozenset(risk_account_policy_bindings)
         or not (
             account_grants
             or account_book_grants
@@ -668,6 +699,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
             or monitor_grants
             or portfolio_grants
             or risk_policy_budget_grants
+            or risk_account_policy_grants
         )
     ):
         raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
@@ -713,6 +745,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         monitor_bindings,
         portfolio_analytics_bindings,
         risk_policy_budget_bindings,
+        risk_account_policy_bindings,
     )
     return _SubjectProfile(
         subject=subject,
@@ -732,6 +765,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         monitor_bindings=MappingProxyType(monitor_bindings),
         portfolio_analytics_bindings=MappingProxyType(portfolio_analytics_bindings),
         risk_policy_budget_bindings=MappingProxyType(risk_policy_budget_bindings),
+        risk_account_policy_bindings=MappingProxyType(risk_account_policy_bindings),
         account_grants=account_grants,
         account_book_grants=account_book_grants,
         strategy_book_grants=strategy_book_grants,
@@ -743,6 +777,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         monitor_grants=monitor_grants,
         portfolio_grants=portfolio_grants,
         risk_policy_budget_grants=risk_policy_budget_grants,
+        risk_account_policy_grants=risk_account_policy_grants,
         max_queue_size=max_queue_size,
         maintenance_interval_seconds=float(interval),
     )
@@ -1253,6 +1288,74 @@ def _parse_risk_policy_budget_bindings(
     return result
 
 
+def _parse_risk_account_policy_bindings(
+    raw: object,
+    scopes: Mapping[str, Any],
+    *,
+    subject: str,
+    principal_ref: str,
+) -> dict[str, RiskAccountPolicyBinding]:
+    """Parse per-account maker/checker grants with exact manual target scopes."""
+
+    if type(raw) is not dict or len(raw) > _MAX_SELECTORS:
+        raise ServiceReadDeploymentError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
+    result: dict[str, RiskAccountPolicyBinding] = {}
+    for raw_account_ref, raw_binding in raw.items():
+        account_ref = _identifier(raw_account_ref)
+        fields = _exact_mapping(
+            raw_binding,
+            {
+                "mount",
+                "scope_ref",
+                "owner_subject",
+                "actor_role",
+                "maker_principal_ref",
+                "checker_principal_ref",
+            },
+        )
+        owner_subject = _identifier(fields["owner_subject"])
+        actor_role = _identifier(fields["actor_role"])
+        maker_principal_ref = _identifier(fields["maker_principal_ref"])
+        checker_principal_ref = _identifier(fields["checker_principal_ref"])
+        if (
+            actor_role not in {"maker", "checker"}
+            or maker_principal_ref == checker_principal_ref
+            or (
+                actor_role == "maker"
+                and (subject != owner_subject or principal_ref != maker_principal_ref)
+            )
+            or (
+                actor_role == "checker"
+                and (subject == owner_subject or principal_ref != checker_principal_ref)
+            )
+        ):
+            raise ServiceReadDeploymentError("RISK_ACCOUNT_POLICY_ACTOR_MISMATCH")
+        mount = _identifier(fields["mount"])
+        scope_ref = _identifier(fields["scope_ref"])
+        if mount != "application.risk_policy" or not _is_risk_account_policy_scope(
+            scopes.get(scope_ref), account_ref
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        try:
+            result[account_ref] = RiskAccountPolicyBinding(
+                mount=mount,
+                account_ref=account_ref,
+                scope_ref=scope_ref,
+                owner_subject=owner_subject,
+                actor_role=actor_role,
+                maker_principal_ref=maker_principal_ref,
+                checker_principal_ref=checker_principal_ref,
+            )
+        except Exception:
+            raise ServiceReadDeploymentError(
+                "INVALID_RISK_ACCOUNT_POLICY_BINDINGS"
+            ) from None
+    scope_refs = [binding.scope_ref for binding in result.values()]
+    if len(scope_refs) != len(set(scope_refs)):
+        raise ServiceReadDeploymentError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
+    return result
+
+
 def _validate_profile_bindings(
     client_config: Mapping[str, Any],
     identity: Any,
@@ -1270,6 +1373,7 @@ def _validate_profile_bindings(
     monitor_bindings: Mapping[str, MonitorBinding],
     portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding],
     risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding],
+    risk_account_policy_bindings: Mapping[str, RiskAccountPolicyBinding],
 ) -> None:
     declared: dict[tuple[str, str], tuple[str, str | None]] = {}
     budget_management_portfolios: dict[tuple[str, str], str] = {}
@@ -1416,6 +1520,25 @@ def _validate_profile_bindings(
             ):
                 raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
             _add_declared(declared, binding.mount, scope_ref, account_ref)
+
+    budget_scope_refs = {
+        binding.management_scope_ref
+        for binding in risk_policy_budget_bindings.values()
+    } | {
+        scope_ref
+        for binding in risk_policy_budget_bindings.values()
+        for scope_ref in binding.member_scope_refs.values()
+    }
+    for account_ref, binding in risk_account_policy_bindings.items():
+        scope = scopes.get(binding.scope_ref)
+        if (
+            binding.mount != "application.risk_policy"
+            or binding.account_ref != account_ref
+            or not _is_risk_account_policy_scope(scope, account_ref)
+            or binding.scope_ref in budget_scope_refs
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
 
     if set(scopes) != {scope_ref for _, scope_ref in declared}:
         raise ServiceReadDeploymentError("UNUSED_SCOPE")
@@ -1572,6 +1695,23 @@ def _is_budget_member_scope(
         and getattr(scope, "run_id", None) is None
         and getattr(scope, "strategy_ref", None) is None
         and getattr(scope, "manual_book_ref", None) is None
+        and getattr(scope, "group_id", None) is None
+        and getattr(scope, "leg_id", None) is None
+    )
+
+
+def _is_risk_account_policy_scope(scope: Any, account_ref: str) -> bool:
+    """Accept only a manual-book scope identical in shape to a Risk target."""
+
+    return (
+        scope is not None
+        and getattr(scope, "account_ref", None) == account_ref
+        and not getattr(scope, "account_refs", ())
+        and bool(getattr(scope, "execution_domain_ref", None))
+        and bool(getattr(scope, "manual_book_ref", None))
+        and getattr(scope, "strategy_ref", None) is None
+        and getattr(scope, "run_id", None) is None
+        and getattr(scope, "portfolio_ref", None) is None
         and getattr(scope, "group_id", None) is None
         and getattr(scope, "leg_id", None) is None
     )

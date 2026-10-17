@@ -199,6 +199,12 @@ _register_optional_router(
     tags=["Live Trading Control"],
 )
 _register_optional_router(
+    "risk_policy",
+    "app.api.risk_policy",
+    prefix="/risk-policies",
+    tags=["Risk Policy"],
+)
+_register_optional_router(
     "approved_orders",
     "app.api.approved_orders",
     tags=["Approved Orders"],

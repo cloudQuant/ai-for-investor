@@ -143,6 +143,7 @@ def _resolve_access(
         "monitor",
         "portfolio_analytics",
         "risk_policy_budget",
+        "risk_account_policy",
     ],
 ) -> ReadAccess:
     directory = _require_directory()
@@ -173,6 +174,8 @@ def _resolve_access(
             return directory.resolve_portfolio_analytics(current_user.sub, selector)
         if selector_kind == "risk_policy_budget":
             return directory.resolve_risk_policy_budget(current_user.sub, selector)
+        if selector_kind == "risk_account_policy":
+            return directory.resolve_risk_account_policy(current_user.sub, selector)
     except ServiceReadAccessError:
         raise _access_denied() from None
     raise HTTPException(
@@ -198,6 +201,14 @@ def resolve_risk_policy_budget_access(
     """Resolve one deployment-owned budget-control binding for this subject."""
 
     return _resolve_access(current_user, portfolio_ref, "risk_policy_budget")
+
+
+def resolve_risk_account_policy_access(
+    current_user: TokenPayload, account_ref: str
+) -> ReadAccess:
+    """Resolve one exact account-only policy grant for the authenticated subject."""
+
+    return _resolve_access(current_user, account_ref, "risk_account_policy")
 
 
 def resolve_paper_submit_access(

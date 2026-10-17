@@ -166,6 +166,9 @@ def _catalog_error(code: str) -> HTTPException:
         http_status = status.HTTP_404_NOT_FOUND
     elif code in {
         "APPROVER_NOT_AUTHORIZED",
+        "APPROVER_MUST_DIFFER_FROM_OWNER",
+        "APPROVAL_NOT_AUTHORIZED",
+        "POLICY_PUBLISH_NOT_AUTHORIZED",
         "BUDGET_PUBLISH_NOT_AUTHORIZED",
         "BUDGET_PROPOSAL_OWNER_REQUIRED",
         "BUDGET_MEMBER_OWNER_REQUIRED",

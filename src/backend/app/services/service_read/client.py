@@ -42,6 +42,7 @@ __all__ = [
     "PaperLegacyImportBinding",
     "ApprovedTargetSubmitBinding",
     "RiskPolicyBudgetBinding",
+    "RiskAccountPolicyBinding",
     "ServiceReadClientCloseError",
     "ServiceReadUnavailableError",
     "PAPER_CONTROL_MODES",
@@ -69,6 +70,16 @@ RISK_POLICY_BUDGET_CHECKER_OPERATIONS = frozenset(
 )
 RISK_POLICY_BUDGET_OPERATIONS = frozenset(
     RISK_POLICY_BUDGET_MAKER_OPERATIONS | RISK_POLICY_BUDGET_CHECKER_OPERATIONS
+)
+
+RISK_ACCOUNT_POLICY_MAKER_OPERATIONS = frozenset(
+    {"policy.draft", "policy.publish", "policy.inspect", "policy.confirmation.read"}
+)
+RISK_ACCOUNT_POLICY_CHECKER_OPERATIONS = frozenset(
+    {"policy.approve", "policy.inspect", "policy.confirmation.read"}
+)
+RISK_ACCOUNT_POLICY_OPERATIONS = frozenset(
+    RISK_ACCOUNT_POLICY_MAKER_OPERATIONS | RISK_ACCOUNT_POLICY_CHECKER_OPERATIONS
 )
 
 PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
@@ -550,6 +561,58 @@ class RiskPolicyBudgetBinding:
         if self.actor_role == "checker":
             return self.checker_principal_ref
         return self.maker_principal_ref
+
+
+@dataclass(frozen=True, slots=True)
+class RiskAccountPolicyBinding:
+    """One actor's operation grant for one exact manual account scope.
+
+    Ordinary account policy control deliberately has no portfolio or budget
+    selector. The scope itself is validated by deployment and again against
+    the registered SDK binding before the owner thread is started.
+    """
+
+    mount: str
+    account_ref: str
+    scope_ref: str
+    owner_subject: str
+    actor_role: str
+    maker_principal_ref: str
+    checker_principal_ref: str
+
+    def __post_init__(self) -> None:
+        for value, code in (
+            (self.mount, "INVALID_MOUNT"),
+            (self.account_ref, "INVALID_ACCOUNT_REF"),
+            (self.scope_ref, "INVALID_SCOPE_REF"),
+            (self.owner_subject, "INVALID_OWNER_SUBJECT"),
+            (self.maker_principal_ref, "INVALID_MAKER_PRINCIPAL"),
+            (self.checker_principal_ref, "INVALID_CHECKER_PRINCIPAL"),
+        ):
+            if type(value) is not str or not value or value != value.strip():
+                raise ServiceReadContractError(code)
+        if self.mount != "application.risk_policy":
+            raise ServiceReadContractError("INVALID_MOUNT")
+        if self.actor_role not in {"maker", "checker"}:
+            raise ServiceReadContractError("INVALID_RISK_ACCOUNT_POLICY_ACTOR_ROLE")
+        if self.maker_principal_ref == self.checker_principal_ref:
+            raise ServiceReadContractError("MAKER_CHECKER_PRINCIPAL_MUST_DIFFER")
+
+    @property
+    def operations(self) -> frozenset[str]:
+        return (
+            RISK_ACCOUNT_POLICY_CHECKER_OPERATIONS
+            if self.actor_role == "checker"
+            else RISK_ACCOUNT_POLICY_MAKER_OPERATIONS
+        )
+
+    @property
+    def expected_principal_ref(self) -> str:
+        return (
+            self.checker_principal_ref
+            if self.actor_role == "checker"
+            else self.maker_principal_ref
+        )
 
 
 @dataclass(frozen=True)

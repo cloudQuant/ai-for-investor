@@ -90,6 +90,10 @@ class ServiceReadSession(Protocol):
         member_account_ref: str | None = None,
     ) -> dict[str, Any]: ...
 
+    def call_risk_account_policy(
+        self, account_ref: str, operation: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
     def call_paper_legacy_import(
         self,
         legacy_account_id: str,
@@ -123,6 +127,7 @@ class _Kind(Enum):
     ANALYTICS_QUERY = auto()
     ANALYTICS_CANCEL = auto()
     RISK_POLICY_BUDGET = auto()
+    RISK_ACCOUNT_POLICY = auto()
     PAPER_LEGACY_IMPORT = auto()
 
 
@@ -309,6 +314,15 @@ class ServiceReadWorker:
             operation,
             arguments,
             member_account_ref,
+        )
+
+    async def call_risk_account_policy(
+        self, account_ref: str, operation: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Queue one bounded account-policy catalog call on the owner thread."""
+
+        return await self._submit(
+            _Kind.RISK_ACCOUNT_POLICY, account_ref, operation, arguments
         )
 
     async def call_paper_legacy_import(
@@ -532,6 +546,10 @@ class ServiceReadWorker:
                     request.arguments[1],
                     request.arguments[2],
                     member_account_ref=request.arguments[3],
+                )
+            elif request.kind is _Kind.RISK_ACCOUNT_POLICY:
+                result = session.call_risk_account_policy(
+                    request.arguments[0], request.arguments[1], request.arguments[2]
                 )
             elif request.kind is _Kind.PAPER_LEGACY_IMPORT:
                 result = session.call_paper_legacy_import(

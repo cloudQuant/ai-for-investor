@@ -25,6 +25,7 @@ from .client import (
     PaperLegacyImportBinding,
     PAPER_LEGACY_IMPORT_OPERATIONS,
     PaperSubmitBinding,
+    RiskAccountPolicyBinding,
     RiskPolicyBudgetBinding,
     ServiceReadUnavailableError,
 )
@@ -110,6 +111,7 @@ class SdkServiceReadSession:
         monitor_bindings: Mapping[str, MonitorBinding] | None = None,
         portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] | None = None,
         risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding] | None = None,
+        risk_account_policy_bindings: Mapping[str, RiskAccountPolicyBinding] | None = None,
     ) -> None:
         self._account_bindings = dict(account_bindings)
         self._account_book_bindings = dict(account_book_bindings or {})
@@ -129,6 +131,7 @@ class SdkServiceReadSession:
         self._monitor_bindings = dict(monitor_bindings or {})
         self._portfolio_analytics_bindings = dict(portfolio_analytics_bindings or {})
         self._risk_policy_budget_bindings = dict(risk_policy_budget_bindings or {})
+        self._risk_account_policy_bindings = dict(risk_account_policy_bindings or {})
         if not (
             self._account_bindings
             or self._account_book_bindings
@@ -140,6 +143,7 @@ class SdkServiceReadSession:
             or self._monitor_bindings
             or self._portfolio_analytics_bindings
             or self._risk_policy_budget_bindings
+            or self._risk_account_policy_bindings
         ):
             raise ServiceReadSessionError(
                 "SERVICE_READ_NOT_CONFIGURED",
@@ -281,7 +285,23 @@ class SdkServiceReadSession:
             )
             for scope_ref in binding.member_scope_refs.values():
                 expected.add((binding.mount, scope_ref, binding.operations))
+        for binding in self._risk_account_policy_bindings.values():
+            expected.add((binding.mount, binding.scope_ref, binding.operations))
         return expected
+
+    @staticmethod
+    def _scope_is_manual_policy_scope(scope: Any, account_ref: str) -> bool:
+        return (
+            getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and bool(getattr(scope, "execution_domain_ref", None))
+            and bool(getattr(scope, "manual_book_ref", None))
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "portfolio_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
 
     def _validate_registered_bindings(self) -> None:
         assert self._runtime is not None
@@ -442,6 +462,21 @@ class SdkServiceReadSession:
                         "SERVICE_READ_SCOPE_MISMATCH",
                         "budget member scope does not match its configured account",
                     )
+
+        for account_ref, configured in self._risk_account_policy_bindings.items():
+            if configured.account_ref != account_ref:
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "account policy selector does not match its configured account",
+                )
+            scope = self._one_registered_binding(
+                configured.mount, configured.scope_ref
+            ).scope
+            if not self._scope_is_manual_policy_scope(scope, account_ref):
+                raise ServiceReadSessionError(
+                    "SERVICE_READ_SCOPE_MISMATCH",
+                    "account policy scope must be one exact manual account target",
+                )
 
     @staticmethod
     def _scope_is_portfolio_analytics_scope(scope: Any, portfolio_ref: str) -> bool:
@@ -980,6 +1015,61 @@ class SdkServiceReadSession:
             or type(reply["result"]) is not dict
         ):
             raise ServiceReadUnavailableError("INVALID_RISK_POLICY_BUDGET_REPLY")
+        return reply
+
+    def call_risk_account_policy(
+        self,
+        account_ref: str,
+        operation: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Call one explicitly granted ordinary account-policy operation."""
+
+        self._assert_owner()
+        self._require_open()
+        if not self._started:
+            raise ServiceReadSessionError(
+                "SERVICE_READ_NOT_STARTED",
+                "service runtime must be started before operations",
+            )
+        binding = self._risk_account_policy_bindings.get(account_ref)
+        if binding is None:
+            raise ServiceReadUnavailableError("RISK_ACCOUNT_POLICY_NOT_CONFIGURED")
+        if operation not in binding.operations:
+            raise ServiceReadUnavailableError(
+                "RISK_ACCOUNT_POLICY_OPERATION_NOT_AUTHORIZED"
+            )
+        expected_arguments: dict[str, frozenset[str]] = {
+            "policy.draft": frozenset({"policy_ref", "content"}),
+            "policy.approve": frozenset({"policy_ref"}),
+            "policy.publish": frozenset({"policy_ref"}),
+            "policy.inspect": frozenset({"policy_ref"}),
+            "policy.receipt": frozenset({"policy_ref"}),
+            "policy.confirmation.read": frozenset({"policy_ref"}),
+        }
+        required = expected_arguments.get(operation)
+        if required is None or set(arguments) != required:
+            raise ServiceReadUnavailableError(
+                "INVALID_RISK_ACCOUNT_POLICY_ARGUMENTS"
+            )
+        self._validate_runtime()
+        assert self._runtime is not None
+        reply = _thaw_json(
+            self._runtime.call(
+                binding.mount,
+                operation,
+                dict(arguments),
+                scope_ref=binding.scope_ref,
+            )
+        )
+        if (
+            type(reply) is not dict
+            or set(reply) != {"ok", "code", "result"}
+            or type(reply["ok"]) is not bool
+            or type(reply["code"]) is not str
+            or type(reply["result"]) is not dict
+        ):
+            raise ServiceReadUnavailableError("INVALID_RISK_ACCOUNT_POLICY_REPLY")
         return reply
 
     def call_paper_legacy_import(

@@ -20,6 +20,7 @@ from app.services.service_read.client import (
     ApprovedTargetSubmitBinding,
     OrderSubmitBinding,
     PortfolioAnalyticsBinding,
+    RiskAccountPolicyBinding,
     RiskPolicyBudgetBinding,
 
     PaperLegacyImportBinding,
@@ -30,6 +31,7 @@ __all__ = [
     "ReadAccess",
     "StrategyBookBinding",
     "PortfolioAnalyticsBinding",
+    "RiskAccountPolicyBinding",
     "RiskPolicyBudgetBinding",
     "ServiceReadAccessDirectory",
     "ServiceReadAccessError",
@@ -76,10 +78,14 @@ class ReadAccess:
     allow_monitor_scope_refs: frozenset[str] = frozenset()
     allow_portfolio_refs: frozenset[str] = frozenset()
     allow_risk_policy_budget_refs: frozenset[str] = frozenset()
+    allow_risk_account_policy_refs: frozenset[str] = frozenset()
     portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding] = field(
         default_factory=dict, repr=False
     )
     risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding] = field(
+        default_factory=dict, repr=False
+    )
+    risk_account_policy_bindings: Mapping[str, RiskAccountPolicyBinding] = field(
         default_factory=dict, repr=False
     )
     strategy_book_bindings: Mapping[str, StrategyBookBinding] = field(
@@ -117,6 +123,7 @@ class ReadAccess:
             "allow_monitor_scope_refs",
             "allow_portfolio_refs",
             "allow_risk_policy_budget_refs",
+            "allow_risk_account_policy_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
         if self.allow_account_book_refs and not inspect.iscoroutinefunction(
@@ -377,6 +384,43 @@ class ReadAccess:
             self, "risk_policy_budget_bindings", MappingProxyType(normalized_budgets)
         )
 
+        account_policy_bindings = self.risk_account_policy_bindings
+        if not isinstance(account_policy_bindings, Mapping) or len(account_policy_bindings) > 4096:
+            raise ServiceReadAccessError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
+        normalized_account_policies: dict[str, RiskAccountPolicyBinding] = {}
+        for account_ref, binding in account_policy_bindings.items():
+            if (
+                not _valid_identifier(account_ref)
+                or type(binding) is not RiskAccountPolicyBinding
+                or binding.account_ref != account_ref
+            ):
+                raise ServiceReadAccessError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
+            normalized_account_policies[account_ref] = binding
+        if set(normalized_account_policies) != set(self.allow_risk_account_policy_refs):
+            raise ServiceReadAccessError("RISK_ACCOUNT_POLICY_BINDING_MISMATCH")
+        if normalized_account_policies:
+            if not inspect.iscoroutinefunction(
+                getattr(self.worker, "call_risk_account_policy", None)
+            ):
+                raise ServiceReadAccessError("INVALID_WORKER")
+            identity = self.application_identity
+            role_value = getattr(getattr(identity, "role", None), "value", None)
+            if (
+                role_value != "application_client"
+                or not _valid_identifier(getattr(identity, "principal_ref", None))
+                or not _valid_identifier(getattr(identity, "actor_ref", None))
+                or (
+                    getattr(identity, "delegate_ref", None) is not None
+                    and not _valid_identifier(identity.delegate_ref)
+                )
+            ):
+                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+        object.__setattr__(
+            self,
+            "risk_account_policy_bindings",
+            MappingProxyType(normalized_account_policies),
+        )
+
 
 @dataclass(frozen=True, slots=True, init=False)
 class ServiceReadAccessDirectory:
@@ -522,6 +566,16 @@ class ServiceReadAccessDirectory:
             raise ServiceReadAccessError("ACCESS_DENIED")
         access = self._access_by_subject.get(subject)
         if access is None or portfolio_ref not in access.risk_policy_budget_bindings:
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        return access
+
+    def resolve_risk_account_policy(self, subject: str, account_ref: str) -> ReadAccess:
+        """Resolve one exact ordinary policy account grant for a JWT subject."""
+
+        if not _valid_identifier(subject) or not _valid_identifier(account_ref):
+            raise ServiceReadAccessError("ACCESS_DENIED")
+        access = self._access_by_subject.get(subject)
+        if access is None or account_ref not in access.risk_account_policy_bindings:
             raise ServiceReadAccessError("ACCESS_DENIED")
         return access
 
