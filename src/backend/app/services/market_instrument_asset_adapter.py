@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import app.services.market_instrument as _market_instrument
@@ -557,6 +557,14 @@ async def _lookup_fx_warehouse(
     )
 
 
+_CRYPTO_INTRADAY_PERIODS = frozenset({"1m", "5m", "15m", "30m", "1h", "2h", "4h", "hourly"})
+
+
+def _crypto_pair_code(symbol: str) -> str:
+    """Normalise BTC-USDT / BTC/USDT / btcusdt to the Binance code BTCUSDT."""
+    return "".join(character for character in symbol.upper() if character.isalnum())
+
+
 async def _lookup_crypto_warehouse(
     service: _market_instrument.MarketInstrumentService,
     *,
@@ -567,55 +575,84 @@ async def _lookup_crypto_warehouse(
     market: str | None,
     warnings: list[str],
 ) -> dict[str, Any]:
-    normalized = symbol.upper()
-    spot = await service._fetch_one(
-        """
+    normalized = _crypto_pair_code(symbol)
+    intraday = (period or "").strip().lower() in _CRYPTO_INTRADAY_PERIODS
+    table = "CRYPTO_HOURLY_MARKET" if intraday else "CRYPTO_DAILY_MARKET"
+    time_column = "TRADE_DATETIME" if intraday else "TRADE_DATE"
+    start_text = _market_instrument._sql_date_text(start_date, date.today())
+    end_text = _market_instrument._sql_date_text(end_date, date.today())
+    # DATETIME comparisons against a bare date string drop the whole end day.
+    if intraday:
+        start_text = f"{start_text} 00:00:00"
+        end_text = f"{end_text} 23:59:59"
+    rows = await service._fetch_rows(
+        f"""
         SELECT *
-        FROM CRYPTO_JS_SPOT
-        WHERE UPPER(`交易品种`) = :symbol
-        ORDER BY data_date DESC
-        LIMIT 1
+        FROM {table}
+        WHERE MARKET = 'BINANCE'
+          AND SYMBOL = :symbol
+          AND {time_column} BETWEEN :start AND :end
+        ORDER BY {time_column} DESC
+        LIMIT 1000
         """,
-        {"symbol": normalized},
+        {"symbol": normalized, "start": start_text, "end": end_text},
     )
-    # CRYPTO_BITCOIN_CME is a Bitcoin positioning report, not price bars
-    # for a requested crypto pair such as BTCJPY.
-    history_rows: list[dict[str, Any]] = []
-    snapshot = {
-        "symbol": normalized,
-        "name": _market_instrument._safe_str(
-            _market_instrument._first_value(spot or {}, "交易品种")
+    # Most recent window first, then back to chronological order so
+    # change_pct can be derived from the previous close.
+    rows = list(reversed(rows))
+    if intraday:
+        # ``_iso_date`` truncates a datetime to its date, which would collapse
+        # every bar of a day onto one category label.  Hand it a pre-formatted
+        # string instead so the hourly labels stay distinct.
+        for row in rows:
+            stamp = _market_instrument._first_value(row, time_column)
+            if isinstance(stamp, datetime):
+                row[time_column] = stamp.strftime("%Y-%m-%d %H:%M")
+    history_rows = service._normalize_warehouse_history(
+        rows,
+        date_key=time_column,
+        open_key="OPEN_PRICE",
+        high_key="HIGH_PRICE",
+        low_key="LOW_PRICE",
+        close_key="CLOSE_PRICE",
+        volume_key="VOLUME",
+        turnover_key="TURNOVER",
+    )
+    snapshot = service._snapshot_from_latest_history(normalized, history_rows)
+    latest_raw = rows[-1] if rows else {}
+    previous_close = (
+        _market_instrument._safe_float(
+            _market_instrument._first_value(rows[-2], "CLOSE_PRICE")
         )
-        or normalized,
-        "price": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "最近报价")
-        ),
-        "change": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "涨跌额")
-        ),
-        "change_pct": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "涨跌幅")
-        ),
-        "high": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "24小时最高")
-        ),
-        "low": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "24小时最低")
-        ),
-        "volume": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "24小时成交量")
-        ),
-        "market": _market_instrument._safe_str(_market_instrument._first_value(spot or {}, "市场")),
-        "update_time": _market_instrument._safe_str(
-            _market_instrument._first_value(spot or {}, "更新时间", "data_date")
-        ),
-        "data_source_table": "CRYPTO_JS_SPOT",
-    }
+        if len(rows) > 1
+        else None
+    )
+    latest_close = snapshot.get("price")
+    snapshot.update(
+        {
+            "symbol": symbol.strip().upper(),
+            "name": symbol.strip().upper(),
+            "data_source_symbol": normalized,
+            "market": "BINANCE",
+            "change": (
+                latest_close - previous_close
+                if latest_close is not None and previous_close is not None
+                else None
+            ),
+            "trade_count": _market_instrument._safe_int(
+                _market_instrument._first_value(latest_raw, "TRADE_COUNT")
+            ),
+            "data_source_table": table,
+        }
+    )
     return service._payload(
         asset_type="crypto",
-        symbol=normalized,
+        # Echo the requested code so ``_payload_matches_request`` (which keys
+        # crypto on a plain upper()) accepts BTC-USDT / btcusdt variants; the
+        # canonical Binance pair stays in data_source_symbol.
+        symbol=symbol.strip().upper(),
         name=_market_instrument._name_or_fallback(snapshot.get("name"), normalized),
-        market=market or _market_instrument._safe_str(snapshot.get("market")) or "CRYPTO",
+        market=market or "BINANCE",
         snapshot=snapshot,
         rows=history_rows,
         period=period,

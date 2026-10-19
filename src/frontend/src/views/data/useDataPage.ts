@@ -357,7 +357,7 @@ export function useDataPage() {
       key: 'crypto',
       labelKey: 'dataMgmt.tabCrypto',
       placeholderKey: 'dataMgmt.cryptoSymbolPlaceholder',
-      defaultSymbol: 'BTCJPY',
+      defaultSymbol: 'BTCUSDT',
       icon: Coin,
     },
   ]
