@@ -343,7 +343,10 @@ export function useDataPage() {
       key: 'option',
       labelKey: 'dataMgmt.tabOptions',
       placeholderKey: 'dataMgmt.optionSymbolPlaceholder',
-      defaultSymbol: 'MO',
+      // Options have no continuous-contract alias; the backend refuses IO/HO/MO
+      // and requires an exact contract, so the tab adopts one from the
+      // warehouse list instead of starting from a symbol that cannot resolve.
+      defaultSymbol: '',
       icon: DataAnalysis,
     },
     {
@@ -1307,9 +1310,7 @@ export function useDataPage() {
     } else {
       restoreAssetSelection(form.asset_type)
     }
-    void loadInstrumentOptions(formSymbolText())
-    void loadCoverageMatrix()
-    void lookupInstrument('local_only')
+    loadInstrumentsThenLookup()
     window.addEventListener('resize', handleViewportResize)
   })
 
@@ -1335,9 +1336,7 @@ export function useDataPage() {
     () => route.query.tab,
     (tab) => {
       if (applyRouteTab(tab, true)) {
-        void loadInstrumentOptions(formSymbolText())
-        void loadCoverageMatrix()
-        void lookupInstrument('local_only')
+        loadInstrumentsThenLookup()
       }
     },
   )
@@ -1451,11 +1450,7 @@ export function useDataPage() {
   }
 
   function setAssetType(assetType: MarketAssetType) {
-    if (applyAssetType(assetType)) {
-      void loadInstrumentOptions(formSymbolText())
-      void loadCoverageMatrix()
-      void lookupInstrument('local_only')
-    }
+    if (applyAssetType(assetType)) loadInstrumentsThenLookup()
   }
 
   function applyRouteTab(tabValue: unknown, resetResult: boolean) {
@@ -2783,7 +2778,7 @@ export function useDataPage() {
     }
   }
 
-  async function loadInstrumentOptions(search = '') {
+  async function loadInstrumentOptions(search = '', adoptFirstOnMiss = false) {
     const requestId = ++instrumentOptionsRequestId
     const normalizedSearch = String(search || '').trim()
     instrumentOptionsLoading.value = true
@@ -2795,6 +2790,7 @@ export function useDataPage() {
       })
       if (requestId !== instrumentOptionsRequestId) return
       instrumentOptions.value = ensureCurrentInstrumentOption(response.items)
+      if (adoptFirstOnMiss) adoptFirstInstrumentOption(response.items)
     } catch {
       if (requestId === instrumentOptionsRequestId) {
         instrumentOptions.value = ensureCurrentInstrumentOption([])
@@ -2824,6 +2820,37 @@ export function useDataPage() {
       },
       ...options,
     ]
+  }
+
+  /**
+   * Point the option tab at a contract the warehouse can actually return.
+   * ``ensureCurrentInstrumentOption`` synthesizes an entry for whatever symbol
+   * is already selected, so membership in the rendered list is not evidence
+   * the instrument exists -- only the server-returned items are.
+   */
+  function adoptFirstInstrumentOption(items: MarketInstrumentOption[]) {
+    if (form.asset_type !== 'option') return
+    const currentSymbol = formSymbolText()
+    if (items.some((item) => item.symbol === currentSymbol)) return
+    const first = items.find((item) => Boolean(item.symbol))
+    if (!first) return
+    form.symbol = first.symbol
+  }
+
+  function loadInstrumentsThenLookup(): void {
+    if (form.asset_type !== 'option') {
+      void loadInstrumentOptions(formSymbolText())
+      void loadCoverageMatrix()
+      void lookupInstrument('local_only')
+      return
+    }
+    // A missing or stale option symbol can only be repaired from the contract
+    // list, so that list must resolve before the first lookup is issued.
+    void (async () => {
+      await loadInstrumentOptions(formSymbolText(), true)
+      void loadCoverageMatrix()
+      if (formSymbolText()) await lookupInstrument('local_only')
+    })()
   }
 
   function formSymbolText() {

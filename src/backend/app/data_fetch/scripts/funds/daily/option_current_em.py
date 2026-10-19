@@ -6,12 +6,16 @@ Option Current Em
 频率: daily
 """
 
+import logging
+
 import pandas as pd
 from akshare.option.option_em import option_current_cffex_em
 from akshare.utils.request import request_with_retry as request_eastmoney
 
 from app.data_fetch.configs.db_config import DB_CONFIG
 from app.data_fetch.providers.akshare_to_mysql import AkshareToMySql
+
+_logger = logging.getLogger(__name__)
 
 
 class OptionCurrentEm(AkshareToMySql):
@@ -35,6 +39,29 @@ class OptionCurrentEm(AkshareToMySql):
 
     @staticmethod
     def fetch_limited_pages(max_pages: int = 1, include_cffex: bool = True) -> pd.DataFrame:
+        frames: list[pd.DataFrame] = []
+        try:
+            frames.extend(OptionCurrentEm._fetch_eastmoney_pages(max_pages=max_pages))
+        except Exception as exc:
+            # 东财 clist 与中金所是两个独立接口。东财被出口策略拒成 403 时只丢商品期权行，
+            # 不能让一次 EM 失败连带丢弃本可入库的中金所快照。
+            _logger.warning("东财期权快照抓取失败，仅跳过该数据源: %s", exc)
+        if include_cffex:
+            try:
+                cffex_df = option_current_cffex_em()
+            except Exception as exc:
+                _logger.warning("中金所期权快照抓取失败: %s", exc)
+                cffex_df = None
+            if cffex_df is not None and not cffex_df.empty:
+                frames.append(cffex_df)
+        if not frames:
+            return pd.DataFrame()
+        df = pd.concat(frames, ignore_index=True)
+        df["序号"] = range(1, len(df) + 1)
+        return OptionCurrentEm.normalize_columns(df)
+
+    @staticmethod
+    def _fetch_eastmoney_pages(max_pages: int = 1) -> list[pd.DataFrame]:
         url = "https://23.push2.eastmoney.com/api/qt/clist/get"
         params = {
             "pn": "1",
@@ -81,15 +108,7 @@ class OptionCurrentEm(AkshareToMySql):
                     }
                 )
             )
-        if include_cffex:
-            cffex_df = option_current_cffex_em()
-            if cffex_df is not None and not cffex_df.empty:
-                frames.append(cffex_df)
-        if not frames:
-            return pd.DataFrame()
-        df = pd.concat(frames, ignore_index=True)
-        df["序号"] = range(1, len(df) + 1)
-        return OptionCurrentEm.normalize_columns(df)
+        return frames
 
     @staticmethod
     def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -142,6 +161,10 @@ class OptionCurrentEm(AkshareToMySql):
                 )
             else:
                 df = self.fetch_ak_data("option_current_em", **kwargs)
+                if df is None or df.empty:
+                    # ak.option_current_em 内部吞掉东财异常后返回空表，
+                    # 而中金所快照此时仍然可用，不能据此判定"无数据"。
+                    df = self.fetch_limited_pages(include_cffex=bool(include_cffex))
 
             if df is None or df.empty:
                 self.logger.warning("No data found")

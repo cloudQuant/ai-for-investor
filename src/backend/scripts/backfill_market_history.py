@@ -737,38 +737,89 @@ def _lookup_fx_cache_history(
     service: MarketInstrumentService,
     warnings: list[str],
 ) -> list[dict[str, Any]]:
-    currency_column = service._fx_history_column(candidate.symbol)  # noqa: SLF001
+    """Derive a pair's daily mid rate from both legs of ``CURRENCY_BOC_SAFE``.
+
+    This used to pick a single currency column matched as a prefix or suffix of the pair code
+    and fell back to 美元, and it stored the table's 人民币-per-100-units value without dividing
+    by 100. Together those wrote USDCNH=685 and AUDCHF=477 into the cache as if they were pair
+    prices. The same quotient the market page now uses is what belongs here.
+    """
+    import pandas as pd
+
+    from app.data_fetch.scripts.common.currency_fallback import (
+        CODE_TO_NAME,
+        _boc_rates_for_row,
+    )
+    from app.services.market_instrument_asset_adapter import (  # noqa: SLF001
+        _FX_OFFSHORE_LEG_MAP,
+        _fx_pair_legs,
+    )
+
+    symbol = str(candidate.symbol).upper()
+    legs = _fx_pair_legs(symbol)
+    if legs is None:
+        warnings.append(f"外汇代码 {symbol} 无法拆分为两个币种，跳过缓存")
+        return []
+
+    resolved = [_FX_OFFSHORE_LEG_MAP.get(leg, leg) for leg in legs]
+    base, quote = resolved
+    needed = [leg for leg in resolved if leg != "CNY"]
+    missing = [leg for leg in needed if leg not in CODE_TO_NAME]
+    if missing:
+        warnings.append(f"人民币中间价表未覆盖 {', '.join(missing)}，{symbol} 跳过缓存")
+        return []
+
+    selected_columns = [CODE_TO_NAME[leg] for leg in needed]
+    projected = ", ".join(f"MAX(`{name}`) AS `{name}`" for name in selected_columns)
+    fields = "`日期`" + (f", {projected}" if projected else "")
+
     conn = _connect()
     try:
         with conn.cursor(dictionary=True) as cursor:
             cursor.execute(
                 f"""
-                SELECT `日期` AS date, `{currency_column}` AS close
+                SELECT {fields}
                 FROM CURRENCY_BOC_SAFE
-                WHERE STR_TO_DATE(`日期`, '%Y-%m-%d') BETWEEN %s AND %s
-                ORDER BY STR_TO_DATE(`日期`, '%Y-%m-%d') ASC
+                WHERE `日期` BETWEEN %s AND %s
+                GROUP BY `日期`
+                ORDER BY `日期` ASC
                 LIMIT 260
                 """,
                 (_sql_date_text(args.start_date), _sql_date_text(args.end_date)),
             )
-            rows = cursor.fetchall()
-            if not rows:
+            raw_rows = cursor.fetchall()
+            used_fallback = False
+            if not raw_rows:
                 cursor.execute(
                     f"""
-                    SELECT `日期` AS date, `{currency_column}` AS close
+                    SELECT {fields}
                     FROM CURRENCY_BOC_SAFE
-                    ORDER BY STR_TO_DATE(`日期`, '%Y-%m-%d') DESC
+                    GROUP BY `日期`
+                    ORDER BY `日期` DESC
                     LIMIT 120
                     """
                 )
-                rows = list(reversed(cursor.fetchall()))
-                if rows:
-                    warnings.append("所选日期范围无外汇历史数据，已使用最近可用汇率记录")
+                raw_rows = list(reversed(cursor.fetchall()))
+                used_fallback = True
     except Exception as exc:
         warnings.append(f"外汇本地历史缓存不可用: {exc}")
         return []
     finally:
         conn.close()
+
+    rows: list[dict[str, Any]] = []
+    for raw in raw_rows:
+        rates = _boc_rates_for_row(pd.Series(raw))
+        base_rate = rates.get(base)
+        quote_rate = rates.get(quote)
+        if not base_rate or not quote_rate:
+            continue
+        rows.append({"date": str(raw["日期"]), "close": base_rate / quote_rate})
+
+    if used_fallback and rows:
+        warnings.append("所选日期范围无外汇历史数据，已使用最近可用汇率记录")
+    if not rows:
+        warnings.append(f"人民币中间价表没有可用于推导 {symbol} 的汇率记录")
     return service._normalize_fx_history(rows)  # noqa: SLF001
 
 

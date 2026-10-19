@@ -127,6 +127,48 @@ async def _fill_history_gap(
     )
 
 
+async def _fill_history_from_local_cache(
+    service: _market_instrument.MarketInstrumentService,
+    *,
+    asset_type: MarketAssetType,
+    warehouse_payload: dict[str, Any],
+    symbol: str,
+    start_date: date | str,
+    end_date: date | str,
+    period: str,
+    warnings: list[str],
+) -> dict[str, Any]:
+    """Serve missing history from the local gap-fill cache without provider I/O.
+
+    ``_fill_history_gap`` treats a stale cache as unusable because it can follow
+    up online; the legacy lookup endpoint may not reach the network, so a stale
+    cache is returned as explicitly partial coverage instead of being dropped.
+    """
+    cached_rows = await service._lookup_history_cache(
+        asset_type=asset_type,
+        symbol=warehouse_payload.get("symbol") or symbol,
+        start_date=start_date,
+        end_date=end_date,
+        period=period,
+    )
+    if not cached_rows:
+        return warehouse_payload
+
+    last_bar = str(cached_rows[-1].get("date") or "")
+    requested_end = _market_instrument._coerce_date(end_date)
+    if requested_end is None or last_bar >= requested_end.isoformat():
+        coverage = f"最后一条为 {last_bar}"
+    else:
+        coverage = f"本地仅覆盖到 {last_bar}，其后区间无数据"
+    warnings.append(f"akshare_data 缺少该资产的历史行情，已使用本地补齐缓存（{coverage}）。")
+    return service._merge_history_gap(
+        warehouse_payload=warehouse_payload,
+        rows=cached_rows,
+        period=period,
+        provider_suffix="cache",
+    )
+
+
 def _merge_history_gap(
     service: _market_instrument.MarketInstrumentService,
     *,

@@ -165,9 +165,22 @@ class FuturesDailyMarket(AkshareToMySql):
         df["UPDATEUSER"] = "system"
 
         try:
-            df["TRADE_DATE"] = pd.to_datetime(df["TRADE_DATE"], errors="coerce").dt.strftime(
-                "%Y-%m-%d"
-            )
+            # Some exchanges (CZCE) return TRADE dates as YYYYMMDD integers, which
+            # pd.to_datetime reads as epoch nanoseconds and silently turns into
+            # 1970-01-01. Parse those with the explicit compact format instead.
+            def _parse_trade_date(value):
+                text = str(value).strip()
+                if len(text) == 8 and text.isdigit():
+                    return pd.to_datetime(text, format="%Y%m%d", errors="coerce")
+                return pd.to_datetime(text, errors="coerce")
+
+            parsed = df["TRADE_DATE"].map(_parse_trade_date)
+            unparsed = int(parsed.isna().sum())
+            if unparsed:
+                self.logger.warning(f"Dropping {unparsed} row(s) with unparseable TRADE_DATE")
+                df = df.loc[parsed.notna()]
+                parsed = parsed.loc[parsed.notna()]
+            df = df.assign(TRADE_DATE=parsed.dt.strftime("%Y-%m-%d"))
         except Exception as e:
             self.logger.warning(f"Error formatting TRADE_DATE: {e}")
 

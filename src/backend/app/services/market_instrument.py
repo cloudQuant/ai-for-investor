@@ -342,8 +342,19 @@ class MarketInstrumentService:
                 market=market,
                 period=normalized_period,
             )
-        elif not self._payload_has_data(warehouse_payload):
-            warnings.append("本地行情未找到所请求的精确标的。")
+        else:
+            if not (warehouse_payload.get("history") or {}).get("rows"):
+                warehouse_payload = await self._fill_history_from_local_cache(
+                    asset_type=asset_type,
+                    warehouse_payload=warehouse_payload,
+                    symbol=normalized_symbol,
+                    start_date=start_date or start,
+                    end_date=end_date or end,
+                    period=normalized_period,
+                    warnings=warnings,
+                )
+            if not self._payload_has_data(warehouse_payload):
+                warnings.append("本地行情未找到所请求的精确标的。")
         warehouse_payload["warnings"] = warnings
         warehouse_payload["indicators"] = self._build_indicators(
             warehouse_payload["history"]["rows"]
@@ -521,6 +532,32 @@ class MarketInstrumentService:
             end_date=end_date,
             period=period,
             market=market,
+            warnings=warnings,
+        )
+
+    async def _fill_history_from_local_cache(
+        self,
+        *,
+        asset_type: MarketAssetType,
+        warehouse_payload: dict[str, Any],
+        symbol: str,
+        start_date: date | str,
+        end_date: date | str,
+        period: str,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        from app.services.market_instrument_dynamic_data import (
+            _fill_history_from_local_cache as _delegate,
+        )
+
+        return await _delegate(
+            self,
+            asset_type=asset_type,
+            warehouse_payload=warehouse_payload,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            period=period,
             warnings=warnings,
         )
 
@@ -978,14 +1015,6 @@ class MarketInstrumentService:
         )
 
         return _delegate(rows=rows)
-
-    @staticmethod
-    def _fx_history_column(symbol: str) -> str:
-        from app.services.market_instrument_projection import (
-            _fx_history_column as _delegate,
-        )
-
-        return _delegate(symbol=symbol)
 
     def _lookup_stock(
         self,

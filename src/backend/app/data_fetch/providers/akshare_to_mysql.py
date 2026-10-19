@@ -182,19 +182,37 @@ class AkshareToMySql(MysqlBase):
     ) -> list[str]:
         """
         获取指定交易所和时间范围内的交易日列表
-        """
-        table_name = "trading_days"
 
-        try:
-            if self.table_exists(table_name):
+        Prefer the warehouse-wide ``TRADING_DAYS`` calendar, then the legacy
+        per-exchange table, then the Sina calendar. Chinese futures exchanges
+        share the same statutory trading-day calendar.
+        """
+        calendar_sources = (
+            ("TRADING_DAYS", "TRADE_DATE", None),
+            ("trading_days", "trading_day", "exchange"),
+        )
+        for table_name, date_column, exchange_column in calendar_sources:
+            try:
+                if not self.table_exists(table_name):
+                    continue
                 self.connect_db()
-                query = f"""  # nosec B608
-                SELECT trading_day FROM {table_name}
-                WHERE exchange = %s AND trading_day BETWEEN %s AND %s
-                ORDER BY trading_day
-                """
+                if exchange_column is None:
+                    query = (  # nosec B608
+                        f"SELECT {date_column} FROM {table_name} "
+                        f"WHERE {date_column} BETWEEN %s AND %s "
+                        f"ORDER BY {date_column}"
+                    )
+                    params: tuple[object, ...] = (start_date, end_date)
+                else:
+                    query = (  # nosec B608
+                        f"SELECT {date_column} FROM {table_name} "
+                        f"WHERE {exchange_column} = %s "
+                        f"AND {date_column} BETWEEN %s AND %s "
+                        f"ORDER BY {date_column}"
+                    )
+                    params = (exchange, start_date, end_date)
                 cursor = self._require_cursor()
-                cursor.execute(query, (exchange, start_date, end_date))
+                cursor.execute(query, params)
                 results = cursor.fetchall()
 
                 if results:
@@ -209,8 +227,29 @@ class AkshareToMySql(MysqlBase):
                             trading_days.append(str(value))
                     self.logger.info(f"从数据库获取到{len(trading_days)}个交易日")
                     return trading_days
-        except Exception as e:
-            self.logger.warning(f"从数据库获取交易日失败: {e}")
+            except Exception as e:
+                self.logger.warning(f"从 {table_name} 获取交易日失败: {e}")
+            finally:
+                self.disconnect_db()
+
+        chinese_exchanges = {"XSHG", "XSHE", "DCE", "SHFE", "CZCE", "CFFEX", "INE", "GFEX"}
+        if exchange in chinese_exchanges:
+            try:
+                df = self.fetch_ak_data("tool_trade_date_hist_sina")
+                if df is not None and not df.empty:
+                    frame = df.copy()
+                    frame["trade_date"] = pd.to_datetime(
+                        frame["trade_date"], errors="coerce"
+                    ).dt.strftime("%Y-%m-%d")
+                    frame = frame[
+                        (frame["trade_date"] >= start_date) & (frame["trade_date"] <= end_date)
+                    ]
+                    trading_days = sorted(frame["trade_date"].dropna().unique().tolist())
+                    if trading_days:
+                        self.logger.info(f"使用新浪交易日历获取到{len(trading_days)}个交易日")
+                        return trading_days
+            except Exception as e:
+                self.logger.warning(f"从新浪获取交易日失败: {e}")
 
         # 使用pandas_market_calendars作为备选
         try:
