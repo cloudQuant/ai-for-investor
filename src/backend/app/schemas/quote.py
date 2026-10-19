@@ -190,3 +190,11 @@ class ChartDataResponse(BaseModel):
     timeframe: str = Field("M1", description="Timeframe, e.g. M1, M5, M15, H1, D1")
     bars: list[KlineBar]
     total: int = 0
+    complete: bool | None = Field(
+        None,
+        description="Whether a configured service-market history scan exhausted its interval.",
+    )
+    error_code: str | None = Field(
+        None,
+        description="Finite service-market history error; configured routes do not fall back to legacy transport.",
+    )

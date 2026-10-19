@@ -510,6 +510,14 @@ describe('useQuoteStore', () => {
     expect(localStorage.getItem('btweb_quote_chartTimeframe')).toBe(JSON.stringify('D1'))
     expect(quoteApi.getChartData).toHaveBeenLastCalledWith('alpha', '600000', 'D1')
 
+    vi.mocked(quoteApi.getChartData).mockResolvedValueOnce({
+      source: 'alpha', symbol: '600000', timeframe: 'D1', bars: [], total: 0,
+      complete: false, error_code: 'SERVICE_MARKET_PROFILE_REQUIRED',
+    })
+    await store.fetchChartData()
+    expect(store.chartBars).toEqual([])
+    expect(store.chartError).toBe('SERVICE_MARKET_PROFILE_REQUIRED')
+
     vi.mocked(quoteApi.getChartData).mockRejectedValueOnce({ status: 502 })
     await store.fetchChartData()
     expect(store.chartBars).toEqual([])

@@ -219,6 +219,13 @@ export const capabilities: Capability[] = [
     icon: 'ChatDotRound',
     legacyPaths: ['/ai-trading'],
   },
+  {
+    id: 'trading.gatewayHealth',
+    domainId: 'trading',
+    path: APP_PATHS.trading.gatewayHealth,
+    labelKey: 'nav.gatewayHealth',
+    icon: 'Monitor',
+  },
 
   {
     id: 'portfolio.overview',
@@ -227,6 +234,13 @@ export const capabilities: Capability[] = [
     labelKey: 'nav.portfolio',
     icon: 'TrendCharts',
     legacyPaths: ['/portfolio'],
+  },
+  {
+    id: 'portfolio.riskPolicies',
+    domainId: 'portfolio',
+    path: APP_PATHS.portfolio.policies,
+    labelKey: 'nav.riskPolicies',
+    icon: 'DataAnalysis',
   },
   {
     id: 'ai.chat',

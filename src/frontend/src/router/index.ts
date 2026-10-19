@@ -438,6 +438,11 @@ const routes: RouteRecordRaw[] = [
         meta: { workspaceType: 'trading' },
       },
       {
+        path: toAppChildPath(APP_PATHS.trading.gatewayHealth),
+        name: 'TradingGatewayHealth',
+        component: () => import('@/views/ServiceGatewayHealthPage.vue'),
+      },
+      {
         path: 'trading/brokers',
         redirect: { name: 'TradingWorkspaceList' },
       },
@@ -465,6 +470,11 @@ const routes: RouteRecordRaw[] = [
         path: 'portfolio/overview',
         name: 'PortfolioOverview',
         component: () => import('@/views/PortfolioPage.vue'),
+      },
+      {
+        path: toAppChildPath(APP_PATHS.portfolio.policies),
+        name: 'PortfolioRiskPolicies',
+        component: () => import('@/views/RiskPolicyPage.vue'),
       },
       {
         path: 'brokers',

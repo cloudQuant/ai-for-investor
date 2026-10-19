@@ -209,16 +209,15 @@ async def test_monitoring_summary_and_metric_value_sources():
         is None
     )
 
-    # account: live trading path
-    svc.live_trading_service = SimpleNamespace(
-        get_task_status=AsyncMock(return_value={"cash": 10.0, "value": 20.0})
-    )
+    # account: retained live-task rules are unavailable without the retired runtime.
+    assert not hasattr(svc, "live_trading_service")
     assert (
-        await svc._get_current_metric_value(rule, {"live_task_id": "t1", "metric": "cash"}) == 10.0
+        await svc._get_current_metric_value(rule, {"live_task_id": "t1", "metric": "cash"})
+        is None
     )
     assert (
         await svc._get_current_metric_value(rule, {"live_task_id": "t1", "metric": "equity"})
-        == 20.0
+        is None
     )
 
     # position: missing symbol
@@ -254,17 +253,12 @@ async def test_monitoring_summary_and_metric_value_sources():
         == 0.05
     )
 
-    # position: live positions path
-    svc.live_trading_service = SimpleNamespace(
-        get_task_status=AsyncMock(
-            return_value={"positions": [{"symbol": "BTC/USDT", "size": 2, "price": 50}]}
-        )
-    )
+    # position: a live task id remains explicitly unavailable.
     assert (
         await svc._get_current_metric_value(
             pos_rule, {"live_task_id": "t1", "symbol": "BTC/USDT", "metric": "market_value"}
         )
-        == 100.0
+        is None
     )
 
     # strategy: backtest metrics path + unknown metric
@@ -374,14 +368,10 @@ async def test_monitoring_remaining_branches_for_full_coverage():
     svc.paper_trading_service = SimpleNamespace(get_account=AsyncMock(return_value=None))
     assert await svc._get_current_metric_value(acct_rule, {"account_id": "missing"}) is None
 
-    # _get_current_metric_value: live status missing + unknown metric in live status
-    svc.live_trading_service = SimpleNamespace(get_task_status=AsyncMock(return_value=None))
+    # _get_current_metric_value: legacy live-task values remain unavailable.
     assert (
         await svc._get_current_metric_value(acct_rule, {"live_task_id": "t1", "metric": "cash"})
         is None
-    )
-    svc.live_trading_service = SimpleNamespace(
-        get_task_status=AsyncMock(return_value={"cash": 1.0, "value": 2.0})
     )
     assert (
         await svc._get_current_metric_value(acct_rule, {"live_task_id": "t1", "metric": "unknown"})
@@ -410,27 +400,16 @@ async def test_monitoring_remaining_branches_for_full_coverage():
         is None
     )
 
-    # _get_current_metric_value: live positions status missing + non-market_value metric return
-    svc.live_trading_service = SimpleNamespace(get_task_status=AsyncMock(return_value=None))
+    # _get_current_metric_value: live position metrics are unavailable.
     assert (
         await svc._get_current_metric_value(pos_rule, {"live_task_id": "t1", "symbol": "BTC/USDT"})
         is None
-    )
-    svc.live_trading_service = SimpleNamespace(
-        get_task_status=AsyncMock(
-            return_value={"positions": [{"symbol": "BTC/USDT", "size": 2, "price": 50}]}
-        )
     )
     assert (
         await svc._get_current_metric_value(
             pos_rule, {"live_task_id": "t1", "symbol": "BTC/USDT", "metric": "unrealized_pnl"}
         )
-        == 100.0
-    )
-    svc.live_trading_service = SimpleNamespace(
-        get_task_status=AsyncMock(
-            return_value={"positions": [{"symbol": "ETH/USDT", "size": 1, "price": 10}]}
-        )
+        is None
     )
     assert (
         await svc._get_current_metric_value(

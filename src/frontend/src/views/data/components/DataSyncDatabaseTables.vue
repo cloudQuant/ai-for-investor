@@ -44,6 +44,7 @@
             {{ row.local.exists ? row.local.size_display : t('dataPages.syncStateNotExists') }}
           </template>
         </el-table-column>
+        <!-- @vue-generic {DatabaseSyncInfo} -->
         <el-table-column
           :label="t('dataPages.syncColRemoteState')"
           min-width="160"
@@ -128,6 +129,7 @@
             {{ row.remote.exists ? row.remote.size_display : t('dataPages.syncStateNotExists') }}
           </template>
         </el-table-column>
+        <!-- @vue-generic {DatabaseSyncInfo} -->
         <el-table-column
           :label="t('dataPages.syncColLocalState')"
           min-width="160"

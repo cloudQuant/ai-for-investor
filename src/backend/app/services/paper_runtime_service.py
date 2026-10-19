@@ -11,10 +11,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.db.database import async_session_maker
 from app.models.alerts import Alert, AlertStatus
+from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.paper_runtime import (
     LiveHandoffReview,
     PaperEquitySnapshot,
@@ -22,7 +24,19 @@ from app.models.paper_runtime import (
     RiskRule,
 )
 from app.models.paper_trading import Account
+from app.models.user import User
 from app.models.workspace import StrategyUnit, Workspace
+
+_MAX_RUNTIME_SNAPSHOT_ROWS = 20_000
+_ACTIVE_LEGACY_IMPORT_STATES = ("PREPARED", "COMMITTED", "ACTIVE")
+
+
+class PaperRuntimeSnapshotWriteDenied(RuntimeError):
+    """Finite, non-sensitive denial at the persisted snapshot boundary."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 @dataclass(frozen=True)
@@ -81,6 +95,127 @@ class PaperRuntimeService:
             )
             return result.scalar_one_or_none()
 
+    @staticmethod
+    async def _snapshot_account_binding(
+        session: Any,
+        *,
+        user_id: str,
+        workspace_id: str,
+        unit_id: str,
+        instance_id: str,
+    ) -> str | None:
+        result = await session.execute(
+            select(
+                PaperEquitySnapshot.workspace_id,
+                PaperEquitySnapshot.unit_id,
+                PaperEquitySnapshot.paper_account_id,
+            )
+            .where(
+                PaperEquitySnapshot.user_id == user_id,
+                PaperEquitySnapshot.instance_id == instance_id,
+            )
+            .order_by(PaperEquitySnapshot.id.asc())
+            .limit(_MAX_RUNTIME_SNAPSHOT_ROWS + 1)
+        )
+        rows = list(result.all())
+        if len(rows) > _MAX_RUNTIME_SNAPSHOT_ROWS:
+            raise PaperRuntimeSnapshotWriteDenied(
+                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+            )
+        if not rows:
+            return None
+        account_ids: set[str] = set()
+        has_unbound_history = False
+        for row_workspace_id, row_unit_id, account_id in rows:
+            if (
+                (row_workspace_id, row_unit_id) != (workspace_id, unit_id)
+            ):
+                raise PaperRuntimeSnapshotWriteDenied(
+                    "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+                )
+            if account_id is None:
+                has_unbound_history = True
+            elif type(account_id) is str and account_id:
+                account_ids.add(account_id)
+            else:
+                raise PaperRuntimeSnapshotWriteDenied(
+                    "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+                )
+        if not account_ids and has_unbound_history:
+            return None
+        if has_unbound_history:
+            raise PaperRuntimeSnapshotWriteDenied(
+                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+            )
+        if len(account_ids) != 1:
+            raise PaperRuntimeSnapshotWriteDenied(
+                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+            )
+        account_id = next(iter(account_ids))
+        account = await session.scalar(
+            select(Account.id).where(
+                Account.id == account_id,
+                Account.user_id == user_id,
+            )
+        )
+        if account != account_id:
+            raise PaperRuntimeSnapshotWriteDenied(
+                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+            )
+        return account_id
+
+    @staticmethod
+    async def _account_has_active_legacy_import(session: Any, account_id: str) -> bool:
+        receipt_id = await session.scalar(
+            select(LegacyPaperImportReceipt.id)
+            .where(
+                LegacyPaperImportReceipt.legacy_account_id == account_id,
+                LegacyPaperImportReceipt.active_fence_key == account_id,
+                LegacyPaperImportReceipt.state.in_(_ACTIVE_LEGACY_IMPORT_STATES),
+            )
+            .limit(1)
+        )
+        return receipt_id is not None
+
+    @staticmethod
+    async def _owner_has_active_legacy_import(session: Any, user_id: str) -> bool:
+        receipt_id = await session.scalar(
+            select(LegacyPaperImportReceipt.id)
+            .where(
+                LegacyPaperImportReceipt.owner_subject == user_id,
+                LegacyPaperImportReceipt.active_fence_key.is_not(None),
+                LegacyPaperImportReceipt.state.in_(_ACTIVE_LEGACY_IMPORT_STATES),
+            )
+            .limit(1)
+        )
+        return receipt_id is not None
+
+    async def require_snapshot_write_allowed(self, user_id: str, instance_id: str) -> None:
+        """Fail before a restarted worker starts if its imported account is fenced."""
+        async with async_session_maker() as session:
+            result = await session.execute(self._runtime_query(user_id, instance_id))
+            row = result.one_or_none()
+            if row is None:
+                return
+            workspace, unit = row
+            account_id = await self._snapshot_account_binding(
+                session,
+                user_id=user_id,
+                workspace_id=workspace.id,
+                unit_id=unit.id,
+                instance_id=instance_id,
+            )
+            if account_id is None:
+                if await self._owner_has_active_legacy_import(session, user_id):
+                    raise PaperRuntimeSnapshotWriteDenied(
+                        "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+                    )
+                return
+            if await self._account_has_active_legacy_import(session, account_id):
+                raise PaperRuntimeSnapshotWriteDenied(
+                    "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
+                )
+
     async def record_snapshot(
         self,
         user_id: str,
@@ -88,46 +223,122 @@ class PaperRuntimeService:
         payload: dict[str, Any],
     ) -> PaperEquitySnapshot | None:
         """Write an idempotent runtime snapshot; return None when not owned."""
-        runtime = await self.get_runtime(user_id, instance_id)
-        if runtime is None:
-            return None
-        workspace, unit = runtime
         observed_at = payload.get("observed_at") or datetime.now(timezone.utc)
         source = str(payload.get("source") or "mark_to_market")
-        async with async_session_maker() as session:
-            existing = await session.execute(
-                select(PaperEquitySnapshot).where(
-                    PaperEquitySnapshot.instance_id == instance_id,
-                    PaperEquitySnapshot.source == source,
-                    PaperEquitySnapshot.observed_at == observed_at,
-                )
-            )
-            snapshot = existing.scalar_one_or_none()
-            values = {
-                "total_equity": float(payload["total_equity"]),
-                "cash": float(payload.get("cash") or 0.0),
-                "position_value": float(payload.get("position_value") or 0.0),
-                "unrealized_pnl": float(payload.get("unrealized_pnl") or 0.0),
-                "realized_pnl": float(payload.get("realized_pnl") or 0.0),
-                "metadata_json": dict(payload.get("metadata") or {}),
-            }
-            if snapshot is None:
-                snapshot = PaperEquitySnapshot(
-                    user_id=user_id,
-                    workspace_id=workspace.id,
-                    unit_id=unit.id,
-                    instance_id=instance_id,
-                    observed_at=observed_at,
-                    source=source,
-                    **values,
-                )
-                session.add(snapshot)
-            else:
-                for key, value in values.items():
-                    setattr(snapshot, key, value)
-            await session.commit()
-            await session.refresh(snapshot)
+        linked_account_id: str | None = None
+        try:
+            async with async_session_maker() as session:
+                async with session.begin():
+                    # This common owner-row mutex orders even a previously
+                    # unbound runtime writer against an import.  The importer
+                    # takes the same no-op UPDATE before validating all owned
+                    # runtime links and locking the source account.
+                    await session.execute(
+                        update(User)
+                        .where(User.id == user_id)
+                        .values(updated_at=User.updated_at)
+                    )
+                    result = await session.execute(
+                        self._runtime_query(user_id, instance_id).with_for_update()
+                    )
+                    runtime_row = result.one_or_none()
+                    if runtime_row is None:
+                        return None
+                    workspace, unit = runtime_row
+                    linked_account_id = await self._snapshot_account_binding(
+                        session,
+                        user_id=user_id,
+                        workspace_id=workspace.id,
+                        unit_id=unit.id,
+                        instance_id=instance_id,
+                    )
+                    if linked_account_id is None:
+                        if await self._owner_has_active_legacy_import(session, user_id):
+                            raise PaperRuntimeSnapshotWriteDenied(
+                                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+                            )
+                    else:
+                        # Same row and order as the legacy import freeze.  The
+                        # installed AFI12 trigger rejects this write if the
+                        # receipt became active after the read above.
+                        await session.execute(
+                            update(Account)
+                            .where(Account.id == linked_account_id)
+                            .values(updated_at=Account.updated_at)
+                        )
+                        account = await session.scalar(
+                            select(Account)
+                            .where(
+                                Account.id == linked_account_id,
+                                Account.user_id == user_id,
+                            )
+                            .with_for_update()
+                        )
+                        if account is None:
+                            raise PaperRuntimeSnapshotWriteDenied(
+                                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+                            )
+                        if await self._account_has_active_legacy_import(
+                            session, linked_account_id
+                        ):
+                            raise PaperRuntimeSnapshotWriteDenied(
+                                "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
+                            )
+
+                    existing = await session.execute(
+                        select(PaperEquitySnapshot).where(
+                            PaperEquitySnapshot.instance_id == instance_id,
+                            PaperEquitySnapshot.source == source,
+                            PaperEquitySnapshot.observed_at == observed_at,
+                        )
+                    )
+                    snapshot = existing.scalar_one_or_none()
+                    if snapshot is not None and (
+                        snapshot.user_id != user_id
+                        or snapshot.workspace_id != workspace.id
+                        or snapshot.unit_id != unit.id
+                        or snapshot.paper_account_id != linked_account_id
+                    ):
+                        raise PaperRuntimeSnapshotWriteDenied(
+                            "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
+                        )
+                    values = {
+                        "paper_account_id": linked_account_id,
+                        "total_equity": float(payload["total_equity"]),
+                        "cash": float(payload.get("cash") or 0.0),
+                        "position_value": float(payload.get("position_value") or 0.0),
+                        "unrealized_pnl": float(payload.get("unrealized_pnl") or 0.0),
+                        "realized_pnl": float(payload.get("realized_pnl") or 0.0),
+                        "metadata_json": dict(payload.get("metadata") or {}),
+                    }
+                    if snapshot is None:
+                        snapshot = PaperEquitySnapshot(
+                            user_id=user_id,
+                            workspace_id=workspace.id,
+                            unit_id=unit.id,
+                            instance_id=instance_id,
+                            observed_at=observed_at,
+                            source=source,
+                            **values,
+                        )
+                        session.add(snapshot)
+                    else:
+                        for key, value in values.items():
+                            setattr(snapshot, key, value)
+                    await session.flush()
             return snapshot
+        except PaperRuntimeSnapshotWriteDenied:
+            raise
+        except IntegrityError:
+            if linked_account_id is not None:
+                async with async_session_maker() as session:
+                    if await self._account_has_active_legacy_import(
+                        session, linked_account_id
+                    ):
+                        raise PaperRuntimeSnapshotWriteDenied(
+                            "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
+                        ) from None
+            raise
 
     async def list_snapshots(
         self,

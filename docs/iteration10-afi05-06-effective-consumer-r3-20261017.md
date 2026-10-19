@@ -1,0 +1,13 @@
+# AFI05/06 budget consumer source round R3
+
+Repository: `ai-for-investor`, branch `dev`, source base `7640b6466e88b310947e6d6be5656f3e681afa7a`.
+
+This source-support round changes only `src/backend/tests/test_afi_policy_budget_owner_checker_host.py` and this record. The test is 34,719 bytes, SHA-256 `d912c7b68b0129b09151d22ec6a612dc16f2c63aee63f7b916611b4b7a7f635a`.
+
+The selected node passed 1/1 with pytest exit 0. It exercised the authenticated AFI HTTP/lifespan route, the local CURVE policy-catalog Host, temporary SQLite catalog and confirmation stores, maker/checker permissions, member publication and confirmation, store reopen and resolver lookup for both accounts, then the normal account-owner HTTP route and Risk Host for account A. The account gate rejected a 40-unit increase against a 25-unit budget without reservation or provider writes, then accepted a 20-unit increase with one reservation and one synthetic provider write under the resolved generation and policy fingerprint. Host and deployment cleanup assertions passed. The response does not claim `consumer_effective=true`.
+
+The fixed run used `D:/bt_api_py/.codex-tmp/iteration10-afi-budget-effective-consumer-root-spec-r3-20261017.json` (629,417 bytes, SHA-256 `d30a964f9964b8e12ff7febfb2d67136ab9fb4db1fd523199542190cede48643`) and output directory `D:/temp/iteration10-afi-budget-effective-consumer-root-20261017-r3`. The result is 1,873 bytes, SHA-256 `c6ac37b20da2256c26ca8161c09011dbcd957c59100ad10abe643126d6111d4c`; JUnit is 407 bytes, SHA-256 `c394a8806321bd29520d20f284d37ed68d32aa6e0d241b0561921957e95128c5`. All 2,921 source pins and eight repository HEADs were unchanged. Three existing environment warnings were reported: one Backtrader Quandl deprecation and two Windows ZMQ Proactor notices.
+
+Independent static review returned GO for this one-node source-support round and did not run tests. Failed R1 and R2 outputs remain preserved. R1 exposed a test resource-provider omission; R2 exposed the missing `Decimal` import. R3 is local synthetic HTTP/Host/account-gate evidence only, not a real deployment, provider, account, or formal AFI05/06 acceptance.
+
+Remaining AFI05/06 clauses include exercising account B through its own gate, distinct owner confirmation identity, active old-policy/reservation rollback and partial-publication failure, and end-to-end concurrency/retraction behavior with occupied or UNKNOWN member ledgers. Existing Risk catalog tests cover some local store invariants but do not close these HTTP/account-level clauses. The reviewer also noted that checker/member role-denial coverage exists in this test, while the full ordinary-user/AI increase and freeze-release refusal matrix remains incomplete.

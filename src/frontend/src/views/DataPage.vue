@@ -358,6 +358,7 @@
                 :label="t('dataMgmt.coverageProvider')"
                 min-width="120"
               />
+              <!-- @vue-generic {typeof coverageRows.value[number]} -->
               <el-table-column
                 :label="t('dataMgmt.coverageRange')"
                 min-width="180"
@@ -676,6 +677,7 @@
         stripe
         max-height="520"
       >
+        <!-- @vue-generic {typeof referenceSeriesRows.value[number]} -->
         <el-table-column
           v-for="column in referenceSeriesTableColumns"
           :key="column.key"
@@ -729,6 +731,7 @@
         max-height="520"
         data-test="market-generic-observation-rows"
       >
+        <!-- @vue-generic {typeof genericObservationRows.value[number]} -->
         <el-table-column
           v-for="column in genericObservationColumns"
           :key="`${column.source}:${column.key}`"
@@ -770,6 +773,7 @@
         stripe
         max-height="520"
       >
+        <!-- @vue-generic {typeof displayHistoryRows.value[number]} -->
         <el-table-column
           v-for="column in historyTableColumns"
           :key="column.key"

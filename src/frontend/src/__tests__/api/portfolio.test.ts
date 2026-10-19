@@ -3,7 +3,7 @@ import { portfolioApi } from '@/api/portfolio'
 import request from '@/api/index'
 
 vi.mock('@/api/index', () => ({
-  default: { get: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn() },
 }))
 
 describe('portfolioApi', () => {
@@ -20,6 +20,34 @@ describe('portfolioApi', () => {
     vi.mocked(request.get).mockResolvedValue({ total_assets: 100000 })
     await portfolioApi.getOverview(true)
     expect(request.get).toHaveBeenCalledWith('/portfolio/overview/summary')
+  })
+
+  it('lists composition selector versions with bounded pagination parameters', async () => {
+    vi.mocked(request.get).mockResolvedValue({ items: [], total: 0 })
+    await portfolioApi.listCompositionVersions(2, 25)
+    expect(request.get).toHaveBeenCalledWith('/portfolio/compositions', {
+      params: { page: 2, page_size: 25 },
+    })
+  })
+
+  it('requests the exact owner-listed composition through the overview projection route', async () => {
+    vi.mocked(request.get).mockResolvedValue({ portfolio_ref: 'primary', membership_version: 3 })
+    await portfolioApi.getCompositionProjection('primary', 3)
+    expect(request.get).toHaveBeenCalledWith('/portfolio/overview', {
+      params: { portfolio_ref: 'primary', membership_version: 3 },
+    })
+  })
+
+  it('creates a display-only imported composition with an exact version reference', async () => {
+    vi.mocked(request.post).mockResolvedValue({ portfolio_ref: 'import-view', membership_version: 1 })
+    const payload = {
+      portfolio_ref: 'import-view',
+      source_type: 'imported' as const,
+      base_currency: 'USD',
+      members: [{ kind: 'imported_ledger' as const, ref: 'import-version-1' }],
+    }
+    await portfolioApi.createCompositionVersion(payload)
+    expect(request.post).toHaveBeenCalledWith('/portfolio/compositions', payload)
   })
 
   it('getPositions', async () => {

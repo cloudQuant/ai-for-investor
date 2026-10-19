@@ -5,10 +5,13 @@ Supports versioning, branch management, rollback, and comparisons.
 """
 
 import logging
+import inspect
+from functools import wraps
 from datetime import datetime, timezone
 from typing import Any, cast
 
 from app.db.sql_repository import SQLRepository
+from app.db.database import async_session_maker
 from app.models.strategy import Strategy
 from app.models.strategy_version import (
     StrategyVersion,
@@ -27,8 +30,63 @@ from app.services.version_diff_service import (
 )
 from app.utils.tracing import business_span
 from app.websocket_manager import manager as ws_manager
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+def _freshness_mutation(method):
+    """Run an eligibility-source write under its owner's shared epoch lock."""
+
+    @wraps(method)
+    async def wrapped(self, *args, **kwargs):
+        bound = inspect.signature(method).bind(self, *args, **kwargs)
+        owner_subject = bound.arguments.get("user_id")
+        if type(owner_subject) is not str or not owner_subject:
+            raise ValueError("owner subject is required for a strategy source mutation")
+
+        async def apply(session: AsyncSession):
+            from app.services.strategy_approval_authority import (
+                advance_strategy_approval_authority_epoch,
+                lock_strategy_approval_authority_epoch,
+            )
+
+            await lock_strategy_approval_authority_epoch(session, owner_subject)
+            service = type(self)(session=session)
+            result = await method(service, *args, **kwargs)
+            if result is not None and result is not False:
+                await advance_strategy_approval_authority_epoch(session, owner_subject)
+            return result
+
+        if self._session is None:
+            async with async_session_maker() as session:
+                async with session.begin():
+                    result = await apply(session)
+        elif self._session.in_transaction():
+            result = await apply(self._session)
+        else:
+            async with self._session.begin():
+                result = await apply(self._session)
+
+        # Keep the external notification outside the database serialization
+        # transaction; a websocket failure must not roll back a committed
+        # strategy source mutation.
+        if method.__name__ == "update_version" and result is not None:
+            await ws_manager.send_to_task(
+                f"strategy_version:{result.strategy_id}",
+                {
+                    "type": "version_updated",
+                    "version_id": result.id,
+                    "data": {
+                        "status": result.status,
+                        "is_active": result.is_active,
+                        "is_default": result.is_default,
+                    },
+                },
+            )
+        return result
+
+    return wrapped
 
 
 class VersionControlService:
@@ -50,13 +108,14 @@ class VersionControlService:
         strategy_repo: Repository for Strategy entities.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, session: AsyncSession | None = None) -> None:
         """Initialize the VersionControlService with required repositories."""
-        self.version_repo = SQLRepository(StrategyVersion)
-        self.branch_repo = SQLRepository(VersionBranch)
-        self.comparison_repo = SQLRepository(VersionComparison)
-        self.rollback_repo = SQLRepository(VersionRollback)
-        self.strategy_repo = SQLRepository(Strategy)
+        self._session = session
+        self.version_repo = SQLRepository(StrategyVersion, session=session)
+        self.branch_repo = SQLRepository(VersionBranch, session=session)
+        self.comparison_repo = SQLRepository(VersionComparison, session=session)
+        self.rollback_repo = SQLRepository(VersionRollback, session=session)
+        self.strategy_repo = SQLRepository(Strategy, session=session)
 
     async def _require_strategy_owner(self, strategy_id: str, user_id: str) -> Strategy:
         """Load a strategy and enforce ownership.
@@ -70,6 +129,19 @@ class VersionControlService:
             raise PermissionError("forbidden")
         return strategy
 
+    async def _version_strategy_is_owned_by(self, version: StrategyVersion, user_id: str) -> bool:
+        """Check the strategy owner as well as the version author.
+
+        Imported or legacy rows can have a creator different from the
+        strategy owner, so created_by alone is not a freshness-write boundary.
+        """
+        strategy_id = getattr(version, "strategy_id", None)
+        if type(strategy_id) is not str or not strategy_id:
+            return False
+        strategy = await self.strategy_repo.get_by_id(strategy_id)
+        return strategy is not None and getattr(strategy, "user_id", None) == user_id
+
+    @_freshness_mutation
     async def create_version(
         self,
         user_id: str,
@@ -207,6 +279,7 @@ class VersionControlService:
         total = await self.version_repo.count(filters=filters)
         return [self._to_response(v) for v in versions], total
 
+    @_freshness_mutation
     async def update_version(
         self,
         version_id: str,
@@ -230,6 +303,8 @@ class VersionControlService:
         if not version:
             return None
         if getattr(version, "created_by", None) != user_id:
+            return None
+        if not await self._version_strategy_is_owned_by(version, user_id):
             return None
 
         # Can only update DRAFT status versions
@@ -273,20 +348,6 @@ class VersionControlService:
         if version is None:
             return None
 
-        # Push version update notification
-        await ws_manager.send_to_task(
-            f"strategy_version:{version.strategy_id}",
-            {
-                "type": "version_updated",
-                "version_id": version.id,
-                "data": {
-                    "status": version.status,
-                    "is_active": version.is_active,
-                    "is_default": version.is_default,
-                },
-            },
-        )
-
         return version
 
     async def set_version_default(
@@ -308,6 +369,8 @@ class VersionControlService:
             return False
         if getattr(version, "created_by", None) != user_id:
             return False
+        if not await self._version_strategy_is_owned_by(version, user_id):
+            return False
 
         # Unset other default versions on branch
         await self._unset_default_versions(str(version.strategy_id), str(version.branch))
@@ -323,6 +386,7 @@ class VersionControlService:
 
         return True
 
+    @_freshness_mutation
     async def activate_version(
         self,
         version_id: str,
@@ -341,6 +405,8 @@ class VersionControlService:
         if not version:
             return False
         if getattr(version, "created_by", None) != user_id:
+            return False
+        if not await self._version_strategy_is_owned_by(version, user_id):
             return False
 
         # Unset other active versions on branch
@@ -428,6 +494,7 @@ class VersionControlService:
 
         return comparison
 
+    @_freshness_mutation
     async def rollback_version(
         self,
         user_id: str,
@@ -508,6 +575,8 @@ class VersionControlService:
         await self._unset_active_versions(strategy_id, "main")
 
         new_version = await self.version_repo.create(new_version)
+        branch = await self._get_or_create_branch(strategy_id, user_id, "main")
+        await self._update_branch(branch, new_version)
 
         logger.info(f"Rolled back strategy {strategy_id} to {target_version.version_name}")
 
@@ -595,6 +664,7 @@ class VersionControlService:
             },
         )
 
+    @_freshness_mutation
     async def create_branch(
         self,
         user_id: str,

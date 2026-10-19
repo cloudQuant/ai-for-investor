@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.db.sql_repository import SQLRepository
+from app.db.database import async_session_maker
 from app.models.strategy import Strategy
 from app.schemas.strategy import (
     AIStrategyDraft,
@@ -46,6 +47,7 @@ from app.services.strategy.templates import STRATEGIES_DIR
 from app.utils.datetime_utils import utc_now_naive
 from app.utils.response_cache import invalidate_cache
 from app.utils.tracing import business_span
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -170,13 +172,14 @@ __all__ = [
 class StrategyService:
     """Service for managing user-defined strategies."""
 
-    def __init__(self) -> None:
+    def __init__(self, session: AsyncSession | None = None) -> None:
         """Initialize the StrategyService.
 
         Attributes:
             strategy_repo: Repository for strategy CRUD operations.
         """
-        self.strategy_repo = SQLRepository(Strategy)
+        self._session = session
+        self.strategy_repo = SQLRepository(Strategy, session=session)
 
     async def create_strategy(
         self,
@@ -536,18 +539,39 @@ class StrategyService:
         Returns:
             True if deletion succeeded, False if not found or unauthorized.
         """
-        from app.services.workspace.units import has_server_owned_ai_research_strategy_reference
+        async def delete_in_session(db: AsyncSession) -> bool:
+            from app.services.strategy_approval_authority import (
+                advance_strategy_approval_authority_epoch,
+                lock_strategy_approval_authority_epoch,
+            )
+            from app.services.workspace.units import (
+                has_server_owned_ai_research_strategy_reference,
+            )
 
-        if await has_server_owned_ai_research_strategy_reference(strategy_id, user_id):
-            raise ValueError("AI_RESEARCH_PAPER_STRATEGY_MUTATION_FORBIDDEN")
-        strategy = await self._get_owned_strategy(strategy_id, user_id)
-        if strategy is None:
-            return False
+            await lock_strategy_approval_authority_epoch(db, user_id)
+            if await has_server_owned_ai_research_strategy_reference(strategy_id, user_id):
+                raise ValueError("AI_RESEARCH_PAPER_STRATEGY_MUTATION_FORBIDDEN")
+            service = type(self)(session=db)
+            strategy = await service._get_owned_strategy(strategy_id, user_id)
+            if strategy is None:
+                return False
+            result = await service.strategy_repo.delete(strategy_id)
+            if result:
+                await advance_strategy_approval_authority_epoch(db, user_id)
+            return result
 
-        result = await self.strategy_repo.delete(strategy_id)
-        if result:
+        if self._session is None:
+            async with async_session_maker() as db:
+                async with db.begin():
+                    deleted = await delete_in_session(db)
+        elif self._session.in_transaction():
+            deleted = await delete_in_session(self._session)
+        else:
+            async with self._session.begin():
+                deleted = await delete_in_session(self._session)
+        if deleted:
             await invalidate_cache("strategies")
-        return result
+        return deleted
 
     async def list_strategies(
         self, user_id: str, limit: int = 20, offset: int = 0, category: str | None = None

@@ -1,0 +1,11 @@
+# AFI05/06 static budget compiler R219
+
+**Repository and scope:** `ai-for-investor/dev`, acceptance base `0c8aa93c1ca83363f13bd2128d40808b481e9e61`. The round adds a pure compiler for a fixed, single-currency `max_increase_notional` portfolio budget and focused tests against Risk's real `PolicyCatalogStore` and `ConfirmedPolicyStore` implementations using temporary SQLite files. The AFI change is limited to the compiler and its test; this note is the third AFI path. Scoped commit is pending Root.
+
+**Acceptance:** independent static review was GO for the exact two candidate pins. Root's focused run passed 16, with 0 failures/errors/skips, pytest exit 0, 0.37 seconds, and no warnings. The 145 pinned inputs were unchanged, and SDK/Risk/Base/AFI `dev` HEAD guards remained stable. Exact result, JUnit, command, runner, spec, and before/after source pins are preserved under `D:/bt_api_py/.codex-tmp/afi05-06-static-budget-20261016/root-qa/`.
+
+**Runtime sources:** the test loads the AFI compiler as a leaf module and uses `--noconftest`, so AFI app initialization, Settings, and database startup were not exercised. Risk runtime imports came only from the blob-verified non-Git export at accepted `71be56e29f867a5a5aaac60331f9eca46c7e09f0`; Base came from accepted `b4aabd1e17b9c7252fa7b4d266932087d99b5517`. AFI `0c8aa93` package initializer/config sources are preserved as references but are not imported. The test uses temporary local SQLite catalogs; it does not touch providers, network, accounts, or live stores.
+
+**Evidence boundary:** this accepts only an offline compiler/catalog component. It does not establish normal AFI startup, independent account-owner approval, live policy activation, a persistent global pool-claim authority, or formal AFI05/AFI06 acceptance. The compiler prepares detached versioned drafts; the next Risk-side round must own durable pool proposals, allocations, confirmations, retraction, and conservative UNKNOWN holds.
+
+**Pins:** compiler `12,854` bytes / `8D3CE4E647F6BCC655970F985D2F68282E6B50656BD66C1E13E0BCF4AC39BB99`; test `9,362` bytes / `9B7CE80DF23E7B03CF9C86E5C660B9FA1B9A1989A7C3B88F2AB7B7C38BBFDBD0`. Root spec and complete source/evidence pins are in the SDK evidence package's `root-spec.json` and `manifest.json`. The scoped commit hash will be recorded in Root's postcommit result.

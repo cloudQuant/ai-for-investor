@@ -45,37 +45,6 @@ _is_address_in_use_error = net_probe.is_address_in_use_error
 _find_recent_bind_error = net_probe.find_recent_bind_error
 
 
-def _release_gateway_zmq_ports(runtime: Any) -> None:
-    """Clear bt_api_base TCP port caches for a stopped runtime so reconnect
-    can reuse or reallocate the same ports without 'Address in use' errors."""
-    try:
-        from bt_api_base.gateway.config import (
-            _TCP_PORT_ASSIGNMENTS,
-            _TCP_RESERVED_BASE_PORTS,
-        )
-    except ImportError:
-        return
-    config = getattr(runtime, "config", None)
-    if config is None:
-        return
-    # Remove the cached port assignment for this runtime name
-    runtime_name = getattr(config, "runtime_name", "")
-    if runtime_name:
-        base_port = _TCP_PORT_ASSIGNMENTS.pop(runtime_name, None)
-        if base_port is not None:
-            _TCP_RESERVED_BASE_PORTS.discard(base_port)
-    # Also try the seed_input key used internally
-    for key in list(_TCP_PORT_ASSIGNMENTS):
-        port = _TCP_PORT_ASSIGNMENTS[key]
-        cmd_ep = getattr(config, "command_endpoint", "")
-        # Runtime cleanup must remain best-effort.  In particular, an early
-        # startup failure can leave a partially initialized runtime (or a test
-        # double) whose endpoint is not a string yet.
-        if isinstance(cmd_ep, str) and str(port) in cmd_ep:
-            _TCP_PORT_ASSIGNMENTS.pop(key, None)
-            _TCP_RESERVED_BASE_PORTS.discard(port)
-
-
 def _start_runtime_with_retry(
     gateway_config_cls: Any,
     gateway_runtime_cls: Any,
@@ -119,7 +88,6 @@ def _start_runtime_with_retry(
                     kwargs["gateway_runtime_name"] = (
                         f"{runtime_name}-retry-{attempt + 2}-{int(time.time() * 1000)}"
                     )
-                    _release_gateway_zmq_ports(runtime)
                     try:
                         runtime.stop()
                     except Exception:
@@ -1347,7 +1315,6 @@ def connect_ctp_gateway(
                     logger.debug(
                         "Failed to stop direct CTP runtime after connect error", exc_info=True
                     )
-                _release_gateway_zmq_ports(runtime)
                 runtime = None
             from app.services.ctp_tunnel import is_proxy_tunnel_needed
 
@@ -1395,7 +1362,6 @@ def connect_ctp_gateway(
                 runtime.stop()
             except Exception:
                 logger.debug("Failed to stop CTP runtime after connect error", exc_info=True)
-            _release_gateway_zmq_ports(runtime)
         logger.exception("Failed to connect CTP gateway %s", key)
         return {
             "gateway_key": key,
@@ -2708,11 +2674,6 @@ def disconnect_gateway(gateways: dict[str, dict[str, Any]], gateway_key: str) ->
                 thread.join(timeout=5.0)
         except Exception as e:
             _logger.warning(f"Error joining gateway thread {gateway_key}: {e}")
-        # Clear bt_api_py port caches so reconnect can reuse the ports
-        try:
-            _release_gateway_zmq_ports(runtime)
-        except Exception as e:
-            _logger.warning(f"Error releasing gateway ports {gateway_key}: {e}")
     gateways.pop(gateway_key, None)
     return {
         "gateway_key": gateway_key,

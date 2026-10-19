@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import GatewayStatusPage from '@/views/GatewayStatusPage.vue'
@@ -7,9 +7,13 @@ import { elStubs } from '@/test/stubs'
 
 const liveTradingApiMocks = vi.hoisted(() => ({
   listGatewayHealth: vi.fn(),
-  getGatewayCredentials: vi.fn(),
-  connectGateway: vi.fn(),
-  disconnectGateway: vi.fn(),
+}))
+
+const serviceGatewayOperatorApiMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  legacyGateways: vi.fn(),
+  status: vi.fn(),
+  act: vi.fn(),
 }))
 
 vi.mock('element-plus', () => ({
@@ -30,10 +34,11 @@ vi.mock('@element-plus/icons-vue', () => ({
 vi.mock('@/api/liveTrading', () => ({
   liveTradingApi: {
     listGatewayHealth: liveTradingApiMocks.listGatewayHealth,
-    getGatewayCredentials: liveTradingApiMocks.getGatewayCredentials,
-    connectGateway: liveTradingApiMocks.connectGateway,
-    disconnectGateway: liveTradingApiMocks.disconnectGateway,
   },
+}))
+
+vi.mock('@/api/serviceGatewayOperator', () => ({
+  serviceGatewayOperatorApi: serviceGatewayOperatorApiMocks,
 }))
 
 function makeGateway(overrides: Record<string, unknown> = {}) {
@@ -105,9 +110,10 @@ describe('GatewayStatusPage', () => {
         }),
       ],
     })
-    liveTradingApiMocks.getGatewayCredentials.mockResolvedValue({})
-    liveTradingApiMocks.connectGateway.mockResolvedValue({ message: 'ok' })
-    liveTradingApiMocks.disconnectGateway.mockResolvedValue({ message: 'ok' })
+    serviceGatewayOperatorApiMocks.list.mockResolvedValue({ operators: [] })
+    serviceGatewayOperatorApiMocks.legacyGateways.mockResolvedValue({ gateways: [] })
+    serviceGatewayOperatorApiMocks.status.mockResolvedValue({})
+    serviceGatewayOperatorApiMocks.act.mockResolvedValue({})
   })
 
   afterEach(() => {
@@ -131,6 +137,7 @@ describe('GatewayStatusPage', () => {
     expect(wrapper.find('[data-test="gateway-hero"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="gateway-metrics"]').findAll('.gateway-metric')).toHaveLength(4)
     expect(wrapper.find('[data-test="gateway-workbench"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="service-gateway-operators"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="gateway-card-grid"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('交易网关控制台')
     expect(wrapper.text()).toContain('088888')
@@ -200,6 +207,24 @@ describe('GatewayStatusPage', () => {
     expect(wrapper.find('[data-test="gateway-alert"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="gateway-empty"]').text()).toBeTruthy()
     expect(liveTradingApiMocks.listGatewayHealth).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('shows service controls without exposing legacy credential or disconnect entrypoints', async () => {
+    const wrapper = doMount()
+    await flushUi()
+    await flushPromises()
+
+    expect(serviceGatewayOperatorApiMocks.list).toHaveBeenCalledOnce()
+    expect(serviceGatewayOperatorApiMocks.legacyGateways).toHaveBeenCalledOnce()
+    expect(serviceGatewayOperatorApiMocks.status).not.toHaveBeenCalled()
+    expect(serviceGatewayOperatorApiMocks.act).not.toHaveBeenCalled()
+    expect(wrapper.findComponent({ name: 'GatewayConnectDialog' }).exists()).toBe(false)
+    const buttonLabels = wrapper.findAll('button').map((button) => button.text())
+    expect(buttonLabels).not.toContain('手动连接（兼容）')
+    expect(buttonLabels).not.toContain('断开')
+    expect(wrapper.get('[data-test="operator-empty"]').text()).toContain('没有已授权的 Service Gateway operator')
+    expect(wrapper.get('[data-test="legacy-gateway-history"]').text()).toContain('旧 Gateway 历史记录')
     wrapper.unmount()
   })
 })

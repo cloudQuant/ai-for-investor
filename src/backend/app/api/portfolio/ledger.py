@@ -1,6 +1,6 @@
 import typing
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -45,6 +45,38 @@ async def list_portfolios(
     return await get_portfolio_ledger_service(db).list_portfolios(current_user.sub)
 
 
+@router.get("/imports", response_model=None)
+async def list_import_sources(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    current_user: typing.Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> typing.Any:
+    return await get_portfolio_ledger_service(db).list_import_sources(
+        current_user.sub,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/imports/{import_version_id}", response_model=None)
+async def get_import_source(
+    import_version_id: str,
+    current_user: typing.Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> typing.Any:
+    result = await get_portfolio_ledger_service(db).get_import_source(
+        current_user.sub,
+        import_version_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="portfolio_import_source_not_found",
+        )
+    return result
+
+
 @router.get("/{portfolio_id}", response_model=None)
 async def get_portfolio(
     portfolio_id: str,
@@ -70,6 +102,8 @@ async def import_transactions(
         idempotency_key=str(payload["idempotency_key"]),
         transactions=list(payload.get("transactions") or []),
         import_format=str(payload.get("format") or "json"),
+        source_as_of=payload.get("source_as_of"),
+        source_currency=payload.get("source_currency"),
     )
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="portfolio_not_found")

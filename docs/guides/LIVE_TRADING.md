@@ -11,9 +11,9 @@
 | 类型 | 对外路径 | 后端实现 | 当前状态 |
 |------|----------|----------|----------|
 | 主链路 | `/api/v1/live-trading` | `app.api.live_trading_api` + `LiveTradingManager` | 当前默认入口 |
-| 遗留兼容链路 | `/api/v1/live-trading-crypto` | `app.api.live_trading` + `LiveTradingService` | Deprecated，仅保留兼容用途 |
+| 历史加密货币链路 | `/api/v1/live-trading-crypto` | 已无对应路由或运行时 | 已退役；使用上方受管入口 |
 
-新功能、联调和问题修复应优先基于主链路 `live-trading` 进行；`live-trading-crypto` 仅用于兼容历史调用，不再作为默认接入入口。
+新功能、联调和问题修复应基于受管入口 `live-trading`。历史告警规则若仍引用进程内 `live_task_id`，规则记录会保留，但其指标不可用，不会用零余额或零持仓替代缺失的运行时数据。
 
 ### 1.2 支持的交易所/券商
 

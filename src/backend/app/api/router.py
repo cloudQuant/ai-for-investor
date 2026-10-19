@@ -153,3 +153,64 @@ _register_optional_router(
     prefix="/quote",
     tags=["Quote"],
 )
+
+# Authorized read-only access to the shared service packages.  Registered as
+# optional so a deployment without the SDK still starts and reports the
+# surface as unavailable instead of failing the whole application.
+_register_optional_router(
+    "service_read",
+    "app.api.service_read",
+    tags=["Service Read"],
+)
+_register_optional_router(
+    "risk_policy_budget",
+    "app.api.risk_policy_budget",
+    prefix="/risk-policy-budgets",
+    tags=["Risk Policy Budget"],
+)
+_register_optional_router(
+    "service_gateway",
+    "app.api.service_gateway",
+    tags=["Service Gateway"],
+)
+_register_optional_router(
+    "service_gateway_ws",
+    "app.api.service_gateway_ws",
+    tags=["Service Gateway"],
+)
+_register_optional_router(
+    "service_gateway_operator",
+    "app.api.service_gateway_operator",
+    tags=["Service Gateway Operator"],
+)
+_register_optional_router(
+    "service_orders",
+    "app.api.service_orders",
+    tags=["Service Orders"],
+)
+_register_optional_router(
+    "strategy_process_stop",
+    "app.api.strategy_process_stop",
+    tags=["Live Trading Control"],
+)
+_register_optional_router(
+    "strategy_reduction",
+    "app.api.strategy_reduction",
+    tags=["Live Trading Control"],
+)
+_register_optional_router(
+    "risk_policy",
+    "app.api.risk_policy",
+    prefix="/risk-policies",
+    tags=["Risk Policy"],
+)
+_register_optional_router(
+    "approved_orders",
+    "app.api.approved_orders",
+    tags=["Approved Orders"],
+)
+_register_optional_router(
+    "legacy_paper_import",
+    "app.api.legacy_paper_import",
+    tags=["Legacy Paper Import"],
+)

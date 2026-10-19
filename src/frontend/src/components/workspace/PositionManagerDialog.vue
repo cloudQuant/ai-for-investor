@@ -194,6 +194,7 @@
             {{ formatNumber(row.commission, 2) }}
           </template>
         </el-table-column>
+        <!-- @vue-generic {TradingPositionManagerItem} -->
         <el-table-column
           :label="t('workspaceDialogs.pmColValuationStatus')"
           width="125"

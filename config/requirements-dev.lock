@@ -28,7 +28,7 @@ attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
-backtrader @ git+https://github.com/cloudQuant/backtrader.git@04adc08c2deb02cbf240efbd495e5eee68b375d8
+backtrader @ git+https://github.com/cloudQuant/backtrader.git@4f3e6a1ca3c41c1e5a726d11cce162faec25b140
     # via ai-for-investor-backend (pyproject.toml)
 bandit==1.9.4
     # via ai-for-investor-backend (pyproject.toml)

@@ -25,6 +25,10 @@ export const APP_PATHS = {
   },
   trading: {
     workspaces: '/trading/workspaces',
+    gatewayHealth: '/trading/gateway-health',
+  },
+  portfolio: {
+    policies: '/portfolio/policies',
   },
   config: {
     gateways: '/config/gateways',

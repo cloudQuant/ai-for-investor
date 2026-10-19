@@ -9,7 +9,7 @@ import asyncio
 import logging
 import typing
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -24,8 +24,6 @@ from app.schemas.analytics import (
 )
 from app.schemas.auth import TokenPayload
 from app.schemas.live_trading_instance import (
-    GatewayConnectRequest,
-    GatewayConnectResponse,
     LiveBatchResponse,
     LiveGatewayPresetListResponse,
     LiveInstanceCreate,
@@ -50,10 +48,7 @@ from app.services.workspace.units import (
     has_server_owned_ai_research_strategy_reference,
 )
 from app.types.live_trading import (
-    ConnectResult,
-    GatewayCredentials,
     InstanceData,
-    OperationResult,
     StartResult,
     StopResult,
 )
@@ -146,48 +141,42 @@ async def get_gateway_health(
 
 @router.post(
     "/gateways/connect",
-    response_model=GatewayConnectResponse,
+    deprecated=True,
     summary="Manually connect a gateway",
 )
-def connect_gateway(
-    req: GatewayConnectRequest,
-    current_user: TokenPayload = Depends(get_current_user),
-    mgr: LiveTradingManager = Depends(_get_manager),
-) -> ConnectResult:
-    """Manually connect a gateway with provided credentials.
-
-    Supports CTP, IB_WEB, BINANCE, MT5, and OKX exchange types.
-    Uses ``def`` (not ``async def``) so the blocking subprocess start
-    runs in a thread-pool instead of stalling the event loop.
-    """
-    try:
-        result = mgr.connect_gateway(req.exchange_type, cast(GatewayCredentials, req.credentials))
-    except Exception as exc:
-        _logger.exception("Unhandled error in connect_gateway")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to connect gateway / 连接网关失败: {type(exc).__name__}: {exc}",
-        ) from exc
-    if result["status"] == "error":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["message"])
-    return result
+def connect_gateway(current_user: TokenPayload = Depends(get_current_user)) -> None:
+    """Reject the retired credential-based entry before parsing its body."""
+    del current_user
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "LEGACY_GATEWAY_MIGRATION_REQUIRED",
+            "message": (
+                "Use an authorized Service Gateway profile. Historical gateway records are "
+                "preserved; no legacy runtime was started."
+            ),
+        },
+    )
 
 
 @router.post(
     "/gateways/disconnect",
-    response_model=GatewayConnectResponse,
+    deprecated=True,
     summary="Disconnect a manually-started gateway",
 )
-async def disconnect_gateway(
-    gateway_key: str,
-    current_user: TokenPayload = Depends(get_current_user),
-    mgr: LiveTradingManager = Depends(_get_manager),
-) -> OperationResult:
-    """Disconnect a manually-started gateway by its key."""
-    result = await asyncio.to_thread(mgr.disconnect_gateway, gateway_key)
-    if result["status"] == "error":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["message"])
-    return result
+def disconnect_gateway(current_user: TokenPayload = Depends(get_current_user)) -> None:
+    """Keep historical records intact; stop only through an authorized profile."""
+    del current_user
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "LEGACY_GATEWAY_MIGRATION_REQUIRED",
+            "message": (
+                "Use the authorized Service Gateway profile controls; legacy gateway records "
+                "were not removed."
+            ),
+        },
+    )
 
 
 @router.get(

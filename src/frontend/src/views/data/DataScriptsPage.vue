@@ -243,6 +243,7 @@
               {{ formatDateTime(row.updated_at) }}
             </template>
           </el-table-column>
+          <!-- @vue-generic {DataScript} -->
           <el-table-column
             :label="t('dataPages.scriptsColActions')"
             fixed="right"

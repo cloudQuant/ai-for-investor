@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
+from app.api.service_read import list_authorized_service_account_refs
 from app.schemas.ai_trading import (
     AITradingConfigResponse,
     AITradingRequest,
@@ -35,9 +36,9 @@ def get_ai_trading_service() -> AITradingService:
 
 def _merge_selectable_accounts(
     paper_accounts: list[dict[str, Any]],
-    gateways: list[dict[str, Any]],
+    service_account_refs: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
-    """Build account selector options from paper accounts and connected gateways."""
+    """Build account options from paper accounts and subject-granted service refs."""
     accounts: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
 
@@ -51,27 +52,21 @@ def _merge_selectable_accounts(
             seen.add(key)
             accounts.append(item)
 
-    for gateway in gateways:
-        if not gateway.get("connected"):
+    for account_ref in service_account_refs:
+        if not account_ref:
             continue
-        gateway_id = str(gateway.get("gateway_id") or "")
-        account_id = str(gateway.get("account_id") or gateway_id)
-        if not gateway_id or not account_id:
-            continue
-        exchange_type = str(gateway.get("exchange_type") or "")
-        name = f"{exchange_type} · {account_id}" if exchange_type else account_id
         item = {
-            "account_id": account_id,
-            "name": name,
+            "account_id": account_ref,
+            "name": f"Service v2 · {account_ref}",
             "total_equity": None,
             "current_cash": None,
             "is_active": True,
-            "source": "gateway",
-            "gateway_id": gateway_id,
-            "exchange_type": exchange_type,
-            "connected": True,
+            "source": "service_v2",
+            # Kept for the existing AI request contract; this is an account
+            # selector only, never a legacy gateway key.
+            "gateway_id": account_ref,
         }
-        key = ("gateway", account_id, gateway_id)
+        key = ("service_v2", account_ref, account_ref)
         if key not in seen:
             seen.add(key)
             accounts.append(item)
@@ -159,9 +154,12 @@ async def get_config(
         Current configuration including limits, available gateways, and mode.
     """
     config = service.risk_guard.config
-    available_gateways = service.list_available_gateways()
     paper_accounts = await service.list_available_accounts(current_user.sub)
-    available_accounts = _merge_selectable_accounts(paper_accounts, available_gateways)
+    service_account_refs = list_authorized_service_account_refs(current_user.sub)
+    available_accounts = _merge_selectable_accounts(
+        paper_accounts,
+        service_account_refs,
+    )
     return AITradingConfigResponse(
         enabled=True,
         default_mode="paper",
@@ -170,7 +168,9 @@ async def get_config(
         max_position_ratio=config.max_position_ratio,
         require_confirmation_above=config.require_confirmation_above,
         blocked_symbols=config.blocked_symbols,
-        available_gateways=available_gateways,
+        # Gateway connection status is owned by the operator page. AI lists
+        # only the current subject's configured read selectors above.
+        available_gateways=[],
         available_accounts=available_accounts,
     )
 

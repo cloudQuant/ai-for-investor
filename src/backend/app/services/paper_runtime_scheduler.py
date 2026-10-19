@@ -6,11 +6,16 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import and_, exists, select
 
 from app.db.database import async_session_maker
+from app.models.legacy_paper_import import LegacyPaperImportReceipt
+from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.workspace import StrategyUnit, Workspace
-from app.services.paper_runtime_service import PaperRuntimeService
+from app.services.paper_runtime_service import (
+    PaperRuntimeService,
+    PaperRuntimeSnapshotWriteDenied,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -52,6 +57,28 @@ class PaperRuntimeSnapshotScheduler:
 
     async def start_existing(self) -> int:
         """Restore workers for currently running, unlocked paper units after restart."""
+        fenced_runtime = exists(
+            select(LegacyPaperImportReceipt.id)
+            .select_from(PaperEquitySnapshot)
+            .join(
+                LegacyPaperImportReceipt,
+                and_(
+                    LegacyPaperImportReceipt.legacy_account_id
+                    == PaperEquitySnapshot.paper_account_id,
+                    LegacyPaperImportReceipt.active_fence_key
+                    == PaperEquitySnapshot.paper_account_id,
+                    LegacyPaperImportReceipt.owner_subject
+                    == PaperEquitySnapshot.user_id,
+                    LegacyPaperImportReceipt.state.in_(
+                        ("PREPARED", "COMMITTED", "ACTIVE")
+                    ),
+                ),
+            )
+            .where(
+                PaperEquitySnapshot.user_id == Workspace.user_id,
+                PaperEquitySnapshot.instance_id == StrategyUnit.trading_instance_id,
+            )
+        )
         async with async_session_maker() as session:
             result = await session.execute(
                 select(Workspace.user_id, StrategyUnit.trading_instance_id)
@@ -62,6 +89,7 @@ class PaperRuntimeSnapshotScheduler:
                     StrategyUnit.run_status == "running",
                     StrategyUnit.lock_running.is_(False),
                     StrategyUnit.trading_instance_id.is_not(None),
+                    ~fenced_runtime,
                 )
             )
             rows = list(result.all())
@@ -78,6 +106,9 @@ class PaperRuntimeSnapshotScheduler:
 
     async def _run(self, user_id: str, instance_id: str) -> None:
         try:
+            startup_check = getattr(self._service, "require_snapshot_write_allowed", None)
+            if startup_check is not None:
+                await startup_check(user_id, instance_id)
             while True:
                 snapshot = await self._service.capture_mark_to_market_snapshot(
                     user_id,
@@ -90,6 +121,11 @@ class PaperRuntimeSnapshotScheduler:
                 await asyncio.sleep(self.interval_seconds)
         except asyncio.CancelledError:
             raise
+        except PaperRuntimeSnapshotWriteDenied as error:
+            logger.info(
+                "Paper runtime snapshot worker stopped at legacy import fence: %s",
+                error.code,
+            )
         except Exception:
             logger.exception("Paper runtime snapshot worker failed for %s", instance_id)
             await self._service.emit_alert(

@@ -84,6 +84,7 @@ describe('router', () => {
     expect(names).toContain('Scanners')
     expect(names).not.toContain('QuantTools')
     expect(names).toContain('TradingWorkspaceList')
+    expect(names).toContain('TradingGatewayHealth')
     expect(names).toContain('TradingWorkspaceDetail')
     expect(names).toContain('Data')
     expect(names).toContain('DataTopics')
@@ -110,6 +111,7 @@ describe('router', () => {
     expect(names).toContain('DataQuote')
     expect(names).toContain('ConfigGateways')
     expect(names).toContain('PortfolioOverview')
+    expect(names).toContain('PortfolioRiskPolicies')
     expect(names).not.toContain('BrokerProfiles')
     expect(names).not.toContain('TradingBrokerProfiles')
     expect(names).not.toContain('PortfolioLedger')
@@ -268,6 +270,13 @@ describe('router', () => {
     await router.isReady()
     expect(router.currentRoute.value.name).toBe('ConfigGateways')
     expect(router.currentRoute.value.path).toBe('/config/gateways')
+  })
+
+  it('allows an authenticated non-admin to open the independent Gateway health page', async () => {
+    mockAuthStore(true, false)
+    await router.push('/trading/gateway-health')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('TradingGatewayHealth')
   })
 
   it('redirects removed portfolio ledger entry to portfolio overview', async () => {

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import date
 from types import SimpleNamespace
@@ -3909,6 +3910,34 @@ def test_sync_trading_unit_runtime_writes_fallback_run_py_for_generated_strategy
     assert run_py.is_file()
     assert "def _normalise_signed_rate" in run_py.read_text("utf-8")
     assert (runtime_dir / "strategy_generated.py").is_file()
+
+
+@pytest.mark.parametrize(
+    "sync_runtime",
+    [
+        workspace_unit_runtime.sync_unit_runtime,
+        workspace_unit_runtime.sync_trading_unit_runtime,
+    ],
+    ids=("unit-runtime", "trading-unit-runtime"),
+)
+def test_runtime_sync_writes_fallback_runner_bytes_matching_source_digest(
+    tmp_path, monkeypatch, sync_runtime
+):
+    monkeypatch.setattr(workspace_unit_runtime, "_WORKSPACE_UNITS_ROOT", tmp_path)
+    template_dir = _make_strategy_template(
+        tmp_path, "generated/ai-strategy", "strategy_generated"
+    )
+    (template_dir / "run.py").unlink()
+    monkeypatch.setattr(workspace_unit_runtime, "get_strategy_dir", lambda _sid: template_dir)
+    unit = _make_basic_trading_unit("generated/ai-strategy")
+
+    runtime_dir = sync_runtime(unit, {})
+
+    expected_bytes = workspace_unit_runtime._UNIT_RUN_PY.encode("utf-8")
+    materialized_bytes = (runtime_dir / "run.py").read_bytes()
+    expected_digest = hashlib.sha256(expected_bytes).hexdigest()
+    assert materialized_bytes == expected_bytes
+    assert hashlib.sha256(materialized_bytes).hexdigest() == expected_digest
 
 
 def test_sync_trading_unit_runtime_refreshes_fallback_run_py_for_generated_strategy(
