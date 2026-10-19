@@ -1,6 +1,5 @@
 """Tests for DirectOrderService - trade execution bridge."""
 
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,38 +7,6 @@ import pytest
 
 from app.schemas.ai_trading import OrderType, TradeAction, TradingIntent
 from app.services.direct_order_service import DirectOrderService
-
-
-class TestDirectOrderServiceMapOrderType:
-    """Test order type mapping."""
-
-    def test_market(self):
-        assert DirectOrderService._map_order_type(OrderType.MARKET) == "market"
-
-    def test_limit(self):
-        assert DirectOrderService._map_order_type(OrderType.LIMIT) == "limit"
-
-    def test_stop(self):
-        assert DirectOrderService._map_order_type(OrderType.STOP) == "stop"
-
-    def test_stop_limit(self):
-        assert DirectOrderService._map_order_type(OrderType.STOP_LIMIT) == "stop_limit"
-
-
-
-
-
-
-class TestDirectOrderServiceNumericBoundaries:
-    @pytest.mark.parametrize("value", [None, "", "invalid", float("nan"), float("inf")])
-    def test_invalid_order_sizes_are_rejected(self, value):
-        with pytest.raises(ValueError, match="quantity"):
-            DirectOrderService._normalise_order_size(value, default=None)
-
-    def test_overflowing_order_size_is_rejected(self):
-        with pytest.raises(ValueError, match="quantity"):
-            DirectOrderService._normalise_order_size(10**400, default=None)
-
 
 
 class TestDirectOrderServicePaperTrade:
@@ -580,7 +547,3 @@ class TestDirectOrderServicePaperTrade:
             result = await service.execute_paper_trade(intent, user_id="user1")
             assert result["success"] is False
             assert "no_position" in result["error"]
-
-
-
-

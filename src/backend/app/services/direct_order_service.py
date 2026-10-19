@@ -175,7 +175,7 @@ class DirectOrderService:
         return getattr(source, field, None)
 
     def _get_gateways_dict(self) -> dict[str, Any]:
-        """Get the gateways dict from LiveTradingManager."""
+        """Get gateway metadata for live risk enrichment."""
         try:
             from app.services.live_trading_manager import get_live_trading_manager
 

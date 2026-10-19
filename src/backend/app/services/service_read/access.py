@@ -33,6 +33,7 @@ __all__ = [
     "PortfolioAnalyticsBinding",
     "RiskAccountPolicyBinding",
     "RiskPolicyBudgetBinding",
+    "PaperLegacyImportBinding",
     "ServiceReadAccessDirectory",
     "ServiceReadAccessError",
 ]

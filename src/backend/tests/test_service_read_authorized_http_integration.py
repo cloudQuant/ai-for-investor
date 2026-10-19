@@ -2074,6 +2074,8 @@ def _run_live_composition_projection(
                             "X-Principal-Ref": "forged-principal",
                             "X-Delegate-Ref": _DELEGATE_B,
                             "X-Approver-Ref": _SUBJECT_B,
+                            "X-Tenant-Ref": "forged-tenant-b",
+                            "X-Workspace-Id": "forged-workspace-b",
                         }
                         repeated_read = await client.get(
                             "/api/v1/portfolio/overview",
@@ -2084,6 +2086,8 @@ def _run_live_composition_projection(
                                 "principal_ref": "forged-principal",
                                 "delegate_ref": _DELEGATE_B,
                                 "approver_ref": _SUBJECT_B,
+                                "tenant_ref": "forged-tenant-b",
+                                "workspace_id": "forged-workspace-b",
                             },
                             headers=forged_headers,
                         )

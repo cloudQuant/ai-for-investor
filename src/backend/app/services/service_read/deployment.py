@@ -34,10 +34,10 @@ from app.services.service_read.client import (
     PaperLegacyImportBinding,
     PaperSubmitBinding,
     PAPER_CONTROL_MODES,
-    RiskPolicyBudgetBinding,
     RiskAccountPolicyBinding,
-    _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS,
+    RiskPolicyBudgetBinding,
     PAPER_LEGACY_IMPORT_OPERATIONS,
+    _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS,
 )
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
@@ -294,20 +294,23 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
         requested_operations["application.account"] = frozenset(
             {"account.snapshot", "account.head"}
         )
-    if profile.order_bindings or profile.account_book_bindings:
+    if profile.account_book_bindings or profile.order_bindings:
         operations: set[str] = set()
-        if profile.order_bindings:
-            operations.add("orders.query")
         if profile.account_book_bindings:
             operations.add("execution.account_books.query")
+        if profile.order_bindings:
+            operations.add("orders.query")
         requested_operations["application.order_query"] = frozenset(operations)
-    has_submit = bool(profile.order_submit_bindings or profile.paper_submit_bindings)
-    if has_submit and profile.approved_target_bindings:
+    if profile.order_submit_bindings and profile.approved_target_bindings:
         # Runtime requests operations per mount, so a mixed write profile would
         # widen each selector to both operations. Keep the trusted selectors
         # in separate application identities instead.
         raise ServiceReadDeploymentError("MIXED_ORDER_WRITE_PROFILE")
-    if has_submit:
+    if profile.order_submit_bindings:
+        requested_operations["application.orders"] = frozenset({"orders.submit"})
+    if profile.paper_submit_bindings:
+        if profile.order_submit_bindings or profile.approved_target_bindings:
+            raise ServiceReadDeploymentError("MIXED_PAPER_ORDER_WRITE_PROFILE")
         requested_operations["application.orders"] = frozenset({"orders.submit"})
     if profile.approved_target_bindings:
         requested_operations["application.orders"] = frozenset(
@@ -491,10 +494,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         "strategy_book_bindings",
         "order_submit_bindings",
         "approved_target_bindings",
-        "portfolio_analytics_bindings",
-
         "paper_submit_bindings",
         "paper_legacy_import_bindings",
+        "portfolio_analytics_bindings",
         "risk_policy_budget_bindings",
         "risk_account_policy_bindings",
     }
@@ -635,10 +637,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     optional_grant_fields = book_grant_fields | {
         "order_submit_scope_refs",
         "approved_target_scope_refs",
-        "portfolio_refs",
-
         "paper_submit_account_ids",
         "paper_legacy_import_account_ids",
+        "portfolio_refs",
         "risk_policy_budget_refs",
         "risk_account_policy_refs",
     }
@@ -1417,6 +1418,16 @@ def _validate_profile_bindings(
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
+    for scope_ref, binding in approved_target_bindings.items():
+        scope = scopes.get(scope_ref)
+        if (
+            binding.mount != "application.orders"
+            or scope is None
+            or not _is_approved_target_scope(scope, binding.account_ref, binding.strategy_ref)
+            or scope != binding.wire_scope
+        ):
+            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
     for legacy_account_id, binding in paper_submit_bindings.items():
         scope = scopes.get(binding.scope_ref)
         query = scopes.get(binding.query_scope_ref)
@@ -1463,16 +1474,6 @@ def _validate_profile_bindings(
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         paper.paper_owner_domain.validate_binding(paper.wire_scope, paper.execution_scope)
         _add_declared(declared, binding.mount, binding.scope_ref, paper.account_ref)
-    for scope_ref, binding in approved_target_bindings.items():
-        scope = scopes.get(scope_ref)
-        if (
-            binding.mount != "application.orders"
-            or scope is None
-            or not _is_approved_target_scope(scope, binding.account_ref, binding.strategy_ref)
-            or scope != binding.wire_scope
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
     for scope_ref, binding in monitor_bindings.items():
         scope = scopes.get(binding.scope_ref)
         if (

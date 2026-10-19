@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import socket
+import tempfile
 import threading
 import traceback
 import uuid
@@ -21,6 +22,10 @@ from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_risk.budget_admission import (
+    BudgetAdmissionResolutionError,
+    PolicyCatalogBudgetAdmissionResolver,
+)
 from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore
 from app.db.database import async_session_maker
 from app.models.permission import Role, user_roles
@@ -401,11 +406,18 @@ async def _register_policy_actor(
     return subject, {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
+@pytest.fixture
+def _short_risk_data_root():
+    with tempfile.TemporaryDirectory(prefix="afi-risk-") as root:
+        yield Path(root)
+
+
 @pytest.mark.asyncio
 async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk_host(
     tmp_path: Path,
     client: Any,
     monkeypatch: pytest.MonkeyPatch,
+    _short_risk_data_root: Path,
 ) -> None:
     maker_subject, maker_headers = await _register_policy_actor(
         client, label="maker", policy_admin=True
@@ -525,12 +537,12 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
         "membership_version": membership.membership_version,
         "membership_sha256": membership.membership_sha256,
         "currency": "USD",
-        "total_amount": "60",
+        "total_amount": "50",
         "unallocated_amount": "10",
         "allocations": [
             {
                 "account_ref": account_ref,
-                "amount": "25",
+                "amount": "25" if account_ref == _ACCOUNTS[0] else "15",
                 "currency": "USD",
                 "metric": "max_increase_notional",
                 "max_increase_count": 2,
@@ -611,6 +623,20 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
             assert first_confirmation.json()["authority_ready"] is False
             assert first_confirmation.json()["consumer_effective"] is False
 
+            partial_resolver = PolicyCatalogBudgetAdmissionResolver(catalog, confirmations)
+            for account_ref in _ACCOUNTS:
+                with pytest.raises(BudgetAdmissionResolutionError) as partial_error:
+                    partial_resolver.resolve(
+                        _POOL,
+                        account_ref,
+                        scope=WireScope(
+                            _DOMAIN,
+                            account_ref=account_ref,
+                            portfolio_ref=_PORTFOLIO,
+                        ),
+                    )
+                assert partial_error.value.code == "BUDGET_AUTHORITY_NOT_READY"
+
             checker_owner_confirm = await client.post(
                 f"{url}/members/{_ACCOUNTS[1]}/confirm",
                 json={},
@@ -646,7 +672,6 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
         catalog.close()
         confirmations.close()
         stores_closed = True
-        from bt_api_risk.budget_admission import PolicyCatalogBudgetAdmissionResolver
 
         reopened_catalog = PolicyCatalogStore(
             str(catalog_path), trusted_approver_principals=(_CHECKER_PRINCIPAL,)
@@ -670,16 +695,23 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
             ]
             assert {row.account_ref for row in resolved_rows} == set(_ACCOUNTS)
             assert {row.generation_ref for row in resolved_rows} == {_GENERATION}
-            assert {str(row.risk_policy.max_increase_notional) for row in resolved_rows} == {"25"}
+            assert {
+                row.account_ref: str(row.risk_policy.max_increase_notional)
+                for row in resolved_rows
+            } == {_ACCOUNTS[0]: "25", _ACCOUNTS[1]: "15"}
             assert {row.risk_policy.notional_unit for row in resolved_rows} == {"USD"}
-            await _exercise_http_account_gate_consumer(
-                client=client,
-                monkeypatch=monkeypatch,
-                subject=maker_subject,
-                headers=maker_headers,
-                resolver=resolver,
-                tmp_path=tmp_path,
-            )
+            for account_ref, unit_price in zip(_ACCOUNTS, ("20", "10"), strict=True):
+                await _exercise_http_account_gate_consumer(
+                    client=client,
+                    monkeypatch=monkeypatch,
+                    subject=maker_subject,
+                    headers=maker_headers,
+                    resolver=resolver,
+                    tmp_path=tmp_path,
+                    risk_data_root=_short_risk_data_root,
+                    account_ref=account_ref,
+                    unit_price=unit_price,
+                )
         finally:
             reopened_catalog.close()
             reopened_confirmations.close()
@@ -701,12 +733,14 @@ async def _exercise_http_account_gate_consumer(
     headers: dict[str, str],
     resolver: Any,
     tmp_path: Path,
+    risk_data_root: Path,
+    account_ref: str,
+    unit_price: str,
 ) -> None:
     """Use the HTTP-created generation through the normal account-owner route."""
 
     from tests import test_afi_budget_manual_admission_host as manual
 
-    account_ref = _ACCOUNTS[0]
     resolved = resolver.resolve(
         _POOL,
         account_ref,
@@ -718,12 +752,20 @@ async def _exercise_http_account_gate_consumer(
     )
     assert resolved.generation_ref == _GENERATION, resolved
     assert resolved.account_ref == account_ref, resolved
+    provider_account_key = manual.AccountKey(
+        provider=manual._PROVIDER_ACCOUNT_KEY.provider,
+        venue=manual._PROVIDER_ACCOUNT_KEY.venue,
+        environment=manual._PROVIDER_ACCOUNT_KEY.environment,
+        account_id=f"synthetic-provider-{account_ref}",
+    )
     for name, value in {
         "_DOMAIN": _DOMAIN,
         "_ACCOUNT": account_ref,
         "_POOL": _POOL,
         "_PORTFOLIO": _PORTFOLIO,
         "_POLICY_REF_A": resolved.policy_ref,
+        "_PROVIDER_ACCOUNT_KEY": provider_account_key,
+        "_PROVIDER_ACCOUNT": provider_account_key.account_key_id,
     }.items():
         monkeypatch.setattr(manual, name, value)
 
@@ -738,11 +780,10 @@ async def _exercise_http_account_gate_consumer(
     }
     provider = manual._SyntheticProvider()
     resources: dict[str, Any] = {}
-
     base_resource_provider = manual._resource_provider_factory(
         resolver=resolver,
-        gate_path=tmp_path / "afi-budget-consumer-risk.sqlite3",
-        journal_path=tmp_path / "afi-budget-consumer-journal.sqlite3",
+        gate_path=risk_data_root / f"{account_ref}-afi-budget-consumer-risk.sqlite3",
+        journal_path=risk_data_root / f"{account_ref}-afi-budget-consumer-journal.sqlite3",
         provider=provider,
         resources=resources,
     )
@@ -771,7 +812,7 @@ async def _exercise_http_account_gate_consumer(
     host_owner = manual._HostOwner(
         manual._service_config(endpoint),
         manual._service_authority(endpoint, keys),
-        tmp_path / "afi-budget-consumer-service-registry.sqlite3",
+        tmp_path / f"{account_ref}-afi-budget-consumer-service-registry.sqlite3",
         provide_account_risk_resources,
         resources,
     )
@@ -798,7 +839,45 @@ async def _exercise_http_account_gate_consumer(
     host_started = False
     try:
         host_started = host_owner.start()
-        assert host_started, host_owner.diagnostics()
+        if not host_started:
+            diagnostics = host_owner.diagnostics()
+            error = host_owner.error
+            exception_chain: list[dict[str, object]] = []
+            seen_errors: set[int] = set()
+            while (
+                error is not None
+                and id(error) not in seen_errors
+                and len(exception_chain) < 8
+            ):
+                seen_errors.add(id(error))
+                exception_chain.append(
+                    {
+                        "type": f"{type(error).__module__}.{type(error).__qualname__}",
+                        "code": getattr(error, "code", None),
+                        "message": str(error)[:256],
+                        "suppress_context": error.__suppress_context__,
+                        "cause_type": (
+                            None
+                            if error.__cause__ is None
+                            else f"{type(error.__cause__).__module__}.{type(error.__cause__).__qualname__}"
+                        ),
+                        "context_type": (
+                            None
+                            if error.__context__ is None
+                            else f"{type(error.__context__).__module__}.{type(error.__context__).__qualname__}"
+                        ),
+                        "traceback": "".join(
+                            traceback.format_exception(
+                                type(error), error, error.__traceback__, limit=16
+                            )
+                        ),
+                    }
+                )
+                error = error.__cause__ or error.__context__
+            diagnostics["exception_chain"] = exception_chain
+            assert host_started, json.dumps(
+                diagnostics, ensure_ascii=False, sort_keys=True
+            )
         assert host_owner.state == "started", host_owner.diagnostics()
         assert resources["resolved_budget"].generation_ref == _GENERATION
         assert resources["resolved_budget"].policy_ref == resolved.policy_ref
@@ -818,13 +897,13 @@ async def _exercise_http_account_gate_consumer(
                     "position_effect": "OPEN",
                     "order_type": "LIMIT",
                     "quantity": "2",
-                    "price": "20",
+                    "price": unit_price,
                     "time_in_force": "GTC",
                     "reduce_only": False,
                 },
                 headers={
                     **headers,
-                    "Idempotency-Key": "afi-policy-generation-over-budget",
+                    "Idempotency-Key": f"afi-policy-{account_ref}-over-budget",
                 },
             )
             assert denied.status_code == 200, denied.text
@@ -847,13 +926,13 @@ async def _exercise_http_account_gate_consumer(
                     "position_effect": "OPEN",
                     "order_type": "LIMIT",
                     "quantity": "1",
-                    "price": "20",
+                    "price": unit_price,
                     "time_in_force": "GTC",
                     "reduce_only": False,
                 },
                 headers={
                     **headers,
-                    "Idempotency-Key": "afi-policy-generation-under-budget",
+                    "Idempotency-Key": f"afi-policy-{account_ref}-under-budget",
                 },
             )
             assert accepted.status_code == 200, accepted.text
@@ -866,7 +945,7 @@ async def _exercise_http_account_gate_consumer(
             assert observed["policy_fingerprint"] == resolved.risk_policy.fingerprint
             assert observed["ledger_identity_ref"], observed
             assert observed["increase_count"] == 1, observed
-            assert Decimal(str(observed["increase_notional"])) == Decimal("20"), observed
+            assert Decimal(str(observed["increase_notional"])) == Decimal(unit_price), observed
             assert len(observed["provider_writes"]) == 1, observed
             assert resources["resolved_budget"].generation_ref == _GENERATION
             assert "consumer_effective" not in accepted_payload

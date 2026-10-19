@@ -52,10 +52,13 @@ PAPER_CONTROL_MODES = frozenset(
     {"execution_only", "execution_risk", "execution_risk_monitor"}
 )
 
-
 RISK_POLICY_BUDGET_MAKER_OPERATIONS = frozenset(
     {
         "policy.draft",
+        "policy.publish",
+        "policy.inspect",
+        "policy.receipt",
+        "policy.confirmation.read",
         "policy.budget.propose",
         "policy.budget.publish_member",
         "policy.budget.owner_confirm_member",
@@ -66,7 +69,14 @@ RISK_POLICY_BUDGET_MAKER_OPERATIONS = frozenset(
     }
 )
 RISK_POLICY_BUDGET_CHECKER_OPERATIONS = frozenset(
-    {"policy.budget.approve", "policy.budget.read"}
+    {
+        "policy.approve",
+        "policy.inspect",
+        "policy.receipt",
+        "policy.confirmation.read",
+        "policy.budget.approve",
+        "policy.budget.read",
+    }
 )
 RISK_POLICY_BUDGET_OPERATIONS = frozenset(
     RISK_POLICY_BUDGET_MAKER_OPERATIONS | RISK_POLICY_BUDGET_CHECKER_OPERATIONS
@@ -91,6 +101,7 @@ PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
         "paper.import.abort",
     }
 )
+
 
 class ServiceReadUnavailableError(RuntimeError):
     """The authorized read path refused or could not answer this request.

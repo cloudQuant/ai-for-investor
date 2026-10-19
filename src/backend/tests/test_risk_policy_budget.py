@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import sqlite3
 import sys
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from bt_api_base.service_protocol import WireScope
 from bt_api_risk.core.admission import RiskPolicy
+from bt_api_risk.portfolio_analytics import FxObservationV1
 from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore
 
 _POLICY_BUDGET_SOURCE = Path(os.environ["AFI_POLICY_BUDGET_SOURCE"]).resolve(strict=True)
@@ -64,6 +66,48 @@ def _policy_refs() -> dict[str, str]:
         "account-a": "afi.portfolio-demo.account-a-v3",
         "account-b": "afi.portfolio-demo.account-b-v3",
     }
+
+
+def _cross_currency_plan() -> StaticPortfolioBudgetPlan:
+    return _plan(
+        total=Decimal("10"),
+        unallocated=Decimal("0"),
+        allocations=(
+            AccountBudgetAllocation(
+                "account-a", Decimal("3"), "EUR", max_increase_count=3
+            ),
+            AccountBudgetAllocation(
+                "account-b", Decimal("6.296296329629629633"), "USD", max_increase_count=2
+            ),
+        ),
+    )
+
+
+def _fx_observation(
+    *,
+    now_ns: int,
+    base: str = "EUR",
+    quote: str = "USD",
+    rate: Decimal = Decimal("1.234567890123456789"),
+    as_of_ns: int | None = None,
+    valid_until_ns: int | None = None,
+) -> FxObservationV1:
+    return FxObservationV1(
+        observation_ref="fx-budget-eur-usd-v1",
+        base_currency=base,
+        quote_currency=quote,
+        direction="BASE_TO_QUOTE",
+        rate_unit="QUOTE_PER_BASE",
+        rate=rate,
+        as_of_ns=now_ns - 1_000_000_000 if as_of_ns is None else as_of_ns,
+        valid_until_ns=now_ns + 3_600_000_000_000
+        if valid_until_ns is None
+        else valid_until_ns,
+        source_ref="trusted-market-fx-reference",
+        source_version="fx-reference-v1",
+        source_generation="fx-reference-generation-7",
+        source_cursor="fx-reference-cursor-42",
+    )
 
 
 def test_compiled_drafts_are_accepted_by_risk_policy_and_real_catalog(tmp_path) -> None:
@@ -120,6 +164,142 @@ def test_compiled_drafts_are_accepted_by_risk_policy_and_real_catalog(tmp_path) 
         catalog.close()
 
 
+def test_fresh_fx_converts_exactly_and_catalog_persists_source_facts(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now_ns = 1_900_000_000_000_000_000
+    monkeypatch.setattr(_POLICY_BUDGET_MODULE.time, "time_ns", lambda: now_ns)
+    observation = _fx_observation(now_ns=now_ns)
+    compiled = compile_static_portfolio_budget(
+        _cross_currency_plan(),
+        policy_refs=_policy_refs(),
+        fx_observations={"EUR": observation},
+    )
+    requests = compiled.catalog_requests()
+    account_a = next(
+        request["content"]
+        for request in requests
+        if request["content"]["afi_budget"]["account_ref"] == "account-a"
+    )
+    assert account_a["risk_policy"]["max_increase_notional"] == "3.703703670370370367"
+    assert account_a["risk_policy"]["notional_unit"] == "USD"
+    budget = account_a["afi_budget"]
+    assert budget["source_amount"] == "3"
+    assert budget["source_currency"] == "EUR"
+    assert budget["allocated_amount"] == "3.703703670370370367"
+    assert budget["fx_observation"] == {
+        "observation_ref": observation.observation_ref,
+        "base_currency": "EUR",
+        "quote_currency": "USD",
+        "direction": "BASE_TO_QUOTE",
+        "rate_unit": "QUOTE_PER_BASE",
+        "rate": "1.234567890123456789",
+        "as_of_ns": observation.as_of_ns,
+        "valid_until_ns": observation.valid_until_ns,
+        "source_ref": observation.source_ref,
+        "source_version": observation.source_version,
+        "source_generation": observation.source_generation,
+        "source_cursor": observation.source_cursor,
+    }
+    # 3 EUR * the exact 18-place rate plus the USD allocation equals the
+    # declared ten USD exactly; no Decimal-context rounding is permitted.
+    assert compiled.total_amount == "10"
+    assert compiled.unallocated_amount == "0"
+
+    catalog_path = tmp_path / "fx-budget-catalog.sqlite"
+    catalog = PolicyCatalogStore(str(catalog_path))
+    account_a_policy_version: str | None = None
+    try:
+        for request in requests:
+            content = request["content"]
+            risk_policy = RiskPolicy(**content["risk_policy"])
+            account_ref = content["afi_budget"]["account_ref"]
+            scope = WireScope("afi-fx-budget-test", account_ref=account_ref)
+            result = catalog.draft(
+                request["policy_ref"],
+                content,
+                principal_ref="afi-budget-manager",
+                scope=scope,
+            )
+            assert result["state"] == "draft"
+            assert risk_policy.notional_unit == "USD"
+            if account_ref == "account-a":
+                account_a_policy_version = result["policy_version"]
+    finally:
+        catalog.close()
+
+    # The accepted catalog intentionally requires generation-level approval for
+    # budget policies. Read its persisted draft row after closing the writer to
+    # verify FX provenance survived the actual SQLite store boundary.
+    assert account_a_policy_version is not None
+    with sqlite3.connect(str(catalog_path)) as reopened:
+        reopened.row_factory = sqlite3.Row
+        saved = reopened.execute(
+            "SELECT state, digest, content_json FROM policy_catalog_versions "
+            "WHERE reference = ?",
+            ("afi.portfolio-demo.account-a-v3",),
+        ).fetchone()
+    assert saved is not None
+    assert saved["state"] == "draft"
+    assert saved["digest"] == account_a_policy_version
+    assert json.loads(saved["content_json"]) == account_a
+    assert json.loads(saved["content_json"])["afi_budget"]["fx_observation"]["source_cursor"] == (
+        "fx-reference-cursor-42"
+    )
+
+def test_cross_currency_budget_fails_closed_without_current_bound_fx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now_ns = 1_900_000_000_000_000_000
+    monkeypatch.setattr(_POLICY_BUDGET_MODULE.time, "time_ns", lambda: now_ns)
+    cases = (
+        ({}, "BUDGET_FX_REQUIRED"),
+        (
+            {
+                "EUR": _fx_observation(
+                    now_ns=now_ns,
+                    as_of_ns=now_ns - 86_400_000_000_001,
+                    valid_until_ns=now_ns + 1_000_000_000,
+                )
+            },
+            "BUDGET_FX_STALE",
+        ),
+        (
+            {
+                "EUR": _fx_observation(
+                    now_ns=now_ns,
+                    as_of_ns=now_ns + 1,
+                    valid_until_ns=now_ns + 1_000_000_000,
+                )
+            },
+            "BUDGET_FX_NOT_CURRENT",
+        ),
+        (
+            {
+                "EUR": _fx_observation(
+                    now_ns=now_ns,
+                    as_of_ns=now_ns - 1_000_000_000,
+                    valid_until_ns=now_ns,
+                )
+            },
+            "BUDGET_FX_NOT_CURRENT",
+        ),
+        (
+            {"EUR": _fx_observation(now_ns=now_ns, base="GBP")},
+            "BUDGET_FX_PAIR_MISMATCH",
+        ),
+    )
+    for observations, expected_code in cases:
+        with pytest.raises(RiskPolicyBudgetError) as error:
+            compile_static_portfolio_budget(
+                _cross_currency_plan(),
+                policy_refs=_policy_refs(),
+                fx_observations=observations,
+            )
+        assert error.value.code == expected_code
+
+
 def test_allocation_set_hash_is_order_independent_and_binds_membership() -> None:
     plan = _plan()
     reversed_plan = replace(plan, allocations=tuple(reversed(plan.allocations)))
@@ -168,7 +348,7 @@ def test_budget_conservation_does_not_round_large_decimal_allocations() -> None:
                 )
             ),
             _policy_refs(),
-            "MIXED_BUDGET_CURRENCY",
+            "BUDGET_FX_REQUIRED",
         ),
         (
             _plan(

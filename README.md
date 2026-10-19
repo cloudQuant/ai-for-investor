@@ -81,6 +81,10 @@ cd src/frontend && npm run dev
 - API / Swagger：<http://localhost:8000/docs>
 - 健康检查：<http://localhost:8000/health>
 
+Windows 11 完成 [首次环境配置](scripts/windows/README.md)后，可以从仓库根目录运行
+`scripts\windows\start_app.bat`、`scripts\windows\stop_app.bat` 或
+`scripts\windows\restart_app.bat`。`scripts\windows\app.bat doctor` 会检查启动依赖和本地配置。
+
 ### Docker
 
 Compose 基础文件位于 `docker/docker-compose.yml`，需配合环境覆盖文件使用：

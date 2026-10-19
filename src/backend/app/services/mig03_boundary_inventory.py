@@ -16,7 +16,7 @@ import math
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from sqlalchemy import JSON, LargeBinary, String, Text, cast, func, select
 from sqlalchemy import inspect as sa_inspect
@@ -26,6 +26,7 @@ from app.models.approved_target_http_operation import ApprovedTargetHttpOperatio
 from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.paper_trading import Account, Order, PaperTrade, Position
+from app.models.workspace import StrategyUnit, Workspace
 from app.models.service_order_operation import ServiceOrderOperation
 from app.models.strategy_target_approval import (
     StrategyTargetApproval,
@@ -129,6 +130,29 @@ class PaperWriterStopReceipt:
     tasks_before: int
     stopped_task_names: tuple[str, ...]
     tasks_after: int
+
+
+@dataclass(frozen=True, slots=True)
+class AfiConfiguredSnapshotWriter:
+    """One production-restorable AFI paper snapshot writer and its owner link.
+
+    The external ``account_ref`` is supplied by the typed migration mapping;
+    this inventory proves only that the AFI runtime's persisted snapshot rows
+    all point to one real ``paper_trading_accounts.id`` owned by the workspace
+    user. It never derives either identity from a similarly named string.
+    """
+
+    consumer_id: str
+    consumer_kind: str
+    configuration_sha256: str
+    scope_sha256: str
+    operations_sha256: str
+    account_ref: str
+    paper_account_id: str
+    user_id: str
+    workspace_id: str
+    unit_id: str
+    instance_id: str
 
 
 @dataclass(slots=True)
@@ -436,6 +460,275 @@ def capture_afi_boundary(
         reservation_ids=reservation_ids,
         _configuration_sha256=configuration_sha256,
     )
+
+
+def enumerate_paper_snapshot_writers(
+    session: Session,
+    *,
+    account_refs_by_paper_account: Mapping[str, str],
+    configuration_sha256: str,
+) -> tuple[AfiConfiguredSnapshotWriter, ...]:
+    """Derive every restorable AFI snapshot consumer from persisted ownership.
+
+    The selection predicate matches :meth:`PaperRuntimeSnapshotScheduler.start_existing`.
+    Each selected instance must have bounded historical snapshot rows whose
+    workspace, unit, user, and non-null paper-account FK agree with that
+    configured runtime. The referenced Account row must confirm the same
+    owner. Missing history, mixed/unbound FKs, owner drift, extra/missing
+    account mappings, and oversized scans fail closed before a cutover can
+    treat this producer as stopped.
+
+    ``account_refs_by_paper_account`` is an explicit migration crosswalk. It
+    labels the verified AFI account FK with the destination-side account_ref;
+    it is not itself evidence that the mapping is authorized or a runtime
+    grant. The caller must preserve and verify that crosswalk separately.
+    """
+
+    if (
+        not isinstance(session, Session)
+        or not session.is_active
+        or session.new
+        or session.dirty
+        or session.deleted
+        or type(account_refs_by_paper_account) is not dict
+    ):
+        raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
+    _require_sha256(configuration_sha256)
+    if any(
+        type(account_id) is not str
+        or not account_id
+        or type(account_ref) is not str
+        or not account_ref
+        for account_id, account_ref in account_refs_by_paper_account.items()
+    ):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    if len(set(account_refs_by_paper_account.values())) != len(account_refs_by_paper_account):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+
+    budget = _InventoryReadBudget()
+    try:
+        active_workspace_scope = (
+            Workspace.workspace_type == "trading",
+            StrategyUnit.trading_mode == "paper",
+            StrategyUnit.run_status == "running",
+            StrategyUnit.lock_running.is_(False),
+            StrategyUnit.trading_instance_id.is_not(None),
+        )
+        active_unit_ids = (
+            select(StrategyUnit.id)
+            .join(Workspace, StrategyUnit.workspace_id == Workspace.id)
+            .where(*active_workspace_scope)
+        )
+        active_workspace_ids = select(StrategyUnit.workspace_id).where(
+            StrategyUnit.id.in_(active_unit_ids)
+        )
+        _preflight_query_budget(
+            session,
+            Workspace,
+            select(Workspace).where(Workspace.id.in_(active_workspace_ids)),
+            budget,
+        )
+        _preflight_query_budget(
+            session,
+            StrategyUnit,
+            select(StrategyUnit).where(
+                StrategyUnit.id.in_(active_unit_ids),
+                StrategyUnit.workspace_id.in_(
+                    select(Workspace.id).where(Workspace.workspace_type == "trading")
+                ),
+            ),
+            budget,
+        )
+        configured_rows = list(
+            session.execute(
+                select(
+                    Workspace.id.label("workspace_id"),
+                    Workspace.user_id.label("user_id"),
+                    StrategyUnit.id.label("unit_id"),
+                    StrategyUnit.workspace_id.label("unit_workspace_id"),
+                    StrategyUnit.trading_instance_id.label("instance_id"),
+                )
+                .join(StrategyUnit, StrategyUnit.workspace_id == Workspace.id)
+                .where(*active_workspace_scope)
+                .order_by(Workspace.id, StrategyUnit.id)
+                .limit(_MAX_BOUNDARY_ROWS + 1)
+            ).all()
+        )
+        if len(configured_rows) > _MAX_BOUNDARY_ROWS:
+            raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
+        if not configured_rows:
+            if account_refs_by_paper_account:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            return ()
+
+        workspace_ids = tuple(sorted({row.workspace_id for row in configured_rows}))
+        unit_ids = tuple(sorted({row.unit_id for row in configured_rows}))
+        workspace_rows = _query_rows(
+            session,
+            Workspace,
+            select(Workspace).where(Workspace.id.in_(workspace_ids)),
+            budget,
+        )
+        unit_rows = _query_rows(
+            session,
+            StrategyUnit,
+            select(StrategyUnit).where(StrategyUnit.id.in_(unit_ids)),
+            budget,
+        )
+        workspaces = {row["id"]: row for row in workspace_rows}
+        units = {row["id"]: row for row in unit_rows}
+        if set(workspaces) != set(workspace_ids) or set(units) != set(unit_ids):
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+
+        selected: list[dict[str, Any]] = []
+        all_account_ids: set[str] = set()
+        seen_instances: set[str] = set()
+        snapshot_bytes = 0
+        snapshot_rows_seen = 0
+        for configured in configured_rows:
+            workspace_id = configured.workspace_id
+            user_id = configured.user_id
+            unit_id = configured.unit_id
+            instance_id = configured.instance_id
+            if (
+                type(workspace_id) is not str
+                or not workspace_id
+                or type(user_id) is not str
+                or not user_id
+                or type(unit_id) is not str
+                or not unit_id
+                or type(instance_id) is not str
+                or not instance_id
+                or configured.unit_workspace_id != workspace_id
+                or instance_id in seen_instances
+            ):
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            seen_instances.add(instance_id)
+            rows = list(
+                session.execute(
+                    select(
+                        PaperEquitySnapshot.id,
+                        PaperEquitySnapshot.user_id,
+                        PaperEquitySnapshot.workspace_id,
+                        PaperEquitySnapshot.unit_id,
+                        PaperEquitySnapshot.instance_id,
+                        PaperEquitySnapshot.paper_account_id,
+                    )
+                    .where(PaperEquitySnapshot.instance_id == instance_id)
+                    .order_by(PaperEquitySnapshot.id)
+                    .limit(_MAX_BOUNDARY_ROWS + 1)
+                ).all()
+            )
+            if not rows or len(rows) > _MAX_BOUNDARY_ROWS:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            accounts_for_instance: set[str] = set()
+            for row in rows:
+                identity = tuple(row)
+                encoded = _canonical_json(identity)
+                snapshot_bytes += len(encoded)
+                snapshot_rows_seen += 1
+                if (
+                    snapshot_rows_seen > _MAX_BOUNDARY_ROWS
+                    or snapshot_bytes > _MAX_BOUNDARY_BYTES
+                ):
+                    raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
+                (
+                    snapshot_id,
+                    snapshot_user_id,
+                    snapshot_workspace_id,
+                    snapshot_unit_id,
+                    snapshot_instance_id,
+                    paper_account_id,
+                ) = identity
+                if (
+                    type(snapshot_id) is not str
+                    or not snapshot_id
+                    or (snapshot_user_id, snapshot_workspace_id, snapshot_unit_id, snapshot_instance_id)
+                    != (user_id, workspace_id, unit_id, instance_id)
+                    or type(paper_account_id) is not str
+                    or not paper_account_id
+                ):
+                    raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+                accounts_for_instance.add(paper_account_id)
+            if len(accounts_for_instance) != 1:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            paper_account_id = next(iter(accounts_for_instance))
+            all_account_ids.add(paper_account_id)
+            selected.append(
+                {
+                    "user_id": user_id,
+                    "workspace_id": workspace_id,
+                    "unit_id": unit_id,
+                    "instance_id": instance_id,
+                    "paper_account_id": paper_account_id,
+                }
+            )
+
+        if set(account_refs_by_paper_account) != all_account_ids:
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+        accounts = _query_rows(
+            session,
+            Account,
+            select(Account).where(Account.id.in_(tuple(sorted(all_account_ids)))),
+            budget,
+        )
+        account_by_id = {row["id"]: row for row in accounts}
+        if set(account_by_id) != all_account_ids:
+            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+
+        consumers = []
+        operations = {"model": "PaperEquitySnapshot", "operation": "scheduled_snapshot"}
+        operations_sha256 = hashlib.sha256(_canonical_json(operations)).hexdigest()
+        for item in selected:
+            account_id = item["paper_account_id"]
+            if account_by_id[account_id]["user_id"] != item["user_id"]:
+                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+            account_ref = account_refs_by_paper_account[account_id]
+            workspace_row = workspaces[item["workspace_id"]]
+            unit_row = units[item["unit_id"]]
+            scope_document = {
+                "account_ref": account_ref,
+                "user_id": item["user_id"],
+                "workspace_id": item["workspace_id"],
+                "unit_id": item["unit_id"],
+                "instance_id": item["instance_id"],
+            }
+            configuration_document = {
+                "configuration_sha256": configuration_sha256,
+                "consumer_kind": "afi_snapshot_scheduler",
+                "scheduler": "app.services.paper_runtime_scheduler.PaperRuntimeSnapshotScheduler.start_existing",
+                "workspace": workspace_row,
+                "strategy_unit": unit_row,
+                "verified_account_fk": account_id,
+                "account_ref_crosswalk": account_ref,
+            }
+            configuration_digest = hashlib.sha256(
+                _canonical_json(configuration_document)
+            ).hexdigest()
+            scope_digest = hashlib.sha256(
+                _canonical_json(scope_document)
+            ).hexdigest()
+            consumer_id = "afi-snapshot-writer-v1:" + configuration_digest
+            consumers.append(
+                AfiConfiguredSnapshotWriter(
+                    consumer_id=consumer_id,
+                    consumer_kind="afi_snapshot_scheduler",
+                    configuration_sha256=configuration_digest,
+                    scope_sha256=scope_digest,
+                    operations_sha256=operations_sha256,
+                    account_ref=account_ref,
+                    paper_account_id=account_id,
+                    user_id=item["user_id"],
+                    workspace_id=item["workspace_id"],
+                    unit_id=item["unit_id"],
+                    instance_id=item["instance_id"],
+                )
+            )
+        return tuple(sorted(consumers, key=lambda item: item.consumer_id))
+    except AfiMigrationBoundaryError:
+        raise
+    except Exception:
+        raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED) from None
 
 
 async def stop_paper_snapshot_writers(

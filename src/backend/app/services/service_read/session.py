@@ -289,20 +289,6 @@ class SdkServiceReadSession:
             expected.add((binding.mount, binding.scope_ref, binding.operations))
         return expected
 
-    @staticmethod
-    def _scope_is_manual_policy_scope(scope: Any, account_ref: str) -> bool:
-        return (
-            getattr(scope, "account_ref", None) == account_ref
-            and not getattr(scope, "account_refs", ())
-            and bool(getattr(scope, "execution_domain_ref", None))
-            and bool(getattr(scope, "manual_book_ref", None))
-            and getattr(scope, "strategy_ref", None) is None
-            and getattr(scope, "run_id", None) is None
-            and getattr(scope, "portfolio_ref", None) is None
-            and getattr(scope, "group_id", None) is None
-            and getattr(scope, "leg_id", None) is None
-        )
-
     def _validate_registered_bindings(self) -> None:
         assert self._runtime is not None
         active = [binding for binding in self._runtime.bindings if self._active(binding)]
@@ -503,6 +489,20 @@ class SdkServiceReadSession:
             and getattr(scope, "run_id", None) is None
             and getattr(scope, "strategy_ref", None) is None
             and getattr(scope, "manual_book_ref", None) is None
+            and getattr(scope, "group_id", None) is None
+            and getattr(scope, "leg_id", None) is None
+        )
+
+    @staticmethod
+    def _scope_is_manual_policy_scope(scope: Any, account_ref: str) -> bool:
+        return (
+            getattr(scope, "account_ref", None) == account_ref
+            and not getattr(scope, "account_refs", ())
+            and bool(getattr(scope, "execution_domain_ref", None))
+            and bool(getattr(scope, "manual_book_ref", None))
+            and getattr(scope, "strategy_ref", None) is None
+            and getattr(scope, "run_id", None) is None
+            and getattr(scope, "portfolio_ref", None) is None
             and getattr(scope, "group_id", None) is None
             and getattr(scope, "leg_id", None) is None
         )
@@ -931,6 +931,11 @@ class SdkServiceReadSession:
             raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_OPERATION_NOT_AUTHORIZED")
         expected_arguments: dict[str, frozenset[str]] = {
             "policy.draft": frozenset({"policy_ref", "content"}),
+            "policy.approve": frozenset({"policy_ref"}),
+            "policy.publish": frozenset({"policy_ref"}),
+            "policy.inspect": frozenset({"policy_ref"}),
+            "policy.receipt": frozenset({"policy_ref"}),
+            "policy.confirmation.read": frozenset({"policy_ref"}),
             "policy.budget.propose": frozenset(
                 {
                     "pool_ref",
@@ -968,6 +973,11 @@ class SdkServiceReadSession:
             raise ServiceReadUnavailableError("INVALID_RISK_POLICY_BUDGET_ARGUMENTS")
         member_operations = {
             "policy.draft",
+            "policy.approve",
+            "policy.publish",
+            "policy.inspect",
+            "policy.receipt",
+            "policy.confirmation.read",
             "policy.budget.confirm_member",
             "policy.budget.owner_confirm_member",
             "policy.budget.reject_member",

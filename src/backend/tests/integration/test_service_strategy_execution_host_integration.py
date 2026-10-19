@@ -14,6 +14,7 @@ import hashlib
 import importlib
 import json
 import os
+import re
 import subprocess
 import sys
 import sysconfig
@@ -107,6 +108,429 @@ _LISTENER_REF = "bt-callback-listener-v1"
 _LEGACY_KEY = "manual:OKX:account.synthetic.callbacks"
 _INTENT_CONTRACT_REF = "bt-cerebro-fill-metadata-r1"
 _ORDER_QUERY_MARKER = "AFI_SERVICE_ORDER_QUERY_OK:FILLED"
+_SAFE_ERROR_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+
+
+def _finite_error_projection(error):
+    error_type = type(error).__name__
+    code = getattr(error, "code", None)
+    if not (type(code) is str and _SAFE_ERROR_CODE_RE.fullmatch(code)):
+        code = None
+        if type(error) is RuntimeError:
+            message = str(error)
+            if _SAFE_ERROR_CODE_RE.fullmatch(message):
+                code = message
+    return {"type": error_type, "code": code}
+
+
+async def _cleanup_service_process_after_stop_new(
+    manager,
+    *,
+    subject,
+    instance_id,
+    profile_ref,
+    run_id,
+    process,
+    stop_receipt,
+):
+    """Retry only the exact graceful stop after the owner fence was final."""
+
+    if (
+        getattr(stop_receipt, "stop_new_status", None) != "acknowledged"
+        or getattr(stop_receipt, "stop_new_owner_final", None) is not True
+        or getattr(stop_receipt, "stop_new_reconciliation_required", None) is not False
+        or getattr(stop_receipt, "stop_new_effect", None) not in {"fenced", "already_fenced"}
+    ):
+        return {"status": "unknown", "error_code": "STOP_NEW_NOT_CONFIRMED"}
+    if getattr(process, "returncode", None) is not None:
+        if type(process.returncode) is int and process.returncode == 0:
+            return {"status": "already_exited", "error_code": None}
+        return {"status": "unknown", "error_code": "PROCESS_EXIT_UNCONFIRMED"}
+    processes = getattr(manager, "_processes", None)
+    if not isinstance(processes, dict) or processes.get(instance_id) is not process:
+        return {"status": "unknown", "error_code": "SERVICE_EXECUTION_RUN_IDENTITY_CHANGED"}
+    try:
+        result = await manager.stop_instance(
+            instance_id,
+            user_id=subject,
+            expected_service_execution_profile_ref=profile_ref,
+            expected_service_execution_run_id=run_id,
+            expected_service_execution_process=process,
+        )
+    except BaseException as error:
+        projected = _finite_error_projection(error)
+        return {
+            "status": "unknown",
+            "error_type": projected["type"],
+            "error_code": projected["code"],
+        }
+    if (
+        not isinstance(result, dict)
+        or result.get("status") != "stopped"
+        or type(getattr(process, "returncode", None)) is not int
+        or process.returncode != 0
+        or processes.get(instance_id) is process
+    ):
+        return {"status": "unknown", "error_code": "PROCESS_EXIT_UNCONFIRMED"}
+    return {"status": "stopped", "error_code": None}
+
+
+def _stop_receipt_cleanup_facts(receipt):
+    return {
+        "status": getattr(receipt, "status", "unknown"),
+        "error_code": getattr(receipt, "error_code", None),
+        "stop_new_status": getattr(receipt, "stop_new_status", None),
+        "stop_new_owner_final": getattr(receipt, "stop_new_owner_final", None),
+        "stop_new_reconciliation_required": getattr(
+            receipt, "stop_new_reconciliation_required", None
+        ),
+        "stop_new_effect": getattr(receipt, "stop_new_effect", None),
+    }
+
+
+async def _cleanup_started_service_strategy(
+    manager,
+    owner_control,
+    *,
+    subject,
+    instance_id,
+    binding,
+    profile_ref,
+    run_id,
+    process,
+    stop_attempted,
+    stop_receipt,
+    idempotency_key,
+):
+    """Safely finish one exact started run in the caller's existing loop."""
+
+    if process is None:
+        return {"status": "not_started", "error_code": None}
+    if stop_receipt is not None and getattr(stop_receipt, "status", None) == "stopped":
+        return _stop_receipt_cleanup_facts(stop_receipt)
+    if stop_attempted:
+        if stop_receipt is None:
+            return {"status": "unknown", "error_code": "STOP_RECEIPT_UNAVAILABLE"}
+        result = _stop_receipt_cleanup_facts(stop_receipt)
+        if (
+            getattr(stop_receipt, "stop_new_status", None) != "acknowledged"
+            or getattr(stop_receipt, "stop_new_owner_final", None) is not True
+            or getattr(stop_receipt, "stop_new_reconciliation_required", None) is not False
+            or getattr(stop_receipt, "stop_new_effect", None)
+            not in {"fenced", "already_fenced"}
+        ):
+            return result
+    else:
+        if (
+            owner_control is None
+            or binding is None
+            or type(profile_ref) is not str
+            or not profile_ref
+            or type(run_id) is not str
+            or not run_id
+        ):
+            return {"status": "unknown", "error_code": "SERVICE_STRATEGY_SCOPE_UNAVAILABLE"}
+        try:
+            stop_receipt = await stop_service_strategy_process(
+                manager,
+                owner_control,
+                subject=subject,
+                instance_id=instance_id,
+                binding=binding,
+                idempotency_key=idempotency_key,
+                open_order_policy="leave_open_and_report",
+            )
+        except BaseException as error:
+            projected = _finite_error_projection(error)
+            return {
+                "status": "unknown",
+                "error_type": projected["type"],
+                "error_code": projected["code"],
+                "stop_new_status": None,
+                "stop_new_owner_final": None,
+                "stop_new_reconciliation_required": None,
+                "stop_new_effect": None,
+            }
+        result = _stop_receipt_cleanup_facts(stop_receipt)
+        if getattr(stop_receipt, "status", None) == "stopped":
+            return result
+        if (
+            getattr(stop_receipt, "stop_new_status", None) != "acknowledged"
+            or getattr(stop_receipt, "stop_new_owner_final", None) is not True
+            or getattr(stop_receipt, "stop_new_reconciliation_required", None) is not False
+            or getattr(stop_receipt, "stop_new_effect", None)
+            not in {"fenced", "already_fenced"}
+        ):
+            return result
+
+    try:
+        retry = await _cleanup_service_process_after_stop_new(
+            manager,
+            subject=subject,
+            instance_id=instance_id,
+            profile_ref=profile_ref,
+            run_id=run_id,
+            process=process,
+            stop_receipt=stop_receipt,
+        )
+    except BaseException as error:
+        projected = _finite_error_projection(error)
+        return {
+            **result,
+            "status": "unknown",
+            "error_type": projected["type"],
+            "error_code": projected["code"],
+        }
+    return {**result, **retry}
+
+
+def test_service_process_failure_cleanup_is_same_loop_and_run_bound(monkeypatch):
+    instance_id = "cleanup-instance"
+    subject = "cleanup-subject"
+    profile_ref = "cleanup-profile"
+    run_id = "cleanup-run"
+    process = SimpleNamespace(pid=733019, returncode=None, _bt_service_execution=True)
+    manager = SimpleNamespace(_processes={instance_id: process})
+    stop_receipt = SimpleNamespace(
+        status="unknown",
+        error_code="SERVICE_EXECUTION_CLOSE_UNCERTAIN",
+        stop_new_status="acknowledged",
+        stop_new_owner_final=True,
+        stop_new_reconciliation_required=False,
+        stop_new_effect="fenced",
+    )
+
+    async def exercise_cleanup():
+        loop = asyncio.get_running_loop()
+        calls = []
+
+        async def stop_instance(
+            selected_instance,
+            *,
+            user_id,
+            expected_service_execution_profile_ref,
+            expected_service_execution_run_id,
+            expected_service_execution_process,
+        ):
+            calls.append(
+                (
+                    asyncio.get_running_loop(),
+                    selected_instance,
+                    user_id,
+                    expected_service_execution_profile_ref,
+                    expected_service_execution_run_id,
+                    expected_service_execution_process,
+                )
+            )
+            if len(calls) == 1:
+                raise RuntimeError("SERVICE_EXECUTION_CLOSE_UNCERTAIN")
+            assert expected_service_execution_process is process
+            process.returncode = 0
+            manager._processes.pop(instance_id)
+            return {"status": "stopped"}
+
+        manager.stop_instance = stop_instance
+        try:
+            await manager.stop_instance(
+                instance_id,
+                user_id=subject,
+                expected_service_execution_profile_ref=profile_ref,
+                expected_service_execution_run_id=run_id,
+                expected_service_execution_process=process,
+            )
+        except RuntimeError as primary_error:
+            assert _finite_error_projection(primary_error) == {
+                "type": "RuntimeError",
+                "code": "SERVICE_EXECUTION_CLOSE_UNCERTAIN",
+            }
+        else:
+            raise AssertionError("the primary stop error was not exercised")
+
+        cleanup = await _cleanup_started_service_strategy(
+            manager,
+            SimpleNamespace(),
+            subject=subject,
+            instance_id=instance_id,
+            binding=object(),
+            profile_ref=profile_ref,
+            run_id=run_id,
+            process=process,
+            stop_attempted=True,
+            stop_receipt=stop_receipt,
+            idempotency_key="cleanup-test-key",
+        )
+        assert cleanup["status"] == "stopped"
+        assert cleanup["stop_new_status"] == "acknowledged"
+        assert cleanup["stop_new_effect"] == "fenced"
+        assert len(calls) == 2
+        assert all(call[0] is loop for call in calls)
+        assert all(
+            call[1:] == (instance_id, subject, profile_ref, run_id, process)
+            for call in calls
+        )
+
+        completed_receipt = SimpleNamespace(
+            status="stopped",
+            error_code=None,
+            stop_new_status="acknowledged",
+            stop_new_owner_final=True,
+            stop_new_reconciliation_required=False,
+            stop_new_effect="fenced",
+        )
+        duplicate = await _cleanup_started_service_strategy(
+            manager,
+            SimpleNamespace(),
+            subject=subject,
+            instance_id=instance_id,
+            binding=object(),
+            profile_ref=profile_ref,
+            run_id=run_id,
+            process=process,
+            stop_attempted=True,
+            stop_receipt=completed_receipt,
+            idempotency_key="cleanup-test-key",
+        )
+        assert duplicate["status"] == "stopped"
+        assert len(calls) == 2
+
+        active_process = SimpleNamespace(pid=733020, returncode=None, _bt_service_execution=True)
+        replacement_process = SimpleNamespace(
+            pid=733021, returncode=None, _bt_service_execution=True
+        )
+        manager._processes[instance_id] = replacement_process
+        mismatch = await _cleanup_started_service_strategy(
+            manager,
+            SimpleNamespace(),
+            subject=subject,
+            instance_id=instance_id,
+            binding=object(),
+            profile_ref=profile_ref,
+            run_id=run_id,
+            process=active_process,
+            stop_attempted=True,
+            stop_receipt=stop_receipt,
+            idempotency_key="cleanup-test-key",
+        )
+        assert mismatch["status"] == "unknown"
+        assert mismatch["error_code"] == "SERVICE_EXECUTION_RUN_IDENTITY_CHANGED"
+        assert len(calls) == 2
+
+        not_fenced = SimpleNamespace(
+            stop_new_status="unknown",
+            stop_new_owner_final=False,
+            stop_new_reconciliation_required=True,
+            stop_new_effect=None,
+        )
+        unconfirmed = await _cleanup_started_service_strategy(
+            manager,
+            SimpleNamespace(),
+            subject=subject,
+            instance_id=instance_id,
+            binding=object(),
+            profile_ref=profile_ref,
+            run_id=run_id,
+            process=active_process,
+            stop_attempted=True,
+            stop_receipt=not_fenced,
+            idempotency_key="cleanup-test-key",
+        )
+        assert unconfirmed["status"] == "unknown"
+        assert unconfirmed["stop_new_status"] == "unknown"
+        assert len(calls) == 2
+
+        untrusted = await _cleanup_started_service_strategy(
+            manager,
+            None,
+            subject=subject,
+            instance_id=instance_id,
+            binding=None,
+            profile_ref=None,
+            run_id=None,
+            process=active_process,
+            stop_attempted=False,
+            stop_receipt=None,
+            idempotency_key="cleanup-test-key",
+        )
+        assert untrusted == {
+            "status": "unknown",
+            "error_code": "SERVICE_STRATEGY_SCOPE_UNAVAILABLE",
+        }
+        assert len(calls) == 2
+
+        cleanup_process = SimpleNamespace(
+            pid=733022, returncode=None, _bt_service_execution=True
+        )
+        cleanup_manager = SimpleNamespace(_processes={instance_id: cleanup_process})
+        owner_calls = []
+        expected_binding = object()
+        cleanup_receipt = SimpleNamespace(
+            status="stopped",
+            error_code=None,
+            stop_new_status="acknowledged",
+            stop_new_owner_final=True,
+            stop_new_reconciliation_required=False,
+            stop_new_effect="fenced",
+        )
+
+        async def issue_stop_new_and_stop(
+            selected_manager,
+            selected_owner,
+            *,
+            subject,
+            instance_id,
+            binding,
+            idempotency_key,
+            open_order_policy,
+        ):
+            owner_calls.append(
+                (
+                    asyncio.get_running_loop(),
+                    selected_manager,
+                    selected_owner,
+                    subject,
+                    instance_id,
+                    binding,
+                    idempotency_key,
+                    open_order_policy,
+                )
+            )
+            assert selected_manager is cleanup_manager
+            assert selected_owner is owner_control
+            assert binding is expected_binding
+            cleanup_process.returncode = 0
+            selected_manager._processes.pop(instance_id)
+            return cleanup_receipt
+
+        owner_control = object()
+        monkeypatch.setattr(
+            sys.modules[__name__], "stop_service_strategy_process", issue_stop_new_and_stop
+        )
+        owner_cleanup = await _cleanup_started_service_strategy(
+            cleanup_manager,
+            owner_control,
+            subject=subject,
+            instance_id=instance_id,
+            binding=expected_binding,
+            profile_ref=profile_ref,
+            run_id=run_id,
+            process=cleanup_process,
+            stop_attempted=False,
+            stop_receipt=None,
+            idempotency_key="cleanup-test-owner-fence",
+        )
+        assert owner_cleanup["status"] == "stopped"
+        assert owner_cleanup["stop_new_status"] == "acknowledged"
+        assert len(owner_calls) == 1
+        assert owner_calls[0][0] is loop
+        assert owner_calls[0][3:] == (
+            subject,
+            instance_id,
+            expected_binding,
+            "cleanup-test-owner-fence",
+            "leave_open_and_report",
+        )
+
+    asyncio.run(exercise_cleanup())
 
 
 def _pinned_bt_test_source(relative_path: str, size: int, sha256: str) -> bytes:
@@ -630,13 +1054,18 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
     cleanup_receipt_path = tmp_path / "service-host-cleanup.json"
     process = None
     manager = None
+    stop_receipt = None
+    strategy_cleanup_result = None
     instances = {}
     plugin_root = tmp_path / "trusted-profiles"
     profile_module_name = f"afi_service_strategy_{uuid.uuid4().hex}"
     owner_module_name = f"afi_service_owner_{uuid.uuid4().hex}"
 
     def cleanup_host_and_owner(
-        *, phase_name: str = "pytest_finalizer", primary_error=None, strategy_stop_error=None
+        *,
+        phase_name: str = "pytest_finalizer",
+        primary_error=None,
+        strategy_cleanup_result=None,
     ):
         nonlocal host_cleanup, owner_registered, host_pid_before_cleanup, host_alive_before_cleanup
         if primary_error is None and cleanup_receipt_path.is_file():
@@ -696,20 +1125,62 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
         process_returncode = getattr(owned_process, "returncode", None)
         raw_instance_pid = instances.get(_INSTANCE_ID, {}).get("pid")
         instance_pid = raw_instance_pid if type(raw_instance_pid) is int else None
+        primary_error_projection = (
+            _finite_error_projection(primary_error) if primary_error is not None else None
+        )
+        if isinstance(strategy_cleanup_result, dict):
+            strategy_cleanup_status = strategy_cleanup_result.get("status")
+            strategy_stop_error_type = strategy_cleanup_result.get("error_type")
+            strategy_stop_error_code = strategy_cleanup_result.get("error_code")
+        elif owned_process is None:
+            strategy_cleanup_status = "not_started"
+            strategy_stop_error_type = None
+            strategy_stop_error_code = None
+        elif type(process_returncode) is int and process_returncode == 0:
+            strategy_cleanup_status = "stopped"
+            strategy_stop_error_type = None
+            strategy_stop_error_code = None
+        else:
+            strategy_cleanup_status = "unknown"
+            strategy_stop_error_type = None
+            strategy_stop_error_code = "PROCESS_EXIT_UNCONFIRMED"
         facts = dict(host_cleanup)
         facts.update(
             {
                 "phase": phase_name,
                 "primary_error_type": (
-                    type(primary_error).__name__ if primary_error is not None else None
-                ),
-                "primary_error_code": (
-                    "SERVICE_EXECUTION_START_FAILED"
-                    if type(primary_error) is RuntimeError
-                    and str(primary_error) == "SERVICE_EXECUTION_START_FAILED"
+                    primary_error_projection["type"]
+                    if primary_error_projection is not None
                     else None
                 ),
-                "strategy_stop_error_type": strategy_stop_error,
+                "primary_error_code": (
+                    primary_error_projection["code"]
+                    if primary_error_projection is not None
+                    else None
+                ),
+                "strategy_cleanup_status": strategy_cleanup_status,
+                "strategy_stop_error_type": strategy_stop_error_type,
+                "strategy_stop_error_code": strategy_stop_error_code,
+                "strategy_cleanup_stop_new_status": (
+                    strategy_cleanup_result.get("stop_new_status")
+                    if isinstance(strategy_cleanup_result, dict)
+                    else None
+                ),
+                "strategy_cleanup_stop_new_owner_final": (
+                    strategy_cleanup_result.get("stop_new_owner_final")
+                    if isinstance(strategy_cleanup_result, dict)
+                    else None
+                ),
+                "strategy_cleanup_stop_new_reconciliation_required": (
+                    strategy_cleanup_result.get("stop_new_reconciliation_required")
+                    if isinstance(strategy_cleanup_result, dict)
+                    else None
+                ),
+                "strategy_cleanup_stop_new_effect": (
+                    strategy_cleanup_result.get("stop_new_effect")
+                    if isinstance(strategy_cleanup_result, dict)
+                    else None
+                ),
                 "strategy_process_tracked": owned_process is not None,
                 "strategy_process_pid": process_pid if type(process_pid) is int else None,
                 "strategy_process_returncode": (
@@ -863,109 +1334,154 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
 
     try:
         async def exercise_manager_lifecycle():
-            nonlocal phase, process
+            nonlocal phase, process, stop_receipt, strategy_cleanup_result
+            stop_attempted = False
+            run_id = None
+            profile_ref = None
+            binding = None
+            owner_control = None
             phase = "manager_start"
-            started = await manager.start_instance(_INSTANCE_ID, user_id=_SUBJECT_REF)
-            phase = "strategy_ready"
-            assert started["status"] == "running"
-            assert started["_server_service_execution_managed"] is True
-            assert started["_server_service_execution_profile_ref"] == _PROFILE_REF
-            process = manager._processes[_INSTANCE_ID]
-            assert getattr(process, "_bt_service_execution", False) is True
-            log_path = script_path.parent / "logs" / "subprocess.stdout.log"
-            origin_text = _wait_for_log_marker(log_path, _BT_ORIGIN_MARKER)
-            origin_line = next(
-                line for line in origin_text.splitlines() if _BT_ORIGIN_MARKER in line
-            )
-            child_origins = json.loads(origin_line.split(_BT_ORIGIN_MARKER, 1)[1])
-            assert set(child_origins) == {
-                "app.service_execution_launch",
-                "app.service_execution_runner",
-                "app.service_execution_runner.__main__",
-                "backtrader",
-                "backtrader.service_execution_session",
-                "bt_api_base.service_protocol",
-                "bt_api_execution.service_order_entry",
-                "bt_api_py.gateway_operator_application",
-                "bt_api_py.service_runtime",
-                "bt_api_transport_zmq.service_v2",
-            }
-            assert all(
-                Path(origin).resolve().is_relative_to(purelib)
-                for origin in child_origins.values()
-            )
-            host_bt_origin = Path(host["source_origins"]["backtrader"]["package"]).resolve()
-            assert host_bt_origin.is_relative_to(purelib)
-            text = _wait_for_log_marker(
-                log_path, _ORDER_QUERY_MARKER
-            )
-            assert _ORDER_QUERY_MARKER in text
-            run_id = instances[_INSTANCE_ID]["_server_service_execution_run_id"]
-            stop_calls = []
-            binding = SimpleNamespace(
-                config=SimpleNamespace(
+            started = None
+            try:
+                started = await manager.start_instance(_INSTANCE_ID, user_id=_SUBJECT_REF)
+                phase = "strategy_ready"
+                process = manager._processes.get(_INSTANCE_ID)
+                current_instance = instances.get(_INSTANCE_ID, {})
+                run_id = current_instance.get("_server_service_execution_run_id")
+                profile_ref = current_instance.get("_server_service_execution_profile_ref")
+                if (
+                    isinstance(started, dict)
+                    and started.get("status") == "running"
+                    and started.get("_server_service_execution_managed") is True
+                    and current_instance.get("user_id") == _SUBJECT_REF
+                    and current_instance.get("_server_service_execution_managed") is True
+                    and type(run_id) is str
+                    and run_id
+                    and type(profile_ref) is str
+                    and profile_ref == _PROFILE_REF
+                    and started.get("_server_service_execution_profile_ref") == profile_ref
+                    and getattr(process, "_bt_service_execution", False) is True
+                    and type(current_instance.get("pid")) is int
+                    and current_instance.get("pid") == getattr(process, "pid", None)
+                ):
+                    stop_calls = []
+                    binding = SimpleNamespace(
+                        config=SimpleNamespace(
+                            subject=_SUBJECT_REF,
+                            allowed_actions=["STOP_NEW"],
+                            wire_account_ref=_ACCOUNT_REF,
+                            command_scope=f"strategy:{_STRATEGY_REF}:{run_id}:stop_new",
+                        ),
+                        wire_scope=SimpleNamespace(
+                            account_ref=_ACCOUNT_REF,
+                            strategy_ref=_STRATEGY_REF,
+                            run_id=run_id,
+                        ),
+                    )
+
+                    class _OwnerControlDeployment:
+                        def submit_control(self, selected_binding, **kwargs):
+                            assert selected_binding is binding
+                            assert kwargs["action"] == "STOP_NEW"
+                            assert kwargs["subject"] == _SUBJECT_REF
+                            assert process.returncode is None
+                            stop_calls.append("stop_new")
+                            return {
+                                "action": "stop_new",
+                                "deployment_version": "owner-profile-test-v1",
+                                "command_id": "afi-monitor-stop-new-v1-" + "a" * 32,
+                                "status": "acknowledged",
+                                "outcome": "applied",
+                                "effect_ref": "strategy-stop-new-v1:" + "b" * 64,
+                                "effect_result": {
+                                    "action": "stop_new",
+                                    "result": "fenced",
+                                },
+                                "request_recorded": True,
+                                "owner_final": True,
+                                "reconciliation_required": False,
+                            }
+
+                    owner_control = _OwnerControlDeployment()
+                    owner_control.bindings = (binding,)
+
+                assert started["status"] == "running"
+                assert started["_server_service_execution_managed"] is True
+                assert started["_server_service_execution_profile_ref"] == _PROFILE_REF
+                assert getattr(process, "_bt_service_execution", False) is True
+                log_path = script_path.parent / "logs" / "subprocess.stdout.log"
+                origin_text = _wait_for_log_marker(log_path, _BT_ORIGIN_MARKER)
+                origin_line = next(
+                    line for line in origin_text.splitlines() if _BT_ORIGIN_MARKER in line
+                )
+                child_origins = json.loads(origin_line.split(_BT_ORIGIN_MARKER, 1)[1])
+                assert set(child_origins) == {
+                    "app.service_execution_launch",
+                    "app.service_execution_runner",
+                    "app.service_execution_runner.__main__",
+                    "backtrader",
+                    "backtrader.service_execution_session",
+                    "bt_api_base.service_protocol",
+                    "bt_api_execution.service_order_entry",
+                    "bt_api_py.gateway_operator_application",
+                    "bt_api_py.service_runtime",
+                    "bt_api_transport_zmq.service_v2",
+                }
+                assert all(
+                    Path(origin).resolve().is_relative_to(purelib)
+                    for origin in child_origins.values()
+                )
+                host_bt_origin = Path(
+                    host["source_origins"]["backtrader"]["package"]
+                ).resolve()
+                assert host_bt_origin.is_relative_to(purelib)
+                text = _wait_for_log_marker(log_path, _ORDER_QUERY_MARKER)
+                assert _ORDER_QUERY_MARKER in text
+
+                graceful_stop = manager._gracefully_stop_service_execution
+
+                async def observe_process_stop(instance_id, stopped_process):
+                    stop_calls.append("process_stop")
+                    await graceful_stop(instance_id, stopped_process)
+
+                manager._gracefully_stop_service_execution = observe_process_stop
+                phase = "strategy_stop"
+                stop_attempted = True
+                stop_receipt = await stop_service_strategy_process(
+                    manager,
+                    owner_control,
                     subject=_SUBJECT_REF,
-                    allowed_actions=["STOP_NEW"],
-                    wire_account_ref=_ACCOUNT_REF,
-                    command_scope=f"strategy:{_STRATEGY_REF}:{run_id}:stop_new",
-                ),
-                wire_scope=SimpleNamespace(
-                    account_ref=_ACCOUNT_REF,
-                    strategy_ref=_STRATEGY_REF,
+                    instance_id=_INSTANCE_ID,
+                    binding=binding,
+                    idempotency_key="afi08-stop-r1-test-key",
+                    open_order_policy="leave_open_and_report",
+                )
+                assert stop_receipt.status == "stopped"
+                assert stop_receipt.stop_new_effect == "fenced"
+                assert stop_receipt.process_status == "stopped"
+                assert stop_receipt.process_exit_code == 0
+                assert stop_receipt.subscription_status == "released"
+                assert stop_receipt.open_orders_status == "left_open_unverified"
+                assert stop_receipt.positions_status == "unobserved"
+                assert stop_calls == ["stop_new", "process_stop"]
+                assert instances[_INSTANCE_ID].get("_server_service_execution_managed") is None
+                assert process.returncode == 0
+            finally:
+                if process is None:
+                    process = manager._processes.get(_INSTANCE_ID)
+                strategy_cleanup_result = await _cleanup_started_service_strategy(
+                    manager,
+                    owner_control,
+                    subject=_SUBJECT_REF,
+                    instance_id=_INSTANCE_ID,
+                    binding=binding,
+                    profile_ref=profile_ref,
                     run_id=run_id,
-                ),
-            )
-
-            class _OwnerControlDeployment:
-                def submit_control(self, selected_binding, **kwargs):
-                    assert selected_binding is binding
-                    assert kwargs["action"] == "STOP_NEW"
-                    assert kwargs["subject"] == _SUBJECT_REF
-                    assert process.returncode is None
-                    stop_calls.append("stop_new")
-                    return {
-                        "action": "stop_new",
-                        "deployment_version": "owner-profile-test-v1",
-                        "command_id": "afi-monitor-stop-new-v1-" + "a" * 32,
-                        "status": "acknowledged",
-                        "outcome": "applied",
-                        "effect_ref": "strategy-stop-new-v1:" + "b" * 64,
-                        "effect_result": {"action": "stop_new", "result": "fenced"},
-                        "request_recorded": True,
-                        "owner_final": True,
-                        "reconciliation_required": False,
-                    }
-
-            owner_control = _OwnerControlDeployment()
-            owner_control.bindings = (binding,)
-
-            graceful_stop = manager._gracefully_stop_service_execution
-
-            async def observe_process_stop(instance_id, stopped_process):
-                stop_calls.append("process_stop")
-                await graceful_stop(instance_id, stopped_process)
-
-            manager._gracefully_stop_service_execution = observe_process_stop
-            phase = "strategy_stop"
-            receipt = await stop_service_strategy_process(
-                manager,
-                owner_control,
-                subject=_SUBJECT_REF,
-                instance_id=_INSTANCE_ID,
-                binding=binding,
-                idempotency_key="afi08-stop-r1-test-key",
-                open_order_policy="leave_open_and_report",
-            )
-            assert receipt.status == "stopped"
-            assert receipt.stop_new_effect == "fenced"
-            assert receipt.process_status == "stopped"
-            assert receipt.process_exit_code == 0
-            assert receipt.subscription_status == "released"
-            assert receipt.open_orders_status == "left_open_unverified"
-            assert receipt.positions_status == "unobserved"
-            assert stop_calls == ["stop_new", "process_stop"]
-            assert instances[_INSTANCE_ID].get("_server_service_execution_managed") is None
-            assert process.returncode == 0
+                    process=process,
+                    stop_attempted=stop_attempted,
+                    stop_receipt=stop_receipt,
+                    idempotency_key="afi08-stop-r1-test-key",
+                )
 
         asyncio.run(exercise_manager_lifecycle())
         assert _INSTANCE_ID not in manager._processes
@@ -982,16 +1498,10 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
         assert metrics[6:8] == ("FILLED", 1)
     finally:
         primary_error = sys.exc_info()[1]
-        strategy_stop_error = None
-        if process is not None and process.returncode is None:
-            try:
-                asyncio.run(manager.stop_instance(_INSTANCE_ID))
-            except BaseException as error:
-                strategy_stop_error = type(error).__name__
         cleanup = cleanup_host_and_owner(
             phase_name=phase,
             primary_error=primary_error,
-            strategy_stop_error=strategy_stop_error,
+            strategy_cleanup_result=strategy_cleanup_result,
         )
 
     assert cleanup["normal_close"] is True
