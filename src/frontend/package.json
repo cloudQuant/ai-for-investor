@@ -66,7 +66,7 @@
     "vite": "^6.0.5",
     "vitest": "^4.1.11",
     "vue-eslint-parser": "^10.3.0",
-    "vue-tsc": "^2.0.29"
+    "vue-tsc": "^3.3.13"
   },
   "overrides": {
     "@vue/test-utils": {
