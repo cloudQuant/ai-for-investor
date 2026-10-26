@@ -28,7 +28,7 @@ root独占共享契约、最终OpenAPI及其pin/baseline、`opendata/main.py`、
 - `GET /api/v1/reviewed/jobs`只返回允许公开给管理员的静态字段，如job/version/dataset/provider/model标识及enabled/reviewed状态；不返回handler路径、秘密、任意source配置或SQL。
 - `POST /api/v1/reviewed/runs`只接受严格、有界的手工请求和显式幂等键，委托现有dispatch入口；disabled或unreviewed job必须在写ledger前拒绝。客户端重试相同幂等键应得到一致run身份，不能因网络重试重复提交。
 - `GET /api/v1/reviewed/runs/{run_key}`仅序列化安全状态字段、允许的时间戳和安全错误码；不输出`job_snapshot_json`、原始异常文本或source响应。
-- `POST /api/v1/reviewed/runs/{run_key}/cancel`直接调用`RunLedger.cancel`：活动run立即转为`CANCELLED`并fence旧worker token；响应形状为`{"run": ..., "outcome": ...}`，其中`outcome`只允许`cancelled`或`terminal`；终态run返回`terminal`，不存在的run按not-found处理。不增加“已请求”中间状态。worker进程停止仍是协作式的；取消fence阻止旧token提交终态/事实数据，但不能声称HTTP返回意味着进程已立即退出。
+- `POST /api/v1/reviewed/runs/{run_key}/cancel`直接调用`RunLedger.cancel`：活动run立即转为`CANCELLED`并fence旧worker token；响应形状为`{"run": ..., "outcome": ...}`，其中`outcome`只允许`cancelled`或`terminal`；最终状态为`CANCELLED`时返回`cancelled`，包括重复取消；`SUCCEEDED`或`FAILED`返回`terminal`。该字段描述最终状态，不表示本次请求是否完成了状态转换；不存在的run按not-found处理。不增加“已请求”中间状态。worker进程停止仍是协作式的；取消fence阻止旧token提交终态/事实数据，但不能声称HTTP返回意味着进程已立即退出。
 - 首版页面持有本次返回的run key并轮询。现有`RunLedger`没有最近运行列表接口；本批不自行发明持久列表合同或未评审的查询语义。
 
 管理员端点使用现有JWT `CurrentAdmin` 授权边界；普通用户应被拒绝，API key/一般principal不能替代JWT管理员身份。不得声称此功能“无需配置”：认证设置、管理员身份及应用依赖仍由宿主显式提供。审计若由宿主提供，必须能关联操作者、对象、动作和request ID，避免记录secret、原始job快照或不安全错误文本。
