@@ -1,6 +1,6 @@
 # 第九批 Sina 资产负债表原始wire解析与有界抓取计划
 
-计划日期：2026-10-27（Asia/Shanghai）。状态：**CONTRACT_FROZEN / IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_PENDING**。本批只建立未注册、source-native的`fzb`（资产负债表）解析与有界抓取seam。合同已冻结；实现与精确验收仍在进行，当前没有测试通过结论。本计划不代表来源权利、生产授权或历史覆盖验收。
+计划日期：2026-10-27（Asia/Shanghai）。状态：**CONTRACT_FROZEN / SCOPED_OFFLINE_COMPLETE / NOT_PRODUCTION_ACCEPTED**。本批只建立未注册、source-native的`fzb`（资产负债表）解析与有界抓取seam。实现、root精确测试、scoped gates及独立归档审查均已完成。本计划不代表来源权利、生产授权或历史覆盖验收。
 
 ## 冻结依据与切片边界
 
@@ -32,16 +32,16 @@ root独占质量census、共享合同集成、import-graph审查、测试环境a
 | 子任务 | 状态 | 交付与完成条件 |
 | --- | --- | --- |
 | W9-01 冻结Sina wire合同 | CONTRACT_FROZEN | root-reviewed冻结文本与SHA如上；schema、请求参数、错误码或上限不由各流自行变更。 |
-| W9-02 建立未注册source package与合同DTO | IMPLEMENTED_STATIC_REVIEW_GREEN | 候选提交`4d9e01513f8981d73176eefe4c2f9451ed0475e0`仅含docstring package与合同模块，独立静态复审GREEN；严格查询格式`NNNNNN.SH`/`NNNNNN.SZ`、固定`fzb`身份、冻结/slots原始DTO、limits与sanitized errors。尚非root功能验收。 |
-| W9-03 解析报告外层和日期字段 | IMPLEMENTATION_IN_PROGRESS | 校验严格JSON、状态、count/date-list/report-list一一对应、唯一period及限制；保持source顺序和精确日期/更新时间语义。 |
-| W9-04 解析项目、分组及重复行 | IMPLEMENTATION_IN_PROGRESS | 保留标量metadata与source ordinals；marker只接受冻结的五种精确形状；完全重复保留所有位置，冲突拒绝整响应。 |
-| W9-05 实现parser输入边界与错误映射 | IMPLEMENTATION_IN_PROGRESS | parser本身先限4 MiB与32层深度，严格UTF-8/JSON；重复key、非有限数、超限或schema漂移均转换为固定安全wire错误。 |
-| W9-06 实现request校验和governed scope | IMPLEMENTATION_IN_PROGRESS | 缺budget或非QUERY在零HTTP调用下拒绝；scope固定`source=sina`、`canonical_model=financial_statement`、`QUERY`与精确host；沿用调用者deadline/cancellation。 |
-| W9-07 实现bounded transport | IMPLEMENTATION_IN_PROGRESS | 固定HTTPS endpoint及参数，不接受caller URL/host/page/type，不跟随redirect；4 MiB response cap、20秒总上限、较短context timeout优先、有限connect/read timeout；非200与超限安全失败。 |
-| W9-08 parser T3录制响应测试 | IMPLEMENTATION_IN_PROGRESS | 原始gzip fixture positive replay；断言103 periods、两个固定`TOTASSET`原值、独立日期/epoch/currency、空/null/present、5种marker和source ordinals；negative case由capture envelope变异，不造positive facts。 |
-| W9-09 wire/admission fake-transport测试 | IMPLEMENTATION_IN_PROGRESS | 精确host/params/scope/预算/response cap/status/retrieval time；缺失、UNKNOWN/DENIED及source/model/host/operation不符时断言transport调用为0。只用fake session，不连网或SDK。 |
-| W9-10 独立协议review与root测试前审查 | ACCEPTANCE_PENDING | `dev_client`复核protocol、安全边界和fixture语义；root静态检查import graph没有`opendata.main`、startup、default-engine创建或import-time配置读取，确定有限测试环境allowlist后才可执行测试。 |
-| W9-11 root精确隔离验收与归档 | ACCEPTANCE_PENDING | root依CODE_QUALITY跑定向static gates和仅两个新文件的`--noconftest`隔离运行，核 coverage、errors、receipt和archive；archive reviewer独立复核。不得扩展全套测试或生成生产接受声明。 |
+| W9-02 建立未注册source package与合同DTO | IMPLEMENTED_AND_FOCUSED_VALIDATED | 候选提交`4d9e01513f8981d73176eefe4c2f9451ed0475e0`仅含docstring package与合同模块，独立静态复审GREEN；严格查询格式`NNNNNN.SH`/`NNNNNN.SZ`、固定`fzb`身份、冻结/slots原始DTO、limits与sanitized errors。合同也处于最终focused source revision并由精确parser/wire运行覆盖。 |
+| W9-03 解析报告外层和日期字段 | FOCUSED_OFFLINE_VALIDATED | 精确两文件root测试通过；严格JSON、状态、count/date-list/report-list一一对应、唯一period及限制得到离线覆盖，保持source顺序和精确日期/更新时间语义。 |
+| W9-04 解析项目、分组及重复行 | FOCUSED_OFFLINE_VALIDATED | 保留标量metadata与source ordinals；五种marker、重复行及冲突行为在最终两文件测试中验证。首轮duplicate marker失败保留，窄修复后复测通过。 |
+| W9-05 实现parser输入边界与错误映射 | FOCUSED_OFFLINE_VALIDATED | 4 MiB与32层深度限制、严格UTF-8/JSON和固定安全错误映射通过root精确测试。 |
+| W9-06 实现request校验和governed scope | FOCUSED_OFFLINE_VALIDATED | 缺budget或非QUERY在零HTTP调用下拒绝；固定Sina source/model/operation/host与deadline/cancellation边界在fake transport下验证。 |
+| W9-07 实现bounded transport | FOCUSED_OFFLINE_VALIDATED | 固定HTTPS endpoint及参数，不接受caller URL/host/page/type，不跟随redirect；response cap、timeout、status与安全失败行为在fake transport下验证。 |
+| W9-08 parser T3录制响应测试 | FOCUSED_OFFLINE_VALIDATED | 录制gzip fixture replay验证103 periods、固定原值、日期/epoch/currency、value states、markers和source ordinals；负例仅变异capture envelope。 |
+| W9-09 wire/admission fake-transport测试 | FOCUSED_OFFLINE_VALIDATED | 精确host/params/scope/预算/response cap/status/retrieval time；缺失、UNKNOWN/DENIED及身份不符时transport调用为0；不连网或SDK。 |
+| W9-10 独立协议review与root测试前审查 | REVIEWED_AND_PREFLIGHTED | `dev_client`协议/边界复核、import graph检查和有限测试环境审查均完成；focused run使用隔离环境及`--noconftest`。 |
+| W9-11 root精确隔离验收与归档 | SCOPED_OFFLINE_COMPLETE | 精确测试、scoped static、A2、secret component、冻结归档及独立archive review均完成；24项审计检查验证80/80文件、2 ZIP CRC/path及旧W7/W8归档不变。整仓`make`及生产接受不在本批声明范围。 |
 
 ## 验收顺序与明确限制
 
@@ -49,6 +49,6 @@ root独占质量census、共享合同集成、import-graph审查、测试环境a
 2. 测试前由root检查import graph，确认导入parser/wire不会触发`opendata.main`、app启动、默认engine创建或import-time环境读取；随后仅使用root批准的有限测试环境变量。不得读取`.env`或新增未审阅环境值。
 3. root仅运行`tests/test_sina_financial_statement_parser.py`与`tests/test_sina_financial_statement_wire.py`，使用`--noconftest`，不加载repository `tests/conftest.py`及其eager app/engine fixtures。若需修改shared budget/HTTP代码，先另行审查scope；本计划不预授权扩大allowlist。
 4. Parser正向数据只来自上述录制响应；负向数据限于对captured envelope的schema/limit/identity冲突变异。Wire测试使用注入的fake Requests-compatible session/adapter，不发起实时网络、数据库操作或第三方SDK请求。content-type不在现有bounded response API可证明范围内，不得声称已验证。
-5. 无任何一项focused test结果、coverage结果、静态门禁或归档已通过；全部须等root receipt。即使本批focused gates通过，也只证明这一source-native离线切片的实现行为，不证明来源许可、生产grant、其他标的/市场支持、财报单位、完整历史、listing inception或自然周期。
+5. Final root receipt记录两文件隔离测试85 passed、三个新增data modules均达到90% statement+branch门槛；scoped static、A2及full-history secret component通过。80文件私有归档已冻结，独立archive review 24/24检查通过。即使本批focused gates通过，也只证明这一source-native离线切片的实现行为，不证明来源许可、生产grant、其他标的/市场支持、财报单位、完整历史、listing inception或自然周期。
 
-本批不改变87项父矩阵、1,103项任务或1,066个脚本候选的既有分母与状态。后续注册、授权、字段映射/单位/修订、财报域落库、DWD/PIT、历史补齐及任务748启用均保持OPEN，须基于额外的独立证据和单独批准。
+本批不改变87项父矩阵、1,103项任务或1,066个脚本候选的既有分母与状态。后续注册、授权、字段映射/单位/修订、财报域落库、DWD/PIT、历史补齐及任务748启用均保持OPEN，须基于额外的独立证据和单独批准。归档审查仅完成离线证据包核验，不构成来源或生产接受；完整`make gate`、remote CI与Python 3.10 runtime仍为NOT_RUN。
