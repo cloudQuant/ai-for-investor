@@ -256,13 +256,16 @@ class InstrumentReferenceLimits:
             for _, value, ceiling in integer_limits
         ):
             raise InstrumentReferenceError(_CONFIG_INVALID)
-        for value in (self.deadline_seconds, self.request_timeout_seconds):
+        for value, ceiling in (
+            (self.deadline_seconds, 5.0),
+            (self.request_timeout_seconds, 2.0),
+        ):
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
                 or not math.isfinite(value)
                 or value <= 0
-                or value > 60
+                or value > ceiling
             ):
                 raise InstrumentReferenceError(_CONFIG_INVALID)
 
@@ -336,7 +339,7 @@ class InstrumentReferenceClient:
     async def _fetch_validate_and_select(
         self, search: str, limit: int, effective_on: date | None
     ) -> dict[str, JsonValue]:
-        started = asyncio.get_running_loop().time()
+        started = _monotonic_time()
         deadline = started + self._limits.deadline_seconds
         now = _clock_now(self._clock)
         page_count = 0
@@ -355,7 +358,7 @@ class InstrumentReferenceClient:
 
         client_options: dict[str, Any] = {
             "base_url": self._origin,
-            "headers": headers,
+            "headers": {**headers, "Accept-Encoding": "identity"},
             "timeout": httpx.Timeout(self._limits.request_timeout_seconds),
             "trust_env": False,
             "follow_redirects": False,
@@ -368,7 +371,7 @@ class InstrumentReferenceClient:
             while True:
                 if page_count >= self._limits.max_pages:
                     raise InstrumentReferenceError(_LIMIT_EXCEEDED)
-                remaining_deadline = deadline - asyncio.get_running_loop().time()
+                remaining_deadline = deadline - _monotonic_time()
                 if remaining_deadline <= 0:
                     raise InstrumentReferenceError(_LIMIT_EXCEEDED)
                 remaining_bytes = self._limits.max_total_bytes - total_bytes
@@ -429,6 +432,7 @@ class InstrumentReferenceClient:
                         sequence=_required_integer(active_pins.get("sequence")),
                         publication_id=_required_string(active_pins.get("publication_id")),
                         previous_business_key=previous_business_key,
+                        deadline=deadline,
                     )
                     if len(rows) + len(page_rows) > self._limits.max_rows:
                         raise InstrumentReferenceError(_LIMIT_EXCEEDED)
@@ -471,10 +475,38 @@ class InstrumentReferenceClient:
 
         if pinned is None or len(rows) != _required_integer(pinned.get("record_count")):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        _validate_registry(rows, dataset_id=self._config.dataset_id)
-        if _clock_now(self._clock) >= _parse_datetime(str(pinned["expires_at"])):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        return _build_options(rows, pinned, search=search, limit=limit, effective_on=effective_on)
+        _validate_registry(rows, dataset_id=self._config.dataset_id, deadline=deadline)
+        _ensure_deadline(deadline)
+        _ensure_snapshot_fresh(pinned, clock=self._clock)
+        result = _build_options(
+            rows,
+            pinned,
+            search=search,
+            limit=limit,
+            effective_on=effective_on,
+            deadline=deadline,
+        )
+        # asyncio.wait_for cannot run its timeout callback while synchronous
+        # validation/search code occupies the event loop; recheck both budgets.
+        _ensure_deadline(deadline)
+        _ensure_snapshot_fresh(pinned, clock=self._clock)
+        return result
+
+
+def _monotonic_time() -> float:
+    return asyncio.get_running_loop().time()
+
+
+def _ensure_deadline(deadline: float) -> None:
+    if _monotonic_time() >= deadline:
+        raise InstrumentReferenceError(_LIMIT_EXCEEDED)
+
+
+def _ensure_snapshot_fresh(
+    pinned: Mapping[str, JsonValue], *, clock: Callable[[], datetime]
+) -> None:
+    if _clock_now(clock) >= _parse_datetime(str(pinned["expires_at"])):
+        raise InstrumentReferenceError(_PROTOCOL_INVALID)
 
 
 def _validate_origin(base_url: object) -> str:
@@ -641,7 +673,10 @@ async def _get_json_page(
                     raise InstrumentReferenceError(_PROTOCOL_INVALID)
                 if int(content_length) > max_bytes:
                     raise InstrumentReferenceError(_LIMIT_EXCEEDED)
-            async for chunk in response.aiter_bytes():
+            content_encoding = response.headers.get("content-encoding", "identity")
+            if content_encoding.strip().lower() != "identity":
+                raise InstrumentReferenceError(_PROTOCOL_INVALID)
+            async for chunk in response.aiter_raw():
                 if len(body) + len(chunk) > max_bytes:
                     raise InstrumentReferenceError(_LIMIT_EXCEEDED)
                 body.extend(chunk)
@@ -775,7 +810,13 @@ def _validate_page_metadata(
     as_of = _parse_datetime(page.get("as_of"))
     created_at = _parse_datetime(page.get("created_at"))
     expires_at = _parse_datetime(page.get("expires_at"))
-    if as_of > now or created_at > now or expires_at <= now or expires_at <= created_at:
+    if (
+        as_of > created_at
+        or as_of > now
+        or created_at > now
+        or expires_at <= now
+        or expires_at <= created_at
+    ):
         raise InstrumentReferenceError(_PROTOCOL_INVALID)
     if not _valid_date_only_or_none(page.get("as_of"), allow_datetime=True):
         raise InstrumentReferenceError(_PROTOCOL_INVALID)
@@ -888,6 +929,7 @@ def _validate_page_rows(
     sequence: int,
     publication_id: str,
     previous_business_key: bytes | None,
+    deadline: float,
 ) -> list[dict[str, JsonValue]]:
     raw_rows = page.get("rows")
     if not isinstance(raw_rows, list):
@@ -895,6 +937,7 @@ def _validate_page_rows(
     validated: list[dict[str, JsonValue]] = []
     prev = previous_business_key
     for raw in raw_rows:
+        _ensure_deadline(deadline)
         if not isinstance(raw, dict) or set(raw) != _ROW_KEYS:
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
         row = raw
@@ -1016,12 +1059,15 @@ def _validate_payload(payload: Mapping[str, JsonValue]) -> None:
                 raise InstrumentReferenceError(_PROTOCOL_INVALID)
 
 
-def _validate_registry(rows: list[dict[str, JsonValue]], *, dataset_id: str) -> None:
+def _validate_registry(
+    rows: list[dict[str, JsonValue]], *, dataset_id: str, deadline: float
+) -> None:
     instruments: dict[str, Mapping[str, JsonValue]] = {}
     symbols: dict[str, str] = {}
     alias_rows: dict[str, list[tuple[str, date | None, date | None]]] = {}
     registry_pins: set[tuple[str, str, str]] = set()
     for row in rows:
+        _ensure_deadline(deadline)
         payload = row["payload"]
         if not isinstance(payload, dict):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
@@ -1042,6 +1088,7 @@ def _validate_registry(rows: list[dict[str, JsonValue]], *, dataset_id: str) -> 
         if not isinstance(aliases, list):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
         for alias in aliases:
+            _ensure_deadline(deadline)
             if not isinstance(alias, dict):
                 raise InstrumentReferenceError(_PROTOCOL_INVALID)
             alias_text = str(alias["alias"])
@@ -1055,18 +1102,22 @@ def _validate_registry(rows: list[dict[str, JsonValue]], *, dataset_id: str) -> 
     if len(registry_pins) > 1:
         raise InstrumentReferenceError(_PROTOCOL_INVALID)
     for alias_text, intervals in alias_rows.items():
+        _ensure_deadline(deadline)
         if alias_text in instruments and any(iid != alias_text for iid, _, _ in intervals):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
         symbol_owner = symbols.get(alias_text)
         if symbol_owner is not None and any(iid != symbol_owner for iid, _, _ in intervals):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
         ordered = sorted(intervals, key=lambda item: item[1] or date.min)
-        for index, (_, left_start, left_end) in enumerate(ordered):
-            del left_start
-            for _, right_start, _ in ordered[index + 1 :]:
-                overlaps = left_end is None or right_start is None or left_end >= right_start
-                if overlaps:
-                    raise InstrumentReferenceError(_PROTOCOL_INVALID)
+        max_end: date | None = None
+        has_previous = False
+        for _, start, end in ordered:
+            _ensure_deadline(deadline)
+            if has_previous and (max_end is None or start is None or max_end >= start):
+                raise InstrumentReferenceError(_PROTOCOL_INVALID)
+            if not has_previous or max_end is not None and (end is None or end > max_end):
+                max_end = end
+            has_previous = True
     # Every row has already been scoped to the pinned dataset and source metadata.
     if not dataset_id:
         raise InstrumentReferenceError(_PROTOCOL_INVALID)
@@ -1079,11 +1130,13 @@ def _build_options(
     search: str,
     limit: int,
     effective_on: date | None,
+    deadline: float,
 ) -> dict[str, JsonValue]:
     query = search.casefold()
     matched: list[tuple[dict[str, JsonValue], dict[str, JsonValue] | None]] = []
     alias_only_without_date = False
     for row in rows:
+        _ensure_deadline(deadline)
         payload = row["payload"]
         if not isinstance(payload, dict):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
@@ -1103,6 +1156,7 @@ def _build_options(
         valid_alias: dict[str, JsonValue] | None = None
         if effective_on is not None:
             for alias in exact_aliases:
+                _ensure_deadline(deadline)
                 if _alias_is_valid(alias, effective_on):
                     valid_alias = {
                         "alias": alias["alias"],

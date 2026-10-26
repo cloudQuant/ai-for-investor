@@ -6,15 +6,17 @@ import asyncio
 import copy
 import hashlib
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+from pydantic import JsonValue
 
+import app.services.market_data.opendata_instrument_reference as reference_module
 from app.services.market_data.opendata_instrument_reference import (
     InstrumentReferenceClient,
     InstrumentReferenceConfig,
@@ -195,6 +197,8 @@ class TestConfigAndLimits:
             {"max_response_bytes": 2_097_153},
             {"max_total_bytes": 2_097_151},
             {"deadline_seconds": 0},
+            {"deadline_seconds": 5.01},
+            {"request_timeout_seconds": 2.01},
             {"request_timeout_seconds": float("inf")},
         ],
     )
@@ -202,6 +206,11 @@ class TestConfigAndLimits:
         with pytest.raises(InstrumentReferenceError) as raised:
             replace(InstrumentReferenceLimits(), **changes)
         assert raised.value.code == "OPENDATA_REFERENCE_CONFIG_INVALID"
+
+    def test_timeout_limits_accept_frozen_maximum_values(self) -> None:
+        limits = InstrumentReferenceLimits(deadline_seconds=5.0, request_timeout_seconds=2.0)
+        assert limits.deadline_seconds == 5.0
+        assert limits.request_timeout_seconds == 2.0
 
     @pytest.mark.parametrize("limit", [0, -1, True, 81, 1.0])
     async def test_list_limit_rejects_bool_nonpositive_and_overlarge(self, limit: object) -> None:
@@ -234,6 +243,7 @@ class TestSnapshotProtocol:
             "cursor": "synthetic-cursor-page-2",
         }
         assert all(request.headers["x-api-key"] == _API_KEY for request in requests)
+        assert all(request.headers["accept-encoding"] == "identity" for request in requests)
         assert "payload" not in json.dumps(result)
 
     async def test_full_page_then_empty_terminal_page_is_rejected_as_incomplete(self) -> None:
@@ -373,6 +383,161 @@ class TestSnapshotProtocol:
             await _client(httpx.MockTransport(lambda _: _response(page))).list_options()
         assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
 
+    async def test_as_of_cannot_follow_snapshot_creation(self) -> None:
+        page = copy.deepcopy(_fixture()["pages"][0])
+        page["as_of"] = "2026-10-22T00:00:01+00:00"
+        _sync_snapshot(page)
+
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(httpx.MockTransport(lambda _: _response(page))).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+    async def test_sync_search_cannot_return_after_total_deadline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_time = reference_module._monotonic_time
+        original_build_options = reference_module._build_options
+        offset = 0.0
+
+        def monotonic_time() -> float:
+            return original_time() + offset
+
+        def expire_deadline_after_search(
+            rows: list[dict[str, JsonValue]],
+            pinned: Mapping[str, JsonValue],
+            *,
+            search: str,
+            limit: int,
+            effective_on: date | None,
+            deadline: float,
+        ) -> dict[str, JsonValue]:
+            nonlocal offset
+            result = original_build_options(
+                rows,
+                pinned,
+                search=search,
+                limit=limit,
+                effective_on=effective_on,
+                deadline=deadline,
+            )
+            offset = 10.0
+            return result
+
+        monkeypatch.setattr(reference_module, "_monotonic_time", monotonic_time)
+        monkeypatch.setattr(reference_module, "_build_options", expire_deadline_after_search)
+
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(httpx.MockTransport(lambda _: _response(_single_page()))).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_LIMIT_EXCEEDED"
+
+    async def test_snapshot_expiry_is_rechecked_after_search(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_build_options = reference_module._build_options
+        expired = False
+        expiry = datetime.fromisoformat(_single_page()["expires_at"])
+
+        def clock() -> datetime:
+            return expiry if expired else _clock()
+
+        def expire_snapshot_after_search(
+            rows: list[dict[str, JsonValue]],
+            pinned: Mapping[str, JsonValue],
+            *,
+            search: str,
+            limit: int,
+            effective_on: date | None,
+            deadline: float,
+        ) -> dict[str, JsonValue]:
+            nonlocal expired
+            result = original_build_options(
+                rows,
+                pinned,
+                search=search,
+                limit=limit,
+                effective_on=effective_on,
+                deadline=deadline,
+            )
+            expired = True
+            return result
+
+        monkeypatch.setattr(reference_module, "_build_options", expire_snapshot_after_search)
+        client = InstrumentReferenceClient(
+            _config(),
+            transport=httpx.MockTransport(lambda _: _response(_single_page())),
+            clock=clock,
+            limits=_limits(),
+        )
+
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await client.list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+    async def test_large_disjoint_alias_intervals_use_bounded_sweep(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class CountingDate(date):
+            comparisons = 0
+
+            def __lt__(self, other: date) -> bool:
+                type(self).comparisons += 1
+                return super().__lt__(other)
+
+            def __ge__(self, other: date) -> bool:
+                type(self).comparisons += 1
+                return super().__ge__(other)
+
+            def __gt__(self, other: date) -> bool:
+                type(self).comparisons += 1
+                return super().__gt__(other)
+
+            @classmethod
+            def fromisoformat(cls, value: str) -> CountingDate:
+                parsed = date.fromisoformat(value)
+                return cls(parsed.year, parsed.month, parsed.day)
+
+        monkeypatch.setattr(reference_module, "date", CountingDate)
+        rows: list[dict[str, JsonValue]] = []
+        first_day = date(1900, 1, 1)
+        for index in range(2_000):
+            start = first_day + timedelta(days=2 * index)
+            end = start + timedelta(days=1)
+            payload: dict[str, JsonValue] = {
+                "instrument_id": f"SYNTHETIC-{index}",
+                "symbol": f"{index:06d}",
+                "profile_version": "fixture-profile-v1",
+                "registry_version": "fixture-registry-v1",
+                "registry_evidence_ref": "FIXTURE-REGISTRY",
+                "aliases": [
+                    {
+                        "alias": "LEGACY",
+                        "valid_from": start.isoformat(),
+                        "valid_through": end.isoformat(),
+                    }
+                ],
+            }
+            rows.append({"payload": payload})
+
+        reference_module._validate_registry(
+            rows,
+            dataset_id="fixture.instrument-reference.stock",
+            deadline=reference_module._monotonic_time() + 5.0,
+        )
+        assert CountingDate.comparisons < len(rows) * 10
+
+        last_alias = rows[-1]["payload"]["aliases"][0]
+        previous_alias = rows[-2]["payload"]["aliases"][0]
+        assert isinstance(last_alias, dict)
+        assert isinstance(previous_alias, dict)
+        last_alias["valid_from"] = previous_alias["valid_from"]
+        with pytest.raises(InstrumentReferenceError) as raised:
+            reference_module._validate_registry(
+                rows,
+                dataset_id="fixture.instrument-reference.stock",
+                deadline=reference_module._monotonic_time() + 5.0,
+            )
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
 
 class TestSearchAndAliases:
     async def test_alias_search_requires_explicit_date_and_preserves_evidence(self) -> None:
@@ -490,6 +655,28 @@ class TestHttpSafetyAndResourceBounds:
             await _client(transport, limits=limits).list_options()
         assert raised.value.code == "OPENDATA_REFERENCE_LIMIT_EXCEEDED"
         assert stream.read_count == 2
+        assert stream.closed is True
+
+    async def test_compressed_response_is_rejected_before_body_read(self) -> None:
+        stream = _TrackingStream([b"gzip-expansion-canary"])
+        requests: list[httpx.Request] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "application/json",
+                    "content-encoding": "gzip",
+                },
+                stream=stream,
+            )
+
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(httpx.MockTransport(handler)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+        assert requests[0].headers["accept-encoding"] == "identity"
+        assert stream.read_count == 0
         assert stream.closed is True
 
     async def test_cancellation_propagates_and_closes_stream(self) -> None:
