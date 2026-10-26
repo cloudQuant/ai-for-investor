@@ -20,6 +20,7 @@
 | [WAVE4_PLAN.md](WAVE4_PLAN.md) | 股票日线离线运行切片的5条并行流、冻结接口与验收门槛 |
 | [WAVE4_STATUS.md](WAVE4_STATUS.md) | 第四批提交、独立复核、跨模块验收及保留限制 |
 | [WAVE5_PLAN.md](WAVE5_PLAN.md) | 已启动的股票图表直读与MySQL worker局部任务 |
+| [WAVE5_STATUS.md](WAVE5_STATUS.md) | 第五批局部集成、审查发现、测试越界审计与收敛措施 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |

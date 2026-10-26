@@ -61,4 +61,4 @@ opendata代码集成截至 `f29b8e72`，AFI代码截至 `c9076d462`；新增跨�
 
 第四批五条模块开发流和公共请求保护已集成；metadata迁移、实际子进程到REST的联调和1813项最终组合结果见 [WAVE4_STATUS.md](WAVE4_STATUS.md)。角色规划与CLI库内SPI不代表实际main或systemd已接线。
 
-第五批四条独立分支已开始普通股票图表REST直读、MySQL worker及完整gate的13个既有mypy根修复，输入基线和契约调整见 [WAVE5_PLAN.md](WAVE5_PLAN.md)。尚未交付或合并，不能使用第四批收据为其背书。
+第五批AFI图表直读与13个mypy根修复已合入隔离集成分支，AFI230项定向回归通过。MySQL worker独立审查修复、数据模块覆盖和两次越界测试的只读审计继续推进。输入与契约见 [WAVE5_PLAN.md](WAVE5_PLAN.md)，当前证据及限制见 [WAVE5_STATUS.md](WAVE5_STATUS.md)。本批尚未整体验收，不能使用第四批收据为其背书。
