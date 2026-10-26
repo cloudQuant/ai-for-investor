@@ -3114,7 +3114,10 @@ describe('DataPage', () => {
     apiMocks.listInstrumentOptions.mockRejectedValueOnce(new Error('catalog unavailable'))
     vm.searchInstrumentOptions('failure')
     await flushPromises()
-    expect(vm.instrumentOptions.map((option: { symbol: string }) => option.symbol)).toEqual(['CUSTOM'])
+    expect(vm.instrumentOptions).toEqual([])
+    expect(vm.form.symbol).toBe('CUSTOM')
+    expect(vm.instrumentOptionsCatalogMode).toBe(null)
+    expect(vm.instrumentOptionsError).toBeTruthy()
     wrapper.unmount()
   })
 
