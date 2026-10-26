@@ -159,7 +159,7 @@ function capabilityDocument(
   const gates = mode === 'opendata'
     ? [true, true, false, false]
     : mode === 'opendata_ineffective'
-      ? [true, false, false, false]
+      ? [true, true, false, false]
       : [false, false, false, false]
   const states = ROUTE_IDS.map((capabilityId, index) => (
     lifecycleState(capabilityId, 'rollout', null, gates[index] as boolean)
@@ -601,6 +601,33 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(freezeLegacyState(vm)).toEqual(legacyBefore)
   })
 
+  it('blocks direct and compatibility queries when capability lookup rejects', async () => {
+    apiMocks.getCapabilities.mockRejectedValue(new Error('CAPABILITIES_DOWN_SENTINEL'))
+    const page = await mountPage()
+    const vm = page.vm as unknown as Record<string, unknown>
+    const legacyBefore = freezeLegacyState(vm)
+    apiMocks.getOpenDataDirectKline.mockClear()
+    apiMocks.lookupInstrument.mockClear()
+    apiMocks.getQueryBundle.mockClear()
+    apiMocks.getQueryContract.mockClear()
+    apiMocks.queryLocalFirst.mockClear()
+
+    await clickQuery(page)
+
+    const display = vm.openDataDirectKlineDisplay as Record<string, unknown>
+    expect(vm.dataPageDisplayMode).toBe('opendata_direct')
+    expect(display.status).toBe('unavailable')
+    expect(display.reason).toBe('CAPABILITIES_UNAVAILABLE')
+    expect(display.rows).toEqual([])
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
+    expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
+    expect(apiMocks.queryLocalFirst).not.toHaveBeenCalled()
+    expect(page.text()).not.toContain('CAPABILITIES_DOWN_SENTINEL')
+    expect(freezeLegacyState(vm)).toEqual(legacyBefore)
+  })
+
   it('blocks a disabled OpenData route instead of treating it as legacy', async () => {
     apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('opendata_ineffective'))
     const page = await mountPage()
@@ -612,10 +639,7 @@ describe('DataPage OpenData direct daily chart', () => {
     const display = vm.openDataDirectKlineDisplay as Record<string, unknown>
     expect(vm.dataPageDisplayMode).toBe('opendata_direct')
     expect(display.status).toBe('unavailable')
-    expect([
-      'ONLINE_FETCH_DISABLED',
-      'OPENDATA_ROUTE_INEFFECTIVE',
-    ]).toContain(display.reason)
+    expect(display.reason).toBe('OPENDATA_ROUTE_INEFFECTIVE')
     expect(display.rows).toEqual([])
     expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
