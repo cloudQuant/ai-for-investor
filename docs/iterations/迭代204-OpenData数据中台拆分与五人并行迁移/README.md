@@ -30,6 +30,7 @@
 | [WAVE9_PLAN.md](WAVE9_PLAN.md) | 第九批Sina资产负债表raw wire切片：冻结合同、四条独占开发分支及独立审查 |
 | [WAVE9_STATUS.md](WAVE9_STATUS.md) | 第九批focused验证、首轮失败保留、冻结归档与独立审查状态 |
 | [WAVE10_PLAN.md](WAVE10_PLAN.md) | 第十批source-qualified七项财务候选投影：冻结合同、工作包与未完成验收 |
+| [WAVE10_STATUS.md](WAVE10_STATUS.md) | 第十批候选投影精确测试、scoped static、coverage及开放边界 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
@@ -98,4 +99,4 @@ OpenBB 官方明确其 Provider 是连接器，数据覆盖依赖具体来源；
 
 第九批Sina资产负债表raw-wire切片已完成scoped offline gates：独立Python 3.13.5环境中的两个精确测试文件85 passed，三项新增data modules的statement+branch coverage均超过90%；scoped static、A2及894提交full-history Gitleaks也通过。80文件私有归档（2,064,005 bytes）已冻结，独立archive audit 24/24 checks通过；两个公开manifest的复扫为0 findings。来源权利、财务单位/修订语义、其他标的与完整历史、Python 3.10 runtime、remote CI及整仓`make gate`仍未验证。首轮失败和证据边界见 [WAVE9_STATUS.md](WAVE9_STATUS.md)。
 
-第十批已冻结Sina财务候选投影合同；DTO（`954e79c9`）与projector（`d0abab97`）均静态review GREEN并集成到root source `fd151a46`。唯一测试文件（author commit `be057bb0`）待独立隔离review，root尚未运行W10测试。候选始终是source-qualified、partial且保留原始证据的离线映射，不代表单位、权利、PIT或生产接入；见 [WAVE10_PLAN.md](WAVE10_PLAN.md)。
+第十批已完成scoped offline QA与归档审查：在root source `1bd226690acd7e4bbd620a480f7e6271c38297fd`上，唯一隔离测试文件65 passed，合同/projector coverage分别97.53%/95.36%；Ruff、format、mypy、Bandit、named gates及905提交Gitleaks组件均通过。49文件、766,405 bytes私有归档通过独立audit，复核此前W7/W8/W9共348个归档文件未变；两个公开manifest的secret scan为0 findings。Whole-resolver A2未为W10运行，整仓`make gate`、remote CI、Python 3.10 runtime与生产验收仍开放。合同和projector已集成，测试review与运行通过；候选始终是source-qualified、partial且保留原始证据的离线映射，不代表单位、权利、PIT或生产接入。W11仍是未冻结、无实现的设计讨论。详情见 [WAVE10_PLAN.md](WAVE10_PLAN.md) 与 [WAVE10_STATUS.md](WAVE10_STATUS.md)。

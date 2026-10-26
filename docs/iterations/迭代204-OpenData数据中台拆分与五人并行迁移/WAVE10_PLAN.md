@@ -1,8 +1,8 @@
 # 第十批 Sina 资产负债表候选映射投影计划
 
-计划日期：2026-10-27（Asia/Shanghai）。状态：**CONTRACT_FROZEN / SOURCE_IMPLEMENTED_STATIC_REVIEW_GREEN / TEST_ISOLATION_REVIEW_PENDING / ACCEPTANCE_PENDING**。本批实现一个纯离线、source-qualified的七项映射候选投影。合同与projector均已通过静态review并集成到OpenData `fd151a46c44fe044f00b3386a6e032a3bc52252a`；唯一测试文件已由作者完成，独立隔离review尚待完成，root没有运行W10测试或coverage。
+计划日期：2026-10-27（Asia/Shanghai）。状态：**CONTRACT_FROZEN / SCOPED_OFFLINE_COMPLETE / NOT_PRODUCTION_ACCEPTED**。本批实现一个纯离线、source-qualified的七项映射候选投影。合同与projector已集成并通过静态review，唯一测试文件已通过独立隔离review及root精确运行；私有归档、公开证据扫描及独立归档审查均已完成。
 
-计划与输入基线：[WAVE9_PLAN.md](./WAVE9_PLAN.md)、[WAVE9_STATUS.md](./WAVE9_STATUS.md)。W10工作包以OpenData `9ff72ad668ce161f5132bf866b251acd3c80bbba`为共同基线；root在W9 scoped closure后集成至当前`fd151a46c44fe044f00b3386a6e032a3bc52252a`。W9负责产生原始Sina wire DTO；W10只从该DTO建立保留源证据的候选映射层，不构成W9或生产数据验收。
+计划与验收记录：[WAVE9_PLAN.md](./WAVE9_PLAN.md)、[WAVE9_STATUS.md](./WAVE9_STATUS.md)、[WAVE10_STATUS.md](./WAVE10_STATUS.md)。W10工作包以OpenData `9ff72ad668ce161f5132bf866b251acd3c80bbba`为共同基线；合同与projector集成后的root scoped QA source为`1bd226690acd7e4bbd620a480f7e6271c38297fd`。W9负责产生原始Sina wire DTO；W10只从该DTO建立保留源证据的候选映射层，不构成W9或生产数据验收。
 
 ## 冻结合同与目标边界
 
@@ -32,21 +32,21 @@ root已冻结`/tmp/od204-receipts/wave10-frozen-sina-partial-projection-contract
 | --- | --- | --- | --- |
 | 候选合同 | `/tmp/od204-wave8-reference-publication` · `codex/od204-wave10-sina-candidate-contract` · owner `architecture_review` | `opendata/data/providers/sina/financial_statement_candidate_contract.py` | commit `954e79c970068915bd1b3bf54563d8733eb8a807`；唯一合同文件完成并静态review GREEN，已集成。只定义冻结DTO、七对mapping、namespace/status/disposition、固定evidence refs、bounds及sanitized errors；不导入FinancialStatement/PIT。 |
 | 纯候选投影 | `/tmp/od204-wave8-table-api` · `codex/od204-wave10-sina-candidate-projector` · owner `wave5_frames_review` | `opendata/data/providers/sina/financial_statement_candidate_projection.py` | commit `d0abab97`；projector实现已静态review GREEN并集成至当前root source。实现snapshot验证、精确ID/title映射、逐报告核算与always-partial输出；仅依赖stdlib、W9 source DTO和新候选合同。 |
-| 定向测试 | `/tmp/od204-wave6-http-boundaries` · `codex/od204-wave10-sina-candidate-tests` · owner `wave6_http_boundaries` | `tests/test_sina_financial_statement_candidate_projection.py` | author commit `be057bb0`已完成；测试隔离review pending，root未运行。使用W9录制正向fixture，负向用例只对captured response或typed DTO深拷贝变异。单文件、T3/A2测试。 |
+| 定向测试 | `/tmp/od204-wave6-http-boundaries` · `codex/od204-wave10-sina-candidate-tests` · owner `wave6_http_boundaries` | `tests/test_sina_financial_statement_candidate_projection.py` | author commit `be057bb0927a710a8e5b233fd28a9b262f0f9f4a`已完成；独立隔离review GREEN，root在source `1bd226690acd7e4bbd620a480f7e6271c38297fd`运行通过。使用W9录制正向fixture，负向用例只对captured response或typed DTO深拷贝变异。 |
 
-root独占质量census、跨分支集成、import graph审查、测试环境及唯一测试运行；独立reviewer审查候选协议与结果证据边界。W9 archive closure后，root已集成合同与projector；测试作者仍在独立worktree，待隔离review后由root运行。
+root独占质量census、跨分支集成、import graph审查、测试环境及唯一测试运行；独立reviewer审查候选协议与结果证据边界。W9 archive closure后，root已集成合同与projector；作者测试隔离review及root单文件运行均通过。W10 archive preparation仍待完成。
 
 ## 实施任务
 
 | 任务 | 状态 | 完成条件 |
 | --- | --- | --- |
 | W10-01 冻结source-native候选合同 | CONTRACT_FROZEN | root decision与v4独立review pin一致；wire/DTO/命名空间/核算顺序变更需重新审查与冻结。 |
-| W10-02 定义独立候选DTO和mapping table | IMPLEMENTED_STATIC_REVIEW_GREEN | 合同分支commit `954e79c970068915bd1b3bf54563d8733eb8a807`；`wave10-sina-candidate-contract-implementation-review.txt`为GREEN，范围限合同声明与import boundaries，不是projector、测试或生产验收。七组ID/title/key精确对应；candidate/unmapped类型与`c10-seven-balance-v1`绑定；固定来源证据引用；不依赖域模型或存储。 |
-| W10-03 验证W9快照与源身份 | IMPLEMENTED_STATIC_REVIEW_GREEN | Projector commit `d0abab97`实现精确W9 DTO、expected query、symbol/paper code、`fzb`、报告period、date-only publication、Asia/Shanghai更新时间和UTC retrieval timestamp验证；手工DTO按不可信输入处理。静态review不替代运行测试。 |
-| W10-04 保留原始条目并作精确投影 | IMPLEMENTED_STATIC_REVIEW_GREEN | 仅ID+title完全匹配成为candidate；raw value/state不参与匹配。原始值、metadata、ordinals和marker保留；unknown ID与title mismatch保留为unmapped；报告输出matched/missing/unmapped accounting。 |
-| W10-05 保持有界、always-partial结果 | IMPLEMENTED_STATIC_REVIEW_GREEN | Projector实施W9 limits与ordinal完整性校验、CNY pilot admission并保持结果always-partial；任一报告无效则整份投影失败。CNY条件不证明科目单位。 |
-| W10-06 唯一定向测试文件 | AUTHOR_TEST_READY / ISOLATION_REVIEW_PENDING | author commit `be057bb0`已交付唯一测试文件；等待独立隔离review。root尚未运行。测试使用W9录制fixture及captured response/typed DTO负向变异。 |
-| W10-07 独立review与root scoped acceptance | ACCEPTANCE_PENDING | root静态核查import边界和file hashes、使用批准环境运行唯一新测试文件；A2/Ruff/format/strict-mypy/Bandit/public API及coverage receipt归档后才可更新状态。 |
+| W10-02 定义独立候选DTO和mapping table | IMPLEMENTED_STATIC_REVIEW_GREEN | 合同分支commit `954e79c970068915bd1b3bf54563d8733eb8a807`；`wave10-sina-candidate-contract-implementation-review.txt`为GREEN。七组ID/title/key精确对应；candidate/unmapped类型与`c10-seven-balance-v1`绑定；固定来源证据引用；不依赖域模型或存储。 |
+| W10-03 验证W9快照与源身份 | FOCUSED_OFFLINE_VALIDATED | Projector commit `d0abab97e182437078898971236af417221da266`实现精确W9 DTO及query/symbol/paper code/`fzb`/period/date/time验证；每个手工DTO按不可信输入处理。静态review和root精确测试通过。 |
+| W10-04 保留原始条目并作精确投影 | FOCUSED_OFFLINE_VALIDATED | 仅ID+title完全匹配成为candidate；raw value/state不参与匹配。原始值、metadata、ordinals和marker保留；unknown ID与title mismatch保留为unmapped；报告输出matched/missing/unmapped accounting。 |
+| W10-05 保持有界、always-partial结果 | FOCUSED_OFFLINE_VALIDATED | Projector实施W9 limits与ordinal完整性校验、CNY pilot admission并保持结果always-partial；任一报告无效则整份投影失败。CNY条件不证明科目单位。 |
+| W10-06 唯一定向测试文件 | FOCUSED_OFFLINE_VALIDATED | author commit `be057bb0927a710a8e5b233fd28a9b262f0f9f4a`经`wave10-sina-candidate-test-isolation-review.txt` GREEN；root精确单文件`--noconftest`运行65 passed。 |
+| W10-07 独立review与root scoped acceptance | SCOPED_OFFLINE_COMPLETE | 一文件隔离测试、coverage、scoped static、named gates、full-history secret component、49文件冻结归档、公开JSON secret scan及独立archive audit均通过；全量A2未对W10运行。Full `make gate`、remote CI、Python 3.10 runtime与生产验收仍开放。 |
 
 ## 必须保持的语义边界
 
@@ -63,6 +63,6 @@ root独占质量census、跨分支集成、import graph审查、测试环境及�
 2. 实现作者只执行静态质量检查：Ruff、format、strict mypy、Bandit、public API约束；projector按`opendata/data/`既有口径满足至少90% statement+branch coverage目标。不得添加exclusions或降低阈值。
 3. 测试执行前root审查import graph，确认projector没有HTTP、注册、ORM、app settings、scheduler或database import；root设置有限环境与空工作目录。
 4. root只运行新增的`tests/test_sina_financial_statement_candidate_projection.py`，禁用repo conftest并按隔离runner规则执行。positive facts只能来自W9记录bytes；negative inputs从捕获DTO深拷贝变异。不得调用Sina、数据库或第三方SDK。
-5. 合同DTO（commit `954e79c9`）及projector（commit `d0abab97`）已静态review GREEN并集成到root source `fd151a46c44fe044f00b3386a6e032a3bc52252a`；唯一测试文件（author commit `be057bb0`）待独立隔离review，root尚未运行W10测试。静态review不替代执行、coverage或整体批次接受。W9/W10两批的旧失败历史、父矩阵或W9 acceptance不得由本批计划更改。
+5. root receipt `wave10-candidates-first-root-command.json`在source `1bd226690acd7e4bbd620a480f7e6271c38297fd`记录精确单文件65 passed、44.23秒，contract/projector statement+branch coverage分别97.5309%和95.3608%；scoped static和Gitleaks也通过。该运行复用未变更的W9-owned 17-pin Python 3.13.5环境。W10 whole-resolver A2未运行。49文件私有归档的独立audit通过，验证W10所有文件及此前W7/W8/W9共348个归档文件；两个公开JSON独立扫描0 findings。W11目前仅为设计讨论，尚无冻结合同或代码。W9/W10两批的父矩阵和生产边界不因本批scoped QA改变。
 
 本批不注册Sina provider、不创建生产grant、不持久化候选、不新增route或调度任务、不修改FinancialStatement/DWD/PIT，也不启用任务748。来源rights、逐标的全历史、source-wide units/identity/revisions、自然周期和生产切换依旧OPEN。父级87项矩阵、1,103项任务与1,066个脚本候选的既有分母和状态保持不变。
