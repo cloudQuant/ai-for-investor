@@ -386,6 +386,29 @@ describe('DataPage OpenData direct daily chart', () => {
     await flushPromises()
   }
 
+  function resetPostMountQueryCalls(expectStockBundleBootstrap: boolean) {
+    if (expectStockBundleBootstrap) {
+      expect(apiMocks.getQueryBundle).toHaveBeenCalledTimes(1)
+      expect(apiMocks.getQueryBundle).toHaveBeenCalledWith({ asset_type: 'stock' })
+    } else {
+      expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
+    }
+
+    // The initial local-only page bootstrap may resolve the V2 bundle. Reset
+    // that control-plane call so later assertions cover only user intent.
+    apiMocks.getOpenDataDirectKline.mockClear()
+    apiMocks.lookupInstrument.mockClear()
+    apiMocks.getQueryBundle.mockClear()
+    apiMocks.getQueryContract.mockClear()
+    apiMocks.queryLocalFirst.mockClear()
+  }
+
+  function expectDirectChartHidden(page: VueWrapper) {
+    const chart = page.get('[data-test="market-opendata-direct-chart"]')
+    expect(chart.exists()).toBe(true)
+    expect(chart.isVisible()).toBe(false)
+  }
+
   function freezeLegacyState(vm: Record<string, unknown>) {
     return clone({
       result: vm.result,
@@ -436,10 +459,7 @@ describe('DataPage OpenData direct daily chart', () => {
     vm.dateRange = [START_DATE, END_DATE]
     form.symbol = '000001'
     form.period = 'daily'
-    apiMocks.lookupInstrument.mockClear()
-    apiMocks.getQueryBundle.mockClear()
-    apiMocks.getQueryContract.mockClear()
-    apiMocks.queryLocalFirst.mockClear()
+    resetPostMountQueryCalls(true)
 
     await clickQuery(page)
 
@@ -477,11 +497,13 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(display).not.toHaveProperty('sourceRegistryId')
 
     const directChart = page.get('[data-test="market-opendata-direct-chart"]')
-    expect(directChart.text()).toContain(display.symbolLabel as string)
-    expect(directChart.text()).toContain(display.rangeLabel as string)
-    expect(directChart.text()).toContain(String(display.returnedBarCount))
-    expect(directChart.text()).toContain(display.retrievedAt as string)
-    expect(directChart.text()).toMatch(/unknown|未知/i)
+    expect(directChart.isVisible()).toBe(true)
+    expect(directChart.attributes('aria-label')).toContain(display.symbolLabel as string)
+    expect(directChart.attributes('aria-label')).toContain(display.rangeLabel as string)
+    const provenance = page.get('[data-test="opendata-direct-provenance"]')
+    expect(provenance.text()).toContain(String(display.returnedBarCount))
+    expect(provenance.text()).toContain(display.retrievedAt as string)
+    expect(provenance.text()).toMatch(/unknown|未知/i)
     expect(page.find('.asset-overview').exists()).toBe(false)
     expect(page.find('.history-metrics-grid').exists()).toBe(false)
     expect(page.find('.market-data-platform-status').exists()).toBe(false)
@@ -512,9 +534,9 @@ describe('DataPage OpenData direct daily chart', () => {
   it('clears prior direct bars after failure without fallback or error leakage', async () => {
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
+    resetPostMountQueryCalls(true)
     const legacyBefore = freezeLegacyState(vm)
     vm.dateRange = [START_DATE, END_DATE]
-    apiMocks.lookupInstrument.mockClear()
     apiMocks.getOpenDataDirectKline.mockResolvedValueOnce(directResponse({
       symbol: '000001',
       start_date: START_DATE,
@@ -539,7 +561,7 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(display.rows).toEqual([])
     expect(page.text()).not.toContain('RAW_UPSTREAM_SECRET_SENTINEL')
     expect(page.text()).not.toContain('LOCAL_SNAPSHOT_TIME_SENTINEL')
-    expect(page.find('[data-test="market-opendata-direct-chart"]').exists()).toBe(true)
+    expectDirectChartHidden(page)
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
     expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
     expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
@@ -550,7 +572,7 @@ describe('DataPage OpenData direct daily chart', () => {
   it('clears prior direct bars when the API rejects a malformed DTO', async () => {
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    apiMocks.lookupInstrument.mockClear()
+    resetPostMountQueryCalls(true)
     vm.dateRange = [START_DATE, END_DATE]
     const legacyBefore = freezeLegacyState(vm)
 
@@ -567,6 +589,7 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(display.reason).toBe('DIRECT_RESPONSE_INVALID')
     expect(display.rows).toEqual([])
     expect(page.text()).not.toContain('OPENDATA_DIRECT_RESPONSE_INVALID')
+    expectDirectChartHidden(page)
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
     expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
     expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
@@ -581,8 +604,8 @@ describe('DataPage OpenData direct daily chart', () => {
     })
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
+    resetPostMountQueryCalls(true)
     const legacyBefore = freezeLegacyState(vm)
-    apiMocks.lookupInstrument.mockClear()
 
     await clickQuery(page)
 
@@ -596,6 +619,7 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
     expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
     expect(apiMocks.queryLocalFirst).not.toHaveBeenCalled()
+    expectDirectChartHidden(page)
     expect(page.find('.asset-overview').exists()).toBe(false)
     expect(page.find('.snapshot-card').exists()).toBe(false)
     expect(page.text()).not.toContain('LOCAL_SNAPSHOT_TIME_SENTINEL')
@@ -606,12 +630,8 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.getCapabilities.mockRejectedValue(new Error('CAPABILITIES_DOWN_SENTINEL'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
+    resetPostMountQueryCalls(false)
     const legacyBefore = freezeLegacyState(vm)
-    apiMocks.getOpenDataDirectKline.mockClear()
-    apiMocks.lookupInstrument.mockClear()
-    apiMocks.getQueryBundle.mockClear()
-    apiMocks.getQueryContract.mockClear()
-    apiMocks.queryLocalFirst.mockClear()
 
     await clickQuery(page)
 
@@ -626,6 +646,7 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
     expect(apiMocks.queryLocalFirst).not.toHaveBeenCalled()
     expect(page.text()).not.toContain('CAPABILITIES_DOWN_SENTINEL')
+    expectDirectChartHidden(page)
     expect(freezeLegacyState(vm)).toEqual(legacyBefore)
   })
 
@@ -633,7 +654,7 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('opendata_ineffective'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    apiMocks.lookupInstrument.mockClear()
+    resetPostMountQueryCalls(true)
 
     await clickQuery(page)
 
@@ -647,13 +668,14 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
     expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
     expect(apiMocks.queryLocalFirst).not.toHaveBeenCalled()
+    expectDirectChartHidden(page)
   })
 
   it('keeps a legacy census with closed gates on the existing lookup path', async () => {
     apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('legacy'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    apiMocks.lookupInstrument.mockClear()
+    resetPostMountQueryCalls(false)
 
     await clickQuery(page)
 
@@ -679,40 +701,41 @@ describe('DataPage OpenData direct daily chart', () => {
     const form = vm.form as { asset_type: string; symbol: string; period: string }
 
     form.asset_type = 'fund'
-    apiMocks.lookupInstrument.mockClear()
+    resetPostMountQueryCalls(true)
     await clickQuery(page)
     expect((vm.openDataDirectKlineDisplay as Record<string, unknown>).reason)
       .toBe('UNSUPPORTED_ASSET')
     expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expectDirectChartHidden(page)
 
     form.asset_type = 'stock'
     form.period = 'weekly'
-    apiMocks.lookupInstrument.mockClear()
     await clickQuery(page)
     expect((vm.openDataDirectKlineDisplay as Record<string, unknown>).reason)
       .toBe('UNSUPPORTED_PERIOD')
     expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expectDirectChartHidden(page)
 
     form.period = 'daily'
     vm.dateRange = ['2025-10-26', '2026-10-27']
-    apiMocks.lookupInstrument.mockClear()
     await clickQuery(page)
     expect((vm.openDataDirectKlineDisplay as Record<string, unknown>).reason)
       .toBe('INVALID_DATE_RANGE')
     expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expectDirectChartHidden(page)
 
     form.symbol = 'UNVERIFIED_TYPED_SYMBOL'
     vm.dateRange = [START_DATE, END_DATE]
-    apiMocks.lookupInstrument.mockClear()
     await clickQuery(page)
     expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
     expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
     expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
     expect(apiMocks.queryLocalFirst).not.toHaveBeenCalled()
+    expectDirectChartHidden(page)
 
     form.symbol = '000001'
     vm.dateRange = ['2025-10-27', '2026-10-27']
@@ -724,6 +747,7 @@ describe('DataPage OpenData direct daily chart', () => {
       period: 'daily',
     }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect((vm.openDataDirectKlineDisplay as Record<string, unknown>).status).toBe('ready')
+    expect(page.get('[data-test="market-opendata-direct-chart"]').isVisible()).toBe(true)
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
   })
 
