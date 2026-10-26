@@ -4,7 +4,7 @@ Market data API routes.
 
 import logging
 import typing
-from datetime import date
+from datetime import date, datetime, time, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from math import isfinite
 from zoneinfo import ZoneInfo
@@ -346,11 +346,12 @@ def _request_from_public_kline_contract(
         or not isinstance(contract.get("request"), dict)
     ):
         raise LegacyKlineBridgeError("KLINE_CONTRACT_UNAVAILABLE")
+    business_start, business_end = _opendata_business_date_window(request)
     payload = dict(contract["request"])
     payload.update(
         {
-            "start": request.start,
-            "end": request.end,
+            "start": business_start,
+            "end": business_end,
             "mode": "local_first",
             "cursor": None,
             "page_size": 2000,
@@ -379,11 +380,48 @@ def _request_from_public_kline_contract(
         or query.mode != "local_first"
         or query.cursor is not None
         or query.page_size != 2000
-        or query.start != request.start
-        or query.end != request.end
+        or query.start != business_start
+        or query.end != business_end
     ):
         raise LegacyKlineBridgeError("KLINE_QUERY_CONTRACT_INVALID")
     return query
+
+
+def _opendata_business_date_window(
+    request: LegacyKlineRequest,
+) -> tuple[datetime, datetime]:
+    """Map legacy Shanghai business dates to OpenData's UTC date-only axis.
+
+    Legacy K-line windows are half-open Shanghai-midnight intervals. OpenData
+    returns date-only business keys normalized to UTC midnight, so the public
+    query window must use those same UTC-midnight date boundaries. This only
+    changes the query axis; provider trade dates and observation timestamps are
+    left untouched.
+    """
+    if (
+        request.start.tzinfo is None
+        or request.start.utcoffset() is None
+        or request.end.tzinfo is None
+        or request.end.utcoffset() is None
+    ):
+        raise LegacyKlineBridgeError("KLINE_QUERY_WINDOW_INVALID")
+    local_start = request.start.astimezone(_SHANGHAI)
+    local_end = request.end.astimezone(_SHANGHAI)
+    if (
+        local_start.time().replace(tzinfo=None) != time.min
+        or local_end.time().replace(tzinfo=None) != time.min
+    ):
+        raise LegacyKlineBridgeError("KLINE_QUERY_WINDOW_INVALID")
+    day_count = (local_end.date() - local_start.date()).days
+    if not 1 <= day_count <= 366:
+        raise LegacyKlineBridgeError("KLINE_QUERY_WINDOW_INVALID")
+    try:
+        return (
+            datetime.combine(local_start.date(), time.min, tzinfo=timezone.utc),
+            datetime.combine(local_end.date(), time.min, tzinfo=timezone.utc),
+        )
+    except (OverflowError, ValueError) as exc:
+        raise LegacyKlineBridgeError("KLINE_QUERY_WINDOW_INVALID") from exc
 
 
 def _project_opendata_legacy_kline(
@@ -397,6 +435,7 @@ def _project_opendata_legacy_kline(
     context = result.context
     query = context.query
     fetch_result = result.fetch_result
+    business_start, business_end = _opendata_business_date_window(request)
     if (
         query.dataset_code != "market.bars"
         or query.data_kind != "bars"
@@ -414,8 +453,8 @@ def _project_opendata_legacy_kline(
         or query.mode != "local_first"
         or query.cursor is not None
         or query.page_size != 2000
-        or query.start != request.start
-        or query.end != request.end
+        or query.start != business_start
+        or query.end != business_end
         or context.identity.canonical_id != query.canonical_id
         or context.identity.asset_type != "stock"
         or context.identity.venue not in {"CN-SSE", "CN-SZSE"}
@@ -441,7 +480,11 @@ def _project_opendata_legacy_kline(
             raise LegacyKlineBridgeError("KLINE_EVENT_TIME_INVALID")
         local_date = observation.event_at.astimezone(_SHANGHAI).date()
         rendered_date = local_date.isoformat()
-        if dates and rendered_date <= dates[-1]:
+        if (
+            local_date < business_start.date()
+            or local_date >= business_end.date()
+            or (dates and rendered_date <= dates[-1])
+        ):
             raise LegacyKlineBridgeError("KLINE_DATE_INTEGRITY")
         rendered_open = _direct_two_decimal_number(observation.fields.get("open"), "open")
         rendered_high = _direct_two_decimal_number(observation.fields.get("high"), "high")

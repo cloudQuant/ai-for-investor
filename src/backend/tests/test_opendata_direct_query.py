@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -33,6 +34,7 @@ from app.services.market_data.catalog import DatasetStorageResolution
 from app.services.market_data.coverage import QueryIdentity
 from app.services.market_data.dataset_contracts import FAMILY_CONTRACT_VERSION
 from app.services.market_data.identity import ResolvedMarketDataIdentity
+from app.services.market_data.legacy_kline_projection import LegacyKlineRequest
 from app.services.market_data.opendata_credentials import OpendataCredentials
 from app.services.market_data.opendata_provider import OpendataProvider
 from app.services.market_data.publication import MarketDataVisibilityAnchor
@@ -118,11 +120,24 @@ def _page(rows: list[dict[str, object]]) -> bytes:
     ).encode("utf-8")
 
 
-def _provider(rows: list[dict[str, object]], *, status_code: int = 200) -> OpendataProvider:
-    async def handler(_request: httpx.Request) -> httpx.Response:
+def _provider(
+    rows: list[dict[str, object]],
+    *,
+    status_code: int = 200,
+    requests: list[httpx.Request] | None = None,
+) -> OpendataProvider:
+    request_log = requests if requests is not None else []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_log.append(request)
         if status_code >= 400:
             return httpx.Response(status_code, json={"detail": "unavailable"})
-        return httpx.Response(200, content=_page(rows))
+        start = request.url.params.get("start")
+        end = request.url.params.get("end")
+        if start is None or end is None:
+            return httpx.Response(422, json={"detail": "missing date bounds"})
+        selected_rows = [row for row in rows if start <= str(row["trade_date"]) <= end]
+        return httpx.Response(200, content=_page(selected_rows))
 
     return OpendataProvider(
         client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
@@ -363,12 +378,10 @@ def _service(
 
 @pytest_asyncio.fixture
 async def direct_kline_dependencies(monkeypatch: pytest.MonkeyPatch) -> Any:
-    async def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=_page([_row("2026-09-07")]))
-
-    provider = OpendataProvider(
-        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-        credentials=OpendataCredentials("test-api-key", base_url="http://opendata.test"),
+    provider_requests: list[httpx.Request] = []
+    provider = _provider(
+        [_row("2026-09-07")],
+        requests=provider_requests,
     )
     store = _Store()
     service = _service(provider, store)
@@ -394,7 +407,7 @@ async def direct_kline_dependencies(monkeypatch: pytest.MonkeyPatch) -> Any:
         lambda: resolver
     )
     try:
-        yield db, store, service, resolver, authorizer, provider
+        yield db, store, service, resolver, authorizer, provider, provider_requests
     finally:
         for dependency in (
             get_db,
@@ -412,7 +425,15 @@ async def test_kline_enabled_opendata_reads_rest_and_never_touches_local_facts(
     client: AsyncClient,
     direct_kline_dependencies: Any,
 ) -> None:
-    db, store, _service_value, resolver, authorizer, _provider_value = direct_kline_dependencies
+    (
+        db,
+        store,
+        _service_value,
+        resolver,
+        authorizer,
+        _provider_value,
+        provider_requests,
+    ) = direct_kline_dependencies
     response = await client.get(
         "/api/v1/data/kline",
         params={
@@ -424,6 +445,8 @@ async def test_kline_enabled_opendata_reads_rest_and_never_touches_local_facts(
     )
 
     assert response.status_code == 200
+    assert provider_requests[0].url.params["start"] == "2026-09-07"
+    assert provider_requests[0].url.params["end"] == "2026-09-07"
     payload = response.json()
     assert payload["kline"] == {
         "dates": ["2026-09-07"],
@@ -451,21 +474,38 @@ async def test_kline_enabled_opendata_reads_rest_and_never_touches_local_facts(
 
 
 @pytest.mark.asyncio
-async def test_empty_rest_result_is_returned_as_empty_with_unknown_coverage(
+async def test_multi_day_rest_query_includes_the_requested_last_business_date(
     client: AsyncClient,
     direct_kline_dependencies: Any,
 ) -> None:
-    _db, _store, _service_value, _resolver, _authorizer, old_provider = direct_kline_dependencies
+    (
+        _db,
+        store,
+        _service_value,
+        _resolver,
+        _authorizer,
+        old_provider,
+        _provider_requests,
+    ) = direct_kline_dependencies
     await old_provider._client.aclose()
-    provider = _provider([])
-    app.dependency_overrides[get_market_data_query_service] = lambda: _service(provider, _store)
+    provider_requests: list[httpx.Request] = []
+    provider = _provider(
+        [
+            _row("2026-09-06"),
+            _row("2026-09-07"),
+            _row("2026-09-08"),
+            _row("2026-09-09"),
+        ],
+        requests=provider_requests,
+    )
+    app.dependency_overrides[get_market_data_query_service] = lambda: _service(provider, store)
     try:
         response = await client.get(
             "/api/v1/data/kline",
             params={
                 "symbol": "600000",
                 "start_date": "2026-09-07",
-                "end_date": "2026-09-07",
+                "end_date": "2026-09-08",
                 "period": "daily",
             },
         )
@@ -473,6 +513,103 @@ async def test_empty_rest_result_is_returned_as_empty_with_unknown_coverage(
         await provider._client.aclose()
 
     assert response.status_code == 200
+    assert provider_requests[0].url.params["start"] == "2026-09-07"
+    assert provider_requests[0].url.params["end"] == "2026-09-08"
+    assert response.json()["kline"]["dates"] == ["2026-09-07", "2026-09-08"]
+
+
+@pytest.mark.asyncio
+async def test_equivalent_utc_offsets_use_the_same_business_date_url(
+    direct_kline_dependencies: Any,
+) -> None:
+    (
+        db,
+        _store_value,
+        service,
+        resolver,
+        authorizer,
+        _provider_value,
+        provider_requests,
+    ) = direct_kline_dependencies
+    access = MarketDataQueryAccess(principal=_principal(), authorizer=authorizer)
+    capabilities = SimpleNamespace(
+        response=SimpleNamespace(query_v2_enabled=True),
+        route_is_effective=lambda route_id: route_id == ROUTE_ID,
+    )
+    utc_window = LegacyKlineRequest(
+        symbol="600000",
+        period="daily",
+        frequency="1d",
+        start=datetime(2026, 9, 6, 16, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 7, 16, tzinfo=timezone.utc),
+    )
+    shanghai_window = LegacyKlineRequest(
+        symbol="600000",
+        period="daily",
+        frequency="1d",
+        start=datetime(2026, 9, 7, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+        end=datetime(2026, 9, 8, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
+    )
+
+    utc_result = await data_base.get_kline_data(
+        request=utc_window,
+        access=access,
+        db=db,
+        capabilities=capabilities,
+        service=service,
+        query_contracts=resolver,
+    )
+    shanghai_result = await data_base.get_kline_data(
+        request=shanghai_window,
+        access=access,
+        db=db,
+        capabilities=capabilities,
+        service=service,
+        query_contracts=resolver,
+    )
+
+    assert utc_result["kline"]["dates"] == ["2026-09-07"]
+    assert shanghai_result["kline"]["dates"] == ["2026-09-07"]
+    assert len(provider_requests) == 2
+    for provider_request in provider_requests:
+        assert provider_request.url.params["start"] == "2026-09-07"
+        assert provider_request.url.params["end"] == "2026-09-07"
+
+
+@pytest.mark.asyncio
+async def test_empty_rest_result_is_returned_as_empty_with_unknown_coverage(
+    client: AsyncClient,
+    direct_kline_dependencies: Any,
+) -> None:
+    (
+        _db,
+        _store,
+        _service_value,
+        _resolver,
+        _authorizer,
+        old_provider,
+        _provider_requests,
+    ) = direct_kline_dependencies
+    await old_provider._client.aclose()
+    provider_requests: list[httpx.Request] = []
+    provider = _provider([_row("2026-09-07")], requests=provider_requests)
+    app.dependency_overrides[get_market_data_query_service] = lambda: _service(provider, _store)
+    try:
+        response = await client.get(
+            "/api/v1/data/kline",
+            params={
+                "symbol": "600000",
+                "start_date": "2026-09-08",
+                "end_date": "2026-09-08",
+                "period": "daily",
+            },
+        )
+    finally:
+        await provider._client.aclose()
+
+    assert response.status_code == 200
+    assert provider_requests[0].url.params["start"] == "2026-09-08"
+    assert provider_requests[0].url.params["end"] == "2026-09-08"
     assert response.json()["count"] == 0
     assert response.json()["records"] == []
     assert response.json()["provenance"]["coverage_status"] == "unknown"
@@ -483,7 +620,15 @@ async def test_direct_read_filters_out_of_window_rows_and_rejects_missing_fields
     client: AsyncClient,
     direct_kline_dependencies: Any,
 ) -> None:
-    _db, store, _service_value, _resolver, _authorizer, old_provider = direct_kline_dependencies
+    (
+        _db,
+        store,
+        _service_value,
+        _resolver,
+        _authorizer,
+        old_provider,
+        _provider_requests,
+    ) = direct_kline_dependencies
     await old_provider._client.aclose()
     provider = _provider([_row("2026-09-06"), _row("2026-09-07")])
     app.dependency_overrides[get_market_data_query_service] = lambda: _service(provider, store)
@@ -530,7 +675,15 @@ async def test_opendata_provider_failure_does_not_fall_back_to_legacy_path(
     client: AsyncClient,
     direct_kline_dependencies: Any,
 ) -> None:
-    _db, store, _service_value, _resolver, _authorizer, old_provider = direct_kline_dependencies
+    (
+        _db,
+        store,
+        _service_value,
+        _resolver,
+        _authorizer,
+        old_provider,
+        _provider_requests,
+    ) = direct_kline_dependencies
     await old_provider._client.aclose()
     provider = _provider([], status_code=503)
     app.dependency_overrides[get_market_data_query_service] = lambda: _service(provider, store)
@@ -558,7 +711,15 @@ async def test_opendata_rejects_unsupported_frequency_without_local_fallback(
     client: AsyncClient,
     direct_kline_dependencies: Any,
 ) -> None:
-    _db, store, _service_value, resolver, _authorizer, _provider_value = direct_kline_dependencies
+    (
+        _db,
+        store,
+        _service_value,
+        resolver,
+        _authorizer,
+        _provider_value,
+        _provider_requests,
+    ) = direct_kline_dependencies
     response = await client.get(
         "/api/v1/data/kline",
         params={
@@ -581,7 +742,15 @@ async def test_missing_route_attestation_fails_before_provider_or_fact_access(
     client: AsyncClient,
     direct_kline_dependencies: Any,
 ) -> None:
-    _db, store, _service_value, resolver, _authorizer, _provider_value = direct_kline_dependencies
+    (
+        _db,
+        store,
+        _service_value,
+        resolver,
+        _authorizer,
+        _provider_value,
+        _provider_requests,
+    ) = direct_kline_dependencies
     app.dependency_overrides[get_market_data_capability_evaluation] = lambda: SimpleNamespace(
         response=SimpleNamespace(query_v2_enabled=True),
         route_is_effective=lambda _route_id: False,
