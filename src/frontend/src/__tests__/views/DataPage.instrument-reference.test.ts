@@ -64,6 +64,28 @@ const instrumentSelectStub = defineComponent({
   },
 })
 
+const instrumentDatePickerStub = defineComponent({
+  inheritAttrs: false,
+  props: [
+    'modelValue',
+    'type',
+    'valueFormat',
+    'clearable',
+    'placeholder',
+    'startPlaceholder',
+    'endPlaceholder',
+  ],
+  emits: ['update:modelValue', 'change'],
+  setup(props, { attrs, emit }) {
+    return () => h('input', {
+      ...attrs,
+      value: typeof props.modelValue === 'string' ? props.modelValue : '',
+      onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).value),
+      onChange: (event: Event) => emit('change', (event.target as HTMLInputElement).value),
+    })
+  },
+})
+
 const instrumentQueryButtonStub = defineComponent({
   inheritAttrs: false,
   props: {
@@ -151,6 +173,7 @@ describe('DataPage OpenData instrument selector', () => {
         stubs: {
           ...elStubs,
           'el-select': instrumentSelectStub,
+          'el-date-picker': instrumentDatePickerStub,
           'el-button': instrumentQueryButtonStub,
         },
       },
@@ -206,10 +229,13 @@ describe('DataPage OpenData instrument selector', () => {
       limit: 80,
     })
 
-    vm.instrumentAliasEffectiveOn = '2018-06-01'
-    vm.handleInstrumentAliasEffectiveDateChange()
+    const effectiveOnPicker = page.get<HTMLInputElement>('[data-test="market-instrument-effective-on"]')
+    effectiveOnPicker.element.value = '2018-06-01'
+    await effectiveOnPicker.trigger('input')
+    await effectiveOnPicker.trigger('change')
     await flushPromises()
 
+    expect(vm.instrumentAliasEffectiveOn).toBe('2018-06-01')
     expect(apiMocks.listInstrumentOptions).toHaveBeenLastCalledWith({
       asset_type: 'stock',
       search: 'HIST',
