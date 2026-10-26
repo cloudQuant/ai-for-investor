@@ -786,6 +786,10 @@ export function useDataPage() {
   const marketChartRef = ref<HTMLDivElement>()
   const instrumentOptions = ref<MarketInstrumentOption[]>([])
   const instrumentOptionsLoading = ref(false)
+  const instrumentOptionsCatalogMode = ref<'legacy' | 'opendata' | null>(null)
+  const instrumentOptionsError = ref('')
+  const instrumentAliasEffectiveOn = ref<string | null>(null)
+  const instrumentOptionsSearchTerm = ref('')
   const relatedTablesLoading = ref(false)
   const relatedTables = ref<DataTable[]>([])
   const relatedTablesError = ref('')
@@ -1465,6 +1469,14 @@ export function useDataPage() {
     form.asset_type = assetType
     restoreAssetSelection(assetType)
     if (changed) {
+      // An OpenData-only alias date or catalog error must not affect a legacy
+      // selector on another asset tab. Invalidate pending option reads too.
+      instrumentOptionsRequestId += 1
+      instrumentOptionsCatalogMode.value = null
+      instrumentOptionsError.value = ''
+      instrumentAliasEffectiveOn.value = null
+      instrumentOptionsSearchTerm.value = ''
+      instrumentOptions.value = []
       // Product selection never crosses asset tabs. Keeping it explicit avoids
       // a ready family on the next tab silently inheriting a prior tab's mode.
       selectedFamilyId.value = defaultFamilyId(assetType)
@@ -2423,10 +2435,49 @@ export function useDataPage() {
       ? 'refresh'
       : intent === false ? 'local_first' : intent
     const refreshOnline = queryMode === 'refresh'
+    const requestedAssetType = form.asset_type
     const requestedSymbol = formSymbolText()
     if (!requestedSymbol) {
       ElMessage.error(t('dataMgmt.msgSymbolRequired'))
       return
+    }
+    if (form.asset_type === 'stock' && instrumentOptionsCatalogMode.value === null) {
+      if (!instrumentOptionsError.value) {
+        await loadInstrumentOptions(requestedSymbol)
+        // The selector could change while the directory request was in flight.
+        if (form.asset_type !== requestedAssetType || formSymbolText() !== requestedSymbol) return
+      }
+      if (instrumentOptionsCatalogMode.value === null) {
+        result.value = null
+        referenceSeriesResult.value = null
+        genericObservationResult.value = null
+        relatedTables.value = []
+        if (!instrumentOptionsError.value) {
+          instrumentOptionsError.value = t('dataMgmt.marketDataSourceError')
+        }
+        setMarketDataPlatformErrorStatus()
+        return
+      }
+    }
+    if (
+      form.asset_type === 'stock'
+      && instrumentOptionsCatalogMode.value === 'opendata'
+      && !instrumentOptions.value.some(
+        (option) => option.catalog_verified === true && option.symbol === requestedSymbol,
+      )
+    ) {
+      result.value = null
+      referenceSeriesResult.value = null
+      genericObservationResult.value = null
+      relatedTables.value = []
+      if (!instrumentOptionsError.value) {
+        instrumentOptionsError.value = '请先从已验证的 OpenData 标的目录中选择标的。'
+      }
+      setMarketDataPlatformErrorStatus()
+      return
+    }
+    if (form.asset_type === 'stock' && instrumentOptionsCatalogMode.value === 'opendata') {
+      instrumentOptionsError.value = ''
     }
     // The current bundle is only a presentation control plane, but it is
     // sufficient to prevent a user-edited 90-day picker range from reaching
@@ -2769,6 +2820,7 @@ export function useDataPage() {
   }
 
   function searchInstrumentOptions(query: string) {
+    instrumentOptionsSearchTerm.value = String(query || '')
     void loadInstrumentOptions(query)
   }
 
@@ -2781,25 +2833,75 @@ export function useDataPage() {
   async function loadInstrumentOptions(search = '', adoptFirstOnMiss = false) {
     const requestId = ++instrumentOptionsRequestId
     const normalizedSearch = String(search || '').trim()
+    instrumentOptionsSearchTerm.value = normalizedSearch
     instrumentOptionsLoading.value = true
+    instrumentOptionsError.value = ''
     try {
-      const response = await marketDataApi.listInstrumentOptions({
+      const params = {
         asset_type: form.asset_type,
         search: normalizedSearch,
         limit: 80,
+        ...(form.asset_type === 'stock'
+          && instrumentOptionsCatalogMode.value === 'opendata'
+          && instrumentAliasEffectiveOn.value
+          ? { effective_on: instrumentAliasEffectiveOn.value }
+          : {}),
+      }
+      const response = await marketDataApi.listInstrumentOptions({
+        ...params,
       })
       if (requestId !== instrumentOptionsRequestId) return
-      instrumentOptions.value = ensureCurrentInstrumentOption(response.items)
-      if (adoptFirstOnMiss) adoptFirstInstrumentOption(response.items)
-    } catch {
+      const isOpenDataCatalog = response.catalog_mode === 'opendata'
+      instrumentOptionsCatalogMode.value = isOpenDataCatalog ? 'opendata' : 'legacy'
+      const responseItems = Array.isArray(response.items) ? response.items : []
+      instrumentOptions.value = isOpenDataCatalog
+        ? responseItems.filter((item) => item.catalog_verified === true)
+        : ensureCurrentInstrumentOption(responseItems)
+      if (adoptFirstOnMiss && !isOpenDataCatalog) adoptFirstInstrumentOption(responseItems)
+    } catch (error) {
       if (requestId === instrumentOptionsRequestId) {
-        instrumentOptions.value = ensureCurrentInstrumentOption([])
+        const openDataError = openDataInstrumentReferenceError(error)
+        if (openDataError || instrumentOptionsCatalogMode.value === 'opendata') {
+          instrumentOptionsCatalogMode.value = 'opendata'
+          instrumentOptions.value = []
+          instrumentOptionsError.value = openDataError === 'effective_date_required'
+            ? '历史简称查询需要先选择生效日期后重试。'
+            : t('dataMgmt.marketDataSourceError')
+        } else if (form.asset_type === 'stock') {
+          // Until the server has returned a legacy response, a failed stock
+          // catalog request cannot authorize a synthetic selector entry.
+          instrumentOptionsCatalogMode.value = null
+          instrumentOptionsError.value = t('dataMgmt.marketDataSourceError')
+          instrumentOptions.value = []
+        } else {
+          instrumentOptionsCatalogMode.value = 'legacy'
+          instrumentOptionsError.value = ''
+          instrumentOptions.value = ensureCurrentInstrumentOption([])
+        }
       }
     } finally {
       if (requestId === instrumentOptionsRequestId) {
         instrumentOptionsLoading.value = false
       }
     }
+  }
+
+  function openDataInstrumentReferenceError(error: unknown) {
+    if (!error || typeof error !== 'object') return null
+    const response = (error as { response?: { data?: unknown } }).response
+    const data = response?.data
+    if (!data || typeof data !== 'object') return null
+    const detail = (data as { detail?: unknown }).detail
+    if (!detail || typeof detail !== 'object') return null
+    const payload = detail as { catalog_mode?: unknown; code?: unknown }
+    if (payload.catalog_mode !== 'opendata') return null
+    return payload.code === 'OPENDATA_REFERENCE_EFFECTIVE_DATE_REQUIRED'
+      ? 'effective_date_required'
+      : 'unavailable'
+  }
+
+  function handleInstrumentAliasEffectiveDateChange() {
+    void loadInstrumentOptions(instrumentOptionsSearchTerm.value)
   }
 
   function ensureCurrentInstrumentOption(options: MarketInstrumentOption[]) {
@@ -2839,6 +2941,16 @@ export function useDataPage() {
 
   function loadInstrumentsThenLookup(): void {
     if (form.asset_type !== 'option') {
+      if (form.asset_type === 'stock') {
+        const requestedSymbol = formSymbolText()
+        void loadCoverageMatrix()
+        void (async () => {
+          await loadInstrumentOptions(requestedSymbol)
+          if (form.asset_type !== 'stock' || formSymbolText() !== requestedSymbol) return
+          await lookupInstrument('local_only')
+        })()
+        return
+      }
       void loadInstrumentOptions(formSymbolText())
       void loadCoverageMatrix()
       void lookupInstrument('local_only')
@@ -2868,7 +2980,25 @@ export function useDataPage() {
   }
 
   function formatInstrumentHistoryStatus(option: MarketInstrumentOption) {
+    if (
+      option.data_availability === 'unknown'
+      || option.has_history == null
+      || option.history_rows == null
+    ) {
+      return t('dataMgmt.coverageUnknown')
+    }
     return option.has_history ? formatNumber(option.history_rows) : '0'
+  }
+
+  function instrumentOptionStatusTagType(option: MarketInstrumentOption) {
+    if (
+      option.data_availability === 'unknown'
+      || option.has_history == null
+      || option.history_rows == null
+    ) {
+      return 'info'
+    }
+    return option.has_history ? 'success' : 'warning'
   }
 
   function historyRowTimestamp(row: MarketHistoryRow): number {
@@ -4013,6 +4143,9 @@ export function useDataPage() {
     marketChartRef,
     instrumentOptions,
     instrumentOptionsLoading,
+    instrumentOptionsCatalogMode,
+    instrumentOptionsError,
+    instrumentAliasEffectiveOn,
     relatedTablesLoading,
     relatedTables,
     relatedTablesError,
@@ -4100,6 +4233,7 @@ export function useDataPage() {
     refreshCoverageMatrix,
     searchInstrumentOptions,
     handleInstrumentDropdownVisible,
+    handleInstrumentAliasEffectiveDateChange,
     loadInstrumentOptions,
     ensureCurrentInstrumentOption,
     formSymbolText,
@@ -4122,6 +4256,7 @@ export function useDataPage() {
     queryV2FromLookupContract,
     instrumentOptionLabel,
     formatInstrumentHistoryStatus,
+    instrumentOptionStatusTagType,
     toDateInput,
     loadRelatedTables,
     buildRelatedTableKeywords,

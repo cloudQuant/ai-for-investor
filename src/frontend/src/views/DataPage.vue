@@ -93,7 +93,10 @@
           filterable
           remote
           clearable
-          allow-create
+          :allow-create="
+            instrumentOptionsCatalogMode === 'legacy'
+              || (instrumentOptionsCatalogMode !== 'opendata' && form.asset_type !== 'stock')
+          "
           default-first-option
           reserve-keyword
           :loading="instrumentOptionsLoading"
@@ -115,13 +118,24 @@
               <em>{{ option.market || '-' }}</em>
               <el-tag
                 size="small"
-                :type="option.has_history ? 'success' : 'warning'"
+                :type="instrumentOptionStatusTagType(option)"
               >
                 {{ formatInstrumentHistoryStatus(option) }}
               </el-tag>
             </div>
           </el-option>
         </el-select>
+        <el-date-picker
+          v-if="form.asset_type === 'stock' && instrumentOptionsCatalogMode === 'opendata'"
+          v-model="instrumentAliasEffectiveOn"
+          data-test="market-instrument-effective-on"
+          type="date"
+          clearable
+          value-format="YYYY-MM-DD"
+          placeholder="历史简称匹配日期（可选）"
+          aria-label="历史简称匹配生效日期（可选）"
+          @change="handleInstrumentAliasEffectiveDateChange"
+        />
         <el-select
           v-if="selectableDataFamilies.length"
           :model-value="selectedFamilyId"
@@ -171,6 +185,15 @@
           <span>{{ t('dataMgmt.btnQuery') }}</span>
         </el-button>
       </div>
+      <p
+        v-if="instrumentOptionsError"
+        class="instrument-options-safe-error"
+        data-test="market-instrument-options-error"
+        role="status"
+        style="grid-column: 1 / -1; margin: 0"
+      >
+        {{ instrumentOptionsError }}
+      </p>
     </el-card>
 
     <section
@@ -848,6 +871,9 @@ const {
   marketChartRef,
   instrumentOptions,
   instrumentOptionsLoading,
+  instrumentOptionsCatalogMode,
+  instrumentOptionsError,
+  instrumentAliasEffectiveOn,
   relatedTablesLoading,
   relatedTables,
   relatedTablesError,
@@ -911,8 +937,10 @@ const {
   refreshCoverageMatrix,
   searchInstrumentOptions,
   handleInstrumentDropdownVisible,
+  handleInstrumentAliasEffectiveDateChange,
   instrumentOptionLabel,
   formatInstrumentHistoryStatus,
+  instrumentOptionStatusTagType,
   loadRelatedTables,
   goTableDetail,
   formatHistoryCell,

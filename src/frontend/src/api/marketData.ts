@@ -264,17 +264,34 @@ export interface MarketInstrumentOption {
   symbol: string
   name: string
   market?: string | null
+  exchange?: string | null
+  instrument_id?: string | null
+  catalog_verified?: boolean
+  data_availability?: string | null
+  lifecycle?: string | null
+  status?: string | null
+  lifecycle_status?: string | null
+  status_as_of?: string | null
+  matched_alias?: {
+    alias: string
+    alias_version: string
+    evidence_ref: string
+    valid_from: string
+    valid_through: string
+  } | null
   source_table?: string | null
   latest_date?: string | null
-  has_snapshot: boolean
-  has_history: boolean
-  history_rows: number
+  has_snapshot: boolean | null
+  has_history: boolean | null
+  history_rows: number | null
 }
 
 export interface MarketInstrumentOptionsParams {
   asset_type: MarketAssetType
   search?: string
   limit?: number
+  /** Only supplied after an explicit user selection for historical aliases. */
+  effective_on?: string
 }
 
 export interface MarketDataQueryContractParams {
@@ -297,8 +314,31 @@ export interface MarketDataQueryBundleParams {
 
 export interface MarketInstrumentOptionsResponse {
   asset_type: MarketAssetType
+  /** Absent on the legacy response; OpenData mode is an explicit server assertion. */
+  catalog_mode?: 'opendata' | 'legacy'
+  complete?: boolean
+  has_more?: boolean
+  data_availability?: string
   items: MarketInstrumentOption[]
   total: number
+  provenance?: {
+    source: string
+    dataset_id: string
+    source_id: string
+    publication_id: string
+    snapshot_id: string
+    sequence: number
+    schema_version: string
+    semantic_version: string
+    contract_sha256: string
+    content_sha256: string
+    selection_sha256: string
+    as_of: string
+    expires_at: string
+    registry_version: string
+    profile_version: string
+    coverage: string
+  }
 }
 
 export interface MarketSnapshot {
