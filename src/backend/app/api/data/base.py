@@ -5,8 +5,12 @@ Market data API routes.
 import logging
 import typing
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from math import isfinite
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +27,7 @@ from app.api.data.queries import (
 from app.api.deps import get_current_user
 from app.config import get_settings
 from app.db.database import get_db
+from app.schemas.market_data_platform import MarketDataQueryRequest
 from app.services.market_data.access import (
     MarketDataAccessAuthorizer,
     MarketDataAuthorizationError,
@@ -30,12 +35,19 @@ from app.services.market_data.access import (
 )
 from app.services.market_data.capability_ledger import MarketDataCapabilityEvaluation
 from app.services.market_data.dataset_contracts import (
+    FAMILY_CONTRACT_VERSION,
     KLINE_LEGACY_FAMILY_ID,
     DatasetContractRegistryError,
+)
+from app.services.market_data.field_quality import (
+    FieldQualityValueError,
+    is_usable_field_value,
+    normalize_numeric_field_value,
 )
 from app.services.market_data.identity import MarketDataIdentityResolutionError
 from app.services.market_data.legacy_contract import LegacyMarketDataQueryContractResolver
 from app.services.market_data.legacy_kline_bridge import execute_legacy_kline_local_first
+from app.services.market_data.legacy_kline_identity import matches_legacy_kline_display_token
 from app.services.market_data.legacy_kline_projection import (
     LegacyKlineBridgeError,
     LegacyKlineInputError,
@@ -47,6 +59,7 @@ from app.services.market_data.query_service import (
     MarketDataCursorBinding,
     MarketDataQueryService,
     MarketDataQueryServiceError,
+    OpendataDirectRead,
 )
 from app.services.market_data.source_policy import MarketDataSourcePolicyError
 from app.services.market_data.store import MarketDataStoreError
@@ -58,6 +71,9 @@ from app.services.market_instrument import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
+_MAX_SAFE_JSON_INTEGER = 9_007_199_254_740_991
+_TWO_DECIMAL_PLACES = Decimal("0.01")
 
 # The K-line facade reserves HTTP 403 for the caller's current data-read
 # entitlement. Source-route, license, and provider-policy decisions are
@@ -224,12 +240,12 @@ async def get_kline_data(
         get_legacy_market_data_query_contract_resolver
     ),
 ) -> typing.Any:
-    """Return the legacy K-line wire shape from a governed local reread only.
+    """Return either a governed local K-line read or a direct OpenData daily read.
 
-    The first execution may fill an approved, bounded gap through the normal
-    v2 service.  It is never projected directly: a new ``local_only``
-    execution must return the exact persisted event keys before the response
-    can be formed.
+    The transitional local-first path still requires a local-only reread. When
+    the explicit OpenData switch is enabled, ordinary stock daily requests use
+    the independently authorized public ``stock.realtime`` contract and
+    project the REST observations directly with honest, non-durable provenance.
     """
     if not capabilities.response.query_v2_enabled:
         raise HTTPException(
@@ -260,6 +276,36 @@ async def get_kline_data(
         )
 
     try:
+        if bool(getattr(get_settings(), "MARKET_DATA_OPENDATA_ENABLED", False)):
+            if request.frequency != "1d":
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "OPENDATA_FREQUENCY_UNSUPPORTED"},
+                )
+            route_is_effective = getattr(capabilities, "route_is_effective", None)
+            if not callable(route_is_effective) or not route_is_effective(
+                "opendata-stock-daily-v1"
+            ):
+                raise HTTPException(
+                    status_code=503,
+                    detail={"code": "OPENDATA_ROUTE_NOT_EFFECTIVE"},
+                )
+            contract = await query_contracts.resolve(
+                asset_type="stock",
+                symbol=request.symbol,
+                period=request.period,
+            )
+            direct_request = _request_from_public_kline_contract(
+                contract,
+                request=request,
+            )
+            result = await service.read_opendata_direct(direct_request, access=access)
+            response = _project_opendata_legacy_kline(result, request=request)
+            # The resolver, provider lifecycle gate and post-fetch source
+            # reauthorization may have opened a read transaction. No write is
+            # performed on this route, so release it explicitly.
+            await db.rollback()
+            return response
         return await execute_legacy_kline_local_first(
             request=request,
             contract_resolver=query_contracts,
@@ -285,6 +331,202 @@ async def get_kline_data(
     except SQLAlchemyError as exc:
         await db.rollback()
         raise HTTPException(status_code=503, detail={"code": "MARKET_DATA_WRITE_FAILED"}) from exc
+
+
+def _request_from_public_kline_contract(
+    contract: object,
+    *,
+    request: LegacyKlineRequest,
+) -> MarketDataQueryRequest:
+    """Bind the legacy date window to the reviewed public stock-bars contract."""
+    if (
+        not isinstance(contract, dict)
+        or set(contract) != {"version", "request"}
+        or contract.get("version") != "market-data-v2"
+        or not isinstance(contract.get("request"), dict)
+    ):
+        raise LegacyKlineBridgeError("KLINE_CONTRACT_UNAVAILABLE")
+    payload = dict(contract["request"])
+    payload.update(
+        {
+            "start": request.start,
+            "end": request.end,
+            "mode": "local_first",
+            "cursor": None,
+            "page_size": 2000,
+        }
+    )
+    try:
+        query = MarketDataQueryRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise LegacyKlineBridgeError("KLINE_QUERY_CONTRACT_INVALID") from exc
+    if (
+        query.identity.canonical_id is None
+        or query.dataset_code != "market.bars"
+        or query.data_kind != "bars"
+        or query.frequency != "1d"
+        or query.required_fields != ("close",)
+        or query.adjustment != "qfq"
+        or query.price_basis != "close"
+        or query.currency != "CNY"
+        or query.unit != "share"
+        or query.source_policy_id != "market-default-v1"
+        or query.family_id != "stock.realtime"
+        or query.family_contract_version != FAMILY_CONTRACT_VERSION
+        or query.consistency != "display"
+        or query.purpose != "display"
+        or query.knowledge_cutoff is not None
+        or query.mode != "local_first"
+        or query.cursor is not None
+        or query.page_size != 2000
+        or query.start != request.start
+        or query.end != request.end
+    ):
+        raise LegacyKlineBridgeError("KLINE_QUERY_CONTRACT_INVALID")
+    return query
+
+
+def _project_opendata_legacy_kline(
+    result: OpendataDirectRead,
+    *,
+    request: LegacyKlineRequest,
+) -> dict[str, object]:
+    """Project a direct REST response without claiming AFI calendar coverage."""
+    if not isinstance(result, OpendataDirectRead):
+        raise LegacyKlineBridgeError("KLINE_DIRECT_RESULT_INVALID")
+    context = result.context
+    query = context.query
+    fetch_result = result.fetch_result
+    if (
+        query.dataset_code != "market.bars"
+        or query.data_kind != "bars"
+        or query.frequency != request.frequency
+        or query.adjustment != "qfq"
+        or query.price_basis != "close"
+        or query.currency != "CNY"
+        or query.unit != "share"
+        or query.source_policy_id != "market-default-v1"
+        or query.family_id != "stock.realtime"
+        or query.family_contract_version != FAMILY_CONTRACT_VERSION
+        or query.consistency != "display"
+        or query.purpose != "display"
+        or query.knowledge_cutoff is not None
+        or query.mode != "local_first"
+        or query.cursor is not None
+        or query.page_size != 2000
+        or query.start != request.start
+        or query.end != request.end
+        or context.identity.canonical_id != query.canonical_id
+        or context.identity.asset_type != "stock"
+        or context.identity.venue not in {"CN-SSE", "CN-SZSE"}
+        or not matches_legacy_kline_display_token(
+            context.identity.identity,
+            token=request.symbol,
+        )
+        or fetch_result.provider_id != "opendata"
+        or fetch_result.request.canonical_id != query.canonical_id
+        or fetch_result.request.frequency != "1d"
+    ):
+        raise LegacyKlineBridgeError("KLINE_DIRECT_RESULT_INVALID")
+    if len(fetch_result.observations) > 366:
+        raise LegacyKlineBridgeError("OPENDATA_RESULT_TOO_LARGE")
+
+    observations = sorted(fetch_result.observations, key=lambda item: item.event_at)
+    dates: list[str] = []
+    ohlc: list[list[float]] = []
+    volumes: list[int] = []
+    records: list[dict[str, object]] = []
+    for observation in observations:
+        if observation.event_at.tzinfo is None or observation.event_at.utcoffset() is None:
+            raise LegacyKlineBridgeError("KLINE_EVENT_TIME_INVALID")
+        local_date = observation.event_at.astimezone(_SHANGHAI).date()
+        rendered_date = local_date.isoformat()
+        if dates and rendered_date <= dates[-1]:
+            raise LegacyKlineBridgeError("KLINE_DATE_INTEGRITY")
+        rendered_open = _direct_two_decimal_number(observation.fields.get("open"), "open")
+        rendered_high = _direct_two_decimal_number(observation.fields.get("high"), "high")
+        rendered_low = _direct_two_decimal_number(observation.fields.get("low"), "low")
+        rendered_close = _direct_two_decimal_number(observation.fields.get("close"), "close")
+        rendered_volume = _direct_safe_integer(observation.fields.get("volume"), "volume")
+        rendered_change = _direct_two_decimal_number(
+            observation.fields.get("change_pct"),
+            "change_pct",
+        )
+        dates.append(rendered_date)
+        ohlc.append([rendered_open, rendered_close, rendered_low, rendered_high])
+        volumes.append(rendered_volume)
+        records.append(
+            {
+                "date": rendered_date,
+                "open": rendered_open,
+                "high": rendered_high,
+                "low": rendered_low,
+                "close": rendered_close,
+                "volume": rendered_volume,
+                "change": rendered_change,
+            }
+        )
+
+    return {
+        "symbol": request.symbol,
+        "count": len(records),
+        "kline": {"dates": dates, "ohlc": ohlc, "volumes": volumes},
+        "records": records,
+        "provenance": {
+            "provider_id": fetch_result.provider_id,
+            "provider_adapter_revision": fetch_result.source_revision,
+            "source_revision": None,
+            "request_id": fetch_result.request.request_id,
+            "retrieved_at": fetch_result.retrieved_at.isoformat(),
+            "raw_payload_sha256": fetch_result.raw_payload_hash,
+            "source_registry_id": result.source_authorization.source_registry_id,
+            "coverage_status": "unknown",
+            "source_available_at": "unknown",
+            "source_snapshot_id": None,
+            "observation_revision_ids": None,
+            "committed_at": None,
+            "durable_receipt": "not_created",
+        },
+    }
+
+
+def _direct_two_decimal_number(value: object, field_name: str) -> float:
+    """Render one finite field using the legacy K-line numeric convention."""
+    decimal_value = _direct_finite_decimal(value, field_name)
+    try:
+        rounded = decimal_value.quantize(_TWO_DECIMAL_PLACES, rounding=ROUND_HALF_UP)
+        rendered = float(rounded)
+    except (InvalidOperation, OverflowError, ValueError) as exc:
+        raise LegacyKlineBridgeError("KLINE_FIELD_QUALITY_INVALID") from exc
+    if not isfinite(rendered) or Decimal(str(rendered)) != rounded:
+        raise LegacyKlineBridgeError("KLINE_FIELD_QUALITY_INVALID")
+    return 0.0 if rendered == 0 else rendered
+
+
+def _direct_safe_integer(value: object, field_name: str) -> int:
+    """Render a non-negative JSON-safe integer quantity."""
+    decimal_value = _direct_finite_decimal(value, field_name)
+    if decimal_value != decimal_value.to_integral_value():
+        raise LegacyKlineBridgeError("KLINE_VOLUME_INVALID")
+    rendered = int(decimal_value)
+    if rendered < 0 or rendered > _MAX_SAFE_JSON_INTEGER:
+        raise LegacyKlineBridgeError("KLINE_VOLUME_INVALID")
+    return rendered
+
+
+def _direct_finite_decimal(value: object, field_name: str) -> Decimal:
+    if not is_usable_field_value(field_name, value):
+        raise LegacyKlineBridgeError("KLINE_FIELD_QUALITY_INVALID")
+    try:
+        normalized = normalize_numeric_field_value(value, field_name=field_name)
+        if normalized is None:
+            raise LegacyKlineBridgeError("KLINE_FIELD_QUALITY_INVALID")
+        decimal_value = Decimal(str(normalized))
+    except (FieldQualityValueError, InvalidOperation, ValueError) as exc:
+        raise LegacyKlineBridgeError("KLINE_FIELD_QUALITY_INVALID") from exc
+    if not decimal_value.is_finite():
+        raise LegacyKlineBridgeError("KLINE_FIELD_QUALITY_INVALID")
+    return decimal_value
 
 
 @router.get(
