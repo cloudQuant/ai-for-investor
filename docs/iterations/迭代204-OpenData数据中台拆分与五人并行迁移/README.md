@@ -22,7 +22,7 @@
 | [WAVE5_PLAN.md](WAVE5_PLAN.md) | 股票图表直读、MySQL worker、静态类型边界及局部验证门槛 |
 | [WAVE5_STATUS.md](WAVE5_STATUS.md) | 第五批局部收据、组合重跑状态、测试范围审计及未关闭边界 |
 | [WAVE6_PLAN.md](WAVE6_PLAN.md) | HTTP边界、请求预算、股票进程切片及资源清理的工作流与验收顺序 |
-| [WAVE6_STATUS.md](WAVE6_STATUS.md) | 第六批局部测试、静态/A2、冻结归档与尚待独立收尾的公开证据扫描及开放边界 |
+| [WAVE6_STATUS.md](WAVE6_STATUS.md) | 第六批局部测试、静态/A2、冻结归档、公开证据扫描及开放边界 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
