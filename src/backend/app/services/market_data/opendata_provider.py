@@ -198,7 +198,7 @@ class OpendataProvider:
         self,
         *,
         client: httpx.AsyncClient,
-        credentials: OpendataCredentials,
+        credentials: OpendataCredentials | None,
         timeout_seconds: float = 20.0,
         max_response_bytes: int = _MAX_RESPONSE_BYTES,
         max_total_response_bytes: int = _MAX_TOTAL_RESPONSE_BYTES,
@@ -210,10 +210,17 @@ class OpendataProvider:
         self._max_total_response_bytes = max_total_response_bytes
 
     @classmethod
-    def from_environment(cls) -> OpendataProvider | None:
-        """从环境变量构建；未配置 Key 返回 ``None``（上层判失败关闭）。"""
+    def from_environment(cls, *, require_config: bool = False) -> OpendataProvider | None:
+        """构建环境适配器。
+
+        默认保留旧调用方的 ``None`` 语义。策略选择器在 OpenData-only
+        模式下传 ``require_config=True``，即使 Key 缺失也保留 OpenData
+        adapter；真正 fetch 时返回明确配置错误，绝不因此切换其他数据源。
+        """
+        if not isinstance(require_config, bool):
+            raise TypeError("require_config must be a bool")
         credentials = OpendataCredentials.from_environment()
-        if credentials is None:
+        if credentials is None and not require_config:
             return None
         # trust_env=False：直连数据中台，不继承本地 HTTP(S) 代理配置。
         client = httpx.AsyncClient(trust_env=False)
@@ -225,6 +232,8 @@ class OpendataProvider:
             raise OpendataProviderError("OPENDATA_PROVIDER_MISMATCH")
         if request.frequency not in OPENDATA_SUPPORTED_FREQUENCIES:
             raise OpendataProviderError("OPENDATA_FREQUENCY_UNSUPPORTED")
+        if self._credentials is None:
+            raise OpendataProviderError("OPENDATA_CREDENTIAL_MISSING")
         try:
             contract = _reviewed_contract_for_request(request)
         except ProviderContractError as exc:

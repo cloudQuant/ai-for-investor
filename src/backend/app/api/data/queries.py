@@ -111,13 +111,18 @@ def _shared_openbb_provider() -> OpenBBSubprocessProvider:
 
 
 @lru_cache(maxsize=1)
-def _shared_opendata_provider() -> OpendataProvider | None:
-    """Retain one process-owned opendata adapter; None when Key unconfigured.
+def _shared_opendata_provider() -> OpendataProvider:
+    """Retain the selected OpenData adapter, including a missing-key sentinel.
 
-    opendata is fail-closed: a missing ``OPENDATA_API_KEY`` means no opendata
-    route is assembled, and the source policy falls back to AkShare.
+    When OpenData-only mode is enabled, an absent key is reported by the
+    adapter at fetch time. Keeping this route selected makes configuration
+    failure visible and prevents a source policy from choosing a different
+    provider.
     """
-    return OpendataProvider.from_environment()
+    provider = OpendataProvider.from_environment(require_config=True)
+    if provider is None:  # ``require_config`` makes this unreachable.
+        raise RuntimeError("OPENDATA_PROVIDER_CONFIGURATION_INVALID")
+    return provider
 
 
 @lru_cache(maxsize=1)
@@ -144,7 +149,10 @@ def _default_source_policy_registry(
     adapter. OpenBB routes must appear in the static runtime permit matrix;
     operator market configuration can only narrow those permits. Adding a
     paid/licensed route requires a separate server-owned policy and entitlement
-    review.
+    review. When ``opendata_enabled`` is true, OpenData is the only provider
+    candidate; a missing key or unsupported product cannot fall through to
+    THS, AkShare, or OpenBB. Setting the flag false is the explicit transitional
+    legacy policy and is not evidence that consumer migration is complete.
 
     THS is the A-share primary source. Its routes are assembled ahead of the
     corresponding AkShare routes only when ``ths_enabled`` is true (the settings
@@ -153,30 +161,38 @@ def _default_source_policy_registry(
     and source authorization grant remain the fail-closed gates that decide
     whether the route actually performs provider I/O.
     """
-    ths_provider = _shared_ths_provider() if ths_enabled else None
-    opendata_provider = _shared_opendata_provider() if opendata_enabled else None
-    routes: list[MarketDataProviderRoute] = []
-    if opendata_provider is not None:
-        # 自建数据中台的 dwd 合并层：THS 之后的 A 股日线候选源。仅日线，
-        # 复权因子缺表时中台返回 501（adapter 如实映射为 HTTP 错误）。
-        routes.append(
-            MarketDataProviderRoute(
-                route_id="opendata-stock-daily-v1",
-                request_provider="opendata",
-                expected_result_provider_ids=frozenset({"opendata"}),
-                asset_types=frozenset({"stock"}),
-                data_kinds=frozenset({"bars"}),
-                frequencies=_DAILY_ONLY_FREQUENCIES,
-                markets=frozenset({"CN-SSE", "CN-SZSE"}),
-                adjustments=_STOCK_FUND_ADJUSTMENTS,
-                price_bases=_CLOSE_OR_UNDECLARED,
-                currencies=_CNY_OR_UNDECLARED,
-                units=_SHARE_OR_UNDECLARED,
-                adapter=opendata_provider,
-                family_id="stock.realtime",
-                family_contract_version=FAMILY_CONTRACT_VERSION,
+    if opendata_enabled:
+        route = MarketDataProviderRoute(
+            route_id="opendata-stock-daily-v1",
+            request_provider="opendata",
+            expected_result_provider_ids=frozenset({"opendata"}),
+            asset_types=frozenset({"stock"}),
+            data_kinds=frozenset({"bars"}),
+            frequencies=_DAILY_ONLY_FREQUENCIES,
+            markets=frozenset({"CN-SSE", "CN-SZSE"}),
+            adjustments=_STOCK_FUND_ADJUSTMENTS,
+            price_bases=_CLOSE_OR_UNDECLARED,
+            currencies=_CNY_OR_UNDECLARED,
+            units=_SHARE_OR_UNDECLARED,
+            adapter=_shared_opendata_provider(),
+            family_id="stock.realtime",
+            family_contract_version=FAMILY_CONTRACT_VERSION,
+        )
+        allowed_purposes = _PUBLIC_MARKET_DATA_PURPOSES
+        if research_cache_fill_enabled:
+            allowed_purposes = allowed_purposes | frozenset({_RESEARCH_CACHE_FILL_PURPOSE})
+        return MarketDataSourcePolicyRegistry(
+            (
+                MarketDataSourcePolicy(
+                    policy_id="market-default-v1",
+                    allowed_purposes=allowed_purposes,
+                    routes=(route,),
+                ),
             )
         )
+
+    ths_provider = _shared_ths_provider() if ths_enabled else None
+    routes: list[MarketDataProviderRoute] = []
     if ths_provider is not None:
         # THS 为 A 股主源：THS stock 路由排在 AkShare 之前。频率仅 1d，
         # 分钟频 THS 不 supports，自动落到 AkShare/OpenBB 或 UNSUPPORTED。
@@ -482,7 +498,8 @@ def _source_policies_from_settings(settings: object) -> MarketDataSourcePolicyRe
         # THS kill-switch is a stacked gate; durable attestation/provder/source
         # gates still decide actual provider I/O.
         ths_enabled=bool(getattr(settings, "MARKET_DATA_THS_ENABLED", False)),
-        # opendata kill-switch：同样只是叠加门，台账/授权门仍决定是否真正取数。
+        # Enabled selects an OpenData-only provider policy. Durable lifecycle
+        # and source authorization still gate whether provider I/O may run.
         opendata_enabled=bool(getattr(settings, "MARKET_DATA_OPENDATA_ENABLED", False)),
     )
 
@@ -759,6 +776,14 @@ async def query_market_data(
             detail={"code": "MARKET_DATA_PRIVATE_FAMILY"},
         )
     if (
+        bool(getattr(get_settings(), "MARKET_DATA_OPENDATA_ENABLED", False))
+        and request.frequency != "1d"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "OPENDATA_FREQUENCY_UNSUPPORTED"},
+        )
+    if (
         request.purpose == _RESEARCH_CACHE_FILL_PURPOSE
         and not capabilities.response.research_cache_fill_enabled
     ):
@@ -794,6 +819,17 @@ async def query_market_data(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "MARKET_DATA_WRITE_FAILED"},
         ) from exc
+    configuration_failure = next(
+        (
+            warning.code
+            for warning in execution.warnings
+            if warning.code == "OPENDATA_CREDENTIAL_MISSING"
+        ),
+        None,
+    )
+    if configuration_failure is not None:
+        await db.rollback()
+        raise _market_data_http_error(configuration_failure)
     return _response_from_execution(execution)
 
 
@@ -828,8 +864,11 @@ def _market_data_http_error(code: str) -> HTTPException:
         "SOURCE_POLICY_PURPOSE_DENIED",
         "ONLINE_FETCH_DISABLED",
         "MARKET_DATA_RESEARCH_CACHE_FILL_DISABLED",
+        "OPENDATA_CREDENTIAL_MISSING",
     }:
         response_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    elif code == "OPENDATA_FREQUENCY_UNSUPPORTED":
+        response_status = status.HTTP_422_UNPROCESSABLE_CONTENT
     else:
         response_status = status.HTTP_422_UNPROCESSABLE_CONTENT
     return HTTPException(status_code=response_status, detail={"code": code})
