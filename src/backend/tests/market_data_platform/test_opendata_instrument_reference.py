@@ -632,9 +632,22 @@ class TestSearchAndAliases:
                 effective_on=effective_on,
             )
             assert result["total"] == 1
+            items = result["items"]
+            assert isinstance(items, list)
+            assert isinstance(items[0], dict)
+            assert items[0]["instrument_id"] == "TEST_XSHG_A"
         result = await _client(_pages_transport(copy.deepcopy(_fixture()["pages"]))).list_options(
             search="HIST",
             effective_on=date(2020, 1, 1),
+        )
+        assert result["total"] == 1
+        items = result["items"]
+        assert isinstance(items, list)
+        assert isinstance(items[0], dict)
+        assert items[0]["instrument_id"] == "TEST_XSHE_B"
+        result = await _client(_pages_transport(copy.deepcopy(_fixture()["pages"]))).list_options(
+            search="HIST",
+            effective_on=date(2009, 12, 31),
         )
         assert result["total"] == 0
 
