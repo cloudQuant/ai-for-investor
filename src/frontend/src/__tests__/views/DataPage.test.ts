@@ -1268,7 +1268,7 @@ describe('DataPage', () => {
     expect(apiMocks.getQueryBundle).toHaveBeenCalledWith({ asset_type: 'crypto' })
     expect(apiMocks.getQueryContract).toHaveBeenCalledWith({
       asset_type: 'crypto',
-      symbol: 'BTCJPY',
+      symbol: 'BTCUSDT',
       period: 'daily',
       family_id: 'crypto.realtime',
     })
