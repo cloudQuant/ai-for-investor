@@ -67,11 +67,25 @@ def _client(
 
 
 def _response(page: object, *, status: int = 200) -> httpx.Response:
-    return httpx.Response(
-        status,
-        json=page,
+    body = json.dumps(page, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode(
+        "utf-8"
+    )
+    return _stream_response(
+        body,
+        status=status,
         headers={"content-type": "application/json"},
     )
+
+
+def _stream_response(
+    body: bytes,
+    *,
+    status: int = 200,
+    headers: Mapping[str, str] | None = None,
+) -> httpx.Response:
+    response_headers = dict(headers or {})
+    response_headers.setdefault("content-length", str(len(body)))
+    return httpx.Response(status, headers=response_headers, stream=_BodyStream(body))
 
 
 def _pages_transport(
@@ -128,6 +142,18 @@ def _rehash_row(row: dict[str, Any]) -> None:
         allow_nan=False,
     ).encode("utf-8")
     row["record_hash"] = hashlib.sha256(encoded).hexdigest()
+
+
+class _BodyStream(httpx.AsyncByteStream):
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        if self.body:
+            yield self.body
+
+    async def aclose(self) -> None:
+        return None
 
 
 class _TrackingStream(httpx.AsyncByteStream):
@@ -195,7 +221,8 @@ class TestConfigAndLimits:
             {"max_pages": True},
             {"max_rows": 20_001},
             {"max_response_bytes": 2_097_153},
-            {"max_total_bytes": 2_097_151},
+            {"max_total_bytes": 0},
+            {"max_total_bytes": 16_777_217},
             {"deadline_seconds": 0},
             {"deadline_seconds": 5.01},
             {"request_timeout_seconds": 2.01},
@@ -211,6 +238,11 @@ class TestConfigAndLimits:
         limits = InstrumentReferenceLimits(deadline_seconds=5.0, request_timeout_seconds=2.0)
         assert limits.deadline_seconds == 5.0
         assert limits.request_timeout_seconds == 2.0
+
+    def test_total_byte_budget_can_be_lower_than_per_response_budget(self) -> None:
+        limits = InstrumentReferenceLimits(max_response_bytes=1024, max_total_bytes=512)
+        assert limits.max_response_bytes == 1024
+        assert limits.max_total_bytes == 512
 
     @pytest.mark.parametrize("limit", [0, -1, True, 81, 1.0])
     async def test_list_limit_rejects_bool_nonpositive_and_overlarge(self, limit: object) -> None:
@@ -332,9 +364,7 @@ class TestSnapshotProtocol:
 
         body = b'{"dataset_id":"safe","dataset_id":"secret"}'
         transport = httpx.MockTransport(
-            lambda _: httpx.Response(
-                200, content=body, headers={"content-type": "application/json"}
-            )
+            lambda _: _stream_response(body, headers={"content-type": "application/json"})
         )
         with pytest.raises(InstrumentReferenceError) as raised:
             await _client(transport).list_options()
@@ -638,9 +668,9 @@ class TestSearchAndAliases:
 class TestHttpSafetyAndResourceBounds:
     async def test_status_errors_never_echo_body_url_or_key(self) -> None:
         async def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
-                503,
-                content=f"{_API_KEY} https://private.example/path credential-canary".encode(),
+            return _stream_response(
+                f"{_API_KEY} https://private.example/path credential-canary".encode(),
+                status=503,
                 headers={"content-type": "text/plain"},
             )
 
@@ -652,7 +682,7 @@ class TestHttpSafetyAndResourceBounds:
 
     async def test_rate_limit_has_fixed_error(self) -> None:
         transport = httpx.MockTransport(
-            lambda _: httpx.Response(429, content=b"secret quota detail")
+            lambda _: _stream_response(b"secret quota detail", status=429)
         )
         with pytest.raises(InstrumentReferenceError) as raised:
             await _client(transport).list_options()
@@ -664,7 +694,9 @@ class TestHttpSafetyAndResourceBounds:
 
         async def handler(request: httpx.Request) -> httpx.Response:
             calls.append(request)
-            return httpx.Response(302, headers={"location": "https://attacker.invalid/collect"})
+            return _stream_response(
+                b"", status=302, headers={"location": "https://attacker.invalid/collect"}
+            )
 
         with pytest.raises(InstrumentReferenceError) as raised:
             await _client(httpx.MockTransport(handler)).list_options()
