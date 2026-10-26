@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   getQueryBundle: vi.fn(),
   getQueryContract: vi.fn(),
   queryLocalFirst: vi.fn(),
+  getOpenDataDirectKline: vi.fn(),
   listInstrumentOptions: vi.fn(),
   listCoverage: vi.fn(),
   refreshWarehouseCoverage: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('@/api/marketData', async (importOriginal) => {
       getQueryBundle: apiMocks.getQueryBundle,
       getQueryContract: apiMocks.getQueryContract,
       queryLocalFirst: apiMocks.queryLocalFirst,
+      getOpenDataDirectKline: apiMocks.getOpenDataDirectKline,
       listInstrumentOptions: apiMocks.listInstrumentOptions,
       listCoverage: apiMocks.listCoverage,
       refreshWarehouseCoverage: apiMocks.refreshWarehouseCoverage,
@@ -110,6 +112,52 @@ function openDataOptions(): MarketInstrumentOptionsResponse {
   }
 }
 
+const legacyRolloutGates = [
+  ['market-data.query-v2', 'query_v2_enabled'],
+  ['market-data.online-fetch', 'online_fetch_enabled'],
+  ['market-data.research-cache-fill', 'research_cache_fill_enabled'],
+  ['market-data.research-backtest-bridge', 'research_backtest_bridge_enabled'],
+] as const
+
+function createLegacyCapabilities() {
+  const gates = {
+    query_v2_enabled: false,
+    online_fetch_enabled: false,
+    research_cache_fill_enabled: false,
+    research_backtest_bridge_enabled: false,
+  }
+  const rolloutStates = legacyRolloutGates.map(([capability_id, gate]) => ({
+    capability_id,
+    scope: 'rollout' as const,
+    route_id: null,
+    declared: true,
+    installed: true,
+    verified: true,
+    authorized: true,
+    effective: gates[gate],
+    reason_code: gates[gate] ? null : 'ROLLOUT_DISABLED',
+  }))
+
+  return {
+    version: 'market-data-capabilities-v1',
+    ...gates,
+    capability_states: [
+      ...rolloutStates,
+      {
+        capability_id: 'market-data.route:akshare-stock-kline-legacy-v1',
+        scope: 'route' as const,
+        route_id: 'akshare-stock-kline-legacy-v1',
+        declared: true,
+        installed: true,
+        verified: true,
+        authorized: true,
+        effective: false,
+        reason_code: 'ROLLOUT_GATE_CLOSED',
+      },
+    ],
+  }
+}
+
 function successfulStockLookup(): MarketInstrumentLookupResponse {
   return {
     asset_type: 'stock',
@@ -135,13 +183,8 @@ describe('DataPage OpenData instrument selector', () => {
     vi.clearAllMocks()
     window.localStorage.removeItem(ASSET_SELECTIONS_STORAGE_KEY)
     window.localStorage.removeItem(LEGACY_SELECTION_STORAGE_KEY)
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
-      query_v2_enabled: false,
-      online_fetch_enabled: false,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities())
+    apiMocks.getOpenDataDirectKline.mockRejectedValue(new Error('unexpected direct query'))
     apiMocks.lookupInstrument.mockRejectedValue(new Error('lookup unavailable'))
     apiMocks.getQueryBundle.mockRejectedValue({ response: { status: 404 } })
     apiMocks.getQueryContract.mockRejectedValue({ response: { status: 404 } })
@@ -208,6 +251,7 @@ describe('DataPage OpenData instrument selector', () => {
     expect(vm.instrumentAliasEffectiveOn).toBeNull()
     // Unknown availability is not a reason to reject a verified identity.
     expect(apiMocks.lookupInstrument).toHaveBeenCalled()
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect(apiMocks.listInstrumentOptions).toHaveBeenNthCalledWith(1, {
       asset_type: 'stock',
       search: '000001',
@@ -317,6 +361,7 @@ describe('DataPage OpenData instrument selector', () => {
     expect(vm.instrumentOptions.map((item: { symbol: string }) => item.symbol)).toEqual(
       frozenOptionsResponse.items.map((item) => item.symbol),
     )
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
   })
 
   it('blocks a manually changed symbol after OpenData verified options are already loaded', async () => {
