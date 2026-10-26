@@ -5,7 +5,10 @@ import { defineComponent, h } from 'vue'
 
 import DataPage from '@/views/DataPage.vue'
 import { elStubs } from '@/test/stubs'
-import type { MarketInstrumentOptionsResponse } from '@/api/marketData'
+import type {
+  MarketInstrumentLookupResponse,
+  MarketInstrumentOptionsResponse,
+} from '@/api/marketData'
 import instrumentReferenceFixture from '../fixtures/instrument_reference_v1.json'
 
 const apiMocks = vi.hoisted(() => ({
@@ -82,6 +85,24 @@ function openDataOptions(): MarketInstrumentOptionsResponse {
   return {
     ...frozenOptionsResponse,
     items: frozenOptionsResponse.items.map((item) => ({ ...item })),
+  }
+}
+
+function successfulStockLookup(): MarketInstrumentLookupResponse {
+  return {
+    asset_type: 'stock',
+    symbol: '000001',
+    name: 'Synthetic verified stock',
+    market: 'CN',
+    provider: 'fixture',
+    snapshot: { price: 12.5, update_time: '2026-10-26T00:00:00Z' },
+    history: {
+      period: 'daily',
+      rows: [{ date: '2026-10-26', open: 12, high: 13, low: 11, close: 12.5, volume: 100 }],
+      total: 1,
+    },
+    indicators: { latest_close: 12.5, observation_count: 1 },
+    warnings: [],
   }
 }
 
@@ -283,6 +304,79 @@ describe('DataPage OpenData instrument selector', () => {
 
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
     expect(vm.instrumentOptionsError).toContain('已验证')
+  })
+
+  it('requires reselecting when a filtered OpenData response omits the current symbol', async () => {
+    const page = await mountPage()
+    const vm = page.vm as any
+    apiMocks.lookupInstrument.mockClear()
+    apiMocks.listInstrumentOptions.mockResolvedValueOnce({
+      ...openDataOptions(),
+      items: [openDataOptions().items[1]],
+    })
+
+    vm.searchInstrumentOptions('600001')
+    await flushPromises()
+
+    expect(vm.form.symbol).toBe('000001')
+    expect(vm.instrumentOptions.map((item: { symbol: string }) => item.symbol)).toEqual(['600001'])
+    expect(vm.instrumentOptionsError).toContain('重新选择')
+    await page.get('[data-test="market-instrument-query"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+  })
+
+  it('clears existing query results when an OpenData directory refresh fails', async () => {
+    const page = await mountPage()
+    const vm = page.vm as any
+    apiMocks.lookupInstrument.mockClear()
+    apiMocks.lookupInstrument.mockResolvedValueOnce(successfulStockLookup())
+    apiMocks.listTables.mockResolvedValue({
+      items: [{
+        id: 204,
+        table_name: 'fixture_stock_history',
+        table_comment: null,
+        category: null,
+        script_id: null,
+        row_count: 1,
+        last_update_time: null,
+        last_update_status: null,
+        data_start_date: '2026-10-26',
+        data_end_date: '2026-10-26',
+        symbol_raw: '000001',
+        symbol_normalized: '000001',
+        market: 'CN',
+        asset_type: 'stock',
+        metadata: {},
+        created_at: '2026-10-27T00:00:00Z',
+        updated_at: '2026-10-27T00:00:00Z',
+      }],
+    })
+
+    await page.get('[data-test="market-instrument-query"]').trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(vm.result?.symbol).toBe('000001')
+    expect(vm.relatedTables).toHaveLength(1)
+
+    apiMocks.listInstrumentOptions.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          message: 'RAW_UPSTREAM_SECRET_SENTINEL',
+          detail: { code: 'OPENDATA_REFERENCE_UNAVAILABLE', catalog_mode: 'opendata' },
+        },
+      },
+    })
+    await vm.loadInstrumentOptions('000001')
+
+    expect(vm.instrumentOptions).toEqual([])
+    expect(vm.result).toBeNull()
+    expect(vm.referenceSeriesResult).toBeNull()
+    expect(vm.genericObservationResult).toBeNull()
+    expect(vm.relatedTables).toEqual([])
+    expect(vm.instrumentOptionsError).not.toContain('RAW_UPSTREAM_SECRET_SENTINEL')
   })
 
   it('fails closed on an initial stock catalog timeout without inventing a legacy selector item', async () => {

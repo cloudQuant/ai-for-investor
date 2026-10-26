@@ -2427,6 +2427,17 @@ export function useDataPage() {
     if (signal?.aborted) throw new Error('MARKET_DATA_QUERY_ABORTED')
   }
 
+  function clearMarketDataQueryResults() {
+    invalidateMarketDataQueryLifecycle()
+    result.value = null
+    referenceSeriesResult.value = null
+    genericObservationResult.value = null
+    relatedTableRequestId += 1
+    relatedTables.value = []
+    relatedTablesLoading.value = false
+    relatedTablesError.value = ''
+  }
+
   async function lookupInstrument(intent: MarketLookupIntent = 'local_first') {
     // ``true``/``false`` were the pre-197 exposed refresh argument. Preserve
     // that boundary for existing callers while making lifecycle/UI calls name
@@ -2448,10 +2459,7 @@ export function useDataPage() {
         if (form.asset_type !== requestedAssetType || formSymbolText() !== requestedSymbol) return
       }
       if (instrumentOptionsCatalogMode.value === null) {
-        result.value = null
-        referenceSeriesResult.value = null
-        genericObservationResult.value = null
-        relatedTables.value = []
+        clearMarketDataQueryResults()
         if (!instrumentOptionsError.value) {
           instrumentOptionsError.value = t('dataMgmt.marketDataSourceError')
         }
@@ -2466,10 +2474,7 @@ export function useDataPage() {
         (option) => option.catalog_verified === true && option.symbol === requestedSymbol,
       )
     ) {
-      result.value = null
-      referenceSeriesResult.value = null
-      genericObservationResult.value = null
-      relatedTables.value = []
+      clearMarketDataQueryResults()
       if (!instrumentOptionsError.value) {
         instrumentOptionsError.value = '请先从已验证的 OpenData 标的目录中选择标的。'
       }
@@ -2854,9 +2859,21 @@ export function useDataPage() {
       const isOpenDataCatalog = response.catalog_mode === 'opendata'
       instrumentOptionsCatalogMode.value = isOpenDataCatalog ? 'opendata' : 'legacy'
       const responseItems = Array.isArray(response.items) ? response.items : []
-      instrumentOptions.value = isOpenDataCatalog
-        ? responseItems.filter((item) => item.catalog_verified === true)
-        : ensureCurrentInstrumentOption(responseItems)
+      if (isOpenDataCatalog) {
+        const verifiedItems = responseItems.filter((item) => item.catalog_verified === true)
+        instrumentOptions.value = verifiedItems
+        const currentSymbol = form.asset_type === 'stock' ? formSymbolText() : ''
+        if (
+          currentSymbol
+          && !verifiedItems.some((item) => item.symbol === currentSymbol)
+        ) {
+          clearMarketDataQueryResults()
+          setMarketDataPlatformErrorStatus()
+          instrumentOptionsError.value = '当前目录结果不包含所选标的，请从已验证的 OpenData 目录中重新选择。'
+        }
+      } else {
+        instrumentOptions.value = ensureCurrentInstrumentOption(responseItems)
+      }
       if (adoptFirstOnMiss && !isOpenDataCatalog) adoptFirstInstrumentOption(responseItems)
     } catch (error) {
       if (requestId === instrumentOptionsRequestId) {
@@ -2864,6 +2881,8 @@ export function useDataPage() {
         if (openDataError || instrumentOptionsCatalogMode.value === 'opendata') {
           instrumentOptionsCatalogMode.value = 'opendata'
           instrumentOptions.value = []
+          clearMarketDataQueryResults()
+          setMarketDataPlatformErrorStatus()
           instrumentOptionsError.value = openDataError === 'effective_date_required'
             ? '历史简称查询需要先选择生效日期后重试。'
             : t('dataMgmt.marketDataSourceError')

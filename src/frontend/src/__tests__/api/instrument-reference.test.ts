@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import api from '@/api/index'
 import {
   marketDataApi,
+  type MarketInstrumentOption,
   type MarketInstrumentOptionsResponse,
 } from '@/api/marketData'
 import instrumentReferenceFixture from '../fixtures/instrument_reference_v1.json'
@@ -41,6 +42,8 @@ describe('instrument reference options API', () => {
     }))
     expect(api.get).toHaveBeenCalledWith('/data/market-instruments/options', {
       params: { asset_type: 'stock', search: '600001', limit: 80 },
+      skipRetry: true,
+      suppressErrorToast: true,
     })
   })
 
@@ -64,9 +67,33 @@ describe('instrument reference options API', () => {
         limit: 80,
         effective_on: '2018-06-01',
       },
+      skipRetry: true,
+      suppressErrorToast: true,
     })
     expect(api.get).toHaveBeenNthCalledWith(2, '/data/market-instruments/options', {
       params: { asset_type: 'stock', search: '600001', limit: 80 },
+      skipRetry: true,
+      suppressErrorToast: true,
+    })
+  })
+
+  it('accepts open-ended alias dates from the frozen reference fixture', () => {
+    const fixtureAlias = instrumentReferenceFixture.rows[0].payload.aliases[0]
+    const matchedAlias: NonNullable<MarketInstrumentOption['matched_alias']> = fixtureAlias
+
+    expect(matchedAlias.valid_from).toBe('2020-01-01')
+    expect(matchedAlias.valid_through).toBeNull()
+  })
+
+  it('keeps non-stock directory requests on default retry and toast behavior', async () => {
+    await marketDataApi.listInstrumentOptions({
+      asset_type: 'fund',
+      search: '510300',
+      limit: 80,
+    })
+
+    expect(api.get).toHaveBeenCalledWith('/data/market-instruments/options', {
+      params: { asset_type: 'fund', search: '510300', limit: 80 },
     })
   })
 })

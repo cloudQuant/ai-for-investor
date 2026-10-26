@@ -276,8 +276,8 @@ export interface MarketInstrumentOption {
     alias: string
     alias_version: string
     evidence_ref: string
-    valid_from: string
-    valid_through: string
+    valid_from: string | null
+    valid_through: string | null
   } | null
   source_table?: string | null
   latest_date?: string | null
@@ -796,9 +796,13 @@ export const marketDataApi = {
     })
   },
   listInstrumentOptions(params: MarketInstrumentOptionsParams) {
-    return request.get<MarketInstrumentOptionsResponse>('/data/market-instruments/options', {
-      params,
-    })
+    const requestOptions = params.asset_type === 'stock'
+      ? { params, skipRetry: true, suppressErrorToast: true }
+      : { params }
+    return request.get<MarketInstrumentOptionsResponse>(
+      '/data/market-instruments/options',
+      requestOptions,
+    )
   },
   lookupInstrument(params: MarketInstrumentLookupParams) {
     return request.get<MarketInstrumentLookupResponse>('/data/market-instruments/lookup', {
