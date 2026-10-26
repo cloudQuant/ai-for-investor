@@ -1,6 +1,8 @@
 # 迭代204子代理任务清单
 
-本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **87个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；首批6个子任务已在本地集成分支完成代码与离线验证，其余81项为 PLANNED。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
+本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **87个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；当前7个子任务为DEV_DONE，6项为IN_PROGRESS，74项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
+
+第二批已按独占文件集成11条开发任务，第三批又分派6条任务，跨多个父工作包推进；其实际交付与剩余验收面见 [WAVE2_STATUS.md](WAVE2_STATUS.md)。下表保留完整任务验收门槛，库内能力或局部链路完成不会自动关闭要求外部证据、生产worker或完整业务场景的任务。
 
 ## 验收边界与并行约定
 
@@ -24,10 +26,10 @@
 | 204-A02-01 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 冻结v1兼容约束和v2 OpenAPI骨架：端点、认证、闭/半开区间、分页、错误信封、版本字段。 | 204-A01-01 | OpenAPI可解析；每项拟议能力标明现存或待实现；v1既有响应语义有契约测试。 |
 | 204-A02-02 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 逐数据集身份、instrument、业务时间/事件时间/可得时间、单位/币种、Decimal、空值、质量和许可schema。 | 204-A02-01 | schema示例覆盖股票日线、基金NAV、曲线或财务修订中的不同语义；非法单位/日期可被验证器拒绝。 |
 | 204-A02-03 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 提供黄金fixture、错误fixture和可本地运行的mock服务，供opendata API及AFI client并行开发。 | 204-A02-01, 204-A02-02 | 同一fixture能驱动服务端与客户端合同测试；含空结果、部分覆盖、越权、过期cursor和分页样例。 |
-| 204-A02-04 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 加入OpenAPI兼容性门禁、schema版本规则和破坏性变更检查。 | 204-A02-03 | CI能拒绝至少一个故意破坏v1/已发布v2合同的样例；兼容扩展路径有说明。 |
+| 204-A02-04 | A02 | IN_PROGRESS | A / 契约代理 | CODE/OFFLINE | 加入OpenAPI兼容性门禁、schema版本规则和破坏性变更检查。 | 204-A02-03 | CI能拒绝至少一个故意破坏v1/已发布v2合同的样例；兼容扩展路径有说明。 |
 | 204-A03-01 | A03 | PLANNED | A / 元数据代理 | CODE/OFFLINE | 定义dataset/schema版本、来源、负责人、许可和域注册表的元数据模型及首个迁移提案。 | 204-A02-02 | 唯一共享registry owner确认迁移序列；升级/降级或备份恢复边界有离线验证记录。 |
 | 204-A03-02 | A03 | PLANNED | A / 元数据代理 | CODE/OFFLINE | 定义instrument稳定ID、别名生效区间、上市/退市/到期生命周期和交易日历版本接口。 | 204-A03-01 | fixture覆盖换码、退市、基金份额类别、到期合约、节假日及未知边界；不以当前代码回填历史身份。 |
-| 204-A04-01 | A04 | PLANNED | A / 存储代理 | CODE/OFFLINE | 增加raw响应证据引用与受控artifact manifest合同，包含请求摘要、内容hash、采集时刻、状态和保留策略。 | 204-A03-01 | 单测证明密钥/Cookie不会进入manifest或日志；ODS记录可定位证据或明确SOURCE_LIMITED。 |
+| 204-A04-01 | A04 | IN_PROGRESS | A / 存储代理 | CODE/OFFLINE | 增加raw响应证据引用与受控artifact manifest合同，包含请求摘要、内容hash、采集时刻、状态和保留策略。 | 204-A03-01 | 单测证明密钥/Cookie不会进入manifest或日志；ODS记录可定位证据或明确SOURCE_LIMITED。 |
 | 204-A04-02 | A04 | PLANNED | A / 存储代理 | CODE/OFFLINE | 建立ODS到DWD的来源血缘、转换版本、修订链、可得时点和固定publication/snapshot版本字段。 | 204-A04-01, 204-A03-02 | fixture中修订前后值可追踪；严格PIT未知的数据不能伪装成已知。 |
 | 204-A04-03 | A04 | PLANNED | A / 存储代理 | CODE/OFFLINE | 定义候选分区验证、原子publication指针和跨metadata/warehouse receipt/outbox的可重放提交。 | 204-A04-02, 204-D02-01 | 故障注入证明提交状态不领先事实数据，重复receipt可幂等重放；不宣称跨库原子事务。 |
 | 204-A05-01 | A05 | PLANNED | A / API代理 | CODE/OFFLINE | 实现兼容v1只读端点及固定latest-view行为，沿用既有闭区间和count语义。 | 204-A02-03, 204-A03-01 | 合同测试验证旧请求/响应；普通读身份不能触发provider抓取或写入。 |
@@ -84,19 +86,19 @@
 
 | 子任务ID | 父WP | 状态 | owner/建议代理 | 类别/验收面 | 具体交付 | 前置依赖 | 验收条件 |
 |---|---|---|---|---|---|---|---|
-| 204-D01-01 | D01 | PLANNED | D / 运维代理 | DEPLOYMENT/READ_ONLY | 只读导出实际task/run/claim、crontab/systemd/进程、checkpoint、脚本参数、目标库/表及版本。 | 204-A01-01 | 记录身份、时间、命令与读取边界；不触发生产任务、不暴露secret；与脚本资产清单差异列成待查。 |
+| 204-D01-01 | D01 | IN_PROGRESS | D / 运维代理 | DEPLOYMENT/READ_ONLY | 只读导出实际task/run/claim、crontab/systemd/进程、checkpoint、脚本参数、目标库/表及版本。 | 204-A01-01 | 记录身份、时间、命令与读取边界；不触发生产任务、不暴露secret；与脚本资产清单差异列成待查。 |
 | 204-D01-02 | D01 | PLANNED | D / 运维代理 | DEPLOYMENT | 记录目标环境/数据库指纹、允许目标白名单、账号权限分离和恢复基线。 | 204-A01-01, 204-D01-01 | 只读校验能拒绝错误仓库或数据库身份；备份恢复演练步骤有owner，不执行未批准写入。 |
 | 204-D02-01 | D02 | DEV_DONE（仅合同/纯函数） | D / dev_runs | CODE/OFFLINE | 定义声明式Job/Run UTC canonical身份合同及规范化/幂等身份纯函数：job版本、UTC计划时刻、分片、运行类型；补数含明确范围和request id。 | 204-A02-02, 204-D01-01 | 固定向量覆盖时区等价时刻、DST、定时与补数不冲突、重试同身份；明确本任务不含durable repository/lease/worker接线。 |
 | 204-D02-02 | D02 | DEV_DONE（仅ledger离线） | D / dev_ledger | CODE/OFFLINE | 在独立opendata-od204-ledger分支实现显式Engine注入的SQL持久Run ledger、幂等入队、CAS状态/租约/token、heartbeat、终态和取消；提供owned SQLite双实例行为测试。 | 204-D02-01 | 双ledger实例竞争同一Run时只允许一个有效claim；过期token不能推进状态，重复enqueue幂等，心跳/终态/取消有行为测试。当前不含Alembic接入、调度/worker运行接线或warehouse write fence；父WP D02未完成。 |
-| 204-D02-03 | D02 | PLANNED | D / 运维代理 | CODE/OFFLINE | 为Run ledger分配唯一Alembic迁移序列并集成到目标数据库迁移体系，保持双库版本治理。 | 204-D02-02 | 迁移owner确认revision无多head；升级/恢复路径经目标数据库测试，SQLite仅作局部验证。 |
+| 204-D02-03 | D02 | DEV_DONE（MySQL/SQLite迁移） | D / 运维代理 | CODE/OFFLINE | 为Run ledger分配唯一Alembic迁移序列并集成到目标数据库迁移体系，保持双库版本治理。 | 204-D02-02 | 迁移owner确认revision无多head；warehouse 0010唯一head承接至0011；literal up/down已在独立MySQL8.0.46与SQLite验证，metadata head0006保持独立。PostgreSQL行为未验证；父D02未关闭。 |
 | 204-D02-04 | D02 | PLANNED | D / 运维代理 | CODE/OFFLINE | 把持久ledger接入统一Run service与worker入口，加入持久环境下多进程竞争/崩溃恢复测试。 | 204-D02-02, 204-D02-03, 204-D03-03 | worker只能经Run service领取和结算；重启后租约可恢复，旧token不能写入终态或事实数据。 |
-| 204-D03-01 | D03 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现Provider task executor协议、统一日志/退出码和可终止的有界子进程执行器。 | 204-D02-01, 204-B02-01 | fake provider验证超时、取消、stdout/stderr截断和临时资源回收；API事件循环不被阻塞。 |
+| 204-D03-01 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 实现Provider task executor协议、统一日志/退出码和可终止的有界子进程执行器。 | 204-D02-01, 204-B02-01 | fake provider验证超时、取消、stdout/stderr截断和临时资源回收；API事件循环不被阻塞。 |
 | 204-D03-02 | D03 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现重试/预算/并发/供应商限速/退避、自然槽与显式补数分流及分片规则。 | 204-D03-01 | fake时钟/源模拟证明限速共享、Retry-After受尊重、源WAF不无限重试、历史恢复有独立预算。 |
-| 204-D03-03 | D03 | PLANNED | D / 运维代理 | CODE/OFFLINE | 让APScheduler、手工API、CLI、systemd外壳统一提交同一Run入口。 | 204-D02-01, 204-D03-01 | 多入口相同任务映射同一occurrence身份；systemd不再直写warehouse或绕过fencing。 |
+| 204-D03-03 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 让APScheduler、手工API、CLI、systemd外壳统一提交同一Run入口。 | 204-D02-01, 204-D03-01 | 多入口相同任务映射同一occurrence身份；systemd不再直写warehouse或绕过fencing。 |
 | 204-D04-01 | D04 | PLANNED | D / 运维代理 | CODE/OFFLINE | 提供管理员JobDefinition/Run/DQ/coverage后端接口、授权scope、操作者审计和安全取消。 | 204-A02-03, 204-D02-04, 204-A06-02 | 未授权请求被拒绝；审计包含操作者/对象/动作/request_id；取消不可中断阶段真实显示状态。 |
 | 204-D04-02 | D04 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现opendata运维控制台的任务、执行、下次运行、覆盖、隔离、补数/取消/重放和容量页面。 | 204-D04-01 | 页面仅调用受权限保护API，关键操作有确认/结果反馈，失败原因可追踪，不内嵌任意脚本参数。 |
 | 204-D05-01 | D01,D05,B01,C01 | DEV_DONE（仅静态盘点工具） | D / dev_inventory | CODE/OFFLINE | 实现opendata/migration_inventory.py、CLI与tests，把AST源文件和可选JSON任务映射整理成可重跑JSON/CSV及双向差异报告，拒绝输出覆盖源/输入；不查生产库、不执行脚本或抓源。 | 204-A01-01 | CLI对相同输入给稳定输出；单测覆盖入口/辅助/哈希、解析失败、重复/缺失映射、路径与输出保护；不宣称源、任务或数据迁移完成。 |
-| 204-D05-02 | D05 | PLANNED | D / 迁移代理 | CODE/OFFLINE | 实现存量Job/执行/checkpoint迁移的只读dry-run、显式apply闸门、备份和目标指纹校验。 | 204-D01-02, 204-D02-03, 204-A04-03 | dry-run拒绝未知目标并汇报导入/跳过/冲突；默认disabled；apply必须检查部署身份与备份可恢复性。 |
+| 204-D05-02 | D05 | IN_PROGRESS | D / 迁移代理 | CODE/OFFLINE | 实现存量Job/执行/checkpoint迁移的只读dry-run、显式apply闸门、备份和目标指纹校验。 | 204-D01-02, 204-D02-03, 204-A04-03 | dry-run拒绝未知目标并汇报导入/跳过/冲突；默认disabled；apply必须检查部署身份与备份可恢复性。 |
 | 204-D05-03 | D05 | PLANNED | D / 运维代理 | DEPLOYMENT | 在隔离恢复环境验证元数据/warehouse备份、artifact manifest和迁移后状态的恢复流程。 | 204-D05-02 | 记录RPO/RTO实测、缺失工件与恢复偏差；恢复演练不覆盖生产数据。 |
 | 204-D06-01 | D06 | PLANNED | D / 可观测性代理 | CODE/OFFLINE | 连接request/run/source/publication的trace_id，建设低基数日志、trace和指标埋点。 | 204-D03-03, 204-A05-03 | 本地追踪可串起一笔mock查询到Run/publication；instrument维度明细放事件而非高基数标签。 |
 | 204-D06-02 | D06 | PLANNED | D / 可观测性代理 | DEPLOYMENT | 配置按源周期的数据freshness告警、API/worker/磁盘/备份SLO仪表盘和故障演练。 | 204-D06-01, 204-D05-03 | 目标环境触发测试告警并可恢复；SLO标为初始目标且经实测校准，未演练前不写已达标。 |

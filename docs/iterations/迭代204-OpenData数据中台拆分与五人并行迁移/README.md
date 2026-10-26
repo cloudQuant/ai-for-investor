@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-26（Asia/Shanghai）。状态：**首批6个子任务已完成代码与离线验证；尚未合入dev，生产迁移与运行验收未开始**。
+编制日期：2026-10-26（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批6条任务已分派；尚未合入dev或切换生产调度**。
 
 目标：将 ai-for-investor 的市场及研究基础数据采集、清洗、仓储、质量治理、调度和运维管理迁入 `/home/yun/Documents/opendata`。ai-for-investor 保留投研、策略、回测、交易和用户业务，通过 opendata REST API 消费数据。
 
@@ -15,6 +15,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统边界、数据生命周期、REST 契约、存储、调度、安全与可观测性 |
 | [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) | 87个可分派子任务、依赖和验收面；首批6项代码交付 |
 | [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) | 双仓隔离分支、提交、测试、限制与后续接线 |
+| [WAVE2_STATUS.md](WAVE2_STATUS.md) | 11条并行开发任务、真实运行清单、事务决定、审查与剩余范围 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
@@ -39,7 +40,7 @@
 - ai-for-investor 已有 HTTP `OpendataProvider`，但当前审查契约仅股票 `1d`，最多50,000行，仍接本地 store/publication 流程。不能仅打开开关就称为七类资产全量切换。
 - opendata 已有 FastAPI 查询、独立 client、Provider 框架、ODS/DWD、API Key 和管理前端；先扩展这些能力。原生 provider-model 的特定持久化映射目前只有3个模型，这不代表整个仓库只有3种数据，也不代表全部350项已能落库。
 - opendata 的350项上游 provider×model清单与 ai-for-investor 的旧脚本清单是不同集合。建立交叉映射，重用既有迭代2工作；不重复承诺实现整个 OpenBB 功能全集。
-- 203实施台账最新相关记录为2026-10-26 15:26：1,103个任务中1,098个启用，69个是此前的精选任务子集；这些是文档记录，并非本计划重新查询生产库的结果。启用不等于质量通过。
+- 2026-10-26 11:38 UTC 的真实只读快照确认：1,103个任务中1,098个启用、5个停用；全部1,066条脚本注册的路径可解析，1,056个静态入口均有运行态映射。69个仍仅是此前精选子集；启用不等于质量通过。
 - 当前 ai-for-investor 有大量未提交数据修复与恢复工具。开工基线必须包含工作树，不能仅从旧 HEAD 拷贝代码。迁移需覆盖 systemd、shell、补数worker和旁路采集。
 
 ## 建议里程碑与投入
