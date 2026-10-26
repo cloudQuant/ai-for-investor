@@ -403,10 +403,18 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.queryLocalFirst.mockClear()
   }
 
+  // `mountPage` keeps the wrapper detached. happy-dom returns no computed
+  // styles for disconnected nodes, so inspect the inline v-show display value.
   function expectDirectChartHidden(page: VueWrapper) {
     const chart = page.get('[data-test="market-opendata-direct-chart"]')
     expect(chart.exists()).toBe(true)
-    expect(chart.isVisible()).toBe(false)
+    expect((chart.element as HTMLElement).style.display).toBe('none')
+  }
+
+  function expectDirectChartShown(page: VueWrapper) {
+    const chart = page.get('[data-test="market-opendata-direct-chart"]')
+    expect(chart.exists()).toBe(true)
+    expect((chart.element as HTMLElement).style.display).not.toBe('none')
   }
 
   function freezeLegacyState(vm: Record<string, unknown>) {
@@ -497,7 +505,7 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(display).not.toHaveProperty('sourceRegistryId')
 
     const directChart = page.get('[data-test="market-opendata-direct-chart"]')
-    expect(directChart.isVisible()).toBe(true)
+    expectDirectChartShown(page)
     expect(directChart.attributes('aria-label')).toContain(display.symbolLabel as string)
     expect(directChart.attributes('aria-label')).toContain(display.rangeLabel as string)
     const provenance = page.get('[data-test="opendata-direct-provenance"]')
@@ -747,7 +755,7 @@ describe('DataPage OpenData direct daily chart', () => {
       period: 'daily',
     }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect((vm.openDataDirectKlineDisplay as Record<string, unknown>).status).toBe('ready')
-    expect(page.get('[data-test="market-opendata-direct-chart"]').isVisible()).toBe(true)
+    expectDirectChartShown(page)
     expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
   })
 
