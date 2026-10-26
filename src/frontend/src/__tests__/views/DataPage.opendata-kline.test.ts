@@ -67,8 +67,9 @@ const LEGACY_SELECTION_STORAGE_KEY = 'ai_for_investor:market:last_query'
 const START_DATE = '2026-10-01'
 const END_DATE = '2026-10-02'
 
-const frozenOptionsResponse = instrumentReferenceFixture.options_response
-  as MarketInstrumentOptionsResponse
+const frozenOptionsResponse = (
+  instrumentReferenceFixture.options_response as MarketInstrumentOptionsResponse
+)
 
 const instrumentSelectStub = defineComponent({
   inheritAttrs: false,
