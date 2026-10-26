@@ -1,6 +1,6 @@
 # 第七批 管理员 reviewed-run 离线接线计划
 
-计划日期：2026-10-27（Asia/Shanghai）。状态：**IN_PROGRESS（计划与隔离实现中，尚无第七批验收结果）**。本文件定义工作分工、依赖与root验收边界；不报告任何第七批测试、覆盖率、静态检查或整合门禁已通过。第五、六批的冻结结果分别见 [WAVE5_STATUS.md](WAVE5_STATUS.md) 与 [WAVE6_STATUS.md](WAVE6_STATUS.md)，不得借用作第七批通过证据。
+计划日期：2026-10-27（Asia/Shanghai）。状态：**SCOPED_VALIDATED（仅本批离线接线与证据收口；NOT_PRODUCTION_ACCEPTED）**。本文件保留计划范围、工作分工、依赖与root验收边界；实际执行结果见 [WAVE7_STATUS.md](WAVE7_STATUS.md)，未运行项不得推断为通过。第五、六批的冻结结果分别见 [WAVE5_STATUS.md](WAVE5_STATUS.md) 与 [WAVE6_STATUS.md](WAVE6_STATUS.md)，不得借用作第七批通过证据。
 
 ## 目标与范围
 
@@ -33,7 +33,7 @@ root独占共享契约、最终OpenAPI及其pin/baseline、`opendata/main.py`、
 
 管理员端点使用现有JWT `CurrentAdmin` 授权边界；普通用户应被拒绝，API key/一般principal不能替代JWT管理员身份。不得声称此功能“无需配置”：认证设置、管理员身份及应用依赖仍由宿主显式提供。审计若由宿主提供，必须能关联操作者、对象、动作和request ID，避免记录secret、原始job快照或不安全错误文本。
 
-应用工厂只挂载认证与reviewed routes；应用组装不得意外包含legacy API router。运行时worker使用的metadata Engine必须与`RunLedger`收到的metadata Engine为同一对象，不能另建或替换。worker/应用只释放自己拥有的资源；borrowed Engine不得因关闭子应用或worker而被擅自dispose/close。当前正在实施的worker close修正只停用新adapter，不会取消已运行的job；执行停止保持协作式，必须依靠ledger取消fence与token校验防止旧worker写入，不能将`close()`等同于run取消。
+应用工厂只挂载认证与reviewed routes；应用组装不得意外包含legacy API router。运行时worker使用的metadata Engine必须与`RunLedger`收到的metadata Engine为同一对象，不能另建或替换。worker/应用只释放自己拥有的资源；borrowed Engine不得因关闭子应用或worker而被擅自dispose/close。本批实现的worker close语义只停用新adapter，不会取消已运行的job；执行停止保持协作式，必须依靠ledger取消fence与token校验防止旧worker写入，不能将`close()`等同于run取消。
 
 导入本身也有边界：运行时import链可能eager-load pipeline/model/core settings并构造默认Engine；API子模块的package initializer也可能先初始化legacy API router。`create_reviewed_app()`被显式调用并不自动证明这些import无副作用，也不代表无需认证配置或无需`.env`隔离。root的测试环境必须不加载`.env`，以显式环境变量allowlist启动，只提供需要的JWT/settings值和`tmp_path` owned SQLite路径；对借用Engine按同对象约束验证，不能依赖import默认值。既有default-Engine guard只限制已覆盖的访问路径，不构成通用数据库、网络、进程或文件系统沙箱。
 
@@ -53,7 +53,7 @@ root独占共享契约、最终OpenAPI及其pin/baseline、`opendata/main.py`、
 
 ## root验收门禁
 
-以下是待执行的验收方案，不是已运行结果。**仅root**可运行审核后的backend精确文件allowlist；不运行整仓pytest、广覆盖`--cov`或其他宽泛命令。allowlist至少覆盖现有reviewed CLI/worker/vertical-flow路径及本批API、runtime、factory测试；实际命令及环境由root在审查后记录。使用fixture与`tmp_path`自有SQLite/artifact目录，在无`.env`且显式环境变量allowlist的环境中运行，不得依赖import时创建的默认Engine。应检查401、普通用户403、API key拒绝、管理员允许、disabled/unreviewed无ledger写入、重复幂等提交、安全状态序列化、取消响应`outcome`及立即`CANCELLED`/旧token fencing，以及fixture成功/失败时publication fence行为；worker进程停止仍按协作式处理。
+以下保留本批的验收方案；实际命令、通过结果与未运行项见 [WAVE7_STATUS.md](WAVE7_STATUS.md)。**仅root**可运行审核后的backend精确文件allowlist；不运行整仓pytest，也不为覆盖率扩大测试文件选择；coverage按文件系统source采集，report只列出明确的受检目标。allowlist至少覆盖现有reviewed CLI/worker/vertical-flow路径及本批API、runtime、factory测试；实际命令及环境由root在审查后记录。使用fixture与`tmp_path`自有SQLite/artifact目录，在无`.env`且显式环境变量allowlist的环境中运行，不得依赖import时创建的默认Engine。应检查401、普通用户403、API key拒绝、管理员允许、disabled/unreviewed无ledger写入、重复幂等提交、安全状态序列化、取消响应`outcome`及立即`CANCELLED`/旧token fencing，以及fixture成功/失败时publication fence行为；worker进程停止仍按协作式处理。
 
 覆盖率阈值沿用项目门槛：data/pipeline目标模块各自至少90%，API/app目标至少85%；不得靠降低阈值、增加覆盖排除或换成未执行文件取得通过。HTTP及其他现有覆盖排除不因本批自动增加。
 
@@ -65,4 +65,4 @@ root静态审查应覆盖JWT管理员依赖、响应字段白名单、秘密/异
 
 本批不改变任务分母与状态：87个控制任务仍为8项DEV_DONE、9项IN_PROGRESS、70项PLANNED；204-E03-01仍是部分消费接线。1,103个既有任务及其完整导入、1,066个候选脚本处置、真实source权利和历史保留、全历史head/interior/tail、所有AFI消费者迁移、自然发布周期、外部备份恢复、生产角色与单写者cutover均保持OPEN。库存数字不是就绪度或可迁移性的证明。
 
-reviewed UI/API/factory处于离线开发计划阶段；即使定向fixture门禁以后通过，真实股票仍默认disabled、来源权限UNKNOWN，不能启动生产调度、上游抓取、warehouse写入或部署切换。父工作包验收、全历史完整性、部署及自然周期必须分别取得其定义要求的证据。
+reviewed UI/API/factory已取得上述局部离线验证；定向fixture门禁通过不改变以下限制：真实股票仍默认disabled、来源权限UNKNOWN，不能启动生产调度、上游抓取、warehouse写入或部署切换。父工作包验收、全历史完整性、部署及自然周期必须分别取得其定义要求的证据。

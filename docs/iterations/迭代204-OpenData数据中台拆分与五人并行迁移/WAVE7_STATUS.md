@@ -1,6 +1,6 @@
 # 第七批 管理员 reviewed-run 离线接线状态
 
-记录日期：2026-10-27（Asia/Shanghai）。状态：**IN_PROGRESS；前端、账本/身份、reviewed runtime/API/app定向门禁、120文件Ruff/format、64生产文件mypy/Bandit、974文件范围named gates、74文件组合、质量锚点A2、861提交secret scan及两个公开JSON的独立secret scan均已通过；106文件Wave 7私有归档已生成，独立归档审查待完成。NOT_PRODUCTION_ACCEPTED。** 本状态仅记录局部离线验证。计划、所有权、共享契约及验收边界见 [WAVE7_PLAN.md](WAVE7_PLAN.md)；第五、六批的冻结收据保持独立。
+记录日期：2026-10-27（Asia/Shanghai）。状态：**SCOPED_VALIDATED（仅本批离线接线与证据收口）；前端、账本/身份、reviewed runtime/API/app定向门禁、120文件Ruff/format、64生产文件mypy/Bandit、974文件范围named gates、74文件组合、质量锚点A2、861提交secret scan及两个公开JSON的独立secret scan均已通过；106文件Wave 7私有归档已生成，独立归档审查36项全部通过。NOT_PRODUCTION_ACCEPTED。** 本状态仅记录局部离线验证。计划、所有权、共享契约及验收边界见 [WAVE7_PLAN.md](WAVE7_PLAN.md)；第五、六批的冻结收据保持独立。
 
 ## 已通过的定向验证
 
@@ -15,7 +15,7 @@
 | 跨流combined | 质量锚点 `f7aec5da6c30de03b48e88e7abbdcd748bde0934`；74个显式文件，**2,627 passed、26 deselected，142.09秒**，无报告warning | 25个既有e2e及1个既有cache integration node按原选择明确排除；使用空owned CWD、74个绝对测试路径及仓库`pytest.ini`；无coverage报告，不代表完整`make gate` |
 | A2 | 质量锚点 `f7aec5da6c30de03b48e88e7abbdcd748bde0934`：**1,200个resolver文件、786个mypy roots全部exit 0** | 333个docs/evidence文件按既有策略排除；149,323条历史Ruff发现仍NOT GREEN，5,130项support和16项active evidence缺口仍OPEN |
 | Secret scan | 固定版本Gitleaks 8.30.1扫描**861个提交，0泄漏**；后生成的两个公开JSON在owned copy目录由同一固定版本单独扫描，exit 0、0 findings | 两个JSON的独立扫描收据位于冻结归档之外；冻结归档创建后不回写 |
-| 私有归档与公开证据 | `/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-wave7`：**106 files，10,544,281 bytes**；目录0700、文件0600；公开验证JSON与归档JSON分别有独立SHA | 私有归档已冻结，独立归档审核尚未完成；当前只确认归档生成，不把它描述为审核通过 |
+| 私有归档与公开证据 | `/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-wave7`：**106 files，10,544,281 bytes**；目录0700、文件0600；公开验证JSON与归档JSON分别有独立SHA | 独立归档审查36项通过，106个文件的哈希、字节数和权限逐一匹配；这是同机证据归档，不是外部备份或恢复演练 |
 
 定向与74文件组合结果可以说明本次覆盖的离线接口与fixture检查通过，不能推出上游来源、数据权利、真实任务、生产DB、部署或自然周期已验收。前端和OpenData后端分别在各自隔离checkout执行；组合收据也不替代A2、secret scan、归档或完整`make gate`。
 
@@ -37,17 +37,15 @@
 
 Python导入链仍是重要边界：运行时可能eager-load pipeline/model/core settings并构造默认Engine；API package initializer可能加载legacy API router。显式调用reviewed app factory不等于无导入副作用，也不等于环境隔离。root测试需从无`.env`的cwd启动，并使用显式环境变量allowlist和临时owned SQLite；default-Engine guard不是通用网络、文件系统或任意DBAPI沙箱。当前验证没有真实source请求或生产数据库操作。
 
-质量锚点 `f7aec5da6c30de03b48e88e7abbdcd748bde0934` 仅将zero-dependency census从643项更新为646项（vendor 325、client 3、合计974）；独立review收据为`wave7-zero-dep-census-review.txt`。该锚点相对operator静态检查提交`b4a1f630ad48781d21440724971562ec946374d3`无Python代码变化；scanner、93条source pins及12项AST例外未改。root确认operator/ledger定向测试涉及源码hash仍与对应通过收据匹配。Ruff/format/mypy/Bandit静态范围及A2均已通过；A2报告1,200个resolver文件、786个mypy roots全部exit 0，333个docs/evidence文件按既有规则排除。149,323条历史Ruff发现、5,130项support缺口及16项active-evidence缺失仍OPEN。
+质量锚点 `f7aec5da6c30de03b48e88e7abbdcd748bde0934` 仅将zero-dependency census从643项更新为646项（vendor 325、client 3、合计974）；独立review收据为`wave7-zero-dep-census-review.txt`。该锚点相对operator静态检查提交`b4a1f630ad48781d21440724971562ec946374d3`无Python代码变化；scanner、93条引用SHA pins及12项AST例外未改。root确认operator/ledger定向测试涉及源码hash仍与对应通过收据匹配。Ruff/format/mypy/Bandit静态范围及A2均已通过；A2报告1,200个resolver文件、786个mypy roots全部exit 0，333个docs/evidence文件按既有规则排除。149,323条历史Ruff发现、5,130项support缺口及16项active-evidence缺失仍OPEN。
 
 真实股票候选继续默认disabled且来源权利为UNKNOWN；UI不能运行该候选，coverage保持UNKNOWN。合成worker fixture不授予真实来源权限，也不证明Popen真实上游调用、完整历史或上市/日历边界。
 
-## 第七批整体收口待办
+## 第七批局部收口结果及保留限制
 
-下列root级收据**待完成**，不能用Wave 5/6结果或单流review代替：
+独立只读归档审查已完成：36项检查全部通过、0失败；106个文件共10,544,281 bytes的哈希、大小、权限、coverage XML/HTML bundle及公开清单事实匹配，旧Wave 6归档也保持不变。审查收据为`/tmp/od204-receipts/wave7-archive-independent-audit.json`（0600），SHA-256为`26412e145d4d4d01b8f05ffbd70e17ecdf40d5f8d6e49e9dd9815aacc77ad899`；该审查与公开JSON后续扫描收据保存在冻结归档之外。
 
-- root对已生成106文件私有归档的独立审核；在审核结果返回前，不宣称归档审核通过；
-
-完整`make gate`仍为**NOT_RUN**，不因局部root门禁通过而改变。Python 3.10 runtime未执行，作为保留的验证限制记录。两个公开JSON由OpenData本地提交`df8bf9b51ac634e2d55863127077ef37292ead4e`生成：`docs/afi204-wave7-validation.json` SHA-256 `017a69ea56a87c7ff3b09b472ba7464447683923707e8ea01e928f40d842f685`，`docs/afi204-wave7-archive.json` SHA-256 `6125ec2ae14432d8c3b22497edcf0b8f850817a8baea88fb4324d9285a3e096a`；独立secret scan通过，收据在私有归档之外。未收到独立归档审核结果前，不给第七批整体PASS、生产接受或任务关闭结论。
+完整`make gate`仍为**NOT_RUN**，不因局部root门禁通过而改变。Python 3.10 runtime未执行，作为保留的验证限制记录。两个公开JSON由OpenData本地提交`df8bf9b51ac634e2d55863127077ef37292ead4e`生成：`docs/afi204-wave7-validation.json` SHA-256 `017a69ea56a87c7ff3b09b472ba7464447683923707e8ea01e928f40d842f685`，`docs/afi204-wave7-archive.json` SHA-256 `6125ec2ae14432d8c3b22497edcf0b8f850817a8baea88fb4324d9285a3e096a`；独立secret scan通过，收据在私有归档之外。本批只关闭上述离线接线与证据归档范围，不给出完整迁移、生产接受或全部任务关闭结论。
 
 ## 保留开放的迁移范围
 

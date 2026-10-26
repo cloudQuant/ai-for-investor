@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-27（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批7条执行任务已集成验证，第四批1813项隔离组合收据保持冻结；第五批最终58文件组合2199 passed、25 deselected，fixture/guard定向22 passed；最终Ruff、format、mypy、Bandit、named gates和A2均通过；121文件私有收据归档已冻结，状态为局部代码及隔离集成验证通过、未作生产验收。第六批HTTP/request-budget定向组合288 passed、1 deselected且目标覆盖92.97%，worker资源清理21 passed，修正后股票三文件测试168 passed、目标覆盖92.22%，69文件组合2529 passed、26 deselected；Ruff/format（112 Python文件）、production mypy（58 core+3 client）、Bandit（61文件）、named gates、1,192文件/783 roots的A2、821提交历史secret-check及两个新公开JSON的独立secret scan均已通过；135文件Wave 6私有归档和两个公开manifest已生成。第七批reviewed-run离线接线仍在进行：前端、ledger/identity及runtime/API/app分项测试、120文件static、974文件范围named gates、74文件组合（2,627 passed、26 deselected）、A2（1,200 resolver/786 roots）、861提交历史Gitleaks扫描及两个公开JSON的独立扫描均已通过；106文件Wave 7私有归档已生成，独立归档审查待完成。整仓make gate NOT_RUN；尚未push、合入dev或切换生产调度**。
+编制日期：2026-10-27（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批7条执行任务已集成验证，第四批1813项隔离组合收据保持冻结；第五批最终58文件组合2199 passed、25 deselected，fixture/guard定向22 passed；最终Ruff、format、mypy、Bandit、named gates和A2均通过；121文件私有收据归档已冻结，状态为局部代码及隔离集成验证通过、未作生产验收。第六批HTTP/request-budget定向组合288 passed、1 deselected且目标覆盖92.97%，worker资源清理21 passed，修正后股票三文件测试168 passed、目标覆盖92.22%，69文件组合2529 passed、26 deselected；Ruff/format（112 Python文件）、production mypy（58 core+3 client）、Bandit（61文件）、named gates、1,192文件/783 roots的A2、821提交历史secret-check及两个新公开JSON的独立secret scan均已通过；135文件Wave 6私有归档和两个公开manifest已生成。第七批reviewed-run离线接线已局部收口：前端、ledger/identity及runtime/API/app分项测试、120文件static、974文件范围named gates、74文件组合（2,627 passed、26 deselected）、A2（1,200 resolver/786 roots）、861提交历史Gitleaks扫描及两个公开JSON的独立扫描均已通过；106文件Wave 7私有归档已生成，独立归档审查36项全部通过。整仓make gate NOT_RUN；尚未push、合入dev或切换生产调度**。
 
 目标：将 ai-for-investor 的市场及研究基础数据采集、清洗、仓储、质量治理、调度和运维管理迁入 `/home/yun/Documents/opendata`。ai-for-investor 保留投研、策略、回测、交易和用户业务，通过 opendata REST API 消费数据。
 
@@ -24,7 +24,7 @@
 | [WAVE6_PLAN.md](WAVE6_PLAN.md) | HTTP边界、请求预算、股票进程切片及资源清理的工作流与验收顺序 |
 | [WAVE6_STATUS.md](WAVE6_STATUS.md) | 第六批局部测试、静态/A2、冻结归档、公开证据扫描及开放边界 |
 | [WAVE7_PLAN.md](WAVE7_PLAN.md) | 管理员reviewed-run离线接线的四条并行流、契约、权限与root验收边界 |
-| [WAVE7_STATUS.md](WAVE7_STATUS.md) | 第七批分项验证、失败保留、待完成组合门禁和开放范围 |
+| [WAVE7_STATUS.md](WAVE7_STATUS.md) | 第七批分项验证、失败保留、组合与静态门禁、归档审查及开放范围 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
@@ -87,4 +87,4 @@ OpenBB 官方明确其 Provider 是连接器，数据覆盖依赖具体来源；
 
 第六批HTTP/request-budget边界组合为288 passed、1 deselected，两个目标模块覆盖率92.97%；worker资源清理专用测试21 passed。股票进程slice首轮root三文件测试161 passed、1 failed，测试fixture修复经review后合入；修复后三文件168 passed、两个目标覆盖均超过90%。root另运行69个显式文件组合，2529 passed、26 deselected，无报告warning。质量锚点`2464dd13839acc00f4102d551601af2de8d72a60`上Ruff/format、production mypy、Bandit、named gates及全量A2通过；A2范围之外的历史Ruff与证据缺口仍开放。821提交历史secret-check通过，两个新公开JSON随后由固定版本Gitleaks单独扫描，exit 0、0 findings；135文件私有归档和两个公开manifest已生成。详细范围与证据边界见 [WAVE6_PLAN.md](WAVE6_PLAN.md) 与 [WAVE6_STATUS.md](WAVE6_STATUS.md)。这些局部结果不改变第五批冻结收据，也不关闭完整任务清单、生产门禁或历史恢复要求。
 
-第七批reviewed-run离线接线目前仍为IN_PROGRESS。OpenData前端6文件Vitest为29 passed，`npm run build`通过但保留chunk size warning；账本/身份9文件248 passed，runtime/API/app 4文件70 passed且各自目标覆盖达到门槛。Ruff/format覆盖120个Python文件、production mypy 61 core+3 client文件、Bandit 64个production文件、四个named gates、74文件combined（2,627 passed、26 deselected）及A2（1,200 resolver文件、786 roots全通过）均通过；861提交历史Gitleaks 8.30.1扫描0 leaks，两个公开JSON的后续独立扫描exit 0、0 findings。333个docs/evidence文件按既有A2策略排除，149,323条历史Ruff发现、5,130项support缺口和16项active-evidence缺失仍开放。106文件、10,544,281 bytes的Wave 7私有归档已生成，独立归档审查待完成；3.10 grammar通过但3.10 runtime NOT_RUN，此前前端与API未达标尝试均保留。整仓`make gate`仍NOT_RUN。功能边界、具体收据和未关闭范围见 [WAVE7_PLAN.md](WAVE7_PLAN.md) 与 [WAVE7_STATUS.md](WAVE7_STATUS.md)。
+第七批reviewed-run离线接线与证据归档已局部收口。OpenData前端6文件Vitest为29 passed，`npm run build`通过但保留chunk size warning；账本/身份9文件248 passed，runtime/API/app 4文件70 passed且各自目标覆盖达到门槛。Ruff/format覆盖120个Python文件、production mypy 61 core+3 client文件、Bandit 64个production文件、四个named gates、74文件combined（2,627 passed、26 deselected）及A2（1,200 resolver文件、786 roots全通过）均通过；861提交历史Gitleaks 8.30.1扫描0 leaks，两个公开JSON的后续独立扫描exit 0、0 findings。333个docs/evidence文件按既有A2策略排除，149,323条历史Ruff发现、5,130项support缺口和16项active-evidence缺失仍开放。106文件、10,544,281 bytes的Wave 7私有归档已生成，独立归档审查36项全部通过；3.10 grammar通过但3.10 runtime NOT_RUN，此前前端与API未达标尝试均保留。整仓`make gate`仍NOT_RUN。功能边界、具体收据和未关闭范围见 [WAVE7_PLAN.md](WAVE7_PLAN.md) 与 [WAVE7_STATUS.md](WAVE7_STATUS.md)。
