@@ -354,18 +354,7 @@ async def test_empty_snapshot_has_no_fabricated_registry_pins() -> None:
     assert provenance["profile_version"] is None
 
 
-@pytest.mark.parametrize(
-    ("deadline_seconds", "request_timeout_seconds", "expected_code"),
-    [
-        (5.0, 2.0, "OPENDATA_REFERENCE_UNAVAILABLE"),
-        (0.1, 0.2, "OPENDATA_REFERENCE_LIMIT_EXCEEDED"),
-    ],
-)
-async def test_transport_timeout_is_classified_by_the_active_budget(
-    deadline_seconds: float,
-    request_timeout_seconds: float,
-    expected_code: str,
-) -> None:
+async def test_immediate_transport_timeout_is_an_unavailable_error() -> None:
     requests: list[httpx.Request] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -374,16 +363,33 @@ async def test_transport_timeout_is_classified_by_the_active_budget(
 
     client = fixtures._client(
         httpx.MockTransport(handler),
-        limits=fixtures._limits(
-            deadline_seconds=deadline_seconds,
-            request_timeout_seconds=request_timeout_seconds,
-        ),
+        limits=fixtures._limits(deadline_seconds=5.0, request_timeout_seconds=2.0),
     )
     with pytest.raises(fixtures.InstrumentReferenceError) as raised:
         await client.list_options()
 
-    assert raised.value.code == expected_code
+    assert raised.value.code == "OPENDATA_REFERENCE_UNAVAILABLE"
     assert "transport-timeout-detail" not in str(raised.value)
+    assert len(requests) == 1
+
+
+async def test_suspended_request_expiring_total_deadline_is_a_limit_error() -> None:
+    requests: list[httpx.Request] = []
+    never_release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        await never_release.wait()
+        return fixtures._response(fixtures._single_page())
+
+    client = fixtures._client(
+        httpx.MockTransport(handler),
+        limits=fixtures._limits(deadline_seconds=0.05, request_timeout_seconds=0.2),
+    )
+    with pytest.raises(fixtures.InstrumentReferenceError) as raised:
+        await asyncio.wait_for(client.list_options(), timeout=1.0)
+
+    assert raised.value.code == "OPENDATA_REFERENCE_LIMIT_EXCEEDED"
     assert len(requests) == 1
 
 
