@@ -593,6 +593,12 @@ def _valid_text(value: object, *, maximum: int) -> bool:
     )
 
 
+def _valid_instrument_name(value: object) -> bool:
+    if not isinstance(value, str) or not _valid_text(value, maximum=128):
+        return False
+    return value == value.strip() and all(character.isprintable() for character in value)
+
+
 def _validate_query(
     search: object,
     limit: object,
@@ -999,8 +1005,7 @@ def _validate_payload(payload: Mapping[str, JsonValue]) -> None:
         or payload.get("market") != "CN"
         or not isinstance(payload.get("exchange"), str)
         or payload.get("exchange") not in {"XSHG", "XSHE", "XBSE"}
-        or not _valid_text(payload.get("name"), maximum=128)
-        or str(payload.get("name", "")).strip() == ""
+        or not _valid_instrument_name(payload.get("name"))
         or not _valid_identifier(payload.get("lifecycle_version"))
         or not isinstance(payload.get("status"), str)
         or payload.get("status") not in {"active", "delisted", "unknown"}

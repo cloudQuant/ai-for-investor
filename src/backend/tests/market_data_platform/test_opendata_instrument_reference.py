@@ -392,6 +392,37 @@ class TestSnapshotProtocol:
             await _client(httpx.MockTransport(lambda _: _response(page))).list_options()
         assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
 
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Company\u202eName",
+            "Company\u0001Name",
+            "N" * 129,
+            " Company",
+            "Company ",
+        ],
+    )
+    async def test_instrument_name_requires_printable_trimmed_text(self, name: str) -> None:
+        page = _single_page()
+        row = page["rows"][0]
+        row["payload"]["name"] = name
+        _rehash_row(row)
+
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(httpx.MockTransport(lambda _: _response(page))).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+    async def test_instrument_name_allows_printable_internal_spaces(self) -> None:
+        page = _single_page()
+        row = page["rows"][0]
+        row["payload"]["name"] = "Synthetic Company"
+        _rehash_row(row)
+
+        result = await _client(httpx.MockTransport(lambda _: _response(page))).list_options()
+        items = result["items"]
+        assert isinstance(items, list)
+        assert items[0]["name"] == "Synthetic Company"
+
     async def test_sync_search_cannot_return_after_total_deadline(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
