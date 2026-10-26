@@ -335,6 +335,12 @@ class TestSnapshotProtocol:
             await _client(_pages_transport(pages)).list_options()
         assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
 
+        pages, _, _ = _incremental_pages()
+        pages[0]["rows"][0]["publication_sequence"] = 0
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(_pages_transport(pages)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
         pages, _, current_publication_id = _incremental_pages()
         pages[0]["rows"][0]["publication_sequence"] = 2
         pages[0]["rows"][0]["publication_id"] = "4" * 32
