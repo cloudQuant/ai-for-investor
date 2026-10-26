@@ -1,8 +1,10 @@
 # 迭代204子代理任务清单
 
-本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **87个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；当前7个子任务为DEV_DONE，6项为IN_PROGRESS，74项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
+本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **87个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；当前8个子任务为DEV_DONE，8项为IN_PROGRESS，71项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
 
-第二批已按独占文件集成11条开发任务，第三批又分派6条任务，跨多个父工作包推进；其实际交付与剩余验收面见 [WAVE2_STATUS.md](WAVE2_STATUS.md)。下表保留完整任务验收门槛，库内能力或局部链路完成不会自动关闭要求外部证据、生产worker或完整业务场景的任务。
+第二批已按独占文件集成11条开发任务，第三批按6个控制任务拆成7条执行任务，跨多个父工作包推进；其实际交付与剩余验收面见 [WAVE2_STATUS.md](WAVE2_STATUS.md)。下表保留完整任务验收门槛，库内能力或局部链路完成不会自动关闭要求外部证据、生产worker或完整业务场景的任务。
+
+第三批逐条状态、额外wire身份修正及外部限制见 [WAVE3_STATUS.md](WAVE3_STATUS.md)。第四批5条并行执行流与独占文件见 [WAVE4_PLAN.md](WAVE4_PLAN.md)。
 
 ## 验收边界与并行约定
 
@@ -12,7 +14,7 @@
 - 混合类型的子任务只有分别完成对应验收面后才算该子任务验收。真实源不可得、历史保留不足或许可未知时，产出限制证据和复查条件，需求保留开放，不能填造成功状态。
 - M1可由股票日线、标的目录、日历、覆盖、一个补数任务、一个自然调度和一个研究快照的代表样本启动。20个代表案例、首批六个子任务和本清单不要求先把1066个文件全盘完毕；批量盘点与M1并行。代表样本覆盖之外的文件仍留在范围分母中。
 - `owner/建议代理` 的 A–E 对应 IMPLEMENTATION_PLAN.md 的职责；括号内为已知子代理名。root负责总集成和跨仓裁决。六个首批任务由对应代理在各自隔离 worktree/branch 开发；其他任务可在下一波重分配。
-- 每个子代理在自己的仓库隔离 worktree 和 branch 提交小 PR/提交；opendata 与 ai-for-investor 分别管理分支。root逐项 cherry-pick、review并运行与影响面相符的测试，先集成到本地集成分支，后续经PR合入 `dev`。禁止多个代理同时修改同一共享文件；共享 schema、总路由、依赖锁和 Alembic 序列由指定 owner 排队集成。发生接口变化先更新契约并让消费者同步，不把数周后的大批量合并作为计划。
+- 每个子代理在自己的仓库隔离 worktree 和 branch 提交小 PR/提交；opendata 与 ai-for-investor 分别管理分支。root逐项 cherry-pick、review并运行与影响面相符的测试，先集成到本地集成分支，后续经PR合入 `dev`。第四批以冻结合成fixture解耦离线代码与真实源验收：提交SPI和执行SPI独立开发，真实源不得阻塞纯离线worker/CLI。禁止多个代理同时修改同一共享文件；共享 schema、总路由、依赖锁和 Alembic 序列由指定 owner 排队集成。发生接口变化先更新契约并让消费者同步，不把数周后的大批量合并作为计划。
 - 前置依赖仅写本清单任务ID；空表示可直接开始。依赖链无环，部分任务可并行。工作包整体状态按 IMPLEMENTATION_PLAN.md 单独管理，子任务状态不可推导成父包 ACCEPTED。
 
 证券/衍生品长尾任务进入开发时继续按一个模型族或不超过20个源条目拆执行批次，每批绑定独占文件清单和台账行；87项是当前控制任务，不要求把607/449个候选文件塞给一个长期子代理。并行数量依据依赖和资源预算调整。
@@ -26,9 +28,9 @@
 | 204-A02-01 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 冻结v1兼容约束和v2 OpenAPI骨架：端点、认证、闭/半开区间、分页、错误信封、版本字段。 | 204-A01-01 | OpenAPI可解析；每项拟议能力标明现存或待实现；v1既有响应语义有契约测试。 |
 | 204-A02-02 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 逐数据集身份、instrument、业务时间/事件时间/可得时间、单位/币种、Decimal、空值、质量和许可schema。 | 204-A02-01 | schema示例覆盖股票日线、基金NAV、曲线或财务修订中的不同语义；非法单位/日期可被验证器拒绝。 |
 | 204-A02-03 | A02 | PLANNED | A / 契约代理 | CODE/OFFLINE | 提供黄金fixture、错误fixture和可本地运行的mock服务，供opendata API及AFI client并行开发。 | 204-A02-01, 204-A02-02 | 同一fixture能驱动服务端与客户端合同测试；含空结果、部分覆盖、越权、过期cursor和分页样例。 |
-| 204-A02-04 | A02 | IN_PROGRESS | A / 契约代理 | CODE/OFFLINE | 加入OpenAPI兼容性门禁、schema版本规则和破坏性变更检查。 | 204-A02-03 | CI能拒绝至少一个故意破坏v1/已发布v2合同的样例；兼容扩展路径有说明。 |
+| 204-A02-04 | A02 | DEV_DONE（代码/离线门禁） | A / wave3_contract_gate | CODE/OFFLINE | 加入OpenAPI兼容性门禁、schema版本规则和破坏性变更检查。 | 204-A02-03 | actual main v1共140路径、v2共6路径冻结，24项行为测试覆盖破坏/兼容变化；固定hash的检查器已接入make gate，现有CI调用该gate。远端CI尚未运行，整仓gate不通过；不自动更新baseline，兼容扩展路径有说明。 |
 | 204-A03-01 | A03 | PLANNED | A / 元数据代理 | CODE/OFFLINE | 定义dataset/schema版本、来源、负责人、许可和域注册表的元数据模型及首个迁移提案。 | 204-A02-02 | 唯一共享registry owner确认迁移序列；升级/降级或备份恢复边界有离线验证记录。 |
-| 204-A03-02 | A03 | PLANNED | A / 元数据代理 | CODE/OFFLINE | 定义instrument稳定ID、别名生效区间、上市/退市/到期生命周期和交易日历版本接口。 | 204-A03-01 | fixture覆盖换码、退市、基金份额类别、到期合约、节假日及未知边界；不以当前代码回填历史身份。 |
+| 204-A03-02 | A03 | IN_PROGRESS | A / wave4_reference | CODE/OFFLINE | 定义instrument稳定ID、别名生效区间、上市/退市/到期生命周期和交易日历版本接口。 | 204-A03-01 | fixture覆盖换码、退市、基金份额类别、到期合约、节假日及未知边界；不以当前代码回填历史身份。 |
 | 204-A04-01 | A04 | IN_PROGRESS | A / 存储代理 | CODE/OFFLINE | 增加raw响应证据引用与受控artifact manifest合同，包含请求摘要、内容hash、采集时刻、状态和保留策略。 | 204-A03-01 | 单测证明密钥/Cookie不会进入manifest或日志；ODS记录可定位证据或明确SOURCE_LIMITED。 |
 | 204-A04-02 | A04 | PLANNED | A / 存储代理 | CODE/OFFLINE | 建立ODS到DWD的来源血缘、转换版本、修订链、可得时点和固定publication/snapshot版本字段。 | 204-A04-01, 204-A03-02 | fixture中修订前后值可追踪；严格PIT未知的数据不能伪装成已知。 |
 | 204-A04-03 | A04 | PLANNED | A / 存储代理 | CODE/OFFLINE | 定义候选分区验证、原子publication指针和跨metadata/warehouse receipt/outbox的可重放提交。 | 204-A04-02, 204-D02-01 | 故障注入证明提交状态不领先事实数据，重复receipt可幂等重放；不宣称跨库原子事务。 |
@@ -47,7 +49,7 @@
 |---|---|---|---|---|---|---|---|
 | 204-B01-01 | B01 | PLANNED | B / 证券代理 | CODE/OFFLINE | 按冻结CSV分批处置607个证券候选资产，记录旧脚本hash、输入参数、数据集、provider、落库、消费者、许可和REUSE/EXTEND/CONSOLIDATE等决策。 | 204-A01-01 | 每个候选保留一个可追溯处置或待查原因；统计与原清单anti-join解释一致，不把文件数当数据集数。 |
 | 204-B01-02 | B01 | PLANNED | B / 证券代理 | REAL_SOURCE | 选10个证券代表案例，实测简单、复权、财报PIT、多表、源限流/失效等源能力与字段语义。 | 204-A01-01 | 每例记录真实源、参数、时间戳、返回边界、许可待核项和成本；作为M0输入，不等待607项映射。 |
-| 204-B02-01 | B02 | PLANNED | B / 证券代理 | CODE/OFFLINE | 完成股票日线M1样板Provider、标准映射和fixture，分离不复权价、成交量/额单位与源字段。 | 204-A02-02, 204-B01-02 | 黄金fixture稳定重放，唯一业务键和空值/单位合同通过；源真实性另由下一任务验收。 |
+| 204-B02-01 | B02 | IN_PROGRESS | B / wave4_stock_job | CODE/OFFLINE | 完成股票日线M1样板Provider、标准映射和fixture，分离不复权价、成交量/额单位与源字段。 | 204-A02-02 | 离线样板使用明确合成fixture，真实源另验204-B02-02；黄金fixture稳定重放，唯一业务键和空值/单位合同通过；源真实性另由下一任务验收。 |
 | 204-B02-02 | B02 | PLANNED | B / 证券代理 | REAL_SOURCE | 对选定股票真实抓取日线，核对源参数、交易日、原始响应、字段及许可/历史保留边界。 | 204-B02-01 | 样本与真实源可逐字段比对；上市起点证据与源最早返回日分开记录，异常不被填平。 |
 | 204-B02-03 | B02 | PLANNED | B / 证券代理 | CODE/OFFLINE | 形成股票universe/上市退市、公司行动、复权因子版本和财报公告PIT映射规则。 | 204-A03-02, 204-B02-01 | fixture覆盖换码、退市、除权、前后复权锚定、公告时间与platform available_at；无证据时PIT标unknown。 |
 | 204-B03-01 | B03 | PLANNED | B / 证券代理 | CODE/OFFLINE | 建立基金/ETF交易价格、单位净值、累计净值、万份收益和七日年化的独立数据集及映射。 | 204-A03-02 | 合同测试证明字段不混用、单位与公布时点明确；缺失NAV不会由交易价格补值。 |
@@ -91,10 +93,10 @@
 | 204-D02-01 | D02 | DEV_DONE（仅合同/纯函数） | D / dev_runs | CODE/OFFLINE | 定义声明式Job/Run UTC canonical身份合同及规范化/幂等身份纯函数：job版本、UTC计划时刻、分片、运行类型；补数含明确范围和request id。 | 204-A02-02, 204-D01-01 | 固定向量覆盖时区等价时刻、DST、定时与补数不冲突、重试同身份；明确本任务不含durable repository/lease/worker接线。 |
 | 204-D02-02 | D02 | DEV_DONE（仅ledger离线） | D / dev_ledger | CODE/OFFLINE | 在独立opendata-od204-ledger分支实现显式Engine注入的SQL持久Run ledger、幂等入队、CAS状态/租约/token、heartbeat、终态和取消；提供owned SQLite双实例行为测试。 | 204-D02-01 | 双ledger实例竞争同一Run时只允许一个有效claim；过期token不能推进状态，重复enqueue幂等，心跳/终态/取消有行为测试。当前不含Alembic接入、调度/worker运行接线或warehouse write fence；父WP D02未完成。 |
 | 204-D02-03 | D02 | DEV_DONE（MySQL/SQLite迁移） | D / 运维代理 | CODE/OFFLINE | 为Run ledger分配唯一Alembic迁移序列并集成到目标数据库迁移体系，保持双库版本治理。 | 204-D02-02 | 迁移owner确认revision无多head；warehouse 0010唯一head承接至0011；literal up/down已在独立MySQL8.0.46与SQLite验证，metadata head0006保持独立。PostgreSQL行为未验证；父D02未关闭。 |
-| 204-D02-04 | D02 | PLANNED | D / 运维代理 | CODE/OFFLINE | 把持久ledger接入统一Run service与worker入口，加入持久环境下多进程竞争/崩溃恢复测试。 | 204-D02-02, 204-D02-03, 204-D03-03 | worker只能经Run service领取和结算；重启后租约可恢复，旧token不能写入终态或事实数据。 |
-| 204-D03-01 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 实现Provider task executor协议、统一日志/退出码和可终止的有界子进程执行器。 | 204-D02-01, 204-B02-01 | fake provider验证超时、取消、stdout/stderr截断和临时资源回收；API事件循环不被阻塞。 |
+| 204-D02-04 | D02 | IN_PROGRESS | D / wave4_worker | CODE/OFFLINE | 把持久ledger接入统一Run service与worker入口，加入持久环境下多进程竞争/崩溃恢复测试。 | 204-D02-02, 204-D02-03, 204-D03-01 | worker只能经Run service领取和结算；重启后租约可恢复，旧token不能写入终态或事实数据。 |
+| 204-D03-01 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 实现Provider task executor协议、统一日志/退出码和可终止的有界子进程执行器。 | 204-D02-01 | 使用冻结合成job/provider fixture推进离线开发；fake provider验证超时、取消、stdout/stderr截断和临时资源回收；API事件循环不被阻塞。 |
 | 204-D03-02 | D03 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现重试/预算/并发/供应商限速/退避、自然槽与显式补数分流及分片规则。 | 204-D03-01 | fake时钟/源模拟证明限速共享、Retry-After受尊重、源WAF不无限重试、历史恢复有独立预算。 |
-| 204-D03-03 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 让APScheduler、手工API、CLI、systemd外壳统一提交同一Run入口。 | 204-D02-01, 204-D03-01 | 多入口相同任务映射同一occurrence身份；systemd不再直写warehouse或绕过fencing。 |
+| 204-D03-03 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 让APScheduler、手工API、CLI、systemd外壳统一提交同一Run入口。 | 204-D02-01 | 入口只依赖提交SPI，不依赖worker或真实Provider；多入口相同任务映射同一occurrence身份；systemd不再直写warehouse或绕过fencing。 |
 | 204-D04-01 | D04 | PLANNED | D / 运维代理 | CODE/OFFLINE | 提供管理员JobDefinition/Run/DQ/coverage后端接口、授权scope、操作者审计和安全取消。 | 204-A02-03, 204-D02-04, 204-A06-02 | 未授权请求被拒绝；审计包含操作者/对象/动作/request_id；取消不可中断阶段真实显示状态。 |
 | 204-D04-02 | D04 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现opendata运维控制台的任务、执行、下次运行、覆盖、隔离、补数/取消/重放和容量页面。 | 204-D04-01 | 页面仅调用受权限保护API，关键操作有确认/结果反馈，失败原因可追踪，不内嵌任意脚本参数。 |
 | 204-D05-01 | D01,D05,B01,C01 | DEV_DONE（仅静态盘点工具） | D / dev_inventory | CODE/OFFLINE | 实现opendata/migration_inventory.py、CLI与tests，把AST源文件和可选JSON任务映射整理成可重跑JSON/CSV及双向差异报告，拒绝输出覆盖源/输入；不查生产库、不执行脚本或抓源。 | 204-A01-01 | CLI对相同输入给稳定输出；单测覆盖入口/辅助/哈希、解析失败、重复/缺失映射、路径与输出保护；不宣称源、任务或数据迁移完成。 |

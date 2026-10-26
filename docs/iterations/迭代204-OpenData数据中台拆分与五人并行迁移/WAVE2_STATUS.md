@@ -28,10 +28,10 @@
 - 脚本注册有 1,066 条：启用 1,051、停用 15。全部源码路径存在；1,056 个静态入口均有运行态映射，无悬空 script_id 或未解析路径。
 - 旧仓库有 1,042 张表。information_schema 的 TABLE_ROWS 仅为估算，不能证明覆盖完整。
 - 1,066 个脚本与初始逐文件 hash 全部一致；另扫描 184 个运维/调度/配置文件和 85 条脚本引用。
-- 修正后的脚本级分类：877 个缺少已注册 Fetcher 适配器，189 个需要人工确认。前一类有本地 vendor export 静态证据；不意味着数据语义、源可用或落库已验证。
+- 修正后的脚本级分类：877 个未静态匹配已注册 Fetcher，189 个需要人工确认。前一类有本地 vendor export 静态证据；不意味着数据语义、源可用或落库已验证。
 - 代码中的服务文件不等于主机已经安装的 systemd/cron。主机任务、进程、checkpoint 和全部旁路写入入口仍需核对。
 
-OpenData 的脱敏摘要位于 `docs/afi204-runtime-inventory.json`、`docs/afi204-migration-catalog.json`；完整只读收据保存在 `/tmp/od204-receipts/`，迁移前必须转入受控、可恢复的持久存储。
+OpenData 的脱敏摘要位于 `docs/afi204-runtime-inventory.json`、`docs/afi204-migration-catalog.json`；完整只读收据已按hash复制到原OpenData `var/reports/afi204/2026-10-26-wave2`，目录0700、文件0600、Git忽略；22项索引见OpenData `docs/afi204-wave2-archive.json`。这是同主机持久目录，异机备份与恢复演练尚未完成。
 
 ## 架构决定与限制
 
@@ -57,14 +57,14 @@ OpenData 的脱敏摘要位于 `docs/afi204-runtime-inventory.json`、`docs/afi2
 - 目标Ruff/format、mypy和Bandit通过；实际Python为3.13.5，3.10仅语法核验，未冒称运行矩阵。
 - 修复了组合回归发现的HTTP `Retry-After` 日期秒级舍入问题，并用固定时钟测试验证后复跑通过。临时MySQL实例已按准确datadir/socket验证身份并通过管理员socket关闭，测试库均清理。
 
-机器收据位于OpenData `docs/afi204-wave2-validation.json`，包含源码/报告hash、测试范围、限制与私有日志hash；操作说明见 `docs/operations-afi204-migration.md`。完整私有收据仍需转入受控持久存储。
+机器收据位于OpenData `docs/afi204-wave2-validation.json`，包含源码/报告hash、测试范围、限制与私有日志hash；操作说明见 `docs/operations-afi204-migration.md`。本批22份私有收据已完成同主机持久归档，未完成异机备份或恢复演练。
 
 整仓门禁尚未通过：两个OpenData checkout均缺少既有immutable-evidence manifest引用的5,130个文件；现有依赖静态诊断、secret全历史扫描等也不能由本轮定向检查代替。正在只读核查历史原件恢复路径，不伪造批准或扩大豁免。
 
 ## 下一批依赖
 
 1. 将审核的 stock Provider、原始证据/日历/coverage 接入实际 job，并提供受控 worker/CLI/APScheduler 入口。
-2. 按模型族适配 877 个缺适配器脚本和 189 个待确认脚本，生成旧 task → job/version/dataset/sink 映射；默认 disabled。
+2. 按模型族审查 877 个未静态匹配已注册Fetcher的脚本和 189 个待确认脚本，确定复用或新增适配，生成旧 task → job/version/dataset/sink 映射；默认 disabled。
 3. 开发存量历史导入 dry-run、分区对账、源更正追赶和备份恢复，不以 MAX 日期判定完整。
 4. 扩展其他资产、真实覆盖和来源验证，再迁移 AFI 剩余直连消费者与管理界面。
 5. 满足逐域真实源、自然周期、单写者和回滚门槛后切换；保持未覆盖域需求开放。

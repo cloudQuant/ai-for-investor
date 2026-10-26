@@ -75,6 +75,25 @@ PYTHONPATH=src/backend python \
 
 扫描器只标记代码中看得见的路径/SDK/数据库模式。报告数字应与底账行数、活跃任务实例、真实容器/主机 schedule 和 source 权限逐项对照；本报告不代表所有消费者已迁移，也不构成 OpenData 生产数据覆盖证明。
 
+## 业务场景调用矩阵
+
+补充只读审查以集成分支 `d1384ccba` 为基线，原目录仍为 `c720a261c` 加203未提交变更；两个源快照不混用。下表沿实际service调用核对AST无法解析的注入路径，没有请求源站或生产API。OpenData domains.yaml中的声明不等于已部署/授权/填充的数据能力。
+
+| 业务场景 | 当前调用及数据边界 | 后续迁移和回归条件 |
+| --- | --- | --- |
+| `/data/queries`、`/data/kline` | `api/data/queries.py:152` → `market_data/query_service.py:818` → OpenData adapter；仍先写AFI本地数据store再读 | 共用REST读门面直接返回中台数据；隔离研究sealed副本，移除通用行情复制维护；保留权限/来源/单位/日期校验 |
+| 标的lookup/options | `market_instrument.py:280` → 旧行情warehouse DSN/本地历史缓存，线上refresh被拒绝 | 中台instrument/alias/交易所/生命周期合同；离线缓存须带版本，不能只换DSN |
+| 普通回测 | `backtest/service.py:448,891` → AFI coverage预检、`BACKTRADER_DATA_DIR` CSV | 从固定中台snapshot取数并校验覆盖/调整口径/PIT，运行中不可读取变化的latest；AFI保留策略和结果 |
+| Workspace研究绑定 | `market_data/research_binding.py:231,257` 的local_only → CSV/hash/manifest；runtime仅用已验证绑定文件 | 将输入来源改成REST固定snapshot，保留AFI签名、hash、封存和复现边界 |
+| 扫描器 | `scanner_universe.py:266,314,418` 直接成分/行情源，池/指标快照本地JSON；`:362`可生成seed_fallback值 | 成分/行情读中台；用户自定义池和规则留AFI；移除或明确标注模拟值，不将其当真实行情；缺域合同显式不可用 |
+| 股票分析后台任务 | `stock_analysis/data_collector.py:113,152,322` → 旧行情仓库、新闻库、直接财务/公司/行业/新闻源 | 行情、财报、公司画像、同行、新闻逐项合同；缺数据呈现质量限制，研究报告和结论留AFI |
+| 夜间信号 | `stock_signal/universe.py:16`、`calendar.py:20`、`batch.py:189,225,307` → 成分/日历/基准源及AFI行情库 | 统一REST消费版本化成分、日历、基准和outcome行情；信号模型、预测/评分及业务调度保留 |
+| 多资产研究 | `asset_research/orchestrator.py:193` → `providers/akshare.py:385,1261` 与本地仓库适配器 | 按期货/期权/债券/基金/FX/crypto独立合同迁移；保留AFI来源授权、cutoff校验、任务和研究快照审计 |
+| 历史/实时行情路由 | `realtime_data_service.py:175,237` 直接日/周/月线来源 | 支持的历史日线走中台；实时tick/执行报价单独定义产品/时延边界，不套日线或静默降频 |
+| 旧采集与调度 | `akshare/scheduler_service.py:65,101`、`startup/orchestration.py:49` 管理任务，失败fallback可启动旧scheduler | 采集计划/执行日志迁中台；先导入默认disabled定义、隔离目标影子补数/影子读，再逐dataset/sink单写者切换；AFI业务调度保留 |
+
+以上为首批场景矩阵，动态分派与额外203恢复工具仍须单独核对。下一波优先做共用async REST门面、直接行情读、固定研究snapshot与单一股票调用链回归，再按资产模型族补其余合同；多人不同时修改 `MarketDataQueryService` / `MarketInstrumentService`。实际库分母为1,103调度任务（1,098active、5inactive）、10条无调度helper，不能把5个停用任务当辅助脚本。
+
 ## 未迁移与切换限制
 
 - 当前 OpenData consumer route 仅股票日线、仅 v1 stock-daily endpoint。基金、债券、期货、期权、外汇、crypto、指数、财务、宏观及分钟频率没有 OpenData consumer route；OpenData-only 模式下不会转去旧 provider。
