@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from app.services.market_data.opendata_instrument_reference import InstrumentReferenceError
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import JsonValue
@@ -33,6 +32,7 @@ from app.config import Settings
 from app.db.database import Base
 from app.models.permission import Role, user_roles
 from app.models.user import User
+from app.services.market_data.opendata_instrument_reference import InstrumentReferenceError
 
 pytestmark = pytest.mark.asyncio
 _USER_ID = "fixture-reference-user"
@@ -234,6 +234,10 @@ async def test_upstream_failures_are_safe_and_never_fall_back(
         {"effective_on": ""},
         {"limit": "81"},
         {"search": "A" * 129},
+        {"search": " 600001"},
+        {"search": "600001 "},
+        {"search": "600\x00001"},
+        {"search": "600\n001"},
     ],
 )
 async def test_invalid_enabled_input_is_rejected_before_fetch(

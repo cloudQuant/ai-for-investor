@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
@@ -143,7 +144,12 @@ async def read_instrument_reference_options(
             authorizer.require_read_data(principal=principal)
             # A repeatable-read snapshot must not survive the external fetch.
             await db.rollback()
-            if len(search) > 128 or not 1 <= limit <= 80:
+            if (
+                len(search) > 128
+                or search != search.strip()
+                or any(unicodedata.category(character) == "Cc" for character in search)
+                or not 1 <= limit <= 80
+            ):
                 raise _failure(422, "OPENDATA_REFERENCE_REQUEST_INVALID")
             effective_date = _effective_date(effective_on)
             if catalog.client_factory is None:
