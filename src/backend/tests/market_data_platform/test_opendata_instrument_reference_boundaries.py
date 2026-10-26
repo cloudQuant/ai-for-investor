@@ -130,7 +130,7 @@ async def test_clock_must_return_an_aware_datetime(clock: Callable[[], object]) 
     [
         ("text/plain", None, b"{}", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
         ("application/json", "-1", b"{}", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
-        ("application/json", "²", b"{}", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
+        ("application/json", "12x", b"{}", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
         ("application/json", None, b"", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
         ("application/json", None, b"\xff", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
         ("application/json", None, b"{", "OPENDATA_REFERENCE_PROTOCOL_INVALID"),
