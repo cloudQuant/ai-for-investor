@@ -1,33 +1,39 @@
 # 第五批：图表直读、MySQL worker与类型边界
 
-状态：**开发中，尚未整批验收**。代码仅合入隔离集成分支，未push、未合入dev、未部署。本页是第五批进度快照，第四批冻结代码和归档保持不变。
+记录日期：2026-10-27（Asia/Shanghai）。状态：**本批局部代码与隔离集成验证完成；OpenData验证状态为SCOPED_CODE_AND_ISOLATED_INTEGRATION_VALIDATED，NOT_PRODUCTION_ACCEPTED。** root复核的fixture专用修复与最终静态结果均锚定提交31cfd70ba62dee6e1243d7ea9100a15532e49f95；证据归档已冻结。AFI与OpenData代码留在各自隔离分支，未push、未合入dev、未部署。第四批代码和归档保持冻结。
 
-## 已集成的局部交付
+## 局部交付与证据
 
-| 执行流 | 提交与验证 | 保留边界 |
+| 工作流 | 收据与结果 | 边界 |
 | --- | --- | --- |
-| AFI普通股票日线图表 | 集成`6203d18ef`、日期修复`b7514d444`；7份明确测试文件共230 passed；独立复核无剩余P1/P2 | 只在明确启用OpenData且符合股票1d合同的已有kline路径直接投影REST；默认开关未改，其他消费者仍开放 |
-| 10文件纯类型清理 | OpenData集成`10c9d012`；删除冗余cast/无效ignore与无用import，独立复核未见runtime改变 | 没有更改规则、依赖或质量豁免 |
-| 3文件日期/DataFrame类型边界 | 集成`7b810652`；独立复核修复后无剩余P1/P2 | 明确拒绝非字符串及重复列名，复权NaN传播保持；覆盖率验收仍未通过，修复后pytest尚未运行 |
+| AFI股票图表REST直读 | 图表直读提交6203d18ef及日期窗口修复b7514d444；7个定向测试文件230 passed（Python 3.13.5） | 只覆盖明确启用OpenData且符合既有股票1d合同的图表读取；原许可、身份及默认开关边界保留。不是所有AFI消费者迁移完成 |
+| OpenData A2类型静态检查 | 最终静态收据在OpenData提交31cfd70ba62dee6e1243d7ea9100a15532e49f95上通过：1,189个A2 resolver文件、783个mypy roots且0个失败；Ruff、format、mypy、Bandit及命名gate按当前策略通过 | 333个docs/evidence Python文件依既有规则排除静态工具；没有改范围或豁免。149,323条历史Ruff发现仍为NOT GREEN（历史证据）；5,130项support及16项active-evidence缺失仍OPEN |
+| DataFrame与日期类型边界 | OpenData cb3fbec5235f557fd212be4b63ceae141cf2859a上的7个定向文件366 passed、1 skipped；三个目标模块综合覆盖率95.3795%，高于90%门槛 | _sdk.py 99.0499%，stock_daily.py 100%，dwd_merge.py 90.1299%。三个目标文件在最终提交中哈希一致；最终58文件组合不采集覆盖率，覆盖率来自此前独立命令。保留源日期、自然日排序、复权NaN传播与重复列拒绝语义 |
+| MySQL持久worker | OpenData cb3fbec5235f557fd212be4b63ceae141cf2859a上的专用MySQL命令41 passed；reviewed_worker.py分支/语句覆盖率91.2467%，高于90%门槛 | worker及相关目标文件在最终提交中哈希一致，但最终58文件命令没有包含MySQL专用测试文件，故41项结果仍锚定前次专用命令。16个ResourceWarning报告未关闭SQLite连接，仍待处理。仅验证隔离私有Unix socket上的自有MySQL 8.4实例；三个随机测试schema均清理，实例已停止。远程TLS握手NOT_RUN |
+| 默认测试目标guard | 七个目标的20项专用命令在cb3fbec5235f557fd212be4b63ceae141cf2859a上通过；最终31cfd70命令也包含guard测试 | 保护连接、checkout、保留连接SQL及pool pre-ping路径；是目标级测试保护，不是操作系统沙箱或全局网络/文件隔离 |
 
-root在OpenData `7b810652` 对前次失败的13个根重新运行完整Ruff/format、逐根mypy和Bandit，全部通过。私有回执为`wave5-thirteen-typing-roots-static.json`。这是精确13根检查，不是整仓A2或make gate通过。实际运行时仍为Python3.13.5，Python3.10运行矩阵未执行。
+上述OpenData测试与覆盖率命令使用Python 3.13.5。最终静态结果覆盖106个变更Python文件，production mypy检查56个core与3个client文件，Bandit检查59个生产文件；brand、zero-dep、public-api-quality与published-OpenAPI命名gate通过。OpenAPI v1/v2分别校验140和6条live paths，2,488个public callables的docstring与annotation覆盖均为100%。Python 3.10只完成AST语法检查，没有运行时矩阵结果。完整make gate仍NOT_RUN。
 
-AFI独立审查曾发现上海业务日窗口误映射前一天：原来的测试响应忽略URL参数而未暴露问题。现仅在legacy到public-query适配层转换日期轴，测试根据实际start/end过滤源数据；未更改OpenData源trade_date或全局normalizer。stock_daily类型修复也曾引入同日排序漂移，现按自然日键稳定排序，并增加同日15:00在09:00前的源序黄金用例。
+## 最终组合与整仓门禁
 
-## 审查和补充任务
+root对fixture专用修复31cfd70ba62dee6e1243d7ea9100a15532e49f95完成复核；修复只调整测试fixture，未改生产代码或削弱guard。相同58文件组合在该提交上2199 passed、25 deselected，耗时109.78秒，没有报告warning；两个fixture回归加20项guard回归另为22 passed、1.04秒。此前2197 passed、2项fixture失败的旧组合属于修复前结果，不作为最终结果。最终静态和A2复跑已在31cfd70ba62dee6e1243d7ea9100a15532e49f95通过（1,189个resolver文件、783个mypy roots、0个失败，范围与gate规则未变）；最终私有归档与公开验证manifest均已冻结。manifest将本批限定为局部代码和隔离集成验证通过，NOT_PRODUCTION_ACCEPTED。
 
-MySQL worker草案已有临时私有Unix socket MySQL8.4的实际测试证据，但独立审查仍发现TLS信任材料漂移、timeout校验晚于身份查询、socket父目录0750不够私有三个问题。草案尚未合并；修复、独立复核和最终定向验证完成前不能声明该worker验收通过。远程TLS握手未执行。
+完整make gate **NOT_RUN**。A2全量resolver静态检查通过不等于pytest、全仓质量门禁或生产验收通过；没有改变任务范围、质量阈值或历史证据豁免。
 
-数据模块触碰后的覆盖阈值仍按90%执行。保存的旧报告中三文件汇总80.75%，其中_sdk.py为67.46%；该报告发生在最终修复之前，且来自下述越界执行，不作第五批验收通过证据。正在编写仅使用fake transport与预计算期望的离线边界测试，不引入运行时SDK、不降低阈值。
+## 修正前失败的保留记录
 
-## 测试范围越界与收敛
+首轮六文件frames覆盖率为86.36%，未达90%门槛；加入经过单独复核的financial_pit测试后，七文件定向命令达到95.3795%，首轮报告保留在归档中。MySQL worker首轮因AF_UNIX socket路径过长而39 passed、2 failed；保持代码、断言和deadline不变，仅缩短自有basetemp路径后41 passed，首轮失败也保留。组合测试首轮2197 passed、25 deselected、2个owned-SQLite fixture失败；仅修复两个测试fixture后在最终提交通过，guard与生产代码未变。
 
-- 第一事件：typing代理在其隔离工作树执行整个tests目录，报告28383 passed、236 skipped、22 failed和1项teardown error，覆盖命令exit非零。日志包含scheduled pipeline取消用例尝试默认localhost MySQL、连接被拒；它没有使用root创建的owned MySQL URL。
-- 第二事件：HTTP流式分支代理启动目录级tests后中断，旧会话退出2、无完整收集/执行摘要及落盘stdout；不能从约41个进度点推断所有实际执行节点。
-- 两次运行均未在启动前显式设置APP_ENV、TESTING和REDIS_URL。测试标记not e2e不能证明每个非e2e节点均被fixture隔离。AccessDenied也不能证明其他测试没有成功连接或写入；默认DB、外部服务与持久文件的影响仍待只读审计，未擅自连接或回滚未知目标。
+## 测试范围审计
 
-root已禁止开发代理继续pytest/coverage，集中审核后续精确文件命令。新增测试默认目标保护独立分支，拟在DBAPI connect前阻止普通测试使用两条应用默认Engine，并移除全局fixture清理共享Redis的路径；它不代表全局网络或文件隔离。后续完整gate会触发目录级test-cov，当前尚未重跑，不冒用静态组件或第四批结果宣布整仓绿灯。
+两次先前未经批准的目录级测试执行已完成只读审计。第一次运行整个tests目录，留存结果为28,383 passed、236 skipped、22 failed及1项teardown error；日志记录一个取消用例尝试连接默认localhost MySQL并被拒绝。第二次目录级执行被中断，只留下约41个进度点，没有完整收集清单或最终摘要。审计没有证明这两次执行无副作用；未知数据库连接、外部数据库影响及文件副作用仍保持未知。没有擅自连接或回滚未知目标。
 
-## 后续范围
+不可变审计归档位于`/home/yun/Documents/opendata/var/reports/afi204/2026-10-26-wave5-test-scope`，共6个文件、530,049 bytes，保持私有；审计已冻结，未知影响不因此转为已知。独立复核的默认目标保护仅覆盖前述七个目标，不覆盖任意Engine、原始DBAPI句柄、上游HTTP或文件系统。
 
-HTTP流式body cap和合作式预算另在第六批分支开发，尚未合并或最终验证。真实源、许可、全历史head/interior/tail、原1103任务导入、生产角色/调度/API/管理页面接线、全部AFI消费者、自然周期、外部备份恢复和单写者切换仍保持开放。完整87项任务状态不因本页局部交付而整体关闭。
+## 最终归档与公开收据
+
+冻结的同机忽略归档位于`/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-wave5`，共121个文件、12,400,793 bytes；目录权限0700、文件权限0600。它是同机私有证据保存，不是外部备份或恢复演练。OpenData仓库的公开验证与归档manifest分别为`/home/yun/Documents/opendata-od204/docs/afi204-wave5-validation.json`和`/home/yun/Documents/opendata-od204/docs/afi204-wave5-archive.json`。验证manifest将本批状态限定为SCOPED_CODE_AND_ISOLATED_INTEGRATION_VALIDATED、NOT_PRODUCTION_ACCEPTED；真实源未验证，rights/retention未知。
+
+## 仍开放的迁移范围
+
+1,103个旧任务（本批无真实任务导入、无ready任务）、真实源与许可/保留期核验、逐instrument全历史head/interior/tail、全部生产角色与CLI/UI接线、所有AFI消费者、自然调度周期、外部备份恢复和单写者切换继续开放。87个控制任务状态仍为8项DEV_DONE、9项IN_PROGRESS、70项PLANNED；204-E03-01仍为局部完成。第六批HTTP边界代码在分支3d16400c有静态复核结果，但尚未由root合入或测试；stock进程切片仍在开发，默认关闭且运行权限未知。

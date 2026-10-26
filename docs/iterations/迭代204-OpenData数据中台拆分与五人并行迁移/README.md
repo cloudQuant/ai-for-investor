@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-26（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批7条执行任务已集成验证，第四批已完成1813项隔离组合回归，整仓gate仍有13个既有mypy根失败，第五批继续开发；尚未合入dev或切换生产调度**。
+编制日期：2026-10-27（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批7条执行任务已集成验证，第四批1813项隔离组合收据保持冻结；第五批最终58文件组合2199 passed、25 deselected，fixture/guard定向22 passed；最终Ruff、format、mypy、Bandit、named gates和A2均通过；121文件私有收据归档已冻结，状态为局部代码及隔离集成验证通过、未作生产验收。整仓make gate NOT_RUN；尚未push、合入dev或切换生产调度**。
 
 目标：将 ai-for-investor 的市场及研究基础数据采集、清洗、仓储、质量治理、调度和运维管理迁入 `/home/yun/Documents/opendata`。ai-for-investor 保留投研、策略、回测、交易和用户业务，通过 opendata REST API 消费数据。
 
@@ -19,8 +19,8 @@
 | [WAVE3_STATUS.md](WAVE3_STATUS.md) | 执行器/证据/主机清单/提交/迁移预演/兼容门禁和wire身份修正 |
 | [WAVE4_PLAN.md](WAVE4_PLAN.md) | 股票日线离线运行切片的5条并行流、冻结接口与验收门槛 |
 | [WAVE4_STATUS.md](WAVE4_STATUS.md) | 第四批提交、独立复核、跨模块验收及保留限制 |
-| [WAVE5_PLAN.md](WAVE5_PLAN.md) | 已启动的股票图表直读与MySQL worker局部任务 |
-| [WAVE5_STATUS.md](WAVE5_STATUS.md) | 第五批局部集成、审查发现、测试越界审计与收敛措施 |
+| [WAVE5_PLAN.md](WAVE5_PLAN.md) | 股票图表直读、MySQL worker、静态类型边界及局部验证门槛 |
+| [WAVE5_STATUS.md](WAVE5_STATUS.md) | 第五批局部收据、组合重跑状态、测试范围审计及未关闭边界 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
@@ -73,8 +73,10 @@
 
 初始计划阶段对两仓工作树做只读代码与文档检查，未连接生产数据库、执行数据采集或改动运行调度。ai-for-investor HEAD 为 `c720a261c`，opendata HEAD 为 `61800c18`；前者存在未提交改动，源码哈希见逐文件台账。源码引用和历史记录见 [INVENTORY.md](INVENTORY.md)。引用的 `.joyincode/rules/backend.md`、`frontend.md` 在本地两仓未找到，实施开工时由A核对恢复位置；本次按根 AGENTS.md 和现有架构编写规划。
 
-文档校验：7份Markdown的本地链接与代码块检查通过；35个工作包、18个验收ID及其引用完整；1,066条CSV记录与源目录集合一致、路径唯一、逐文件SHA-256一致。两次独立方案复核已纳入能力边界、阶段依赖和交接崩溃恢复修正。本批已完成定向业务回归；生产/真实源/部署及自然周期验收仍NOT_RUN，提交和测试记录见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+计划初稿校验记录：7份Markdown的本地链接与代码块检查通过；35个工作包、18个验收ID及其引用完整；1,066条CSV记录与源目录集合一致、路径唯一、逐文件SHA-256一致。两次独立方案复核已纳入能力边界、阶段依赖和交接崩溃恢复修正。此处是初稿时的校验记录；第五批当前测试收据和仍开放的门禁以 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 与 [WAVE5_STATUS.md](WAVE5_STATUS.md) 为准。
 
 OpenBB 官方明确其 Provider 是连接器，数据覆盖依赖具体来源；社区存在独立 AKShare 扩展。它们不能证明旧脚本逐项等价覆盖。[OpenBB Provider说明](https://docs.openbb.co/odp/v4/python/extensions/providers)、[AKShare扩展项目](https://github.com/finanalyzer/openbb_akshare)。官方V5文档还说明命名空间及部分Provider发生变化，故本项目能力映射须钉住参考版本。[OpenBB V5 Provider说明](https://docs.openbb.co/odp/python/extensions/providers)。本计划的组织和架构选择是针对现有两仓的设计建议，不宣称已通过外部标准认证。
 
 第四批采用独立分支和worktree并行开发，root逐项复核、合并及组合验收；进度见 [WAVE4_STATUS.md](WAVE4_STATUS.md)。
+
+第五批当前局部结果、最终组合与静态复跑、归档和范围审计见 [WAVE5_STATUS.md](WAVE5_STATUS.md)；没有任何局部结果关闭整仓门禁、全历史或生产切换条件。
