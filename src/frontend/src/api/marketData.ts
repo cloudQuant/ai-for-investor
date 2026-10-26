@@ -121,6 +121,7 @@ function isMarketDataCapabilityState(value: unknown): value is MarketDataCapabil
     || typeof authorized !== 'boolean'
     || typeof effective !== 'boolean'
   ) return false
+  if (effective && (!declared || !installed || !verified || !authorized)) return false
   if (reason_code !== null && (typeof reason_code !== 'string' || reason_code.length > 128)) return false
   if (effective ? reason_code !== null : typeof reason_code !== 'string' || reason_code.trim().length === 0) {
     return false
