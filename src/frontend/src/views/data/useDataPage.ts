@@ -16,6 +16,7 @@ import {
 import * as echarts from 'echarts'
 import { akshareTablesApi } from '@/api/akshare'
 import {
+  classifyMarketDataRouteSelection,
   createMarketDataQueryFromContract,
   hasMarketDataCapabilities,
   hasMarketDataQueryBundle,
@@ -26,6 +27,7 @@ import {
   marketDataApi,
   type MarketAssetType,
   type MarketDataCapabilitiesResponse,
+  type MarketDataRouteSelection,
   type MarketDataFamilyObservationShape,
   type MarketHistoryRow,
   type MarketInstrumentOption,
@@ -40,10 +42,74 @@ import {
   type MarketDataQueryMode,
   type MarketDataQueryObservation,
   type MarketDataQueryResponse,
+  type OpenDataDirectKlineRecord,
+  type OpenDataDirectKlineRequest,
+  type OpenDataDirectKlineResponse,
 } from '@/api/marketData'
 import { CANDLE_DOWN_COLOR, CANDLE_ITEM_STYLE, CANDLE_UP_COLOR } from '@/constants/chartColors'
 import type { DataTable } from '@/types'
 import type { MarketDataCoverageResponse } from '@/types/trust'
+
+export type DataPageDisplayMode = 'legacy' | 'opendata_direct'
+
+export type OpenDataDirectKlineDisplayStatus = 'idle' | 'loading' | 'ready' | 'unavailable'
+
+export type OpenDataDirectKlineDisplayReason =
+  | 'CAPABILITIES_UNAVAILABLE'
+  | 'CAPABILITY_CENSUS_INVALID'
+  | 'QUERY_V2_DISABLED'
+  | 'ONLINE_FETCH_DISABLED'
+  | 'OPENDATA_ROUTE_INEFFECTIVE'
+  | 'UNSUPPORTED_ASSET'
+  | 'UNSUPPORTED_PERIOD'
+  | 'INVALID_DATE_RANGE'
+  | 'DIRECT_REQUEST_FAILED'
+  | 'DIRECT_RESPONSE_INVALID'
+
+export interface OpenDataDirectKlineDisplayState {
+  status: OpenDataDirectKlineDisplayStatus
+  request: OpenDataDirectKlineRequest | null
+  symbolLabel: string | null
+  rangeLabel: string | null
+  rows: readonly OpenDataDirectKlineRecord[]
+  returnedBarCount: number | null
+  retrievedAt: string | null
+  coverageStatus: 'unknown' | null
+  sourceAvailableAt: 'unknown' | null
+  durableReceipt: 'not_created' | null
+  reason: OpenDataDirectKlineDisplayReason | null
+}
+
+function emptyOpenDataDirectKlineDisplay(): OpenDataDirectKlineDisplayState {
+  return {
+    status: 'idle',
+    request: null,
+    symbolLabel: null,
+    rangeLabel: null,
+    rows: [],
+    returnedBarCount: null,
+    retrievedAt: null,
+    coverageStatus: null,
+    sourceAvailableAt: null,
+    durableReceipt: null,
+    reason: null,
+  }
+}
+
+function isValidDirectBusinessDateRange(start: string, end: string): boolean {
+  const parseDate = (value: string): number | null => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+    const timestamp = Date.parse(`${value}T00:00:00.000Z`)
+    if (!Number.isFinite(timestamp)) return null
+    return new Date(timestamp).toISOString().slice(0, 10) === value ? timestamp : null
+  }
+
+  const startTimestamp = parseDate(start)
+  const endTimestamp = parseDate(end)
+  if (startTimestamp === null || endTimestamp === null || endTimestamp < startTimestamp) return false
+  const inclusiveCalendarDays = Math.floor((endTimestamp - startTimestamp) / 86_400_000) + 1
+  return inclusiveCalendarDays <= 366
+}
 
 const MARKET_ASSET_SELECTIONS_STORAGE_KEY = 'ai_for_investor:market:asset_selections'
 
@@ -782,6 +848,10 @@ export function useDataPage() {
   const dateRange = ref<[string, string]>([toDateInput(ninetyDaysAgo), toDateInput(today)])
   const loading = ref(false)
   const result = ref<MarketInstrumentLookupResponse | null>(null)
+  const dataPageDisplayMode = ref<DataPageDisplayMode>('legacy')
+  const openDataDirectKlineDisplay = ref<OpenDataDirectKlineDisplayState>(
+    emptyOpenDataDirectKlineDisplay(),
+  )
   const chartMode = ref<ChartMode>('price')
   const marketChartRef = ref<HTMLDivElement>()
   const instrumentOptions = ref<MarketInstrumentOption[]>([])
@@ -823,6 +893,7 @@ export function useDataPage() {
   const genericObservationResult = ref<GenericObservationResult | null>(null)
   const viewportWidth = ref(window.innerWidth)
   let marketChart: echarts.ECharts | null = null
+  let marketChartElement: HTMLDivElement | null = null
   let instrumentOptionsRequestId = 0
   let relatedTableRequestId = 0
   let coverageRequestId = 0
@@ -831,6 +902,13 @@ export function useDataPage() {
   let activeMarketDataQuerySelectionKey: string | null = null
   let marketDataCapabilitiesResolved = false
   let marketDataCapabilitiesRequest: Promise<MarketDataCapabilitiesResponse | null> | null = null
+  const marketDataRouteSelection = ref<MarketDataRouteSelection>({
+    mode: 'unknown',
+    can_query: false,
+    reason: 'CAPABILITIES_UNAVAILABLE',
+  })
+  let openDataDirectRequestEpoch = 0
+  let activeOpenDataDirectAbortController: AbortController | null = null
 
   const snapshot = computed<Record<string, unknown>>(() => result.value?.snapshot || {})
   const historyRows = computed(() => result.value?.history.rows || [])
@@ -1319,6 +1397,7 @@ export function useDataPage() {
   })
 
   onUnmounted(() => {
+    invalidateOpenDataDirectRequest()
     abortActiveMarketDataQueryLifecycle()
     window.removeEventListener('resize', handleViewportResize)
     disposeMarketChart()
@@ -1334,6 +1413,27 @@ export function useDataPage() {
         invalidateMarketDataQueryLifecycle()
       }
     },
+  )
+
+  watch(
+    () => [
+      form.asset_type,
+      formSymbolText(),
+      form.period,
+      selectedFamilyId.value,
+      dateRange.value?.[0] || '',
+      dateRange.value?.[1] || '',
+      instrumentAliasEffectiveOn.value || '',
+      instrumentOptionsCatalogMode.value || '',
+      instrumentOptionsLoading.value,
+      instrumentOptions.value,
+    ],
+    () => {
+      if (dataPageDisplayMode.value === 'opendata_direct') {
+        invalidateOpenDataDirectRequest()
+      }
+    },
+    { flush: 'sync' },
   )
 
   watch(
@@ -1361,6 +1461,19 @@ export function useDataPage() {
       const firstDate = rows[0]?.date || ''
       const lastDate = rows[rows.length - 1]?.date || ''
       return `${form.asset_type}:${result.value?.symbol || ''}:${chartMode.value}:${rows.length}:${firstDate}:${lastDate}`
+    },
+    () => {
+      void nextTick(renderMarketChart)
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    () => {
+      const display = openDataDirectKlineDisplay.value
+      const firstDate = display.rows[0]?.date || ''
+      const lastDate = display.rows[display.rows.length - 1]?.date || ''
+      return `${dataPageDisplayMode.value}:${display.status}:${display.rows.length}:${firstDate}:${lastDate}`
     },
     () => {
       void nextTick(renderMarketChart)
@@ -1433,13 +1546,15 @@ export function useDataPage() {
 
     marketDataCapabilitiesRequest = marketDataApi.getCapabilities()
       .then((response) => {
+        marketDataRouteSelection.value = classifyMarketDataRouteSelection(response)
         marketDataCapabilities.value = hasMarketDataCapabilities(response) ? response : null
         return marketDataCapabilities.value
       })
       .catch(() => {
-        // A pre-197 or temporarily unavailable server cannot grant v2 access.
-        // The existing legacy local read remains the only compatibility path.
+        // A pre-197 or temporarily unavailable server cannot grant v2 or
+        // identify a complete legacy source policy for an online intent.
         marketDataCapabilities.value = null
+        marketDataRouteSelection.value = classifyMarketDataRouteSelection(null)
         return null
       })
       .finally(() => {
@@ -2438,6 +2553,202 @@ export function useDataPage() {
     relatedTablesError.value = ''
   }
 
+  function invalidateOpenDataDirectRequest(): void {
+    openDataDirectRequestEpoch += 1
+    const controller = activeOpenDataDirectAbortController
+    activeOpenDataDirectAbortController = null
+    if (controller && !controller.signal.aborted) controller.abort()
+    if (dataPageDisplayMode.value === 'opendata_direct') {
+      openDataDirectKlineDisplay.value = emptyOpenDataDirectKlineDisplay()
+    }
+  }
+
+  function finishOpenDataDirectRequest(controller: AbortController): void {
+    if (activeOpenDataDirectAbortController === controller) {
+      activeOpenDataDirectAbortController = null
+    }
+  }
+
+  function isCurrentOpenDataDirectIntent(
+    requestId: number,
+    controller: AbortController,
+    snapshot: {
+      assetType: MarketAssetType
+      symbol: string
+      period: string
+      familyId: string
+      startDate: string
+      endDate: string
+      aliasEffectiveOn: string | null
+    },
+  ): boolean {
+    return requestId === openDataDirectRequestEpoch
+      && activeOpenDataDirectAbortController === controller
+      && !controller.signal.aborted
+      && form.asset_type === snapshot.assetType
+      && formSymbolText() === snapshot.symbol
+      && form.period === snapshot.period
+      && selectedFamilyId.value === snapshot.familyId
+      && dateRange.value?.[0] === snapshot.startDate
+      && dateRange.value?.[1] === snapshot.endDate
+      && instrumentAliasEffectiveOn.value === snapshot.aliasEffectiveOn
+  }
+
+  function openDataDirectUnavailable(reason: OpenDataDirectKlineDisplayReason): void {
+    openDataDirectKlineDisplay.value = {
+      ...openDataDirectKlineDisplay.value,
+      status: 'unavailable',
+      rows: [],
+      returnedBarCount: null,
+      retrievedAt: null,
+      coverageStatus: null,
+      sourceAvailableAt: null,
+      durableReceipt: null,
+      reason,
+    }
+  }
+
+  function routeSelectionFailureReason(
+    selection: MarketDataRouteSelection,
+  ): OpenDataDirectKlineDisplayReason {
+    switch (selection.reason) {
+      case 'CAPABILITIES_UNAVAILABLE':
+      case 'CAPABILITY_CENSUS_INVALID':
+      case 'QUERY_V2_DISABLED':
+      case 'ONLINE_FETCH_DISABLED':
+      case 'OPENDATA_ROUTE_INEFFECTIVE':
+        return selection.reason
+      default:
+        return 'CAPABILITY_CENSUS_INVALID'
+    }
+  }
+
+  async function routeOpenDataDirectQuery(): Promise<boolean> {
+    invalidateMarketDataQueryLifecycle()
+    if (marketDataCapabilitiesResolved && marketDataRouteSelection.value.mode === 'legacy') {
+      invalidateOpenDataDirectRequest()
+      dataPageDisplayMode.value = 'legacy'
+      return false
+    }
+    const controller = new AbortController()
+    activeOpenDataDirectAbortController?.abort()
+    activeOpenDataDirectAbortController = controller
+    const requestId = ++openDataDirectRequestEpoch
+    const rawDates = Array.isArray(dateRange.value) ? dateRange.value : []
+    const snapshot = {
+      assetType: form.asset_type,
+      symbol: formSymbolText(),
+      period: form.period,
+      familyId: selectedFamilyId.value,
+      startDate: rawDates[0] || '',
+      endDate: rawDates[1] || '',
+      aliasEffectiveOn: instrumentAliasEffectiveOn.value,
+    }
+    const rangeLabel = snapshot.startDate && snapshot.endDate
+      ? `${snapshot.startDate} – ${snapshot.endDate}`
+      : null
+    const candidateRequest: OpenDataDirectKlineRequest | null = (
+      snapshot.period === 'daily' && snapshot.startDate && snapshot.endDate
+    ) ? {
+        symbol: snapshot.symbol,
+        start_date: snapshot.startDate,
+        end_date: snapshot.endDate,
+        period: 'daily',
+      } : null
+    dataPageDisplayMode.value = 'opendata_direct'
+    openDataDirectKlineDisplay.value = {
+      ...emptyOpenDataDirectKlineDisplay(),
+      status: 'loading',
+      request: candidateRequest,
+      symbolLabel: snapshot.symbol || null,
+      rangeLabel,
+    }
+
+    const isCurrent = () => isCurrentOpenDataDirectIntent(requestId, controller, snapshot)
+    const release = () => finishOpenDataDirectRequest(controller)
+    try {
+      await resolveMarketDataCapabilities()
+      if (!isCurrent()) return true
+
+      const selection = marketDataRouteSelection.value
+      if (selection.mode === 'legacy') {
+        dataPageDisplayMode.value = 'legacy'
+        openDataDirectKlineDisplay.value = emptyOpenDataDirectKlineDisplay()
+        return false
+      }
+      if (selection.mode === 'unknown') {
+        openDataDirectUnavailable(routeSelectionFailureReason(selection))
+        return true
+      }
+      if (!selection.can_query) {
+        openDataDirectUnavailable(routeSelectionFailureReason(selection))
+        return true
+      }
+      if (snapshot.assetType !== 'stock') {
+        openDataDirectUnavailable('UNSUPPORTED_ASSET')
+        return true
+      }
+      if (snapshot.period !== 'daily') {
+        openDataDirectUnavailable('UNSUPPORTED_PERIOD')
+        return true
+      }
+      if (snapshot.familyId !== defaultFamilyId('stock')) {
+        openDataDirectUnavailable('UNSUPPORTED_ASSET')
+        return true
+      }
+      if (!isValidDirectBusinessDateRange(snapshot.startDate, snapshot.endDate)) {
+        openDataDirectUnavailable('INVALID_DATE_RANGE')
+        return true
+      }
+      if (
+        instrumentOptionsLoading.value
+        || instrumentOptionsCatalogMode.value !== 'opendata'
+        || !instrumentOptions.value.some((option) => (
+          option.asset_type === 'stock'
+          && option.catalog_verified === true
+          && option.symbol === snapshot.symbol
+        ))
+      ) {
+        openDataDirectUnavailable('UNSUPPORTED_ASSET')
+        return true
+      }
+      if (!candidateRequest) {
+        openDataDirectUnavailable('INVALID_DATE_RANGE')
+        return true
+      }
+
+      const response: OpenDataDirectKlineResponse = await marketDataApi.getOpenDataDirectKline(
+        candidateRequest,
+        { signal: controller.signal },
+      )
+      if (!isCurrent()) return true
+      openDataDirectKlineDisplay.value = {
+        status: 'ready',
+        request: candidateRequest,
+        symbolLabel: snapshot.symbol,
+        rangeLabel,
+        rows: response.records,
+        returnedBarCount: response.count,
+        retrievedAt: response.provenance.retrieved_at,
+        coverageStatus: response.provenance.coverage_status,
+        sourceAvailableAt: response.provenance.source_available_at,
+        durableReceipt: response.provenance.durable_receipt,
+        reason: null,
+      }
+      return true
+    } catch (error) {
+      if (!isCurrent()) return true
+      const reason = error instanceof Error
+        && error.message === 'OPENDATA_DIRECT_RESPONSE_INVALID'
+        ? 'DIRECT_RESPONSE_INVALID'
+        : 'DIRECT_REQUEST_FAILED'
+      openDataDirectUnavailable(reason)
+      return true
+    } finally {
+      release()
+    }
+  }
+
   async function lookupInstrument(intent: MarketLookupIntent = 'local_first') {
     // ``true``/``false`` were the pre-197 exposed refresh argument. Preserve
     // that boundary for existing callers while making lifecycle/UI calls name
@@ -2451,6 +2762,12 @@ export function useDataPage() {
     if (!requestedSymbol) {
       ElMessage.error(t('dataMgmt.msgSymbolRequired'))
       return
+    }
+    if (queryMode === 'local_first') {
+      if (await routeOpenDataDirectQuery()) return
+    } else {
+      invalidateOpenDataDirectRequest()
+      dataPageDisplayMode.value = 'legacy'
     }
     if (form.asset_type === 'stock' && instrumentOptionsCatalogMode.value === null) {
       if (!instrumentOptionsError.value) {
@@ -3485,14 +3802,26 @@ export function useDataPage() {
   }
 
   function renderMarketChart() {
-    if (!chartCanRender.value || !marketChartRef.value) {
+    const isDirectDisplay = dataPageDisplayMode.value === 'opendata_direct'
+    const canRender = isDirectDisplay
+      ? openDataDirectKlineDisplay.value.status === 'ready'
+        && openDataDirectKlineDisplay.value.rows.length > 0
+      : chartCanRender.value
+    if (!canRender || !marketChartRef.value) {
       disposeMarketChart()
       return
     }
+    if (marketChart && marketChartElement !== marketChartRef.value) {
+      disposeMarketChart()
+    }
     if (!marketChart) {
       marketChart = echarts.init(marketChartRef.value)
+      marketChartElement = marketChartRef.value
     }
-    marketChart.setOption(buildMarketChartOption(), true)
+    marketChart.setOption(
+      isDirectDisplay ? buildOpenDataDirectKlineChartOption() : buildMarketChartOption(),
+      true,
+    )
     marketChart.resize()
   }
 
@@ -3508,6 +3837,50 @@ export function useDataPage() {
   function disposeMarketChart() {
     marketChart?.dispose()
     marketChart = null
+    marketChartElement = null
+  }
+
+  function buildOpenDataDirectKlineChartOption(): echarts.EChartsOption {
+    const rows = openDataDirectKlineDisplay.value.rows
+    const dates = rows.map((row) => row.date)
+    const ohlc = rows.map((row) => [row.open, row.close, row.low, row.high])
+    const volumeBars = rows.map((row) => ({
+      value: row.volume,
+      itemStyle: { color: row.close >= row.open ? CANDLE_UP_COLOR : CANDLE_DOWN_COLOR },
+    }))
+
+    return baseChartOption({
+      legend: [t('charts.klineSeries'), t('charts.klineVolume')],
+      grid: [
+        { left: 64, right: 28, top: 42, height: '55%' },
+        { left: 64, right: 28, top: '73%', height: '16%' },
+      ],
+      xAxis: [
+        categoryAxis(dates),
+        { ...categoryAxis(dates), gridIndex: 1, axisLabel: { show: false } },
+      ],
+      yAxis: [
+        valueAxis(),
+        valueAxis({ gridIndex: 1, splitNumber: 2, axisLabel: { show: false } }),
+      ],
+      dataZoom: dataZoom([0, 1]),
+      series: [
+        {
+          name: t('charts.klineSeries'),
+          type: 'candlestick',
+          data: ohlc,
+          itemStyle: CANDLE_ITEM_STYLE,
+        },
+        {
+          name: t('charts.klineVolume'),
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumeBars,
+          barMaxWidth: 12,
+        },
+      ],
+    })
   }
 
   function buildMarketChartOption(): echarts.EChartsOption {
@@ -4157,6 +4530,8 @@ export function useDataPage() {
     form,
     dateRange,
     loading,
+    dataPageDisplayMode,
+    openDataDirectKlineDisplay,
     result,
     chartMode,
     marketChartRef,
