@@ -475,6 +475,7 @@ class InstrumentReferenceClient:
 
         if pinned is None or len(rows) != _required_integer(pinned.get("record_count")):
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
+        _validate_row_publication_consistency(rows, pinned, deadline=deadline)
         _validate_registry(rows, dataset_id=self._config.dataset_id, deadline=deadline)
         _ensure_deadline(deadline)
         _ensure_snapshot_fresh(pinned, clock=self._clock)
@@ -947,14 +948,16 @@ def _validate_page_rows(
         if not isinstance(raw, dict) or set(raw) != _ROW_KEYS:
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
         row = raw
+        row_publication_id = row.get("publication_id")
         publication_sequence = row.get("publication_sequence")
         revision = row.get("revision")
         if (
             row.get("dataset_id") != config.dataset_id
             or row.get("business_date") is not None
-            or row.get("publication_id") != publication_id
+            or not _valid_identifier(row_publication_id)
             or type(publication_sequence) is not int
-            or publication_sequence != sequence
+            or not 1 <= publication_sequence <= sequence
+            or (publication_sequence == sequence and row_publication_id != publication_id)
             or type(revision) is not int
             or revision < 1
         ):
@@ -991,6 +994,41 @@ def _validate_page_rows(
             raise InstrumentReferenceError(_PROTOCOL_INVALID)
         validated.append(row)
     return validated
+
+
+def _validate_row_publication_consistency(
+    rows: list[dict[str, JsonValue]],
+    pinned: Mapping[str, JsonValue],
+    *,
+    deadline: float,
+) -> None:
+    """Require visible row publication IDs and sequences to form a stable pairing."""
+    snapshot_sequence = _required_integer(pinned.get("sequence"))
+    snapshot_publication_id = _required_string(pinned.get("publication_id"))
+    if not _valid_identifier(snapshot_publication_id):
+        raise InstrumentReferenceError(_PROTOCOL_INVALID)
+
+    publication_id_by_sequence = {snapshot_sequence: snapshot_publication_id}
+    sequence_by_publication_id = {snapshot_publication_id: snapshot_sequence}
+    for row in rows:
+        _ensure_deadline(deadline)
+        publication_sequence = _required_integer(row.get("publication_sequence"))
+        publication_id = _required_string(row.get("publication_id"))
+        if (
+            publication_sequence < 1
+            or publication_sequence > snapshot_sequence
+            or not _valid_identifier(publication_id)
+        ):
+            raise InstrumentReferenceError(_PROTOCOL_INVALID)
+
+        known_publication_id = publication_id_by_sequence.get(publication_sequence)
+        known_sequence = sequence_by_publication_id.get(publication_id)
+        if (known_publication_id is not None and known_publication_id != publication_id) or (
+            known_sequence is not None and known_sequence != publication_sequence
+        ):
+            raise InstrumentReferenceError(_PROTOCOL_INVALID)
+        publication_id_by_sequence[publication_sequence] = publication_id
+        sequence_by_publication_id[publication_id] = publication_sequence
 
 
 def _validate_payload(payload: Mapping[str, JsonValue]) -> None:

@@ -115,6 +115,18 @@ def _single_page() -> dict[str, Any]:
     return page
 
 
+def _incremental_pages(
+    *, snapshot_sequence: int = 2, snapshot_publication_id: str = "3" * 32
+) -> tuple[list[dict[str, Any]], str, str]:
+    pages = copy.deepcopy(_fixture()["pages"])
+    prior_publication_id = pages[0]["publication_id"]
+    for page in pages:
+        page["sequence"] = snapshot_sequence
+        page["publication_id"] = snapshot_publication_id
+        _sync_snapshot(page)
+    return pages, prior_publication_id, snapshot_publication_id
+
+
 def _sync_snapshot(page: dict[str, Any]) -> None:
     page["meta"]["snapshot"] = {
         key: value
@@ -277,6 +289,65 @@ class TestSnapshotProtocol:
         assert all(request.headers["x-api-key"] == _API_KEY for request in requests)
         assert all(request.headers["accept-encoding"] == "identity" for request in requests)
         assert "payload" not in json.dumps(result)
+
+    async def test_incremental_snapshot_accepts_unchanged_rows_from_prior_publication(self) -> None:
+        pages, prior_publication_id, current_publication_id = _incremental_pages()
+        assert prior_publication_id != current_publication_id
+        assert all(
+            row["publication_id"] == prior_publication_id and row["publication_sequence"] == 1
+            for page in pages
+            for row in page["rows"]
+        )
+        assert all(
+            page["publication_id"] == current_publication_id and page["sequence"] == 2
+            for page in pages
+        )
+
+        result = await _client(_pages_transport(pages)).list_options()
+
+        assert result["total"] == 2
+        items = result["items"]
+        assert isinstance(items, list)
+        assert len(items) == 2
+
+    async def test_row_publication_ids_and_sequences_must_pair_consistently(self) -> None:
+        pages, _, _ = _incremental_pages()
+        pages[1]["rows"][0]["publication_id"] = "4" * 32
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(_pages_transport(pages)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+        pages, prior_publication_id, _ = _incremental_pages(snapshot_sequence=3)
+        pages[1]["rows"][0]["publication_sequence"] = 2
+        # The same publication ID cannot identify two different sequences.
+        assert pages[0]["rows"][0]["publication_id"] == prior_publication_id
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(_pages_transport(pages)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+    async def test_row_publication_metadata_cannot_claim_future_or_wrong_current_version(
+        self,
+    ) -> None:
+        pages, _, _ = _incremental_pages()
+        pages[0]["rows"][0]["publication_sequence"] = 3
+        pages[0]["rows"][0]["publication_id"] = "4" * 32
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(_pages_transport(pages)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+        pages, _, current_publication_id = _incremental_pages()
+        pages[0]["rows"][0]["publication_sequence"] = 2
+        pages[0]["rows"][0]["publication_id"] = "4" * 32
+        assert pages[0]["rows"][0]["publication_id"] != current_publication_id
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(_pages_transport(pages)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
+
+        pages, _, current_publication_id = _incremental_pages()
+        pages[0]["rows"][0]["publication_id"] = current_publication_id
+        with pytest.raises(InstrumentReferenceError) as raised:
+            await _client(_pages_transport(pages)).list_options()
+        assert raised.value.code == "OPENDATA_REFERENCE_PROTOCOL_INVALID"
 
     async def test_full_page_then_empty_terminal_page_is_rejected_as_incomplete(self) -> None:
         pages = copy.deepcopy(_fixture()["pages"])
