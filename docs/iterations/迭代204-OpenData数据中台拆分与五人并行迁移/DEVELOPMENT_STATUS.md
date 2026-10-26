@@ -59,4 +59,6 @@ opendata代码集成截至 `f29b8e72`，AFI代码截至 `c9076d462`；新增跨�
 
 生产切换仍必须执行既定逐域对账、单写者、自然周期和回滚门槛。未执行数据采集、DDL、调度启停、source Key变更或生产发布；不能用本批离线结果关闭1,103个旧任务、全部脚本或全历史恢复要求。
 
-第四批5条离线开发流已分派，范围和依赖调整见 [WAVE4_PLAN.md](WAVE4_PLAN.md)。
+第四批五条模块开发流和公共请求保护已集成；metadata迁移、实际子进程到REST的联调和1813项最终组合结果见 [WAVE4_STATUS.md](WAVE4_STATUS.md)。角色规划与CLI库内SPI不代表实际main或systemd已接线。
+
+第五批四条独立分支已开始普通股票图表REST直读、MySQL worker及完整gate的13个既有mypy根修复，输入基线和契约调整见 [WAVE5_PLAN.md](WAVE5_PLAN.md)。尚未交付或合并，不能使用第四批收据为其背书。

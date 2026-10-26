@@ -1,6 +1,6 @@
 # 第四批 股票日线离线运行切片
 
-日期：2026-10-26。状态：5条独立分支已创建并分派开发。目标是在隔离环境中重复执行“统一提交→持久worker→原始证据→fenced发布→REST/coverage”，并验证一条默认disabled的任务定义导入。真实来源、全历史和生产切换仍单独验收。
+日期：2026-10-26。状态：5条独立分支的模块已合入本地集成分支；追加公共请求凭据保护、metadata迁移及跨模块联调任务，最终结果见 [WAVE4_STATUS.md](WAVE4_STATUS.md)。目标是在隔离环境中重复执行“统一提交→持久worker→原始证据→fenced发布→REST/coverage”，并验证一条默认disabled的任务定义导入。真实来源、全历史和生产切换仍单独验收。
 
 ## 冻结接口和集成顺序
 
@@ -12,7 +12,7 @@
 | 股票reviewed job | 204-B02-01、B06局部 | `codex/od204-wave4-stock-job` | 新增 `pipeline/stock_daily_job.py`及tests；复用严格wire/parser/normalizer、raw artifact与合同writer；只注入fixture响应，默认disabled，来源verified仍False |
 | 单任务定义导入原型 | 204-D05-02局部 | `codex/od204-wave4-job-import` | 新增 `job_definition_store.py`、`migration_apply.py`及tests；control metadata定义、冻结计划/hash/审核/目标指纹校验、幂等导入；不启动Run、不迁事实/执行/checkpoint |
 | 持久worker | 204-D02-04、D03-01局部 | `codex/od204-wave4-worker` | 新增 `pipeline/reviewed_worker.py`及tests；子进程只接plain JSON，父端负责claim/heartbeat/取消/fencing/同事务发布；单次或有界执行 |
-| 入口与角色 | 204-D03-03局部 | `codex/od204-wave4-entrypoints` | 新增 `reviewed_cli.py`、`pipeline/runtime_roles.py`、tests及未安装的systemd模板；CLI/APS共用提交SPI，API/scheduler/worker/legacy角色互斥规划，不自动启用 |
+| 入口与角色 | 204-D03-03局部 | `codex/od204-wave4-entrypoints` | 新增 `reviewed_cli.py`、`pipeline/runtime_roles.py`、tests及部署边界说明；CLI/APS共用提交SPI，API/scheduler/worker/legacy角色互斥规划，不自动启用 |
 
 root独占总路由、启动配置、Alembic序列、依赖锁、共享schema和quality reference/census，负责独立审查、cherry-pick、跨模块测试及文档。各分支从第三批集成代码开始，执行器进程组修复由root统一合入；不把其他代理未交付模块作为开发前置。
 

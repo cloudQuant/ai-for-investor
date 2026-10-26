@@ -1,10 +1,10 @@
 # 迭代204子代理任务清单
 
-本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **87个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；当前8个子任务为DEV_DONE，8项为IN_PROGRESS，71项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
+本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **87个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；当前8个子任务为DEV_DONE，9项为IN_PROGRESS，70项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
 
 第二批已按独占文件集成11条开发任务，第三批按6个控制任务拆成7条执行任务，跨多个父工作包推进；其实际交付与剩余验收面见 [WAVE2_STATUS.md](WAVE2_STATUS.md)。下表保留完整任务验收门槛，库内能力或局部链路完成不会自动关闭要求外部证据、生产worker或完整业务场景的任务。
 
-第三批逐条状态、额外wire身份修正及外部限制见 [WAVE3_STATUS.md](WAVE3_STATUS.md)。第四批5条并行执行流与独占文件见 [WAVE4_PLAN.md](WAVE4_PLAN.md)。
+第三批逐条状态、额外wire身份修正及外部限制见 [WAVE3_STATUS.md](WAVE3_STATUS.md)。第四批5条并行执行流与独占文件见 [WAVE4_PLAN.md](WAVE4_PLAN.md)，模块交付、追加审查任务与最终组合见 [WAVE4_STATUS.md](WAVE4_STATUS.md)。第五批首个图表直读与MySQL worker局部开发见 [WAVE5_PLAN.md](WAVE5_PLAN.md)，没有关闭整行验收。
 
 ## 验收边界与并行约定
 
@@ -118,7 +118,7 @@
 | 204-E02-02 | E02,E03 | DEV_DONE（仅AFI输入校验） | E / dev_consumer | CODE/OFFLINE | 在现有AFI股票日线v1适配器核对响应symbol、严格业务日期和分页元数据，拒绝重复页；流式读取并限制单响应/累计字节，保留原窗口转换与过滤。 | 204-A02-03, 204-E02-01 | 单测覆盖错/缺symbol、非法日期、首尾过滤、错误分页类型/回显/count、重复页/超行/超字节及关闭；不声称新增cursor/snapshot/其他资产支持。 |
 | 204-E02-03 | E02 | PLANNED | E / 消费端代理 | CODE/OFFLINE | 为async FastAPI读路径加独立Async HTTP适配器或薄REST层，确保不在事件循环调用同步SDK。 | 204-E02-01, 204-E02-02 | async并发测试确认无同步阻塞；请求使用共同OpenAPI fixture，适配层不复制provider/清洗逻辑。 |
 | 204-E02-04 | E02 | PLANNED | E / 消费端代理 | CODE/OFFLINE | 统一认证、单位/时区、deadline、有限重试、request_id、429/503/空结果错误映射。 | 204-E02-03, 204-A02-04 | 重试只覆盖幂等读且受总deadline限制；scope/许可错误不重试；可区分合法空、未覆盖、无权和中台不可用。 |
-| 204-E03-01 | E03 | PLANNED | E / 消费端代理 | CODE/OFFLINE | 将行情列表、搜索、覆盖/主题卡等首批业务读路径改到REST client。 | 204-E02-04, 204-A05-01 | API级测试证明业务路径无数据库直读/源SDK调用，页面字段/单位和分页行为符合场景矩阵。 |
+| 204-E03-01 | E03 | IN_PROGRESS | E / afi_inventory | CODE/OFFLINE | 将行情列表、搜索、覆盖/主题卡等首批业务读路径改到REST client。 | 204-E02-04, 204-A05-01 | API级测试证明业务路径无数据库直读/源SDK调用，页面字段/单位和分页行为符合场景矩阵。 |
 | 204-E03-02 | E03 | PLANNED | E / 消费端代理 | CODE/OFFLINE | 迁移单标的分析、扫描器、信号所需行情读路径并明确频率不可用时的业务响应。 | 204-E02-04, 204-A05-02 | 集成fixture验证symbol、日期、频率及缺口提示；不静默降频、换源或改变策略语义。 |
 | 204-E03-03 | E03 | PLANNED | E / 消费端代理 | CODE/OFFLINE | 补齐迁移业务页面和关键API回归，保持已有分析功能并标记暂不可用能力。 | 204-E03-01, 204-E03-02 | 既有场景矩阵逐项有通过/限制结果；错误提示可行动且不把质量部分数据冒充完整。 |
 | 204-E04-01 | E04 | PLANNED | E / 研究工件代理 | CODE/OFFLINE | 为研究快照/导出增加publication、schema、过滤条件、内容hash与来源manifest引用。 | 204-A04-03, 204-E02-04 | 相同固定snapshot可重放同一工件；哈希/契约不匹配时拒绝加载。 |

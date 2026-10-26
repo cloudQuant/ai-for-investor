@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-26（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批7条执行任务已集成验证，第四批5条开发流进行中；尚未合入dev或切换生产调度**。
+编制日期：2026-10-26（Asia/Shanghai）。状态：**首批基础能力已交付，第二批发布/快照/执行/授权/API/SDK已完成隔离集成验证，第三批7条执行任务已集成验证，第四批已完成1813项隔离组合回归，整仓gate仍有13个既有mypy根失败，第五批继续开发；尚未合入dev或切换生产调度**。
 
 目标：将 ai-for-investor 的市场及研究基础数据采集、清洗、仓储、质量治理、调度和运维管理迁入 `/home/yun/Documents/opendata`。ai-for-investor 保留投研、策略、回测、交易和用户业务，通过 opendata REST API 消费数据。
 
@@ -18,6 +18,8 @@
 | [WAVE2_STATUS.md](WAVE2_STATUS.md) | 11条并行开发任务、真实运行清单、事务决定、审查与剩余范围 |
 | [WAVE3_STATUS.md](WAVE3_STATUS.md) | 执行器/证据/主机清单/提交/迁移预演/兼容门禁和wire身份修正 |
 | [WAVE4_PLAN.md](WAVE4_PLAN.md) | 股票日线离线运行切片的5条并行流、冻结接口与验收门槛 |
+| [WAVE4_STATUS.md](WAVE4_STATUS.md) | 第四批提交、独立复核、跨模块验收及保留限制 |
+| [WAVE5_PLAN.md](WAVE5_PLAN.md) | 已启动的股票图表直读与MySQL worker局部任务 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
@@ -74,4 +76,4 @@
 
 OpenBB 官方明确其 Provider 是连接器，数据覆盖依赖具体来源；社区存在独立 AKShare 扩展。它们不能证明旧脚本逐项等价覆盖。[OpenBB Provider说明](https://docs.openbb.co/odp/v4/python/extensions/providers)、[AKShare扩展项目](https://github.com/finanalyzer/openbb_akshare)。官方V5文档还说明命名空间及部分Provider发生变化，故本项目能力映射须钉住参考版本。[OpenBB V5 Provider说明](https://docs.openbb.co/odp/python/extensions/providers)。本计划的组织和架构选择是针对现有两仓的设计建议，不宣称已通过外部标准认证。
 
-第四批5条离线开发流已分派，范围和依赖调整见 [WAVE4_PLAN.md](WAVE4_PLAN.md)。
+第四批采用独立分支和worktree并行开发，root逐项复核、合并及组合验收；进度见 [WAVE4_STATUS.md](WAVE4_STATUS.md)。
