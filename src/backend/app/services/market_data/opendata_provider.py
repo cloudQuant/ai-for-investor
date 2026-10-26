@@ -12,7 +12,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime, time, timezone
 from types import MappingProxyType
@@ -43,6 +45,7 @@ _UTC = timezone.utc
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _MAX_PROVENANCE_BYTES = 10 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+_TRADE_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 #: 中台 REST 响应信封的成功标识字段。
 _ENVELOPE_SUCCESS_FIELD = "success"
@@ -86,11 +89,10 @@ def _date_to_utc(value: object) -> datetime:
     与 AkShare 契约一致：date-only 时间戳代表交易日，``event_at`` 取该日
     ``00:00 UTC``（日历表的 date-only → UTC midnight 口径相同）。
     """
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or _TRADE_DATE_PATTERN.fullmatch(value) is None:
         raise OpendataProviderError("OPENDATA_TIMESTAMP_INVALID")
-    text = value.strip()
     try:
-        parsed = datetime.strptime(text[:10], "%Y-%m-%d").date()
+        parsed = datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError as exc:
         raise OpendataProviderError("OPENDATA_TIMESTAMP_INVALID") from exc
     return datetime.combine(parsed, time.min, tzinfo=_UTC)
@@ -118,6 +120,11 @@ def _normalize_observations(
     observations: list[ProviderMarketObservation] = []
     seen_events: set[datetime] = set()
     for row in rows:
+        symbol = row.get("symbol")
+        if not isinstance(symbol, str):
+            raise OpendataProviderError("OPENDATA_RESPONSE_SYMBOL_INVALID")
+        if symbol != request.provider_symbol:
+            raise OpendataProviderError("OPENDATA_RESPONSE_SYMBOL_MISMATCH")
         event_at = _date_to_utc(row.get("trade_date"))
         if not request.start_at <= event_at < request.end_at:
             if contract.client_filters_window:
@@ -208,6 +215,7 @@ class OpendataProvider:
         endpoint = next(iter(contract.endpoints))
         responses: list[Mapping[str, Any]] = []
         rows: list[Mapping[str, Any]] = []
+        seen_pages: set[bytes] = set()
         page = 1
         while True:
             payload = await self._get_page(endpoint, {**params, "page": page})
@@ -217,15 +225,61 @@ class OpendataProvider:
             page_rows = data.get("rows")
             if not isinstance(page_rows, list):
                 raise OpendataProviderError("OPENDATA_ROWS_INVALID")
+
+            response_page = data.get("page")
+            if isinstance(response_page, bool) or not isinstance(response_page, int):
+                raise OpendataProviderError("OPENDATA_PAGE_INVALID")
+            if response_page != page:
+                raise OpendataProviderError("OPENDATA_PAGE_MISMATCH")
+
+            response_page_size = data.get("page_size")
+            if isinstance(response_page_size, bool) or not isinstance(response_page_size, int):
+                raise OpendataProviderError("OPENDATA_PAGE_SIZE_INVALID")
+            if not 1 <= response_page_size <= OPENDATA_MAX_PAGE_SIZE:
+                raise OpendataProviderError("OPENDATA_PAGE_SIZE_INVALID")
+            if response_page_size != params["page_size"]:
+                raise OpendataProviderError("OPENDATA_PAGE_SIZE_MISMATCH")
+
+            response_count = data.get("count")
+            if isinstance(response_count, bool) or not isinstance(response_count, int):
+                raise OpendataProviderError("OPENDATA_COUNT_INVALID")
+            if not 0 <= response_count <= response_page_size:
+                raise OpendataProviderError("OPENDATA_COUNT_INVALID")
+            if response_count != len(page_rows):
+                raise OpendataProviderError("OPENDATA_COUNT_MISMATCH")
+            if len(page_rows) > response_page_size:
+                raise OpendataProviderError("OPENDATA_ROWS_INVALID")
+
             for row in page_rows:
                 if not isinstance(row, Mapping):
                     raise OpendataProviderError("OPENDATA_ROW_NOT_MAPPING")
-                rows.append(row)
-            responses.append(data)
-            if len(rows) > OPENDATA_MAX_ROWS:
+            if page_rows:
+                try:
+                    canonical_rows = sorted(
+                        json.dumps(
+                            row,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        )
+                        for row in page_rows
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise OpendataProviderError("OPENDATA_ROWS_INVALID") from exc
+                page_fingerprint = hashlib.sha256(
+                    json.dumps(
+                        canonical_rows, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")
+                ).digest()
+                if page_fingerprint in seen_pages:
+                    raise OpendataProviderError("OPENDATA_RESPONSE_DUPLICATE_PAGE")
+                seen_pages.add(page_fingerprint)
+
+            if len(rows) + len(page_rows) > OPENDATA_MAX_ROWS:
                 raise OpendataProviderError("OPENDATA_RESPONSE_TOO_LARGE")
-            page_size = int(data.get("page_size") or OPENDATA_MAX_PAGE_SIZE)
-            if len(page_rows) < page_size or not page_rows:
+            rows.extend(page_rows)
+            responses.append(data)
+            if len(page_rows) < response_page_size or not page_rows:
                 break
             page += 1
 
