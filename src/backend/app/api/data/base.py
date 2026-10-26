@@ -18,6 +18,13 @@ from app.api.data.deps import (
     get_authorized_market_data_access,
     get_market_data_access_authorizer,
 )
+from app.api.data.instrument_reference import (
+    InstrumentReferenceCatalog,
+    InstrumentReferenceSessionFactory,
+    get_instrument_reference_catalog,
+    get_instrument_reference_session_factory,
+    read_instrument_reference_options,
+)
 from app.api.data.queries import (
     evaluate_market_data_capabilities,
     execute_market_data_query_with_singleflight,
@@ -685,10 +692,26 @@ async def list_market_instrument_options(
     asset_type: MarketAssetType = Query("stock", description="Instrument type"),
     search: str = Query("", description="Search by symbol, name, market, or variety"),
     limit: int = Query(80, ge=1, le=200, description="Maximum number of options"),
+    effective_on: str | None = Query(None, description="Explicit YYYY-MM-DD alias effective date"),
     current_user: typing.Any = Depends(get_current_user),
     service: MarketInstrumentService = Depends(get_market_instrument_service),
+    catalog: InstrumentReferenceCatalog = Depends(get_instrument_reference_catalog),
+    control_session: InstrumentReferenceSessionFactory = Depends(
+        get_instrument_reference_session_factory
+    ),
 ) -> typing.Any:
     """Return selectable instruments for the market data query page."""
+    if asset_type == "stock" and catalog.enabled:
+        async with control_session() as db:
+            return await read_instrument_reference_options(
+                catalog=catalog,
+                db=db,
+                authorizer=get_market_data_access_authorizer(db),
+                current_user=current_user,
+                search=search,
+                limit=limit,
+                effective_on=effective_on,
+            )
     try:
         return await service.list_instruments(
             asset_type=asset_type,
