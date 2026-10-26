@@ -16,7 +16,7 @@ root最终决定是**扩展现有v2 records/snapshot路径，接纳窄化的`tab
 
 两份设计评审收据（`wave8-instrument-contract-proposal.txt`、`wave8-instrument-contract-independent-review.txt`）有一项建议为新建专用目录查询route；root的最终选择已否决该首版route方向，本计划以root决定为准。评审中关于完整快照读取、无部分结果、逐页授权、请求边界、alias日期语义和rights未证明等建议保留为设计约束。
 
-现有OpenData `DatasetContract`已定义`record_kind="table"`、`temporal_semantics="none"`和nullable `business_date`；`PublicationStore`支持无日期边界的snapshot，并用null-date后接business-key的稳定排序分页。目前`opendata/api/published_data.py`的records校验仍要求`time_series + business_date + 两端日期窗`，payload校验也拒绝null `business_date`。实施时只增加显式的无时间table分支，原有time-series/date-window响应和拒绝条件保持不变。
+现有OpenData `DatasetContract`已定义`record_kind="table"`和`temporal_semantics="none"`；`PublicationStore`的记录允许nullable `business_date`，也支持无日期边界的snapshot，并用null-date后接business-key的稳定排序分页。目前`opendata/api/published_data.py`的records校验仍要求`time_series + business_date + 两端日期窗`，payload校验也拒绝null `business_date`。实施时只增加显式的无时间table分支，原有time-series/date-window响应和拒绝条件保持不变。
 
 AFI不能直接复用同步的`opendata-client SnapshotClient`：它要求日期窗并按business date校验，在async请求中同步调用也会阻塞事件循环。设计方向是AFI专用的小型async HTTP adapter，读取现有records/snapshot页并在AFI内完成完整快照校验与有限搜索；不引入sibling-checkout导入或未发布的本地client依赖。
 
@@ -29,7 +29,7 @@ AFI不能直接复用同步的`opendata-client SnapshotClient`：它要求日期
 1. **发布profile与来源身份。** 明确fixture及未来profile的dataset/source identity、registry/profile version、schema/semantic version、stable instrument identifier、显式的AFI股票查询symbol映射，以及确有独立证据时才可包含的display name/market字段。还须定义alias、lifecycle、evidence reference、known-start boundary等概念的表达和缺值状态。确切字段名、数据类型、business key、ordering及hash绑定均由root冻结。
 2. **共享published fixture。** root建立唯一确定性fixture，覆盖null business date、稳定business key、identity与AFI-symbol映射、alias有效期、lifecycle及未知边界。它只用于离线合同测试，不含真实source访问、production grant或权利声明。各流只消费root冻结的fixture，不复制出语义不同的本地fixture。
 3. **API page/DTO及错误合同。** 冻结首次读取、continuation、snapshot元数据、contract/provenance字段、错误状态、exact `total`和`has_more`含义，以及何时返回unavailable。不得把完整snapshot的`content_sha256`描述成搜索子集hash。
-4. **访问控制与运行配置。** 冻结server-owned dataset/source/API URL、OpenData grant operation/purpose、AFI服务凭证注入、独立默认false的selector flag及disabled/enabled失败行为。flag名称与共享config文件由root拥有。client不能指定dataset/source/URL/purpose/key；unknown rights或grant必须fail closed。
+4. **访问控制与运行配置。** 冻结server-owned dataset/source/API URL、OpenData grant operation/purpose、AFI服务凭证注入、独立默认false的selector flag及disabled/enabled失败行为。flag名称与共享config文件由root拥有。AFI浏览器或外部调用者不能任意指定server-owned dataset/source/URL/purpose/key；后端adapter只能使用明确注入的配置与凭证，unknown rights或grant必须fail closed。
 5. **有界完整扫描预算。** 冻结页大小、最大页数/总行数/bytes、总时限、expiry处理和UI result cap。设计评审建议UI返回上限不大于80、单页使用低延迟小页；确切数字须根据catalog规模及UI延迟预算由root确认，不能直接采用通用SDK的200,000行/64 MiB/120秒上限。
 6. **身份与时间语义。** 冻结stable ID到AFI query symbol的映射、alias日期字段名与端点包含规则、status/evidence更新时间的含义，以及显式业务生效日如何选择。publication `as_of`只表示平台发布可见时间，不能替代alias生效日、source availability或strategy PIT时间。
 
@@ -86,7 +86,7 @@ root独占现有`opendata/data/platform_contracts.py`共享模型的审查及任
 | Sina consolidated statements（1） | `stock_financial_report_sina.py` | 首个潜在复用候选：现有`AkshareFinancialStatementFetcher`已注册同一Sina函数 | 当前能力仍`verified=false`/需人工复核；原始参数、字段、sink、来源与授权均未证实。Sina中文item键不能直接与THS英文键合并。 |
 | Income/profit（4） | `stock_profit_sheet_by_quarterly_em.py`、`stock_profit_sheet_by_report_delisted_em.py`、`stock_profit_sheet_by_report_em.py`、`stock_profit_sheet_by_yearly_em.py` | 4个Eastmoney endpoints均为扩展现有`FinancialStatement / income`的候选 | 单季/累计、单位、公告日、修订、退市范围及不同endpoint重叠 |
 
-现有`ThsFinancialStatementFetcher`对THS来源的`verified=true`只证明其自身来源和字段，不为本表中Eastmoney或Sina候选背书。11个Eastmoney endpoint在映射收据中无provider；Sina fetcher虽是首个复用候选，仍不是已验收实现。历史脚本用共享writer写入MySQL表，唯一键`(symbol,data_date)`，缺日期时还可能填运行日期；这可能丢失report period、announcement date和revision区分，须先审计，不得直接把运行日当财报业务日期。
+现有`ThsFinancialStatementFetcher`的`verified=true`只属于其自身source/model的能力声明，不能单凭此标志证明真实来源、字段或权利已验收，也不为本表中Eastmoney或Sina候选背书。11个Eastmoney endpoint在映射收据中无provider；Sina fetcher虽是首个复用候选，仍不是已验收实现。历史脚本用共享writer写入MySQL表，唯一键`(symbol,data_date)`，缺日期时还可能填运行日期；这可能丢失report period、announcement date和revision区分，须先审计，不得直接把运行日当财报业务日期。
 
 映射receipt依据AFI commit `85b27158b0b5686b38b2357ffb96217511d19554`复算脚本SHA，OpenData基线为`b4a1f630ad48781d21440724971562ec946374d3`。它引用的运行快照生成于2026-10-26T11:38:36Z，历史上将12个脚本映射到12个scheduled-task id，snapshot中active=1、schedule_type=cron；参数仅有空对象hash、时区未记录。该快照不是当前运行/安装/参数证据，不能把目录派生的`daily`、历史cron或这些12行解释为真实业务频率、SOURCE_VERIFIED或已迁移。12只是脚本数，不是数据集数或总分母。
 
