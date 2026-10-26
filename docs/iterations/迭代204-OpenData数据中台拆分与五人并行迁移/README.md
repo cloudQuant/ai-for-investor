@@ -25,7 +25,9 @@
 | [WAVE6_STATUS.md](WAVE6_STATUS.md) | 第六批局部测试、静态/A2、冻结归档、公开证据扫描及开放边界 |
 | [WAVE7_PLAN.md](WAVE7_PLAN.md) | 管理员reviewed-run离线接线的四条并行流、契约、权限与root验收边界 |
 | [WAVE7_STATUS.md](WAVE7_STATUS.md) | 第七批分项验证、失败保留、组合与静态门禁、归档审查及开放范围 |
-| [WAVE8_PLAN.md](WAVE8_PLAN.md) | 股票标的目录REST接线的五条工作流、共享契约冻结项及12条财报脚本映射；尚未开始实现 |
+| [WAVE8_PLAN.md](WAVE8_PLAN.md) | 股票标的目录REST接线的独占工作流、冻结契约、实现及12条财报脚本映射 |
+| [WAVE8_STATUS.md](WAVE8_STATUS.md) | 第八批专项验证、增量发布兼容修正、锁文件环境及仍开放范围 |
+| [WAVE9_PLAN.md](WAVE9_PLAN.md) | 第九批Sina资产负债表raw wire切片：冻结合同、四条独占开发分支及独立审查 |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | 五人职责、35项工作包、依赖、工期、共享文件与合并规则 |
 | [ACCEPTANCE_AND_CUTOVER.md](ACCEPTANCE_AND_CUTOVER.md) | 验收案例、数据迁移、单写者切换、回滚与退出条件 |
 | [INVENTORY.md](INVENTORY.md) | 两仓现状、逐脚本台账口径、完整任务盘点要求和历史遗留事项 |
@@ -90,4 +92,4 @@ OpenBB 官方明确其 Provider 是连接器，数据覆盖依赖具体来源；
 
 第七批reviewed-run离线接线与证据归档已局部收口。OpenData前端6文件Vitest为29 passed，`npm run build`通过但保留chunk size warning；账本/身份9文件248 passed，runtime/API/app 4文件70 passed且各自目标覆盖达到门槛。Ruff/format覆盖120个Python文件、production mypy 61 core+3 client文件、Bandit 64个production文件、四个named gates、74文件combined（2,627 passed、26 deselected）及A2（1,200 resolver文件、786 roots全通过）均通过；861提交历史Gitleaks 8.30.1扫描0 leaks，两个公开JSON的后续独立扫描exit 0、0 findings。333个docs/evidence文件按既有A2策略排除，149,323条历史Ruff发现、5,130项support缺口和16项active-evidence缺失仍开放。106文件、10,544,281 bytes的Wave 7私有归档已生成，独立归档审查36项全部通过；3.10 grammar通过但3.10 runtime NOT_RUN，此前前端与API未达标尝试均保留。整仓`make gate`仍NOT_RUN。功能边界、具体收据和未关闭范围见 [WAVE7_PLAN.md](WAVE7_PLAN.md) 与 [WAVE7_STATUS.md](WAVE7_STATUS.md)。
 
-第八批已完成设计准备与12条财报脚本的静态映射。root选择在现有v2 records/snapshot中严格支持table/none参考表，后续由AFI async adapter完整校验有界快照后搜索；精确profile、共用fixture和DTO仍须先冻结，尚未开始本批实现或测试。五条独占工作流及开放边界见 [WAVE8_PLAN.md](WAVE8_PLAN.md)。
+第八批股票标的目录REST接线已局部收口：OpenData严格支持table/none参考表，AFI完整校验有界快照后搜索，并保持目录成员与行情可用性分离。OpenData专项112项、AFI锁文件子集环境专项203项、前端109项及真实producer/store/API/AFI跨仓bridge两项均通过，前端类型检查、构建和scoped static通过。增量发布中未变化行保留旧publication元数据的兼容问题已修复。当前A2静态1,203 resolver文件/787 mypy roots通过，历史secret扫描872提交0泄漏；162文件私有归档的25项独立核对全部通过。证据来自多个精确提交的分项运行，production字节pins一致，不是一轮current-HEAD组合测试。整仓make gate与生产验收仍开放；12条财报脚本仅完成静态映射。分工、证据与限制见 [WAVE8_PLAN.md](WAVE8_PLAN.md) 和 [WAVE8_STATUS.md](WAVE8_STATUS.md)。
