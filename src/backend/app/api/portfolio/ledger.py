@@ -225,7 +225,7 @@ async def get_portfolio_position_sizing(
 async def get_portfolio_benchmark_metrics(
     portfolio_id: str,
     benchmark_id: str | None = None,
-    risk_free_rate: float = 0.0,
+    risk_free_rate: float = Query(default=0.0, ge=-1.0, le=1.0),
     current_user: typing.Any = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> typing.Any:

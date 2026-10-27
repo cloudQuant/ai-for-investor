@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,56 +112,29 @@ class PortfolioLedgerAnalyticsService:
         context = await self.ledger_service.analytics_context(user_id, portfolio_id)
         if context is None:
             return None
-        equity_dates = [str(item) for item in context["equity_dates"]]
-        if len(equity_dates) < 2:
-            return PortfolioLedgerBenchmarkMetricsResult(
-                portfolio_id=portfolio_id,
-                status="degraded",
-                benchmark_id=self._resolve_benchmark_id(
-                    benchmark_id,
-                    context["portfolio"].get("benchmark_symbol"),
-                ),
-                observation_count=max(len(equity_dates) - 1, 0),
-                risk_free_rate=risk_free_rate,
-                reason="insufficient_history",
-            )
         resolved_benchmark_id = self._resolve_benchmark_id(
             benchmark_id,
             context["portfolio"].get("benchmark_symbol"),
         )
-        benchmark = await self.benchmark_service.get_benchmark_returns(
-            resolved_benchmark_id,
-            equity_dates[0],
-            equity_dates[-1],
-        )
-        if benchmark.status != "ok":
-            return PortfolioLedgerBenchmarkMetricsResult(
-                portfolio_id=portfolio_id,
-                status="degraded",
-                benchmark_id=resolved_benchmark_id,
-                observation_count=max(len(equity_dates) - 1, 0),
-                risk_free_rate=risk_free_rate,
-                reason=benchmark.reason,
-            )
-        result = self.benchmark_metrics_service.calculate(
-            strategy_returns=self.benchmark_metrics_service.returns_from_equity_curve(
-                list(context["equity_curve"])
-            ),
-            benchmark_returns=list(benchmark.returns),
-            benchmark_id=resolved_benchmark_id,
-            risk_free_rate=risk_free_rate,
-        )
+        try:
+            validated_risk_free_rate = float(risk_free_rate)
+        except (TypeError, ValueError, OverflowError):
+            validated_risk_free_rate = float("nan")
+        if (
+            not math.isfinite(validated_risk_free_rate)
+            or not -1.0 <= validated_risk_free_rate <= 1.0
+        ):
+            reason = "invalid_risk_free_rate"
+            validated_risk_free_rate = 0.0
+        else:
+            reason = "portfolio_nav_not_time_weighted_or_close_marked"
         return PortfolioLedgerBenchmarkMetricsResult(
             portfolio_id=portfolio_id,
-            status=result.status,
-            benchmark_id=result.benchmark_id,
-            observation_count=result.observation_count,
-            alpha=result.alpha,
-            beta=result.beta,
-            tracking_error=result.tracking_error,
-            information_ratio=result.information_ratio,
-            risk_free_rate=result.risk_free_rate,
-            reason=result.reason,
+            status="degraded",
+            benchmark_id=resolved_benchmark_id,
+            observation_count=0,
+            risk_free_rate=validated_risk_free_rate,
+            reason=reason,
         )
 
     async def calculate_brinson(

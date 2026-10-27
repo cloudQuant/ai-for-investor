@@ -43,7 +43,7 @@ describe('PortfolioLedgerPage', () => {
     apiMocks.exportPortfolio.mockResolvedValue({ schema_version: 'portfolio-ledger.v1', portfolio: { id: 'ledger-1' }, transactions: [] })
     apiMocks.getVarCvar.mockResolvedValue({ portfolio_id: 'ledger-1', status: 'ok', method: 'historical', observation_count: 31, var_95: -0.0123, cvar_95: -0.021 })
     apiMocks.getPositionSizing.mockResolvedValue({ portfolio_id: 'ledger-1', status: 'ok', method: 'volatility_target', observation_count: 31, annualized_volatility: 0.11, target_volatility: 0.15, recommended_position: 0.8 })
-    apiMocks.getBenchmarkMetrics.mockResolvedValue({ portfolio_id: 'ledger-1', status: 'ok', benchmark_id: 'hs300', observation_count: 31, alpha: 0.03, beta: 0.92, information_ratio: 0.55, risk_free_rate: 0 })
+    apiMocks.getBenchmarkMetrics.mockResolvedValue({ portfolio_id: 'ledger-1', status: 'degraded', benchmark_id: 'hs300', observation_count: 0, risk_free_rate: 0, reason: 'portfolio_nav_not_time_weighted_or_close_marked' })
   })
 
   it('creates ledger and renders holdings', async () => {
@@ -70,6 +70,7 @@ describe('PortfolioLedgerPage', () => {
     expect(wrapper.text()).toContain('风险分析')
     expect(wrapper.text()).toContain('VaR / CVaR')
     expect(wrapper.text()).toContain('hs300')
+    expect(wrapper.text()).toContain('账本快照尚未按收盘价盯市并调整外部现金流')
   })
 
   it('loads an existing ledger on mount', async () => {
