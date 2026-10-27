@@ -415,3 +415,14 @@ PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源�
 | Fuyao one-shot 私有候选 | 离线合成用例 **34 项通过**，实现保存在本地私有候选中。 | 未制作或验证真实上游录制；当前执行环境未确认可用凭证。该候选不构成真实 Fuyao 响应、采集或数据语义验收。 |
 
 Sina capture discovery API 与 Fuyao financial fetcher 仍未合并，状态和限制维持此前记录；Sina discovery 继续硬关闭。上述局部测试与 MySQL 合成验证都不改变来源真实性、生产权限配置、全 A 股及逐标的全历史、PIT、调度与部署仍开放的结论。
+
+## 2026-10-28 OpenData PR #39 与 AFI PR #91
+
+以下记录 PR 的限定交付和隔离证据；迭代204整体仍未完成。
+
+| PR | 已合入范围与局部证据 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #39](https://github.com/cloudQuant/opendata/pull/39) | 已合入 `dev`，新增 Sina capture discovery 所需的 `0017` 查询索引迁移。定向隔离测试 **72 项通过**，statement+branch 覆盖率 **97.46%**。在隔离 MySQL 8.4 上用合成 marker 和最小环境 DDL 验证 upgrade、downgrade、re-upgrade；同时验证 MDL 1205 后重试、已有合成数据及旧索引保留。 | 隔离快照表没有种子记录；未验收 API、Store、执行计划/扫描预算（EXPLAIN）、PIT、完整历史迁移链或真实数据。Sina capture discovery API 仍硬关闭，新增索引不代表查询端点已经可用。 |
+| [AFI PR #91](https://github.com/cloudQuant/ai-for-investor/pull/91) | 已合入 `dev`。因扫描器可能把代理指标当成真实报价，停用所有即时、计划和预计算扫描；旧历史数据不删除并标记为 `legacy_unverified`，管理功能保留。前端新建计划表单默认关闭 schedule；编辑时保留已知设置。后端 **8 项**、前端 **21 项与 44 项**测试通过，定向 typecheck 与 Ruff 通过。 | 相关扫描功能现处于暂停状态。后端 API 在创建请求省略 schedule 字段时仍默认为开启，因此默认关闭目前由前端表单保证。恢复依赖 OpenData 提供并验收有效的数据来源、字段单位及时间语义合同；这些内容尚未验收。现存历史记录被标为未验证，不应作为真实报价或有效扫描结果使用。 |
+
+OpenData PR #39 只为后续 discovery 查询提供索引基础，没有启用 Sina discovery，也未补足 source evidence 或 PIT。AFI PR #91 暂停相关扫描，直到消费端可依赖经验证的 OpenData 数据合同。Fuyao one-shot fetcher 仍未合并：没有完成真实来源响应取证，真实 income、balance、cashflow 证据仍待补齐。以上进展均不证明全 A 股真实数据、全历史恢复、生产调度或端到端查询链路已验收。
