@@ -358,3 +358,15 @@ store 已从未验收的 Fuyao 精确财报 fetcher 解耦；合并前的隔离�
 查询目标交易日为 **2026-10-26**；对北交所证券 **920202** 的 Eastmoney 候选 market code `0` 探测于 **2026-10-27 23:45（Asia/Shanghai，UTC+08:00）**在本地执行并生成证据。第一次运行在网络请求前被隔离环境拒绝；第二次仅发出一次请求，返回 `HTTP_NETWORK_FAILURE`，没有取得响应或报文，也没有自动重试。日志保存在 [`2026-10-27-bse-single-probe`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-bse-single-probe>)（[`runtime-refused.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-bse-single-probe/runtime-refused.json>)、[`probe-result.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-bse-single-probe/probe-result.json>)）。脚本中的 `rights_evidence` 文本不是供应商 grant，也不是对合同或数据权限的独立核验。因此 market-code 映射仍未验证；这不是成功采集或真实源响应证据。
 
 用户关于 AkShare 与 Fuyao 可使用的声明已记录，不因本次网络失败重复请求授权。BSE market mapping、可用上游响应、北交所与全 A 股权威证券全集及全历史仍待逐项验证；当前探测不能关闭这些开放项，也不证明 PIT 或生产采集已完成。
+
+## 2026-10-28 局部增量：OpenData PR #31、AFI PR #83–#84
+
+以下更新仅记录各 PR 明确限定的代码与隔离验证结果。它们不改变迭代204整体仍未完成的状态。
+
+| PR | 已合入的限定范围与验证 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #31](https://github.com/cloudQuant/opendata/pull/31) | 增加 runtime database URL endpoint 守卫，拒绝非允许的 URL query 配置，防止通过 query 参数重定向到未经允许的连接选项。定向隔离测试与目标静态检查通过。 | 守卫只验证配置 URL 的 endpoint/query 约束；没有确认运行时实际连接的数据库实例 UUID，也没有核验目标任务表是否为 InnoDB。因此不能据此证明运行实例身份、事务快照条件或生产数据库安全性。 |
+| [AFI PR #83](https://github.com/cloudQuant/ai-for-investor/pull/83) | 增加 `.BJ` 与 `CN-BJSE` 及沪深北代码的身份往返离线测试；定向隔离测试 **4 项通过**。 | 这是标识符解析/序列化往返，不是北交所真实行情、数据源路由、证券全集、市场覆盖或历史数据验证；不改变北交所及全 A 股覆盖仍待验收的状态。 |
+| [AFI PR #84](https://github.com/cloudQuant/ai-for-investor/pull/84) | 从本机现存 Python 字节码恢复缺失的 `run_with_core_environment.py` 包装脚本，并通过 **6 项隔离单元测试**及一次受限环境中的真实进程替换 smoke。PR 已合入 `dev`。 | 2026-10-28 00:06（CST）的一次历史恢复 service 尝试因缺少 `run_with_core_environment.py` 退出。包装脚本恢复合并后，systemd timer 自动触发了后续尝试；截至 00:28 的只读检查，记录显示 timer 于 00:28:04（CST）触发，service 随后于 00:28:05 以状态码 2 退出，原因是缺少 `run_full_history_recovery_worker.py`。这些后续触发由 timer 自动执行，本轮没有手动启动或重启主服务或恢复 service；本次只读状态检查时，timer 仍为 enabled、active/waiting。主服务没有重启；恢复 worker 缺失问题与启动包装脚本修复是两个独立问题，恢复任务仍未成功运行。 |
+
+OpenData 迁移工作清单仍在开发，尚无通过项目覆盖率门槛的证据，也未合并。它不得用于启动迁移任务或授权作业。全量旧任务迁移、全 A 股含北交所的逐标的真实数据与完整历史核对、生产数据库身份与存储引擎验证、自然调度及恢复演练仍保持开放；迭代204整体未完成。
