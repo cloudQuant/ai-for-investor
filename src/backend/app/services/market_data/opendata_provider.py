@@ -19,15 +19,23 @@ import math
 import re
 import time as _time
 from collections.abc import Mapping, Sequence
-from datetime import datetime, time, timezone
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from types import MappingProxyType
 from typing import Any
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import httpx
 
 from app.services.market_data.opendata_contracts import (
+    OPENDATA_INDEX_BENCHMARK_DATASET_IDS,
+    OPENDATA_INDEX_BENCHMARK_DATASETS,
+    OPENDATA_INDEX_BENCHMARK_FAMILY_ID,
+    OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION,
+    OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT,
+    OPENDATA_INDEX_BENCHMARK_ROUTE_ID,
     OPENDATA_MAX_PAGE_SIZE,
     OPENDATA_MAX_ROWS,
     OPENDATA_PROVIDER_CONTRACT_REGISTRY,
@@ -55,6 +63,12 @@ _DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
 _MAX_RETRIES = 2
 _MAX_RETRY_DELAY_SECONDS = 2.0
 _RETRYABLE_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+_PUBLISHED_SNAPSHOT_PAGE_SIZE = 1000
+_PUBLISHED_SNAPSHOT_MAX_PAGES = 100
+_PUBLISHED_SNAPSHOT_MAX_ROWS = 50_000
+_PUBLISHED_SNAPSHOT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+_PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES = 64 * 1024 * 1024
+_PUBLISHED_SNAPSHOT_DEADLINE_SECONDS = 60.0
 _TRADE_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 #: 中台 REST 响应信封的成功标识字段。
@@ -78,6 +92,31 @@ class OpendataProviderError(RuntimeError):
         self.code = code
         self.detail = detail
         super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class OpendataPublishedSnapshotResult:
+    """One fully paged result tied to a fixed published dataset snapshot."""
+
+    snapshot: Mapping[str, Any]
+    coverage: Mapping[str, Any]
+    records: tuple[Mapping[str, Any], ...]
+    page_count: int
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys at the OpenData v2 trust boundary."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(_value: str) -> None:
+    """Reject non-standard NaN and infinity tokens in API JSON."""
+    raise ValueError("non-standard JSON number")
 
 
 def _reviewed_contract_for_request(request: MarketDataProviderRequest) -> ProviderContract:
@@ -423,6 +462,331 @@ class OpendataProvider:
             request=request,
             warnings=(("OPENDATA_IDENTITY_SOURCE_RESPONSE_BOUND",) if observations else ()),
         )
+
+    async def fetch_published_index_snapshot(
+        self,
+        request: MarketDataProviderRequest,
+        *,
+        dataset_id: str,
+    ) -> OpendataPublishedSnapshotResult:
+        """Read one allowlisted index dataset through a fixed v2 snapshot.
+
+        Snapshot creation is deliberately sent once because OpenData does not
+        support an idempotency key. Coverage is checked against that exact
+        publication before any records are fetched, and every records page is
+        pinned to the returned ``snapshot_id`` and opaque cursor.
+        """
+        if not isinstance(request, MarketDataProviderRequest):
+            raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_REQUEST_INVALID")
+        symbol_to_dataset = dict(OPENDATA_INDEX_BENCHMARK_DATASETS.values())
+        benchmark_id = request.canonical_id.removeprefix("index:")
+        expected_identity = OPENDATA_INDEX_BENCHMARK_DATASETS.get(benchmark_id)
+        if (
+            dataset_id not in OPENDATA_INDEX_BENCHMARK_DATASET_IDS
+            or expected_identity != (request.provider_symbol, dataset_id)
+            or symbol_to_dataset.get(request.provider_symbol) != dataset_id
+            or request.provider != "opendata"
+            or request.asset_type != "index"
+            or request.market != "CN-SSE"
+            or request.data_kind != "bars"
+            or request.frequency != "1d"
+            or request.required_fields != frozenset({"close"})
+            or request.adjustment != "not_applicable"
+            or request.price_basis != "close"
+            or request.currency is not None
+            or request.unit != "point"
+            or request.route_id != OPENDATA_INDEX_BENCHMARK_ROUTE_ID
+            or request.family_id != OPENDATA_INDEX_BENCHMARK_FAMILY_ID
+            or request.family_contract_version != OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION
+            or request.provider_endpoint != OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT
+            or request.start_at.utcoffset() != timedelta(0)
+            or request.end_at.utcoffset() != timedelta(0)
+            or request.start_at.time() != time.min
+            or request.end_at.time() != time.min
+            or request.start_at >= request.end_at
+        ):
+            raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_REQUEST_INVALID")
+        if self._credentials is None:
+            raise OpendataProviderError("OPENDATA_CREDENTIAL_MISSING")
+
+        start_date = request.start_at.date().isoformat()
+        end_date = request.end_at.date().isoformat()
+        deadline = _monotonic() + _PUBLISHED_SNAPSHOT_DEADLINE_SECONDS
+        total_bytes = 0
+        # Check coverage before creating a snapshot: snapshot creation has no
+        # idempotency key and would otherwise leave orphan snapshots on a
+        # missing grant or UNKNOWN coverage. Pin the resulting snapshot to the
+        # exact publication and contract asserted by this response.
+        coverage_payload, response_bytes = await self._published_json_request(
+            "GET",
+            f"/datasets/{quote(dataset_id, safe='')}/coverage",
+            params={"start_date": start_date, "end_date": end_date},
+            expected_status=200,
+            request_id=request.request_id,
+            deadline=deadline,
+        )
+        total_bytes += response_bytes
+        coverage = coverage_payload.get("coverage")
+        publication_id = coverage_payload.get("publication_id")
+        contract_sha256 = coverage_payload.get("contract_sha256")
+        if (
+            coverage_payload.get("dataset_id") != dataset_id
+            or not isinstance(publication_id, str)
+            or re.fullmatch(r"[0-9a-f]{32}", publication_id) is None
+            or not isinstance(contract_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", contract_sha256) is None
+            or not isinstance(coverage, Mapping)
+            or coverage.get("status") != "complete"
+            or coverage.get("scope") != "business_history"
+            or coverage.get("requested") != {"start": start_date, "end": end_date}
+            or coverage.get("observed") != {"start": start_date, "end": end_date}
+            or coverage.get("missing_ranges") != []
+            or not isinstance(coverage.get("evidence_refs"), list)
+            or not coverage["evidence_refs"]
+            or any(
+                not isinstance(item, str) or not item.strip() for item in coverage["evidence_refs"]
+            )
+        ):
+            raise OpendataProviderError("OPENDATA_INDEX_COVERAGE_UNAVAILABLE")
+
+        snapshot_payload, response_bytes = await self._published_json_request(
+            "POST",
+            "/snapshots",
+            body={
+                "dataset_id": dataset_id,
+                "publication_id": publication_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "page_size": _PUBLISHED_SNAPSHOT_PAGE_SIZE,
+            },
+            expected_status=201,
+            request_id=request.request_id,
+            deadline=deadline,
+        )
+        total_bytes += response_bytes
+        snapshot_id = snapshot_payload.get("snapshot_id")
+        window = snapshot_payload.get("window")
+        record_count = snapshot_payload.get("record_count")
+        if (
+            not isinstance(snapshot_id, str)
+            or re.fullmatch(r"[0-9a-f]{32}", snapshot_id) is None
+            or snapshot_payload.get("dataset_id") != dataset_id
+            or snapshot_payload.get("publication_id") != publication_id
+            or snapshot_payload.get("contract_sha256") != contract_sha256
+            or not isinstance(window, Mapping)
+            or window.get("start") != start_date
+            or window.get("end") != end_date
+            or window.get("end_exclusive") is not True
+            or snapshot_payload.get("page_size") != _PUBLISHED_SNAPSHOT_PAGE_SIZE
+            or isinstance(snapshot_payload.get("page_size"), bool)
+            or type(record_count) is not int
+            or not 0 <= record_count <= _PUBLISHED_SNAPSHOT_MAX_ROWS
+        ):
+            raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_METADATA_INVALID")
+        snapshot = dict(snapshot_payload)
+
+        records: list[Mapping[str, Any]] = []
+        seen_cursors: set[str] = set()
+        cursor: str | None = None
+        page_count = 0
+        while True:
+            if page_count >= _PUBLISHED_SNAPSHOT_MAX_PAGES:
+                raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_LIMIT_EXCEEDED")
+            params = {"snapshot_id": snapshot_id}
+            if cursor is not None:
+                params["cursor"] = cursor
+            page_payload, response_bytes = await self._published_json_request(
+                "GET",
+                f"/datasets/{quote(dataset_id, safe='')}/records",
+                params=params,
+                expected_status=200,
+                request_id=request.request_id,
+                deadline=deadline,
+                max_response_bytes=min(
+                    _PUBLISHED_SNAPSHOT_MAX_RESPONSE_BYTES,
+                    _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES - total_bytes,
+                ),
+            )
+            total_bytes += response_bytes
+            page_count += 1
+            rows = page_payload.get("rows")
+            count = page_payload.get("count")
+            has_more = page_payload.get("has_more")
+            next_cursor = page_payload.get("next_cursor")
+            metadata_keys = set(snapshot)
+            expected_page_keys = metadata_keys | {
+                "rows",
+                "count",
+                "next_cursor",
+                "has_more",
+                "meta",
+            }
+            page_metadata = {key: page_payload.get(key) for key in metadata_keys}
+            page_meta = page_payload.get("meta")
+            if (
+                set(page_payload) != expected_page_keys
+                or page_metadata != snapshot
+                or not isinstance(rows, list)
+                or type(count) is not int
+                or count != len(rows)
+                or count > _PUBLISHED_SNAPSHOT_PAGE_SIZE
+                or type(has_more) is not bool
+                or (
+                    next_cursor is not None
+                    and (not isinstance(next_cursor, str) or not next_cursor)
+                )
+                or has_more != (next_cursor is not None)
+                or (has_more and not rows)
+                or not isinstance(page_meta, Mapping)
+                or set(page_meta)
+                != {"snapshot", "ordering_fields", "storage_order", "identity_key_encoding"}
+                or page_meta.get("snapshot") != snapshot
+                or page_meta.get("ordering_fields") != snapshot.get("ordering_fields")
+                or page_meta.get("storage_order") != snapshot.get("storage_order")
+                or page_meta.get("identity_key_encoding") != snapshot.get("identity_key_encoding")
+                or any(not isinstance(row, Mapping) for row in rows)
+            ):
+                raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_PAGE_INVALID")
+            records.extend(rows)
+            if (
+                len(records) > _PUBLISHED_SNAPSHOT_MAX_ROWS
+                or len(records) > record_count
+                or total_bytes > _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES
+            ):
+                raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_LIMIT_EXCEEDED")
+            if not has_more:
+                if len(records) != record_count:
+                    raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_INCOMPLETE")
+                break
+            if page_count >= _PUBLISHED_SNAPSHOT_MAX_PAGES:
+                raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_LIMIT_EXCEEDED")
+            if (
+                next_cursor is None
+                or next_cursor == cursor
+                or next_cursor in seen_cursors
+                or len(next_cursor) > 8192
+                or any(ord(character) < 32 for character in next_cursor)
+            ):
+                raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_CURSOR_INVALID")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+
+        return OpendataPublishedSnapshotResult(
+            snapshot=snapshot,
+            coverage=dict(coverage_payload),
+            records=tuple(records),
+            page_count=page_count,
+        )
+
+    async def _published_json_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        request_id: str,
+        deadline: float,
+        expected_status: int,
+        params: Mapping[str, str] | None = None,
+        body: Mapping[str, Any] | None = None,
+        max_response_bytes: int = _PUBLISHED_SNAPSHOT_MAX_RESPONSE_BYTES,
+    ) -> tuple[Mapping[str, Any], int]:
+        """Make one bounded v2 request without retrying snapshot creation."""
+        if self._credentials is None:
+            raise OpendataProviderError("OPENDATA_CREDENTIAL_MISSING")
+        remaining = self._remaining_seconds(deadline)
+        url = f"{self._credentials.base_url}/api/v2{path}"
+        headers = {
+            "X-API-Key": self._credentials.api_key,
+            "X-Request-ID": request_id,
+            "Accept": "application/json",
+        }
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        try:
+            status_code, response_body = await asyncio.wait_for(
+                self._read_published_attempt(
+                    method,
+                    url,
+                    params=params,
+                    body=body,
+                    headers=headers,
+                    timeout_seconds=min(self._timeout_seconds, remaining),
+                    max_response_bytes=min(
+                        max_response_bytes, _PUBLISHED_SNAPSHOT_MAX_RESPONSE_BYTES
+                    ),
+                ),
+                timeout=remaining,
+            )
+        except (asyncio.TimeoutError, httpx.TimeoutException) as exc:
+            raise OpendataProviderError("OPENDATA_TIMEOUT") from exc
+        except httpx.HTTPError as exc:
+            raise OpendataProviderError(
+                "OPENDATA_TRANSPORT_ERROR", detail=exc.__class__.__name__
+            ) from exc
+        if status_code != expected_status:
+            if status_code == 401:
+                code = "OPENDATA_UNAUTHORIZED"
+            elif status_code == 403:
+                code = "OPENDATA_FORBIDDEN"
+            elif status_code == 410:
+                code = "OPENDATA_SNAPSHOT_EXPIRED"
+            elif status_code == 429:
+                code = "OPENDATA_RATE_LIMITED"
+            else:
+                code = "OPENDATA_HTTP_ERROR"
+            raise OpendataProviderError(code, detail=str(status_code))
+        try:
+            payload = json.loads(
+                response_body,
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
+        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+            raise OpendataProviderError("OPENDATA_V2_RESPONSE_INVALID_JSON") from exc
+        if not isinstance(payload, Mapping):
+            raise OpendataProviderError("OPENDATA_V2_RESPONSE_INVALID")
+        return payload, len(response_body)
+
+    async def _read_published_attempt(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Mapping[str, str] | None,
+        body: Mapping[str, Any] | None,
+        headers: Mapping[str, str],
+        timeout_seconds: float,
+        max_response_bytes: int,
+    ) -> tuple[int, bytes]:
+        """Stream one v2 response under the caller's per-request size cap."""
+        body_bytes = bytearray()
+        async with self._client.stream(
+            method,
+            url,
+            params=dict(params) if params is not None else None,
+            json=dict(body) if body is not None else None,
+            headers=dict(headers),
+            timeout=timeout_seconds,
+        ) as response:
+            if response.status_code != 200 and response.status_code != 201:
+                return response.status_code, b""
+            content_type = response.headers.get("content-type", "")
+            media_type = content_type.split(";", 1)[0].strip().casefold()
+            if media_type != "application/json" and not media_type.endswith("+json"):
+                raise OpendataProviderError("OPENDATA_V2_RESPONSE_CONTENT_TYPE_INVALID")
+            declared_length = response.headers.get("content-length")
+            if (
+                declared_length is not None
+                and declared_length.isascii()
+                and declared_length.isdecimal()
+                and int(declared_length) > max_response_bytes
+            ):
+                raise OpendataProviderError("OPENDATA_RESPONSE_TOO_LARGE")
+            async for chunk in response.aiter_bytes():
+                if len(body_bytes) + len(chunk) > max_response_bytes:
+                    raise OpendataProviderError("OPENDATA_RESPONSE_TOO_LARGE")
+                body_bytes.extend(chunk)
+            return response.status_code, bytes(body_bytes)
 
     async def _get_page(
         self,

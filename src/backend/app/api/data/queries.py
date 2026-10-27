@@ -54,6 +54,12 @@ from app.services.market_data.identity import (
     MarketDataIdentityResolver,
 )
 from app.services.market_data.openbb_runtime import approved_openbb_runtime_route_permits
+from app.services.market_data.opendata_contracts import (
+    OPENDATA_INDEX_BENCHMARK_FAMILY_ID,
+    OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION,
+    OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT,
+    OPENDATA_INDEX_BENCHMARK_ROUTE_ID,
+)
 from app.services.market_data.opendata_provider import OpendataProvider
 from app.services.market_data.providers import OpenBBSubprocessProvider
 from app.services.market_data.query_resolution import (
@@ -142,6 +148,7 @@ def _default_source_policy_registry(
     research_cache_fill_enabled: bool = False,
     ths_enabled: bool = False,
     opendata_enabled: bool = False,
+    risk_benchmark_opendata_enabled: bool = False,
 ) -> MarketDataSourcePolicyRegistry:
     """Build the reviewed default policy without importing OpenBB in FastAPI.
 
@@ -162,22 +169,44 @@ def _default_source_policy_registry(
     whether the route actually performs provider I/O.
     """
     if opendata_enabled:
-        route = MarketDataProviderRoute(
-            route_id="opendata-stock-daily-v1",
-            request_provider="opendata",
-            expected_result_provider_ids=frozenset({"opendata"}),
-            asset_types=frozenset({"stock"}),
-            data_kinds=frozenset({"bars"}),
-            frequencies=_DAILY_ONLY_FREQUENCIES,
-            markets=frozenset({"CN-SSE", "CN-SZSE"}),
-            adjustments=_STOCK_FUND_ADJUSTMENTS,
-            price_bases=_CLOSE_OR_UNDECLARED,
-            currencies=_CNY_OR_UNDECLARED,
-            units=_SHARE_OR_UNDECLARED,
-            adapter=_shared_opendata_provider(),
-            family_id="stock.realtime",
-            family_contract_version=FAMILY_CONTRACT_VERSION,
-        )
+        routes = [
+            MarketDataProviderRoute(
+                route_id="opendata-stock-daily-v1",
+                request_provider="opendata",
+                expected_result_provider_ids=frozenset({"opendata"}),
+                asset_types=frozenset({"stock"}),
+                data_kinds=frozenset({"bars"}),
+                frequencies=_DAILY_ONLY_FREQUENCIES,
+                markets=frozenset({"CN-SSE", "CN-SZSE"}),
+                adjustments=_STOCK_FUND_ADJUSTMENTS,
+                price_bases=_CLOSE_OR_UNDECLARED,
+                currencies=_CNY_OR_UNDECLARED,
+                units=_SHARE_OR_UNDECLARED,
+                adapter=_shared_opendata_provider(),
+                family_id="stock.realtime",
+                family_contract_version=FAMILY_CONTRACT_VERSION,
+            )
+        ]
+        if risk_benchmark_opendata_enabled:
+            routes.append(
+                MarketDataProviderRoute(
+                    route_id=OPENDATA_INDEX_BENCHMARK_ROUTE_ID,
+                    request_provider="opendata",
+                    expected_result_provider_ids=frozenset({"opendata"}),
+                    asset_types=frozenset({"index"}),
+                    data_kinds=frozenset({"bars"}),
+                    frequencies=_DAILY_ONLY_FREQUENCIES,
+                    markets=frozenset({"CN-SSE"}),
+                    adjustments=frozenset({"not_applicable"}),
+                    price_bases=frozenset({"close"}),
+                    currencies=frozenset({None}),
+                    units=frozenset({"point"}),
+                    adapter=_shared_opendata_provider(),
+                    family_id=OPENDATA_INDEX_BENCHMARK_FAMILY_ID,
+                    family_contract_version=OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION,
+                    provider_endpoint=OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT,
+                )
+            )
         allowed_purposes = _PUBLIC_MARKET_DATA_PURPOSES
         if research_cache_fill_enabled:
             allowed_purposes = allowed_purposes | frozenset({_RESEARCH_CACHE_FILL_PURPOSE})
@@ -186,7 +215,7 @@ def _default_source_policy_registry(
                 MarketDataSourcePolicy(
                     policy_id="market-default-v1",
                     allowed_purposes=allowed_purposes,
-                    routes=(route,),
+                    routes=tuple(routes),
                 ),
             )
         )
@@ -501,6 +530,11 @@ def _source_policies_from_settings(settings: object) -> MarketDataSourcePolicyRe
         # Enabled selects an OpenData-only provider policy. Durable lifecycle
         # and source authorization still gate whether provider I/O may run.
         opendata_enabled=bool(getattr(settings, "MARKET_DATA_OPENDATA_ENABLED", False)),
+        # Risk benchmarks have a separate default-off index route. The global
+        # OpenData kill switch above remains a prerequisite.
+        risk_benchmark_opendata_enabled=bool(
+            getattr(settings, "MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED", False)
+        ),
     )
 
 

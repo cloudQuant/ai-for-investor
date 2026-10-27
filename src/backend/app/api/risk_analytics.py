@@ -6,8 +6,13 @@ from functools import lru_cache
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.data.queries import evaluate_market_data_capabilities
 from app.api.deps import get_current_user
+from app.config import get_settings
+from app.db.database import get_db
 from app.schemas.risk_analytics import (
     BenchmarkMetricsResult,
     BenchmarkReturnsResult,
@@ -19,6 +24,13 @@ from app.schemas.risk_analytics import (
     VarCvarResult,
 )
 from app.services.backtest_service import BacktestService
+from app.services.market_data.access import (
+    MarketDataAccessAuthorizer,
+    MarketDataAuthorizationError,
+    MarketDataQueryAccess,
+)
+from app.services.market_data.opendata_credentials import OpendataCredentialsError
+from app.services.market_data.source_policy import MarketDataSourcePolicyError
 from app.services.market_regime import MarketRegimeDetector
 from app.services.risk_analytics import (
     BenchmarkMetricsService,
@@ -27,6 +39,13 @@ from app.services.risk_analytics import (
     PositionSizingService,
     StressTestService,
     VarCvarService,
+)
+from app.services.risk_analytics.benchmark import BENCHMARK_SYMBOLS
+from app.services.risk_analytics.opendata_index_benchmark import (
+    OPENDATA_INDEX_DAILY_POLICY_ID,
+    OPENDATA_INDEX_DAILY_ROUTE_ID,
+    OpenDataIndexBenchmarkError,
+    OpenDataIndexBenchmarkReader,
 )
 
 router = APIRouter(prefix="/risk-analytics", tags=["Risk Analytics"])
@@ -201,8 +220,29 @@ async def get_benchmark_returns(
     end_date: str,
     current_user: typing.Any = Depends(get_current_user),
     benchmark_service: BenchmarkService = Depends(get_benchmark_service),
+    db: AsyncSession = Depends(get_db),
 ) -> BenchmarkReturnsResult:
     """Fetch benchmark prices and derive return series."""
+    settings = get_settings()
+    if _uses_opendata_risk_benchmark(settings, benchmark_id):
+        reader = await _authorized_opendata_index_benchmark_reader(
+            db=db,
+            current_user=current_user,
+            purpose="display",
+            settings=settings,
+        )
+        await db.rollback()
+        try:
+            return await benchmark_service.get_benchmark_returns(
+                benchmark_id,
+                start_date,
+                end_date,
+                data_fetcher=_opendata_fetcher(reader, benchmark_id),
+            )
+        except MarketDataAuthorizationError as exc:
+            raise _market_data_authorization_http_error(exc) from exc
+        except OpenDataIndexBenchmarkError as exc:
+            return _opendata_degraded_benchmark(benchmark_id, start_date, end_date, exc.code)
     return await benchmark_service.get_benchmark_returns(benchmark_id, start_date, end_date)
 
 
@@ -219,6 +259,7 @@ async def get_benchmark_metrics(
     backtest_service: BacktestService = Depends(get_backtest_service),
     benchmark_service: BenchmarkService = Depends(get_benchmark_service),
     benchmark_metrics_service: BenchmarkMetricsService = Depends(get_benchmark_metrics_service),
+    db: AsyncSession = Depends(get_db),
 ) -> BenchmarkMetricsResult:
     """Calculate beta from exactly aligned return intervals."""
     result = await backtest_service.get_result(backtest_id, user_id=current_user.sub)
@@ -260,11 +301,40 @@ async def get_benchmark_metrics(
             backtest_id=backtest_id,
         )
 
-    benchmark = await benchmark_service.get_benchmark_returns(
-        benchmark_id,
-        strategy_observations[0].start_date,
-        strategy_observations[-1].end_date,
-    )
+    benchmark_start_date = strategy_observations[0].start_date
+    benchmark_end_date = strategy_observations[-1].end_date
+    settings = get_settings()
+    if _uses_opendata_risk_benchmark(settings, benchmark_id):
+        reader = await _authorized_opendata_index_benchmark_reader(
+            db=db,
+            current_user=current_user,
+            purpose="backtest",
+            settings=settings,
+        )
+        await db.rollback()
+        try:
+            benchmark = await benchmark_service.get_benchmark_returns(
+                benchmark_id,
+                benchmark_start_date,
+                benchmark_end_date,
+                data_fetcher=_opendata_fetcher(reader, benchmark_id),
+            )
+        except MarketDataAuthorizationError as exc:
+            raise _market_data_authorization_http_error(exc) from exc
+        except OpenDataIndexBenchmarkError as exc:
+            return BenchmarkMetricsResult(
+                status="degraded",
+                benchmark_id=benchmark_id,
+                risk_free_rate=risk_free_rate,
+                reason=exc.code,
+                backtest_id=backtest_id,
+            )
+    else:
+        benchmark = await benchmark_service.get_benchmark_returns(
+            benchmark_id,
+            benchmark_start_date,
+            benchmark_end_date,
+        )
     if benchmark.status != "ok":
         metrics = BenchmarkMetricsResult(
             status="degraded",
@@ -282,6 +352,127 @@ async def get_benchmark_metrics(
     )
     metrics.backtest_id = backtest_id
     return metrics
+
+
+def _uses_opendata_risk_benchmark(settings: object, benchmark_id: str) -> bool:
+    """Select OpenData only for the three fixed A-share indices and explicit opt-in."""
+    return bool(
+        getattr(settings, "MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED", False)
+        and benchmark_id in {"hs300", "csi500", "csi800"}
+    )
+
+
+async def _authorized_opendata_index_benchmark_reader(
+    *,
+    db: AsyncSession,
+    current_user: object,
+    purpose: str,
+    settings: object,
+) -> OpenDataIndexBenchmarkReader:
+    """Build the reader only after current user, route, and source checks pass."""
+    authorizer = MarketDataAccessAuthorizer(db)
+    try:
+        principal = await authorizer.principal_for_user(current_user)
+        authorizer.require_read_data(principal=principal)
+    except MarketDataAuthorizationError as exc:
+        raise _market_data_authorization_http_error(exc) from exc
+
+    try:
+        capabilities = await evaluate_market_data_capabilities(db, settings=settings)
+    except (SQLAlchemyError, OpendataCredentialsError, MarketDataSourcePolicyError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OPENDATA_RISK_BENCHMARK_CAPABILITY_UNAVAILABLE"},
+        ) from exc
+    if not capabilities.response.online_fetch_enabled or not capabilities.route_is_effective(
+        OPENDATA_INDEX_DAILY_ROUTE_ID
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OPENDATA_RISK_BENCHMARK_ROUTE_UNAVAILABLE"},
+        )
+
+    try:
+        policy = capabilities.effective_source_policies.resolve(OPENDATA_INDEX_DAILY_POLICY_ID)
+    except MarketDataSourcePolicyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OPENDATA_RISK_BENCHMARK_POLICY_UNAVAILABLE"},
+        ) from exc
+    route = next(
+        (
+            candidate
+            for candidate in policy.routes
+            if candidate.route_id == OPENDATA_INDEX_DAILY_ROUTE_ID
+        ),
+        None,
+    )
+    if route is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OPENDATA_RISK_BENCHMARK_ROUTE_UNAVAILABLE"},
+        )
+
+    try:
+        access = MarketDataQueryAccess(principal=principal, authorizer=authorizer)
+        grant = await authorizer.authorize_policy(
+            principal=principal,
+            policy=policy,
+            routes=(route,),
+            asset_type="index",
+            market="CN-SSE",
+            purpose=purpose,
+        )
+        return OpenDataIndexBenchmarkReader(
+            access=access,
+            policy=policy,
+            route=route,
+            grant=grant,
+        )
+    except MarketDataAuthorizationError as exc:
+        raise _market_data_authorization_http_error(exc) from exc
+    except OpenDataIndexBenchmarkError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "OPENDATA_RISK_BENCHMARK_ROUTE_CONTRACT_INVALID"},
+        ) from exc
+
+
+def _opendata_fetcher(
+    reader: OpenDataIndexBenchmarkReader,
+    benchmark_id: str,
+):
+    """Bind one public benchmark selector to the reader's fixed allowlist."""
+
+    async def fetch(symbol: str, start_date: str, end_date: str) -> list[dict[str, object]]:
+        return await reader.fetch_prices(benchmark_id, symbol, start_date, end_date)
+
+    return fetch
+
+
+def _opendata_degraded_benchmark(
+    benchmark_id: str,
+    start_date: str,
+    end_date: str,
+    reason: str,
+) -> BenchmarkReturnsResult:
+    """Keep provider failures in the risk API's existing degraded-result shape."""
+    return BenchmarkReturnsResult(
+        status="degraded",
+        benchmark_id=benchmark_id,
+        symbol=BENCHMARK_SYMBOLS.get(benchmark_id),
+        start_date=start_date,
+        end_date=end_date,
+        reason=reason,
+    )
+
+
+def _market_data_authorization_http_error(exc: MarketDataAuthorizationError) -> HTTPException:
+    """Map current read/source denials to the same authenticated 403 boundary."""
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": exc.code},
+    )
 
 
 @router.get(
