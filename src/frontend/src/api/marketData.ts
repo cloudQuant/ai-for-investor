@@ -60,6 +60,367 @@ export function hasMarketDataCapabilities(value: unknown): value is MarketDataCa
     && typeof candidate.research_backtest_bridge_enabled === 'boolean'
 }
 
+export interface MarketDataCapabilityStateResponse {
+  capability_id: string
+  scope: 'rollout' | 'route'
+  route_id: string | null
+  declared: boolean
+  installed: boolean
+  verified: boolean
+  authorized: boolean
+  effective: boolean
+  reason_code: string | null
+}
+
+export interface MarketDataCapabilitiesWithStates extends MarketDataCapabilitiesResponse {
+  capability_states: MarketDataCapabilityStateResponse[]
+}
+
+export type MarketDataRouteMode = 'legacy' | 'opendata_only' | 'unknown'
+
+export type MarketDataRouteSelectionReason =
+  | 'LEGACY_POLICY'
+  | 'CAPABILITIES_UNAVAILABLE'
+  | 'CAPABILITY_CENSUS_INVALID'
+  | 'QUERY_V2_DISABLED'
+  | 'ONLINE_FETCH_DISABLED'
+  | 'OPENDATA_ROUTE_INEFFECTIVE'
+
+export interface MarketDataRouteSelection {
+  mode: MarketDataRouteMode
+  can_query: boolean
+  reason: MarketDataRouteSelectionReason | null
+}
+
+const MARKET_DATA_ROLLOUT_CAPABILITY_IDS = [
+  'market-data.query-v2',
+  'market-data.online-fetch',
+  'market-data.research-cache-fill',
+  'market-data.research-backtest-bridge',
+] as const
+
+const OPENDATA_STOCK_DAILY_ROUTE_ID = 'opendata-stock-daily-v1'
+const AKSHARE_STOCK_KLINE_LEGACY_ROUTE_ID = 'akshare-stock-kline-legacy-v1'
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isMarketDataCapabilityState(value: unknown): value is MarketDataCapabilityStateResponse {
+  if (!isPlainRecord(value)) return false
+  const { capability_id, scope, route_id, declared, installed, verified, authorized, effective, reason_code } = value
+  if (typeof capability_id !== 'string' || capability_id.length < 1 || capability_id.length > 192) return false
+  if (scope !== 'rollout' && scope !== 'route') return false
+  if (route_id !== null && (typeof route_id !== 'string' || route_id.length < 1 || route_id.length > 128)) {
+    return false
+  }
+  if (
+    typeof declared !== 'boolean'
+    || typeof installed !== 'boolean'
+    || typeof verified !== 'boolean'
+    || typeof authorized !== 'boolean'
+    || typeof effective !== 'boolean'
+  ) return false
+  if (effective && (!declared || !installed || !verified || !authorized)) return false
+  if (reason_code !== null && (typeof reason_code !== 'string' || reason_code.length > 128)) return false
+  if (effective ? reason_code !== null : typeof reason_code !== 'string' || reason_code.trim().length === 0) {
+    return false
+  }
+  if (scope === 'rollout') return route_id === null
+  return typeof route_id === 'string' && capability_id === `market-data.route:${route_id}`
+}
+
+function marketDataCapabilitiesWithStates(value: unknown): MarketDataCapabilitiesWithStates | null {
+  if (!hasMarketDataCapabilities(value) || !isPlainRecord(value)) return null
+  const states = value.capability_states
+  if (!Array.isArray(states) || !states.every(isMarketDataCapabilityState)) return null
+
+  const capabilityIds = new Set<string>()
+  const routeIds = new Set<string>()
+  const rolloutIds = new Set<string>()
+  for (const state of states) {
+    if (capabilityIds.has(state.capability_id)) return null
+    capabilityIds.add(state.capability_id)
+
+    if (state.scope === 'rollout') {
+      if ((MARKET_DATA_ROLLOUT_CAPABILITY_IDS as readonly string[]).includes(state.capability_id)) {
+        if (rolloutIds.has(state.capability_id)) return null
+        rolloutIds.add(state.capability_id)
+      } else {
+        return null
+      }
+    } else if (state.route_id !== null) {
+      if (routeIds.has(state.route_id)) return null
+      routeIds.add(state.route_id)
+    }
+  }
+
+  if (rolloutIds.size !== MARKET_DATA_ROLLOUT_CAPABILITY_IDS.length) return null
+  const rolloutById = new Map(
+    states
+      .filter((state) => state.scope === 'rollout')
+      .map((state) => [state.capability_id, state]),
+  )
+  if (
+    value.query_v2_enabled !== rolloutById.get('market-data.query-v2')?.effective
+    || value.online_fetch_enabled !== rolloutById.get('market-data.online-fetch')?.effective
+    || value.research_cache_fill_enabled !== rolloutById.get('market-data.research-cache-fill')?.effective
+    || value.research_backtest_bridge_enabled !== rolloutById.get('market-data.research-backtest-bridge')?.effective
+  ) return null
+
+  return value as unknown as MarketDataCapabilitiesWithStates
+}
+
+export function classifyMarketDataRouteSelection(value: unknown): MarketDataRouteSelection {
+  const capabilities = marketDataCapabilitiesWithStates(value)
+  if (!capabilities) {
+    return {
+      mode: 'unknown',
+      can_query: false,
+      reason: value === null || value === undefined
+        ? 'CAPABILITIES_UNAVAILABLE'
+        : 'CAPABILITY_CENSUS_INVALID',
+    }
+  }
+
+  const routeStates = capabilities.capability_states.filter((state) => state.scope === 'route')
+  const opendataState = routeStates.find((state) => state.route_id === OPENDATA_STOCK_DAILY_ROUTE_ID)
+  const legacyState = routeStates.find((state) => state.route_id === AKSHARE_STOCK_KLINE_LEGACY_ROUTE_ID)
+
+  if (opendataState && !legacyState) {
+    if (routeStates.length !== 1) {
+      return { mode: 'unknown', can_query: false, reason: 'CAPABILITY_CENSUS_INVALID' }
+    }
+    if (!capabilities.query_v2_enabled) {
+      return { mode: 'opendata_only', can_query: false, reason: 'QUERY_V2_DISABLED' }
+    }
+    if (!capabilities.online_fetch_enabled) {
+      return { mode: 'opendata_only', can_query: false, reason: 'ONLINE_FETCH_DISABLED' }
+    }
+    if (!opendataState.effective) {
+      return { mode: 'opendata_only', can_query: false, reason: 'OPENDATA_ROUTE_INEFFECTIVE' }
+    }
+    return { mode: 'opendata_only', can_query: true, reason: null }
+  }
+
+  if (legacyState && !opendataState) {
+    return { mode: 'legacy', can_query: false, reason: 'LEGACY_POLICY' }
+  }
+
+  return { mode: 'unknown', can_query: false, reason: 'CAPABILITY_CENSUS_INVALID' }
+}
+
+export interface OpenDataDirectKlineRequest {
+  symbol: string
+  start_date: string
+  end_date: string
+  period: 'daily'
+}
+
+export interface OpenDataDirectKlineOptions {
+  signal?: AbortSignal
+}
+
+export interface OpenDataDirectKlineRecord {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  change: number
+}
+
+export interface OpenDataDirectKlineProvenance {
+  provider_id: 'opendata'
+  provider_adapter_revision: string
+  source_revision: null
+  request_id: string
+  retrieved_at: string
+  raw_payload_sha256: string
+  source_registry_id: string
+  coverage_status: 'unknown'
+  source_available_at: 'unknown'
+  source_snapshot_id: null
+  observation_revision_ids: null
+  committed_at: null
+  durable_receipt: 'not_created'
+}
+
+export interface OpenDataDirectKlineResponse {
+  symbol: string
+  count: number
+  kline: {
+    dates: string[]
+    ohlc: Array<readonly [open: number, close: number, low: number, high: number]>
+    volumes: number[]
+  }
+  records: OpenDataDirectKlineRecord[]
+  provenance: OpenDataDirectKlineProvenance
+}
+
+function isIsoCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const year = Number(value.slice(0, 4))
+  const month = Number(value.slice(5, 7))
+  const day = Number(value.slice(8, 10))
+  if (year < 1 || month < 1 || month > 12) return false
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return day >= 1 && day <= daysInMonth[month - 1]
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    && isIsoCalendarDate(value.slice(0, 10))
+    && Number.isFinite(Date.parse(value))
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isOpenDataDirectKlineProvenance(value: unknown): value is OpenDataDirectKlineProvenance {
+  if (!isPlainRecord(value)) return false
+  return value.provider_id === 'opendata'
+    && typeof value.provider_adapter_revision === 'string'
+    && value.provider_adapter_revision.length > 0
+    && value.source_revision === null
+    && typeof value.request_id === 'string'
+    && value.request_id.length > 0
+    && isIsoTimestamp(value.retrieved_at)
+    && typeof value.raw_payload_sha256 === 'string'
+    && /^[a-f0-9]{64}$/.test(value.raw_payload_sha256)
+    && typeof value.source_registry_id === 'string'
+    && value.source_registry_id.length > 0
+    && value.coverage_status === 'unknown'
+    && value.source_available_at === 'unknown'
+    && value.source_snapshot_id === null
+    && value.observation_revision_ids === null
+    && value.committed_at === null
+    && value.durable_receipt === 'not_created'
+}
+
+export function parseOpenDataDirectKlineResponse(
+  value: unknown,
+  expected: OpenDataDirectKlineRequest,
+): OpenDataDirectKlineResponse | null {
+  if (
+    !expected
+    || typeof expected.symbol !== 'string'
+    || expected.symbol.length === 0
+    || expected.period !== 'daily'
+    || !isIsoCalendarDate(expected.start_date)
+    || !isIsoCalendarDate(expected.end_date)
+    || expected.start_date > expected.end_date
+    || Date.parse(`${expected.end_date}T00:00:00Z`)
+      - Date.parse(`${expected.start_date}T00:00:00Z`) > 365 * 24 * 60 * 60 * 1000
+    || !isPlainRecord(value)
+    || value.symbol !== expected.symbol
+    || typeof value.count !== 'number'
+    || !Number.isSafeInteger(value.count)
+    || value.count < 0
+    || value.count > 366
+    || !Array.isArray(value.records)
+    || !isPlainRecord(value.kline)
+    || !Array.isArray(value.kline.dates)
+    || !Array.isArray(value.kline.ohlc)
+    || !Array.isArray(value.kline.volumes)
+    || !isOpenDataDirectKlineProvenance(value.provenance)
+  ) return null
+
+  const count = value.count
+  if (
+    value.records.length !== count
+    || value.kline.dates.length !== count
+    || value.kline.ohlc.length !== count
+    || value.kline.volumes.length !== count
+  ) return null
+
+  const records: OpenDataDirectKlineRecord[] = []
+  const dates: string[] = []
+  const ohlc: Array<readonly [number, number, number, number]> = []
+  const volumes: number[] = []
+  let previousDate = ''
+
+  for (let index = 0; index < count; index += 1) {
+    const row = value.records[index]
+    const date = value.kline.dates[index]
+    const candle = value.kline.ohlc[index]
+    const volume = value.kline.volumes[index]
+    if (!isPlainRecord(row)) return null
+
+    const recordDate = row.date
+    const open = row.open
+    const high = row.high
+    const low = row.low
+    const close = row.close
+    const recordVolume = row.volume
+    const change = row.change
+    if (
+      !isIsoCalendarDate(recordDate)
+      || recordDate < expected.start_date
+      || recordDate > expected.end_date
+      || (previousDate !== '' && recordDate <= previousDate)
+      || date !== recordDate
+      || !Array.isArray(candle)
+      || candle.length !== 4
+      || !isFiniteNumber(open)
+      || !isFiniteNumber(high)
+      || !isFiniteNumber(low)
+      || !isFiniteNumber(close)
+      || typeof recordVolume !== 'number'
+      || !Number.isSafeInteger(recordVolume)
+      || recordVolume < 0
+      || !isFiniteNumber(change)
+      || !candle.every(isFiniteNumber)
+      || candle[0] !== open
+      || candle[1] !== close
+      || candle[2] !== low
+      || candle[3] !== high
+      || volume !== recordVolume
+    ) return null
+
+    const record: OpenDataDirectKlineRecord = {
+      date: recordDate,
+      open,
+      high,
+      low,
+      close,
+      volume: recordVolume,
+      change,
+    }
+    records.push(record)
+    dates.push(recordDate)
+    ohlc.push([open, close, low, high])
+    volumes.push(recordVolume)
+    previousDate = recordDate
+  }
+
+  return {
+    symbol: expected.symbol,
+    count,
+    kline: { dates, ohlc, volumes },
+    records,
+    provenance: {
+      provider_id: 'opendata',
+      provider_adapter_revision: value.provenance.provider_adapter_revision,
+      source_revision: null,
+      request_id: value.provenance.request_id,
+      retrieved_at: value.provenance.retrieved_at,
+      raw_payload_sha256: value.provenance.raw_payload_sha256,
+      source_registry_id: value.provenance.source_registry_id,
+      coverage_status: 'unknown',
+      source_available_at: 'unknown',
+      source_snapshot_id: null,
+      observation_revision_ids: null,
+      committed_at: null,
+      durable_receipt: 'not_created',
+    },
+  }
+}
+
 /**
  * Server-proven v2 request facts attached to a legacy lookup when, and only
  * when, the API can resolve an exact canonical instrument and active dataset.
@@ -264,17 +625,34 @@ export interface MarketInstrumentOption {
   symbol: string
   name: string
   market?: string | null
+  exchange?: string | null
+  instrument_id?: string | null
+  catalog_verified?: boolean
+  data_availability?: string | null
+  lifecycle?: string | null
+  status?: string | null
+  lifecycle_status?: string | null
+  status_as_of?: string | null
+  matched_alias?: {
+    alias: string
+    alias_version: string
+    evidence_ref: string
+    valid_from: string | null
+    valid_through: string | null
+  } | null
   source_table?: string | null
   latest_date?: string | null
-  has_snapshot: boolean
-  has_history: boolean
-  history_rows: number
+  has_snapshot: boolean | null
+  has_history: boolean | null
+  history_rows: number | null
 }
 
 export interface MarketInstrumentOptionsParams {
   asset_type: MarketAssetType
   search?: string
   limit?: number
+  /** Only supplied after an explicit user selection for historical aliases. */
+  effective_on?: string
 }
 
 export interface MarketDataQueryContractParams {
@@ -297,8 +675,31 @@ export interface MarketDataQueryBundleParams {
 
 export interface MarketInstrumentOptionsResponse {
   asset_type: MarketAssetType
+  /** Absent on the legacy response; OpenData mode is an explicit server assertion. */
+  catalog_mode?: 'opendata' | 'legacy'
+  complete?: boolean
+  has_more?: boolean
+  data_availability?: string
   items: MarketInstrumentOption[]
   total: number
+  provenance?: {
+    source: string
+    dataset_id: string
+    source_id: string
+    publication_id: string
+    snapshot_id: string
+    sequence: number
+    schema_version: string
+    semantic_version: string
+    contract_sha256: string
+    content_sha256: string
+    selection_sha256: string
+    as_of: string
+    expires_at: string
+    registry_version: string
+    profile_version: string
+    coverage: string
+  }
 }
 
 export interface MarketSnapshot {
@@ -755,10 +1156,28 @@ export const marketDataApi = {
       validateStatus: (status) => status >= 200 && status < 300,
     })
   },
-  listInstrumentOptions(params: MarketInstrumentOptionsParams) {
-    return request.get<MarketInstrumentOptionsResponse>('/data/market-instruments/options', {
+  async getOpenDataDirectKline(
+    params: OpenDataDirectKlineRequest,
+    options?: OpenDataDirectKlineOptions,
+  ): Promise<OpenDataDirectKlineResponse> {
+    const response = await request.get<unknown>('/data/kline', {
       params,
+      signal: options?.signal,
+      skipRetry: true,
+      suppressErrorToast: true,
     })
+    const parsed = parseOpenDataDirectKlineResponse(response, params)
+    if (!parsed) throw new Error('OPENDATA_DIRECT_RESPONSE_INVALID')
+    return parsed
+  },
+  listInstrumentOptions(params: MarketInstrumentOptionsParams) {
+    const requestOptions = params.asset_type === 'stock'
+      ? { params, skipRetry: true, suppressErrorToast: true }
+      : { params }
+    return request.get<MarketInstrumentOptionsResponse>(
+      '/data/market-instruments/options',
+      requestOptions,
+    )
   },
   lookupInstrument(params: MarketInstrumentLookupParams) {
     return request.get<MarketInstrumentLookupResponse>('/data/market-instruments/lookup', {

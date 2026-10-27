@@ -11,7 +11,10 @@
             <h2>{{ t('dataMgmt.headerTitle') }}</h2>
             <p>{{ t('dataMgmt.headerDesc') }}</p>
           </div>
-          <div class="history-query-status">
+          <div
+            v-if="dataPageDisplayMode === 'legacy'"
+            class="history-query-status"
+          >
             <el-tag type="info">
               {{ t('dataMgmt.providerTag', { provider: result?.provider || '-' }) }}
             </el-tag>
@@ -93,7 +96,10 @@
           filterable
           remote
           clearable
-          allow-create
+          :allow-create="
+            instrumentOptionsCatalogMode === 'legacy'
+              || (instrumentOptionsCatalogMode !== 'opendata' && form.asset_type !== 'stock')
+          "
           default-first-option
           reserve-keyword
           :loading="instrumentOptionsLoading"
@@ -115,13 +121,24 @@
               <em>{{ option.market || '-' }}</em>
               <el-tag
                 size="small"
-                :type="option.has_history ? 'success' : 'warning'"
+                :type="instrumentOptionStatusTagType(option)"
               >
                 {{ formatInstrumentHistoryStatus(option) }}
               </el-tag>
             </div>
           </el-option>
         </el-select>
+        <el-date-picker
+          v-if="form.asset_type === 'stock' && instrumentOptionsCatalogMode === 'opendata'"
+          v-model="instrumentAliasEffectiveOn"
+          data-test="market-instrument-effective-on"
+          type="date"
+          clearable
+          value-format="YYYY-MM-DD"
+          placeholder="历史简称匹配日期（可选）"
+          aria-label="历史简称匹配生效日期（可选）"
+          @change="handleInstrumentAliasEffectiveDateChange"
+        />
         <el-select
           v-if="selectableDataFamilies.length"
           :model-value="selectedFamilyId"
@@ -161,7 +178,7 @@
         />
         <el-button
           type="primary"
-          :loading="loading"
+          :loading="loading || openDataDirectKlineDisplay.status === 'loading'"
           data-test="market-instrument-query"
           @click="lookupInstrument('local_first')"
         >
@@ -171,660 +188,762 @@
           <span>{{ t('dataMgmt.btnQuery') }}</span>
         </el-button>
       </div>
+      <p
+        v-if="instrumentOptionsError"
+        class="instrument-options-safe-error"
+        data-test="market-instrument-options-error"
+        role="status"
+        style="grid-column: 1 / -1; margin: 0"
+      >
+        {{ instrumentOptionsError }}
+      </p>
     </el-card>
 
     <section
-      class="asset-overview"
-      :class="`asset-overview--${form.asset_type}`"
-      data-test="market-instrument-overview"
+      v-if="dataPageDisplayMode === 'opendata_direct'"
+      class="opendata-direct-display"
+      data-test="opendata-direct-display"
+      aria-live="polite"
     >
-      <div class="asset-overview-main">
-        <span class="asset-overview-icon">
-          <el-icon aria-hidden="true">
-            <component :is="activeAssetIcon" />
-          </el-icon>
-        </span>
-        <div>
-          <span class="asset-overview-label">{{ assetLabel(form.asset_type) }}</span>
-          <h3>{{ result?.name || result?.symbol || form.symbol || '-' }}</h3>
-          <p>{{ assetOverviewDescription }}</p>
-        </div>
-      </div>
-      <div class="asset-overview-meta">
-        <span>{{ marketOverviewPrimaryLabel }}</span>
-        <strong :class="marketOverviewTone">
-          {{ marketOverviewPrimaryValue }}
-        </strong>
-        <small
-          v-if="marketOverviewSecondaryText"
-          :class="marketOverviewTone"
-        >
-          {{ marketOverviewSecondaryText }}
-        </small>
-        <small v-else>{{ chartSubtitle }}</small>
-        <div class="asset-overview-context">
-          <el-tag
-            size="small"
-            type="info"
-          >
-            {{ result?.provider || '-' }}
-          </el-tag>
-          <span>{{ result?.market || (form.asset_type === 'futures' ? form.market : '-') }}</span>
-        </div>
-      </div>
-    </section>
-
-    <div class="history-metrics-grid">
-      <div
-        v-for="item in assetKpiCards"
-        :key="item.label"
-        class="history-metric-card"
-      >
-        <div class="history-metric-head">
-          <span>{{ item.label }}</span>
-          <i :class="item.tone || 'is-neutral'" />
-        </div>
-        <strong :class="item.tone">{{ item.value }}</strong>
-      </div>
-    </div>
-
-    <el-alert
-      v-if="result?.warnings?.length"
-      class="history-alert"
-      type="warning"
-      show-icon
-      :closable="false"
-      :title="t('dataMgmt.warningTitle')"
-      :description="result.warnings.join('；')"
-    />
-
-    <section
-      v-loading="coverageLoading"
-      class="market-data-details"
-      data-test="market-coverage-matrix"
-    >
-      <el-collapse>
-        <el-collapse-item
-          :title="t('dataMgmt.dataSourceDetailsCoverageMatrix')"
-          name="coverage-matrix"
-        >
-          <section class="market-coverage-section">
-            <div class="market-coverage-header">
-              <div>
-                <span>{{ t('dataMgmt.coverageMatrixTitle') }}</span>
-                <p>{{ coverageMatrixSubtitle }}</p>
-              </div>
-              <div class="market-coverage-actions">
-                <el-select
-                  v-model="coverageTimeframe"
-                  size="small"
-                  class="coverage-timeframe-select"
-                  @change="loadCoverageMatrix()"
-                >
-                  <el-option
-                    label="1d"
-                    value="1d"
-                  />
-                  <el-option
-                    label="1h"
-                    value="1h"
-                  />
-                  <el-option
-                    label="30m"
-                    value="30m"
-                  />
-                  <el-option
-                    label="5m"
-                    value="5m"
-                  />
-                </el-select>
-                <el-input
-                  v-model="coverageProvider"
-                  size="small"
-                  clearable
-                  class="coverage-provider-input"
-                  placeholder="provider"
-                  @change="loadCoverageMatrix()"
-                />
-                <el-button
-                  size="small"
-                  :loading="coverageRefreshing"
-                  data-test="market-coverage-refresh"
-                  @click="refreshCoverageMatrix"
-                >
-                  <el-icon aria-hidden="true">
-                    <Refresh />
-                  </el-icon>
-                  <span>{{ t('dataMgmt.coverageRefresh') }}</span>
-                </el-button>
-              </div>
-            </div>
-
-            <div class="market-coverage-summary">
-              <article
-                v-for="item in coverageSummaryCards"
-                :key="item.label"
-              >
-                <span>{{ item.label }}</span>
-                <strong :class="item.tone">{{ item.value }}</strong>
-              </article>
-            </div>
-
-            <el-alert
-              v-if="coverageError"
-              class="history-alert"
-              type="warning"
-              show-icon
-              :closable="false"
-              :title="coverageError"
-            />
-
-            <el-table
-              v-if="coverageRows.length"
-              :data="coverageRows"
-              stripe
-              max-height="360"
-            >
-              <el-table-column
-                :label="t('dataMgmt.coverageStatus')"
-                width="96"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    size="small"
-                    :type="coverageStatusTagType(row.quality_status)"
-                  >
-                    {{ coverageStatusLabel(row.quality_status) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="symbol"
-                :label="t('dataMgmt.coverageSymbol')"
-                min-width="120"
-              />
-              <el-table-column
-                prop="asset_type"
-                :label="t('dataMgmt.coverageAsset')"
-                width="100"
-              />
-              <el-table-column
-                prop="timeframe"
-                :label="t('dataMgmt.coveragePeriod')"
-                width="88"
-              />
-              <el-table-column
-                prop="provider"
-                :label="t('dataMgmt.coverageProvider')"
-                min-width="120"
-              />
-              <!-- @vue-generic {typeof coverageRows.value[number]} -->
-              <el-table-column
-                :label="t('dataMgmt.coverageRange')"
-                min-width="180"
-              >
-                <template #default="{ row }">
-                  {{ coverageDateRange(row) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('dataMgmt.coverageRows')"
-                width="110"
-                align="right"
-              >
-                <template #default="{ row }">
-                  {{ formatNumber(row.row_count) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                :label="t('dataMgmt.coverageGap')"
-                width="110"
-                align="right"
-              >
-                <template #default="{ row }">
-                  {{ formatCoverageRatio(row.missing_ratio) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="latest_bar_time"
-                :label="t('dataMgmt.coverageLatestBar')"
-                min-width="150"
-              />
-            </el-table>
-            <el-empty
-              v-else-if="!coverageLoading"
-              :description="t('dataMgmt.coverageEmpty')"
-            />
-          </section>
-        </el-collapse-item>
-      </el-collapse>
-    </section>
-
-    <section
-      v-if="!isReferenceSeriesSelected && !isGenericObservationSelected"
-      class="market-workbench-grid"
-    >
-      <el-card class="market-chart-card">
+      <el-card class="market-chart-card opendata-direct-card">
         <template #header>
-          <div class="section-header market-chart-header">
+          <div class="section-header">
             <div>
-              <span>
-                {{ t('dataMgmt.marketWorkbenchTitle') }} · {{ t(activeAssetConfig.titleKey) }}
-              </span>
-              <small>{{ t(activeAssetConfig.descKey) }}</small>
-              <div class="market-workbench-context">
-                <el-tag size="small">
-                  {{ assetLabel(form.asset_type) }}
-                </el-tag>
-                <span>{{ result?.market || '-' }}</span>
-                <strong>{{ result?.symbol || form.symbol || '-' }}</strong>
-                <span>{{ chartSubtitle }}</span>
-              </div>
-            </div>
-            <div class="chart-mode-tabs">
-              <button
-                v-for="mode in chartModeOptions"
-                :key="mode.value"
-                class="chart-mode-tab"
-                :class="{ 'is-active': chartMode === mode.value }"
-                type="button"
-                @click="chartMode = mode.value"
-              >
-                {{ mode.label }}
-              </button>
+              <span>{{ t('dataMgmt.openDataDirectTitle') }}</span>
+              <small>{{ t('dataMgmt.openDataDirectDisclaimer') }}</small>
             </div>
           </div>
         </template>
+        <dl class="opendata-direct-request-labels">
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectSymbol') }}</dt>
+            <dd>{{ openDataDirectKlineDisplay.symbolLabel || '-' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectRange') }}</dt>
+            <dd>{{ openDataDirectKlineDisplay.rangeLabel || '-' }}</dd>
+          </div>
+        </dl>
+        <p
+          v-if="openDataDirectKlineDisplay.status === 'idle'"
+          class="opendata-direct-message"
+          role="status"
+          data-test="opendata-direct-idle"
+        >
+          {{ t('dataMgmt.openDataDirectIdle') }}
+        </p>
+        <p
+          v-else-if="openDataDirectKlineDisplay.status === 'loading'"
+          class="opendata-direct-message"
+          role="status"
+          data-test="opendata-direct-loading"
+        >
+          {{ t('dataMgmt.openDataDirectLoading') }}
+        </p>
+        <el-alert
+          v-else-if="openDataDirectKlineDisplay.status === 'unavailable'"
+          type="warning"
+          :closable="false"
+          show-icon
+          data-test="opendata-direct-unavailable"
+          :title="t(`dataMgmt.openDataDirectReasons.${openDataDirectKlineDisplay.reason || 'DIRECT_REQUEST_FAILED'}`)"
+        />
         <el-empty
-          v-if="!chartCanRender"
-          :description="chartEmptyText"
+          v-else-if="openDataDirectKlineDisplay.status === 'ready' && !openDataDirectKlineDisplay.rows.length"
+          :description="t('dataMgmt.openDataDirectNoBars')"
+          data-test="opendata-direct-empty"
         />
         <div
-          v-show="chartCanRender"
+          v-show="openDataDirectKlineDisplay.status === 'ready' && openDataDirectKlineDisplay.rows.length > 0"
           ref="marketChartRef"
           class="market-main-chart"
-          data-test="market-main-chart"
+          data-test="market-opendata-direct-chart"
           role="img"
-          :aria-label="chartAriaLabel"
+          :aria-label="t('dataMgmt.openDataDirectChartAria', { symbol: openDataDirectKlineDisplay.symbolLabel || '-', range: openDataDirectKlineDisplay.rangeLabel || '-' })"
         />
+        <dl
+          v-if="openDataDirectKlineDisplay.status === 'ready'"
+          class="opendata-direct-provenance"
+          data-test="opendata-direct-provenance"
+        >
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectBarCount') }}</dt>
+            <dd>{{ openDataDirectKlineDisplay.returnedBarCount ?? 0 }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectRetrievedAt') }}</dt>
+            <dd>{{ openDataDirectKlineDisplay.retrievedAt || '-' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectCoverage') }}</dt>
+            <dd>{{ t('dataMgmt.openDataDirectUnknown') }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectAvailability') }}</dt>
+            <dd>{{ t('dataMgmt.openDataDirectUnknown') }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('dataMgmt.openDataDirectReceipt') }}</dt>
+            <dd>{{ t('dataMgmt.openDataDirectNotCreated') }}</dd>
+          </div>
+        </dl>
       </el-card>
-
-      <div class="market-side-panels">
-        <section class="market-panel">
-          <div class="market-panel-header">
-            <span>{{ t('dataMgmt.rangeStatsTitle') }}</span>
-            <strong>{{ formatNumber(result?.indicators.observation_count) }}</strong>
-          </div>
-          <div class="market-stat-list">
-            <div
-              v-for="item in rangeStats"
-              :key="item.label"
-              class="market-stat-row"
-            >
-              <span>{{ item.label }}</span>
-              <strong :class="item.tone">{{ item.value }}</strong>
-            </div>
-          </div>
-        </section>
-      </div>
     </section>
 
-    <section class="market-data-details">
-      <el-collapse>
-        <el-collapse-item
-          :title="t('dataMgmt.dataSourceDetailsCatalog')"
-          name="data-catalog"
+    <template v-else>
+      <section
+        class="asset-overview"
+        :class="`asset-overview--${form.asset_type}`"
+        data-test="market-instrument-overview"
+      >
+        <div class="asset-overview-main">
+          <span class="asset-overview-icon">
+            <el-icon aria-hidden="true">
+              <component :is="activeAssetIcon" />
+            </el-icon>
+          </span>
+          <div>
+            <span class="asset-overview-label">{{ assetLabel(form.asset_type) }}</span>
+            <h3>{{ result?.name || result?.symbol || form.symbol || '-' }}</h3>
+            <p>{{ assetOverviewDescription }}</p>
+          </div>
+        </div>
+        <div class="asset-overview-meta">
+          <span>{{ marketOverviewPrimaryLabel }}</span>
+          <strong :class="marketOverviewTone">
+            {{ marketOverviewPrimaryValue }}
+          </strong>
+          <small
+            v-if="marketOverviewSecondaryText"
+            :class="marketOverviewTone"
+          >
+            {{ marketOverviewSecondaryText }}
+          </small>
+          <small v-else>{{ chartSubtitle }}</small>
+          <div class="asset-overview-context">
+            <el-tag
+              size="small"
+              type="info"
+            >
+              {{ result?.provider || '-' }}
+            </el-tag>
+            <span>{{ result?.market || (form.asset_type === 'futures' ? form.market : '-') }}</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="history-metrics-grid">
+        <div
+          v-for="item in assetKpiCards"
+          :key="item.label"
+          class="history-metric-card"
         >
-          <section class="data-catalog-section">
-            <div class="data-catalog-header">
-              <div>
-                <span>{{ t('dataMgmt.dataCatalogTitle') }}</span>
-                <p>{{ t('dataMgmt.dataCatalogDesc') }}</p>
-              </div>
-              <el-tag :type="relatedTablesError ? 'warning' : 'info'">
-                {{ relatedTablesBadge }}
-              </el-tag>
-            </div>
+          <div class="history-metric-head">
+            <span>{{ item.label }}</span>
+            <i :class="item.tone || 'is-neutral'" />
+          </div>
+          <strong :class="item.tone">{{ item.value }}</strong>
+        </div>
+      </div>
 
-            <div class="data-catalog-grid">
-              <div class="data-family-grid">
-                <article
-                  v-for="family in assetDataFamilies"
-                  :key="family.familyId"
-                  class="data-family-card"
-                  :data-test="`market-data-family-${family.familyId}`"
-                >
-                  <div class="data-family-card-head">
-                    <span>{{ family.label }}</span>
-                    <el-tag
-                      size="small"
-                      :type="family.tagType"
-                    >
-                      {{ family.statusLabel }}
-                    </el-tag>
-                  </div>
-                  <p>{{ family.description }}</p>
-                  <div
-                    v-if="family.contract"
-                    class="data-family-contract"
-                    data-test="market-data-family-contract"
-                  >
-                    <code>{{ family.familyId }}</code>
-                    <span>{{ family.contract.dataKind }} · {{ family.contract.frequencySemantics }}</span>
-                    <span>{{ family.contract.coverageModel }} · {{ family.contract.observationShape }}</span>
-                  </div>
-                  <small
-                    v-if="family.readStatusLabel"
-                    class="data-family-read-state"
-                    data-test="market-data-family-read-state"
-                  >
-                    {{ family.readStatusLabel }}
-                  </small>
-                  <div class="field-chip-row">
-                    <span
-                      v-for="field in family.fields"
-                      :key="field.name"
-                      class="field-chip"
-                      :class="{ 'is-present': field.present }"
-                    >
-                      {{ field.label }}
-                    </span>
-                  </div>
-                </article>
-              </div>
+      <el-alert
+        v-if="result?.warnings?.length"
+        class="history-alert"
+        type="warning"
+        show-icon
+        :closable="false"
+        :title="t('dataMgmt.warningTitle')"
+        :description="result.warnings.join('；')"
+      />
 
-              <aside
-                v-loading="relatedTablesLoading"
-                class="related-table-panel"
-              >
-                <div class="related-table-header">
-                  <div>
-                    <span>{{ t('dataMgmt.relatedTablesTitle') }}</span>
-                    <small>{{ relatedTableSummary }}</small>
-                  </div>
+      <section
+        v-loading="coverageLoading"
+        class="market-data-details"
+        data-test="market-coverage-matrix"
+      >
+        <el-collapse>
+          <el-collapse-item
+            :title="t('dataMgmt.dataSourceDetailsCoverageMatrix')"
+            name="coverage-matrix"
+          >
+            <section class="market-coverage-section">
+              <div class="market-coverage-header">
+                <div>
+                  <span>{{ t('dataMgmt.coverageMatrixTitle') }}</span>
+                  <p>{{ coverageMatrixSubtitle }}</p>
+                </div>
+                <div class="market-coverage-actions">
+                  <el-select
+                    v-model="coverageTimeframe"
+                    size="small"
+                    class="coverage-timeframe-select"
+                    @change="loadCoverageMatrix()"
+                  >
+                    <el-option
+                      label="1d"
+                      value="1d"
+                    />
+                    <el-option
+                      label="1h"
+                      value="1h"
+                    />
+                    <el-option
+                      label="30m"
+                      value="30m"
+                    />
+                    <el-option
+                      label="5m"
+                      value="5m"
+                    />
+                  </el-select>
+                  <el-input
+                    v-model="coverageProvider"
+                    size="small"
+                    clearable
+                    class="coverage-provider-input"
+                    placeholder="provider"
+                    @change="loadCoverageMatrix()"
+                  />
                   <el-button
                     size="small"
-                    @click="loadRelatedTables()"
+                    :loading="coverageRefreshing"
+                    data-test="market-coverage-refresh"
+                    @click="refreshCoverageMatrix"
                   >
                     <el-icon aria-hidden="true">
                       <Refresh />
                     </el-icon>
-                    <span>{{ t('dataMgmt.btnRefresh') }}</span>
+                    <span>{{ t('dataMgmt.coverageRefresh') }}</span>
                   </el-button>
                 </div>
-                <el-empty
-                  v-if="!relatedTables.length && !relatedTablesLoading"
-                  :description="relatedTablesError || t('dataMgmt.relatedTablesEmpty')"
-                />
-                <div
-                  v-else
-                  class="related-table-list"
+              </div>
+
+              <div class="market-coverage-summary">
+                <article
+                  v-for="item in coverageSummaryCards"
+                  :key="item.label"
                 >
-                  <button
-                    v-for="table in relatedTables.slice(0, 6)"
-                    :key="table.id"
-                    type="button"
-                    class="related-table-row"
-                    @click="goTableDetail(table.id)"
-                  >
-                    <span>
-                      <strong>{{ table.table_name }}</strong>
-                      <small>{{ table.table_comment || table.script_id || '-' }}</small>
-                    </span>
-                    <em>{{ formatNumber(table.row_count) }}</em>
-                  </button>
-                </div>
-              </aside>
-            </div>
-          </section>
-        </el-collapse-item>
-      </el-collapse>
-    </section>
-
-    <div class="asset-insight-grid">
-      <el-card class="snapshot-card">
-        <template #header>
-          <div class="section-header">
-            <span>{{ t('dataMgmt.snapshotTitle') }}</span>
-            <el-tag size="small">
-              {{ assetLabel(result?.asset_type || form.asset_type) }}
-            </el-tag>
-          </div>
-        </template>
-        <el-empty
-          v-if="!result"
-          :description="t('dataMgmt.emptyQueryFirst')"
-        />
-        <div
-          v-else
-          class="snapshot-grid"
-          data-test="market-snapshot-grid"
-        >
-          <article
-            v-for="item in snapshotMetrics"
-            :key="item.key"
-            class="snapshot-metric"
-            data-test="market-snapshot-item"
-          >
-            <span>{{ item.label }}</span>
-            <strong :class="item.tone">{{ item.value }}</strong>
-          </article>
-        </div>
-      </el-card>
-
-      <el-card class="asset-detail-card">
-        <template #header>
-          <div class="section-header">
-            <span>{{ assetDetailTitle }}</span>
-            <el-tag
-              v-if="result?.provider"
-              size="small"
-              type="info"
-            >
-              {{ result.provider }}
-            </el-tag>
-          </div>
-        </template>
-        <el-empty
-          v-if="!result"
-          :description="t('dataMgmt.emptyQueryFirst')"
-        />
-        <div
-          v-else
-          class="asset-detail-list"
-        >
-          <div
-            v-for="row in assetDetailRows"
-            :key="row.label"
-            class="asset-detail-row"
-          >
-            <span>{{ row.label }}</span>
-            <strong :class="row.tone">{{ row.value }}</strong>
-          </div>
-          <p>{{ assetDetailNote }}</p>
-        </div>
-      </el-card>
-    </div>
-
-    <el-card
-      v-if="isReferenceSeriesSelected"
-      class="history-table-card"
-      data-test="market-reference-series-table"
-    >
-      <template #header>
-        <div class="section-header">
-          <span>{{ t('dataMgmt.referenceSeriesTitle') }}</span>
-          <el-tag
-            v-if="referenceSeriesResult"
-            size="small"
-            type="success"
-          >
-            {{ t('dataMgmt.historyRows', { count: referenceSeriesRows.length }) }}
-          </el-tag>
-          <el-tag
-            size="small"
-            type="info"
-            data-test="market-reference-series-family"
-          >
-            {{ selectedFamilyId }}
-          </el-tag>
-        </div>
-      </template>
-      <el-table
-        v-if="referenceSeriesRows.length"
-        v-loading="loading"
-        :data="referenceSeriesRows"
-        stripe
-        max-height="520"
-      >
-        <!-- @vue-generic {typeof referenceSeriesRows.value[number]} -->
-        <el-table-column
-          v-for="column in referenceSeriesTableColumns"
-          :key="column.key"
-          :prop="column.key"
-          :label="column.label"
-          :width="column.width"
-          :min-width="column.minWidth"
-          :align="column.align"
-          :fixed="column.fixed"
-        >
-          <template #default="{ row }">
-            {{ formatHistoryCell(row, column) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty
-        v-else
-        :description="referenceSeriesEmptyText"
-      />
-    </el-card>
-
-    <el-card
-      v-else-if="isGenericObservationSelected"
-      class="history-table-card"
-      data-test="market-generic-observation-table"
-    >
-      <template #header>
-        <div class="section-header">
-          <span>{{ t('dataMgmt.genericObservationTitle') }}</span>
-          <el-tag
-            v-if="genericObservationResult"
-            size="small"
-            type="success"
-          >
-            {{ t('dataMgmt.historyRows', { count: genericObservationRows.length }) }}
-          </el-tag>
-          <el-tag
-            size="small"
-            type="info"
-            data-test="market-generic-observation-family"
-          >
-            {{ selectedFamilyId }} · {{ genericObservationResult?.dataKind || selectedMarketPageFamily?.data_kind || '-' }}
-          </el-tag>
-        </div>
-      </template>
-      <el-table
-        v-if="genericObservationRows.length"
-        v-loading="loading"
-        :data="genericObservationRows"
-        stripe
-        max-height="520"
-        data-test="market-generic-observation-rows"
-      >
-        <!-- @vue-generic {typeof genericObservationRows.value[number]} -->
-        <el-table-column
-          v-for="column in genericObservationColumns"
-          :key="`${column.source}:${column.key}`"
-          :prop="column.key"
-          :label="column.label"
-          min-width="140"
-        >
-          <template #default="{ row }">
-            {{ formatGenericObservationCell(row, column) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty
-        v-else
-        :description="genericObservationEmptyText"
-      />
-    </el-card>
-
-    <el-card
-      v-else
-      class="history-table-card"
-    >
-      <template #header>
-        <div class="section-header">
-          <span>{{ t('dataMgmt.cardHistory') }}</span>
-          <el-tag
-            v-if="result"
-            size="small"
-            type="success"
-          >
-            {{ t('dataMgmt.historyRows', { count: result.history.total }) }}
-          </el-tag>
-        </div>
-      </template>
-      <el-table
-        v-if="displayHistoryRows.length"
-        v-loading="loading"
-        :data="displayHistoryRows"
-        stripe
-        max-height="520"
-      >
-        <!-- @vue-generic {typeof displayHistoryRows.value[number]} -->
-        <el-table-column
-          v-for="column in historyTableColumns"
-          :key="column.key"
-          :prop="column.key"
-          :label="column.label"
-          :width="column.width"
-          :min-width="column.minWidth"
-          :align="column.align"
-          :fixed="column.fixed"
-        >
-          <template #default="{ row }">
-            <span :class="column.tone ? toneClass(row[column.key]) : ''">
-              {{ formatHistoryCell(row, column) }}
-            </span>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty
-        v-else
-        :description="emptyHistoryText"
-      />
-    </el-card>
-
-    <section class="market-data-details">
-      <el-collapse>
-        <el-collapse-item
-          :title="t('dataMgmt.dataSourceDetailsCoverage')"
-          name="data-coverage"
-        >
-          <section class="market-panel market-panel--coverage">
-            <div class="market-panel-header">
-              <span>{{ t('dataMgmt.coverageTitle') }}</span>
-              <strong>{{ coverageScore }}%</strong>
-            </div>
-            <div class="coverage-list">
-              <div
-                v-for="item in dataCoverageRows"
-                :key="item.label"
-                class="coverage-row"
-              >
-                <div>
                   <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
+                  <strong :class="item.tone">{{ item.value }}</strong>
+                </article>
+              </div>
+
+              <el-alert
+                v-if="coverageError"
+                class="history-alert"
+                type="warning"
+                show-icon
+                :closable="false"
+                :title="coverageError"
+              />
+
+              <el-table
+                v-if="coverageRows.length"
+                :data="coverageRows"
+                stripe
+                max-height="360"
+              >
+                <el-table-column
+                  :label="t('dataMgmt.coverageStatus')"
+                  width="96"
+                >
+                  <template #default="{ row }">
+                    <el-tag
+                      size="small"
+                      :type="coverageStatusTagType(row.quality_status)"
+                    >
+                      {{ coverageStatusLabel(row.quality_status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="symbol"
+                  :label="t('dataMgmt.coverageSymbol')"
+                  min-width="120"
+                />
+                <el-table-column
+                  prop="asset_type"
+                  :label="t('dataMgmt.coverageAsset')"
+                  width="100"
+                />
+                <el-table-column
+                  prop="timeframe"
+                  :label="t('dataMgmt.coveragePeriod')"
+                  width="88"
+                />
+                <el-table-column
+                  prop="provider"
+                  :label="t('dataMgmt.coverageProvider')"
+                  min-width="120"
+                />
+                <!-- @vue-generic {typeof coverageRows.value[number]} -->
+                <el-table-column
+                  :label="t('dataMgmt.coverageRange')"
+                  min-width="180"
+                >
+                  <template #default="{ row }">
+                    {{ coverageDateRange(row) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :label="t('dataMgmt.coverageRows')"
+                  width="110"
+                  align="right"
+                >
+                  <template #default="{ row }">
+                    {{ formatNumber(row.row_count) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  :label="t('dataMgmt.coverageGap')"
+                  width="110"
+                  align="right"
+                >
+                  <template #default="{ row }">
+                    {{ formatCoverageRatio(row.missing_ratio) }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="latest_bar_time"
+                  :label="t('dataMgmt.coverageLatestBar')"
+                  min-width="150"
+                />
+              </el-table>
+              <el-empty
+                v-else-if="!coverageLoading"
+                :description="t('dataMgmt.coverageEmpty')"
+              />
+            </section>
+          </el-collapse-item>
+        </el-collapse>
+      </section>
+
+      <section
+        v-if="!isReferenceSeriesSelected && !isGenericObservationSelected"
+        class="market-workbench-grid"
+      >
+        <el-card class="market-chart-card">
+          <template #header>
+            <div class="section-header market-chart-header">
+              <div>
+                <span>
+                  {{ t('dataMgmt.marketWorkbenchTitle') }} · {{ t(activeAssetConfig.titleKey) }}
+                </span>
+                <small>{{ t(activeAssetConfig.descKey) }}</small>
+                <div class="market-workbench-context">
+                  <el-tag size="small">
+                    {{ assetLabel(form.asset_type) }}
+                  </el-tag>
+                  <span>{{ result?.market || '-' }}</span>
+                  <strong>{{ result?.symbol || form.symbol || '-' }}</strong>
+                  <span>{{ chartSubtitle }}</span>
                 </div>
-                <i :style="{ width: `${item.coverage}%` }" />
+              </div>
+              <div class="chart-mode-tabs">
+                <button
+                  v-for="mode in chartModeOptions"
+                  :key="mode.value"
+                  class="chart-mode-tab"
+                  :class="{ 'is-active': chartMode === mode.value }"
+                  type="button"
+                  @click="chartMode = mode.value"
+                >
+                  {{ mode.label }}
+                </button>
+              </div>
+            </div>
+          </template>
+          <el-empty
+            v-if="!chartCanRender"
+            :description="chartEmptyText"
+          />
+          <div
+            v-show="chartCanRender"
+            ref="marketChartRef"
+            class="market-main-chart"
+            data-test="market-main-chart"
+            role="img"
+            :aria-label="chartAriaLabel"
+          />
+        </el-card>
+
+        <div class="market-side-panels">
+          <section class="market-panel">
+            <div class="market-panel-header">
+              <span>{{ t('dataMgmt.rangeStatsTitle') }}</span>
+              <strong>{{ formatNumber(result?.indicators.observation_count) }}</strong>
+            </div>
+            <div class="market-stat-list">
+              <div
+                v-for="item in rangeStats"
+                :key="item.label"
+                class="market-stat-row"
+              >
+                <span>{{ item.label }}</span>
+                <strong :class="item.tone">{{ item.value }}</strong>
               </div>
             </div>
           </section>
-        </el-collapse-item>
-      </el-collapse>
-    </section>
+        </div>
+      </section>
+
+      <section class="market-data-details">
+        <el-collapse>
+          <el-collapse-item
+            :title="t('dataMgmt.dataSourceDetailsCatalog')"
+            name="data-catalog"
+          >
+            <section class="data-catalog-section">
+              <div class="data-catalog-header">
+                <div>
+                  <span>{{ t('dataMgmt.dataCatalogTitle') }}</span>
+                  <p>{{ t('dataMgmt.dataCatalogDesc') }}</p>
+                </div>
+                <el-tag :type="relatedTablesError ? 'warning' : 'info'">
+                  {{ relatedTablesBadge }}
+                </el-tag>
+              </div>
+
+              <div class="data-catalog-grid">
+                <div class="data-family-grid">
+                  <article
+                    v-for="family in assetDataFamilies"
+                    :key="family.familyId"
+                    class="data-family-card"
+                    :data-test="`market-data-family-${family.familyId}`"
+                  >
+                    <div class="data-family-card-head">
+                      <span>{{ family.label }}</span>
+                      <el-tag
+                        size="small"
+                        :type="family.tagType"
+                      >
+                        {{ family.statusLabel }}
+                      </el-tag>
+                    </div>
+                    <p>{{ family.description }}</p>
+                    <div
+                      v-if="family.contract"
+                      class="data-family-contract"
+                      data-test="market-data-family-contract"
+                    >
+                      <code>{{ family.familyId }}</code>
+                      <span>{{ family.contract.dataKind }} · {{ family.contract.frequencySemantics }}</span>
+                      <span>{{ family.contract.coverageModel }} · {{ family.contract.observationShape }}</span>
+                    </div>
+                    <small
+                      v-if="family.readStatusLabel"
+                      class="data-family-read-state"
+                      data-test="market-data-family-read-state"
+                    >
+                      {{ family.readStatusLabel }}
+                    </small>
+                    <div class="field-chip-row">
+                      <span
+                        v-for="field in family.fields"
+                        :key="field.name"
+                        class="field-chip"
+                        :class="{ 'is-present': field.present }"
+                      >
+                        {{ field.label }}
+                      </span>
+                    </div>
+                  </article>
+                </div>
+
+                <aside
+                  v-loading="relatedTablesLoading"
+                  class="related-table-panel"
+                >
+                  <div class="related-table-header">
+                    <div>
+                      <span>{{ t('dataMgmt.relatedTablesTitle') }}</span>
+                      <small>{{ relatedTableSummary }}</small>
+                    </div>
+                    <el-button
+                      size="small"
+                      @click="loadRelatedTables()"
+                    >
+                      <el-icon aria-hidden="true">
+                        <Refresh />
+                      </el-icon>
+                      <span>{{ t('dataMgmt.btnRefresh') }}</span>
+                    </el-button>
+                  </div>
+                  <el-empty
+                    v-if="!relatedTables.length && !relatedTablesLoading"
+                    :description="relatedTablesError || t('dataMgmt.relatedTablesEmpty')"
+                  />
+                  <div
+                    v-else
+                    class="related-table-list"
+                  >
+                    <button
+                      v-for="table in relatedTables.slice(0, 6)"
+                      :key="table.id"
+                      type="button"
+                      class="related-table-row"
+                      @click="goTableDetail(table.id)"
+                    >
+                      <span>
+                        <strong>{{ table.table_name }}</strong>
+                        <small>{{ table.table_comment || table.script_id || '-' }}</small>
+                      </span>
+                      <em>{{ formatNumber(table.row_count) }}</em>
+                    </button>
+                  </div>
+                </aside>
+              </div>
+            </section>
+          </el-collapse-item>
+        </el-collapse>
+      </section>
+
+      <div class="asset-insight-grid">
+        <el-card class="snapshot-card">
+          <template #header>
+            <div class="section-header">
+              <span>{{ t('dataMgmt.snapshotTitle') }}</span>
+              <el-tag size="small">
+                {{ assetLabel(result?.asset_type || form.asset_type) }}
+              </el-tag>
+            </div>
+          </template>
+          <el-empty
+            v-if="!result"
+            :description="t('dataMgmt.emptyQueryFirst')"
+          />
+          <div
+            v-else
+            class="snapshot-grid"
+            data-test="market-snapshot-grid"
+          >
+            <article
+              v-for="item in snapshotMetrics"
+              :key="item.key"
+              class="snapshot-metric"
+              data-test="market-snapshot-item"
+            >
+              <span>{{ item.label }}</span>
+              <strong :class="item.tone">{{ item.value }}</strong>
+            </article>
+          </div>
+        </el-card>
+
+        <el-card class="asset-detail-card">
+          <template #header>
+            <div class="section-header">
+              <span>{{ assetDetailTitle }}</span>
+              <el-tag
+                v-if="result?.provider"
+                size="small"
+                type="info"
+              >
+                {{ result.provider }}
+              </el-tag>
+            </div>
+          </template>
+          <el-empty
+            v-if="!result"
+            :description="t('dataMgmt.emptyQueryFirst')"
+          />
+          <div
+            v-else
+            class="asset-detail-list"
+          >
+            <div
+              v-for="row in assetDetailRows"
+              :key="row.label"
+              class="asset-detail-row"
+            >
+              <span>{{ row.label }}</span>
+              <strong :class="row.tone">{{ row.value }}</strong>
+            </div>
+            <p>{{ assetDetailNote }}</p>
+          </div>
+        </el-card>
+      </div>
+
+      <el-card
+        v-if="isReferenceSeriesSelected"
+        class="history-table-card"
+        data-test="market-reference-series-table"
+      >
+        <template #header>
+          <div class="section-header">
+            <span>{{ t('dataMgmt.referenceSeriesTitle') }}</span>
+            <el-tag
+              v-if="referenceSeriesResult"
+              size="small"
+              type="success"
+            >
+              {{ t('dataMgmt.historyRows', { count: referenceSeriesRows.length }) }}
+            </el-tag>
+            <el-tag
+              size="small"
+              type="info"
+              data-test="market-reference-series-family"
+            >
+              {{ selectedFamilyId }}
+            </el-tag>
+          </div>
+        </template>
+        <el-table
+          v-if="referenceSeriesRows.length"
+          v-loading="loading"
+          :data="referenceSeriesRows"
+          stripe
+          max-height="520"
+        >
+          <!-- @vue-generic {typeof referenceSeriesRows.value[number]} -->
+          <el-table-column
+            v-for="column in referenceSeriesTableColumns"
+            :key="column.key"
+            :prop="column.key"
+            :label="column.label"
+            :width="column.width"
+            :min-width="column.minWidth"
+            :align="column.align"
+            :fixed="column.fixed"
+          >
+            <template #default="{ row }">
+              {{ formatHistoryCell(row, column) }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty
+          v-else
+          :description="referenceSeriesEmptyText"
+        />
+      </el-card>
+
+      <el-card
+        v-else-if="isGenericObservationSelected"
+        class="history-table-card"
+        data-test="market-generic-observation-table"
+      >
+        <template #header>
+          <div class="section-header">
+            <span>{{ t('dataMgmt.genericObservationTitle') }}</span>
+            <el-tag
+              v-if="genericObservationResult"
+              size="small"
+              type="success"
+            >
+              {{ t('dataMgmt.historyRows', { count: genericObservationRows.length }) }}
+            </el-tag>
+            <el-tag
+              size="small"
+              type="info"
+              data-test="market-generic-observation-family"
+            >
+              {{ selectedFamilyId }} · {{ genericObservationResult?.dataKind || selectedMarketPageFamily?.data_kind || '-' }}
+            </el-tag>
+          </div>
+        </template>
+        <el-table
+          v-if="genericObservationRows.length"
+          v-loading="loading"
+          :data="genericObservationRows"
+          stripe
+          max-height="520"
+          data-test="market-generic-observation-rows"
+        >
+          <!-- @vue-generic {typeof genericObservationRows.value[number]} -->
+          <el-table-column
+            v-for="column in genericObservationColumns"
+            :key="`${column.source}:${column.key}`"
+            :prop="column.key"
+            :label="column.label"
+            min-width="140"
+          >
+            <template #default="{ row }">
+              {{ formatGenericObservationCell(row, column) }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty
+          v-else
+          :description="genericObservationEmptyText"
+        />
+      </el-card>
+
+      <el-card
+        v-else
+        class="history-table-card"
+      >
+        <template #header>
+          <div class="section-header">
+            <span>{{ t('dataMgmt.cardHistory') }}</span>
+            <el-tag
+              v-if="result"
+              size="small"
+              type="success"
+            >
+              {{ t('dataMgmt.historyRows', { count: result.history.total }) }}
+            </el-tag>
+          </div>
+        </template>
+        <el-table
+          v-if="displayHistoryRows.length"
+          v-loading="loading"
+          :data="displayHistoryRows"
+          stripe
+          max-height="520"
+        >
+          <!-- @vue-generic {typeof displayHistoryRows.value[number]} -->
+          <el-table-column
+            v-for="column in historyTableColumns"
+            :key="column.key"
+            :prop="column.key"
+            :label="column.label"
+            :width="column.width"
+            :min-width="column.minWidth"
+            :align="column.align"
+            :fixed="column.fixed"
+          >
+            <template #default="{ row }">
+              <span :class="column.tone ? toneClass(row[column.key]) : ''">
+                {{ formatHistoryCell(row, column) }}
+              </span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty
+          v-else
+          :description="emptyHistoryText"
+        />
+      </el-card>
+
+      <section class="market-data-details">
+        <el-collapse>
+          <el-collapse-item
+            :title="t('dataMgmt.dataSourceDetailsCoverage')"
+            name="data-coverage"
+          >
+            <section class="market-panel market-panel--coverage">
+              <div class="market-panel-header">
+                <span>{{ t('dataMgmt.coverageTitle') }}</span>
+                <strong>{{ coverageScore }}%</strong>
+              </div>
+              <div class="coverage-list">
+                <div
+                  v-for="item in dataCoverageRows"
+                  :key="item.label"
+                  class="coverage-row"
+                >
+                  <div>
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                  </div>
+                  <i :style="{ width: `${item.coverage}%` }" />
+                </div>
+              </div>
+            </section>
+          </el-collapse-item>
+        </el-collapse>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -843,11 +962,16 @@ const {
   form,
   dateRange,
   loading,
+  dataPageDisplayMode,
+  openDataDirectKlineDisplay,
   result,
   chartMode,
   marketChartRef,
   instrumentOptions,
   instrumentOptionsLoading,
+  instrumentOptionsCatalogMode,
+  instrumentOptionsError,
+  instrumentAliasEffectiveOn,
   relatedTablesLoading,
   relatedTables,
   relatedTablesError,
@@ -911,8 +1035,10 @@ const {
   refreshCoverageMatrix,
   searchInstrumentOptions,
   handleInstrumentDropdownVisible,
+  handleInstrumentAliasEffectiveDateChange,
   instrumentOptionLabel,
   formatInstrumentHistoryStatus,
+  instrumentOptionStatusTagType,
   loadRelatedTables,
   goTableDetail,
   formatHistoryCell,
@@ -929,3 +1055,36 @@ defineExpose(dataPage)
 </script>
 
 <style scoped src="./DataPage.css" />
+
+<style scoped>
+.opendata-direct-request-labels,
+.opendata-direct-provenance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  margin: 0 0 18px;
+}
+
+.opendata-direct-request-labels dt,
+.opendata-direct-provenance dt {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.opendata-direct-request-labels dd,
+.opendata-direct-provenance dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.opendata-direct-provenance {
+  margin: 18px 0 0;
+}
+
+.opendata-direct-message {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: var(--el-text-color-secondary);
+}
+</style>

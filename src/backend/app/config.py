@@ -181,6 +181,19 @@ class Settings(BaseSettings):
             "authorization grant; this flag only removes the route from the assembled policy."
         ),
     )
+    MARKET_DATA_OPENDATA_INSTRUMENT_CATALOG_ENABLED: bool = Field(
+        default=False,
+        description="Use the reviewed OpenData published stock reference catalog for selector options",
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_DATASET_ID: str = Field(
+        default="", description="Exact server-owned published instrument reference dataset ID"
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_SOURCE_ID: str = Field(
+        default="", description="Exact approved source ID for the instrument reference catalog"
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_CONTRACT_SHA256: str = Field(
+        default="", description="Pinned canonical contract SHA-256 for the reference catalog"
+    )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
         default=False,
         description=(
@@ -1328,21 +1341,15 @@ class Settings(BaseSettings):
     def validate_service_monitor_control_deployment_size(cls, value: SecretStr) -> SecretStr:
         """Bound the separate operator-owned monitor control deployment."""
         if len(value.get_secret_value().encode("utf-8")) > 262_144:
-            raise ValueError(
-                "SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON exceeds the 256 KiB limit"
-            )
+            raise ValueError("SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON exceeds the 256 KiB limit")
         return value
 
     @field_validator("SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON")
     @classmethod
-    def validate_service_strategy_reduction_deployment_size(
-        cls, value: SecretStr
-    ) -> SecretStr:
+    def validate_service_strategy_reduction_deployment_size(cls, value: SecretStr) -> SecretStr:
         """Bound the operator-owned exact-run reduction deployment."""
         if len(value.get_secret_value().encode("utf-8")) > 262_144:
-            raise ValueError(
-                "SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON exceeds the 256 KiB limit"
-            )
+            raise ValueError("SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON exceeds the 256 KiB limit")
         return value
 
     @field_validator("PORTFOLIO_VALUATION_BINDINGS_JSON")

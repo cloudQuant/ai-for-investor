@@ -8,7 +8,8 @@ HTTP 错误码映射、契约选择失败关闭、凭据脱敏。
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from collections.abc import AsyncIterator
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -61,7 +62,18 @@ def _row(trade_date: str, *, close: float = 2.0, amount: float = 100.0) -> dict:
     }
 
 
-def _page(rows: list[dict], *, page: int = 1, page_size: int = 2000) -> bytes:
+def _full_page_rows() -> list[dict]:
+    first_date = date(2023, 1, 1)
+    return [_row((first_date + timedelta(days=offset)).isoformat()) for offset in range(1000)]
+
+
+def _page(
+    rows: list[dict],
+    *,
+    page: object = 1,
+    page_size: object = 1000,
+    count: object | None = None,
+) -> bytes:
     payload = {
         "success": True,
         "message": "success",
@@ -73,7 +85,7 @@ def _page(rows: list[dict], *, page: int = 1, page_size: int = 2000) -> bytes:
             "rows": rows,
             "page": page,
             "page_size": page_size,
-            "count": len(rows),
+            "count": len(rows) if count is None else count,
         },
     }
     return json.dumps(payload).encode("utf-8")
@@ -84,12 +96,29 @@ def _provider(
     *,
     base_url: str = "http://opendata.test",
     max_response_bytes: int = 32 * 1024 * 1024,
+    max_total_response_bytes: int = 64 * 1024 * 1024,
 ) -> OpendataProvider:
     return OpendataProvider(
         client=httpx.AsyncClient(transport=transport),
         credentials=OpendataCredentials("od-test-key", base_url=base_url),
         max_response_bytes=max_response_bytes,
+        max_total_response_bytes=max_total_response_bytes,
     )
+
+
+class _TrackingByteStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.chunks_read = 0
+        self.closed = False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for chunk in self.chunks:
+            self.chunks_read += 1
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class TestRequestTransform:
@@ -215,10 +244,20 @@ class TestObservationNormalization:
 
         assert exc.value.code == "OPENDATA_RESPONSE_DUPLICATE_EVENT"
 
-    async def test_invalid_timestamp_is_refused(self) -> None:
+    @pytest.mark.parametrize(
+        "trade_date",
+        [
+            "not-a-date",
+            "2026-01-02T00:00:00Z",
+            "2026-01-02trailing",
+            " 2026-01-02",
+            "2026-1-2",
+        ],
+    )
+    async def test_non_date_only_timestamp_is_refused(self, trade_date: str) -> None:
         async def handler(request: httpx.Request) -> httpx.Response:
             row = _row("2026-01-02")
-            row["trade_date"] = "not-a-date"
+            row["trade_date"] = trade_date
             return httpx.Response(200, content=_page([row]))
 
         provider = _provider(httpx.MockTransport(handler))
@@ -226,6 +265,45 @@ class TestObservationNormalization:
             await provider.fetch(_request())
 
         assert exc.value.code == "OPENDATA_TIMESTAMP_INVALID"
+
+    @pytest.mark.parametrize(
+        ("symbol", "present", "expected"),
+        [
+            (None, False, "OPENDATA_RESPONSE_SYMBOL_INVALID"),
+            (None, True, "OPENDATA_RESPONSE_SYMBOL_INVALID"),
+            (600519, True, "OPENDATA_RESPONSE_SYMBOL_INVALID"),
+            ("600519.SS", True, "OPENDATA_RESPONSE_SYMBOL_MISMATCH"),
+            ("600000", True, "OPENDATA_RESPONSE_SYMBOL_MISMATCH"),
+        ],
+    )
+    async def test_each_row_symbol_must_exactly_match_request(
+        self, symbol: object, present: bool, expected: str
+    ) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            row = _row("2026-01-02")
+            if present:
+                row["symbol"] = symbol
+            else:
+                row.pop("symbol")
+            return httpx.Response(200, content=_page([row]))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == expected
+
+    async def test_out_of_window_row_still_requires_matching_symbol(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            row = _row("2026-01-04")  # request end is exclusive
+            row["symbol"] = "600000"
+            return httpx.Response(200, content=_page([row]))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == "OPENDATA_RESPONSE_SYMBOL_MISMATCH"
 
 
 class TestPagination:
@@ -240,24 +318,176 @@ class TestPagination:
         provider = _provider(httpx.MockTransport(handler))
         result = await provider.fetch(_request(end_at=datetime(2026, 1, 10, tzinfo=UTC)))
 
-        assert seen_pages == [1]  # page_size=2000，两行即短页
+        assert seen_pages == [1]  # page_size=1000，两行即短页
         assert len(result.observations) == 2
 
     async def test_follows_a_full_page(self) -> None:
+        seen_pages: list[int] = []
+        full_page = _full_page_rows()
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            page = int(dict(request.url.params)["page"])
+            seen_pages.append(page)
+            rows = full_page if page == 1 else []
+            return httpx.Response(200, content=_page(rows, page=page))
+
+        provider = _provider(httpx.MockTransport(handler))
+        result = await provider.fetch(
+            _request(
+                start_at=datetime(2023, 1, 1, tzinfo=UTC),
+                end_at=datetime(2026, 1, 10, tzinfo=UTC),
+            )
+        )
+
+        assert seen_pages == [1, 2]
+        assert len(result.observations) == 1000
+        assert [page["count"] for page in result.raw_payload["opendata_pages"]] == [1000, 0]
+
+    @pytest.mark.parametrize(
+        ("page", "page_size", "count", "expected"),
+        [
+            ("1", 1000, 1, "OPENDATA_PAGE_INVALID"),
+            (True, 1000, 1, "OPENDATA_PAGE_INVALID"),
+            (2, 1000, 1, "OPENDATA_PAGE_MISMATCH"),
+            (1, "1000", 1, "OPENDATA_PAGE_SIZE_INVALID"),
+            (1, 1001, 1, "OPENDATA_PAGE_SIZE_INVALID"),
+            (1, 500, 1, "OPENDATA_PAGE_SIZE_MISMATCH"),
+            (1, 1000, "1", "OPENDATA_COUNT_INVALID"),
+            (1, 1000, True, "OPENDATA_COUNT_INVALID"),
+            (1, 1000, 1001, "OPENDATA_COUNT_INVALID"),
+            (1, 1000, 2, "OPENDATA_COUNT_MISMATCH"),
+        ],
+    )
+    async def test_invalid_pagination_metadata_fails_closed(
+        self, page: object, page_size: object, count: object, expected: str
+    ) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                content=_page([_row("2026-01-02")], page=page, page_size=page_size, count=count),
+            )
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == expected
+
+    async def test_repeated_page_number_is_refused(self) -> None:
+        seen_pages: list[int] = []
+        full_page = _full_page_rows()
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            requested_page = int(dict(request.url.params)["page"])
+            seen_pages.append(requested_page)
+            return httpx.Response(
+                200,
+                content=_page(
+                    full_page if requested_page == 1 else [],
+                    page=1,
+                ),
+            )
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == "OPENDATA_PAGE_MISMATCH"
+        assert seen_pages == [1, 2]
+
+    async def test_repeated_page_rows_are_refused_even_when_page_number_advances(self) -> None:
+        full_page = _full_page_rows()
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            page = int(dict(request.url.params)["page"])
+            return httpx.Response(200, content=_page(full_page, page=page))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == "OPENDATA_RESPONSE_DUPLICATE_PAGE"
+
+    async def test_response_row_limit_fails_instead_of_truncating(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("app.services.market_data.opendata_provider.OPENDATA_MAX_ROWS", 1)
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                content=_page([_row("2026-01-02"), _row("2026-01-03")]),
+            )
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == "OPENDATA_RESPONSE_TOO_LARGE"
+
+    async def test_streaming_response_limit_closes_without_reading_later_chunks(self) -> None:
+        stream = _TrackingByteStream([b"x" * 17, b"remaining body"])
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, stream=stream)
+
+        provider = _provider(httpx.MockTransport(handler), max_response_bytes=16)
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == "OPENDATA_RESPONSE_TOO_LARGE"
+        assert stream.chunks_read == 1
+        assert stream.closed
+
+    async def test_total_response_limit_stops_before_requesting_another_page(self) -> None:
+        first_body = _page(_full_page_rows(), page=1)
+        first_stream = _TrackingByteStream([first_body])
+        second_stream = _TrackingByteStream([b"x" * 10, b"remaining response"])
         seen_pages: list[int] = []
 
         async def handler(request: httpx.Request) -> httpx.Response:
             page = int(dict(request.url.params)["page"])
             seen_pages.append(page)
-            rows = [_row("2026-01-02"), _row("2026-01-03")] if page == 1 else []
-            return httpx.Response(200, content=_page(rows, page=page, page_size=2))
+            if page == 1:
+                return httpx.Response(200, stream=first_stream)
+            return httpx.Response(200, stream=second_stream)
+
+        provider = _provider(
+            httpx.MockTransport(handler),
+            max_total_response_bytes=len(first_body) + 5,
+        )
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
+
+        assert exc.value.code == "OPENDATA_RESPONSE_TOO_LARGE"
+        assert seen_pages == [1, 2]
+        assert first_stream.closed
+        assert second_stream.chunks_read == 1
+        assert second_stream.closed
+
+    async def test_provenance_limit_stops_before_requesting_another_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "app.services.market_data.opendata_provider._MAX_PROVENANCE_BYTES", 512 * 1024
+        )
+        full_page = _full_page_rows()
+        for row in full_page:
+            row["large_field"] = "x" * 1024
+        seen_pages: list[int] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            page = int(dict(request.url.params)["page"])
+            seen_pages.append(page)
+            rows = full_page if page == 1 else []
+            return httpx.Response(200, content=_page(rows, page=page))
 
         provider = _provider(httpx.MockTransport(handler))
-        result = await provider.fetch(_request(end_at=datetime(2026, 1, 10, tzinfo=UTC)))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request())
 
-        assert seen_pages == [1, 2]
-        assert len(result.observations) == 2
-        assert [page["count"] for page in result.raw_payload["opendata_pages"]] == [2, 0]
+        assert exc.value.code == "OPENDATA_PROVENANCE_TOO_LARGE"
+        assert seen_pages == [1]
 
 
 class TestErrorMapping:

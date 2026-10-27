@@ -91,6 +91,8 @@ describe('marketDataApi', () => {
         search: '000',
         limit: 20,
       },
+      skipRetry: true,
+      suppressErrorToast: true,
     })
   })
 

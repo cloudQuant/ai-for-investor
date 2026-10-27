@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   getQueryBundle: vi.fn(),
   getQueryContract: vi.fn(),
   queryLocalFirst: vi.fn(),
+  getOpenDataDirectKline: vi.fn(),
   listInstrumentOptions: vi.fn(),
   listCoverage: vi.fn(),
   refreshLocalCoverage: vi.fn(),
@@ -28,107 +29,113 @@ vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn() },
 }))
 
-vi.mock('@/api/marketData', () => ({
-  hasMarketDataCapabilities: (value: unknown) => (
-    Boolean(
-      value
-      && typeof value === 'object'
-      && (value as { version?: unknown }).version === 'market-data-capabilities-v1'
-      && typeof (value as { query_v2_enabled?: unknown }).query_v2_enabled === 'boolean'
-      && typeof (value as { online_fetch_enabled?: unknown }).online_fetch_enabled === 'boolean'
-      && typeof (value as { research_cache_fill_enabled?: unknown }).research_cache_fill_enabled === 'boolean'
-      && typeof (value as { research_backtest_bridge_enabled?: unknown }).research_backtest_bridge_enabled === 'boolean',
-    )
-  ),
-  hasMarketDataQueryBundle: (value: unknown) => (
-    Boolean(
-      value
-      && typeof value === 'object'
-      && (value as { version?: unknown }).version === 'market-data-family-bundle-v1'
-      && (value as { requested_asset_type?: unknown }).requested_asset_type
-      && Array.isArray((value as { families?: unknown }).families),
-    )
-  ),
-  hasMarketDataQueryContract: (value: unknown) => (
-    Boolean(
-      value
-      && typeof value === 'object'
-      && (value as { version?: unknown }).version === 'market-data-v2'
-      && (value as { request?: unknown }).request,
-    )
-  ),
-  isMarketDataQueryBundleFamilyExecutable: (value: unknown) => {
-    if (!value || typeof value !== 'object') return false
-    const family = value as {
-      status?: unknown
-      source_policy_id?: unknown
-      reason_code?: unknown
+vi.mock('@/api/marketData', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/marketData')>()
+  return {
+    ...actual,
+    hasMarketDataCapabilities: (value: unknown) => (
+      Boolean(
+        value
+        && typeof value === 'object'
+        && (value as { version?: unknown }).version === 'market-data-capabilities-v1'
+        && typeof (value as { query_v2_enabled?: unknown }).query_v2_enabled === 'boolean'
+        && typeof (value as { online_fetch_enabled?: unknown }).online_fetch_enabled === 'boolean'
+        && typeof (value as { research_cache_fill_enabled?: unknown }).research_cache_fill_enabled === 'boolean'
+        && typeof (value as { research_backtest_bridge_enabled?: unknown }).research_backtest_bridge_enabled === 'boolean',
+      )
+    ),
+    hasMarketDataQueryBundle: (value: unknown) => (
+      Boolean(
+        value
+        && typeof value === 'object'
+        && (value as { version?: unknown }).version === 'market-data-family-bundle-v1'
+        && (value as { requested_asset_type?: unknown }).requested_asset_type
+        && Array.isArray((value as { families?: unknown }).families),
+      )
+    ),
+    hasMarketDataQueryContract: (value: unknown) => (
+      Boolean(
+        value
+        && typeof value === 'object'
+        && (value as { version?: unknown }).version === 'market-data-v2'
+        && (value as { request?: unknown }).request,
+      )
+    ),
+    isMarketDataQueryBundleFamilyExecutable: (value: unknown) => {
+      if (!value || typeof value !== 'object') return false
+      const family = value as {
+        status?: unknown
+        source_policy_id?: unknown
+        reason_code?: unknown
+        data_kind?: unknown
+        frequency_semantics?: unknown
+        frequencies?: unknown
+        coverage_model?: unknown
+        dimension_fields?: unknown
+      }
+      const dataKind = family.data_kind
+      const frequencies = family.frequencies
+      const hasNoDimensions = Array.isArray(family.dimension_fields) && family.dimension_fields.length === 0
+      const isCalendarSeries = (
+        (dataKind === 'bars' || dataKind === 'reference_series')
+        && family.frequency_semantics === 'calendar_grid'
+        && family.coverage_model === 'calendar_grid'
+        && Array.isArray(frequencies)
+        && frequencies.length > 0
+        && frequencies.every((frequency) => frequency !== 'snapshot')
+        && hasNoDimensions
+      )
+      const isQuoteSnapshot = (
+        dataKind === 'quote_snapshot'
+        && family.frequency_semantics === 'snapshot'
+        && family.coverage_model === 'snapshot_freshness'
+        && Array.isArray(frequencies)
+        && frequencies.length === 1
+        && frequencies[0] === 'snapshot'
+        && hasNoDimensions
+      )
+      return family.status === 'ready'
+        && typeof family.source_policy_id === 'string'
+        && family.source_policy_id.trim().length > 0
+        && family.reason_code === null
+        && (isCalendarSeries || isQuoteSnapshot)
+    },
+    createMarketDataQueryFromContract: (
+      contract: { request: Record<string, unknown> },
+      options: Record<string, unknown>,
+    ) => ({ ...contract.request, ...options }),
+    marketDataFamilyObservationShape: (family: {
       data_kind?: unknown
-      frequency_semantics?: unknown
-      frequencies?: unknown
-      coverage_model?: unknown
       dimension_fields?: unknown
-    }
-    const dataKind = family.data_kind
-    const frequencies = family.frequencies
-    const hasNoDimensions = Array.isArray(family.dimension_fields) && family.dimension_fields.length === 0
-    const isCalendarSeries = (
-      (dataKind === 'bars' || dataKind === 'reference_series')
-      && family.frequency_semantics === 'calendar_grid'
-      && family.coverage_model === 'calendar_grid'
-      && Array.isArray(frequencies)
-      && frequencies.length > 0
-      && frequencies.every((frequency) => frequency !== 'snapshot')
-      && hasNoDimensions
-    )
-    const isQuoteSnapshot = (
-      dataKind === 'quote_snapshot'
-      && family.frequency_semantics === 'snapshot'
-      && family.coverage_model === 'snapshot_freshness'
-      && Array.isArray(frequencies)
-      && frequencies.length === 1
-      && frequencies[0] === 'snapshot'
-      && hasNoDimensions
-    )
-    return family.status === 'ready'
-      && typeof family.source_policy_id === 'string'
-      && family.source_policy_id.trim().length > 0
-      && family.reason_code === null
-      && (isCalendarSeries || isQuoteSnapshot)
-  },
-  createMarketDataQueryFromContract: (
-    contract: { request: Record<string, unknown> },
-    options: Record<string, unknown>,
-  ) => ({ ...contract.request, ...options }),
-  marketDataFamilyObservationShape: (family: {
-    data_kind?: unknown
-    dimension_fields?: unknown
-  }) => (
-    (
-      (Array.isArray(family.dimension_fields) && family.dimension_fields.length > 0)
-      || ['option_chain', 'position_report', 'inventory_report', 'option_risk_surface']
-        .includes(String(family.data_kind))
-    )
-      ? 'dimensioned_records'
-      : 'single_record'
-  ),
-  isMarketDataQueryV2FallbackError: (error: { response?: { status?: unknown, data?: { details?: { code?: unknown } } } }) => (
-    [404, 405, 501].includes(Number(error?.response?.status))
-    || error?.response?.data?.details?.code === 'MARKET_DATA_QUERY_V2_DISABLED'
-    || error?.response?.data?.details?.code === 'MARKET_DATA_QUERY_BUNDLE_UNAVAILABLE'
-  ),
-  marketDataApi: {
-    getCapabilities: apiMocks.getCapabilities,
-    listInstrumentOptions: apiMocks.listInstrumentOptions,
-    lookupInstrument: apiMocks.lookupInstrument,
-    getQueryBundle: apiMocks.getQueryBundle,
-    getQueryContract: apiMocks.getQueryContract,
-    queryLocalFirst: apiMocks.queryLocalFirst,
-    listCoverage: apiMocks.listCoverage,
-    refreshLocalCoverage: apiMocks.refreshLocalCoverage,
-    refreshWarehouseCoverage: apiMocks.refreshWarehouseCoverage,
-  },
-}))
+    }) => (
+      (
+        (Array.isArray(family.dimension_fields) && family.dimension_fields.length > 0)
+        || ['option_chain', 'position_report', 'inventory_report', 'option_risk_surface']
+          .includes(String(family.data_kind))
+      )
+        ? 'dimensioned_records'
+        : 'single_record'
+    ),
+    isMarketDataQueryV2FallbackError: (error: { response?: { status?: unknown, data?: { details?: { code?: unknown } } } }) => (
+      [404, 405, 501].includes(Number(error?.response?.status))
+      || error?.response?.data?.details?.code === 'MARKET_DATA_QUERY_V2_DISABLED'
+      || error?.response?.data?.details?.code === 'MARKET_DATA_QUERY_BUNDLE_UNAVAILABLE'
+    ),
+    marketDataApi: {
+      ...actual.marketDataApi,
+      getCapabilities: apiMocks.getCapabilities,
+      listInstrumentOptions: apiMocks.listInstrumentOptions,
+      lookupInstrument: apiMocks.lookupInstrument,
+      getQueryBundle: apiMocks.getQueryBundle,
+      getQueryContract: apiMocks.getQueryContract,
+      queryLocalFirst: apiMocks.queryLocalFirst,
+      getOpenDataDirectKline: apiMocks.getOpenDataDirectKline,
+      listCoverage: apiMocks.listCoverage,
+      refreshLocalCoverage: apiMocks.refreshLocalCoverage,
+      refreshWarehouseCoverage: apiMocks.refreshWarehouseCoverage,
+    },
+  }
+})
 
 vi.mock('@/api/akshare', () => ({
   akshareTablesApi: {
@@ -157,6 +164,64 @@ const assetSymbols: Record<MarketAssetType, string> = {
 }
 const MARKET_ASSET_SELECTIONS_STORAGE_KEY = 'ai_for_investor:market:asset_selections'
 const LEGACY_MARKET_SELECTION_STORAGE_KEY = 'ai_for_investor:market:last_query'
+
+type CapabilityGate = (
+  | 'query_v2_enabled'
+  | 'online_fetch_enabled'
+  | 'research_cache_fill_enabled'
+  | 'research_backtest_bridge_enabled'
+)
+
+const legacyRolloutGates = [
+  ['market-data.query-v2', 'query_v2_enabled'],
+  ['market-data.online-fetch', 'online_fetch_enabled'],
+  ['market-data.research-cache-fill', 'research_cache_fill_enabled'],
+  ['market-data.research-backtest-bridge', 'research_backtest_bridge_enabled'],
+] as const
+
+function createLegacyCapabilities(overrides: Partial<Record<CapabilityGate, boolean>> = {}) {
+  const gates: Record<CapabilityGate, boolean> = {
+    query_v2_enabled: true,
+    online_fetch_enabled: false,
+    research_cache_fill_enabled: false,
+    research_backtest_bridge_enabled: false,
+    ...overrides,
+  }
+  const rolloutStates = legacyRolloutGates.map(([capability_id, gate]) => {
+    const effective = gates[gate]
+    return {
+      capability_id,
+      scope: 'rollout' as const,
+      route_id: null,
+      declared: true,
+      installed: true,
+      verified: true,
+      authorized: true,
+      effective,
+      reason_code: effective ? null : 'ROLLOUT_DISABLED',
+    }
+  })
+  const legacyRouteEffective = gates.query_v2_enabled && gates.online_fetch_enabled
+
+  return {
+    version: 'market-data-capabilities-v1',
+    ...gates,
+    capability_states: [
+      ...rolloutStates,
+      {
+        capability_id: 'market-data.route:akshare-stock-kline-legacy-v1',
+        scope: 'route' as const,
+        route_id: 'akshare-stock-kline-legacy-v1',
+        declared: true,
+        installed: true,
+        verified: true,
+        authorized: true,
+        effective: legacyRouteEffective,
+        reason_code: legacyRouteEffective ? null : 'ROLLOUT_GATE_CLOSED',
+      },
+    ],
+  }
+}
 
 function createLookupFixture(assetType: MarketAssetType) {
   const baseSnapshot = {
@@ -676,13 +741,8 @@ describe('DataPage', () => {
     vi.stubEnv('VITE_MARKET_DATA_QUERY_BUNDLE_ENABLED', 'false')
     window.localStorage.removeItem(MARKET_ASSET_SELECTIONS_STORAGE_KEY)
     window.localStorage.removeItem(LEGACY_MARKET_SELECTION_STORAGE_KEY)
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
-      query_v2_enabled: true,
-      online_fetch_enabled: false,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities())
+    apiMocks.getOpenDataDirectKline.mockRejectedValue(new Error('unexpected direct query'))
     apiMocks.lookupInstrument.mockImplementation(({ asset_type }: { asset_type: MarketAssetType }) => (
       Promise.resolve(createLookupFixture(asset_type))
     ))
@@ -781,13 +841,9 @@ describe('DataPage', () => {
   it('keeps lifecycle and user queries off legacy online refresh when the server capability is disabled', async () => {
     // A browser build flag must never claim the receipt-backed path is live
     // while the authenticated server capability says it is disabled.
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities({
       query_v2_enabled: false,
-      online_fetch_enabled: false,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    }))
 
     const wrapper = await mountPage()
 
@@ -799,6 +855,7 @@ describe('DataPage', () => {
       symbol: '000001',
       refresh_online: false,
     }))
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
     expect((wrapper.vm as any).marketDataPlatformStatus.path).toBe('legacy')
     expect((wrapper.vm as any).marketDataPlatformStatus).toMatchObject({
       canonicalId: null,
@@ -824,16 +881,13 @@ describe('DataPage', () => {
       symbol: '000001',
       refresh_online: false,
     }))
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
   })
 
   it('never turns an unavailable v2 contract into a legacy online refresh', async () => {
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
-      query_v2_enabled: true,
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities({
       online_fetch_enabled: true,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    }))
     apiMocks.getQueryBundle.mockRejectedValue({ response: { status: 404 } })
     apiMocks.getQueryContract.mockRejectedValue({ response: { status: 404 } })
 
@@ -857,6 +911,7 @@ describe('DataPage', () => {
     expect(apiMocks.lookupInstrument).toHaveBeenCalledWith(expect.objectContaining({
       refresh_online: false,
     }))
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
   })
 
   it('uses the server capability even when the browser rollout variable is stale', async () => {
@@ -1172,6 +1227,7 @@ describe('DataPage', () => {
     expect((wrapper.vm as any).result.history.rows).toHaveLength(1)
     expect((wrapper.vm as any).marketDataPlatformStatus.path).toBe('local_only')
     expect(wrapper.find('[data-test="market-data-platform-status"]').text()).toContain('仅本地读取')
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
   })
 
   it('fails closed when an initial local-only response claims a provider receipt', async () => {
@@ -1249,6 +1305,7 @@ describe('DataPage', () => {
       consistency: 'display',
     }), expect.objectContaining({ suppressErrorMessage: true }))
     expect(vm.marketDataPlatformStatus.path).toBe('local_only')
+    expect(apiMocks.getOpenDataDirectKline).not.toHaveBeenCalled()
   })
 
   it('fails closed when the unbundled crypto realtime family is unconfigured', async () => {
@@ -1268,7 +1325,7 @@ describe('DataPage', () => {
     expect(apiMocks.getQueryBundle).toHaveBeenCalledWith({ asset_type: 'crypto' })
     expect(apiMocks.getQueryContract).toHaveBeenCalledWith({
       asset_type: 'crypto',
-      symbol: 'BTCJPY',
+      symbol: 'BTCUSDT',
       period: 'daily',
       family_id: 'crypto.realtime',
     })
@@ -1402,13 +1459,7 @@ describe('DataPage', () => {
   })
 
   it('does not label incomplete local-first coverage as a local cache hit when online fill is disabled', async () => {
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
-      query_v2_enabled: true,
-      online_fetch_enabled: false,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities())
     apiMocks.getQueryContract.mockResolvedValue(createV2ContractFixture())
     apiMocks.queryLocalFirst.mockResolvedValue(createV2ResponseFixture())
 
@@ -1457,13 +1508,9 @@ describe('DataPage', () => {
   })
 
   it('keeps persisted provider receipts with incomplete coverage out of the success state', async () => {
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
-      query_v2_enabled: true,
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities({
       online_fetch_enabled: true,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    }))
     apiMocks.getQueryContract.mockResolvedValue(createV2ContractFixture())
     apiMocks.queryLocalFirst.mockResolvedValue(createV2ResponseFixture())
 
@@ -1869,13 +1916,7 @@ describe('DataPage', () => {
   })
 
   it('drops the initial lookup when every request selector changes during capability resolution', async () => {
-    const pendingCapabilities = createDeferred<{
-      version: string
-      query_v2_enabled: boolean
-      online_fetch_enabled: boolean
-      research_cache_fill_enabled: boolean
-      research_backtest_bridge_enabled: boolean
-    }>()
+    const pendingCapabilities = createDeferred<ReturnType<typeof createLegacyCapabilities>>()
     apiMocks.getCapabilities.mockReturnValueOnce(pendingCapabilities.promise)
 
     const wrapper = await mountPage()
@@ -1889,13 +1930,7 @@ describe('DataPage', () => {
     vm.dateRange = ['2026-06-01', '2026-06-20']
     vm.selectedFamilyId = 'futures.settlement'
 
-    pendingCapabilities.resolve({
-      version: 'market-data-capabilities-v1',
-      query_v2_enabled: true,
-      online_fetch_enabled: false,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    pendingCapabilities.resolve(createLegacyCapabilities())
     await flushPromises()
     await flushPromises()
 
@@ -1910,13 +1945,9 @@ describe('DataPage', () => {
   })
 
   it('treats a cleared date range as an omitted legacy window', async () => {
-    apiMocks.getCapabilities.mockResolvedValue({
-      version: 'market-data-capabilities-v1',
+    apiMocks.getCapabilities.mockResolvedValue(createLegacyCapabilities({
       query_v2_enabled: false,
-      online_fetch_enabled: false,
-      research_cache_fill_enabled: false,
-      research_backtest_bridge_enabled: false,
-    })
+    }))
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
     apiMocks.lookupInstrument.mockClear()
@@ -3114,7 +3145,10 @@ describe('DataPage', () => {
     apiMocks.listInstrumentOptions.mockRejectedValueOnce(new Error('catalog unavailable'))
     vm.searchInstrumentOptions('failure')
     await flushPromises()
-    expect(vm.instrumentOptions.map((option: { symbol: string }) => option.symbol)).toEqual(['CUSTOM'])
+    expect(vm.instrumentOptions).toEqual([])
+    expect(vm.form.symbol).toBe('CUSTOM')
+    expect(vm.instrumentOptionsCatalogMode).toBe(null)
+    expect(vm.instrumentOptionsError).toBeTruthy()
     wrapper.unmount()
   })
 
