@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from app.config import Settings
+from app.db import database as database_module
+from app.models.stock_signal import StockSignalPrediction
 from app.services.market_data.opendata_credentials import OpendataCredentials
 from app.services.stock_signal import batch as batch_module
 from app.services.stock_signal.opendata_sse50_benchmark import (
@@ -411,6 +414,186 @@ async def test_batch_benchmark_rows_feed_outcomes_and_missing_rows_stay_unbenchm
         else:
             assert evaluation.benchmark_returns == {1: None, 5: None, 20: None}
             assert evaluation.excess_returns == {1: None, 5: None, 20: None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["success", "empty", "forbidden"])
+async def test_score_pending_persists_opendata_outcome_through_orm(
+    case: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dates = _weekdays(date(2026, 7, 1), 20)
+    stock_rows = [
+        {"date": day.isoformat(), "open": 50.0, "close": 51.0 + index}
+        for index, day in enumerate(dates)
+    ]
+    benchmark_source_rows = [
+        _bar(day.isoformat(), open_price=100.0 + index, close=101.0 + index)
+        for index, day in enumerate(dates)
+    ]
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.method == "GET"
+        assert request.url.path == "/api/v1/data/index/index_daily"
+        assert request.headers["x-api-key"] == "test-key"
+        assert request.url.params["symbols"] == "000016"
+        assert request.url.params["start"] == dates[0].isoformat()
+        assert request.url.params["end"] == dates[-1].isoformat()
+        assert request.url.params["source"] == "ths"
+        assert request.url.params["layer"] == "dwd"
+        assert request.url.params["adjust"] == "none"
+        if case == "forbidden":
+            return httpx.Response(403, json={"detail": "forbidden"})
+        rows = benchmark_source_rows if case == "success" else []
+        return httpx.Response(200, json=_payload(rows, page=1, page_size=1_000))
+
+    session_maker = database_module.async_session_maker
+    monkeypatch.setattr(batch_module, "async_session_maker", session_maker)
+    as_of_date = dates[0] - timedelta(days=1)
+    prediction_key = f"opendata-score-pending-{case}"
+    prediction = StockSignalPrediction(
+        prediction_key=prediction_key,
+        run_id=None,
+        report_id=None,
+        owner_scope="system",
+        source="nightly_sse50",
+        universe_code="SSE50",
+        symbol="600000.SH",
+        symbol_name="测试股份",
+        market_type="A股",
+        as_of_date=as_of_date,
+        as_of_at=datetime.now(timezone.utc),
+        available_at=datetime.now(timezone.utc),
+        next_trading_date=dates[0],
+        signal_action="BUY",
+        confidence_score=0.75,
+        risk_score=0.25,
+        eligibility_status="eligible",
+        quality_reasons_json=[],
+        data_freshness_json={},
+        feature_version="ohlcv-v1",
+        decision_policy_version="baseline-v1",
+        model_version="deterministic-shadow-v1",
+        feature_snapshot_json={},
+        policy_snapshot_json={
+            "round_trip_cost_bps": 0,
+            "buy_success_threshold_bps": 0,
+            "sell_success_threshold_bps": 0,
+        },
+        source_snapshot_hash="b" * 64,
+        outcome_status="pending",
+    )
+    async with session_maker() as session:
+        session.add(prediction)
+        await session.commit()
+
+    lookup_calls: list[dict[str, object]] = []
+
+    class FakeMarketInstrumentService:
+        async def lookup(
+            self,
+            *,
+            asset_type: str,
+            symbol: str,
+            start_date: date,
+            end_date: date,
+            period: str,
+            refresh_online: bool,
+        ) -> dict[str, object]:
+            lookup_calls.append(
+                {
+                    "asset_type": asset_type,
+                    "symbol": symbol,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "period": period,
+                    "refresh_online": refresh_online,
+                }
+            )
+            return {"history": {"rows": stock_rows}}
+
+    class UnusedCalendar:
+        async def next_trading_day(self, *_args: object) -> date:
+            pytest.fail("an existing next_trading_date must avoid calendar access")
+
+    monkeypatch.setattr(
+        batch_module,
+        "MarketInstrumentService",
+        FakeMarketInstrumentService,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handle),
+        trust_env=False,
+    ) as client:
+        reader = _reader(client, page_size=1_000, max_rows=100, max_pages=2)
+        monkeypatch.setattr(
+            batch_module,
+            "OpenDataSse50BenchmarkReader",
+            _injected_reader_factory(reader),
+        )
+        runner = batch_module.Sse50SignalBatchRunner.__new__(batch_module.Sse50SignalBatchRunner)
+        runner.settings = SimpleNamespace(STOCK_SIGNAL_BENCHMARK_OPENDATA_ENABLED=True)
+        runner.calendar = UnusedCalendar()
+        monkeypatch.setattr(
+            runner,
+            "_fetch_sse50_benchmark_rows",
+            lambda *_args: pytest.fail("OpenData benchmark mode must not use AkShare"),
+        )
+
+        updated = await runner.score_pending(through_date=dates[-1])
+
+    assert updated == 1
+    assert lookup_calls == [
+        {
+            "asset_type": "stock",
+            "symbol": "600000.SH",
+            "start_date": dates[0],
+            "end_date": dates[-1],
+            "period": "daily",
+            "refresh_online": False,
+        }
+    ]
+    assert len(requests) == 1
+    assert requests[0].url.host == "opendata.example"
+    assert requests[0].url.path == "/api/v1/data/index/index_daily"
+
+    async with session_maker() as session:
+        persisted = await session.scalar(
+            select(StockSignalPrediction).where(
+                StockSignalPrediction.prediction_key == prediction_key
+            )
+        )
+
+    assert persisted is not None
+    assert persisted.outcome_status == "scored"
+    assert persisted.scored_at is not None
+    assert persisted.entry_date == dates[0]
+    assert persisted.entry_price == pytest.approx(50.0)
+    assert {
+        1: persisted.horizon_1d_return,
+        5: persisted.horizon_5d_return,
+        20: persisted.horizon_20d_return,
+    } == pytest.approx({1: 0.02, 5: 0.10, 20: 0.40})
+    if case == "success":
+        assert {
+            1: persisted.benchmark_1d_return,
+            5: persisted.benchmark_5d_return,
+            20: persisted.benchmark_20d_return,
+        } == pytest.approx({1: 0.01, 5: 0.05, 20: 0.20})
+        assert {
+            1: persisted.excess_1d_return,
+            5: persisted.excess_5d_return,
+            20: persisted.excess_20d_return,
+        } == pytest.approx({1: 0.01, 5: 0.05, 20: 0.20})
+    else:
+        assert persisted.benchmark_1d_return is None
+        assert persisted.benchmark_5d_return is None
+        assert persisted.benchmark_20d_return is None
+        assert persisted.excess_1d_return is None
+        assert persisted.excess_5d_return is None
+        assert persisted.excess_20d_return is None
 
 
 @pytest.mark.asyncio
