@@ -4,8 +4,9 @@ Audit API endpoints for user operation event tracking and querying.
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
+from app.api.data.deps import require_data_admin_user
 from app.api.deps import get_current_user
 from app.schemas.audit import (
     AuditEventBatch,
@@ -65,9 +66,12 @@ async def create_audit_events(
     return {"persisted": persisted, "total": len(batch.events)}
 
 
-@router.get("/records", response_model=AuditQueryResponse)
+@router.get(
+    "/records",
+    response_model=AuditQueryResponse,
+    dependencies=[Depends(require_data_admin_user)],
+)
 async def query_audit_records(
-    current_user: TokenPayload = Depends(get_current_user),
     user_id: str | None = Query(None, description="Filter by user ID"),
     event_type: str | None = Query(None, description="Filter by event type"),
     start_time: datetime | None = Query(None, description="Start time filter (ISO 8601)"),
@@ -81,7 +85,6 @@ async def query_audit_records(
     and time range. Results are sorted by server_timestamp descending.
 
     Args:
-        current_user: Authenticated user token payload.
         user_id: Optional user ID filter.
         event_type: Optional event type filter.
         start_time: Optional start time filter.
@@ -95,13 +98,6 @@ async def query_audit_records(
     Raises:
         HTTPException: 403 if user is not admin.
     """
-    # Admin check
-    if not getattr(current_user, "is_admin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required to access audit records",
-        )
-
     params = AuditQueryParams(
         user_id=user_id,
         event_type=event_type,
