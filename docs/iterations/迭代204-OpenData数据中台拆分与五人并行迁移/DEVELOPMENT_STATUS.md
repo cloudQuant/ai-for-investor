@@ -386,3 +386,14 @@ OpenData 迁移工作清单仍在开发，尚无通过项目覆盖率门槛的�
 在一次性 MySQL 8.4 实例的 Unix socket 路径上，内部事务/实例身份验收通过：校验了 UUID pin、InnoDB 一致性快照，并确认 MyISAM 表会被拒绝。该结果只覆盖本机隔离 socket 测试；TCP 连接及运行服务实际 endpoint 集成未测试。生产 service 的配置来源和预期 UUID pin 仍需独立核实。本次没有读取生产数据或对生产执行 DDL；任何后续生产核验必须保持生产 DDL 禁用，并在确认配置来源与实例 pin 后另行审查。不能将此 PR 视为生产数据盘点或数据库接线验收。
 
 以上只关闭局部代码与隔离验证范围；生产 inventory、数据读取、完整历史恢复、自动调度和切换仍未验收，迭代204整体未完成。
+
+## OpenData PR #34–#35：来源声明与北交所路由保护（2026-10-28）
+
+以下两个 PR 均已合入 OpenData `dev`，仅记录局部代码与隔离验收，不改变迭代204整体未完成状态。
+
+| PR | 已合入范围与局部证据 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #34](https://github.com/cloudQuant/opendata/pull/34) | 增加六组来源结构声明校验；定向隔离测试 **19 项通过**，目标覆盖率 **96%**。日志保存在本机私有目录 [`2026-10-28-fuyao-evidence-declarations`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-evidence-declarations>)。 | 结构声明校验不构成真实上游响应或来源真实性证据；未接入 recorder 或部署。Fuyao 财报 fetcher 仍未验收，所需真实来源证据和生产接线仍开放。 |
+| [OpenData PR #35](https://github.com/cloudQuant/opendata/pull/35) | 为 AkShare/Eastmoney 股票日线增加 BSE fail-closed 路由保护，阻止未知市场码；沪深既有行为保留。联合隔离测试 **207 项通过**，三个目标模块覆盖率为 **91% / 92% / 92%**。日志保存在本机私有目录 [`2026-10-28-bse-route-guard`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-bse-route-guard>)。 | 北交所真实源数据、路由映射及逐证券历史覆盖仍未验证；该保护不会生成或补齐 BSE 行情，也不证明全 A 股历史完整。 |
+
+PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源、生产采集及全 A 股含北交所的完整历史仍待验收，迭代204整体未完成。
