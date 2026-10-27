@@ -8,6 +8,10 @@ OpenData PR #6 已合入，但只增加离线 UTC cron 的单代 slot 对账器�
 
 OpenData PR #7 已合入：仅增加离线 SQLite source attempt token-bucket gate，101 项隔离测试（含同机两进程竞争）通过，source 模块覆盖率 90.26%。它未接入 HTTP 或真实 Sina grant；Sina 仍禁用且授权为 `UNKNOWN`。该 gate 不提供日/run 总额度、严格滚动窗口或在途并发上限；SQLite 测试不证明多主机、MySQL 或 PostgreSQL 行为。授权证据仍是人工声明而非法律自动验证，策略快照不能完整重算；备份恢复与生产接线均待验收。
 
+OpenData PR #8 已合入：352 项隔离测试通过；HTTP client 模块语句+分支综合覆盖率为 90.446%，request budget 模块为 98.571%。HTTP 门禁通过显式注入验证，并使用 SQLite；未接真实新浪来源或调度，其他调用路径也未受门禁保护。这些证据不代表生产授权、跨主机并发、生产数据库或上线验收。
+
+AFI PR #62 已合入 benchmark 区间对齐，定向验证为 24 项后端、2 项前端测试通过，覆盖区间匹配、年化以及 ledger fail-closed degraded/UI 提示行为。生产 NAV、收盘盯市、TWR 和实盘行为仍未验证，FF 问题仍未解决；该改动不表示 benchmark 全链路或迭代204已完成。
+
 波次历史摘要：W8—W11 的局部隔离验证及归档仍按对应状态文件保留；此前列出的覆盖率、收据和静态检查是历史范围证据，不代表当前 HEAD 整仓门禁或生产验收。当前 PR 与未完成范围以 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 为准。
 
 目标：将 ai-for-investor 的市场及研究基础数据采集、清洗、仓储、质量治理、调度和运维管理迁入 `/home/yun/Documents/opendata`。ai-for-investor 保留投研、策略、回测、交易和用户业务，通过 opendata REST API 消费数据。
