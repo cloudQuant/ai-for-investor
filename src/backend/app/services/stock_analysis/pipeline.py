@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from math import isfinite
 from typing import Any
 
 from app.services.stock_analysis.signal import StockSignalExtractor
@@ -283,11 +284,42 @@ class StockAnalysisPipeline:
                 "基本面不纳入方向性加分；结构化信号已将该缺口记录为数据质量原因，并保持观望。"
             )
         peer_names = context["peer_names"] or "暂无"
-        roe = self._float_or_none(context["roe"])
-        roe_text = self._format_pct(roe / 100 if roe is not None and roe > 1 else roe)
-        eps = self._float_or_default(latest.get("eps"), 0.0)
+        report_date = latest.get("report_date")
+        record_label = "本报告期" if report_date else "当前财务记录"
+        record_scope = "单个报告期指标" if report_date else "单条财务记录"
+        roe = self._finite_metric(context["roe"])
+        roe_value_text = (
+            "数据不足" if roe is None else f"{latest.get('roe')}（单位与口径待确认）"
+        )
+        net_income = self._finite_metric(latest.get("net_income"))
+        net_income_value_text = (
+            "数据不足" if net_income is None else str(latest.get("net_income"))
+        )
+        revenue = self._finite_metric(latest.get("revenue"))
+        revenue_value_text = "数据不足" if revenue is None else str(latest.get("revenue"))
+        revenue_growth = self._finite_metric(context["revenue_growth"])
+        profit_growth = self._finite_metric(context["profit_growth"])
+        if net_income is None:
+            profit_evidence = f"{record_label}净利润数据不足，无法判断盈亏。"
+        elif net_income > 0:
+            profit_evidence = f"{record_label}净利润为 {latest['net_income']}（本条记录为正）。"
+        elif net_income < 0:
+            profit_evidence = f"{record_label}净利润为 {latest['net_income']}（本条记录为负）。"
+        else:
+            profit_evidence = f"{record_label}净利润为 0。"
+        if roe is None:
+            roe_evidence = f"{record_label} ROE 数据不足，单位与口径待确认。"
+        else:
+            roe_evidence = f"{record_label} ROE 原始值为 {roe_value_text}。"
+        stability_limit = (
+            f"{record_scope}不足以判断盈利稳定性。"
+        )
+        eps = self._finite_metric(latest.get("eps"))
         price = self._float_or_none(context["price"])
-        pe_text = "数据不足" if eps <= 0 or price is None else f"{price / eps:.2f} 倍"
+        eps_text = latest.get("eps") if eps is not None else "数据不足"
+        period_eps_ratio_text = (
+            "数据不足" if eps is None or eps <= 0 or price is None else f"{price / eps:.2f}"
+        )
         return (
             f"{context['name']}（{context['code']}）深度基本面分析报告\n"
             f"分析日期：{context['analysis_date']} | 当前股价：{self._format_price(context['price'], context)}\n\n"
@@ -298,21 +330,23 @@ class StockAnalysisPipeline:
             f"业务描述：{context['description']}\n"
             f"可比标的：{peer_names}\n\n"
             "二、核心财务数据分析\n"
-            f"最新披露日期：{latest.get('report_date', 'N/A')}；"
-            f"最新披露收入：{latest.get('revenue', 'N/A')}；净利润：{latest.get('net_income', 'N/A')}；"
-            f"EPS：{latest.get('eps', 'N/A')}；ROE：{roe_text}。"
-            f"收入同比变化约 {self._format_pct(context['revenue_growth'])}，"
-            f"净利润同比变化约 {self._format_pct(context['profit_growth'])}。"
-            "从已有样本看，公司仍保持正盈利和稳定股东回报，基本面阶段对最终结论形成支撑。\n\n"
+            f"报告期截止日：{report_date or '数据不足'}；"
+            f"{record_label}收入：{revenue_value_text}；"
+            f"净利润：{net_income_value_text}；EPS：{eps_text}；ROE 原始值：{roe_value_text}。"
+            f"收入同比变化约 {self._format_pct(revenue_growth)}，"
+            f"净利润同比变化约 {self._format_pct(profit_growth)}。"
+            f"{profit_evidence}{stability_limit}"
+            "当前财务记录不含股息或派息指标，无法评价股东回报。\n\n"
             "三、估值与盈利质量\n"
-            f"按当前价格和最新披露 EPS 估算，静态市盈率约 {pe_text}。"
+            f"当前价格与{record_label} EPS 的比值为 {period_eps_ratio_text}；"
+            "该比值未作年化，不代表静态市盈率。"
             f"对于{context['industry']}行业，估值判断需要结合资产质量、拨备、净息差和分红能力，"
-            "不能只看短期股价波动。当前 ROE 维持在两位数，说明盈利质量相对稳健，但增长弹性并不激进。\n\n"
+            f"不能只看短期股价波动。{roe_evidence}\n\n"
             "四、合理价位区间与投资建议\n"
             f"基准目标价为 {self._format_price(profile['target_price'], context)}。"
             f"若盈利稳定且风险偏好修复，价格可向 {self._format_price(context['resistance'], context)} 区域试探；"
             f"若宏观信用或行业估值承压，则需关注 {self._format_price(context['support'], context)} 附近防守。"
-            f"基本面综合评分为 {profile['fundamental_score']:.2f}，结论偏稳健，但不足以单独触发强买入信号。"
+            f"基本面综合评分为 {profile['fundamental_score']:.2f}，不足以单独触发强买入信号。"
         )
 
     def _bull_researcher(
@@ -326,29 +360,70 @@ class StockAnalysisPipeline:
         context: dict[str, Any],
     ) -> str:
         has_financials = bool(context["latest_financial"])
+        has_report_date = bool(context["latest_financial"].get("report_date"))
+        record_label = (
+            "当前报告期财务记录"
+            if has_report_date
+            else "当前财务记录（报告期截止日数据不足）"
+        )
+        record_scope = "单个报告期指标" if has_report_date else "单条财务记录"
         financial_premise = (
-            "当前财务数据对估值有一定支撑。"
+            f"{record_label}可供核对，但单条记录不能单独构成估值支撑。"
             if has_financials
             else "当前财务数据不可用，以下乐观假设不能作为买入证据。"
         )
+        current_roe_value = self._finite_metric(context["roe"])
+        current_roe = current_roe_value if current_roe_value is not None else "数据不足"
+        current_net_income_value = self._finite_metric(
+            context["latest_financial"].get("net_income")
+        )
+        current_net_income = (
+            current_net_income_value if current_net_income_value is not None else "数据不足"
+        )
         financial_reason = (
-            f"1. 已披露财务数据：最新披露 ROE 为 {context['roe']}，净利润为 "
-            f"{context['latest_financial'].get('net_income', 'N/A')}，需要结合后续披露持续验证。\n"
+            f"1. {record_label}：ROE 为 {current_roe}，净利润为 {current_net_income}；"
+            f"{record_scope}不足以确认盈利稳定性。\n"
             if has_financials
             else "1. 财务数据不可用：不能把缺失数据解释为盈利稳定、低估或安全边际。\n"
         )
+        price = self._finite_metric(context["price"])
+        history_high = self._finite_metric(context["history_high"])
+        if price is None or price <= 0:
+            price_reason = "价格数据不足，无法评估相对历史样本高点的变化。"
+        elif history_high is None or history_high <= 0:
+            price_reason = "当前价格有报价，但缺少历史收盘价样本，无法确认高点折让或回归空间。"
+        elif price < history_high:
+            drawdown = (history_high - price) / history_high * 100
+            price_reason = (
+                f"参考价格 {self._format_price(price, context)} 较历史收盘样本高点 "
+                f"{self._format_price(history_high, context)} 低约 {drawdown:.2f}%；"
+                "该样本差异不单独构成估值或买入证据。"
+            )
+        else:
+            price_reason = "参考价格不低于历史收盘样本高点，样本未显示高点折让。"
+        news_reason = (
+            "本次未收集到新闻样本，无法据此判断催化方向或排除负面事件。"
+            if context["news_count"] == 0
+            else f"本次收集到 {context['news_count']} 条新闻样本，需结合内容评估其影响。"
+        )
+        if not context["history_available"]:
+            bull_counterpoint = "历史收盘价样本不足，无法确认短期均线压力。"
+        elif context["technical_bias"] == "偏多":
+            bull_counterpoint = "当前技术信号偏强，暂不支持短期均线承压的判断。"
+        elif context["technical_bias"] == "中性偏弱":
+            bull_counterpoint = "当前技术信号显示短线承压，看涨观点仍需等待趋势改善。"
+        else:
+            bull_counterpoint = "当前技术信号多空交织，短期均线压力尚未确认。"
         return (
             "Bull Analyst: \n"
             f"作为看涨研究员，我认为{context['name']}（{context['code']}）的核心价值不在于短线波动，"
-            f"而在于盈利稳定性、行业地位和估值防守。{financial_premise}\n\n"
+            f"其盈利能力、行业地位和估值防守仍需数据验证；盈利持续性也需多期数据确认。{financial_premise}\n\n"
             "一、看涨理由\n"
             f"{financial_reason}"
-            f"2. 价格处于回撤观察区：当前价 {self._format_price(context['price'], context)} "
-            f"相对近期样本高点已有明显折让，若风险偏好修复，存在向 "
-            f"{self._format_price(context['resistance'], context)} 回归的空间。\n"
-            "3. 新闻面不可用：当前新闻维度为空，不能据此推断没有新的公开负面催化。\n\n"
+            f"2. 价格证据：{price_reason}\n"
+            f"3. 新闻证据：{news_reason}\n\n"
             "二、反驳空方\n"
-            "空方强调短线均线压力是合理的，但银行类资产的定价通常更依赖盈利稳定、资产质量和分红预期。"
+            f"{bull_counterpoint}银行类资产的定价通常还需结合盈利、资产质量和分红预期。"
             "只要基本面没有恶化，技术回撤更适合作为观察区，而不是直接推导出趋势性卖出。\n\n"
             f"三、看涨结论\n"
             f"多头建议：维持{profile['action']}偏积极的观察态度，目标价参考 "
@@ -366,24 +441,94 @@ class StockAnalysisPipeline:
         profile: dict[str, Any],
         context: dict[str, Any],
     ) -> str:
-        return (
-            "Bear Analyst: \n"
-            f"作为看跌研究员，我认为{context['name']}（{context['code']}）当前最大的风险是短线趋势和催化不足。"
-            "基本面稳定并不等于股价马上重估，尤其当价格低于短期均线、新闻面缺乏增量信息时，资金可能继续观望。\n\n"
-            "一、看跌理由\n"
-            f"1. 技术面尚未确认反转：当前技术信号为{context['technical_signal']}，"
-            f"压力区在 {self._format_price(context['resistance'], context)} 附近。\n"
-            "2. 新闻催化不足：无近期新闻会降低短线交易热度，估值修复缺少触发器。\n"
-            f"3. 行业弹性有限：{context['industry']}行业更偏稳健，若宏观预期或信用环境承压，"
-            "股价上行动能可能弱于高景气成长行业。\n\n"
-            "二、反驳多方\n"
-            "多方强调基本面稳定，但稳定并不等同于低风险买入。若价格继续弱于均线系统，"
-            "持仓者需要优先控制回撤，而不是因为估值看似合理就忽略趋势风险。\n\n"
-            f"三、看跌结论\n"
+        latest = context["latest_financial"]
+        has_report_date = bool(latest.get("report_date"))
+        record_label = "当前报告期财务记录" if has_report_date else "当前财务记录"
+        has_metric_evidence = (
+            self._finite_metric(latest.get("net_income")) is not None
+            or self._finite_metric(latest.get("roe")) is not None
+        )
+        if not latest:
+            financial_evidence = "财务记录缺失，无法基于财务指标验证盈利能力或基本面稳定性。"
+        elif not has_metric_evidence:
+            financial_evidence = (
+                f"{record_label}存在，但净利润和 ROE 均缺少有效数值，"
+                "无法据此验证盈利能力或基本面稳定性。"
+            )
+        else:
+            financial_evidence = (
+                f"当前{('单个报告期' if has_report_date else '财务记录')}不足以证明基本面稳定，"
+                "也不能据此判断股价会马上重估。"
+            )
+        if not context["history_available"]:
+            technical_evidence = "历史收盘价样本不足，无法判断短线趋势压力或是否反转。"
+        elif context["technical_bias"] == "中性偏弱":
+            technical_evidence = "现有历史样本与技术信号显示短线承压。"
+        elif context["technical_bias"] == "偏多":
+            technical_evidence = "当前技术信号偏强，未显示明确的短线趋势压力。"
+        else:
+            technical_evidence = "当前技术信号多空交织，趋势方向尚待确认。"
+        news_evidence = (
+            "本次未收集到新闻样本，无法判断催化方向。"
+            if context["news_count"] == 0
+            else f"本次收集到 {context['news_count']} 条新闻样本，需结合内容评估催化方向。"
+        )
+        technical_pressure = (
+            f"参考压力区域为 {self._format_price(context['resistance'], context)}。\n"
+            if context["history_available"]
+            else "历史样本不足，无法确认技术压力位。\n"
+        )
+        bear_conclusion = (
             f"空方建议：在没有重新站上 {self._format_price(context['resistance'], context)} 前，"
             f"不宜把{profile['action']}解读为积极加仓信号；若跌破 "
             f"{self._format_price(context['support'], context)}，应降低风险敞口。"
+            if context["history_available"]
+            else "空方建议：历史收盘价样本不足，暂不据此确认压力位或防守位；"
+            "待取得足够行情历史后再判断区间交易与风险敞口。"
         )
+        return (
+            "Bear Analyst: \n"
+            f"作为看跌研究员，我将检视{context['name']}（{context['code']}）的行情趋势、新闻催化和数据缺口；"
+            f"{financial_evidence}"
+            "以下只陈述当前可见的证据。\n\n"
+            "一、看跌理由\n"
+            f"1. 技术面：{technical_evidence}{technical_pressure}"
+            f"2. 新闻面：{news_evidence}\n"
+            f"3. 行业弹性有限：{context['industry']}行业更偏稳健，若宏观预期或信用环境承压，"
+            "股价上行动能可能弱于高景气成长行业。\n\n"
+            "二、反驳多方\n"
+            "即使后续多期数据表现稳健，也不等同于低风险买入。若价格继续弱于均线系统，"
+            "持仓者需要优先控制回撤，而不是因为估值看似合理就忽略趋势风险。\n\n"
+            f"三、看跌结论\n"
+            f"{bear_conclusion}"
+        )
+
+    @staticmethod
+    def _research_manager_financial_evidence(
+        fundamental_score: float,
+        latest: dict[str, Any],
+        roe: Any,
+        record_label: str,
+    ) -> str:
+        net_income = latest.get("net_income")
+        parsed_roe = StockAnalysisPipeline._finite_metric(roe)
+        parsed_net_income = StockAnalysisPipeline._finite_metric(net_income)
+        metrics = [
+            f"净利润 {net_income}" if parsed_net_income is not None else "净利润数据不足",
+            (
+                f"ROE 原始值 {latest.get('roe')}（单位与口径待确认）"
+                if parsed_roe is not None
+                else "ROE 数据不足"
+            ),
+        ]
+        if parsed_net_income is None and parsed_roe is None:
+            evidence = "净利润和 ROE 均缺少有效数值，无法据此判断盈利能力。"
+        else:
+            evidence = (
+                f"{record_label}包含 {'；'.join(metrics)}；"
+                "单条财务记录不足以判断盈利稳定性。"
+            )
+        return f"2. 基本面：基本面评分 {fundamental_score:.2f}；{evidence}\n"
 
     def _research_manager(
         self,
@@ -394,16 +539,25 @@ class StockAnalysisPipeline:
         profile: dict[str, Any],
         context: dict[str, Any],
     ) -> str:
+        latest = context["latest_financial"]
+        has_report_date = bool(latest.get("report_date"))
+        record_label = (
+            "当前报告期记录"
+            if has_report_date
+            else "当前财务记录（报告期截止日数据不足）"
+        )
         fundamental_evidence = (
-            f"2. 基本面：基本面评分 {profile['fundamental_score']:.2f}，最新披露对盈利和 ROE 提供了参考。\n"
-            if context["latest_financial"]
+            self._research_manager_financial_evidence(
+                profile["fundamental_score"], latest, context["roe"], record_label
+            )
+            if latest
             else "2. 基本面：财务数据不可用，不纳入方向性判断。\n"
         )
         return (
             "最终裁决与投资计划\n"
             f"我的决定：{profile['action']}\n\n"
             f"在仔细分析多空双方论点后，我对{context['name']}（{context['code']}）给出"
-            f"{profile['action']}结论。这个决定不是简单地追随短期价格，也不是只看基本面稳定性，"
+            f"{profile['action']}结论。这个决定不是简单地追随短期价格，也不是只看单期财务数据，"
             "而是把技术、基本面、新闻情绪和风险约束放在同一个框架里比较。\n\n"
             "为什么做出该裁决\n"
             f"1. 技术面：当前信号为{context['technical_signal']}，价格需要突破 "
@@ -430,10 +584,47 @@ class StockAnalysisPipeline:
         target = self._float_or_none(profile["target_price"])
         confidence = float(profile["confidence"])
         risk_score = float(profile["risk_score"])
+        quote_price = self._finite_metric((snapshot.get("quote") or {}).get("price"))
+        has_quote = quote_price is not None and quote_price > 0
+        history_rows = (snapshot.get("history") or {}).get("rows") or []
+        has_history = any(
+            isinstance(row, dict)
+            and (close := self._finite_metric(row.get("close"))) is not None
+            and close > 0
+            for row in history_rows
+        )
+        if has_quote and has_history:
+            market_evidence = "有当前价格报价和历史收盘价样本。"
+        elif has_quote:
+            market_evidence = "有当前价格报价，但无历史收盘价样本，技术证据有限。"
+        elif has_history:
+            market_evidence = "当前价格报价缺失，但有历史收盘价样本，无法确认当前行情。"
+        else:
+            market_evidence = "当前价格报价和历史收盘价样本均不足。"
+
+        latest = context["latest_financial"]
+        net_income = self._finite_metric(latest.get("net_income"))
+        roe = self._finite_metric(latest.get("roe"))
+        if not latest:
+            financial_evidence = "无有效财务记录，基本面证据不足。"
+        elif net_income is None and roe is None:
+            financial_evidence = "有财务记录，但净利润和 ROE 均缺少有效数值，基本面证据不足。"
+        else:
+            available_metrics = [
+                f"净利润 {latest.get('net_income')}" if net_income is not None else "净利润数据不足",
+                (
+                    f"ROE 原始值 {latest.get('roe')}（单位与口径待确认）"
+                    if roe is not None
+                    else "ROE 数据不足"
+                ),
+            ]
+            financial_evidence = (
+                f"有财务记录，指标为 {'；'.join(available_metrics)}；"
+                "单条记录不足以判断盈利稳定性。"
+            )
         evidence_comment = (
-            "这组评分只作为研究辅助，财务与市场数据均已通过当前快照的质量检查。"
-            if context["latest_financial"] and context["price"] is not None
-            else "部分关键数据不可用，评分不构成基本面或技术面的方向性支持。"
+            f"行情证据：{market_evidence}财务证据：{financial_evidence}"
+            "评分仅作研究辅助，本处未独立验证数据质量。"
         )
         return (
             "最终交易建议\n"
@@ -449,8 +640,7 @@ class StockAnalysisPipeline:
             f"压力价位：{self._format_price(context['resistance'], context)}\n"
             f"若价格放量站上压力位，可继续观察向上修复；若跌破防守价位，应降低仓位或暂停新增买入。\n\n"
             f"3. 置信度：{confidence:.2f}\n"
-            "置信度来自技术、基本面、新闻和风险约束的综合一致性。目前基本面比技术面更强，"
-            "因此结论偏审慎，不做激进方向判断。\n\n"
+            "置信度基于当前可用行情、财务、新闻与风险证据；关键数据不足时，应结合相应数据缺口审慎解读。\n\n"
             f"4. 风险评分：{risk_score:.2f}\n"
             "主要风险包括短线趋势反复、行业估值波动、新闻催化不足，以及数据源缺失导致的判断误差。\n\n"
             "5. 执行计划\n"
@@ -470,9 +660,20 @@ class StockAnalysisPipeline:
     ) -> str:
         risk_score = float(profile["risk_score"])
         has_financials = bool(context["latest_financial"])
+        has_report_date = bool(context["latest_financial"].get("report_date"))
+        latest = context["latest_financial"]
+        has_metric_evidence = (
+            self._finite_metric(latest.get("net_income")) is not None
+            or self._finite_metric(latest.get("roe")) is not None
+        )
+        record_label = (
+            "当前报告期财务记录"
+            if has_report_date
+            else "当前财务记录（报告期截止日数据不足）"
+        )
         if stance == "激进":
             premise = (
-                f"基本面评分 {profile['fundamental_score']:.2f} 提供了已披露财务层面的参考。"
+                f"基本面评分 {profile['fundamental_score']:.2f}；{record_label}可供核对。"
                 if has_financials
                 else "财务数据不可用，因此不把基本面作为进攻性依据。"
             )
@@ -480,11 +681,12 @@ class StockAnalysisPipeline:
                 "激进风险分析师观点\n"
                 f"我支持在{context['name']}上保留进攻性观察。{premise}"
                 f"如果价格能够站上 {self._format_price(context['resistance'], context)}，"
-                "市场会重新定价稳定盈利资产的防御价值。激进策略不是盲目追高，而是在确认突破后提高仓位。"
+                "若后续多期数据确认盈利稳定，市场可能重新评估其防御价值。"
+                "激进策略不是盲目追高，而是在确认突破后提高仓位。"
             )
         if stance == "保守":
             fundamental_risk = (
-                "避免把“基本面稳定”误读为“没有下跌风险”。"
+                f"有{record_label}不代表没有下跌风险。"
                 if has_financials
                 else "财务数据缺口本身就是风险，不能据此判断公司经营稳定。"
             )
@@ -496,9 +698,13 @@ class StockAnalysisPipeline:
                 f"{fundamental_risk}"
             )
         neutral_premise = (
-            "多方看到已披露经营数据，空方看到趋势压力，"
-            if has_financials
-            else "财务数据不可用，趋势证据也不足，"
+            f"多方看到{record_label}中的净利润或 ROE 指标，空方看到趋势压力，"
+            if has_metric_evidence
+            else (
+                f"{record_label}中净利润和 ROE 均缺少有效数值，趋势证据也不足，"
+                if has_financials
+                else "财务数据不可用，趋势证据也不足，"
+            )
         )
         return (
             "中性风险分析师观点\n"
@@ -523,21 +729,44 @@ class StockAnalysisPipeline:
         target = self._float_or_none(profile["target_price"])
         confidence = float(profile["confidence"])
         risk_score = float(profile["risk_score"])
-        has_financials = bool(context["latest_financial"])
+        latest = context["latest_financial"]
+        has_financials = bool(latest)
+        has_report_date = bool(latest.get("report_date"))
+        record_label = (
+            "当前报告期财务记录"
+            if has_report_date
+            else "当前财务记录（报告期截止日数据不足）"
+        )
+        has_net_income = self._finite_metric(latest.get("net_income")) is not None
+        has_roe = self._finite_metric(context["roe"]) is not None
+        has_metric_evidence = has_net_income or has_roe
         committee_evidence = (
-            "激进分析师强调已披露基本面与估值修复，保守分析师强调趋势压力和催化不足，"
-            if has_financials
-            else "关键财务数据不可用，激进观点缺少基本面支撑，保守观点强调数据缺口与趋势压力，"
+            f"激进分析师强调{record_label}与估值修复，保守分析师强调趋势压力和催化不足，"
+            if has_financials and has_metric_evidence
+            else (
+                f"{record_label}中净利润和 ROE 均缺少有效数值，激进观点的财务支撑有限；"
+                "保守观点强调趋势压力和催化不足，"
+                if has_financials
+                else "关键财务数据不可用，激进观点缺少基本面支撑，保守观点强调数据缺口与趋势压力，"
+            )
         )
         core_evidence = (
-            "基本面提供参考，技术面要求纪律，新闻面暂不提供额外催化。"
-            if has_financials
-            else "基本面数据不可用，技术与新闻也不提供足够的方向性证据。"
+            f"{record_label}提供净利润或 ROE 字段参考；单条记录不能证明盈利稳定性。"
+            if has_metric_evidence
+            else (
+                f"{record_label}中净利润和 ROE 均缺少有效数值；技术面要求纪律，新闻面暂不提供额外催化。"
+                if has_financials
+                else "基本面数据不可用，技术与新闻也不提供足够的方向性证据。"
+            )
         )
         conservative_evidence = (
-            "风险控制是必要的，但当前基本面没有恶化到必须全面卖出的程度。"
-            if has_financials
-            else "数据缺口使得风险控制更重要，不能据此推导出经营未恶化。"
+            f"{record_label}不足以判断经营是否恶化，也不足以支持必须全面卖出的结论。"
+            if has_metric_evidence
+            else (
+                f"{record_label}中净利润和 ROE 均缺少有效数值，不能据此判断经营是否恶化。"
+                if has_financials
+                else "数据缺口使得风险控制更重要，不能据此推导出经营未恶化。"
+            )
         )
         return (
             "作为风险管理委员会主席，在认真听取激进、保守和中性三位风险分析师的辩论后，"
@@ -554,7 +783,7 @@ class StockAnalysisPipeline:
             f"基本面评分 {profile['fundamental_score']:.2f}，新闻评分 {profile['news_score']:.2f}。"
             f"{core_evidence}\n"
             "2. 对激进观点的裁决：部分采纳。若价格突破压力位，进攻策略可以提高权重；"
-            "但在突破前，不应把稳定盈利直接等同为买入信号。\n"
+            "但在突破前，即使后续数据确认盈利稳定，也不应直接视为买入信号。\n"
             f"3. 对保守观点的裁决：部分采纳。{conservative_evidence}\n"
             "4. 对中性观点的裁决：采纳。以区间管理和仓位纪律处理当前不完全一致的信号，是更稳健的方案。\n\n"
             "完善交易员计划\n"
@@ -655,6 +884,7 @@ class StockAnalysisPipeline:
             if volume_value is not None
             else (int(volumes[-1]) if volumes else None)
         )
+        news_items = (snapshot.get("news") or {}).get("items") or []
         peer_names = "、".join(item.get("name") or item.get("symbol") or "" for item in peers[:3])
 
         return {
@@ -691,9 +921,12 @@ class StockAnalysisPipeline:
             ),
             "first_close": first_close,
             "last_close": last_close,
+            "history_available": bool(closes),
+            "history_high": max(closes) if closes else None,
             "history_trend": history_trend,
             "technical_signal": technical_signal,
             "technical_bias": technical_bias,
+            "news_count": len(news_items),
             "latest_financial": latest,
             "roe": roe,
             "revenue_growth": revenue_growth,
@@ -897,6 +1130,12 @@ class StockAnalysisPipeline:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _finite_metric(value: Any) -> float | None:
+        """Return a finite numeric report metric, treating NaN and infinities as missing."""
+        numeric = StockAnalysisPipeline._float_or_none(value)
+        return numeric if numeric is not None and isfinite(numeric) else None
 
     @staticmethod
     def _normalize_change_pct(value: Any) -> float:
