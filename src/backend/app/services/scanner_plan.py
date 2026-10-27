@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.scanner_plan import ScannerPlanModel, ScannerPlanRunModel
 from app.services.scanner_service import ScannerService
+from app.services.scanner_universe import SCANNER_DATA_UNAVAILABLE
 
 
 def _utc_now() -> datetime:
@@ -207,57 +208,28 @@ class ScannerPlanService:
         force: bool = False,
     ) -> dict[str, Any]:
         resolved_run_date = run_date or _default_run_date()
-        existing_result = await self.db.execute(
-            select(ScannerPlanRunModel).where(
-                ScannerPlanRunModel.owner_id == user_id,
-                ScannerPlanRunModel.plan_id == plan.id,
-                ScannerPlanRunModel.run_date == resolved_run_date,
-            )
-        )
-        existing = existing_result.scalar_one_or_none()
-        if existing is not None and not force:
-            return {**self._serialize_run(existing), "cache_status": "existing"}
-        if existing is not None:
-            await self.db.delete(existing)
-            await self.db.flush()
-
-        started_at = _utc_now()
-        result = self.scanner_service.run(
-            [],
-            str(plan.condition),
-            lookback_days=int(plan.lookback_days),
-            timeframe=str(plan.timeframe),
-            universe_pool_id=str(plan.universe_pool_id),
-            user_id=user_id,
-        )
-        matches = list(result.get("matches") or [])
-        row = ScannerPlanRunModel(
-            owner_id=user_id,
-            plan_id=plan.id,
-            run_date=resolved_run_date,
-            status=str(result.get("status") or "completed"),
-            universe_pool_id=str(plan.universe_pool_id),
-            condition=str(plan.condition),
-            lookback_days=int(plan.lookback_days),
-            timeframe=str(plan.timeframe),
-            universe_count=int(result.get("universe_count") or 0),
-            match_count=len(matches),
-            matches=matches,
-            metrics={
-                "factor_cache_status": result.get("factor_cache_status"),
-                "source_task_id": result.get("task_id"),
-            },
-            source_task_id=str(result.get("task_id") or ""),
-            started_at=started_at,
-            completed_at=_utc_now(),
-        )
-        self.db.add(row)
-        await self.db.flush()
-        if plan.result_table_status == "ready" and plan.result_table_name:
-            await self._replace_result_table_rows(plan, row, matches)
-        await self.db.commit()
-        await self.db.refresh(row)
-        return {**self._serialize_run(row), "cache_status": "created"}
+        # Do not query or reuse a same-date legacy run, delete rows on force, or
+        # create task/run/result-table records until source contracts are verified.
+        return {
+            "id": None,
+            "plan_id": plan.id,
+            "run_date": resolved_run_date,
+            "status": "unavailable",
+            "data_status": "unavailable",
+            "universe_pool_id": plan.universe_pool_id,
+            "condition": plan.condition,
+            "lookback_days": plan.lookback_days,
+            "timeframe": plan.timeframe,
+            "universe_count": None,
+            "match_count": 0,
+            "matches": [],
+            "metrics": {},
+            "source_task_id": None,
+            "error": SCANNER_DATA_UNAVAILABLE,
+            "cache_status": "skipped",
+            "started_at": None,
+            "completed_at": None,
+        }
 
     async def _get_plan(self, user_id: str, plan_id: str) -> ScannerPlanModel | None:
         result = await self.db.execute(
@@ -283,6 +255,11 @@ class ScannerPlanService:
             "status": plan.status,
             "result_table_name": plan.result_table_name,
             "result_table_status": plan.result_table_status,
+            "result_table_data_status": (
+                "legacy_unverified"
+                if plan.result_table_status == "ready"
+                else "unavailable"
+            ),
             "created_at": plan.created_at.isoformat() if plan.created_at else None,
             "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
         }
@@ -293,7 +270,9 @@ class ScannerPlanService:
             "id": row.id,
             "plan_id": row.plan_id,
             "run_date": row.run_date,
-            "status": row.status,
+            "status": "legacy_unverified",
+            "legacy_status": row.status,
+            "data_status": "legacy_unverified",
             "universe_pool_id": row.universe_pool_id,
             "condition": row.condition,
             "lookback_days": row.lookback_days,

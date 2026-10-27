@@ -12,6 +12,7 @@ from typing import Any
 from app.utils.backend_data_paths import get_backend_data_path
 
 logger = logging.getLogger(__name__)
+SCANNER_DATA_UNAVAILABLE = "scanner_data_contract_unavailable"
 
 DEFAULT_POOLS: list[dict[str, Any]] = [
     {
@@ -136,25 +137,6 @@ def _safe_text(value: Any) -> str:
     return str(value).strip()
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value in (None, ""):
-            return default
-        result = float(value)
-    except (TypeError, ValueError):
-        return default
-    return result if math.isfinite(result) else default
-
-
-def _normalize_change_pct(value: Any) -> float:
-    raw = _safe_float(value)
-    return raw / 100 if abs(raw) > 1 else raw
-
-
-def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
-    return max(minimum, min(maximum, value))
-
-
 def _first_present(row: dict[str, Any], names: list[str]) -> Any:
     for name in names:
         if name in row and _safe_text(row[name]):
@@ -264,7 +246,7 @@ def _records(frame: Any, limit: int = 500) -> list[dict[str, Any]]:
 
 
 class AkshareScannerMarketDataClient:
-    """AkShare-backed loader for scanner universe constituents and quote factors."""
+    """AkShare-backed loader for scanner universe constituents only."""
 
     def fetch_pool_constituents(self, pool_id: str) -> list[dict[str, Any]]:
         import akshare as ak
@@ -291,112 +273,6 @@ class AkshareScannerMarketDataClient:
 
         return []
 
-    def build_symbol_contexts(
-        self,
-        instruments: list[dict[str, Any]],
-        *,
-        lookback_days: int,
-        timeframe: str,
-    ) -> list[dict[str, Any]]:
-        snapshots = self._load_snapshot_maps()
-        contexts: list[dict[str, Any]] = []
-        for instrument in instruments:
-            contexts.append(
-                self._context_for_instrument(
-                    instrument,
-                    snapshots=snapshots,
-                    lookback_days=lookback_days,
-                    timeframe=timeframe,
-                )
-            )
-        return contexts
-
-    def _load_snapshot_maps(self) -> dict[str, dict[str, dict[str, Any]]]:
-        maps: dict[str, dict[str, dict[str, Any]]] = {}
-        try:
-            import akshare as ak
-        except ImportError:
-            logger.warning("akshare not installed; scanner uses seed universe data")
-            return maps
-
-        loaders = {
-            "equity": lambda: ak.stock_zh_a_spot_em(),
-            "etf": lambda: ak.fund_etf_spot_em(),
-            "convertible_bond": lambda: ak.bond_zh_hs_cov_spot(),
-            "credit_bond": lambda: ak.bond_zh_hs_spot(start_page="1", end_page="5"),
-        }
-        for key, loader in loaders.items():
-            try:
-                maps[key] = self._quote_map(_records(loader(), limit=6000))
-            except Exception as exc:  # pragma: no cover - depends on live vendor availability
-                logger.warning("Failed to load akshare scanner snapshot %s: %s", key, exc)
-                maps[key] = {}
-        return maps
-
-    def _context_for_instrument(
-        self,
-        instrument: dict[str, Any],
-        *,
-        snapshots: dict[str, dict[str, dict[str, Any]]],
-        lookback_days: int,
-        timeframe: str,
-    ) -> dict[str, Any]:
-        symbol = _safe_text(instrument.get("symbol"))
-        key = _code_key(symbol)
-        asset_type = _safe_text(instrument.get("asset_type"))
-        candidates = [asset_type, "equity", "etf", "convertible_bond", "credit_bond"]
-        row = next((snapshots.get(candidate, {}).get(key) for candidate in candidates if key), None)
-
-        if row:
-            price = _safe_float(
-                _first_present(row, ["最新价", "price", "trade", "最新", "收盘", "close"]),
-                self._fallback_price(symbol),
-            )
-            volume = _safe_float(_first_present(row, ["成交量", "volume"]), 0.0)
-            amount = _safe_float(_first_present(row, ["成交额", "amount"]), 0.0)
-            change_pct = _normalize_change_pct(
-                _first_present(row, ["涨跌幅", "changepercent", "change_pct"])
-            )
-            provider = "akshare"
-            updated_at = utc_now()
-        else:
-            price = self._fallback_price(symbol)
-            volume = float(abs(hash(symbol)) % 900000 + 100000)
-            amount = price * volume
-            change_pct = ((abs(hash(symbol)) % 700) - 250) / 10000
-            provider = "seed_fallback"
-            updated_at = utc_now()
-
-        indicator = _clamp(0.5 + change_pct * 6)
-        factor = _clamp(0.5 + change_pct * 4 + min(volume / 10_000_000, 0.2))
-        return {
-            **instrument,
-            "price": round(price, 4),
-            "volume": int(volume),
-            "amount": round(amount, 2),
-            "change_pct": round(change_pct, 6),
-            "indicator": round(indicator, 6),
-            "factor": round(factor, 6),
-            "news_sentiment": 0.5,
-            "portfolio_exposure": 0.0,
-            "provider": provider,
-            "updated_at": updated_at,
-            "lookback_days": int(lookback_days),
-            "timeframe": timeframe,
-        }
-
-    @staticmethod
-    def _quote_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        result: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            code = _safe_text(
-                _first_present(row, ["代码", "code", "symbol", "成分券代码", "证券代码"])
-            )
-            key = _code_key(code)
-            if key:
-                result[key] = row
-        return result
-
     @staticmethod
     def _instrument_from_quote(row: dict[str, Any], asset_type: str) -> dict[str, Any]:
         return _normalize_instrument(
@@ -408,11 +284,6 @@ class AkshareScannerMarketDataClient:
             },
             default_asset_type=asset_type,
         )
-
-    @staticmethod
-    def _fallback_price(symbol: str) -> float:
-        base = abs(hash(symbol)) % 10000
-        return round(10 + base / 100, 2)
 
 
 class ScannerUniverseService:
@@ -470,7 +341,6 @@ class ScannerUniverseService:
             "last_refresh_status": status,
             "last_refresh_error": error,
         }
-        self._drop_metric_snapshots(state, user_id=user_id, pool_id=pool_id)
         self._save_state(state)
         return _pool_summary(refreshed)
 
@@ -504,7 +374,6 @@ class ScannerUniverseService:
             user_pools.append(pool)
         else:
             user_pools[existing_index] = pool
-            self._drop_metric_snapshots(state, user_id=user_id, pool_id=pool_id)
         self._save_state(state)
         return _pool_summary(pool)
 
@@ -541,11 +410,7 @@ class ScannerUniverseService:
         lookback_days: int,
         timeframe: str,
     ) -> list[dict[str, Any]]:
-        return self.market_client.build_symbol_contexts(
-            instruments,
-            lookback_days=lookback_days,
-            timeframe=timeframe,
-        )
+        raise ValueError(SCANNER_DATA_UNAVAILABLE)
 
     def precompute_pool_metrics(
         self,
@@ -555,23 +420,7 @@ class ScannerUniverseService:
         lookback_days: int,
         timeframe: str,
     ) -> dict[str, Any]:
-        pool = self.get_pool(pool_id, user_id)
-        if pool is None:
-            raise ValueError("universe_pool_not_found")
-        instruments = _dedupe_instruments(list(pool.get("instruments") or []))
-        contexts = self.build_symbol_contexts(
-            instruments,
-            lookback_days=lookback_days,
-            timeframe=timeframe,
-        )
-        snapshot = self._store_metric_snapshot(
-            user_id=user_id,
-            pool_id=pool_id,
-            lookback_days=lookback_days,
-            timeframe=timeframe,
-            contexts=contexts,
-        )
-        return {**self._snapshot_summary(snapshot), "cache_status": "updated"}
+        raise ValueError(SCANNER_DATA_UNAVAILABLE)
 
     def get_or_build_symbol_contexts(
         self,
@@ -582,28 +431,7 @@ class ScannerUniverseService:
         lookback_days: int,
         timeframe: str,
     ) -> tuple[list[dict[str, Any]], str]:
-        cached = self._get_metric_snapshot(
-            user_id=user_id,
-            pool_id=pool_id,
-            lookback_days=lookback_days,
-            timeframe=timeframe,
-        )
-        if cached is not None:
-            return list(cached.get("items") or []), "hit"
-
-        contexts = self.build_symbol_contexts(
-            instruments,
-            lookback_days=lookback_days,
-            timeframe=timeframe,
-        )
-        self._store_metric_snapshot(
-            user_id=user_id,
-            pool_id=pool_id,
-            lookback_days=lookback_days,
-            timeframe=timeframe,
-            contexts=contexts,
-        )
-        return contexts, "miss"
+        raise ValueError(SCANNER_DATA_UNAVAILABLE)
 
     def _store_metric_snapshot(
         self,
@@ -614,26 +442,7 @@ class ScannerUniverseService:
         timeframe: str,
         contexts: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        state = self._load_state()
-        snapshot = {
-            "user_id": user_id,
-            "pool_id": pool_id,
-            "lookback_days": int(lookback_days),
-            "timeframe": timeframe,
-            "computed_at": utc_now(),
-            "total": len(contexts),
-            "items": list(contexts),
-        }
-        state.setdefault("metric_snapshots", {})[
-            self._snapshot_key(
-                user_id=user_id,
-                pool_id=pool_id,
-                lookback_days=lookback_days,
-                timeframe=timeframe,
-            )
-        ] = snapshot
-        self._save_state(state)
-        return snapshot
+        raise ValueError(SCANNER_DATA_UNAVAILABLE)
 
     def _get_metric_snapshot(
         self,
@@ -652,44 +461,24 @@ class ScannerUniverseService:
                 timeframe=timeframe,
             )
         )
-        return snapshot if isinstance(snapshot, dict) else None
+        if isinstance(snapshot, dict):
+            logger.warning("Ignoring legacy scanner metric snapshot without a verified data contract")
+        return None
 
     def _with_latest_snapshot(self, user_id: str, pool: dict[str, Any]) -> dict[str, Any]:
         state = self._load_state()
-        snapshots = [
-            item
-            for item in (state.get("metric_snapshots") or {}).values()
-            if isinstance(item, dict)
+        has_legacy_snapshot = any(
+            isinstance(item, dict)
             and item.get("user_id") == user_id
             and item.get("pool_id") == pool.get("id")
-        ]
-        if not snapshots:
-            return pool
-        latest = max(snapshots, key=lambda item: str(item.get("computed_at") or ""))
-        return {**pool, "metric_snapshot": self._snapshot_summary(latest)}
-
-    @staticmethod
-    def _snapshot_summary(snapshot: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "pool_id": snapshot.get("pool_id"),
-            "lookback_days": int(snapshot.get("lookback_days") or 0),
-            "timeframe": snapshot.get("timeframe") or "",
-            "computed_at": snapshot.get("computed_at") or "",
-            "total": int(snapshot.get("total") or len(snapshot.get("items") or [])),
-        }
+            for item in (state.get("metric_snapshots") or {}).values()
+        )
+        data_status = "legacy_unverified" if has_legacy_snapshot else "unavailable"
+        return {**pool, "metric_snapshot": {"data_status": data_status}}
 
     @staticmethod
     def _snapshot_key(*, user_id: str, pool_id: str, lookback_days: int, timeframe: str) -> str:
         return f"{user_id}:{pool_id}:{int(lookback_days)}:{timeframe}"
-
-    @staticmethod
-    def _drop_metric_snapshots(state: dict[str, Any], *, user_id: str, pool_id: str) -> None:
-        snapshots = state.setdefault("metric_snapshots", {})
-        for key, item in list(snapshots.items()):
-            if not isinstance(item, dict):
-                continue
-            if item.get("user_id") == user_id and item.get("pool_id") == pool_id:
-                snapshots.pop(key, None)
 
     def _built_in_pools(self) -> list[dict[str, Any]]:
         state = self._load_state()
