@@ -10,12 +10,14 @@ import type {
   MarketInstrumentOptionsResponse,
   OpenDataDirectKlineRequest,
   OpenDataDirectKlineResponse,
+  OpenDataStockDailyFreshnessResponse,
 } from '@/api/marketData'
 import instrumentReferenceFixture from '../fixtures/instrument_reference_v1.json'
 
 const apiMocks = vi.hoisted(() => ({
   getCapabilities: vi.fn(),
   getOpenDataDirectKline: vi.fn(),
+  getOpenDataStockDailyFreshness: vi.fn(),
   lookupInstrument: vi.fn(),
   getQueryBundle: vi.fn(),
   getQueryContract: vi.fn(),
@@ -35,6 +37,7 @@ vi.mock('@/api/marketData', async (importOriginal) => {
       ...actual.marketDataApi,
       getCapabilities: apiMocks.getCapabilities,
       getOpenDataDirectKline: apiMocks.getOpenDataDirectKline,
+      getOpenDataStockDailyFreshness: apiMocks.getOpenDataStockDailyFreshness,
       lookupInstrument: apiMocks.lookupInstrument,
       getQueryBundle: apiMocks.getQueryBundle,
       getQueryContract: apiMocks.getQueryContract,
@@ -121,6 +124,14 @@ const instrumentQueryButtonStub = defineComponent({
       disabled: props.loading,
       onClick: () => emit('click'),
     }, slots.default?.())
+  },
+})
+
+const instrumentAlertStub = defineComponent({
+  inheritAttrs: false,
+  props: { title: { type: String, default: '' } },
+  setup(props, { attrs, slots }) {
+    return () => h('div', attrs, [props.title, slots.default?.()])
   },
 })
 
@@ -287,6 +298,23 @@ function coverageFixture() {
   }
 }
 
+function stockDailyFreshnessFixture(
+  overrides: Partial<OpenDataStockDailyFreshnessResponse> = {},
+): OpenDataStockDailyFreshnessResponse {
+  return {
+    provider: 'opendata',
+    domain: 'stock_daily',
+    source: null,
+    field: 'business_date',
+    latest: '2026-10-26',
+    lag_days: 0,
+    status: 'fresh',
+    expected_data_date: '2026-10-26',
+    checked_at: '2026-10-27T01:00:00Z',
+    ...overrides,
+  }
+}
+
 function relatedTableFixture() {
   return {
     items: [{
@@ -338,6 +366,7 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.getOpenDataDirectKline.mockImplementation((request: OpenDataDirectKlineRequest) => (
       Promise.resolve(directResponse(request))
     ))
+    apiMocks.getOpenDataStockDailyFreshness.mockResolvedValue(stockDailyFreshnessFixture())
     apiMocks.lookupInstrument.mockResolvedValue(legacyLookup())
     apiMocks.getQueryBundle.mockRejectedValue({ response: { status: 404 } })
     apiMocks.getQueryContract.mockRejectedValue({ response: { status: 404 } })
@@ -373,6 +402,7 @@ describe('DataPage OpenData direct daily chart', () => {
           'el-select': instrumentSelectStub,
           'el-date-picker': instrumentDatePickerStub,
           'el-button': instrumentQueryButtonStub,
+          'el-alert': instrumentAlertStub,
         },
       },
     })
@@ -386,16 +416,10 @@ describe('DataPage OpenData direct daily chart', () => {
     await flushPromises()
   }
 
-  function resetPostMountQueryCalls(expectStockBundleBootstrap: boolean) {
-    if (expectStockBundleBootstrap) {
-      expect(apiMocks.getQueryBundle).toHaveBeenCalledTimes(1)
-      expect(apiMocks.getQueryBundle).toHaveBeenCalledWith({ asset_type: 'stock' })
-    } else {
-      expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
-    }
-
-    // The initial local-only page bootstrap may resolve the V2 bundle. Reset
-    // that control-plane call so later assertions cover only user intent.
+  function resetPostMountQueryCalls() {
+    // OpenData/unknown bootstrap resolves only route and directory metadata;
+    // it must not enter the local compatibility query (or its V2 preflight).
+    expect(apiMocks.getQueryBundle).not.toHaveBeenCalled()
     apiMocks.getOpenDataDirectKline.mockClear()
     apiMocks.lookupInstrument.mockClear()
     apiMocks.getQueryBundle.mockClear()
@@ -437,7 +461,8 @@ describe('DataPage OpenData direct daily chart', () => {
     })
   }
 
-  it('keeps mount local-only and leaves the existing complete legacy view intact', async () => {
+  it('keeps the legacy stock bootstrap local-only and leaves its existing view intact', async () => {
+    apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('legacy'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
 
@@ -457,6 +482,182 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(page.text()).toContain('LOCAL_RELATED_TABLE_SENTINEL')
   })
 
+  it('does not read local stock market data during OpenData bootstrap', async () => {
+    const page = await mountPage()
+
+    expect(apiMocks.getOpenDataStockDailyFreshness).toHaveBeenCalledTimes(1)
+    expect(apiMocks.listInstrumentOptions).toHaveBeenCalledWith(expect.objectContaining({
+      asset_type: 'stock',
+    }))
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expect(apiMocks.getQueryContract).not.toHaveBeenCalled()
+    expect(apiMocks.queryLocalFirst).not.toHaveBeenCalled()
+    expect(apiMocks.listCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.refreshWarehouseCoverage).not.toHaveBeenCalled()
+    expect(page.text()).not.toContain('LOCAL_LOOKUP_NAME_SENTINEL')
+    expect(page.text()).not.toContain('LOCAL_SNAPSHOT_TIME_SENTINEL')
+  })
+
+  it('shows only OpenData domain freshness and describes missing as unknown', async () => {
+    apiMocks.getOpenDataStockDailyFreshness.mockResolvedValueOnce(stockDailyFreshnessFixture({
+      field: null,
+      latest: null,
+      lag_days: null,
+      status: 'missing',
+    }))
+
+    const page = await mountPage()
+
+    expect(apiMocks.getOpenDataStockDailyFreshness).toHaveBeenCalledTimes(1)
+    expect(apiMocks.getOpenDataStockDailyFreshness).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expect(apiMocks.listCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.refreshWarehouseCoverage).not.toHaveBeenCalled()
+    expect(page.find('[data-test="market-coverage-matrix"]').exists()).toBe(false)
+    expect(page.find('[data-test="opendata-stock-daily-freshness"]').exists()).toBe(true)
+    expect(page.get('[data-test="opendata-stock-daily-freshness-status"]').text())
+      .toContain('中台未测得')
+    expect(page.get('[data-test="opendata-stock-daily-freshness-missing"]').text())
+      .toContain('不表示某只股票无数据或历史为空')
+    expect(page.text()).toContain('不代表所选股票可用性')
+  })
+
+  it('keeps freshness request failures explicit and never falls back to local coverage', async () => {
+    apiMocks.getOpenDataStockDailyFreshness.mockRejectedValueOnce(
+      new Error('FRESHNESS_ERROR_SENTINEL'),
+    )
+
+    const page = await mountPage()
+
+    expect(apiMocks.listCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.refreshWarehouseCoverage).not.toHaveBeenCalled()
+    expect(page.find('[data-test="market-coverage-matrix"]').exists()).toBe(false)
+    expect(page.find('[data-test="opendata-stock-daily-freshness-unavailable"]').exists()).toBe(true)
+    expect(page.text()).not.toContain('FRESHNESS_ERROR_SENTINEL')
+
+    await page.get('[data-test="opendata-stock-daily-freshness-refresh"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.getOpenDataStockDailyFreshness).toHaveBeenCalledTimes(2)
+    expect(page.get('[data-test="opendata-stock-daily-freshness-status"]').text())
+      .toContain('域级 freshness 正常')
+  })
+
+  it('aborts the domain freshness request when the page unmounts', async () => {
+    const deferred = createDeferred<OpenDataStockDailyFreshnessResponse>()
+    apiMocks.getOpenDataStockDailyFreshness.mockReturnValueOnce(deferred.promise)
+
+    const page = await mountPage()
+    const options = apiMocks.getOpenDataStockDailyFreshness.mock.calls[0]?.[0] as {
+      signal?: AbortSignal
+    } | undefined
+
+    expect(options?.signal).toBeInstanceOf(AbortSignal)
+    expect((page.vm as unknown as Record<string, unknown>).openDataStockDailyFreshnessDisplay)
+      .toMatchObject({ status: 'loading' })
+    const vm = page.vm as unknown as Record<string, unknown>
+    page.unmount()
+    wrapper = undefined
+    expect(options?.signal?.aborted).toBe(true)
+    expect(vm.openDataStockDailyFreshnessDisplay).toEqual({ status: 'idle', response: null })
+
+    deferred.resolve(stockDailyFreshnessFixture())
+    await flushPromises()
+    // This detached wrapper retains its root after unmount; the lifecycle
+    // state is the relevant assertion that the late response was ignored.
+    expect(vm.openDataStockDailyFreshnessDisplay).toEqual({ status: 'idle', response: null })
+  })
+
+  it('aborts pending freshness when switching assets and ignores its late response', async () => {
+    const deferred = createDeferred<OpenDataStockDailyFreshnessResponse>()
+    apiMocks.getOpenDataStockDailyFreshness.mockReturnValueOnce(deferred.promise)
+
+    const page = await mountPage()
+    const vm = page.vm as unknown as Record<string, unknown>
+    const options = apiMocks.getOpenDataStockDailyFreshness.mock.calls[0]?.[0] as {
+      signal?: AbortSignal
+    } | undefined
+    const setAssetType = vm.setAssetType as (assetType: string) => void
+
+    expect(options?.signal).toBeInstanceOf(AbortSignal)
+    expect((vm.openDataStockDailyFreshnessDisplay as { status: string }).status).toBe('loading')
+    setAssetType('fund')
+    await flushPromises()
+
+    expect(options?.signal?.aborted).toBe(true)
+    expect((vm.form as { asset_type: string }).asset_type).toBe('fund')
+    expect(vm.openDataStockDailyFreshnessDisplay).toEqual({ status: 'idle', response: null })
+    expect(page.find('[data-test="opendata-stock-daily-freshness"]').exists()).toBe(false)
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalledWith(
+      expect.objectContaining({ asset_type: 'stock' }),
+    )
+    expect(apiMocks.listCoverage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ asset_type: 'stock' }),
+    )
+    expect(apiMocks.refreshWarehouseCoverage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ asset_type: 'stock' }),
+    )
+    const resultAfterSwitch = clone(vm.result)
+
+    deferred.resolve(stockDailyFreshnessFixture())
+    await flushPromises()
+
+    expect(vm.openDataStockDailyFreshnessDisplay).toEqual({ status: 'idle', response: null })
+    expect(vm.result).toEqual(resultAfterSwitch)
+    expect(page.find('[data-test="opendata-stock-daily-freshness"]').exists()).toBe(false)
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalledWith(
+      expect.objectContaining({ asset_type: 'stock' }),
+    )
+    expect(apiMocks.listCoverage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ asset_type: 'stock' }),
+    )
+  })
+
+  it('does not start freshness or local reads if route resolution finishes after unmount', async () => {
+    const deferred = createDeferred<ReturnType<typeof capabilityDocument>>()
+    apiMocks.getCapabilities.mockReturnValueOnce(deferred.promise)
+
+    const page = await mountPage()
+    page.unmount()
+    wrapper = undefined
+    deferred.resolve(capabilityDocument())
+    await flushPromises()
+
+    expect(apiMocks.getOpenDataStockDailyFreshness).not.toHaveBeenCalled()
+    expect(apiMocks.listCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+  })
+
+  it('does not query freshness or local coverage when the stock route is unknown or unavailable', async () => {
+    apiMocks.getCapabilities.mockRejectedValue(new Error('CAPABILITIES_DOWN_SENTINEL'))
+
+    const page = await mountPage()
+
+    expect(apiMocks.getOpenDataStockDailyFreshness).not.toHaveBeenCalled()
+    expect(apiMocks.listCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.refreshWarehouseCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expect(page.find('[data-test="market-coverage-matrix"]').exists()).toBe(false)
+    expect(page.find('[data-test="opendata-stock-daily-freshness"]').exists()).toBe(false)
+    expect(page.get('[data-test="stock-data-route-notice"]').text()).toContain('路由未知')
+    expect(page.text()).not.toContain('CAPABILITIES_DOWN_SENTINEL')
+
+    page.unmount()
+    wrapper = undefined
+    vi.clearAllMocks()
+    apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('opendata_ineffective'))
+
+    const disabledPage = await mountPage()
+    expect(apiMocks.getOpenDataStockDailyFreshness).not.toHaveBeenCalled()
+    expect(apiMocks.listCoverage).not.toHaveBeenCalled()
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
+    expect(disabledPage.find('[data-test="market-coverage-matrix"]').exists()).toBe(false)
+    expect(disabledPage.find('[data-test="opendata-stock-daily-freshness"]').exists()).toBe(false)
+    expect(disabledPage.get('[data-test="stock-data-route-notice"]').text())
+      .toContain('在线查询能力未开启')
+  })
+
   it('routes verified stock daily to the direct endpoint and isolates its display', async () => {
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
@@ -465,7 +666,7 @@ describe('DataPage OpenData direct daily chart', () => {
     vm.dateRange = [START_DATE, END_DATE]
     form.symbol = '000001'
     form.period = 'daily'
-    resetPostMountQueryCalls(true)
+    resetPostMountQueryCalls()
 
     await clickQuery(page)
 
@@ -528,19 +729,22 @@ describe('DataPage OpenData direct daily chart', () => {
 
     expect(freezeLegacyState(vm)).toEqual(legacyBefore)
 
+    const directDisplayBeforeLocalOnly = clone(vm.openDataDirectKlineDisplay)
     await (vm.lookupInstrument as (intent: string) => Promise<void>)('local_only')
     await flushPromises()
-    expect(vm.dataPageDisplayMode).toBe('legacy')
+    expect(vm.dataPageDisplayMode).toBe('opendata_direct')
+    expect(vm.openDataDirectKlineDisplay).toEqual(directDisplayBeforeLocalOnly)
     expect(freezeLegacyState(vm)).toEqual(legacyBefore)
-    expect(page.find('.asset-overview').exists()).toBe(true)
-    expect(page.find('.snapshot-card').exists()).toBe(true)
+    expect(page.find('.asset-overview').exists()).toBe(false)
+    expect(page.find('.snapshot-card').exists()).toBe(false)
+    expect(apiMocks.lookupInstrument).not.toHaveBeenCalled()
     expect(apiMocks.getOpenDataDirectKline).toHaveBeenCalledTimes(1)
   })
 
   it('clears prior direct bars after failure without fallback or error leakage', async () => {
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    resetPostMountQueryCalls(true)
+    resetPostMountQueryCalls()
     const legacyBefore = freezeLegacyState(vm)
     vm.dateRange = [START_DATE, END_DATE]
     apiMocks.getOpenDataDirectKline.mockResolvedValueOnce(directResponse({
@@ -578,7 +782,7 @@ describe('DataPage OpenData direct daily chart', () => {
   it('clears prior direct bars when the API rejects a malformed DTO', async () => {
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    resetPostMountQueryCalls(true)
+    resetPostMountQueryCalls()
     vm.dateRange = [START_DATE, END_DATE]
     const legacyBefore = freezeLegacyState(vm)
 
@@ -610,7 +814,7 @@ describe('DataPage OpenData direct daily chart', () => {
     })
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    resetPostMountQueryCalls(true)
+    resetPostMountQueryCalls()
     const legacyBefore = freezeLegacyState(vm)
 
     await clickQuery(page)
@@ -636,7 +840,7 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.getCapabilities.mockRejectedValue(new Error('CAPABILITIES_DOWN_SENTINEL'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    resetPostMountQueryCalls(false)
+    resetPostMountQueryCalls()
     const legacyBefore = freezeLegacyState(vm)
 
     await clickQuery(page)
@@ -660,7 +864,7 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('opendata_ineffective'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    resetPostMountQueryCalls(true)
+    resetPostMountQueryCalls()
 
     await clickQuery(page)
 
@@ -681,7 +885,10 @@ describe('DataPage OpenData direct daily chart', () => {
     apiMocks.getCapabilities.mockResolvedValue(capabilityDocument('legacy'))
     const page = await mountPage()
     const vm = page.vm as unknown as Record<string, unknown>
-    resetPostMountQueryCalls(false)
+    expect(apiMocks.getOpenDataStockDailyFreshness).not.toHaveBeenCalled()
+    expect(apiMocks.listCoverage).toHaveBeenCalled()
+    expect(page.find('[data-test="market-coverage-matrix"]').exists()).toBe(true)
+    resetPostMountQueryCalls()
 
     await clickQuery(page)
 
@@ -707,7 +914,7 @@ describe('DataPage OpenData direct daily chart', () => {
     const form = vm.form as { asset_type: string; symbol: string; period: string }
 
     form.asset_type = 'fund'
-    resetPostMountQueryCalls(true)
+    resetPostMountQueryCalls()
     await clickQuery(page)
     expect((vm.openDataDirectKlineDisplay as Record<string, unknown>).reason)
       .toBe('UNSUPPORTED_ASSET')

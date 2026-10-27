@@ -6,22 +6,57 @@ import typing
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.data.deps import require_authorized_market_data_read
 from app.api.deps import get_current_user
+from app.config import get_settings
 from app.schemas.market_data_trust import (
     AssetSpecResponse,
     DataPrecheckRequest,
     DataPrecheckResponse,
     ExecutionModelResponse,
     MarketDataCoverageMatrixResponse,
+    OpenDataStockDailyFreshnessResponse,
 )
 from app.services.asset_spec_service import get_asset_spec_service
 from app.services.backtest.execution_model import ExecutionModel
 from app.services.market_data_coverage_service import get_market_data_coverage_service
 from app.services.market_data_precheck_service import get_market_data_precheck_service
+from app.services.opendata_stock_daily_freshness import (
+    OpenDataStockDailyFreshnessError,
+    get_opendata_stock_daily_freshness_service,
+)
 from app.utils.logger import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+@router.get(
+    "/opendata/stock-daily/freshness",
+    response_model=OpenDataStockDailyFreshnessResponse,
+    summary="Read OpenData stock daily freshness",
+)
+async def get_opendata_stock_daily_freshness(
+    _: None = Depends(require_authorized_market_data_read),
+) -> OpenDataStockDailyFreshnessResponse:
+    """Proxy the fixed OpenData domain freshness route without local fallback."""
+    if not bool(getattr(get_settings(), "MARKET_DATA_OPENDATA_ENABLED", False)):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "OPENDATA_FRESHNESS_DISABLED"},
+        )
+
+    try:
+        service = get_opendata_stock_daily_freshness_service()
+        return await service.read()
+    except OpenDataStockDailyFreshnessError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from None
+    except Exception:
+        # Do not leak upstream bodies, network exception strings, or credentials.
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "OPENDATA_FRESHNESS_UNAVAILABLE"},
+        ) from None
 
 
 def _service_unavailable(exc: Exception) -> HTTPException:
