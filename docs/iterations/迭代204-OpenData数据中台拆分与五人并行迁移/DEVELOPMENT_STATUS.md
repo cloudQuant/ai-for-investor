@@ -268,3 +268,9 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 | [OpenData PR #18](https://github.com/cloudQuant/opendata/pull/18) | 财报精确观察使用独立值对象表达。 | 专项 **59 项测试通过**，目标模块 statement+branch 综合覆盖率 **94.17%**。这是值对象切片，不代表接入真实财报抓取、raw archive、source attempt 账本、生产响应解码或调度，也不证明历史修订/PIT 完整。 |
 | [OpenData PR #19](https://github.com/cloudQuant/opendata/pull/19) | 新浪股票代码解析对错误/不支持的符号 fail closed。 | **57 项测试加 2 项补充测试通过**，目标范围覆盖率 **100%**。北交所及证券代码 `689` 仍不支持；不得将拒绝非法符号的覆盖率解释为全市场代码支持或全 A 股覆盖。 |
 | [OpenData PR #20](https://github.com/cloudQuant/opendata/pull/20) | THS 财报数值以原始 `Decimal` 表达，避免在该切片中提前转换为浮点数。 | 专项 **73 项测试通过**，目标模块 statement+branch 综合覆盖率 **96.71%**。测试使用独立内存解码器；raw archive、source attempt 持久账本、真实 HTTP 响应、单位语义绑定及生产接线均未完成或未验收。该切片不构成全 A 股财报采集或 PIT 历史修订支持。 |
+
+## OpenData PR #21：THS 原始响应实体字节切片
+
+[OpenData PR #21](https://github.com/cloudQuant/opendata/pull/21) 已合入 OpenData `dev`。Fuyao transport 会在成功响应结果中返回 HTTPX 解压后的 response entity bytes，并在对象 `repr` 中隐藏字节内容；因此这里的“原始”指解码前的响应实体内容，不是压缩传输层上的原始 wire bytes。响应大小上限在 HTTPX 缓冲并解压后检查。定向测试 **190 项通过、7 项 e2e 排除**，客户端目标范围 line+branch 覆盖率 **95.8%**。
+
+响应字节虽已随 transport 成功响应返回，仍未接入财报 decoder 或 raw archive；没有真实生产响应验证。跨仓 HTTP wire 验证仍使用 synthetic 样本；上述结果不代表真实来源响应、raw archive、source attempt、单位绑定、数据质量、全 A 股覆盖、PIT 历史或生产调度已完成。
