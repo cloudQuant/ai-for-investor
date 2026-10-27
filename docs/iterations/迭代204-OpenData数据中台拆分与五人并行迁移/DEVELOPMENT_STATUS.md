@@ -2,7 +2,7 @@
 
 ## 当前开发基线（2026-10-27）
 
-截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58 与 OpenData PR #5–#7 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
+截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58、#62 与 OpenData PR #5–#8 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
 
 ## 历史记录：隔离集成状态
 
@@ -184,6 +184,12 @@ process-v1 目前仍 disabled 且没有 schedule；将它接到 slot 对账 cron
 
 该 gate 未接入 HTTP 请求路径或真实 Sina grant；Sina 仍禁用，授权状态为 **UNKNOWN**。它不提供日/run 总额度、严格滚动窗口或在途并发上限。授权证据是人工声明，不是法律自动验证；保存的策略快照不能完整重算；备份恢复和生产接线仍待验证。因此本 PR 不构成真实来源授权、生产限流或上线验收。
 
+### OpenData PR #8：HTTP source attempt 门禁接线切片
+
+[OpenData PR #8](https://github.com/cloudQuant/opendata/pull/8) 已合入 `dev`。专项 **352 项隔离测试通过**；HTTP client 模块语句+分支综合覆盖率为 **90.446%**，request budget 模块为 **98.571%**。HTTP 门禁通过显式注入进行验证，隔离持久化使用 SQLite。
+
+该切片没有接入真实新浪来源或调度，其他 HTTP/采集调用路径也没有被门禁覆盖；测试不证明生产数据源授权、跨主机竞争、生产数据库行为或生产部署。它不改变 Sina 禁用、grant **UNKNOWN**、策略证据、备份恢复及生产接线仍待验收的状态。
+
 **全 A 股全集及全历史覆盖仍未完成**：包含北交所在内的权威当前目录、退市对象、跨代码身份映射和逐标的实际起点均没有经本次 PR 验收。PR #52 的官方来源调查是调查文档，不是数据源落地；PR #53 的历史日线读取路由也不提供历史 universe 分母或 lifecycle 证据。不得以新浪行情最早记录、当前目录或已成功查询替代上市/退市证据。`204-E02-04`、`204-E03-01`、`204-E05-02` 及其父级状态需按既有验收标准逐项更新，不能因 PR 合入自动标完成。
 
 ## 2026-10-27 AFI PR #56 上证50 benchmark reader
@@ -193,3 +199,7 @@ process-v1 目前仍 disabled 且没有 schedule；将它接到 slot 对账 cron
 以下生产与业务验收仍未完成：生产数据库上的 `score_pending` 持久化；真实数据源授权与数据落库；逐日历史 coverage；与 Eastmoney 的跨源对照；运维告警。个股 20 日收益可计算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；不可用原因目前只写日志，未持久化，也没有相应告警。需要在有授权的真实数据与目标生产数据库上完成验证，并补齐可审计原因和告警后，才可评估上线。
 
 PR #56 仅覆盖上证50 benchmark 读路径，不改变全 A 股权威全集、BSE、退市与跨代码身份映射、逐标的全历史覆盖仍未完成的结论；不得据此关闭相关历史恢复任务或宣称全 A 股历史已验收。
+
+## AFI PR #62 benchmark 区间对齐
+
+AFI PR #62 已合入 `dev`，对齐 benchmark 与个股回报的区间边界；定向验证为 **24 项后端、2 项前端测试通过**，覆盖区间匹配、年化以及 ledger fail-closed degraded/UI 提示行为。生产 NAV、收盘盯市、TWR 和实盘行为仍未验证，FF 问题仍未解决；不能据此宣称 benchmark 全链路已完成或改变迭代204整体未完成的状态。
