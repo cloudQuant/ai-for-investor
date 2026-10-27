@@ -192,6 +192,16 @@ pre-commit run --all-files                     # Run manually
 
 ---
 
+## Historical Data Recovery
+
+- The user's default requirement is to recover each dataset/instrument from its actual start through the present, including missing dates inside the existing history. A recent rolling window is a maintenance scope, not full-history recovery.
+- Reconcile head, interior, and tail gaps by instrument and source business key. A table-wide MAX date, row count, or COMPLETED execution does not establish completeness.
+- Keep independently evidenced listing/inception dates separate from the earliest row currently returned by a source. Record unknown boundaries and source-retention limits explicitly.
+- Preserve source business dates, observation times, adjustment bases, metric semantics, and native units. Do not invent missing bars or relabel snapshot observations as historical business dates.
+- A snapshot-only endpoint cannot reconstruct observations that were never archived. Keep that historical requirement open with evidence rather than fabricating a backfill.
+
+---
+
 ## Key Files
 
 - `src/backend/pyproject.toml` - Python config
