@@ -1,6 +1,6 @@
 # 五人实施计划
 
-本文件保留35个工作包的原始规划。现已拆成87个子任务，首批6项代码与离线验证完成；其余工作和各验收面状态见 [子代理任务清单](SUBAGENT_TASKS.md) 与 [研发记录](DEVELOPMENT_STATUS.md)，不将父工作包标为全部完成。开发人员用A–E占位；任务分配是责任约定，不表示已经开始实现。A兼任技术负责人和跨仓集成人，不额外假设第六名全职人员。
+本文件保留35个工作包的原始规划。现已拆成98个子任务；其中8项为DEV_DONE、9项为IN_PROGRESS、81项为PLANNED。其余工作和各验收面状态见[子代理任务清单](SUBAGENT_TASKS.md)与[研发记录](DEVELOPMENT_STATUS.md)，不将父工作包标为全部完成。开发人员用A–E占位；任务分配是责任约定，不表示已经开始实现。A兼任技术负责人和跨仓集成人，不额外假设第六名全职人员。
 
 ## 1 人员与文件所有权
 
@@ -20,11 +20,11 @@ A独占共享契约、公共依赖锁、总路由注册和Alembic序列；D提�
 
 ## 2 开工前三天
 
-1. A保存两仓基线：HEAD、未提交补丁/新增文件内容哈希、依赖锁、迁移head、工具版本和环境身份；排除秘密。验证恢复方法后建立隔离分支/工作树。当前工作树成果先形成可追踪基线，不能丢弃后从旧dev重写。
+1. A保存两仓当前dev checkout基线：HEAD、未提交补丁/新增文件内容哈希、依赖锁、迁移head、工具版本和环境身份；排除秘密。默认复用每仓现有checkout，按独占文件清单并行；只有任务有明确隔离需求时才另建工作树。当前工作树成果先形成可追踪基线，不能丢弃后从旧dev重写。
 2. D以只读方式导出实际任务/执行/claim、systemd/crontab/进程、脚本参数、checkpoint、目标库/表和服务版本；与1066文件清单做集合对账。生产读取动作只盘点，不批量触发任务。
 3. B/C各挑10个代表案例，覆盖结构简单、标量/字典、循环多标的、多表、小时/快照、源受限、浏览器/归档、财务/修订。测量单项适配和独立验证成本。
 4. A/E基于上述20个代表案例冻结第一版数据契约和机器可读OpenAPI，发布mock server、黄金fixture、错误样例、v1兼容测试；D同步冻结TaskDefinition/Run/Receipt接口。A02 v0.1只依赖B01/C01的样本与合同候选，不等待607/449项完整映射；余项盘点并行推进，新增语义走兼容扩展。
-5. 第3天评审确定M1范围：股票日线原价+有证据的复权、上市/退市目录、日历、覆盖、一个补数任务、一个自然调度、一个研究快照。未知复权证据不伪造，保留阻塞。
+5. 第3天评审确定M1范围：股票日线raw价格、单独立项且有证据的复权数据集、上市/退市目录、日历、覆盖、一个补数任务、一个自然调度、一个固定研究snapshot。未知复权证据不伪造，保留阻塞。
 
 缺失的本地开发规范由A定位原版本或记录明确替代；对新包遵守现有分层和代码风格。源码、真实数据、部署、运行验收的基线分别记录。
 
@@ -34,7 +34,7 @@ A独占共享契约、公共依赖锁、总路由注册和Alembic序列；D提�
 
 | ID | 责任人 | 具体工作与交付 | 前置依赖 | 验收 |
 | --- | --- | --- | --- | --- |
-| A01 | A | 双仓工作树基线、范围/所有权/架构ADR、需求与旧迭代映射 | 无 | AC01 |
+| A01 | A | 双仓dev checkout基线、范围/所有权/架构ADR、需求与旧迭代映射 | 无 | AC01 |
 | A02 | A | OpenAPI、v1兼容策略、dataset/identity/time/unit/error合同、mock与golden fixture | A01；B01/C01的20例样本输入 | AC02、AC03 |
 | A03 | A | 数据集/主数据/别名/生命周期/日历契约；统一注册和迁移revision | A02 | AC04、AC05 |
 | A04 | A | raw/ODS/DWD引用、原子publication、修订与snapshot；跨库receipt/outbox | A03；D02 | AC06、AC07 |
@@ -42,7 +42,7 @@ A独占共享契约、公共依赖锁、总路由注册和Alembic序列；D提�
 | A06 | A | DQ/coverage标准、逐标的head/interior/tail报告、源限制账本 | A03；B02/C02 | AC04、AC05、AC10 |
 | A07 | A | 兼容性门禁、跨仓release manifest、最终范围/风险裁决与集成 | A01后持续；各波验收 | AC01、AC18 |
 | B01 | B | 证券文件逐项映射：数据源、模型、参数、落表、消费者、许可、复杂度 | A01 | AC01、AC11 |
-| B02 | B | 股票日线样板与universe、财报PIT、公司行动/复权方案，修正旧源语义 | A02；B01 | AC03、AC04、AC07 |
+| B02 | B | 股票日线样板与universe、财报报告期/修订/来源时间映射、公司行动与独立复权方案，修正旧源语义 | A02；B01 | AC03、AC04、AC07 |
 | B03 | B | 基金ETF价格/NAV/万份收益/七日年化及可转债/收益率曲线独立契约 | A03；B01 | AC04、AC05、AC10 |
 | B04 | B | 指数/成分/估值/证券事件等长尾Provider与数据集；字段漂移隔离 | B01；A03 | AC04、AC11 |
 | B05 | B | 原证券历史数据、成交额sidecar、源证据与断点迁移规则；逐分区对账 | A04/A06；B02/B03 | AC05、AC12 |
@@ -91,6 +91,20 @@ flowchart TD
 
 M1仅要求上述工作包在股票样板范围完成，后续资产仍可IN_PROGRESS。M1出口必须实际经过B02采集、D02/D03补数与自然调度、A03/A04标准化和发布、A05 REST、A06覆盖核验、E02读取及E04固定快照重放；仅有骨架或mock不通过端到端门槛。
 
+### M1补充：股票分析 REST-only research 首版
+
+首个股票分析研究切片由 A（OpenData API/授权/发布封存/覆盖合同）、B（证券数据与源对照）、E（AFI消费和报告门禁）按 `SUBAGENT_TASKS.md` 的 `204-A04-04`、`204-A05-04/05/06/07`、`204-A06-04`、`204-B02-04/05`、`204-E03-04/05`、`204-E06-03` 执行；共享接口先冻结，再按任务依赖串接。用户已明确允许本迭代使用 AkShare 和 Fuyao 数据，相关授权无需再次向用户索取；A需将该授权落实到可审计的 source/research grant 范围，B逐项登记 AkShare 函数对应的实际来源产品、字段和转换证据，并在真实样本记录具体来源和字段证据。
+
+当前边界必须写入实现合同：OpenData v2 已有的 publication sequence 只能固定发布版本；`stock_daily` 尚无 reviewed v2 records 合同，也没有逐行 `available_at`。现有 `published_at` 在事实事务内生成，不能证明事务已提交且数据已可读，也没有可信时钟不可回拨守卫，因此不能直接作为 platform-known-at 证据。A须新增 post-commit visibility seal：只有事实publication已提交并可读后才封存；seal使用可信UTC时钟、持久单调递增visibility sequence和UTC封存时刻。时钟不可信、回拨或封存状态不完整时拒绝封存/查询，不把时间钳制成成功值。首版platform-known-at只由可信seal时刻与单调sequence共同证明：v2研究请求同时约束UTC cutoff和visibility sequence，并固定一个包含各dataset publication_id/sequence、visibility seal、content hash与contract hash的snapshot vector；不满足cutoff/sequence双重约束的版本不可见。AFI报告只可引用有持久证据的vector。今天才采集/回填并封存的数据只能表示从今天的visibility seal起平台可见，不能冒充此前历史已知；没有对应封存vector或修订保留证据的任意历史as-of请求失败关闭。
+
+首版的三个时间维度严格分开：`business_date`是日期字段，按交易所日历的`Asia/Shanghai`解释；`observed_at`是来源响应实际采集时刻；平台可见/发布时间是post-commit `visibility_sealed_at`（API若为兼容保留`published_at`，必须明确它仅为该封存值时才能用作可见时间）。所有instant以时区感知RFC3339表示并规范化为UTC；拒绝无时区的instant。来源提供的原始时间文本、原始offset/时区、精度和版本化转换规则同时留存；只有来源语义与时区经证据核实时才填`source_published_at`，否则保持UNKNOWN，绝不用`observed_at`或交易日推算。首版不宣称source-known、market-known或严格历史source PIT。
+
+行情首版仅发布源端未复权日线，明确现有schema枚举`adjustment_basis=raw`，保留来源标识、原生字段、成交量/成交额原生单位及NULL语义；不把零与缺失合并，也不在AFI转换单位或混用复权价。后续复权数据必须另建有版本和因子/锚点证据的数据集，且全计划统一称raw，不能另造`none`枚举。财务使用独立annual/quarterly records合同，保留报告类型、报告期业务日期、修订身份、源标识、原始字段、原生金额单位/币种及可验证的原始/规范时间；公告时间没有证据时保持UNKNOWN，不能把报告期截止日当披露日。首版只允许清单中已通过逐标的验收的沪深数据集和能力；新闻、社媒、行业/同行或其他未验证主题不进入报告必需输入，也不得伪装成综合分析。北交所/BSE 当前仍未支持，4/8/920等标识不得映射到沪深或自动换源。
+
+查询必须同时通过“当前认证用户对目标数据集/标的/研究用途具有精确`READ_DATA`权限”和“该用户的source research grant覆盖实际来源、数据集、市场和用途”两道检查。后台任务在排队后执行时重新取得并校验用户授权，读取前及报告落盘前再次检查权限/授权版本；服务账号权限不能代替用户授权。拒绝、过期、撤销、scope不匹配、未发布、字段/单位缺证据、质量不合格或逐标的覆盖为UNKNOWN/PARTIAL时，失败关闭：不生成或保存报告，不回退到AFI数据库、缓存、直接SDK或其他来源，也不以空表或静默降频继续。AFI只在单次请求内暂存REST数据；不写可复用的行情/财务事实缓存。用户请求产生的研究报告可以作为AFI研究工件保存，但应持久记录每个dataset的publication_id/sequence、可信cutoff/visibility vector、content hash、contract/schema hash、查询条件及source/grant revision。现有snapshot ID最长7天的TTL仅适合临时读取，不是报告重放凭据；报告重放依靠长期可解析的publication/vector和受控保留策略。发布保留期未验证或短于报告声明的复现期时，不得声称可重放或保存为可复现报告。
+
+覆盖验收以`instrument_id × dataset_id × publication × 窗口`为单位并分数据族建模：日线的预期键来自经验证的交易所日历与上市/退市生命周期，按沪深`Asia/Shanghai`业务日计算head/interior/tail缺口；财报覆盖按annual/quarterly报告类型、报告期和经审查的数据源/数据集预期披露周期检查，不使用交易日历，也不把报告期截止日当披露日。日历、生命周期、报告期集合或披露周期缺证据时结果为UNKNOWN；来源最早返回日不等于真实上市日，缺少财报记录也不能自动判定完整或缺失。真实数据验收由B、E以有界沪深样本串通已获准来源、OpenData采集/发布/API和AFI报告门禁，并记录脱敏请求参数、AkShare函数/实际来源产品映射、字段与转换版本、业务日期、UTC observed/visibility seal、原生单位、响应/发布hash及差异；此样本不证明全A股或全历史完成。离线单测覆盖固定publication/vector、cutoff与sequence双约束、post-commit封存/时钟回拨、RFC3339/时区转换、权限撤销/后台重授权、缓存/回退/报告副作用拒绝、annual/quarterly与修订键、NULL与零、复权隔离、两类独立coverage及BSE拒绝。详细依赖和验收收据见子任务清单；任何失败只返回明确错误与request_id，不保留半成品报告。
+
 数据波次建议：W1股票日线/目录/日历 → W2基金、债券、FX、crypto → W3期货、期权、指数及策略频率 → W4财务、宏观、主题与全部长尾。B/C可以跨波开发，切换按单域门禁推进；未有数据能力的频率保持明确不可用，不能改低需求。仅同一source请求的离线回放可并行；真实源抓取使用统一预算，禁止影子阶段重复全量抓取。
 
 ## 5 每个脚本和任务如何迁移
@@ -128,11 +142,11 @@ M1仅要求上述工作包在股票样板范围完成，后续资产仍可IN_PRO
 
 ## 7 分支 PR与合并
 
-1. 两仓各自采用隔离分支；默认 `codex/od204-a-contract` 等命名，普通变更PR指向 `dev`。opendata若没有dev先由维护规则确认集成分支；不得猜测并推master。遵守各仓CONTRIBUTING与治理声明。
-2. 合同PR先合：schema/OpenAPI/fixture/Run接口 → 服务实现/域模块 → client/消费者 → 控制台 → 切换配置 → 旧能力清理。接口变更采用向后兼容的expand/contract流程。
+1. 默认复用两仓各自现有的主`dev` checkout，按互不重叠的文件清单并行；不为每人创建工作树或长期分支。每仓指定唯一集成人，由其串行执行暂存、提交、建PR、合并和checkout切换；需要PR分支时在现有checkout内创建短期`codex/od204-*`分支，目标为`dev`，合并后回到`dev`。只有任务有明确隔离需求时才另建工作树。若opendata没有`dev`，先按仓库治理确认集成分支；不得猜测并推master。遵守各仓CONTRIBUTING与治理声明。
+2. 按可独立验收行为提交小PR到`dev`：schema/OpenAPI/fixture/Run接口 → 服务实现/域模块 → client/消费者 → 控制台 → 切换配置 → 旧能力清理。接口变更采用向后兼容的expand/contract流程，不等数周后批量合并。
 3. 不把业务数据、源密钥、生产快照或庞大raw工件提交代码仓库。证据用脱敏manifest/hash定位，数据库通过版本化工具迁移；Git合并不承担数据库合并。
 4. 一个PR聚焦一个可验收数据域或行为。共享文件的修改先请求owner集成；Alembic只由A分配序列，CI阻断意外多head和未覆盖升级。
-5. 每个PR说明问题、行为变化、对应工作包/脚本/任务、契约版本、测试、未验证项与回滚影响；合并需另一人review。contract diff、schema兼容、单元/集成、consumer tests和边界扫描按影响运行。
+5. 每个PR说明问题、行为变化、对应工作包/脚本/任务、契约版本、测试、未验证项与回滚影响；作者按仓库规则对精确HEAD提交self-review，另有授权review时遵守其阻断决定。contract diff、schema兼容、单元/集成、consumer tests和边界扫描按影响运行。
 6. 每日15分钟协调接口/阻塞，周中集成，周末演示和重估。不要五条长分支各开发数周后最后一次性合并。
 
 ## 8 状态与完成定义
