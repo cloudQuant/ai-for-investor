@@ -40,7 +40,9 @@ class ScannerPlanModel(Base):
     condition: Mapped[str] = mapped_column(Text, nullable=False)
     lookback_days: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     timeframe: Mapped[str] = mapped_column(String(20), nullable=False, default="1d")
-    schedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # ORM inserts default off. The historical DB server default remains true for raw SQL;
+    # review stored true values explicitly before restoring scheduled scanner execution.
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     schedule_frequency: Mapped[str] = mapped_column(String(20), nullable=False, default="daily")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
     result_table_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)

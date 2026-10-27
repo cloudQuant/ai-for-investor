@@ -42,6 +42,7 @@ class ScannerPlanService:
         condition = str(payload.get("condition") or "").strip()
         if not condition:
             raise ValueError("scanner_plan_condition_required")
+        schedule_enabled = self._parse_schedule_enabled(payload, default=None)
 
         existing_result = await self.db.execute(
             select(ScannerPlanModel).where(
@@ -52,13 +53,15 @@ class ScannerPlanService:
         plan = existing_result.scalar_one_or_none()
         if plan is None:
             plan = ScannerPlanModel(owner_id=user_id, name=name)
+            plan.schedule_enabled = schedule_enabled if schedule_enabled is not None else False
             self.db.add(plan)
+        elif schedule_enabled is not None:
+            plan.schedule_enabled = schedule_enabled
         plan.universe_pool_id = universe_pool_id
         plan.indicator_rules = list(payload.get("indicator_rules") or [])
         plan.condition = condition
         plan.lookback_days = int(payload.get("lookback_days") or 20)
         plan.timeframe = str(payload.get("timeframe") or "1d")
-        plan.schedule_enabled = bool(payload.get("schedule_enabled", True))
         plan.schedule_frequency = str(payload.get("schedule_frequency") or "daily")
         plan.status = str(payload.get("status") or "active")
         plan.updated_at = _utc_now()
@@ -87,6 +90,7 @@ class ScannerPlanService:
         condition = str(payload.get("condition") or "").strip()
         if not condition:
             raise ValueError("scanner_plan_condition_required")
+        schedule_enabled = self._parse_schedule_enabled(payload, default=None)
 
         plan.name = name
         plan.universe_pool_id = universe_pool_id
@@ -94,7 +98,8 @@ class ScannerPlanService:
         plan.condition = condition
         plan.lookback_days = int(payload.get("lookback_days") or 20)
         plan.timeframe = str(payload.get("timeframe") or "1d")
-        plan.schedule_enabled = bool(payload.get("schedule_enabled", True))
+        if schedule_enabled is not None:
+            plan.schedule_enabled = schedule_enabled
         plan.schedule_frequency = str(payload.get("schedule_frequency") or "daily")
         plan.status = str(payload.get("status") or "active")
         plan.updated_at = _utc_now()
@@ -286,6 +291,17 @@ class ScannerPlanService:
             "started_at": row.started_at.isoformat() if row.started_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
         }
+
+    @staticmethod
+    def _parse_schedule_enabled(
+        payload: dict[str, Any], *, default: bool | None
+    ) -> bool | None:
+        if "schedule_enabled" not in payload:
+            return default
+        value = payload["schedule_enabled"]
+        if type(value) is not bool:
+            raise ValueError("scanner_plan_schedule_enabled_must_be_boolean")
+        return value
 
     @staticmethod
     def _result_table_name(plan_id: str) -> str:
