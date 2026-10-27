@@ -4,6 +4,8 @@
 
 AFI PR #56 已合入：新增默认关闭的 OpenData 上证50 benchmark reader；23 项 scoped 测试使用 HTTP mock/SQLite，并出现两项 timeout 配置警告。该范围尚未上线；`score_pending` ORM 持久化、生产数据源授权与落库、逐日历史覆盖及 Eastmoney 对比均未验证。个股 20 日收益可算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；原因只写日志，没有持久化原因或告警。此增量不改变全 A 与逐标的全历史仍待验收的状态。
 
+OpenData PR #6 已合入，但只增加离线 UTC cron 的单代 slot 对账器：167 项 SQLite 测试通过，reconciler 覆盖率 100%、journal 95%、合计 96%。它没有生产入口、告警或补采能力；process-v1 仍 disabled 且无 schedule，接线前须先解决其与对账 cron 的 slot 约束。MySQL/PG、calendar、generation rollover、历史初始 slot 边界均为 `NOT_ASSESSED`；全 A（含北交所/BSE）、来源授权与上线验收仍开放。
+
 波次历史摘要：W8—W11 的局部隔离验证及归档仍按对应状态文件保留；此前列出的覆盖率、收据和静态检查是历史范围证据，不代表当前 HEAD 整仓门禁或生产验收。当前 PR 与未完成范围以 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 为准。
 
 目标：将 ai-for-investor 的市场及研究基础数据采集、清洗、仓储、质量治理、调度和运维管理迁入 `/home/yun/Documents/opendata`。ai-for-investor 保留投研、策略、回测、交易和用户业务，通过 opendata REST API 消费数据。
