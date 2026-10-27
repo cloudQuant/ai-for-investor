@@ -581,7 +581,6 @@ class StockAnalysisPipeline:
         financials = snapshot.get("financials") or {}
         financial_records = self._financial_records(financials)
         latest = financial_records[-1] if financial_records else {}
-        previous = financial_records[-2] if len(financial_records) >= 2 else {}
         peers = (snapshot.get("peers") or {}).get("items") or []
 
         closes = [
@@ -647,16 +646,8 @@ class StockAnalysisPipeline:
             technical_signal = "多空交织，趋势尚未完成确认"
             technical_bias = "中性"
 
-        revenue = self._float_or_none(latest.get("revenue"))
-        previous_revenue = self._float_or_none(previous.get("revenue"))
-        profit = self._float_or_none(latest.get("net_income"))
-        previous_profit = self._float_or_none(previous.get("net_income"))
         revenue_growth = self._float_or_none(latest.get("revenue_growth"))
-        if revenue_growth is None and revenue is not None and previous_revenue is not None:
-            revenue_growth = self._growth_rate(revenue, previous_revenue)
         profit_growth = self._float_or_none(latest.get("profit_growth"))
-        if profit_growth is None and profit is not None and previous_profit is not None:
-            profit_growth = self._growth_rate(profit, previous_profit)
         roe = self._float_or_none(latest.get("roe"))
         volume_value = self._float_or_none(quote.get("volume"))
         volume = (
@@ -741,12 +732,6 @@ class StockAnalysisPipeline:
         if isinstance(features, dict) and features.get(key) is not None:
             return self._float_or_none(features.get(key))
         return self._latest_factor(fallback)
-
-    @staticmethod
-    def _growth_rate(current: float, previous: float) -> float:
-        if previous == 0:
-            return 0.0
-        return (current - previous) / abs(previous)
 
     @staticmethod
     def _format_pct(value: Any) -> str:

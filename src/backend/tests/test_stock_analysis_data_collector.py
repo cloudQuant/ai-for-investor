@@ -343,6 +343,40 @@ async def test_pipeline_uses_the_most_recent_financial_disclosure_not_only_annua
 
     assert "最新披露日期：2026-03-31" in output["fundamentals_report"]
     assert "最新披露收入：35.0" in output["fundamentals_report"]
+    assert "收入同比变化约 数据不足" in output["fundamentals_report"]
+    assert "净利润同比变化约 数据不足" in output["fundamentals_report"]
+
+
+def test_pipeline_preserves_source_financial_yoy_values() -> None:
+    """Use source-provided YoY fields without recalculating from adjacent reports."""
+    pipeline = StockAnalysisPipeline()
+    context = pipeline._analysis_context(
+        symbol="000001.SZ",
+        market_type="A股",
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "financials": {
+                "annual": [
+                    {"report_date": "2025-12-31", "revenue": 130.0, "net_income": 42.0}
+                ],
+                "quarterly": [
+                    {
+                        "report_date": "2026-03-31",
+                        "revenue": 35.0,
+                        "net_income": 14.0,
+                        "revenue_growth": 4.65,
+                        "profit_growth": 3.03,
+                    }
+                ],
+            },
+        },
+        profile={},
+    )
+
+    assert context["revenue_growth"] == 4.65
+    assert context["profit_growth"] == 3.03
+    assert pipeline._format_pct(context["revenue_growth"]) == "4.65%"
+    assert pipeline._format_pct(context["profit_growth"]) == "3.03%"
 
 
 @pytest.mark.asyncio
