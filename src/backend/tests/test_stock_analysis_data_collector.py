@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from datetime import date
 from types import SimpleNamespace
@@ -293,8 +294,8 @@ def test_ai_source_context_includes_company_profile_and_industry_peers():
 
 
 @pytest.mark.asyncio
-async def test_pipeline_uses_the_most_recent_financial_disclosure_not_only_annual_data():
-    """The fundamentals narrative must expose the newest available financial period."""
+async def test_pipeline_uses_latest_report_period_not_only_annual_data():
+    """The fundamentals narrative must label a report period, not an announcement date."""
     output = await StockAnalysisPipeline().run(
         symbol="000001.SZ",
         market_type="A股",
@@ -341,10 +342,223 @@ async def test_pipeline_uses_the_most_recent_financial_disclosure_not_only_annua
         },
     )
 
-    assert "最新披露日期：2026-03-31" in output["fundamentals_report"]
-    assert "最新披露收入：35.0" in output["fundamentals_report"]
+    assert "报告期截止日：2026-03-31" in output["fundamentals_report"]
+    assert "本报告期收入：35.0" in output["fundamentals_report"]
+    assert "ROE 原始值：2.83（单位与口径待确认）" in output["fundamentals_report"]
+    assert "当前价格与本报告期 EPS 的比值为 17.33" in output["fundamentals_report"]
+    assert "静态市盈率约" not in output["fundamentals_report"]
+    assert "最新披露日期" not in output["fundamentals_report"]
+    assert "稳定股东回报" not in output["fundamentals_report"]
+    assert "ROE 维持在两位数" not in output["fundamentals_report"]
     assert "收入同比变化约 数据不足" in output["fundamentals_report"]
     assert "净利润同比变化约 数据不足" in output["fundamentals_report"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "report_date",
+        "net_income",
+        "roe",
+        "expected_date",
+        "expected_profit",
+        "expected_roe",
+        "expected_eps_ratio",
+    ),
+    [
+        (
+            "2026-03-31",
+            14.0,
+            0.83,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润为 14.0（本条记录为正）。",
+            "本报告期 ROE 原始值为 0.83（单位与口径待确认）。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            -1.0,
+            -3.2,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润为 -1.0（本条记录为负）。",
+            "本报告期 ROE 原始值为 -3.2（单位与口径待确认）。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            None,
+            0.83,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润数据不足，无法判断盈亏。",
+            "本报告期 ROE 原始值为 0.83（单位与口径待确认）。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            14.0,
+            None,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润为 14.0（本条记录为正）。",
+            "本报告期 ROE 数据不足，单位与口径待确认。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            -1.0,
+            12.0,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润为 -1.0（本条记录为负）。",
+            "本报告期 ROE 原始值为 12.0（单位与口径待确认）。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            None,
+            None,
+            0.83,
+            "报告期截止日：数据不足",
+            "当前财务记录净利润数据不足，无法判断盈亏。",
+            "当前财务记录 ROE 原始值为 0.83（单位与口径待确认）。",
+            "当前价格与当前财务记录 EPS 的比值为 17.33",
+        ),
+        (
+            None,
+            14.0,
+            None,
+            "报告期截止日：数据不足",
+            "当前财务记录净利润为 14.0（本条记录为正）。",
+            "当前财务记录 ROE 数据不足，单位与口径待确认。",
+            "当前价格与当前财务记录 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            -1.0,
+            None,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润为 -1.0（本条记录为负）。",
+            "本报告期 ROE 数据不足，单位与口径待确认。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            None,
+            None,
+            "报告期截止日：2026-03-31",
+            "本报告期净利润数据不足，无法判断盈亏。",
+            "本报告期 ROE 数据不足，单位与口径待确认。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+        (
+            None,
+            None,
+            None,
+            "报告期截止日：数据不足",
+            "当前财务记录净利润数据不足，无法判断盈亏。",
+            "当前财务记录 ROE 数据不足，单位与口径待确认。",
+            "当前价格与当前财务记录 EPS 的比值为 17.33",
+        ),
+        (
+            "2026-03-31",
+            float("nan"),
+            float("nan"),
+            "报告期截止日：2026-03-31",
+            "本报告期净利润数据不足，无法判断盈亏。",
+            "本报告期 ROE 数据不足，单位与口径待确认。",
+            "当前价格与本报告期 EPS 的比值为 17.33",
+        ),
+    ],
+)
+async def test_fundamentals_report_uses_raw_values_without_unverified_units(
+    report_date: str | None,
+    net_income: float | None,
+    roe: float | None,
+    expected_date: str,
+    expected_profit: str,
+    expected_roe: str,
+    expected_eps_ratio: str,
+) -> None:
+    report_period = {
+        "revenue": 35.0,
+        "eps": 0.67,
+    }
+    if report_date is not None:
+        report_period["report_date"] = report_date
+    if net_income is not None:
+        report_period["net_income"] = net_income
+    if roe is not None:
+        report_period["roe"] = roe
+
+    output = await StockAnalysisPipeline().run(
+        symbol="000001.SZ",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {"symbol": "000001.SZ", "name": "平安银行", "price": 11.61},
+            "info": {"symbol": "000001.SZ", "name": "平安银行"},
+            "history": {"rows": []},
+            "technicals": {"factors": {}},
+            "financials": {"annual": [], "quarterly": [report_period]},
+            "news": {"items": [], "total": 0},
+        },
+    )
+
+    fundamentals = output["fundamentals_report"]
+    assert expected_date in fundamentals
+    assert expected_profit in fundamentals
+    assert expected_roe in fundamentals
+    assert expected_eps_ratio in fundamentals
+    assert "静态市盈率约" not in fundamentals
+    if report_date is None:
+        assert "本报告期" not in fundamentals
+        assert "单条财务记录不足以判断盈利稳定性" in fundamentals
+    else:
+        assert "单个报告期指标不足以判断盈利稳定性" in fundamentals
+    assert "当前财务记录不含股息或派息指标，无法评价股东回报。" in fundamentals
+
+    bull = output["bull_researcher"]
+    assert "盈利能力、行业地位和估值防守仍需数据验证" in bull
+    if net_income is None or not math.isfinite(net_income):
+        assert "净利润为 数据不足" in bull
+    else:
+        assert f"净利润为 {net_income}" in bull
+    if roe is None or not math.isfinite(roe):
+        assert "ROE 为 数据不足" in bull
+    else:
+        assert f"ROE 为 {roe}" in bull
+
+    downstream = "\n".join(
+        output[key]
+        for key in (
+            "bull_researcher",
+            "bear_researcher",
+            "research_team_decision",
+            "risky_analyst",
+            "safe_analyst",
+            "neutral_analyst",
+            "risk_management_decision",
+        )
+    )
+    assert "最新披露" not in downstream
+    assert "稳定股东回报" not in downstream
+    assert "ROE 维持在两位数" not in downstream
+    assert "基本面稳定并不等于" not in downstream
+    assert "多方强调基本面稳定" not in downstream
+    assert "稳定盈利资产" not in downstream
+    if report_date is None:
+        assert "本报告期" not in downstream
+
+    manager_decision = output["research_team_decision"]
+    if (net_income is None or not math.isfinite(net_income)) and (
+        roe is None or not math.isfinite(roe)
+    ):
+        assert "净利润和 ROE 均缺少有效数值，无法据此判断盈利能力。" in manager_decision
+        assert "净利润或 ROE 指标" not in output["neutral_analyst"]
+        assert "净利润和 ROE 均缺少有效数值" in output["neutral_analyst"]
+        assert "净利润和 ROE 均缺少有效数值" in output["risk_management_decision"]
+        assert "提供净利润或 ROE 字段参考" not in output["risk_management_decision"]
+    else:
+        assert "净利润和 ROE 均缺少有效数值" not in manager_decision
 
 
 def test_pipeline_preserves_source_financial_yoy_values() -> None:
@@ -404,3 +618,175 @@ async def test_pipeline_marks_missing_market_and_financial_data_unavailable_with
     assert "基本面维度不可用" in output["fundamentals_report"]
     assert "¥100.00" not in output["market_report"]
     assert "财务数据不可用" in output["bull_researcher"]
+
+
+@pytest.mark.asyncio
+async def test_trader_and_bear_reports_separate_quote_from_missing_financial_data() -> None:
+    output = await StockAnalysisPipeline().run(
+        symbol="601398.SH",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {"symbol": "601398.SH", "name": "中国工商银行", "price": 7.12},
+            "info": {"symbol": "601398.SH", "name": "中国工商银行"},
+            "history": {"rows": []},
+            "technicals": {"factors": {}},
+            "financials": {"annual": [], "quarterly": []},
+            "news": {"items": [], "total": 0},
+        },
+    )
+
+    trader_report = output["trader_investment_plan"]
+    assert "有当前价格报价，但无历史收盘价样本，技术证据有限。" in trader_report
+    assert "无有效财务记录，基本面证据不足。" in trader_report
+    assert "本处未独立验证数据质量。" in trader_report
+    assert "质量检查" not in trader_report
+    assert "目前基本面比技术面更强" not in trader_report
+    assert "缺少历史收盘价样本，无法确认高点折让或回归空间。" in output[
+        "bull_researcher"
+    ]
+    assert "历史收盘价样本不足，无法确认短期均线压力。" in output["bull_researcher"]
+    assert "财务记录缺失，无法基于财务指标验证盈利能力或基本面稳定性。" in output[
+        "bear_researcher"
+    ]
+    assert "历史收盘价样本不足，无法判断短线趋势压力或是否反转。" in output[
+        "bear_researcher"
+    ]
+    assert "本次未收集到新闻样本，无法判断催化方向。" in output["bear_researcher"]
+    assert "当前最大的风险是短线趋势和催化不足" not in output["bear_researcher"]
+    assert "暂不据此确认压力位或防守位" in output["bear_researcher"]
+
+
+@pytest.mark.asyncio
+async def test_trader_and_bear_reports_note_missing_metrics_in_existing_financial_record() -> None:
+    output = await StockAnalysisPipeline().run(
+        symbol="601398.SH",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {"symbol": "601398.SH", "name": "中国工商银行", "price": 7.12},
+            "info": {"symbol": "601398.SH", "name": "中国工商银行"},
+            "history": {"rows": []},
+            "technicals": {"factors": {}},
+            "financials": {
+                "annual": [],
+                "quarterly": [{"report_date": "2026-03-31", "revenue": 80.0, "eps": 0.3}],
+            },
+            "news": {"items": [], "total": 0},
+        },
+    )
+
+    trader_report = output["trader_investment_plan"]
+    assert "有当前价格报价，但无历史收盘价样本，技术证据有限。" in trader_report
+    assert "有财务记录，但净利润和 ROE 均缺少有效数值，基本面证据不足。" in trader_report
+    assert "质量检查" not in trader_report
+    assert "缺少历史收盘价样本，无法确认高点折让或回归空间。" in output[
+        "bull_researcher"
+    ]
+    assert (
+        "当前报告期财务记录存在，但净利润和 ROE 均缺少有效数值，"
+        "无法据此验证盈利能力或基本面稳定性。"
+    ) in output["bear_researcher"]
+
+
+@pytest.mark.asyncio
+async def test_bear_report_respects_positive_trend_and_available_news_samples() -> None:
+    output = await StockAnalysisPipeline().run(
+        symbol="601398.SH",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {"symbol": "601398.SH", "name": "中国工商银行", "price": 11.2},
+            "info": {"symbol": "601398.SH", "name": "中国工商银行"},
+            "history": {
+                "rows": [
+                    {"date": "2026-07-28", "close": 10.0},
+                    {"date": "2026-07-29", "close": 10.5},
+                    {"date": "2026-07-30", "close": 11.0},
+                ]
+            },
+            "technicals": {"factors": {}},
+            "financials": {"annual": [], "quarterly": []},
+            "news": {"items": [{"headline": "业绩公告"}], "total": 1},
+        },
+    )
+
+    bear_report = output["bear_researcher"]
+    assert "当前技术信号偏强，未显示明确的短线趋势压力。" in bear_report
+    assert "本次收集到 1 条新闻样本，需结合内容评估催化方向。" in bear_report
+    assert "当前最大的风险是短线趋势和催化不足" not in bear_report
+    assert "无近期新闻会降低短线交易热度" not in bear_report
+    assert "当前技术信号偏强，暂不支持短期均线承压的判断。" in output[
+        "bull_researcher"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_bull_price_comparison_labels_history_fallback_as_reference_price() -> None:
+    output = await StockAnalysisPipeline().run(
+        symbol="601398.SH",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {},
+            "info": {"symbol": "601398.SH", "name": "中国工商银行"},
+            "history": {
+                "rows": [
+                    {"date": "2026-07-28", "close": 10.0},
+                    {"date": "2026-07-29", "close": 12.0},
+                    {"date": "2026-07-30", "close": 11.0},
+                ]
+            },
+            "technicals": {"factors": {}},
+            "financials": {"annual": [], "quarterly": []},
+            "news": {"items": [], "total": 0},
+        },
+    )
+
+    bull_report = output["bull_researcher"]
+    assert "参考价格 ¥11.00 较历史收盘样本高点 ¥12.00 低约 8.33%" in bull_report
+    assert "当前价 ¥11.00" not in bull_report
+
+
+@pytest.mark.asyncio
+async def test_fundamentals_report_treats_nonfinite_revenue_and_yoy_as_unavailable() -> None:
+    output = await StockAnalysisPipeline().run(
+        symbol="601398.SH",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {"symbol": "601398.SH", "name": "中国工商银行", "price": 7.12},
+            "info": {"symbol": "601398.SH", "name": "中国工商银行"},
+            "history": {"rows": []},
+            "technicals": {"factors": {}},
+            "financials": {
+                "annual": [],
+                "quarterly": [
+                    {
+                        "report_date": "2026-03-31",
+                        "revenue": float("nan"),
+                        "revenue_growth": float("inf"),
+                        "profit_growth": float("nan"),
+                    }
+                ],
+            },
+            "news": {"items": [], "total": 0},
+        },
+    )
+
+    report = output["fundamentals_report"]
+    assert "收入：数据不足" in report
+    assert "收入同比变化约 数据不足" in report
+    assert "净利润同比变化约 数据不足" in report
+    assert "nan" not in report.lower()
+    assert "inf" not in report.lower()
