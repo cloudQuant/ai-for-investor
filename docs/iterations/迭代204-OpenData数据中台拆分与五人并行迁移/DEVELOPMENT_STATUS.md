@@ -278,3 +278,11 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 ## OpenData PR #22：合成 Fuyao transport 到精确 decoder 联调
 
 [OpenData PR #22](https://github.com/cloudQuant/opendata/pull/22) 已合入 OpenData `dev`，用 `MockTransport` 合成响应串联 Fuyao transport 与精确财报 decoder，**3 项测试通过**。这是测试级拼接：没有接入生产 `Fetcher`，没有真实来源响应或 raw archive，也不验证历史修订/PIT、全 A 股覆盖或生产调度。该结果不能改写 PR #21 的生产边界；真实响应、存档与生产 Fetcher 接线仍待完成。
+
+## 未合并的 Fuyao 精确财报入口
+
+当前有一项 Fuyao 精确财报入口实现保留在 OpenData 本地，只有 **2 个未跟踪文件**（源码与测试），尚未验收或合入 `dev`。其合成测试为 **147 passed**，statement+branch 综合覆盖率 **99.16%**，双重 review 已完成；这些证据只覆盖 synthetic 数据下的代码路径。
+
+按 `CODE_QUALITY.md` §5.2，验收还需要真实来源的 income、balance、cashflow 响应证据。当前缺少这三类真实响应样本，因此不能将该入口视为验收完成或提交合并。源码和测试仍保留在本地；受限权限备份及测试证据位于 `/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-exact-fetcher/`。
+
+当前执行进程未发现 Fuyao API key；这只描述当前进程环境，不证明其他环境或部署不存在凭证。用户已声明 AkShare 与 Fuyao 可使用，无需重复确认该声明；真实响应证据和具体入口验收仍未完成。该本地实现不代表全 A 股覆盖、历史 PIT 能力、生产调度或生产落库已经完成。
