@@ -6,14 +6,17 @@ import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from httpx import AsyncClient
 
 import app.api.data.base as data_base
+import app.api.data.realtime as realtime_api
 from app.api.data.deps import get_authorized_market_data_access
 from app.api.data.queries import (
     get_market_data_capability_evaluation,
@@ -41,6 +44,7 @@ from app.services.market_data.publication import MarketDataVisibilityAnchor
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.query_service import (
     MarketDataQueryService,
+    MarketDataQueryServiceError,
 )
 from app.services.market_data.source_policy import (
     MarketDataProviderRoute,
@@ -319,6 +323,14 @@ class _Resolver:
 class _Db:
     def __init__(self) -> None:
         self.rollbacks = 0
+        self.closes = 0
+
+    async def __aenter__(self) -> _Db:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        self.closes += 1
+        return None
 
     async def rollback(self) -> None:
         self.rollbacks += 1
@@ -418,6 +430,514 @@ async def direct_kline_dependencies(monkeypatch: pytest.MonkeyPatch) -> Any:
         ):
             app.dependency_overrides.pop(dependency, None)
         await provider._client.aclose()
+
+
+@pytest_asyncio.fixture
+async def direct_historical_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> Any:
+    provider_requests: list[httpx.Request] = []
+    source_row_options = dict(getattr(request, "param", {}))
+    include_change = bool(source_row_options.pop("include_change", True))
+    source_row = _row("2026-09-07", include_change=include_change)
+    source_row["volume"] = 10_000  # OpenData stock_daily contract is share-based.
+    source_row.update(source_row_options)
+    provider = _provider([source_row], requests=provider_requests)
+    store = _Store()
+    service = _service(provider, store)
+    db = _Db()
+    resolver = _ContractResolver()
+    authorizer = _Authorizer()
+    access = MarketDataQueryAccess(principal=_principal(), authorizer=authorizer)
+    capabilities = SimpleNamespace(
+        response=SimpleNamespace(query_v2_enabled=True),
+        route_is_effective=lambda route_id: route_id == ROUTE_ID,
+    )
+    context = realtime_api._OpenDataHistoricalContext(
+        db=db,
+        access=access,
+        capabilities=capabilities,
+        service=service,
+        query_contracts=resolver,
+    )
+    legacy_service = AsyncMock()
+    legacy_service.get_historical_data = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        realtime_api,
+        "get_settings",
+        lambda: SimpleNamespace(MARKET_DATA_OPENDATA_ENABLED=True),
+    )
+    monkeypatch.setattr(realtime_api, "async_session_maker", lambda: db)
+
+    async def build_context(_current_user: object, provided_db: object) -> Any:
+        assert provided_db is db
+        return context
+
+    monkeypatch.setattr(realtime_api, "build_opendata_historical_context", build_context)
+    app.dependency_overrides[realtime_api.get_realtime_data_service] = lambda: legacy_service
+    try:
+        yield context, store, resolver, authorizer, provider_requests, legacy_service
+    finally:
+        app.dependency_overrides.pop(realtime_api.get_realtime_data_service, None)
+        await provider._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_uses_exact_qfq_daily_rest_route(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    context, store, resolver, authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "symbol": "600000",
+        "frequency": "1d",
+        "ticks": [
+            {
+                "date": "2026-09-07",
+                "open": 10.0,
+                "high": 11.0,
+                "low": 9.0,
+                "close": 10.5,
+                "volume": 100,
+                "change": 0.5,
+            }
+        ],
+        "total": 1,
+    }
+    assert provider_requests[0].url.params["start"] == "2026-09-07"
+    assert provider_requests[0].url.params["end"] == "2026-09-07"
+    assert provider_requests[0].url.params["adjust"] == "qfq"
+    assert resolver.calls == [("stock", "600000", "daily")]
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert authorizer.policy_calls == 1
+    assert authorizer.reauthorization_calls == 1
+    assert authorizer.read_entitlement_checks == 1
+    assert legacy_service.get_historical_data.await_count == 0
+    assert context.db.closes == 1
+
+
+@pytest.mark.parametrize(
+    "direct_historical_dependencies",
+    [
+        {
+            "open": 1.005,
+            "high": 1.015,
+            "low": 1.025,
+            "close": 1.035,
+            "change_pct": 1.005,
+        }
+    ],
+    indirect=True,
+)
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_matches_legacy_python_rounding(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ticks"] == [
+        {
+            "date": "2026-09-07",
+            "open": round(float("1.005"), 2),
+            "high": round(float("1.015"), 2),
+            "low": round(float("1.025"), 2),
+            "close": round(float("1.035"), 2),
+            "volume": 100,
+            "change": round(float("1.005"), 2),
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("direct_historical_dependencies", "expected_code"),
+    [
+        ({"volume": 10_050}, "KLINE_VOLUME_UNIT_CONVERSION_INVALID"),
+        ({"include_change": False}, "KLINE_FIELD_QUALITY_INVALID"),
+    ],
+    indirect=["direct_historical_dependencies"],
+)
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_rejects_unrepresentable_legacy_rows(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+    expected_code: str,
+) -> None:
+    _context, store, _resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["details"] == {"code": expected_code}
+    assert provider_requests
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_without_data_read_grant_never_calls_provider(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context, store, _resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    denied_principal = MarketDataPrincipal(
+        principal_id="user-test",
+        principal_scope="principal-v1:test",
+        tenant_scope="default",
+        roles=("user",),
+        permissions=(),
+        entitlement_revision="e" * 64,
+    )
+    denied_context = realtime_api._OpenDataHistoricalContext(
+        db=context.db,
+        access=MarketDataQueryAccess(
+            principal=denied_principal,
+            authorizer=context.access.authorizer,
+        ),
+        capabilities=context.capabilities,
+        service=context.service,
+        query_contracts=context.query_contracts,
+    )
+
+    async def build_denied_context(_current_user: object, _db: object) -> Any:
+        return denied_context
+
+    monkeypatch.setattr(realtime_api, "build_opendata_historical_context", build_denied_context)
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["details"] == {"code": "MARKET_DATA_READ_ENTITLEMENT_DENIED"}
+    assert provider_requests == []
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_rejects_unsupported_selectors_without_fallback(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    _context, store, resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    common_params = {
+        "broker_id": "opendata",
+        "symbol": "600000",
+        "start_date": "2026-09-07",
+        "end_date": "2026-09-07",
+        "frequency": "1d",
+    }
+    unsupported_params = (
+        {**common_params, "frequency": "1w"},
+        {**common_params, "broker_id": "binance"},
+        {**common_params, "start_date": "2026-09-07T00:00:00+08:00"},
+    )
+
+    for params in unsupported_params:
+        response = await client.get(
+            "/api/v1/realtime/ticks/historical",
+            headers=auth_headers,
+            params=params,
+        )
+        assert response.status_code == 422
+
+    assert provider_requests == []
+    assert resolver.calls == []
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_route_not_effective_fails_closed(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    context, store, resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    context.capabilities.route_is_effective = lambda _route_id: False
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["details"] == {"code": "OPENDATA_ROUTE_NOT_EFFECTIVE"}
+    assert provider_requests == []
+    assert resolver.calls == []
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_unknown_instrument_fails_without_shell_or_fallback(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    _context, store, resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    resolver.contract = None
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "999999",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["details"] == {"code": "OPENDATA_INSTRUMENT_UNSUPPORTED"}
+    assert resolver.calls == [("stock", "999999", "daily")]
+    assert provider_requests == []
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_provider_error_does_not_fallback(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    context, store, resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    context.service.read_opendata_direct = AsyncMock(
+        side_effect=MarketDataQueryServiceError("OPENDATA_PROVIDER_UNAVAILABLE")
+    )
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["details"] == {"code": "OPENDATA_PROVIDER_UNAVAILABLE"}
+    assert resolver.calls == [("stock", "600000", "daily")]
+    assert provider_requests == []
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_context_requires_current_data_read_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    principal_authorizer = _Authorizer()
+    principal_authorizer.principal_for_user = AsyncMock(  # type: ignore[method-assign]
+        return_value=_principal()
+    )
+    capabilities = SimpleNamespace(response=SimpleNamespace(query_v2_enabled=True))
+    service = object()
+    resolver = object()
+    db = _Db()
+    monkeypatch.setattr(
+        realtime_api,
+        "MarketDataAccessAuthorizer",
+        lambda _db: principal_authorizer,
+    )
+    monkeypatch.setattr(
+        realtime_api,
+        "evaluate_market_data_capabilities",
+        AsyncMock(return_value=capabilities),
+    )
+    monkeypatch.setattr(
+        realtime_api,
+        "build_market_data_query_service",
+        lambda _db, _capabilities: service,
+    )
+    monkeypatch.setattr(
+        data_base,
+        "build_legacy_market_data_query_contract_resolver",
+        lambda _db: resolver,
+    )
+
+    context = await realtime_api.build_opendata_historical_context(
+        SimpleNamespace(sub="user-test"),
+        db,  # type: ignore[arg-type]
+    )
+
+    assert context.access.principal == _principal()
+    assert context.access.authorizer is principal_authorizer
+    assert context.service is service
+    assert context.query_contracts is resolver
+    assert principal_authorizer.read_entitlement_checks == 1
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_context_rejects_missing_data_read_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    denied_authorizer = _Authorizer()
+    denied_principal = MarketDataPrincipal(
+        principal_id="user-test",
+        principal_scope="principal-v1:test",
+        tenant_scope="default",
+        roles=("user",),
+        permissions=(),
+        entitlement_revision="e" * 64,
+    )
+    denied_authorizer.principal_for_user = AsyncMock(  # type: ignore[method-assign]
+        return_value=denied_principal
+    )
+    capability_evaluation = AsyncMock()
+    service_builder = Mock()
+    resolver_builder = Mock()
+    monkeypatch.setattr(
+        realtime_api,
+        "MarketDataAccessAuthorizer",
+        lambda _db: denied_authorizer,
+    )
+    monkeypatch.setattr(realtime_api, "evaluate_market_data_capabilities", capability_evaluation)
+    monkeypatch.setattr(realtime_api, "build_market_data_query_service", service_builder)
+    monkeypatch.setattr(
+        data_base,
+        "build_legacy_market_data_query_contract_resolver",
+        resolver_builder,
+    )
+
+    user = SimpleNamespace(sub="user-test")
+    with pytest.raises(HTTPException) as exc_info:
+        await realtime_api.build_opendata_historical_context(
+            user,
+            _Db(),  # type: ignore[arg-type]
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == {"code": "MARKET_DATA_READ_ENTITLEMENT_DENIED"}
+    denied_authorizer.principal_for_user.assert_awaited_once_with(user)
+    assert denied_authorizer.read_entitlement_checks == 1
+    capability_evaluation.assert_not_awaited()
+    service_builder.assert_not_called()
+    resolver_builder.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_realtime_historical_switch_off_preserves_legacy_service_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    legacy_ticks = [{"date": "2024-01-01", "volume": 10}]
+    legacy_service = AsyncMock()
+    legacy_service.get_historical_data = AsyncMock(return_value=legacy_ticks)
+    monkeypatch.setattr(
+        realtime_api,
+        "get_settings",
+        lambda: SimpleNamespace(MARKET_DATA_OPENDATA_ENABLED=False),
+    )
+
+    def fail_if_database_is_opened() -> Any:
+        raise AssertionError("disabled OpenData route must not open a query session")
+
+    monkeypatch.setattr(realtime_api, "async_session_maker", fail_if_database_is_opened)
+    app.dependency_overrides[realtime_api.get_realtime_data_service] = lambda: legacy_service
+    try:
+        response = await client.get(
+            "/api/v1/realtime/ticks/historical",
+            headers=auth_headers,
+            params={
+                "broker_id": "legacy-broker",
+                "symbol": "600000",
+                "start_date": "2024-01-01",
+                "end_date": "2024-01-01",
+                "frequency": "1d",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(realtime_api.get_realtime_data_service, None)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "symbol": "600000",
+        "frequency": "1d",
+        "ticks": legacy_ticks,
+        "total": 1,
+    }
+    legacy_service.get_historical_data.assert_awaited_once()
 
 
 @pytest.mark.asyncio
