@@ -297,6 +297,16 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 | [OpenData PR #24](https://github.com/cloudQuant/opendata/pull/24) | 增加受限的内容寻址 raw-evidence reader。它校验请求上下文与状态、可信 UTC 上界、manifest/body 摘要及文件系统安全属性，并限制证据大小。专用隔离测试 **28 项通过**，目标文件语句与分支覆盖率 **96.43%**；定向 Ruff、导入静默 mypy、Bandit 和安全 review 通过。 | 摘要用于完整性比对，不是签名或来源真实性证明；同一有效用户仍可能修改其可写文件。reader 尚无生产消费者、备份/恢复、生产 API ACL 或真实采集接线；不能据此认定 raw archive 已形成生产级不可变存储。 |
 | [OpenData PR #25](https://github.com/cloudQuant/opendata/pull/25) | 使用一份录制的 Sina 财报响应 fixture（103 行，单只上交所证券资产负债表样本），通过真实 HTTP transport 路径、已审查的子进程 worker、归档、SQLite 发布和 REST 分页完成端到端隔离验证；专项 **2 项测试通过**。 | fixture 不是本次 live 上游抓取，样本元数据也未独立验证来源签名/授权；测试不证明完整财报类型、字段单位、数据质量、全 A 股或北交所覆盖、逐标的历史起点/缺口、PIT/修订语义、生产数据库、生产 API、备份恢复或自然调度已验收。 |
 
-同期仍在本地开发的财报 capture/observation schema 与 store 尚未合入 `dev`，也没有可记录为完成的验收结论；它们不得被视为 PR #24 或 #25 已交付的生产归档/存储能力。Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据，继续保持未验收和未合并状态。
+本段记录的是 PR #23–#25 合入时的历史状态：当时财报 capture/observation schema 与 store 尚未合入 `dev`。当前 schema 状态以 OpenData PR #26 节为准；store 仍是本地未验收实现，不能视为 PR #24 或 #25 已交付的生产归档/存储能力。Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据，继续保持未验收和未合并状态。
 
 全 A 股仍是首批目标范围，不是已完成的数据覆盖事实。全市场权威证券目录（含北交所与退市对象）、逐证券实际上市起点、数据源可保留的历史边界、按业务键核对 head/interior/tail 的证据均未由 #23–#25 提供。没有建立可回放的 PIT/历史修订数据，也没有启用线上采集任务或自然周期调度；上述范围继续 OPEN。
+
+## OpenData PR #26：独立财报 archive schema
+
+[OpenData PR #26](https://github.com/cloudQuant/opendata/pull/26) 已合入 `dev`，新增独立的财报 archive Alembic migration chain 与四张财报 capture/observation 相关表。本节只确认 schema/migration 的局部交付，不表示 capture store 或采集服务已经接线。
+
+验收证据保存在 [`2026-10-27-financial-migration`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-financial-migration>)：隔离 SQLite migration 专项 **27 项通过**；`env.py` 覆盖率为 **94.44%**，revision 覆盖率为 **89.87%**。在新建的隔离 **MySQL 8.4.0** 实例中完成了真实 upgrade；保留一条 capture 记录后尝试 downgrade，迁移按设计拒绝降级，且版本、四张表和记录均保留。Ruff、format、导入静默 mypy 与 Bandit 的定向静态检查记录也保存在该目录。
+
+边界：没有实测 MySQL 8.0；没有生产数据库、生产部署或线上写入验证。独立 schema 与应用层约束不会阻止有数据库写权限的主体直接篡改或删除数据，因此不构成数据库防篡改/WORM 保证；也没有 raw evidence 到 schema 的生产 writer、备份恢复或运维接线。该迁移不证明全 A 股/北交所历史覆盖，也不建立 PIT 或历史修订能力。
+
+财报 observation store 仍保留在 OpenData 本地，**未验收、未合入 `dev`**。当前可复核的首次运行记录在 [`2026-10-27-pending-financial-store`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store>)：**4 failed、12 passed**，目标文件覆盖率 **69.18%**。实现依赖尚未验收或合并的 Fuyao 精确财报 fetcher，首次运行还暴露了失败断言与 fixture/时间、类型绑定问题；这组失败记录不能当作后续修复结果。未验收源码、测试副本与失败/覆盖率证据仍被保留在 OpenData 本地及上述目录，不应提交为已完成能力。store 通过验收前，不得将 PR #26 的 schema 描述为可用的财报落库链路。
