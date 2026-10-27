@@ -18,6 +18,7 @@ from app.services.market_instrument import MarketInstrumentService
 from app.services.stock_analysis.data_collector import StockAnalysisDataCollector
 from app.services.stock_signal.calendar import TradingCalendar
 from app.services.stock_signal.decision_policy import SignalPolicy
+from app.services.stock_signal.opendata_sse50_benchmark import OpenDataSse50BenchmarkReader
 from app.services.stock_signal.quality import DataQualityGate
 from app.services.stock_signal.service import StockSignalService
 from app.services.stock_signal.universe import Sse50UniverseProvider
@@ -310,7 +311,32 @@ class Sse50SignalBatchRunner:
         start_date: date,
         end_date: date,
     ) -> list[dict[str, Any]]:
-        """Return real SSE 50 rows when available; relative return stays unavailable otherwise."""
+        """Read benchmark rows without treating an empty result as data readiness.
+
+        A valid empty OpenData response is logged separately from a failed read. In
+        either case, existing stock-only scoring can still persist ``scored`` with
+        benchmark and excess returns unset. Returned rows do not prove source
+        completeness; production enablement requires verified 000016 coverage,
+        daily comparison against Eastmoney, and operational observability.
+        """
+        if getattr(self.settings, "STOCK_SIGNAL_BENCHMARK_OPENDATA_ENABLED", False):
+            # This branch is deliberately source-pinned and fail-closed. A failed
+            # OpenData read must not silently change the benchmark source.
+            try:
+                reader = OpenDataSse50BenchmarkReader.from_environment()
+                rows = await reader.fetch_rows(start_date=start_date, end_date=end_date)
+                if not rows:
+                    logger.warning(
+                        "OpenData SSE50 benchmark empty code=OPENDATA_SSE50_EMPTY_SUCCESS"
+                    )
+                return rows
+            except Exception as exc:
+                error_code = getattr(exc, "code", "OPENDATA_SSE50_READER_UNAVAILABLE")
+                logger.warning("OpenData SSE50 benchmark unavailable code=%s", error_code)
+                return []
+
+        # Keep the established path until the 000016 OpenData history has been
+        # compared against the existing Eastmoney benchmark.
         try:
             return await asyncio.to_thread(
                 self._fetch_sse50_benchmark_rows,
