@@ -2,7 +2,7 @@
 
 编制日期：2026-10-27（Asia/Shanghai）。当前状态：**AFI PR #52/#53 与 OpenData PR #5 已合入 `dev`。PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。** PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
 
-AFI PR #56 已合入：新增默认关闭的 OpenData 上证50 benchmark reader；23 项 scoped 测试使用 HTTP mock/SQLite，并出现两项 timeout 配置警告。该范围尚未上线；`score_pending` ORM 持久化、生产数据源授权与落库、逐日历史覆盖及 Eastmoney 对比均未验证。个股 20 日收益可算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；原因只写日志，没有持久化原因或告警。此增量不改变全 A 与逐标的全历史仍待验收的状态。
+AFI PR #56 已合入：新增默认关闭的 OpenData 上证50 benchmark reader。#56 合并后又补充了三场景 `score_pending → apply_outcome` 内存 SQLite ORM 回归；补测与本文档更新一并交付。测试文件整套 **23 passed**，Provider HTTP 使用 `MockTransport`、股票行情使用 fake；运行时有两项 timeout 插件配置警告。这不代表生产 source、生产授权或生产数据库验收。生产数据源授权与落库、逐日历史 coverage、Eastmoney 跨源对照及告警仍未验收。个股 20 日收益可算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；原因只写日志，没有持久化原因或告警。此增量不改变全 A 与逐标的全历史仍待验收的状态。
 
 OpenData PR #6 已合入，但只增加离线 UTC cron 的单代 slot 对账器：167 项 SQLite 测试通过，reconciler 覆盖率 100%、journal 95%、合计 96%。它没有生产入口、告警或补采能力；process-v1 仍 disabled 且无 schedule，接线前须先解决其与对账 cron 的 slot 约束。MySQL/PG、calendar、generation rollover、历史初始 slot 边界均为 `NOT_ASSESSED`；全 A（含北交所/BSE）、来源授权与上线验收仍开放。
 
