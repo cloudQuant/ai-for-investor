@@ -167,3 +167,11 @@ PR #53 的 qfq 路由与字段投影通过 MockTransport 合同验证，不等�
 Sina fanout 仍未完成生产验收：进程停机或最大实例变化时可能漏掉调度 slot；持久时隙对账、交易日历对账及告警机制仍待实现/验证；全局跨进程配额与协调未解决。来源权限、BSE 范围与历史映射、全 A 生命周期以及逐标的全历史覆盖继续 OPEN。在上述风险及证据项关闭前，不得将 fanout 标为完成或生产可用。
 
 **全 A 股全集及全历史覆盖仍未完成**：包含北交所在内的权威当前目录、退市对象、跨代码身份映射和逐标的实际起点均没有经本次 PR 验收。PR #52 的官方来源调查是调查文档，不是数据源落地；PR #53 的历史日线读取路由也不提供历史 universe 分母或 lifecycle 证据。不得以新浪行情最早记录、当前目录或已成功查询替代上市/退市证据。`204-E02-04`、`204-E03-01`、`204-E05-02` 及其父级状态需按既有验收标准逐项更新，不能因 PR 合入自动标完成。
+
+## 2026-10-27 AFI PR #56 上证50 benchmark reader
+
+[AFI PR #56](https://github.com/cloudQuant/ai-for-investor/pull/56) 已合入 `dev`，增加默认关闭、可选使用 OpenData 的上证50 benchmark reader。该实现尚未上线。专项测试为 **23 passed**，Provider HTTP 使用 mock，其他依赖使用隔离 SQLite；该隔离运行禁用了 timeout 插件，因此有 `timeout`、`timeout_method` 两项 pytest 配置警告。这些测试不是生产数据、生产数据库或自然调度验收。实现和测试见 [opendata_sse50_benchmark.py](../../../src/backend/app/services/stock_signal/opendata_sse50_benchmark.py) 与 [test_stock_signal_opendata_benchmark.py](../../../src/backend/tests/test_stock_signal_opendata_benchmark.py)。
+
+以下生产与业务验收仍未完成：现有 `score_pending` ORM 的持久化行为；生产数据源授权、生产数据落库；逐日历史覆盖；与 Eastmoney 数据比对。个股 20 日收益可计算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；不可用原因目前只写日志，未持久化，也没有相应告警。需要补充可审计的空结果状态/原因、持久化语义与运维告警，并以有授权的真实数据完成逐日对账后，才可评估上线。
+
+PR #56 仅覆盖上证50 benchmark 读路径，不改变全 A 股权威全集、BSE、退市与跨代码身份映射、逐标的全历史覆盖仍未完成的结论；不得据此关闭相关历史恢复任务或宣称全 A 股历史已验收。
