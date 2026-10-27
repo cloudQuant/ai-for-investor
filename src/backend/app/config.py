@@ -234,6 +234,13 @@ class Settings(BaseSettings):
         default=False,
         description="Enable the after-close auditable SSE50 signal scheduler",
     )
+    STOCK_SIGNAL_BENCHMARK_OPENDATA_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Read SSE50 from OpenData; keep disabled until 000016 coverage, daily source "
+            "comparison, and monitoring are verified"
+        ),
+    )
     STOCK_SIGNAL_SCHEDULE_TIMEZONE: str = Field(
         default="Asia/Shanghai", description="Timezone for the stock signal scheduler"
     )
