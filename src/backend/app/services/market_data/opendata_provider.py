@@ -12,11 +12,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import math
 import re
+import time as _time
 from collections.abc import Mapping, Sequence
 from datetime import datetime, time, timezone
+from email.utils import parsedate_to_datetime
 from types import MappingProxyType
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -46,6 +50,11 @@ _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _MAX_PROVENANCE_BYTES = 10 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 _MAX_TOTAL_RESPONSE_BYTES = 64 * 1024 * 1024
+_DEFAULT_TOTAL_DEADLINE_SECONDS = 60.0
+_DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
+_MAX_RETRIES = 2
+_MAX_RETRY_DELAY_SECONDS = 2.0
+_RETRYABLE_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 _TRADE_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 #: 中台 REST 响应信封的成功标识字段。
@@ -151,6 +160,30 @@ def _encode_json(payload: Any) -> bytes:
     )
 
 
+def _monotonic() -> float:
+    """Return monotonic time through a small seam for deterministic deadline tests."""
+    return _time.monotonic()
+
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    """Parse a Retry-After delay or HTTP date without trusting invalid values."""
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=_UTC)
+            seconds = max(0.0, (retry_at - datetime.now(_UTC)).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    return seconds
+
+
 def _raw_payload_shell(
     request: MarketDataProviderRequest, contract: ProviderContract
 ) -> dict[str, Any]:
@@ -200,12 +233,36 @@ class OpendataProvider:
         client: httpx.AsyncClient,
         credentials: OpendataCredentials | None,
         timeout_seconds: float = 20.0,
+        total_deadline_seconds: float = _DEFAULT_TOTAL_DEADLINE_SECONDS,
+        max_retries: int = _MAX_RETRIES,
+        retry_backoff_seconds: float = _DEFAULT_RETRY_BACKOFF_SECONDS,
         max_response_bytes: int = _MAX_RESPONSE_BYTES,
         max_total_response_bytes: int = _MAX_TOTAL_RESPONSE_BYTES,
     ) -> None:
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be a finite positive number")
+        if not math.isfinite(total_deadline_seconds) or total_deadline_seconds <= 0:
+            raise ValueError("total_deadline_seconds must be a finite positive number")
+        if (
+            isinstance(max_retries, bool)
+            or not isinstance(max_retries, int)
+            or not 0 <= max_retries <= _MAX_RETRIES
+        ):
+            raise ValueError(f"max_retries must be between 0 and {_MAX_RETRIES}")
+        if (
+            not math.isfinite(retry_backoff_seconds)
+            or retry_backoff_seconds < 0
+            or retry_backoff_seconds > _MAX_RETRY_DELAY_SECONDS
+        ):
+            raise ValueError(
+                f"retry_backoff_seconds must be between 0 and {_MAX_RETRY_DELAY_SECONDS}"
+            )
         self._client = client
         self._credentials = credentials
         self._timeout_seconds = timeout_seconds
+        self._total_deadline_seconds = total_deadline_seconds
+        self._max_retries = max_retries
+        self._retry_backoff_seconds = retry_backoff_seconds
         self._max_response_bytes = max_response_bytes
         self._max_total_response_bytes = max_total_response_bytes
 
@@ -249,6 +306,7 @@ class OpendataProvider:
         provenance_bytes = len(_encode_json(_raw_payload_shell(request, contract)))
         if provenance_bytes > _MAX_PROVENANCE_BYTES:
             raise OpendataProviderError("OPENDATA_PROVENANCE_TOO_LARGE")
+        deadline = _monotonic() + self._total_deadline_seconds
         page = 1
         while True:
             remaining_response_bytes = self._max_total_response_bytes - total_response_bytes
@@ -258,6 +316,8 @@ class OpendataProvider:
                 endpoint,
                 {**params, "page": page},
                 max_bytes=min(self._max_response_bytes, remaining_response_bytes),
+                deadline=deadline,
+                request_id=request.request_id,
             )
             total_response_bytes += page_response_bytes
             data = payload.get(_ENVELOPE_DATA_FIELD)
@@ -341,6 +401,7 @@ class OpendataProvider:
                 break
             page += 1
 
+        self._remaining_seconds(deadline)
         retrieved_at = datetime.now(_UTC)
         try:
             observations = _normalize_observations(contract, request, rows, retrieved_at)
@@ -352,6 +413,7 @@ class OpendataProvider:
                 "OPENDATA_RESPONSE_INVALID", detail=exc.__class__.__name__
             ) from exc
 
+        self._remaining_seconds(deadline)
         return ProviderFetchResult(
             provider_id="opendata",
             source_revision="opendata-rest-v1",
@@ -368,41 +430,62 @@ class OpendataProvider:
         params: Mapping[str, Any],
         *,
         max_bytes: int | None = None,
+        deadline: float,
+        request_id: str,
     ) -> tuple[Mapping[str, Any], int]:
-        """流式读取一页，在解压后字节超限时关闭响应并拒绝。"""
+        """流式读取一页，受 fetch 总 deadline 与有限重试共同约束。"""
         url = f"{self._credentials.base_url}{endpoint}"
         response_limit = self._max_response_bytes if max_bytes is None else max_bytes
-        body = bytearray()
-        try:
-            async with self._client.stream(
-                "GET",
-                url,
-                params=dict(params),
-                headers={"X-API-Key": self._credentials.api_key},
-                timeout=self._timeout_seconds,
-            ) as response:
-                if response.status_code == 401:
-                    raise OpendataProviderError("OPENDATA_UNAUTHORIZED")
-                if response.status_code == 403:
-                    raise OpendataProviderError("OPENDATA_FORBIDDEN")
-                if response.status_code == 429:
-                    raise OpendataProviderError("OPENDATA_RATE_LIMITED")
-                if response.status_code >= 400:
-                    raise OpendataProviderError(
-                        "OPENDATA_HTTP_ERROR", detail=str(response.status_code)
+        for retry_number in range(self._max_retries + 1):
+            remaining = self._remaining_seconds(deadline)
+            try:
+                status_code, retry_after, body = await asyncio.wait_for(
+                    self._read_page_attempt(
+                        url,
+                        params,
+                        request_id=request_id,
+                        response_limit=response_limit,
+                        timeout_seconds=min(self._timeout_seconds, remaining),
+                    ),
+                    timeout=remaining,
+                )
+            except (asyncio.TimeoutError, httpx.TimeoutException) as exc:
+                if retry_number < self._max_retries and await self._wait_for_retry(
+                    retry_number, deadline=deadline
+                ):
+                    continue
+                raise OpendataProviderError("OPENDATA_TIMEOUT") from exc
+            except OpendataProviderError:
+                raise
+            except httpx.HTTPError as exc:
+                if retry_number < self._max_retries and await self._wait_for_retry(
+                    retry_number, deadline=deadline
+                ):
+                    continue
+                raise OpendataProviderError(
+                    "OPENDATA_TRANSPORT_ERROR", detail=exc.__class__.__name__
+                ) from exc
+
+            if status_code >= 400:
+                if (
+                    status_code in _RETRYABLE_HTTP_STATUSES
+                    and retry_number < self._max_retries
+                    and await self._wait_for_retry(
+                        retry_number,
+                        deadline=deadline,
+                        retry_after=retry_after,
                     )
-                async for chunk in response.aiter_bytes():
-                    if len(body) + len(chunk) > response_limit:
-                        raise OpendataProviderError("OPENDATA_RESPONSE_TOO_LARGE")
-                    body.extend(chunk)
-        except OpendataProviderError:
-            raise
-        except httpx.TimeoutException as exc:
-            raise OpendataProviderError("OPENDATA_TIMEOUT") from exc
-        except httpx.HTTPError as exc:
-            raise OpendataProviderError(
-                "OPENDATA_TRANSPORT_ERROR", detail=exc.__class__.__name__
-            ) from exc
+                ):
+                    continue
+                if status_code == 401:
+                    raise OpendataProviderError("OPENDATA_UNAUTHORIZED")
+                if status_code == 403:
+                    raise OpendataProviderError("OPENDATA_FORBIDDEN")
+                if status_code == 429:
+                    raise OpendataProviderError("OPENDATA_RATE_LIMITED")
+                raise OpendataProviderError("OPENDATA_HTTP_ERROR", detail=str(status_code))
+            break
+
         try:
             payload = json.loads(body)
         except ValueError as exc:
@@ -416,6 +499,76 @@ class OpendataProvider:
                 detail=message if isinstance(message, str) else None,
             )
         return payload, len(body)
+
+    async def _read_page_attempt(
+        self,
+        url: str,
+        params: Mapping[str, Any],
+        *,
+        request_id: str,
+        response_limit: int,
+        timeout_seconds: float,
+    ) -> tuple[int, str | None, bytes]:
+        """Read one response body; the caller applies a hard wall-clock deadline."""
+        body = bytearray()
+        async with self._client.stream(
+            "GET",
+            url,
+            params=dict(params),
+            headers={
+                "X-API-Key": self._credentials.api_key,
+                "X-Request-ID": request_id,
+            },
+            timeout=timeout_seconds,
+        ) as response:
+            if response.status_code >= 400:
+                return response.status_code, response.headers.get("Retry-After"), b""
+            async for chunk in response.aiter_bytes():
+                if len(body) + len(chunk) > response_limit:
+                    raise OpendataProviderError("OPENDATA_RESPONSE_TOO_LARGE")
+                body.extend(chunk)
+        return response.status_code, None, bytes(body)
+
+    @staticmethod
+    def _remaining_seconds(deadline: float) -> float:
+        remaining = deadline - _monotonic()
+        if remaining <= 0:
+            raise OpendataProviderError("OPENDATA_TIMEOUT", detail="total deadline exceeded")
+        return remaining
+
+    def _retry_delay(self, retry_number: int, retry_after: str | None) -> float | None:
+        """Return a bounded delay, declining excessive upstream Retry-After values."""
+        requested_delay = _retry_after_seconds(retry_after)
+        if requested_delay is not None:
+            if requested_delay > _MAX_RETRY_DELAY_SECONDS:
+                return None
+            return requested_delay
+        return min(
+            self._retry_backoff_seconds * (2**retry_number),
+            _MAX_RETRY_DELAY_SECONDS,
+        )
+
+    async def _wait_for_retry(
+        self,
+        retry_number: int,
+        *,
+        deadline: float,
+        retry_after: str | None = None,
+    ) -> bool:
+        delay = self._retry_delay(retry_number, retry_after)
+        if delay is None:
+            return False
+        remaining = self._remaining_seconds(deadline)
+        if delay >= remaining:
+            return False
+        try:
+            await asyncio.wait_for(asyncio.sleep(delay), timeout=remaining)
+        except asyncio.TimeoutError as exc:
+            raise OpendataProviderError(
+                "OPENDATA_TIMEOUT", detail="total deadline exceeded"
+            ) from exc
+        self._remaining_seconds(deadline)
+        return True
 
 
 __all__ = ["OpendataProvider", "OpendataProviderError"]
