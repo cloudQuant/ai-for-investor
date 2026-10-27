@@ -91,6 +91,14 @@ class PositionSizingResult(BaseModel):
     backtest_id: str | None = None
 
 
+class BenchmarkReturnObservation(BaseModel):
+    """A return measured across one explicit pair of business dates."""
+
+    start_date: str = Field(..., description="Return interval start date YYYY-MM-DD")
+    end_date: str = Field(..., description="Return interval end date YYYY-MM-DD")
+    return_value: float = Field(..., description="Close-to-close return for this interval")
+
+
 class BenchmarkReturnsResult(BaseModel):
     """Benchmark return series response."""
 
@@ -102,6 +110,10 @@ class BenchmarkReturnsResult(BaseModel):
     observation_count: int = 0
     dates: list[str] = Field(default_factory=list)
     returns: list[float] = Field(default_factory=list)
+    return_observations: list[BenchmarkReturnObservation] = Field(
+        default_factory=list,
+        description="Returns paired with their exact start and end dates",
+    )
     reason: str | None = None
 
 

@@ -59,6 +59,12 @@ export interface PositionSizingResult {
   backtest_id?: string | null
 }
 
+export interface BenchmarkReturnObservation {
+  start_date: string
+  end_date: string
+  return_value: number
+}
+
 export interface BenchmarkReturnsResult {
   status: AnalyticsStatus
   benchmark_id: string
@@ -68,6 +74,7 @@ export interface BenchmarkReturnsResult {
   observation_count: number
   dates: string[]
   returns: number[]
+  return_observations?: BenchmarkReturnObservation[]
   reason?: string | null
 }
 

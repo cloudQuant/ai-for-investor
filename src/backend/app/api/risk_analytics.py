@@ -1,10 +1,11 @@
 """Risk analytics API routes."""
 
+import math
 import typing
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_user
 from app.schemas.risk_analytics import (
@@ -208,18 +209,18 @@ async def get_benchmark_returns(
 @router.get(
     "/benchmark-metrics/{backtest_id}",
     response_model=BenchmarkMetricsResult,
-    summary="Calculate strategy metrics relative to benchmark",
+    summary="Calculate beta from date-aligned benchmark returns",
 )
 async def get_benchmark_metrics(
     backtest_id: str,
     benchmark_id: str = "hs300",
-    risk_free_rate: float = 0.0,
+    risk_free_rate: float = Query(default=0.0, ge=-1.0, le=1.0),
     current_user: typing.Any = Depends(get_current_user),
     backtest_service: BacktestService = Depends(get_backtest_service),
     benchmark_service: BenchmarkService = Depends(get_benchmark_service),
     benchmark_metrics_service: BenchmarkMetricsService = Depends(get_benchmark_metrics_service),
 ) -> BenchmarkMetricsResult:
-    """Calculate alpha, beta, tracking error, and information ratio."""
+    """Calculate beta from exactly aligned return intervals."""
     result = await backtest_service.get_result(backtest_id, user_id=current_user.sub)
     if result is None:
         raise HTTPException(
@@ -227,15 +228,56 @@ async def get_benchmark_metrics(
             detail="Backtest result not found",
         )
 
+    if not math.isfinite(risk_free_rate) or not -1.0 <= risk_free_rate <= 1.0:
+        metrics = BenchmarkMetricsResult(
+            status="degraded",
+            benchmark_id=benchmark_id,
+            risk_free_rate=0.0,
+            reason="invalid_risk_free_rate",
+            backtest_id=backtest_id,
+        )
+        return metrics
+
+    try:
+        strategy_observations = benchmark_metrics_service.return_observations_from_equity_curve(
+            result.equity_curve,
+            result.equity_dates,
+        )
+    except ValueError as exc:
+        return BenchmarkMetricsResult(
+            status="degraded",
+            benchmark_id=benchmark_id,
+            risk_free_rate=risk_free_rate,
+            reason=str(exc),
+            backtest_id=backtest_id,
+        )
+    if not strategy_observations:
+        return BenchmarkMetricsResult(
+            status="degraded",
+            benchmark_id=benchmark_id,
+            risk_free_rate=risk_free_rate,
+            reason="insufficient_strategy_history",
+            backtest_id=backtest_id,
+        )
+
     benchmark = await benchmark_service.get_benchmark_returns(
         benchmark_id,
-        result.equity_dates[0] if result.equity_dates else result.start_date.date().isoformat(),
-        result.equity_dates[-1] if result.equity_dates else result.end_date.date().isoformat(),
+        strategy_observations[0].start_date,
+        strategy_observations[-1].end_date,
     )
+    if benchmark.status != "ok":
+        metrics = BenchmarkMetricsResult(
+            status="degraded",
+            benchmark_id=benchmark_id,
+            risk_free_rate=risk_free_rate,
+            reason=benchmark.reason,
+            backtest_id=backtest_id,
+        )
+        return metrics
     metrics = benchmark_metrics_service.calculate(
-        strategy_returns=benchmark_metrics_service.returns_from_equity_curve(result.equity_curve),
-        benchmark_returns=benchmark.returns,
         benchmark_id=benchmark_id,
+        strategy_return_observations=strategy_observations,
+        benchmark_return_observations=benchmark.return_observations,
         risk_free_rate=risk_free_rate,
     )
     metrics.backtest_id = backtest_id

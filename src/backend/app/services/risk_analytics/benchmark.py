@@ -1,10 +1,11 @@
 """Benchmark data service for risk analytics."""
 
+import math
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from app.schemas.risk_analytics import BenchmarkReturnsResult
+from app.schemas.risk_analytics import BenchmarkReturnObservation, BenchmarkReturnsResult
 from app.services.realtime_data_service import RealTimeDataService
 
 BenchmarkFetcher = Callable[[str, str, str], Awaitable[list[dict[str, Any]]]]
@@ -46,11 +47,49 @@ class BenchmarkService:
         closes: list[float] = []
         for record in records:
             close = record.get("close")
-            date = record.get("date")
-            if close is None or date is None:
-                continue
-            dates.append(str(date)[:10])
-            closes.append(float(close))
+            record_date = record.get("date")
+            if close is None or record_date is None:
+                return BenchmarkReturnsResult(
+                    status="degraded",
+                    benchmark_id=benchmark_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    reason="invalid_benchmark_observation",
+                )
+            date_text = str(record_date)[:10]
+            try:
+                parsed_date = date.fromisoformat(date_text)
+                close_value = float(close)
+            except (OverflowError, TypeError, ValueError):
+                return BenchmarkReturnsResult(
+                    status="degraded",
+                    benchmark_id=benchmark_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    reason="invalid_benchmark_observation",
+                )
+            if parsed_date.isoformat() != date_text or (dates and date_text <= dates[-1]):
+                return BenchmarkReturnsResult(
+                    status="degraded",
+                    benchmark_id=benchmark_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    reason="invalid_benchmark_dates",
+                )
+            if not math.isfinite(close_value) or close_value <= 0:
+                return BenchmarkReturnsResult(
+                    status="degraded",
+                    benchmark_id=benchmark_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    reason="invalid_benchmark_prices",
+                )
+            dates.append(date_text)
+            closes.append(close_value)
 
         if len(closes) < 2:
             return BenchmarkReturnsResult(
@@ -64,11 +103,27 @@ class BenchmarkService:
                 reason="insufficient_history",
             )
 
-        returns = [
-            round((current - previous) / previous, 6)
-            for previous, current in zip(closes, closes[1:], strict=False)
-            if previous > 0
-        ]
+        returns: list[float] = []
+        return_observations: list[BenchmarkReturnObservation] = []
+        for index, (previous, current) in enumerate(zip(closes, closes[1:], strict=False)):
+            return_value = round((current - previous) / previous, 6)
+            if not math.isfinite(return_value):
+                return BenchmarkReturnsResult(
+                    status="degraded",
+                    benchmark_id=benchmark_id,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    reason="invalid_benchmark_returns",
+                )
+            returns.append(return_value)
+            return_observations.append(
+                BenchmarkReturnObservation(
+                    start_date=dates[index],
+                    end_date=dates[index + 1],
+                    return_value=return_value,
+                )
+            )
         return BenchmarkReturnsResult(
             status="ok",
             benchmark_id=benchmark_id,
@@ -78,6 +133,7 @@ class BenchmarkService:
             observation_count=len(closes),
             dates=dates,
             returns=returns,
+            return_observations=return_observations,
         )
 
     @staticmethod
