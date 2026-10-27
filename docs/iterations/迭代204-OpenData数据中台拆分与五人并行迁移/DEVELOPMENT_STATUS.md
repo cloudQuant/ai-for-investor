@@ -235,3 +235,24 @@ AFI PR #62 已合入 `dev`，对齐 benchmark 与个股回报的区间边界；�
 定向 **219 项 synthetic 隔离测试通过**，使用内存 SQLite、进程内 ASGI 和 MockTransport；pytest-timeout 配置警告保留。覆盖率优先拒绝、grant/purpose/capability、publication pin、分页、旧路由回退保护和响应映射有测试，但当前 OpenData coverage 恒为 **UNKNOWN**，source rights 与数据质量也 UNKNOWN，index jobs disabled/unreviewed，生产 grants/config 未验证；因此该 reader 不是生产可用功能。它仅校验 SHA 字段格式和 identity binding，不在 client 重算 row/content hash；真实 source、生产数据库及全量指数历史均未测试。
 
 Portfolio Fama–French（FF）路径尚未迁移。启用该 flag 后，三个指数的其他旧 `BenchmarkService` 调用（包括 FF 路径）会 fail closed，而不是继续旧源回退。该增量不改变父级控制任务分母或完成统计，也不能关闭指数来源授权、历史覆盖、生产部署等开放事项。
+
+## 2026-10-27 OpenData PR #12–#16 与 AFI PR #69 增量
+
+以下 PR 均已合入各自仓库的 `dev`，仅关闭其明确限定的代码或文档子范围。PR 合并和局部离线验证不等于数据已接入生产、全 A 股数据已采集或全历史恢复已完成；迭代204整体仍未完成。
+
+| PR | 已合入的限定范围 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #12](https://github.com/cloudQuant/opendata/pull/12) | Sina 日线 v2 离线归一化合同与 fixture 驱动的期货、期权、可转债记录归一器；未提供线上抓取或旧 v1 发布接线。 | 缺失成交额保留为 `null`，不伪造为零；真实源调用、v1 数据修复、质量/单位确认、调度和生产仓库接线仍未验收。 |
+| [OpenData PR #13](https://github.com/cloudQuant/opendata/pull/13) | 扩展发布记录集完整性读取及 coverage 证据评估的局部实现，按固定 publication、合同和有界记录集计算证据。 | 当前证据及 pin 不能替代独立来源真实性和生产授权；没有真实采集、生产数据库验证或生产 grants。来源/数据生命周期覆盖、数据库方言与运维操作仍有未验证边界。 |
+| [OpenData PR #14](https://github.com/cloudQuant/opendata/pull/14) | 将 Fuyao 来源尝试门禁作为可选依赖接入 THS transport / financial fetcher 调用路径，门禁拒绝时不发起来源请求。 | 可选 gate 尚未由生产调度器和可信 grant 工厂配置；不包含生产凭证、全局日/run 额度或跨主机协调。没有真实 Fuyao 抓取、落库或自然周期运行验收。 |
+| [OpenData PR #15](https://github.com/cloudQuant/opendata/pull/15) | 增加历史查询窗口与证券生命周期评估的纯评估切片，使请求窗口状态与全生命周期覆盖证据分开表达。 | 不采集、不补数，也不证明窗口内存在完整观测；权威证券全集、上市/退市及停牌日历证据、真实 publications 和 source retention 均未因此获得。全生命周期历史恢复保持开放。 |
+| [OpenData PR #16](https://github.com/cloudQuant/opendata/pull/16) | 纯规划器输出不可直接执行的财报候选，并附带阻断项。 | 规划器本身没有调度、抓取或落库能力，也不会阻止其他生产入口执行；外部来源证据未经认证。该候选不证明证券全集、BSE/退市覆盖或历史修订/PIT 语义；全 A 股财报 backfill、生产调度和落库仍未验收。 |
+| [AFI PR #69](https://github.com/cloudQuant/ai-for-investor/pull/69) | 记录用户对 AkShare 与 Fuyao 数据使用的授权声明，以及仍未明确的适用数据范围和限制。 | 记录的是用户声明，不构成对供应商合同、底层端点权限、市场/历史范围、频率、留存期限或下游分发的独立核验，也不自动创建可执行生产 grant。未据此启动真实采集。 |
+
+### 跨仓验证与待办
+
+OpenData 发布/coverage wire 与 AFI v2 消费端的跨仓测试仍待安全联调。完成后也只能说明测试环境的协议、认证、发布身份与 coverage 行为符合合同；生产端点、生产凭证、来源授权配置和真实全 A 数据质量需另行验收。当前 OpenData 实际 job / provider 接线状态不能从上述离线模块推定。
+
+用户已选择全 A 股作为首批目标范围，并声明 AkShare、Fuyao 可使用；这不表示系统已取得经核验的权威全 A 股含北交所及退市证券目录，也不证明逐证券上市起点、历史别名、数据保留边界、全量数据或内部生产 API 已就绪。完整历史仍需按标的和业务键核对 head、interior、tail；未知边界必须继续标记，不能以当前目录或最新记录代替历史分母。
+
+完整 mypy 检查仍受历史依赖问题影响，按用户要求暂缓处理；CI 问题也暂缓。这里不把两项暂缓写成通过，也不据此降低代码验收或生产验收边界。后续合并前仍应按各 PR 的限定证据审查；待跨仓安全联调、真实来源与全 A 生命周期证据、财报运行/发布链路以及部署和自然周期验收完成后，再更新对应父级控制任务状态。
