@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-27（Asia/Shanghai）。当前状态：**AFI PR #52/#53 已合入 `dev`，但仅完成来源调查文档与限定的历史日线消费者路由；PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs。该隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告；这些测试不代表真实服务或生产验收。Sina fanout 仍未验收、未生产接线；qfq 因子、成交量质量、全 A（含北交所、退市及代码映射）全集与逐标的全历史仍开放。整仓门禁、来源权利、自然调度及生产切换也未验收。** 详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+编制日期：2026-10-27（Asia/Shanghai）。当前状态：**AFI PR #52/#53 与 OpenData PR #5 已合入 `dev`。PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。** PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
 
 波次历史摘要：W8—W11 的局部隔离验证及归档仍按对应状态文件保留；此前列出的覆盖率、收据和静态检查是历史范围证据，不代表当前 HEAD 整仓门禁或生产验收。当前 PR 与未完成范围以 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 为准。
 
