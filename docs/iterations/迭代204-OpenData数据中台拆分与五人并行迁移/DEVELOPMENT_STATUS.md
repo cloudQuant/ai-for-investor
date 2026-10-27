@@ -346,3 +346,15 @@ store 已从未验收的 Fuyao 精确财报 fetcher 解耦；合并前的隔离�
 [OpenData PR #28](https://github.com/cloudQuant/opendata/pull/28) 已合入 `dev`，增加真实 RunLedger SQLite 路径上的 **3 项合成数据事务测试**：成功提交、callback 失败回滚，以及 callback 执行后租约到期时回滚。三项测试通过；证据：[pytest.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-runledger-financial/pytest.log>)。
 
 该验证覆盖 SQLite 上的本地测试级事务接线，输入仍为合成财报数据。MySQL RunLedger 并发/事务行为、生产 worker/job、真实 Fuyao 上游采集、调度和 REST 发布仍未完成；不得将这三项测试解释为生产 RunLedger 接线或真实财报数据验收。
+
+## OpenData PR #29–#30：财报 capture 只读巡检与脱敏断言
+
+[OpenData PR #29](https://github.com/cloudQuant/opendata/pull/29) 已合入 `dev`，增加有明确 scope、预算和分页边界的只读财报 capture integrity audit；它只核对被选中的 capture 与已验证 manifest/response body 的引用，不记录响应内容，也不修改或清理数据。使用 SQLite 与 synthetic evidence 的定向验证为 **40 项测试通过**，statement+branch 综合覆盖率 **98.25%**。测试范围不证明数据库完整性、来源真实性/授权、全历史覆盖或无 orphan 文件，也未验证 MySQL、备份恢复、生产调度或 REST 接线。
+
+[OpenData PR #30](https://github.com/cloudQuant/opendata/pull/30) 已合入，为异常输出增加 **2 条脱敏断言**并通过定向隔离测试：malformed scope 与 timezone 错误不应泄露底层私有异常文本。该增量只验证错误文本边界，不扩展 #29 的数据、数据库方言或生产验收范围。
+
+## 北交所 920202 Eastmoney market-code 单次探测
+
+查询目标交易日为 **2026-10-26**；对北交所证券 **920202** 的 Eastmoney 候选 market code `0` 探测于 **2026-10-27 23:45（Asia/Shanghai，UTC+08:00）**在本地执行并生成证据。第一次运行在网络请求前被隔离环境拒绝；第二次仅发出一次请求，返回 `HTTP_NETWORK_FAILURE`，没有取得响应或报文，也没有自动重试。日志保存在 [`2026-10-27-bse-single-probe`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-bse-single-probe>)（[`runtime-refused.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-bse-single-probe/runtime-refused.json>)、[`probe-result.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-bse-single-probe/probe-result.json>)）。脚本中的 `rights_evidence` 文本不是供应商 grant，也不是对合同或数据权限的独立核验。因此 market-code 映射仍未验证；这不是成功采集或真实源响应证据。
+
+用户关于 AkShare 与 Fuyao 可使用的声明已记录，不因本次网络失败重复请求授权。BSE market mapping、可用上游响应、北交所与全 A 股权威证券全集及全历史仍待逐项验证；当前探测不能关闭这些开放项，也不证明 PIT 或生产采集已完成。
