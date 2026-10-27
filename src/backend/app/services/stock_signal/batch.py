@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from datetime import date, datetime, timezone
+import re
+from dataclasses import dataclass
+from datetime import date, datetime, time, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -21,10 +24,18 @@ from app.services.stock_signal.decision_policy import SignalPolicy
 from app.services.stock_signal.opendata_sse50_benchmark import OpenDataSse50BenchmarkReader
 from app.services.stock_signal.quality import DataQualityGate
 from app.services.stock_signal.service import StockSignalService
-from app.services.stock_signal.universe import Sse50UniverseProvider
+from app.services.stock_signal.universe import (
+    PointInTimeSse50UniverseProvider,
+    Sse50UniverseMemberEvidence,
+    Sse50UniversePITSnapshot,
+    Sse50UniverseProvider,
+)
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
+_SSE50_DECISION_TIME = time(19, 10)
+_SSE50_RUNTIME_CUTOFF_POLICY = "sse50-runtime-after-close-asia-shanghai-v1"
 
 
 def _now() -> datetime:
@@ -34,6 +45,18 @@ def _now() -> datetime:
 def _digest(value: Any) -> str:
     body = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _shanghai_today() -> date:
+    """Return the current business date in the exchange's local timezone."""
+    return datetime.now(_SHANGHAI).date()
+
+
+@dataclass(frozen=True)
+class _ResolvedUniverse:
+    members: list[dict[str, str]]
+    provenance: dict[str, Any]
+    snapshot_sha256: str
 
 
 class Sse50SignalBatchRunner:
@@ -46,7 +69,7 @@ class Sse50SignalBatchRunner:
         self,
         *,
         calendar: TradingCalendar | None = None,
-        universe: Sse50UniverseProvider | None = None,
+        universe: Sse50UniverseProvider | PointInTimeSse50UniverseProvider | None = None,
     ) -> None:
         settings = get_settings()
         self.settings = settings
@@ -78,16 +101,23 @@ class Sse50SignalBatchRunner:
 
     async def run(self, *, as_of_date: date | None = None) -> StockSignalRun | None:
         """Run only on an official exchange date; never submit an order."""
-        target_date = as_of_date or date.today()
+        business_today = _shanghai_today()
+        target_date = as_of_date or business_today
+        if target_date < business_today:
+            raise RuntimeError("historical_sse50_signal_replay_unavailable")
+        if target_date > business_today:
+            raise RuntimeError("future_sse50_signal_date_not_supported")
         if not self.configuration_ready():
             raise RuntimeError("stock_signal_evaluation_configuration_incomplete")
+        self._require_shanghai_timezone()
         if not await self.calendar.is_trading_day(target_date):
             return None
+        self._require_after_close(_now().astimezone(_SHANGHAI))
         next_trading_date = await self.calendar.next_trading_day(target_date)
         if next_trading_date is None:
             raise RuntimeError("next_trading_date_unavailable")
-        members = await self.universe.members()
-        run, claimed = await self._claim_run(target_date, members)
+        universe = await self._resolve_universe(target_date, current_business_date=business_today)
+        run, claimed = await self._claim_run(target_date, universe)
         if not claimed:
             return run
 
@@ -103,11 +133,11 @@ class Sse50SignalBatchRunner:
                 )
 
         results = await asyncio.gather(
-            *(process(member) for member in members), return_exceptions=True
+            *(process(member) for member in universe.members), return_exceptions=True
         )
         created = eligible = degraded = failed = 0
         errors: dict[str, str] = {}
-        for member, result in zip(members, results, strict=True):
+        for member, result in zip(universe.members, results, strict=True):
             if isinstance(result, BaseException):
                 failed += 1
                 errors[member["symbol"]] = f"{type(result).__name__}:{result}"
@@ -138,7 +168,7 @@ class Sse50SignalBatchRunner:
             return persisted
 
     async def _claim_run(
-        self, as_of_date: date, members: list[dict[str, str]]
+        self, as_of_date: date, universe: _ResolvedUniverse
     ) -> tuple[StockSignalRun, bool]:
         run_key = _digest(
             {
@@ -148,6 +178,7 @@ class Sse50SignalBatchRunner:
                 "feature_version": "ohlcv-v1",
                 "policy_version": self.policy.decision_policy_version,
                 "model_version": self.policy.model_version,
+                "universe_snapshot_sha256": universe.snapshot_sha256,
             }
         )
         async with async_session_maker() as session:
@@ -165,11 +196,12 @@ class Sse50SignalBatchRunner:
                 scheduled_for_at=_now(),
                 started_at=_now(),
                 status="running",
-                expected_count=len(members),
-                universe_snapshot_json=members,
+                expected_count=len(universe.members),
+                universe_snapshot_json=universe.members,
                 config_snapshot_json={
                     "max_concurrency": self.settings.STOCK_SIGNAL_MAX_CONCURRENCY,
                     "policy": self.policy.snapshot(),
+                    "universe": universe.provenance,
                 },
             )
             try:
@@ -186,6 +218,189 @@ class Sse50SignalBatchRunner:
             await session.commit()
             await session.refresh(run)
             return run, True
+
+    async def _resolve_universe(
+        self, as_of_date: date, *, current_business_date: date | None = None
+    ) -> _ResolvedUniverse:
+        """Resolve a complete current or evidence-backed point-in-time membership set.
+
+        Current-date runs may use either a current-only source or a provider
+        that supplies membership evidence. Historical runs remain disabled until
+        the signal and market-data layers can preserve the same point-in-time
+        decision and availability timestamps end to end.
+        """
+        today = current_business_date or _shanghai_today()
+        if as_of_date < today:
+            raise RuntimeError("historical_sse50_signal_replay_unavailable")
+        if as_of_date > today:
+            raise RuntimeError("future_sse50_signal_date_not_supported")
+        self._require_shanghai_timezone()
+        known_by = _now().astimezone(_SHANGHAI)
+        self._require_after_close(known_by)
+        resolver = getattr(self.universe, "resolve_pit", None)
+        if callable(resolver):
+            resolution = await resolver(as_of_date=as_of_date, known_by=known_by)
+            return self._prepare_pit_universe(
+                resolution,
+                as_of_date,
+                known_by,
+                cutoff_policy=_SSE50_RUNTIME_CUTOFF_POLICY,
+            )
+
+        members_loader = getattr(self.universe, "members", None)
+        if not callable(members_loader):
+            raise RuntimeError("sse50_universe_unavailable")
+        raw_members = await members_loader()
+        members = self._normalize_members(raw_members)
+        source = str(getattr(self.universe, "source", "injected.current_only") or "").strip()
+        if not source:
+            raise RuntimeError("sse50_universe_source_missing")
+        identity = {
+            "temporal_scope": "current_only",
+            "decision_cutoff_policy": _SSE50_RUNTIME_CUTOFF_POLICY,
+            "source": source,
+            "members": members,
+        }
+        observed_at = _now().isoformat()
+        return _ResolvedUniverse(
+            members=members,
+            snapshot_sha256=_digest(identity),
+            provenance={
+                "temporal_scope": "current_only",
+                "point_in_time_status": "UNVERIFIED",
+                "source": source,
+                "target_date": as_of_date.isoformat(),
+                "decision_cutoff_policy": _SSE50_RUNTIME_CUTOFF_POLICY,
+                "observed_at": observed_at,
+                "snapshot_sha256": _digest(identity),
+            },
+        )
+
+    @classmethod
+    def _prepare_pit_universe(
+        cls,
+        resolution: Any,
+        as_of_date: date,
+        known_by: datetime,
+        *,
+        cutoff_policy: str,
+    ) -> _ResolvedUniverse:
+        if not isinstance(resolution, Sse50UniversePITSnapshot):
+            raise RuntimeError("sse50_universe_pit_evidence_invalid")
+        source = cls._required_text(resolution.source)
+        snapshot_version = cls._required_text(resolution.snapshot_version)
+        snapshot_evidence_ref = cls._required_text(resolution.evidence_ref)
+        if not isinstance(resolution.members, tuple) or len(resolution.members) != 50:
+            raise RuntimeError("sse50_universe_pit_member_count_invalid")
+
+        rows: list[tuple[Sse50UniverseMemberEvidence, dict[str, str]]] = []
+        seen: set[str] = set()
+        for item in resolution.members:
+            if not isinstance(item, Sse50UniverseMemberEvidence):
+                raise RuntimeError("sse50_universe_pit_evidence_invalid")
+            symbol = cls._required_text(item.symbol)
+            name = cls._required_text(item.name)
+            cls._required_text(item.evidence_ref)
+            if not re.fullmatch(r"\d{6}\.(?:SH|SZ)", symbol) or symbol in seen:
+                raise RuntimeError("sse50_universe_pit_member_identity_invalid")
+            seen.add(symbol)
+            if type(item.valid_from) is not date or (
+                item.valid_to is not None and type(item.valid_to) is not date
+            ):
+                raise RuntimeError("sse50_universe_pit_validity_invalid")
+            if item.valid_to is not None and item.valid_to <= item.valid_from:
+                raise RuntimeError("sse50_universe_pit_validity_invalid")
+            if item.valid_from > as_of_date or (
+                item.valid_to is not None and as_of_date >= item.valid_to
+            ):
+                raise RuntimeError("sse50_universe_pit_validity_gap")
+            if not cls._aware(item.published_at) or not cls._aware(item.platform_available_at):
+                raise RuntimeError("sse50_universe_pit_timestamp_invalid")
+            if item.published_at > known_by or item.platform_available_at > known_by:
+                raise RuntimeError("sse50_universe_pit_evidence_after_cutoff")
+            if item.platform_available_at < item.published_at:
+                raise RuntimeError("sse50_universe_pit_evidence_time_order_invalid")
+            rows.append((item, {"symbol": symbol, "name": name}))
+
+        rows.sort(key=lambda item: item[1]["symbol"])
+        members = [member for _, member in rows]
+        member_evidence = [
+            {
+                "symbol": item.symbol,
+                "valid_from": item.valid_from.isoformat(),
+                "valid_to_exclusive": (
+                    item.valid_to.isoformat() if item.valid_to is not None else None
+                ),
+                "published_at": item.published_at.isoformat(),
+                "platform_available_at": item.platform_available_at.isoformat(),
+                "evidence_ref": item.evidence_ref,
+            }
+            for item, _ in rows
+        ]
+        identity = {
+            "temporal_scope": "point_in_time",
+            "decision_cutoff_policy": cutoff_policy,
+            "source": source,
+            "snapshot_version": snapshot_version,
+            "snapshot_evidence_ref": snapshot_evidence_ref,
+            "members": members,
+            "member_evidence": member_evidence,
+        }
+        snapshot_sha256 = _digest(identity)
+        return _ResolvedUniverse(
+            members=members,
+            snapshot_sha256=snapshot_sha256,
+            provenance={
+                **identity,
+                "temporal_scope": "point_in_time",
+                "point_in_time_status": "PROVIDER_ATTESTED",
+                "evidence_validation": "contract_and_temporal_bounds_only",
+                "target_date": as_of_date.isoformat(),
+                "known_by": known_by.isoformat(),
+                "observed_at": _now().isoformat(),
+                "snapshot_sha256": snapshot_sha256,
+            },
+        )
+
+    def _require_shanghai_timezone(self) -> None:
+        if getattr(self.settings, "STOCK_SIGNAL_SCHEDULE_TIMEZONE", None) != "Asia/Shanghai":
+            raise RuntimeError("stock_signal_business_timezone_unsupported")
+
+    @staticmethod
+    def _require_after_close(now: datetime) -> None:
+        if now.time().replace(tzinfo=None) < _SSE50_DECISION_TIME:
+            raise RuntimeError("stock_signal_decision_cutoff_not_reached")
+
+    @classmethod
+    def _normalize_members(cls, raw_members: Any) -> list[dict[str, str]]:
+        if not isinstance(raw_members, (list, tuple)) or len(raw_members) != 50:
+            raise RuntimeError("sse50_universe_member_count_invalid")
+        members: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in raw_members:
+            if not isinstance(item, dict):
+                raise RuntimeError("sse50_universe_member_invalid")
+            symbol = cls._required_text(item.get("symbol"))
+            name = cls._required_text(item.get("name"))
+            if not re.fullmatch(r"\d{6}\.(?:SH|SZ)", symbol) or symbol in seen:
+                raise RuntimeError("sse50_universe_member_identity_invalid")
+            seen.add(symbol)
+            members.append({"symbol": symbol, "name": name})
+        return sorted(members, key=lambda item: item["symbol"])
+
+    @staticmethod
+    def _required_text(value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError("sse50_universe_evidence_text_invalid")
+        return value.strip()
+
+    @staticmethod
+    def _aware(value: Any) -> bool:
+        return (
+            isinstance(value, datetime)
+            and value.tzinfo is not None
+            and value.utcoffset() is not None
+        )
 
     async def _process_member(
         self,
