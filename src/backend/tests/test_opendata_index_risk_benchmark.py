@@ -205,6 +205,8 @@ def _snapshot(
     dataset_id: str = "cn.csi300.index.daily",
     *,
     record_count: int = 2,
+    start: str = _START,
+    end: str = _END_EXCLUSIVE,
 ) -> dict[str, Any]:
     fields = [
         ("symbol", "string"),
@@ -261,7 +263,7 @@ def _snapshot(
         "as_of": "2026-10-27T00:00:00+00:00",
         "identity_semantics": _EXPECTED_IDENTITY_SEMANTICS,
         "snapshot_id": _SNAPSHOT_ID,
-        "window": {"start": _START, "end": _END_EXCLUSIVE, "end_exclusive": True},
+        "window": {"start": start, "end": end, "end_exclusive": True},
         "page_size": OPENDATA_MAX_PAGE_SIZE,
         "created_at": "2026-10-27T00:00:00+00:00",
         "expires_at": "2026-10-28T00:00:00+00:00",
@@ -271,7 +273,15 @@ def _snapshot(
     }
 
 
-def _coverage(snapshot: dict[str, Any], *, status: str = "complete") -> dict[str, Any]:
+def _coverage(
+    snapshot: dict[str, Any],
+    *,
+    status: str = "complete",
+    observed: tuple[str, str] | None = None,
+    missing_ranges: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    window = snapshot["window"]
+    requested = {"start": window["start"], "end": window["end"]}
     return {
         "dataset_id": snapshot["dataset_id"],
         "publication_id": snapshot["publication_id"],
@@ -279,9 +289,9 @@ def _coverage(snapshot: dict[str, Any], *, status: str = "complete") -> dict[str
         "coverage": {
             "status": status,
             "scope": "business_history",
-            "requested": {"start": _START, "end": _END_EXCLUSIVE},
-            "observed": {"start": _START, "end": _END_EXCLUSIVE},
-            "missing_ranges": [],
+            "requested": requested,
+            "observed": ({"start": observed[0], "end": observed[1]} if observed else requested),
+            "missing_ranges": missing_ranges if missing_ranges is not None else [],
             "evidence_refs": ["coverage-evidence:verified-index-history"],
             "limitation": None,
         },
@@ -323,13 +333,27 @@ def _result(
     *,
     dataset_id: str = "cn.csi300.index.daily",
     coverage_status: str = "complete",
+    start: str = _START,
+    end: str = _END_EXCLUSIVE,
+    observed: tuple[str, str] | None = None,
+    missing_ranges: list[dict[str, str]] | None = None,
     records: tuple[dict[str, Any], ...] | None = None,
     page_count: int = 2,
 ) -> OpendataPublishedSnapshotResult:
-    snapshot = _snapshot(dataset_id, record_count=2 if records is None else len(records))
+    snapshot = _snapshot(
+        dataset_id,
+        record_count=2 if records is None else len(records),
+        start=start,
+        end=end,
+    )
     return OpendataPublishedSnapshotResult(
         snapshot=snapshot,
-        coverage=_coverage(snapshot, status=coverage_status),
+        coverage=_coverage(
+            snapshot,
+            status=coverage_status,
+            observed=observed,
+            missing_ranges=missing_ranges,
+        ),
         records=records or (_row("2024-01-02"), _row("2024-01-03", close=3520.0)),
         page_count=page_count,
     )
@@ -456,6 +480,51 @@ async def test_reader_preserves_exact_dataset_and_exchange_symbol(benchmark_id: 
     assert request.family_contract_version == OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION
     assert request.start_at.date().isoformat() == _START
     assert request.end_at.date().isoformat() == _END_EXCLUSIVE
+
+
+@pytest.mark.parametrize(
+    "invalid_coverage",
+    [
+        "observed-before-request",
+        "observed-after-request",
+        "reversed-observed",
+        "empty-observed",
+        "null-observed",
+        "missing-range",
+    ],
+)
+@pytest.mark.asyncio
+async def test_reader_rejects_complete_coverage_with_out_of_bounds_or_missing_observations(
+    invalid_coverage: str,
+) -> None:
+    result = _result()
+    coverage = dict(result.coverage)
+    coverage_details = dict(coverage["coverage"])
+    if invalid_coverage == "observed-before-request":
+        coverage_details["observed"] = {"start": "2023-12-31", "end": "2024-01-03"}
+    elif invalid_coverage == "observed-after-request":
+        coverage_details["observed"] = {"start": "2024-01-02", "end": "2024-01-05"}
+    elif invalid_coverage == "reversed-observed":
+        coverage_details["observed"] = {"start": "2024-01-03", "end": "2024-01-02"}
+    elif invalid_coverage == "empty-observed":
+        coverage_details["observed"] = {"start": "2024-01-02", "end": "2024-01-02"}
+    elif invalid_coverage == "null-observed":
+        coverage_details["observed"] = None
+    else:
+        coverage_details["missing_ranges"] = [{"start": "2024-01-03", "end": "2024-01-04"}]
+    coverage["coverage"] = coverage_details
+    invalid_result = OpendataPublishedSnapshotResult(
+        snapshot=result.snapshot,
+        coverage=coverage,
+        records=result.records,
+        page_count=result.page_count,
+    )
+    reader = _reader(_SnapshotAdapter(invalid_result))
+
+    with pytest.raises(OpenDataIndexBenchmarkError) as exc_info:
+        await reader.fetch_prices("hs300", "000300.SH", _START, "2024-01-03")
+
+    assert exc_info.value.code == "opendata_coverage_unavailable"
 
 
 @pytest.mark.parametrize(
@@ -647,6 +716,172 @@ async def test_provider_pins_each_page_and_rejects_unverified_coverage_before_re
         ("POST", "/api/v2/snapshots"),
         ("GET", "/api/v2/datasets/cn.csi300.index.daily/records"),
         ("GET", "/api/v2/datasets/cn.csi300.index.daily/records"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_provider_and_reader_accept_weekend_holiday_edges_without_rewriting_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    start = "2024-02-10"  # Lunar New Year holiday and Saturday.
+    end_exclusive = "2024-02-25"  # Sunday after the final covered session.
+    end_inclusive = "2024-02-24"
+    observed = ("2024-02-19", "2024-02-24")
+    snapshot = _snapshot(
+        record_count=5,
+        start=start,
+        end=end_exclusive,
+    )
+    coverage = _coverage(snapshot, observed=observed)
+    trading_dates = (
+        "2024-02-19",
+        "2024-02-20",
+        "2024-02-21",
+        "2024-02-22",
+        "2024-02-23",
+    )
+    rows = [_row(day, close=3510.0 + index * 10.0) for index, day in enumerate(trading_dates)]
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith("/coverage"):
+            assert request.url.params["start_date"] == start
+            assert request.url.params["end_date"] == end_exclusive
+            return httpx.Response(200, json=coverage)
+        if request.method == "POST":
+            assert json.loads(request.content) == {
+                "dataset_id": "cn.csi300.index.daily",
+                "publication_id": _PUBLICATION_ID,
+                "start_date": start,
+                "end_date": end_exclusive,
+                "page_size": OPENDATA_MAX_PAGE_SIZE,
+            }
+            return httpx.Response(201, json=snapshot)
+        assert request.url.params["snapshot_id"] == _SNAPSHOT_ID
+        if "cursor" not in request.url.params:
+            page_rows = rows[:2]
+            next_cursor = "weekend-window-page-two"
+        else:
+            assert request.url.params["cursor"] == "weekend-window-page-two"
+            page_rows = rows[2:]
+            next_cursor = None
+        return httpx.Response(
+            200,
+            json={
+                **snapshot,
+                "rows": page_rows,
+                "count": len(page_rows),
+                "next_cursor": next_cursor,
+                "has_more": next_cursor is not None,
+                "meta": {
+                    "snapshot": snapshot,
+                    "ordering_fields": snapshot["ordering_fields"],
+                    "storage_order": snapshot["storage_order"],
+                    "identity_key_encoding": snapshot["identity_key_encoding"],
+                },
+            },
+        )
+
+    provider, client = _provider(handler)
+    published_results: list[OpendataPublishedSnapshotResult] = []
+    original_fetch = provider.fetch_published_index_snapshot
+
+    async def capture_snapshot(
+        request: MarketDataProviderRequest,
+        *,
+        dataset_id: str,
+    ) -> OpendataPublishedSnapshotResult:
+        result = await original_fetch(request, dataset_id=dataset_id)
+        published_results.append(result)
+        return result
+
+    monkeypatch.setattr(provider, "fetch_published_index_snapshot", capture_snapshot)
+    try:
+        reader = _reader(provider)
+
+        async def fetch_reader_prices(
+            symbol: str, fetch_start: str, fetch_end: str
+        ) -> list[dict[str, Any]]:
+            return await reader.fetch_prices("hs300", symbol, fetch_start, fetch_end)
+
+        result = await BenchmarkService().get_benchmark_returns(
+            "hs300",
+            start,
+            end_inclusive,
+            data_fetcher=fetch_reader_prices,
+        )
+    finally:
+        await client.aclose()
+
+    assert result.status == "ok"
+    assert result.dates == list(trading_dates)
+    assert len(published_results) == 1
+    assert published_results[0].coverage == coverage
+    assert published_results[0].coverage["coverage"]["requested"] == {
+        "start": start,
+        "end": end_exclusive,
+    }
+    assert published_results[0].coverage["coverage"]["observed"] == {
+        "start": observed[0],
+        "end": observed[1],
+    }
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/api/v2/datasets/cn.csi300.index.daily/coverage"),
+        ("POST", "/api/v2/snapshots"),
+        ("GET", "/api/v2/datasets/cn.csi300.index.daily/records"),
+        ("GET", "/api/v2/datasets/cn.csi300.index.daily/records"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "invalid_coverage",
+    [
+        "observed-before-request",
+        "observed-after-request",
+        "reversed-observed",
+        "empty-observed",
+        "null-observed",
+        "missing-range",
+    ],
+)
+@pytest.mark.asyncio
+async def test_provider_rejects_false_complete_coverage_before_creating_snapshot(
+    invalid_coverage: str,
+) -> None:
+    snapshot = _snapshot(record_count=0)
+    coverage = _coverage(snapshot)
+    coverage_details = coverage["coverage"]
+    if invalid_coverage == "observed-before-request":
+        coverage_details["observed"] = {"start": "2023-12-31", "end": "2024-01-03"}
+    elif invalid_coverage == "observed-after-request":
+        coverage_details["observed"] = {"start": "2024-01-02", "end": "2024-01-05"}
+    elif invalid_coverage == "reversed-observed":
+        coverage_details["observed"] = {"start": "2024-01-03", "end": "2024-01-02"}
+    elif invalid_coverage == "empty-observed":
+        coverage_details["observed"] = {"start": "2024-01-02", "end": "2024-01-02"}
+    elif invalid_coverage == "null-observed":
+        coverage_details["observed"] = None
+    else:
+        coverage_details["missing_ranges"] = [{"start": "2024-01-03", "end": "2024-01-04"}]
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.url.path == "/api/v2/datasets/cn.csi300.index.daily/coverage"
+        return httpx.Response(200, json=coverage)
+
+    provider, client = _provider(handler)
+    try:
+        reader = _reader(provider)
+        with pytest.raises(OpenDataIndexBenchmarkError) as exc_info:
+            await reader.fetch_prices("hs300", "000300.SH", _START, "2024-01-03")
+    finally:
+        await client.aclose()
+
+    assert exc_info.value.code == "opendata_coverage_unavailable"
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/api/v2/datasets/cn.csi300.index.daily/coverage")
     ]
 
 
