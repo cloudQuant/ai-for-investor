@@ -258,3 +258,13 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 用户已选择全 A 股作为首批目标范围，并声明 AkShare、Fuyao 可使用；这不表示系统已取得经核验的权威全 A 股含北交所及退市证券目录，也不证明逐证券上市起点、历史别名、数据保留边界、全量数据或内部生产 API 已就绪。完整历史仍需按标的和业务键核对 head、interior、tail；未知边界必须继续标记，不能以当前目录或最新记录代替历史分母。
 
 完整 mypy 检查仍受历史依赖问题影响，按用户要求暂缓处理；CI 问题也暂缓。这里不把两项暂缓写成通过，也不据此降低代码验收或生产验收边界。后续合并前仍应按各 PR 的限定证据审查；真实来源与全 A 生命周期证据、财报运行/发布链路以及部署和自然周期验收完成后，再更新对应父级控制任务状态。
+
+## OpenData PR #18–#20 增量
+
+以下 PR 已合入 OpenData `dev`。它们各自的专项测试与覆盖率只支持所列局部代码范围，不表示全 A 股数据采集、历史恢复、PIT 或生产财报链路已验收。
+
+| PR | 已合入的限定范围 | 局部证据与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #18](https://github.com/cloudQuant/opendata/pull/18) | 财报精确观察使用独立值对象表达。 | 专项 **59 项测试通过**，目标模块 statement+branch 综合覆盖率 **94.17%**。这是值对象切片，不代表接入真实财报抓取、raw archive、source attempt 账本、生产响应解码或调度，也不证明历史修订/PIT 完整。 |
+| [OpenData PR #19](https://github.com/cloudQuant/opendata/pull/19) | 新浪股票代码解析对错误/不支持的符号 fail closed。 | **57 项测试加 2 项补充测试通过**，目标范围覆盖率 **100%**。北交所及证券代码 `689` 仍不支持；不得将拒绝非法符号的覆盖率解释为全市场代码支持或全 A 股覆盖。 |
+| [OpenData PR #20](https://github.com/cloudQuant/opendata/pull/20) | THS 财报数值以原始 `Decimal` 表达，避免在该切片中提前转换为浮点数。 | 专项 **73 项测试通过**，目标模块 statement+branch 综合覆盖率 **96.71%**。测试使用独立内存解码器；raw archive、source attempt 持久账本、真实 HTTP 响应、单位语义绑定及生产接线均未完成或未验收。该切片不构成全 A 股财报采集或 PIT 历史修订支持。 |
