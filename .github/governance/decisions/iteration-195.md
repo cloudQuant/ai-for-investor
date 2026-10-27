@@ -69,3 +69,12 @@
 - 责任人：安全负责人 `@cloudQuant`
 - 解除条件：通道开通验证（能收到测试报告）、支持版本清单、响应时限书面确认后，方可在独立 PR 中新增 `SECURITY.md` 并更新 Issue Template 指向。
 - 过渡措施：`config.yml` 仅指向 GitHub Discussions 与文档，安全问题描述引导至私密漏洞报告（启用后自动生效），不写虚构联系方式。
+
+## 2026-10-27 — 作者自审替代必需的非作者审批
+
+- **状态：通过（仓库内治理策略）**
+- 决策：所有 PR 均须由 PR 作者通过 GitHub 的 review API 提交一个绑定当前完整 40 位 HEAD SHA 的 `COMMENTED` 自审事件。正文必须包含唯一可见 H2 `Author self-review`、`- Decision: APPROVED`、匹配当前 HEAD 的 `- Head SHA: <40hex>`，以及 CONTRIBUTING.md 规定的三条已勾选验收项。该声明属于作者自审，不伪装为 GitHub 原生 `APPROVED` review；作者不需要另一个人的 approval 才能通过本仓库门禁。
+- 分支 Ruleset desired state 中 `dev` 与 `master` 的 `required_approvals` 设为 `0`，`require_last_push_approval` 设为 `false`，同时保留新提交后撤销旧 approvals、conversation resolution、required checks、风险路径和测试证据、release/hotfix 约束、禁强推与禁删除等其他保护。authorized 第三方审批继续作为可选审查；有效第三方 `CHANGES_REQUESTED` 仍阻断合并直至解决。
+- 决策人：仓库所有者 `@cloudQuant`（2026-10-27 明确授权）
+- 适用范围：仓库内 Governance Gate、manifest、模板及贡献指南；不授权脚本写入或修改 GitHub Rulesets。本地 desired state 和 fixture 更新不构成外部 Ruleset 已应用或已验证的证据。
+- 取代范围：本决策取代 D2 中把 required CODEOWNERS review 作为未来目标、等待第二独立审批池后启用的安排，以及此前要求 dev/master 至少一位/两位非作者 approval 的规则。Required CODEOWNERS review 始终可选，不随 D2 审批池变化。D2 reviewer authorization 仍用于判断可选第三方 review 的身份与 `CHANGES_REQUESTED`；D0/D1/D3/D4/D5/D6/D7、分支路由和其他风险/发布/安全证据要求不变。

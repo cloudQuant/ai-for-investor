@@ -147,6 +147,18 @@ Conventional Commits: `<type>(<scope>): <description>`
 - `master` is reserved for maintainer-owned `release/vX.Y.Z` promotions and
   `hotfix/master-*` emergency fixes. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the
   required governance declaration and evidence.
+- Every PR must include a separate author self-review as a GitHub `COMMENTED` review, not a
+  native `APPROVED` review. Bind it to the exact current 40-character HEAD SHA and include the
+  unique visible `## Author self-review` section, `Decision: APPROVED`, and the three checked
+  items specified in [CONTRIBUTING.md](CONTRIBUTING.md). This is distinct from optional
+  authorized third-party reviews; an authorized `CHANGES_REQUESTED` review still blocks merge.
+
+## Parallel Development
+
+- Prefer the existing main `dev` checkout for parallel work, with explicit, mutually exclusive
+  file ownership and a single integrator handling commits and PR merges.
+- Create another worktree only when a contributor explicitly requests isolation or the task
+  has a concrete isolation need. Do not create one by default for every parallel task.
 
 ---
 
