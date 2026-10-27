@@ -16,6 +16,35 @@ def _assert_scanner_data_unavailable(response: Response, expected_path: str) -> 
     assert payload["path"] == expected_path
 
 
+def _assert_scanner_schedule_validation_error(response: Response, expected_path: str) -> None:
+    assert response.status_code == 400
+    payload = response.json()
+    assert set(payload) == {"error", "message", "request_id", "path"}
+    assert payload["error"] == "HTTP_400"
+    assert payload["message"] == "scanner_plan_schedule_enabled_must_be_boolean"
+    assert isinstance(payload["request_id"], str) and payload["request_id"]
+    assert payload["path"] == expected_path
+
+
+def _scanner_plan_payload(
+    name: str,
+    *,
+    include_schedule_enabled: bool = False,
+    schedule_enabled: object = False,
+) -> dict:
+    payload = {
+        "name": name,
+        "universe_pool_id": "hs300",
+        "indicator_rules": [],
+        "condition": "indicator >= 0.6",
+        "lookback_days": 20,
+        "timeframe": "1d",
+    }
+    if include_schedule_enabled:
+        payload["schedule_enabled"] = schedule_enabled
+    return payload
+
+
 def test_legacy_metric_snapshots_are_neither_exposed_as_current_nor_reused(tmp_path):
     import json
 
@@ -302,6 +331,173 @@ async def test_scanner_precompute_and_run_do_not_call_provider_or_write_cache(
 
     state = (tmp_path / "scanner_universe_pools.json").read_text("utf-8")
     assert '"metric_snapshots": {}' in state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("include_schedule_enabled", "schedule_enabled", "expected"),
+    [(False, False, False), (True, True, True), (True, False, False)],
+)
+async def test_scanner_plan_create_schedule_enabled_defaults_off_and_keeps_explicit_value(
+    client: AsyncClient,
+    include_schedule_enabled: bool,
+    schedule_enabled: bool,
+    expected: bool,
+):
+    _, headers = await register_and_login(client, username="scanner_schedule_create_user")
+    payload = _scanner_plan_payload(
+        "schedule-create",
+        include_schedule_enabled=include_schedule_enabled,
+        schedule_enabled=schedule_enabled,
+    )
+
+    response = await client.post("/api/v1/scanners/plans", headers=headers, json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["schedule_enabled"] is expected
+
+
+@pytest.mark.asyncio
+async def test_scanner_plan_save_without_schedule_enabled_preserves_existing_explicit_true(
+    client: AsyncClient,
+):
+    _, headers = await register_and_login(client, username="scanner_schedule_resave_user")
+    created = await client.post(
+        "/api/v1/scanners/plans",
+        headers=headers,
+        json=_scanner_plan_payload(
+            "schedule-resave",
+            include_schedule_enabled=True,
+            schedule_enabled=True,
+        ),
+    )
+    assert created.status_code == 200
+
+    response = await client.post(
+        "/api/v1/scanners/plans",
+        headers=headers,
+        json=_scanner_plan_payload("schedule-resave"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == created.json()["id"]
+    assert response.json()["schedule_enabled"] is True
+
+
+def test_scanner_plan_model_client_default_is_disabled():
+    from app.models.scanner_plan import ScannerPlanModel
+
+    column = ScannerPlanModel.__table__.c.schedule_enabled
+
+    assert column.default is not None
+    assert column.default.arg is False
+    assert column.server_default is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initial_value", [True, False])
+async def test_scanner_plan_patch_without_schedule_enabled_preserves_existing_value(
+    client: AsyncClient, initial_value: bool
+):
+    _, headers = await register_and_login(client, username="scanner_schedule_patch_user")
+    created = await client.post(
+        "/api/v1/scanners/plans",
+        headers=headers,
+        json=_scanner_plan_payload(
+            "schedule-patch-preserve",
+            include_schedule_enabled=True,
+            schedule_enabled=initial_value,
+        ),
+    )
+    assert created.status_code == 200
+
+    response = await client.patch(
+        f"/api/v1/scanners/plans/{created.json()['id']}",
+        headers=headers,
+        json=_scanner_plan_payload("schedule-patch-preserve-updated"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["schedule_enabled"] is initial_value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("schedule_enabled", [True, False])
+async def test_scanner_plan_patch_accepts_explicit_json_boolean(
+    client: AsyncClient, schedule_enabled: bool
+):
+    _, headers = await register_and_login(client, username="scanner_schedule_patch_bool_user")
+    created = await client.post(
+        "/api/v1/scanners/plans",
+        headers=headers,
+        json=_scanner_plan_payload("schedule-patch-explicit"),
+    )
+    assert created.status_code == 200
+
+    response = await client.patch(
+        f"/api/v1/scanners/plans/{created.json()['id']}",
+        headers=headers,
+        json=_scanner_plan_payload(
+            "schedule-patch-explicit-updated",
+            include_schedule_enabled=True,
+            schedule_enabled=schedule_enabled,
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["schedule_enabled"] is schedule_enabled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_value", [None, "false", 0, 1])
+async def test_scanner_plan_schedule_enabled_rejects_non_boolean_without_mutating_plan(
+    client: AsyncClient, invalid_value: object
+):
+    _, headers = await register_and_login(client, username="scanner_schedule_invalid_user")
+
+    invalid_create_payload = _scanner_plan_payload(
+        "invalid-schedule-create",
+        include_schedule_enabled=True,
+        schedule_enabled=invalid_value,
+    )
+    invalid_create = await client.post(
+        "/api/v1/scanners/plans", headers=headers, json=invalid_create_payload
+    )
+    _assert_scanner_schedule_validation_error(
+        invalid_create,
+        "/api/v1/scanners/plans",
+    )
+
+    created = await client.post(
+        "/api/v1/scanners/plans",
+        headers=headers,
+        json=_scanner_plan_payload(
+            "valid-schedule-plan",
+            include_schedule_enabled=True,
+            schedule_enabled=True,
+        ),
+    )
+    assert created.status_code == 200
+
+    invalid_update_payload = _scanner_plan_payload(
+        "should-not-be-saved",
+        include_schedule_enabled=True,
+        schedule_enabled=invalid_value,
+    )
+    invalid_update = await client.patch(
+        f"/api/v1/scanners/plans/{created.json()['id']}",
+        headers=headers,
+        json=invalid_update_payload,
+    )
+    _assert_scanner_schedule_validation_error(
+        invalid_update,
+        f"/api/v1/scanners/plans/{created.json()['id']}",
+    )
+
+    plans = await client.get("/api/v1/scanners/plans", headers=headers)
+    plan = next(item for item in plans.json()["items"] if item["id"] == created.json()["id"])
+    assert plan["name"] == "valid-schedule-plan"
+    assert plan["schedule_enabled"] is True
 
 
 @pytest.mark.asyncio
