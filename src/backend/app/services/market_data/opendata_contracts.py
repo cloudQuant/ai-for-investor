@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import timedelta
+from datetime import date, timedelta
 from types import MappingProxyType
 from typing import Any
 
@@ -58,6 +58,64 @@ OPENDATA_INDEX_BENCHMARK_DATASETS: Mapping[str, tuple[str, str]] = MappingProxyT
 OPENDATA_INDEX_BENCHMARK_DATASET_IDS = frozenset(
     dataset_id for _symbol, dataset_id in OPENDATA_INDEX_BENCHMARK_DATASETS.values()
 )
+
+
+def has_complete_business_history_coverage(
+    coverage: Mapping[str, Any],
+    *,
+    requested_start: str,
+    requested_end: str,
+) -> bool:
+    """Validate exact requested bounds and an evidence-backed observed subrange.
+
+    OpenData reports observed business dates as a half-open range from its first
+    through last observation. Non-trading days at the requested window edges may
+    therefore make this range narrower than the request without reducing
+    completeness. The observed range must still be nonempty and fully bounded by
+    the exact requested window.
+    """
+    try:
+        request_start = date.fromisoformat(requested_start)
+        request_end = date.fromisoformat(requested_end)
+    except (TypeError, ValueError):
+        return False
+    if (
+        request_start.isoformat() != requested_start
+        or request_end.isoformat() != requested_end
+        or request_start >= request_end
+        or coverage.get("status") != "complete"
+        or coverage.get("scope") != "business_history"
+        or coverage.get("requested") != {"start": requested_start, "end": requested_end}
+        or coverage.get("missing_ranges") != []
+        or coverage.get("limitation") is not None
+    ):
+        return False
+
+    observed = coverage.get("observed")
+    evidence_refs = coverage.get("evidence_refs")
+    if (
+        not isinstance(observed, Mapping)
+        or set(observed) != {"start", "end"}
+        or not isinstance(evidence_refs, list)
+        or not evidence_refs
+        or any(not isinstance(item, str) or not item.strip() for item in evidence_refs)
+    ):
+        return False
+    observed_start_text = observed.get("start")
+    observed_end_text = observed.get("end")
+    if not isinstance(observed_start_text, str) or not isinstance(observed_end_text, str):
+        return False
+    try:
+        observed_start = date.fromisoformat(observed_start_text)
+        observed_end = date.fromisoformat(observed_end_text)
+    except ValueError:
+        return False
+    return (
+        observed_start.isoformat() == observed_start_text
+        and observed_end.isoformat() == observed_end_text
+        and request_start <= observed_start < observed_end <= request_end
+    )
+
 
 #: opendata provider 支持的频率：当前仅日线（分钟线走 Parquet 归档，未开放 REST）。
 OPENDATA_SUPPORTED_FREQUENCIES = frozenset({"1d"})

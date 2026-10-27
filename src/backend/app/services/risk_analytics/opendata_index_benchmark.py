@@ -21,6 +21,7 @@ from app.services.market_data.opendata_contracts import (
     OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION,
     OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT,
     OPENDATA_INDEX_BENCHMARK_ROUTE_ID,
+    has_complete_business_history_coverage,
 )
 from app.services.market_data.opendata_provider import (
     OpendataProviderError,
@@ -424,20 +425,16 @@ def _validate_coverage(
 ) -> None:
     """Require independent complete business-history evidence for this scope."""
     coverage = coverage_response.get("coverage")
-    expected_window = {"start": start.isoformat(), "end": end.isoformat()}
     if (
         coverage_response.get("dataset_id") != dataset_id
         or coverage_response.get("publication_id") != snapshot.get("publication_id")
         or coverage_response.get("contract_sha256") != snapshot.get("contract_sha256")
         or not isinstance(coverage, Mapping)
-        or coverage.get("status") != "complete"
-        or coverage.get("scope") != "business_history"
-        or coverage.get("requested") != expected_window
-        or coverage.get("observed") != expected_window
-        or coverage.get("missing_ranges") != []
-        or not isinstance(coverage.get("evidence_refs"), list)
-        or not coverage["evidence_refs"]
-        or any(not isinstance(item, str) or not item.strip() for item in coverage["evidence_refs"])
+        or not has_complete_business_history_coverage(
+            coverage,
+            requested_start=start.isoformat(),
+            requested_end=end.isoformat(),
+        )
     ):
         raise OpenDataIndexBenchmarkError("opendata_coverage_unavailable")
 

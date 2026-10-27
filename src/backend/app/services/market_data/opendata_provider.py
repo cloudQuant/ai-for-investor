@@ -40,6 +40,7 @@ from app.services.market_data.opendata_contracts import (
     OPENDATA_MAX_ROWS,
     OPENDATA_PROVIDER_CONTRACT_REGISTRY,
     OPENDATA_SUPPORTED_FREQUENCIES,
+    has_complete_business_history_coverage,
     prepare_opendata_historical_request,
 )
 from app.services.market_data.opendata_credentials import OpendataCredentials
@@ -536,15 +537,10 @@ class OpendataProvider:
             or not isinstance(contract_sha256, str)
             or re.fullmatch(r"[0-9a-f]{64}", contract_sha256) is None
             or not isinstance(coverage, Mapping)
-            or coverage.get("status") != "complete"
-            or coverage.get("scope") != "business_history"
-            or coverage.get("requested") != {"start": start_date, "end": end_date}
-            or coverage.get("observed") != {"start": start_date, "end": end_date}
-            or coverage.get("missing_ranges") != []
-            or not isinstance(coverage.get("evidence_refs"), list)
-            or not coverage["evidence_refs"]
-            or any(
-                not isinstance(item, str) or not item.strip() for item in coverage["evidence_refs"]
+            or not has_complete_business_history_coverage(
+                coverage,
+                requested_start=start_date,
+                requested_end=end_date,
             )
         ):
             raise OpendataProviderError("OPENDATA_INDEX_COVERAGE_UNAVAILABLE")
