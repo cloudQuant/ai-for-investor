@@ -2,7 +2,7 @@
 
 ## 当前开发基线（2026-10-27）
 
-截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58 与 OpenData PR #5–#6 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
+截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58 与 OpenData PR #5–#7 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
 
 ## 历史记录：隔离集成状态
 
@@ -177,6 +177,12 @@ Sina fanout 仍未完成生产验收：进程停机或最大实例变化时可�
 [OpenData PR #6](https://github.com/cloudQuant/opendata/pull/6) 已合入 `dev`，仅实现单代 slot 的离线 UTC cron 对账。专项 **167 项 SQLite 测试通过**；reconciler 覆盖率 **100%**、journal **95%**、合计 **96%**。它没有生产调用入口、告警或补采/重放能力，不是 job 调度接线或真实采集验收。
 
 process-v1 目前仍 disabled 且没有 schedule；将它接到 slot 对账 cron 前，必须先解决两者的 slot/代际约束。MySQL/PostgreSQL、交易日历对账、generation rollover 和历史初始 slot 边界均为 **NOT_ASSESSED**；单一 SQLite 离线结果不能证明数据库锁、时钟或跨代行为。对账命中 group 只证明该组已登记，不证明当时选取了哪些证券或采集成功；初始时间是 exclusive 下界，其之前为 **NOT_ASSESSED**。全 A（含北交所/BSE）、来源授权与生产上线验收仍未完成。
+
+### OpenData PR #7：离线 SQLite source attempt token-bucket gate
+
+[OpenData PR #7](https://github.com/cloudQuant/opendata/pull/7) 已合入，增加离线 SQLite source attempt token-bucket gate。专项 **101 项隔离测试通过**，覆盖同机两个进程竞争；source 模块覆盖率 **90.26%**。这只验证本地 SQLite 隔离范围，不证明多主机协调或 MySQL/PostgreSQL 的锁与时钟语义。
+
+该 gate 未接入 HTTP 请求路径或真实 Sina grant；Sina 仍禁用，授权状态为 **UNKNOWN**。它不提供日/run 总额度、严格滚动窗口或在途并发上限。授权证据是人工声明，不是法律自动验证；保存的策略快照不能完整重算；备份恢复和生产接线仍待验证。因此本 PR 不构成真实来源授权、生产限流或上线验收。
 
 **全 A 股全集及全历史覆盖仍未完成**：包含北交所在内的权威当前目录、退市对象、跨代码身份映射和逐标的实际起点均没有经本次 PR 验收。PR #52 的官方来源调查是调查文档，不是数据源落地；PR #53 的历史日线读取路由也不提供历史 universe 分母或 lifecycle 证据。不得以新浪行情最早记录、当前目录或已成功查询替代上市/退市证据。`204-E02-04`、`204-E03-01`、`204-E05-02` 及其父级状态需按既有验收标准逐项更新，不能因 PR 合入自动标完成。
 
