@@ -25,6 +25,7 @@ from app.services.market_data.ths_dump_importer import (
     group_by_symbol,
     parse_adjustment_factors_parquet,
     parse_daily_k_parquet,
+    thscode_for_canonical_id,
 )
 
 UTC = timezone.utc
@@ -140,6 +141,24 @@ class TestSessionSemantics:
             "instrument:stock:CN-SZSE:000001",
             "CN-SZSE",
         )
+        assert canonical_id_for_thscode("430047.BJ") == (
+            "instrument:stock:CN-BJSE:430047",
+            "CN-BJSE",
+        )
+
+    @pytest.mark.parametrize(
+        ("thscode", "canonical_id", "venue"),
+        [
+            ("600519.SH", "instrument:stock:CN-SSE:600519", "CN-SSE"),
+            ("000001.SZ", "instrument:stock:CN-SZSE:000001", "CN-SZSE"),
+            ("430047.BJ", "instrument:stock:CN-BJSE:430047", "CN-BJSE"),
+        ],
+    )
+    def test_thscode_and_canonical_id_round_trip(
+        self, thscode: str, canonical_id: str, venue: str
+    ) -> None:
+        assert canonical_id_for_thscode(thscode) == (canonical_id, venue)
+        assert thscode_for_canonical_id(canonical_id) == thscode
 
     def test_canonical_id_rejects_unknown_suffix(self) -> None:
         with pytest.raises(ThsDumpError):
