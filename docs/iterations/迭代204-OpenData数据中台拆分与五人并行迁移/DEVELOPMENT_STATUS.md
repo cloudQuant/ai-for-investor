@@ -397,3 +397,9 @@ OpenData 迁移工作清单仍在开发，尚无通过项目覆盖率门槛的�
 | [OpenData PR #35](https://github.com/cloudQuant/opendata/pull/35) | 为 AkShare/Eastmoney 股票日线增加 BSE fail-closed 路由保护，阻止未知市场码；沪深既有行为保留。联合隔离测试 **207 项通过**，三个目标模块覆盖率为 **91% / 92% / 92%**。日志保存在本机私有目录 [`2026-10-28-bse-route-guard`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-bse-route-guard>)。 | 北交所真实源数据、路由映射及逐证券历史覆盖仍未验证；该保护不会生成或补齐 BSE 行情，也不证明全 A 股历史完整。 |
 
 PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源、生产采集及全 A 股含北交所的完整历史仍待验收，迭代204整体未完成。
+
+## OpenData PR #36：MySQL warehouse migration compatibility（2026-10-28）
+
+[OpenData PR #36](https://github.com/cloudQuant/opendata/pull/36) 已合入 OpenData `dev`。迁移 `0014` 将 MySQL 版本列宽由 **32 扩展为 64**，并在业务 DDL 前核验 `0013` marker 存在且没有 partial 状态；迁移 `0015` 在 MySQL 8 上为 no-op，同时保留 SQLite 原有 gate。定向隔离测试 **33 项通过**，两个目标模块覆盖率为 **87% / 100%**。验收日志保存在本机私有目录 [`2026-10-28-pending-warehouse-revision`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-warehouse-revision>)。
+
+在一次性 MySQL 8.4 Unix socket 实例上，以合成的 `0013` 状态进行实际 upgrade 至 `0015`，再 downgrade 至 `0014` 和 `0013`；downgrade 仅在空表场景验证通过。partial 状态恢复未验证，须单独审查。未运行 `0001`–`0013` 的完整历史迁移链；MySQL TCP、生产数据库及 MySQL 9 均未测试。已有 partial marker 状态不能盲目重试，须先核实数据库状态并按运维流程处理。本次没有生产迁移或数据读取；此 PR 不构成生产升级验收，迭代204整体仍未完成。
