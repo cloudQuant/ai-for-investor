@@ -34,7 +34,7 @@ root已冻结`/tmp/od204-receipts/wave10-frozen-sina-partial-projection-contract
 | 纯候选投影 | `/tmp/od204-wave8-table-api` · `codex/od204-wave10-sina-candidate-projector` · owner `wave5_frames_review` | `opendata/data/providers/sina/financial_statement_candidate_projection.py` | commit `d0abab97`；projector实现已静态review GREEN并集成至当前root source。实现snapshot验证、精确ID/title映射、逐报告核算与always-partial输出；仅依赖stdlib、W9 source DTO和新候选合同。 |
 | 定向测试 | `/tmp/od204-wave6-http-boundaries` · `codex/od204-wave10-sina-candidate-tests` · owner `wave6_http_boundaries` | `tests/test_sina_financial_statement_candidate_projection.py` | author commit `be057bb0927a710a8e5b233fd28a9b262f0f9f4a`已完成；独立隔离review GREEN，root在source `1bd226690acd7e4bbd620a480f7e6271c38297fd`运行通过。使用W9录制正向fixture，负向用例只对captured response或typed DTO深拷贝变异。 |
 
-root独占质量census、跨分支集成、import graph审查、测试环境及唯一测试运行；独立reviewer审查候选协议与结果证据边界。W9 archive closure后，root已集成合同与projector；作者测试隔离review及root单文件运行均通过。W10 archive preparation仍待完成。
+root独占质量census、跨分支集成、import graph审查、测试环境及唯一测试运行；独立reviewer审查候选协议与结果证据边界。W9 archive closure后，root已集成合同与projector；作者测试隔离review及root单文件运行均通过。W10私有归档及独立审查现已完成，完整证据见[WAVE10_STATUS.md](WAVE10_STATUS.md)。
 
 ## 实施任务
 
@@ -63,6 +63,6 @@ root独占质量census、跨分支集成、import graph审查、测试环境及�
 2. 实现作者只执行静态质量检查：Ruff、format、strict mypy、Bandit、public API约束；projector按`opendata/data/`既有口径满足至少90% statement+branch coverage目标。不得添加exclusions或降低阈值。
 3. 测试执行前root审查import graph，确认projector没有HTTP、注册、ORM、app settings、scheduler或database import；root设置有限环境与空工作目录。
 4. root只运行新增的`tests/test_sina_financial_statement_candidate_projection.py`，禁用repo conftest并按隔离runner规则执行。positive facts只能来自W9记录bytes；negative inputs从捕获DTO深拷贝变异。不得调用Sina、数据库或第三方SDK。
-5. root receipt `wave10-candidates-first-root-command.json`在source `1bd226690acd7e4bbd620a480f7e6271c38297fd`记录精确单文件65 passed、44.23秒，contract/projector statement+branch coverage分别97.5309%和95.3608%；scoped static和Gitleaks也通过。该运行复用未变更的W9-owned 17-pin Python 3.13.5环境。W10 whole-resolver A2未运行。49文件私有归档的独立audit通过，验证W10所有文件及此前W7/W8/W9共348个归档文件；两个公开JSON独立扫描0 findings。W11目前仅为设计讨论，尚无冻结合同或代码。W9/W10两批的父矩阵和生产边界不因本批scoped QA改变。
+5. root receipt `wave10-candidates-first-root-command.json`在source `1bd226690acd7e4bbd620a480f7e6271c38297fd`记录精确单文件65 passed、44.23秒，contract/projector statement+branch coverage分别97.5309%和95.3608%；scoped static和Gitleaks也通过。该运行复用未变更的W9-owned 17-pin Python 3.13.5环境。W10 whole-resolver A2未运行。49文件私有归档的独立audit通过，验证W10所有文件及此前W7/W8/W9共348个归档文件；两个公开JSON独立扫描0 findings。**在W10关闭时**，W11仍处设计阶段、合同未冻结；之后W11合同冻结、首轮失败已保留、13文件核心复跑、scoped static/OpenAPI、A2及full-history secret均已通过。W11 182文件归档和两个公开metadata已创建、公开JSON复扫通过；该归档审查当时仍在运行，之后已通过25项独立核验，详见[WAVE11_PLAN.md](./WAVE11_PLAN.md)及[WAVE11_STATUS.md](./WAVE11_STATUS.md)。W9/W10两批的父矩阵和生产边界不因本批scoped QA改变。
 
 本批不注册Sina provider、不创建生产grant、不持久化候选、不新增route或调度任务、不修改FinancialStatement/DWD/PIT，也不启用任务748。来源rights、逐标的全历史、source-wide units/identity/revisions、自然周期和生产切换依旧OPEN。父级87项矩阵、1,103项任务与1,066个脚本候选的既有分母和状态保持不变。

@@ -28,7 +28,7 @@
 | Python 3.10 runtime | **NOT_RUN** | 没有3.10解释器运行矩阵结果。 |
 | 生产授权与启用 | **OPEN / NOT_APPROVED** | 无来源权利、provider注册、生产grant、FinancialStatement/DWD/PIT接入或任务748启用批准。 |
 
-W11目前只有设计讨论，没有冻结合同或实现代码；不属于W10的交付或验收。
+在W10关闭时，W11仍处设计阶段、合同未冻结且尚未开始实现，因此不属于W10的交付或验收。之后W11合同已冻结并进入实施；截至2026-10-27，13文件核心回归、OpenAPI专项、scoped static、A2（1,222 complete-resolver files/796 unique mypy roots）及976-commit full-history Gitleaks（0 leaks）均通过。W11的182文件私有归档及两个公开metadata已创建、公开JSON复扫0 findings；此前状态记录独立归档审查尚在运行，现已完成25项核验且0 findings。当前计划与真实收据分别见[WAVE11_PLAN.md](./WAVE11_PLAN.md)和[WAVE11_STATUS.md](./WAVE11_STATUS.md)。
 
 ## 父迭代范围
 
