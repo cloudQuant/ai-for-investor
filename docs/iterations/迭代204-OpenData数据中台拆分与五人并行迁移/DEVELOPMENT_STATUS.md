@@ -286,3 +286,17 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 按 `CODE_QUALITY.md` §5.2，验收还需要真实来源的 income、balance、cashflow 响应证据。当前缺少这三类真实响应样本，因此不能将该入口视为验收完成或提交合并。源码和测试仍保留在本地；受限权限备份及测试证据位于 `/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-exact-fetcher/`。
 
 当前执行进程未发现 Fuyao API key；这只描述当前进程环境，不证明其他环境或部署不存在凭证。用户已声明 AkShare 与 Fuyao 可使用，无需重复确认该声明；真实响应证据和具体入口验收仍未完成。该本地实现不代表全 A 股覆盖、历史 PIT 能力、生产调度或生产落库已经完成。
+
+## 2026-10-27 OpenData PR #23–#25 增量
+
+以下三个 PR 已合入 OpenData `dev`，只记录各自完成的文档或隔离代码范围，不改变迭代204整体未完成状态。
+
+| PR | 已合入范围与验收证据 | 局限与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #23](https://github.com/cloudQuant/opendata/pull/23) | 增加数据权利登记文档，记录用户声明 AkShare 与 Fuyao 数据可使用及后续需核对的来源、范围和限制。 | 这是声明与治理记录，不是对供应商合同、具体端点、市场/历史范围、频率、保留期限或内部 API 用途的独立核验；没有因此创建可用于生产抓取的 grant。 |
+| [OpenData PR #24](https://github.com/cloudQuant/opendata/pull/24) | 增加受限的内容寻址 raw-evidence reader。它校验请求上下文与状态、可信 UTC 上界、manifest/body 摘要及文件系统安全属性，并限制证据大小。专用隔离测试 **28 项通过**，目标文件语句与分支覆盖率 **96.43%**；定向 Ruff、导入静默 mypy、Bandit 和安全 review 通过。 | 摘要用于完整性比对，不是签名或来源真实性证明；同一有效用户仍可能修改其可写文件。reader 尚无生产消费者、备份/恢复、生产 API ACL 或真实采集接线；不能据此认定 raw archive 已形成生产级不可变存储。 |
+| [OpenData PR #25](https://github.com/cloudQuant/opendata/pull/25) | 使用一份录制的 Sina 财报响应 fixture（103 行，单只上交所证券资产负债表样本），通过真实 HTTP transport 路径、已审查的子进程 worker、归档、SQLite 发布和 REST 分页完成端到端隔离验证；专项 **2 项测试通过**。 | fixture 不是本次 live 上游抓取，样本元数据也未独立验证来源签名/授权；测试不证明完整财报类型、字段单位、数据质量、全 A 股或北交所覆盖、逐标的历史起点/缺口、PIT/修订语义、生产数据库、生产 API、备份恢复或自然调度已验收。 |
+
+同期仍在本地开发的财报 capture/observation schema 与 store 尚未合入 `dev`，也没有可记录为完成的验收结论；它们不得被视为 PR #24 或 #25 已交付的生产归档/存储能力。Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据，继续保持未验收和未合并状态。
+
+全 A 股仍是首批目标范围，不是已完成的数据覆盖事实。全市场权威证券目录（含北交所与退市对象）、逐证券实际上市起点、数据源可保留的历史边界、按业务键核对 head/interior/tail 的证据均未由 #23–#25 提供。没有建立可回放的 PIT/历史修订数据，也没有启用线上采集任务或自然周期调度；上述范围继续 OPEN。
