@@ -1,6 +1,6 @@
 # 子代理开发与集成记录
 
-## 当前开发基线（2026-10-27）
+## 当前开发基线（2026-10-28）
 
 截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
 
@@ -427,3 +427,31 @@ Sina capture discovery API 与 Fuyao financial fetcher 仍未合并，状态和�
 | [AFI PR #93](https://github.com/cloudQuant/ai-for-investor/pull/93) | 已合入 `dev`。API/ORM 新建记录的 `schedule_enabled` 默认值改为 `false`；POST upsert 和 PATCH 在请求省略该字段时保留已有值；非布尔输入在写入前以 **400** 拒绝。**21 项隔离测试通过**，Ruff 通过，收据见本机私有目录 [`ruff-final.log`](</home/yun/Documents/ai-for-investor/var/reports/afi204/2026-10-28-pending-scanner-schedule/ruff-final.log>)。 | 数据库列的 server default 仍为 `true`，此次未修改；本次未批量改写既有行。请求省略该字段时保留原值，显式传入 `true` 或 `false` 仍可更新既有行。恢复任何扫描执行前必须先盘点现存启用记录，并确认启用范围。即时、计划和预计算扫描仍全部停用；此修正不恢复执行，也不改变该状态。 |
 
 OpenData PR #39 只为后续 discovery 查询提供索引基础，没有启用 Sina discovery，也未补足 source evidence 或 PIT。AFI PR #91 暂停相关扫描，直到消费端可依赖经验证的 OpenData 数据合同。Fuyao one-shot fetcher 仍未合并：没有完成真实来源响应取证，真实 income、balance、cashflow 证据仍待补齐。以上进展均不证明全 A 股真实数据、全历史恢复、生产调度或端到端查询链路已验收。
+
+## 2026-10-28 AFI PR #96–#97：数据治理管理员权限边界
+
+[AFI PR #96](https://github.com/cloudQuant/ai-for-investor/pull/96) 与 [AFI PR #97](https://github.com/cloudQuant/ai-for-investor/pull/97) 已合入 `dev`，只收紧 AFI 后端的管理员身份判定，不代表 OpenData 数据接线或迭代204整体验收。
+
+| PR | 已合入范围 | 隔离验证与边界 |
+| --- | --- | --- |
+| #96 | 旧数据治理七个路由统一经过 `require_data_admin_user`，兼容权限矩阵验证普通登录用户返回 **403**、匿名请求返回 **401**。 | 专项 **4 项通过**；本次 pytest 输出有 **2 条 pytest-timeout 配置警告**。该结果覆盖旧路由 guard，不是部署环境或生产数据库验收。 |
+| #97 | `/auth/me`、数据管理、quant tools 和 audit 均按数据库当前 `ADMIN` 角色判权；bootstrap 拒绝同名普通用户接管管理员；禁止注册配置管理员名及其等价别名。 | 扩展隔离组合 **31 项通过**：`test_auth` 16、`test_quant_tools` 3、`test_admin_identity` 5、`test_data_governance_compat` 4，以及 `test_db.py` 3 个定向节点：创建默认管理员、重复初始化幂等、启动时禁止自动 bootstrap 管理员。使用内存 SQLite 并隔离网络；结果有 **2 条 pytest-timeout 配置警告**。这不是完整后端回归。 |
+
+存量兼容风险：过去仅凭配置用户名、数据库中没有 `ADMIN` 角色的账号，现在不会获得管理员权限；同名普通账号也会被 bootstrap fail closed 拒绝接管。需要先人工核验账号身份，再通过受控流程授予数据库角色；本次不批量提升存量账号。MySQL collation 与并发竞态只由 fake 模拟覆盖，未在部署环境或真实 MySQL 上验收，因此不能据此宣称生产管理员授权边界已验证。
+
+`test_db.py` 的三个用例具体为 `test_create_default_admin_when_not_exists`、`test_create_default_admin_is_idempotent` 和 `test_ensure_database_ready_never_bootstraps_admin_at_startup`；没有运行该文件的完整套件。
+
+## 2026-10-28 当前待验收项与本地候选
+
+OpenData 凭证检查仅在仓库和当前可见运行环境范围内进行：只找到 `.env.example` 中空白的 `FUYAO_API_KEY` 配置项，未发现已配置的凭证。Docker 配置未检查；此结果不能推断其他运行环境不存在凭证，也不改变用户已声明可使用 AkShare/Fuyao 的范围。当前没有真实 Fuyao 响应证据。
+
+| 待验收项 | 当前证据 | 仍未验收的范围 |
+| --- | --- | --- |
+| OpenData 旧 `stock_daily` 只读源盘点计算器 | 本地未合并候选 `opendata/scripts/ops/legacy_stock_daily_inventory.py`；**50 项 fake-only 测试通过**，branch-inclusive 覆盖率 **99.18%**。 | 不执行实际迁移，不证明真实数据库一致性快照、真实源数据对账、逐证券历史完整性或生产运行；候选未合并。 |
+| OpenData Sina capture discovery API/Store | 本地候选回归 **232 项隔离测试通过**；Store branch-inclusive 覆盖 **90.43%**，API **88.64%**。隔离 MySQL 已通过分页、同连接 `REPEATABLE READ` 和 **10,000/10,001** 逻辑结果边界验证；查询 API 仍硬关闭。 | 最终 MySQL 验收仍未通过：`EXPLAIN ANALYZE` 格式断言失败，且外层清理阶段无法确认进程身份；内层 pidfd cleanup 报告成功。当前证据不代表 EXPLAIN/扫描预算验收或生产行为通过；候选未合并，也没有真实数据或生产 MySQL 验收。 |
+| OpenData Fuyao 财报入口与有限采集器 | 未合并的精确财报入口有 **147 项 synthetic 测试**、statement+branch 覆盖率 **99.16%**；受限 recorder 原型有 **34 项 synthetic 隔离测试**，限三个 endpoint、两个期间、`600519.SH` 一个标的且最多六次 GET，不重试。 | 未取得真实 income、balance、cashflow 响应样本；没有进行上游实时采集，也未验收 source-attempt gate、生产凭证、生产落库或自然周期。凭证检查仅确认当前可见范围内未找到已配置值。 |
+| OpenData publication outbox 与 visibility seal | 本地候选及设计审查指出，需要以 warehouse RunLedger 与 publication 的同一事务产生可证明的新 outbox 记录，并由独立的 post-commit 读路径完成 seal。 | 当前候选不能证明 outbox 与新 publication 同事务，也未形成独立 receipt/seal；未合并、未做生产验证。不能回填或伪造历史可见时间。 |
+
+AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结果继续标记为 `legacy_unverified`。PR #96–#97 只修正授权判定，不会启用扫描或使旧结果变成可信数据。迭代计划最新记录的任务快照为 **98 项（8 DEV_DONE、9 IN_PROGRESS、81 PLANNED）**；各局部 PR 与合成/隔离测试不会自动关闭父级控制任务。
+
+全 A 股逐标的真实采集和逐证券 head/interior/tail 历史核对、PIT/修订历史、Fuyao 真实响应、完整旧任务迁移、生产 MySQL/API/授权/自然调度与备份恢复仍未完成或未验收。**迭代204整体仍未完成。**
