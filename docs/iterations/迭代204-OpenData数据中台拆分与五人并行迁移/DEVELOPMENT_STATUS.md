@@ -378,3 +378,11 @@ OpenData 迁移工作清单仍在开发，尚无通过项目覆盖率门槛的�
 恢复 worker 候选源码副本和测试记录保存在 [`2026-10-28-recovery-worker-candidate`](</home/yun/Documents/ai-for-investor/var/reports/afi204/2026-10-28-recovery-worker-candidate/>)；隔离测试 **44 项通过**，收据见 [pytest.log](</home/yun/Documents/ai-for-investor/var/reports/afi204/2026-10-28-recovery-worker-candidate/pytest.log>)。这仍是候选验证：当前 `dev` 缺少所需 controllers/providers/scheduler 接口；强杀后的恢复行为、来源证据与授权、自动执行安全尚未验收。因此不得恢复为可运行的 worker 入口。systemd timer 仍会自动触发恢复 service，而该 service 因 worker 脚本缺失继续失败；没有成功恢复运行。
 
 以上均为局部交付与隔离证据；迭代204整体仍未完成。
+
+## OpenData PR #33：runtime inventory 实例身份与快照边界（2026-10-28）
+
+[OpenData PR #33](https://github.com/cloudQuant/opendata/pull/33) 已合入 `dev`。联合隔离回归 **213 项通过**；定向覆盖率为 runtime inventory **89%**、历史迁移 planner **93%**。本次验证保持既有历史 `1.0` 清单哈希不变。验收证据与日志保存在本机私有目录 [`2026-10-28-pending-inventory-identity`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-inventory-identity>)。
+
+在一次性 MySQL 8.4 实例的 Unix socket 路径上，内部事务/实例身份验收通过：校验了 UUID pin、InnoDB 一致性快照，并确认 MyISAM 表会被拒绝。该结果只覆盖本机隔离 socket 测试；TCP 连接及运行服务实际 endpoint 集成未测试。生产 service 的配置来源和预期 UUID pin 仍需独立核实。本次没有读取生产数据或对生产执行 DDL；任何后续生产核验必须保持生产 DDL 禁用，并在确认配置来源与实例 pin 后另行审查。不能将此 PR 视为生产数据盘点或数据库接线验收。
+
+以上只关闭局部代码与隔离验证范围；生产 inventory、数据读取、完整历史恢复、自动调度和切换仍未验收，迭代204整体未完成。
