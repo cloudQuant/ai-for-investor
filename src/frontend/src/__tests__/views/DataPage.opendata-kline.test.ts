@@ -407,13 +407,11 @@ describe('DataPage OpenData direct daily chart', () => {
   // styles for disconnected nodes, so inspect the inline v-show display value.
   function expectDirectChartHidden(page: VueWrapper) {
     const chart = page.get('[data-test="market-opendata-direct-chart"]')
-    expect(chart.exists()).toBe(true)
     expect((chart.element as HTMLElement).style.display).toBe('none')
   }
 
   function expectDirectChartShown(page: VueWrapper) {
     const chart = page.get('[data-test="market-opendata-direct-chart"]')
-    expect(chart.exists()).toBe(true)
     expect((chart.element as HTMLElement).style.display).not.toBe('none')
   }
 

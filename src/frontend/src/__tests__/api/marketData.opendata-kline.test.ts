@@ -289,22 +289,26 @@ describe('market-data capability route census', () => {
     ['both source-policy anchors', (value: Record<string, unknown>) => {
       const states = value.capability_states as Array<Record<string, unknown>>
       const routeId = LEGACY_KLINE_ROUTE
-      states.push(lifecycleState(
-        `market-data.route:${routeId}`,
-        'route',
-        routeId,
-        true,
-      ))
+      states.push({
+        ...lifecycleState(
+          `market-data.route:${routeId}`,
+          'route',
+          routeId,
+          true,
+        ),
+      })
     }],
     ['OpenData census with an extra route', (value: Record<string, unknown>) => {
       const states = value.capability_states as Array<Record<string, unknown>>
       const routeId = 'akshare-stock-primary-v1'
-      states.push(lifecycleState(
-        `market-data.route:${routeId}`,
-        'route',
-        routeId,
-        false,
-      ))
+      states.push({
+        ...lifecycleState(
+          `market-data.route:${routeId}`,
+          'route',
+          routeId,
+          false,
+        ),
+      })
     }],
     ['malformed lifecycle field', (value: Record<string, unknown>) => {
       const states = value.capability_states as Array<Record<string, unknown>>
