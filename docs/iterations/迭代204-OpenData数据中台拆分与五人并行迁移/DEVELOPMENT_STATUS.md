@@ -297,7 +297,7 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 | [OpenData PR #24](https://github.com/cloudQuant/opendata/pull/24) | 增加受限的内容寻址 raw-evidence reader。它校验请求上下文与状态、可信 UTC 上界、manifest/body 摘要及文件系统安全属性，并限制证据大小。专用隔离测试 **28 项通过**，目标文件语句与分支覆盖率 **96.43%**；定向 Ruff、导入静默 mypy、Bandit 和安全 review 通过。 | 摘要用于完整性比对，不是签名或来源真实性证明；同一有效用户仍可能修改其可写文件。reader 尚无生产消费者、备份/恢复、生产 API ACL 或真实采集接线；不能据此认定 raw archive 已形成生产级不可变存储。 |
 | [OpenData PR #25](https://github.com/cloudQuant/opendata/pull/25) | 使用一份录制的 Sina 财报响应 fixture（103 行，单只上交所证券资产负债表样本），通过真实 HTTP transport 路径、已审查的子进程 worker、归档、SQLite 发布和 REST 分页完成端到端隔离验证；专项 **2 项测试通过**。 | fixture 不是本次 live 上游抓取，样本元数据也未独立验证来源签名/授权；测试不证明完整财报类型、字段单位、数据质量、全 A 股或北交所覆盖、逐标的历史起点/缺口、PIT/修订语义、生产数据库、生产 API、备份恢复或自然调度已验收。 |
 
-本段记录的是 PR #23–#25 合入时的历史状态：当时财报 capture/observation schema 与 store 尚未合入 `dev`。当前 schema 状态以 OpenData PR #26 节为准；store 仍是本地未验收实现，不能视为 PR #24 或 #25 已交付的生产归档/存储能力。Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据，继续保持未验收和未合并状态。
+本段记录的是 PR #23–#25 合入时的历史状态：当时财报 capture/observation schema 与 store 尚未合入 `dev`。后续 schema 和 store 的合并状态分别见 OpenData PR #26、#27 节。Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据，继续保持未验收和未合并状态。
 
 全 A 股仍是首批目标范围，不是已完成的数据覆盖事实。全市场权威证券目录（含北交所与退市对象）、逐证券实际上市起点、数据源可保留的历史边界、按业务键核对 head/interior/tail 的证据均未由 #23–#25 提供。没有建立可回放的 PIT/历史修订数据，也没有启用线上采集任务或自然周期调度；上述范围继续 OPEN。
 
@@ -309,4 +309,40 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 
 边界：没有实测 MySQL 8.0；没有生产数据库、生产部署或线上写入验证。独立 schema 与应用层约束不会阻止有数据库写权限的主体直接篡改或删除数据，因此不构成数据库防篡改/WORM 保证；也没有 raw evidence 到 schema 的生产 writer、备份恢复或运维接线。该迁移不证明全 A 股/北交所历史覆盖，也不建立 PIT 或历史修订能力。
 
-财报 observation store 仍保留在 OpenData 本地，**未验收、未合入 `dev`**。当前可复核的首次运行记录在 [`2026-10-27-pending-financial-store`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store>)：**4 failed、12 passed**，目标文件覆盖率 **69.18%**。实现依赖尚未验收或合并的 Fuyao 精确财报 fetcher，首次运行还暴露了失败断言与 fixture/时间、类型绑定问题；这组失败记录不能当作后续修复结果。未验收源码、测试副本与失败/覆盖率证据仍被保留在 OpenData 本地及上述目录，不应提交为已完成能力。store 通过验收前，不得将 PR #26 的 schema 描述为可用的财报落库链路。
+财报 observation store 在最初与未验收的 Fuyao 精确财报 fetcher 耦合实现阶段尚未验收。该阶段首次测试为 **4 failed、12 passed**，目标文件覆盖率 **69.18%**；失败和覆盖率原始记录分别保存在 [`first-pytest-failed.log`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/first-pytest-failed.log>) 与 [`first-coverage.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/first-coverage.json>)。这是早期失败历史，不代表之后解耦和修复阶段的结果；后续验证及合并状态见 PR #27 节。早期实现与失败证据继续保留。PR #26 本身只交付 schema/migration，不能单独视为完整的财报落库链路。
+
+## 2026-10-27 AFI PR #79–#80 与 OpenData store 解耦后的局部进展
+
+### AFI PR #79：财报同比数据缺失时不再用相邻披露替代
+
+[AFI PR #79](https://github.com/cloudQuant/ai-for-investor/pull/79) 已合入 `dev`。当来源没有提供同比值时，不再把相邻披露（例如年报与后续季度）误算为同比增长；使用来源给出的同比值，缺失时显示数据不足。两项离线定向测试通过，覆盖年报/季度相邻披露及保留来源同比值；定向 Ruff 与独立 review 通过。证据：[pytest.log](</home/yun/Documents/ai-for-investor/var/reports/afi204/2026-10-27-financial-yoy/pytest.log>)。这些测试不验证真实上游对同比字段的定义、覆盖或数值质量；相关单位/语义仍需来源级核验。
+
+### AFI PR #80：财报分析叙述绑定到可用证据
+
+[AFI PR #80](https://github.com/cloudQuant/ai-for-investor/pull/80) 已合入 `dev`。报告区分报告期与披露时间，不再无证据断言盈利稳定、股东回报、两位数 ROE 或数据质量；缺值明确呈现，参考价格与实时行情分开，分析文字根据可用财务、价格和新闻证据表达。网络关闭且配置隔离下 **19 项定向离线测试通过**，定向 Ruff 与独立 review 通过；证据：[pytest.log](</home/yun/Documents/ai-for-investor/var/reports/afi204/2026-10-27-financial-report/pytest.log>)。该改动没有补足公告时点历史证据，因此不能支持历史 PIT 分析。财务字段单位与来源百分比语义、既有财务评分逻辑及行业专用模板假设仍未完成或验证；CI 修复仍按前述约定暂缓。
+
+### OpenData financial observation store：PR #27 合并前的解耦回归收据
+
+store 已从未验收的 Fuyao 精确财报 fetcher 解耦；合并前的隔离回归使用合成输入，**54 项测试通过**，目标 store 文件语句与分支综合覆盖率 **93.11%**。收据：[decoupled-pytest.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/decoupled-pytest.log>)、[decoupled-coverage.json](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/decoupled-coverage.json>)。早期首次运行的 4 failed/12 passed 与 69.18% 记录继续保留为历史，不被后续结果覆盖；该预合并回归结果由 OpenData PR #27 的 SQLite 收据再次确认。
+
+在上述预合并收据时，store 尚未合入 `dev`；当前状态见下方 PR #27。合成数据不等于真实 Fuyao 上游响应或授权/字段语义验收。源码、测试副本与分阶段证据继续保存在 [`2026-10-27-pending-financial-store`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store>)。
+
+以上增量不改变全 A 股仍为目标而非已完成覆盖的状态，也不建立 PIT、单位/来源百分比语义、评分或行业模板能力。逐标的全历史、财报修订历史、真实来源到 OpenData 的生产采集、调度、发布及 AFI 全部消费者迁移仍保持 OPEN。
+
+## OpenData PR #27：financial observation store 合并与受限验收
+
+[OpenData PR #27](https://github.com/cloudQuant/opendata/pull/27) 已合入 `dev`，交付独立的财报 observation store：在事务前验证归档响应和 decoder references，再使用调用方提供的数据库连接插入或比较 capture、observations、source pointers 与 quarantined rows。它是可复用的存储原语；**未接入生产 RunLedger worker/job、实际采集任务、调度或 REST API**。后续 PR #28 增加了使用真实 RunLedger SQLite 路径的合成数据事务测试，见下节；尚未形成生产采集/查询链路。
+
+验收证据保存在 [`2026-10-27-pending-financial-store`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store>)（该历史目录同时保存失败与修正后的收据）：常规隔离 SQLite 回归为 **54 passed、4 个仅 MySQL 用例 skipped**，statement+branch 综合覆盖率 **93.11%**；结果见 [final-sqlite-pytest.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/final-sqlite-pytest.log>) 与 [final-sqlite-coverage.json](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/final-sqlite-coverage.json>)。独立临时 **MySQL 8.4.0** 实例上的 4 个 opt-in 用例通过，覆盖事务提交/回滚、精确数值，以及 capture replay、共享 observation 和冲突 capture 的真实锁等待行为；测试实例及随机 schema 已清理。MySQL 收据见 [final-mysql-pytest.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/final-mysql-pytest.log>) 与 [final-mysql-results.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/final-mysql-results.log>)。
+
+初次 MySQL 隔离运行因 pytest 临时 fixture 路径不在私有 `TMPDIR` 下而失败；失败发生在 fixture 路径断言，记录见 [mysql-first-pytest-failed.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/mysql-first-pytest-failed.log>) 和 [mysql-first-results.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/mysql-first-results.log>)。修正隔离目录设置后的上述独立 MySQL 8.4 重跑通过，初次失败仍作为验收审计记录保留。
+
+局限仍明确：MySQL **8.0 未测试**；source identity 与单位映射属于 operator declaration，mapping digest 未对完整单位映射表重新计算核验；单次 capture 最多 **64 行**，超限即拒绝、不静默截断。raw filesystem 写入与 SQL 事务不具原子性，且直接数据库 UPDATE/DELETE 未被阻止，故不提供 WORM/数据库防篡改保证。用例使用合成输入，未验收真实 Fuyao 响应、授权、source field/unit semantics、全 A 股或北交所历史完整性；PIT 与财报修订历史也未完成。
+
+该 PR 的定向 Ruff、Bandit 和导入静默 mypy 通过；相应记录见 [bandit.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/bandit.log>) 与 [target-mypy.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/target-mypy.log>)。full-import mypy 仍报告既有的第三方 YAML/requests stubs 与其他模块类型问题，未作为通过项；记录见 [full-import-mypy-failure.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-financial-store/full-import-mypy-failure.log>)。AFI #79/#80 已合入，但财报字段单位/来源百分比语义、公告时点 PIT、既有评分逻辑和行业模板假设仍未完成；OpenData store 合并也不改变全 A 股完整历史、Fuyao 上游采集与生产 REST/调度接线尚未完成的状态。
+
+## OpenData PR #28：RunLedger SQLite 事务集成测试
+
+[OpenData PR #28](https://github.com/cloudQuant/opendata/pull/28) 已合入 `dev`，增加真实 RunLedger SQLite 路径上的 **3 项合成数据事务测试**：成功提交、callback 失败回滚，以及 callback 执行后租约到期时回滚。三项测试通过；证据：[pytest.log](</home/yun/Documents/opendata/var/reports/afi204/2026-10-27-runledger-financial/pytest.log>)。
+
+该验证覆盖 SQLite 上的本地测试级事务接线，输入仍为合成财报数据。MySQL RunLedger 并发/事务行为、生产 worker/job、真实 Fuyao 上游采集、调度和 REST 发布仍未完成；不得将这三项测试解释为生产 RunLedger 接线或真实财报数据验收。
