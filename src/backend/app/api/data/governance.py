@@ -3,11 +3,15 @@ import typing
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.data.deps import get_current_db_user
+from app.api.data.deps import require_data_admin_user
 from app.db.database import get_db
 from app.services.data_connectors import DataGovernanceService
 
-router = APIRouter(prefix="/data-governance", tags=["Data Governance"])
+router = APIRouter(
+    prefix="/data-governance",
+    tags=["Data Governance"],
+    dependencies=[Depends(require_data_admin_user)],
+)
 
 
 def get_data_governance_service(db: AsyncSession = Depends(get_db)) -> DataGovernanceService:
@@ -16,7 +20,6 @@ def get_data_governance_service(db: AsyncSession = Depends(get_db)) -> DataGover
 
 @router.post("/bootstrap", response_model=None)
 async def bootstrap_data_governance(
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     return await service.bootstrap()
@@ -24,7 +27,6 @@ async def bootstrap_data_governance(
 
 @router.get("/providers", response_model=None)
 async def list_providers(
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     return await service.list_providers()
@@ -33,7 +35,6 @@ async def list_providers(
 @router.get("/endpoints", response_model=None)
 async def list_endpoints(
     provider_id: str | None = None,
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     return await service.list_endpoints(provider_id=provider_id)
@@ -43,7 +44,6 @@ async def list_endpoints(
 async def preview_endpoint(
     endpoint_id: str,
     payload: dict | None = None,
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     result = await service.preview_endpoint(endpoint_id, dict((payload or {}).get("params") or {}))
@@ -55,7 +55,6 @@ async def preview_endpoint(
 @router.get("/jobs", response_model=None)
 async def list_jobs(
     endpoint_id: str | None = None,
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     return await service.list_jobs(endpoint_id=endpoint_id)
@@ -64,7 +63,6 @@ async def list_jobs(
 @router.get("/jobs/{job_id}", response_model=None)
 async def get_job(
     job_id: str,
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     result = await service.get_job(job_id)
@@ -79,7 +77,6 @@ async def get_job(
 async def create_job(
     endpoint_id: str,
     payload: dict | None = None,
-    current_user: typing.Any = Depends(get_current_db_user),
     service: DataGovernanceService = Depends(get_data_governance_service),
 ) -> typing.Any:
     result = await service.create_job(endpoint_id, dict((payload or {}).get("params") or {}))
