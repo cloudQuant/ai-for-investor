@@ -45,6 +45,7 @@ import {
   type OpenDataDirectKlineRecord,
   type OpenDataDirectKlineRequest,
   type OpenDataDirectKlineResponse,
+  type OpenDataStockDailyFreshnessResponse,
 } from '@/api/marketData'
 import { CANDLE_DOWN_COLOR, CANDLE_ITEM_STYLE, CANDLE_UP_COLOR } from '@/constants/chartColors'
 import type { DataTable } from '@/types'
@@ -80,6 +81,17 @@ export interface OpenDataDirectKlineDisplayState {
   reason: OpenDataDirectKlineDisplayReason | null
 }
 
+export type OpenDataStockDailyFreshnessDisplayStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'unavailable'
+
+export interface OpenDataStockDailyFreshnessDisplayState {
+  status: OpenDataStockDailyFreshnessDisplayStatus
+  response: OpenDataStockDailyFreshnessResponse | null
+}
+
 function emptyOpenDataDirectKlineDisplay(): OpenDataDirectKlineDisplayState {
   return {
     status: 'idle',
@@ -94,6 +106,10 @@ function emptyOpenDataDirectKlineDisplay(): OpenDataDirectKlineDisplayState {
     durableReceipt: null,
     reason: null,
   }
+}
+
+function emptyOpenDataStockDailyFreshnessDisplay(): OpenDataStockDailyFreshnessDisplayState {
+  return { status: 'idle', response: null }
 }
 
 function isValidDirectBusinessDateRange(start: string, end: string): boolean {
@@ -852,6 +868,9 @@ export function useDataPage() {
   const openDataDirectKlineDisplay = ref<OpenDataDirectKlineDisplayState>(
     emptyOpenDataDirectKlineDisplay(),
   )
+  const openDataStockDailyFreshnessDisplay = ref<OpenDataStockDailyFreshnessDisplayState>(
+    emptyOpenDataStockDailyFreshnessDisplay(),
+  )
   const chartMode = ref<ChartMode>('price')
   const marketChartRef = ref<HTMLDivElement>()
   const instrumentOptions = ref<MarketInstrumentOption[]>([])
@@ -900,7 +919,7 @@ export function useDataPage() {
   let lookupRequestId = 0
   let activeMarketDataQueryAbortController: AbortController | null = null
   let activeMarketDataQuerySelectionKey: string | null = null
-  let marketDataCapabilitiesResolved = false
+  const marketDataCapabilitiesResolved = ref(false)
   let marketDataCapabilitiesRequest: Promise<MarketDataCapabilitiesResponse | null> | null = null
   const marketDataRouteSelection = ref<MarketDataRouteSelection>({
     mode: 'unknown',
@@ -909,9 +928,38 @@ export function useDataPage() {
   })
   let openDataDirectRequestEpoch = 0
   let activeOpenDataDirectAbortController: AbortController | null = null
+  let openDataStockDailyFreshnessRequestEpoch = 0
+  let activeOpenDataStockDailyFreshnessAbortController: AbortController | null = null
+  let marketPageBootstrapEpoch = 0
 
   const snapshot = computed<Record<string, unknown>>(() => result.value?.snapshot || {})
   const historyRows = computed(() => result.value?.history.rows || [])
+  const isOpenDataOnlyStockRoute = computed(() => (
+    form.asset_type === 'stock'
+    && marketDataCapabilitiesResolved.value
+    && marketDataRouteSelection.value.mode === 'opendata_only'
+  ))
+  const canReadOpenDataStockDailyFreshness = computed(() => (
+    isOpenDataOnlyStockRoute.value
+    && marketDataRouteSelection.value.can_query
+  ))
+  const showLocalCoverageMatrix = computed(() => (
+    form.asset_type !== 'stock'
+    || (
+      marketDataCapabilitiesResolved.value
+      && marketDataRouteSelection.value.mode === 'legacy'
+    )
+  ))
+  const stockDataRouteNotice = computed(() => {
+    if (form.asset_type !== 'stock') return null
+    if (!marketDataCapabilitiesResolved.value) return 'resolving'
+    if (marketDataRouteSelection.value.mode === 'unknown') return 'unknown'
+    if (
+      marketDataRouteSelection.value.mode === 'opendata_only'
+      && !marketDataRouteSelection.value.can_query
+    ) return 'opendata_unavailable'
+    return null
+  })
   const selectedMarketPageFamily = computed(() => {
     const bundle = marketDataQueryBundle.value
     if (!bundle || bundle.requested_asset_type !== form.asset_type) return null
@@ -1397,7 +1445,9 @@ export function useDataPage() {
   })
 
   onUnmounted(() => {
+    marketPageBootstrapEpoch += 1
     invalidateOpenDataDirectRequest()
+    invalidateOpenDataStockDailyFreshnessRequest()
     abortActiveMarketDataQueryLifecycle()
     window.removeEventListener('resize', handleViewportResize)
     disposeMarketChart()
@@ -1541,7 +1591,7 @@ export function useDataPage() {
   }
 
   async function resolveMarketDataCapabilities(): Promise<MarketDataCapabilitiesResponse | null> {
-    if (marketDataCapabilitiesResolved) return marketDataCapabilities.value
+    if (marketDataCapabilitiesResolved.value) return marketDataCapabilities.value
     if (marketDataCapabilitiesRequest) return marketDataCapabilitiesRequest
 
     marketDataCapabilitiesRequest = marketDataApi.getCapabilities()
@@ -1558,10 +1608,74 @@ export function useDataPage() {
         return null
       })
       .finally(() => {
-        marketDataCapabilitiesResolved = true
+        marketDataCapabilitiesResolved.value = true
         marketDataCapabilitiesRequest = null
       })
     return marketDataCapabilitiesRequest
+  }
+
+  function invalidateOpenDataStockDailyFreshnessRequest(): void {
+    openDataStockDailyFreshnessRequestEpoch += 1
+    const controller = activeOpenDataStockDailyFreshnessAbortController
+    activeOpenDataStockDailyFreshnessAbortController = null
+    if (controller && !controller.signal.aborted) controller.abort()
+    openDataStockDailyFreshnessDisplay.value = emptyOpenDataStockDailyFreshnessDisplay()
+  }
+
+  function refreshOpenDataStockDailyFreshness(): void {
+    if (!canReadOpenDataStockDailyFreshness.value) return
+
+    const previousController = activeOpenDataStockDailyFreshnessAbortController
+    activeOpenDataStockDailyFreshnessAbortController = null
+    if (previousController && !previousController.signal.aborted) previousController.abort()
+
+    const controller = new AbortController()
+    const requestId = ++openDataStockDailyFreshnessRequestEpoch
+    activeOpenDataStockDailyFreshnessAbortController = controller
+    openDataStockDailyFreshnessDisplay.value = { status: 'loading', response: null }
+
+    void marketDataApi.getOpenDataStockDailyFreshness({ signal: controller.signal })
+      .then((response) => {
+        if (
+          requestId !== openDataStockDailyFreshnessRequestEpoch
+          || activeOpenDataStockDailyFreshnessAbortController !== controller
+          || controller.signal.aborted
+          || !canReadOpenDataStockDailyFreshness.value
+        ) return
+        openDataStockDailyFreshnessDisplay.value = { status: 'ready', response }
+      })
+      .catch(() => {
+        if (
+          requestId !== openDataStockDailyFreshnessRequestEpoch
+          || activeOpenDataStockDailyFreshnessAbortController !== controller
+          || controller.signal.aborted
+          || !canReadOpenDataStockDailyFreshness.value
+        ) return
+        // Transport and protocol errors are not represented as `missing` and
+        // never fall back to the local coverage matrix.
+        openDataStockDailyFreshnessDisplay.value = { status: 'unavailable', response: null }
+      })
+      .finally(() => {
+        if (activeOpenDataStockDailyFreshnessAbortController === controller) {
+          activeOpenDataStockDailyFreshnessAbortController = null
+        }
+      })
+  }
+
+  function isLocalCoverageMatrixAllowed(): boolean {
+    return form.asset_type !== 'stock'
+      || (
+        marketDataCapabilitiesResolved.value
+        && marketDataRouteSelection.value.mode === 'legacy'
+      )
+  }
+
+  function clearLocalCoverageMatrix(): void {
+    coverageRequestId += 1
+    coverageRows.value = []
+    coverageLoading.value = false
+    coverageRefreshing.value = false
+    coverageError.value = ''
   }
 
   function assetLabel(assetType: MarketAssetType) {
@@ -1580,7 +1694,10 @@ export function useDataPage() {
 
   function applyAssetType(assetType: MarketAssetType, resetResult = true) {
     const changed = form.asset_type !== assetType
-    if (changed) invalidateMarketDataQueryLifecycle()
+    if (changed) {
+      invalidateMarketDataQueryLifecycle()
+      invalidateOpenDataStockDailyFreshnessRequest()
+    }
     form.asset_type = assetType
     restoreAssetSelection(assetType)
     if (changed) {
@@ -2625,7 +2742,7 @@ export function useDataPage() {
 
   async function routeOpenDataDirectQuery(): Promise<boolean> {
     invalidateMarketDataQueryLifecycle()
-    if (marketDataCapabilitiesResolved && marketDataRouteSelection.value.mode === 'legacy') {
+    if (marketDataCapabilitiesResolved.value && marketDataRouteSelection.value.mode === 'legacy') {
       invalidateOpenDataDirectRequest()
       dataPageDisplayMode.value = 'legacy'
       return false
@@ -2762,6 +2879,14 @@ export function useDataPage() {
     if (!requestedSymbol) {
       ElMessage.error(t('dataMgmt.msgSymbolRequired'))
       return
+    }
+    if (queryMode === 'local_only' && requestedAssetType === 'stock') {
+      if (!marketDataCapabilitiesResolved.value) await resolveMarketDataCapabilities()
+      if (
+        form.asset_type !== requestedAssetType
+        || formSymbolText() !== requestedSymbol
+        || marketDataRouteSelection.value.mode !== 'legacy'
+      ) return
     }
     if (queryMode === 'local_first') {
       if (await routeOpenDataDirectQuery()) return
@@ -3098,7 +3223,12 @@ export function useDataPage() {
   }
 
   async function loadCoverageMatrix() {
+    if (!isLocalCoverageMatrixAllowed()) {
+      clearLocalCoverageMatrix()
+      return
+    }
     const requestId = ++coverageRequestId
+    const requestAssetType = form.asset_type
     coverageLoading.value = true
     coverageError.value = ''
     try {
@@ -3108,10 +3238,18 @@ export function useDataPage() {
         provider: coverageProvider.value.trim() || undefined,
         limit: 200,
       })
-      if (requestId !== coverageRequestId) return
+      if (
+        requestId !== coverageRequestId
+        || requestAssetType !== form.asset_type
+        || !isLocalCoverageMatrixAllowed()
+      ) return
       coverageRows.value = response.items
     } catch {
-      if (requestId === coverageRequestId) {
+      if (
+        requestId === coverageRequestId
+        && requestAssetType === form.asset_type
+        && isLocalCoverageMatrixAllowed()
+      ) {
         coverageRows.value = []
         coverageError.value = t('dataMgmt.coverageLoadFailed')
       }
@@ -3123,6 +3261,12 @@ export function useDataPage() {
   }
 
   async function refreshCoverageMatrix() {
+    if (!isLocalCoverageMatrixAllowed()) {
+      clearLocalCoverageMatrix()
+      return
+    }
+    const requestId = ++coverageRequestId
+    const requestAssetType = form.asset_type
     coverageRefreshing.value = true
     coverageError.value = ''
     try {
@@ -3131,13 +3275,23 @@ export function useDataPage() {
         timeframe: coverageTimeframe.value || undefined,
         limit: 500,
       })
+      if (
+        requestId !== coverageRequestId
+        || requestAssetType !== form.asset_type
+        || !isLocalCoverageMatrixAllowed()
+      ) return
       coverageRows.value = response.items
       ElMessage.success(t('dataMgmt.coverageRefreshed'))
     } catch {
+      if (
+        requestId !== coverageRequestId
+        || requestAssetType !== form.asset_type
+        || !isLocalCoverageMatrixAllowed()
+      ) return
       coverageError.value = t('dataMgmt.coverageRefreshFailed')
       ElMessage.error(coverageError.value)
     } finally {
-      coverageRefreshing.value = false
+      if (requestId === coverageRequestId) coverageRefreshing.value = false
     }
   }
 
@@ -3276,14 +3430,43 @@ export function useDataPage() {
   }
 
   function loadInstrumentsThenLookup(): void {
+    const bootstrapId = ++marketPageBootstrapEpoch
     if (form.asset_type !== 'option') {
       if (form.asset_type === 'stock') {
         const requestedSymbol = formSymbolText()
-        void loadCoverageMatrix()
         void (async () => {
+          await resolveMarketDataCapabilities()
+          if (
+            bootstrapId !== marketPageBootstrapEpoch
+            || form.asset_type !== 'stock'
+            || formSymbolText() !== requestedSymbol
+          ) return
+
+          if (marketDataRouteSelection.value.mode === 'legacy') {
+            void loadCoverageMatrix()
+            invalidateOpenDataStockDailyFreshnessRequest()
+          } else {
+            clearLocalCoverageMatrix()
+            if (canReadOpenDataStockDailyFreshness.value) {
+              refreshOpenDataStockDailyFreshness()
+            } else {
+              invalidateOpenDataStockDailyFreshnessRequest()
+            }
+          }
+
           await loadInstrumentOptions(requestedSymbol)
-          if (form.asset_type !== 'stock' || formSymbolText() !== requestedSymbol) return
-          await lookupInstrument('local_only')
+          if (
+            bootstrapId !== marketPageBootstrapEpoch
+            || form.asset_type !== 'stock'
+            || formSymbolText() !== requestedSymbol
+          ) return
+          // The compatibility lookup reads AFI's local market warehouse. It
+          // remains the legacy bootstrap path only when the capability census
+          // explicitly selects that route; OpenData and unknown states wait
+          // for an explicit, bounded direct query instead.
+          if (marketDataRouteSelection.value.mode === 'legacy') {
+            await lookupInstrument('local_only')
+          }
         })()
         return
       }
@@ -3296,6 +3479,7 @@ export function useDataPage() {
     // list, so that list must resolve before the first lookup is issued.
     void (async () => {
       await loadInstrumentOptions(formSymbolText(), true)
+      if (bootstrapId !== marketPageBootstrapEpoch || form.asset_type !== 'option') return
       void loadCoverageMatrix()
       if (formSymbolText()) await lookupInstrument('local_only')
     })()
@@ -4532,6 +4716,10 @@ export function useDataPage() {
     loading,
     dataPageDisplayMode,
     openDataDirectKlineDisplay,
+    openDataStockDailyFreshnessDisplay,
+    canReadOpenDataStockDailyFreshness,
+    stockDataRouteNotice,
+    showLocalCoverageMatrix,
     result,
     chartMode,
     marketChartRef,
@@ -4623,6 +4811,7 @@ export function useDataPage() {
     restoreAssetSelection,
     selectDataFamily,
     lookupInstrument,
+    refreshOpenDataStockDailyFreshness,
     loadCoverageMatrix,
     refreshCoverageMatrix,
     searchInstrumentOptions,

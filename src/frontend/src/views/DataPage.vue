@@ -200,6 +200,113 @@
     </el-card>
 
     <section
+      v-if="stockDataRouteNotice"
+      class="stock-data-route-notice"
+      data-test="stock-data-route-notice"
+      aria-live="polite"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        :title="t(`dataMgmt.stockDailyFreshnessRouteNotice.${stockDataRouteNotice}`)"
+      />
+    </section>
+
+    <section
+      v-if="canReadOpenDataStockDailyFreshness"
+      class="opendata-stock-daily-freshness"
+      data-test="opendata-stock-daily-freshness"
+      aria-live="polite"
+    >
+      <el-card class="market-chart-card">
+        <template #header>
+          <div class="section-header">
+            <div>
+              <span>{{ t('dataMgmt.stockDailyFreshnessTitle') }}</span>
+              <small>{{ t('dataMgmt.stockDailyFreshnessDisclaimer') }}</small>
+            </div>
+            <el-button
+              size="small"
+              :loading="openDataStockDailyFreshnessDisplay.status === 'loading'"
+              data-test="opendata-stock-daily-freshness-refresh"
+              @click="refreshOpenDataStockDailyFreshness"
+            >
+              <el-icon aria-hidden="true">
+                <Refresh />
+              </el-icon>
+              <span>{{ t('dataMgmt.stockDailyFreshnessRefresh') }}</span>
+            </el-button>
+          </div>
+        </template>
+
+        <p
+          v-if="openDataStockDailyFreshnessDisplay.status === 'idle'"
+          role="status"
+          data-test="opendata-stock-daily-freshness-idle"
+        >
+          {{ t('dataMgmt.stockDailyFreshnessIdle') }}
+        </p>
+        <p
+          v-else-if="openDataStockDailyFreshnessDisplay.status === 'loading'"
+          role="status"
+          data-test="opendata-stock-daily-freshness-loading"
+        >
+          {{ t('dataMgmt.stockDailyFreshnessLoading') }}
+        </p>
+        <el-alert
+          v-else-if="openDataStockDailyFreshnessDisplay.status === 'unavailable'"
+          type="warning"
+          :closable="false"
+          show-icon
+          data-test="opendata-stock-daily-freshness-unavailable"
+          :title="t('dataMgmt.stockDailyFreshnessUnavailable')"
+        />
+        <template v-else-if="openDataStockDailyFreshnessDisplay.response">
+          <el-tag
+            :type="openDataStockDailyFreshnessDisplay.response.status === 'fresh'
+              ? 'success'
+              : openDataStockDailyFreshnessDisplay.response.status === 'stale'
+                ? 'warning'
+                : 'info'"
+            data-test="opendata-stock-daily-freshness-status"
+          >
+            {{ t(`dataMgmt.stockDailyFreshnessStatus.${openDataStockDailyFreshnessDisplay.response.status}`) }}
+          </el-tag>
+          <dl class="opendata-stock-daily-freshness-values">
+            <div>
+              <dt>{{ t('dataMgmt.stockDailyFreshnessExpectedDate') }}</dt>
+              <dd>{{ openDataStockDailyFreshnessDisplay.response.expected_data_date }}</dd>
+            </div>
+            <div v-if="openDataStockDailyFreshnessDisplay.response.status !== 'missing'">
+              <dt>{{ t('dataMgmt.stockDailyFreshnessLatestDate') }}</dt>
+              <dd>{{ openDataStockDailyFreshnessDisplay.response.latest }}</dd>
+            </div>
+            <div v-if="openDataStockDailyFreshnessDisplay.response.status !== 'missing'">
+              <dt>{{ t('dataMgmt.stockDailyFreshnessDateDifference') }}</dt>
+              <dd>{{ openDataStockDailyFreshnessDisplay.response.lag_days }}</dd>
+            </div>
+            <div v-if="openDataStockDailyFreshnessDisplay.response.status !== 'missing'">
+              <dt>{{ t('dataMgmt.stockDailyFreshnessField') }}</dt>
+              <dd>{{ openDataStockDailyFreshnessDisplay.response.field }}</dd>
+            </div>
+            <div>
+              <dt>{{ t('dataMgmt.stockDailyFreshnessCheckedAt') }}</dt>
+              <dd>{{ openDataStockDailyFreshnessDisplay.response.checked_at }}</dd>
+            </div>
+          </dl>
+          <p
+            v-if="openDataStockDailyFreshnessDisplay.response.status === 'missing'"
+            class="opendata-stock-daily-freshness-missing"
+            data-test="opendata-stock-daily-freshness-missing"
+          >
+            {{ t('dataMgmt.stockDailyFreshnessMissingMeaning') }}
+          </p>
+        </template>
+      </el-card>
+    </section>
+
+    <section
       v-if="dataPageDisplayMode === 'opendata_direct'"
       class="opendata-direct-display"
       data-test="opendata-direct-display"
@@ -357,6 +464,7 @@
       />
 
       <section
+        v-if="showLocalCoverageMatrix"
         v-loading="coverageLoading"
         class="market-data-details"
         data-test="market-coverage-matrix"
@@ -964,6 +1072,10 @@ const {
   loading,
   dataPageDisplayMode,
   openDataDirectKlineDisplay,
+  openDataStockDailyFreshnessDisplay,
+  canReadOpenDataStockDailyFreshness,
+  stockDataRouteNotice,
+  showLocalCoverageMatrix,
   result,
   chartMode,
   marketChartRef,
@@ -1031,6 +1143,7 @@ const {
   setAssetType,
   selectDataFamily,
   lookupInstrument,
+  refreshOpenDataStockDailyFreshness,
   loadCoverageMatrix,
   refreshCoverageMatrix,
   searchInstrumentOptions,
@@ -1079,6 +1192,28 @@ defineExpose(dataPage)
 
 .opendata-direct-provenance {
   margin: 18px 0 0;
+}
+
+.opendata-stock-daily-freshness-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 20px;
+  margin: 16px 0 0;
+}
+
+.opendata-stock-daily-freshness-values dt {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.opendata-stock-daily-freshness-values dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.opendata-stock-daily-freshness-missing {
+  margin: 14px 0 0;
+  color: var(--el-text-color-secondary);
 }
 
 .opendata-direct-message {
