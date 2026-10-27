@@ -181,6 +181,17 @@ class Settings(BaseSettings):
             "authorization grant; this flag only removes the route from the assembled policy."
         ),
     )
+    MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Default-off OpenData selector for HS300, CSI500, and CSI800 in the risk benchmark "
+            "and benchmark-metrics APIs only. It also requires MARKET_DATA_OPENDATA_ENABLED, "
+            "current read and source-governance authorization, and durable attestation for the "
+            "exact index route. Other consumers using the default BenchmarkService fail closed "
+            "for these indices until migrated; this flag does not switch them to OpenData. "
+            "Missing grants, coverage, credentials, or data never fall back to AkShare."
+        ),
+    )
     MARKET_DATA_OPENDATA_INSTRUMENT_CATALOG_ENABLED: bool = Field(
         default=False,
         description="Use the reviewed OpenData published stock reference catalog for selector options",
