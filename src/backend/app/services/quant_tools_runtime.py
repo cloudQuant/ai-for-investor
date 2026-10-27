@@ -8,18 +8,18 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
 from app.db.database import async_session_maker
 from app.models.ai_call_log import AICallLog
 from app.models.audit_record import AuditRecord
+from app.models.permission import Role, user_roles
 from app.services.data_connectors import DataGovernanceService
 from app.services.data_topic_hub import get_shared_data_topic_hub
 from app.services.news_intelligence import get_news_intelligence_service
 from app.services.portfolio_ledger import get_portfolio_ledger_service
 
-_SETTINGS = get_settings()
 _AUDIT_LIMIT = 4096
 _AUTH_ORDER = {"user": 0, "trader": 1, "admin": 2}
 _MASKED_KEYS = ("token", "secret", "password", "credential")
@@ -310,7 +310,6 @@ class QuantToolsService:
         db: AsyncSession,
         *,
         user_id: str,
-        username: str,
         tool_name: str,
         payload: dict[str, Any],
     ) -> tuple[int, dict[str, Any]]:
@@ -323,7 +322,8 @@ class QuantToolsService:
             limit=int(tool["rate_limit_per_user_per_min"]),
         ):
             return 429, {"detail": "rate_limited"}
-        if not self._is_auth_level_allowed(username, str(tool["auth_level"])):
+        is_admin = await self._user_has_admin_role(db, user_id)
+        if not self._is_auth_level_allowed(is_admin, str(tool["auth_level"])):
             return 403, {"detail": "insufficient_auth_level"}
         if not self._validate_schema(tool["input_schema"], payload):
             return 422, {"detail": "invalid_tool_input"}
@@ -363,7 +363,6 @@ class QuantToolsService:
         db: AsyncSession,
         *,
         user_id: str,
-        username: str,
         tool_calls: list[str],
     ) -> tuple[int, dict[str, Any]]:
         payloads = {
@@ -376,7 +375,6 @@ class QuantToolsService:
             status_code, _ = await self.call_tool(
                 db,
                 user_id=user_id,
-                username=username,
                 tool_name=tool_name,
                 payload=dict(payloads.get(tool_name) or {}),
             )
@@ -595,8 +593,18 @@ class QuantToolsService:
             "rate_limit_per_user_per_min": tool["rate_limit_per_user_per_min"],
         }
 
-    def _is_auth_level_allowed(self, username: str, required_level: str) -> bool:
-        current_level = "admin" if username == _SETTINGS.ADMIN_USERNAME else "user"
+    async def _user_has_admin_role(self, db: AsyncSession, user_id: str) -> bool:
+        """Resolve the caller's current admin assignment from the database."""
+        result = await db.execute(
+            select(user_roles.c.role).where(
+                user_roles.c.user_id == user_id,
+                user_roles.c.role == Role.ADMIN.value,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    def _is_auth_level_allowed(self, is_admin: bool, required_level: str) -> bool:
+        current_level = "admin" if is_admin else "user"
         return _AUTH_ORDER[current_level] >= _AUTH_ORDER.get(required_level, 0)
 
     def _sanitize(self, value: Any) -> Any:

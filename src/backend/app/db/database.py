@@ -1,6 +1,6 @@
-"""
-Database connection management.
-"""
+"""Database connection management."""
+
+from __future__ import annotations
 
 import logging
 import time
@@ -8,12 +8,14 @@ from collections.abc import AsyncGenerator
 
 import sqlalchemy as sa
 from sqlalchemy import Table, event, insert, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 from app.middleware.metrics import record_db_query
+from app.utils.username_identity import normalize_reserved_username
 
 logger = logging.getLogger(__name__)
 
@@ -872,21 +874,75 @@ async def ensure_database_ready() -> None:
         )
 
 
-async def create_default_admin():
-    """Create default admin account (if it doesn't exist)."""
+async def create_default_admin() -> None:
+    """Create the configured administrator only when its username is unused.
+
+    Existing accounts are never promoted by name. The users.username unique
+    constraint arbitrates concurrent registration/bootstrap attempts; a
+    losing bootstrap re-reads the winner in a fresh transaction and succeeds
+    only when that exact account already has the ADMIN role.
+    """
     from app.models.permission import Role, user_roles
     from app.models.user import User
     from app.utils.security import get_password_hash
 
     settings = get_settings()
 
-    async with async_session_maker() as session:
-        # Check if admin account already exists
-        result = await session.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
-        existing_user = result.scalar_one_or_none()
+    async def find_existing_admin(session: AsyncSession) -> User | None:
+        """Resolve configured username using the active database collation."""
+        result = await session.execute(
+            select(User).where(User.username == settings.ADMIN_USERNAME).limit(2)
+        )
+        matches = list(result.scalars().all())
+        if not matches:
+            # Case-sensitive databases such as SQLite/PostgreSQL may not find
+            # a case/accent/compatibility equivalent with `=`. Bootstrap is an
+            # explicit operator action, so scan the account names on this rare
+            # creation path and fail closed if a conservative alias exists.
+            configured_identity = normalize_reserved_username(settings.ADMIN_USERNAME)
+            all_users = await session.execute(select(User))
+            aliases = [
+                user
+                for user in all_users.scalars().all()
+                if normalize_reserved_username(user.username) == configured_identity
+            ]
+            if aliases:
+                raise RuntimeError(
+                    "Default admin bootstrap refused: an existing account has a username "
+                    "equivalent to the configured name under conservative normalization."
+                )
+            return None
+        if len(matches) != 1:
+            raise RuntimeError(
+                "Default admin bootstrap refused: configured username matches multiple accounts."
+            )
 
-        if existing_user is None:
-            # Create admin account
+        existing_user = matches[0]
+        if existing_user.username != settings.ADMIN_USERNAME:
+            raise RuntimeError(
+                "Default admin bootstrap refused: configured username resolves to a differently "
+                "spelled account under the database collation."
+            )
+
+        role_result = await session.execute(
+            select(user_roles.c.role).where(
+                user_roles.c.user_id == existing_user.id,
+                user_roles.c.role == Role.ADMIN.value,
+            )
+        )
+        if role_result.scalar_one_or_none() is None:
+            raise RuntimeError(
+                "Default admin bootstrap refused: the existing configured account has no ADMIN "
+                "role; verify ownership before granting privileges through a separate process."
+            )
+        return existing_user
+
+    try:
+        async with async_session_maker() as session:
+            existing_user = await find_existing_admin(session)
+            if existing_user is not None:
+                return
+
             admin_user = User(
                 username=settings.ADMIN_USERNAME,
                 email=settings.ADMIN_EMAIL,
@@ -895,19 +951,22 @@ async def create_default_admin():
             )
             session.add(admin_user)
             await session.flush()
-            existing_user = admin_user
-            logger.info("Default admin account created: %s", settings.ADMIN_USERNAME)
-
-        role_result = await session.execute(
-            select(user_roles.c.role).where(user_roles.c.user_id == existing_user.id)
-        )
-        assigned_roles = {str(role) for role in role_result.scalars().all()}
-        if Role.ADMIN.value not in assigned_roles:
             await session.execute(
-                insert(user_roles).values(user_id=existing_user.id, role=Role.ADMIN.value)
+                insert(user_roles).values(user_id=admin_user.id, role=Role.ADMIN.value)
             )
-
-        await session.commit()
+            await session.commit()
+            logger.info("Default admin account created")
+    except IntegrityError:
+        # The failed transaction is unusable. Resolve a possible concurrent
+        # bootstrap winner in a new session, and never adopt a registration.
+        async with async_session_maker() as retry_session:
+            concurrent_admin = await find_existing_admin(retry_session)
+            if concurrent_admin is not None:
+                logger.info("Default admin bootstrap completed by a concurrent process")
+                return
+        raise RuntimeError(
+            "Default admin bootstrap conflicted with an existing username or email."
+        ) from None
 
 
 def _create_table_if_missing(from_clause: sa.FromClause, bind) -> None:

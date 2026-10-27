@@ -2,16 +2,26 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.db.database import async_session_maker
+from app.config import get_settings
+from app.db.database import async_session_maker, create_default_admin
 from app.models.ai_call_log import AICallLog
 from app.models.audit_record import AuditRecord
+from app.models.permission import Role, user_roles
+from app.models.user import User
 from tests.conftest import register_and_login
 
 
 @pytest.mark.asyncio
 async def test_quant_tools_schema_auth_rate_limit_and_audit(client: AsyncClient):
     _, headers = await register_and_login(client, username="tool_user")
-    _, admin_headers = await register_and_login(client, username="admin")
+    await create_default_admin()
+    settings = get_settings()
+    admin_login = await client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
+    )
+    assert admin_login.status_code == 200
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
 
     await client.post("/api/v1/data-governance/bootstrap", headers=admin_headers)
 
@@ -110,6 +120,29 @@ async def test_quant_tools_schema_auth_rate_limit_and_audit(client: AsyncClient)
         record.event_target == "markets.get_quote" and len(record.event_data or "") <= 4096
         for record in audit_records
     )
+
+    # The same unexpired token loses admin-only tool access as soon as the
+    # database assignment is removed.
+    async with async_session_maker() as session:
+        admin_result = await session.execute(
+            select(User).where(User.username == settings.ADMIN_USERNAME)
+        )
+        admin_user = admin_result.scalar_one()
+        assert admin_user is not None
+        await session.execute(
+            user_roles.delete().where(
+                user_roles.c.user_id == admin_user.id,
+                user_roles.c.role == Role.ADMIN.value,
+            )
+        )
+        await session.commit()
+
+    revoked = await client.post(
+        "/api/v1/quant-tools/call",
+        headers=admin_headers,
+        json={"tool_name": "data_topics.peek", "input": {"topic": "market:quote:RB2510"}},
+    )
+    assert revoked.status_code == 403
 
 
 @pytest.mark.asyncio
