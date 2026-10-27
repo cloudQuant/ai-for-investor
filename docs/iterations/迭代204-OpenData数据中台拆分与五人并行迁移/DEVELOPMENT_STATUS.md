@@ -403,3 +403,15 @@ PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源�
 [OpenData PR #36](https://github.com/cloudQuant/opendata/pull/36) 已合入 OpenData `dev`。迁移 `0014` 将 MySQL 版本列宽由 **32 扩展为 64**，并在业务 DDL 前核验 `0013` marker 存在且没有 partial 状态；迁移 `0015` 在 MySQL 8 上为 no-op，同时保留 SQLite 原有 gate。定向隔离测试 **33 项通过**，两个目标模块覆盖率为 **87% / 100%**。验收日志保存在本机私有目录 [`2026-10-28-pending-warehouse-revision`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-warehouse-revision>)。
 
 在一次性 MySQL 8.4 Unix socket 实例上，以合成的 `0013` 状态进行实际 upgrade 至 `0015`，再 downgrade 至 `0014` 和 `0013`；downgrade 仅在空表场景验证通过。partial 状态恢复未验证，须单独审查。未运行 `0001`–`0013` 的完整历史迁移链；MySQL TCP、生产数据库及 MySQL 9 均未测试。已有 partial marker 状态不能盲目重试，须先核实数据库状态并按运维流程处理。本次没有生产迁移或数据读取；此 PR 不构成生产升级验收，迭代204整体仍未完成。
+
+## OpenData PR #37–#38 与未合并候选（2026-10-28）
+
+以下记录仅覆盖 PR 的局部代码与隔离验收。它们不改变迭代204整体未完成状态，也不代表旧库已迁完或生产链路已验收。
+
+| PR / 候选 | 已完成范围与局部证据 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #37](https://github.com/cloudQuant/opendata/pull/37) | 已合入 `dev`，修正离线 Sina fixture 成功发布用例的 worker 长租约设置。对应成功用例 **1 项通过**；timeout/cancel 用例 **2 项通过**。 | 先前 **12 个文件的组合运行有失败**，后续针对用例修正与重跑不代表该 12 文件组合整套通过；本次不记录为整套绿灯。验证使用离线 fixture，不证明真实 Sina 抓取、生产租约/并发或全量财报发布。 |
+| [OpenData PR #38](https://github.com/cloudQuant/opendata/pull/38) | 已合入 `dev`，允许旧股票日线 ODS 的 `成交额` 保留 `NULL`，并与真实数值 `0` 区分；不填零、不删行。定向隔离测试 **106 项通过**，迁移 `0016` statement+branch 覆盖率 **100%**，迁移脚本 **88.12%**；覆盖率收据保存在本地私有、非仓库存档 [`coverage-final.txt`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-legacy-null/coverage-final.txt>)。一次性隔离合成 **MySQL 8.4** 验收成功，初次失败及重跑记录均保留在私有证据目录。 | MySQL 结果仅是合成 schema/数据场景，不能证明生产迁移、全量旧数据迁移、`0001`–`0016` 完整历史链、DWD 消费、REST/API、迁移锁或生产运行安全。上述覆盖率只描述聚焦测试中指定模块，不能单独证明迁移工具和数据迁移已完整验收。全量数据对账与下游 `NULL` 处理仍待完成。 |
+| Fuyao one-shot 私有候选 | 离线合成用例 **34 项通过**，实现保存在本地私有候选中。 | 未制作或验证真实上游录制；当前执行环境未确认可用凭证。该候选不构成真实 Fuyao 响应、采集或数据语义验收。 |
+
+Sina capture discovery API 与 Fuyao financial fetcher 仍未合并，状态和限制维持此前记录；Sina discovery 继续硬关闭。上述局部测试与 MySQL 合成验证都不改变来源真实性、生产权限配置、全 A 股及逐标的全历史、PIT、调度与部署仍开放的结论。
