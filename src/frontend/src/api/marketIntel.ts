@@ -28,12 +28,21 @@ export interface ScannerUniverseInstrument {
 }
 
 export interface ScannerMetricSnapshot {
-  pool_id: string
-  lookback_days: number
-  timeframe: string
+  pool_id?: string
+  lookback_days?: number
+  timeframe?: string
   computed_at?: string
-  total: number
+  total?: number
   cache_status?: string
+  data_status?: 'legacy_unverified' | 'unavailable' | 'verified'
+}
+
+export interface ScannerExecutionResult {
+  task_id?: string
+  status?: string
+  data_status?: 'legacy_unverified' | 'unavailable' | 'verified'
+  legacy_status?: string
+  matches?: Array<Record<string, unknown>>
 }
 
 export interface ScannerUniversePool {
@@ -73,24 +82,28 @@ export interface ScannerPlan {
   status: string
   result_table_name?: string
   result_table_status?: string
+  result_table_data_status?: 'legacy_unverified' | 'unavailable' | 'verified'
   created_at?: string
   updated_at?: string
 }
 
 export interface ScannerPlanRun {
-  id: string
+  id?: string | null
   plan_id: string
   run_date: string
   status: string
+  data_status?: 'legacy_unverified' | 'unavailable' | 'verified'
+  legacy_status?: string
   universe_pool_id?: string
   condition?: string
   lookback_days?: number
   timeframe?: string
-  universe_count?: number
+  universe_count?: number | null
   match_count: number
   matches: Array<Record<string, unknown>>
   metrics?: Record<string, unknown>
   cache_status?: string
+  error?: string | null
   started_at?: string
   completed_at?: string
 }
@@ -185,10 +198,10 @@ export const marketIntelApi = {
     return request.post<ScannerUniversePool>('/scanners/universe-pools/custom', payload)
   },
   runScanner(payload: { universe?: string[]; universe_pool_id?: string; condition: string; lookback_days?: number; timeframe?: string }) {
-    return request.post<Record<string, unknown>>('/scanners/run', payload, { timeout: 300000 })
+    return request.post<ScannerExecutionResult>('/scanners/run', payload, { timeout: 300000 })
   },
   getScannerTask(taskId: string) {
-    return request.get<Record<string, unknown>>(`/scanners/tasks/${taskId}`)
+    return request.get<ScannerExecutionResult>(`/scanners/tasks/${taskId}`)
   },
   listQuantTools() {
     return request.get<{ tools: Array<Record<string, unknown>> }>('/quant-tools')

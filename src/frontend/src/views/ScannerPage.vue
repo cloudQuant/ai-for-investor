@@ -40,7 +40,7 @@
             class="scanner-status-tag"
             :type="statusTagType"
           >
-            {{ taskStatus }}
+            {{ taskStatusLabel }}
           </el-tag>
         </div>
 
@@ -97,13 +97,14 @@
                 </el-button>
                 <el-button
                   :loading="planRunLoading"
-                  :disabled="!selectedPlanId"
+                  :disabled="scannerExecutionUnavailable || !selectedPlanId"
                   @click="runSelectedPlan"
                 >
                   {{ t('scannerPage.btnRunPlan') }}
                 </el-button>
                 <el-button
                   :loading="dailyRunLoading"
+                  :disabled="scannerExecutionUnavailable"
                   @click="runDailyPlans"
                 >
                   {{ t('scannerPage.btnRunDailyPlans') }}
@@ -175,7 +176,7 @@
               <el-button
                 type="primary"
                 :loading="loading"
-                :disabled="!selectedPoolId"
+                :disabled="scannerExecutionUnavailable || !selectedPoolId"
                 @click="run"
               >
                 <el-icon aria-hidden="true">
@@ -194,30 +195,14 @@
         </div>
       </section>
 
-      <section class="scanner-metric-panel">
-        <div class="scanner-section-header">
-          <div>
-            <h3>{{ t('scannerPage.metricsTitle') }}</h3>
-            <p>{{ t('scannerPage.metricsDesc') }}</p>
-          </div>
-          <span class="scanner-run-pill">
-            {{ t('scannerPage.taskInfo', { taskId: taskId || '-', status: taskStatus }) }}
-          </span>
-        </div>
-
-        <div class="scanner-metric-grid">
-          <div
-            v-for="metric in metricCards"
-            :key="metric.key"
-            class="scanner-metric-card"
-            :class="`is-${metric.tone}`"
-          >
-            <span>{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-            <small>{{ metric.helper }}</small>
-          </div>
-        </div>
-      </section>
+      <el-alert
+        class="scanner-unavailable-alert"
+        type="warning"
+        :title="t('scannerPage.unavailableTitle')"
+        :description="t('scannerPage.unavailableDesc')"
+        :closable="false"
+        show-icon
+      />
 
       <section class="scanner-match-board">
         <div class="scanner-section-header">
@@ -273,43 +258,6 @@
               {{ formatPercent(scope.row.change_pct) }}
             </template>
           </el-table-column>
-          <el-table-column
-            :label="t('scannerPage.colIndicator')"
-            width="130"
-          >
-            <template #default="scope">
-              <span
-                class="scanner-score-pill"
-                :class="scoreClass(scope.row.indicator)"
-              >
-                {{ formatPercent(scope.row.indicator) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('scannerPage.colFactor')"
-            width="120"
-          >
-            <template #default="scope">
-              {{ formatPercent(scope.row.factor) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('scannerPage.colNewsSentiment')"
-            width="150"
-          >
-            <template #default="scope">
-              {{ formatPercent(scope.row.news_sentiment) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            :label="t('scannerPage.colPortfolioExposure')"
-            width="150"
-          >
-            <template #default="scope">
-              {{ formatPercent(scope.row.portfolio_exposure) }}
-            </template>
-          </el-table-column>
         </el-table>
       </section>
     </el-card>
@@ -325,6 +273,12 @@
         class="scanner-plan-dialog-shell"
         :class="editingPlanId ? 'is-edit' : 'is-create'"
       >
+        <p
+          v-if="editingPlanId && !editPlanScheduleSettingsValid"
+          class="scanner-edit-warning"
+        >
+          {{ t('scannerPage.planEditScheduleUnavailable') }}
+        </p>
         <aside
           v-if="editingPlanId"
           class="scanner-plan-dialog-aside"
@@ -428,6 +382,7 @@
                     v-if="managerPool"
                     type="primary"
                     :loading="precomputingPoolId === managerPool.id"
+                    :disabled="scannerExecutionUnavailable"
                     @click="precomputePoolMetrics(managerPool.id)"
                   >
                     {{ t('scannerPage.btnPrecomputeMetrics') }}
@@ -540,6 +495,7 @@
                         :key="option.value"
                         :label="t(option.labelKey)"
                         :value="option.value"
+                        :disabled="option.disabled"
                       />
                     </el-select>
                   </label>
@@ -639,7 +595,7 @@
           <el-button
             type="primary"
             :loading="planLoading"
-            :disabled="!selectedPoolId"
+            :disabled="!selectedPoolId || !editPlanScheduleSettingsValid"
             @click="savePlanFromDialog"
           >
             {{ t('scannerPage.btnSavePlan') }}
@@ -673,14 +629,15 @@ type IndicatorRule = {
   enabled: boolean
 }
 
-const indicatorMetricOptions = [
-  { value: 'indicator', labelKey: 'scannerPage.metricOptionIndicator' },
-  { value: 'factor', labelKey: 'scannerPage.metricOptionFactor' },
-  { value: 'change_pct', labelKey: 'scannerPage.metricOptionChangePct' },
-  { value: 'volume', labelKey: 'scannerPage.metricOptionVolume' },
-  { value: 'news_sentiment', labelKey: 'scannerPage.metricOptionNewsSentiment' },
-  { value: 'portfolio_exposure', labelKey: 'scannerPage.metricOptionPortfolioExposure' },
+const indicatorMetricOptions: Array<{ value: string; labelKey: string; disabled?: boolean }> = [
   { value: 'price', labelKey: 'scannerPage.metricOptionPrice' },
+  { value: 'volume', labelKey: 'scannerPage.metricOptionVolume' },
+  { value: 'amount', labelKey: 'scannerPage.metricOptionAmount' },
+  { value: 'change_pct', labelKey: 'scannerPage.metricOptionChangePct' },
+  { value: 'indicator', labelKey: 'scannerPage.metricOptionLegacyIndicator', disabled: true },
+  { value: 'factor', labelKey: 'scannerPage.metricOptionLegacyFactor', disabled: true },
+  { value: 'news_sentiment', labelKey: 'scannerPage.metricOptionLegacySentiment', disabled: true },
+  { value: 'portfolio_exposure', labelKey: 'scannerPage.metricOptionLegacyExposure', disabled: true },
 ]
 
 const indicatorOperatorOptions = ['>=', '>', '<=', '<', '==', '!=']
@@ -704,11 +661,12 @@ const fallbackPools: ScannerUniversePool[] = [
 
 const lookbackDays = ref(20)
 const timeframe = ref('1d')
+const scannerExecutionUnavailable = ref(true)
 const loading = ref(false)
 const poolLoading = ref(false)
 const matches = ref<Array<Record<string, unknown>>>([])
 const taskId = ref('')
-const taskStatus = ref('idle')
+const taskStatus = ref('unavailable')
 const universePools = ref<ScannerUniversePool[]>([])
 const selectedPoolId = ref('')
 const managerPoolId = ref('')
@@ -727,13 +685,16 @@ const planLoading = ref(false)
 const planTableLoading = ref(false)
 const planRunLoading = ref(false)
 const dailyRunLoading = ref(false)
-const indicatorRules = ref<IndicatorRule[]>([
-  { id: 'indicator-default', metric: 'indicator', operator: '>=', value: 0.5, enabled: true },
-  { id: 'sentiment-default', metric: 'news_sentiment', operator: '>=', value: 0.4, enabled: true },
-])
+const indicatorRules = ref<IndicatorRule[]>([])
 
 const selectedPool = computed(() => findPool(selectedPoolId.value))
 const selectedPlan = computed(() => scannerPlans.value.find((plan) => plan.id === selectedPlanId.value))
+const editPlanScheduleSettingsValid = computed(() => {
+  if (!editingPlanId.value) return true
+  return hasSupportedPlanScheduleSettings(
+    scannerPlans.value.find((plan) => plan.id === editingPlanId.value),
+  )
+})
 const managerPool = computed(() => findPool(managerPoolId.value) || selectedPool.value)
 const selectedPoolInstrumentCount = computed(() => selectedPool.value?.instrument_count || 0)
 const condition = computed(() => buildCondition(indicatorRules.value))
@@ -744,7 +705,9 @@ const selectedPlanResultTableLabel = computed(() => {
   const status = selectedPlan.value?.result_table_status || 'missing'
   const tableName = selectedPlan.value?.result_table_name
   if (status === 'ready' && tableName) {
-    return t('scannerPage.resultTableReady', { table: tableName })
+    return selectedPlan.value?.result_table_data_status === 'verified'
+      ? t('scannerPage.resultTableReady', { table: tableName })
+      : t('scannerPage.resultTableReadyLegacy', { table: tableName })
   }
   if (status === 'dropped') {
     return t('scannerPage.resultTableDropped')
@@ -754,10 +717,11 @@ const selectedPlanResultTableLabel = computed(() => {
 const latestPlanRunLabel = computed(() => {
   const latest = planRuns.value[0]
   if (!latest) return t('scannerPage.planNoRuns')
-  return t('scannerPage.planRunSummary', {
-    date: latest.run_date,
-    status: latest.status,
-  })
+  if (latest.data_status === 'legacy_unverified') {
+    return t('scannerPage.planRunLegacySummary', { date: latest.run_date })
+  }
+  // Persisted run history has no generation-version/freshness contract in this API.
+  return t('scannerPage.planRunUnavailableSummary', { date: latest.run_date })
 })
 const activeMetricSnapshot = computed(() => {
   if (metricSnapshotInfo.value?.pool_id === managerPool.value?.id) {
@@ -767,17 +731,29 @@ const activeMetricSnapshot = computed(() => {
 })
 const metricSnapshotLabel = computed(() => {
   const snapshot = activeMetricSnapshot.value
-  if (!snapshot?.computed_at) return t('scannerPage.metricSnapshotEmpty')
+  if (snapshot?.data_status === 'legacy_unverified') {
+    return t('scannerPage.metricSnapshotLegacy')
+  }
+  if (snapshot?.data_status !== 'verified' || !snapshot.computed_at) {
+    return t('scannerPage.metricSnapshotUnavailable')
+  }
   return t('scannerPage.metricSnapshotSummary', {
     total: snapshot.total,
     updatedAt: formatDateTime(snapshot.computed_at),
   })
 })
 
+const taskStatusLabel = computed(() => {
+  if (taskStatus.value === 'legacy_unverified') return t('scannerPage.statusLegacyUnverified')
+  if (taskStatus.value === 'completed') return t('scannerPage.statusCompleted')
+  return t('scannerPage.statusUnavailable')
+})
+
 const statusTagType = computed(() => {
   if (taskStatus.value === 'completed') return 'success'
   if (taskStatus.value === 'failed') return 'danger'
   if (taskStatus.value === 'running' || taskStatus.value === 'submitted') return 'warning'
+  if (taskStatus.value === 'legacy_unverified') return 'warning'
   return 'info'
 })
 
@@ -804,45 +780,7 @@ const scannerHeroStats = computed(() => [
     key: 'results',
     label: t('scannerPage.statResults'),
     value: formatNumber(matches.value.length, 0),
-    helper: taskStatus.value || 'idle',
-  },
-])
-
-const metricCards = computed(() => [
-  {
-    key: 'bestIndicator',
-    label: t('scannerPage.metricBestIndicator'),
-    value: formatPercent(maxValue('indicator')),
-    helper: t('scannerPage.metricBestIndicatorHelper'),
-    tone: 'teal',
-  },
-  {
-    key: 'avgChange',
-    label: t('scannerPage.metricAvgChange'),
-    value: formatPercent(avgValue('change_pct')),
-    helper: t('scannerPage.metricAvgChangeHelper'),
-    tone: 'amber',
-  },
-  {
-    key: 'avgExposure',
-    label: t('scannerPage.metricAvgExposure'),
-    value: formatPercent(avgValue('portfolio_exposure')),
-    helper: t('scannerPage.metricAvgExposureHelper'),
-    tone: 'neutral',
-  },
-  {
-    key: 'lookback',
-    label: t('scannerPage.metricLookback'),
-    value: formatNumber(lookbackDays.value, 0),
-    helper: t('scannerPage.metricLookbackHelper'),
-    tone: 'neutral',
-  },
-  {
-    key: 'universe',
-    label: t('scannerPage.metricUniverse'),
-    value: formatNumber(selectedPoolInstrumentCount.value, 0),
-    helper: selectedPool.value?.name || '-',
-    tone: 'neutral',
+    helper: taskStatusLabel.value,
   },
 ])
 
@@ -853,9 +791,6 @@ onMounted(() => {
 async function initialize() {
   await loadUniversePools()
   await loadScannerPlans()
-  if (planRuns.value.length) {
-    loadRunResult(planRuns.value[0])
-  }
 }
 
 async function loadUniversePools() {
@@ -891,6 +826,10 @@ async function loadScannerPlans() {
 }
 
 async function run() {
+  if (scannerExecutionUnavailable.value) {
+    clearCurrentResults()
+    return
+  }
   if (!selectedPoolId.value) return
   loading.value = true
   try {
@@ -900,15 +839,21 @@ async function run() {
       lookback_days: lookbackDays.value,
       timeframe: timeframe.value,
     })
+    if (response.data_status !== 'verified') {
+      clearCurrentResults(response.data_status === 'legacy_unverified' ? 'legacy_unverified' : 'unavailable')
+      return
+    }
     taskId.value = String(response.task_id || '')
-    taskStatus.value = String(response.status || 'submitted')
     if (!taskId.value) {
-      matches.value = normalizeMatches(response.matches)
+      applyVerifiedResults(response.status, response.matches)
       return
     }
     const task = await marketIntelApi.getScannerTask(taskId.value)
-    taskStatus.value = String(task.status || taskStatus.value)
-    matches.value = normalizeMatches(task.matches)
+    if (task.data_status !== 'verified') {
+      clearCurrentResults(task.data_status === 'legacy_unverified' ? 'legacy_unverified' : 'unavailable')
+      return
+    }
+    applyVerifiedResults(task.status, task.matches)
   } finally {
     loading.value = false
   }
@@ -921,6 +866,8 @@ async function saveScannerPlan() {
     const plan = await marketIntelApi.createScannerPlan(buildPlanPayload())
     upsertPlan(plan)
     selectedPlanId.value = plan.id
+    clearCurrentResults()
+    planRuns.value = []
     planName.value = plan.name
     await loadPlanRuns(plan.id)
   } finally {
@@ -930,15 +877,22 @@ async function saveScannerPlan() {
 
 async function savePlanFromDialog() {
   if (!selectedPoolId.value) return
+  const existingPlan = scannerPlans.value.find((plan) => plan.id === editingPlanId.value)
+  if (editingPlanId.value && !hasSupportedPlanScheduleSettings(existingPlan)) return
   planLoading.value = true
   try {
-    const payload = buildPlanPayload()
-    const plan = editingPlanId.value
-      ? await marketIntelApi.updateScannerPlan(editingPlanId.value, { ...payload, status: 'active' })
+    const payload = buildPlanPayload(existingPlan)
+    const plan = existingPlan
+      ? await marketIntelApi.updateScannerPlan(existingPlan.id, {
+        ...payload,
+        status: existingPlan.status,
+      })
       : await marketIntelApi.createScannerPlan(payload)
     upsertPlan(plan)
     selectedPlanId.value = plan.id
     editingPlanId.value = plan.id
+    clearCurrentResults()
+    planRuns.value = []
     planName.value = plan.name
     await loadPlanRuns(plan.id)
   } finally {
@@ -954,6 +908,7 @@ async function deleteSelectedPlan() {
     await marketIntelApi.deleteScannerPlan(deletedPlanId)
     scannerPlans.value = scannerPlans.value.filter((plan) => plan.id !== deletedPlanId)
     selectedPlanId.value = scannerPlans.value[0]?.id || ''
+    clearCurrentResults()
     editingPlanId.value = selectedPlanId.value
     planRuns.value = []
     if (selectedPlan.value) {
@@ -997,6 +952,10 @@ async function deleteSelectedPlanResultTable() {
 }
 
 async function runSelectedPlan() {
+  if (scannerExecutionUnavailable.value) {
+    clearCurrentResults()
+    return
+  }
   const planId = selectedPlanId.value || scannerPlans.value[0]?.id || ''
   if (!planId) return
   selectedPlanId.value = planId
@@ -1014,6 +973,10 @@ async function runSelectedPlan() {
 }
 
 async function runDailyPlans() {
+  if (scannerExecutionUnavailable.value) {
+    clearCurrentResults()
+    return
+  }
   dailyRunLoading.value = true
   try {
     const response = await marketIntelApi.runDailyScannerPlans({})
@@ -1038,6 +1001,8 @@ async function loadPlanRuns(planId: string) {
 
 function applySelectedPlan() {
   const plan = scannerPlans.value.find((item) => item.id === selectedPlanId.value)
+  clearCurrentResults()
+  planRuns.value = []
   if (!plan) return
   applyPlan(plan)
   void loadPlanRuns(plan.id)
@@ -1053,9 +1018,33 @@ function applyPlan(plan: ScannerPlan) {
 }
 
 function loadRunResult(runItem: ScannerPlanRun) {
-  matches.value = normalizeMatches(runItem.matches)
+  if (
+    !scannerExecutionUnavailable.value
+    && runItem.data_status === 'verified'
+    && runItem.status === 'completed'
+  ) {
+    matches.value = normalizeMatches(runItem.matches)
+    taskId.value = String(runItem.id || '')
+    taskStatus.value = String(runItem.status || 'completed')
+    return
+  }
+  clearCurrentResults(runItem.data_status === 'legacy_unverified' ? 'legacy_unverified' : 'unavailable')
   taskId.value = String(runItem.id || '')
-  taskStatus.value = String(runItem.status || 'completed')
+}
+
+function clearCurrentResults(status = 'unavailable') {
+  matches.value = []
+  taskId.value = ''
+  taskStatus.value = status
+}
+
+function applyVerifiedResults(status?: string, resultMatches?: Array<Record<string, unknown>>) {
+  if (status !== 'completed') {
+    clearCurrentResults('unavailable')
+    return
+  }
+  matches.value = normalizeMatches(resultMatches)
+  taskStatus.value = 'completed'
 }
 
 function openNewPlanDialog() {
@@ -1103,6 +1092,7 @@ async function refreshPool(poolId: string) {
 }
 
 async function precomputePoolMetrics(poolId: string) {
+  if (scannerExecutionUnavailable.value) return
   if (!poolId) return
   precomputingPoolId.value = poolId
   try {
@@ -1165,6 +1155,7 @@ function upsertPlan(plan: ScannerPlan) {
 }
 
 function upsertPlanRun(runItem: ScannerPlanRun) {
+  if (runItem.data_status !== 'verified' || !runItem.id) return
   const index = planRuns.value.findIndex((item) => item.id === runItem.id)
   if (index >= 0) {
     planRuns.value.splice(index, 1, runItem)
@@ -1173,7 +1164,7 @@ function upsertPlanRun(runItem: ScannerPlanRun) {
   planRuns.value.unshift(runItem)
 }
 
-function buildPlanPayload() {
+function buildPlanPayload(existingPlan?: ScannerPlan) {
   return {
     name: planName.value.trim() || defaultPlanName(),
     universe_pool_id: selectedPoolId.value,
@@ -1181,9 +1172,18 @@ function buildPlanPayload() {
     condition: condition.value,
     lookback_days: lookbackDays.value,
     timeframe: timeframe.value,
-    schedule_enabled: true,
-    schedule_frequency: 'daily',
+    schedule_enabled: existingPlan ? existingPlan.schedule_enabled : false,
+    schedule_frequency: existingPlan ? existingPlan.schedule_frequency : 'daily',
   }
+}
+
+function hasSupportedPlanScheduleSettings(plan: ScannerPlan | undefined): boolean {
+  return Boolean(
+    plan
+    && typeof plan.schedule_enabled === 'boolean'
+    && plan.schedule_frequency === 'daily'
+    && plan.status === 'active',
+  )
 }
 
 function findPool(poolId: string) {
@@ -1224,10 +1224,7 @@ function normalizeIndicatorRules(rules: ScannerIndicatorRule[] | undefined) {
     value: Number(rule.value),
     enabled: Boolean(rule.enabled),
   }))
-  return normalized.length ? normalized : [
-    { id: 'indicator-default', metric: 'indicator', operator: '>=', value: 0.5, enabled: true },
-    { id: 'sentiment-default', metric: 'news_sentiment', operator: '>=', value: 0.4, enabled: true },
-  ]
+  return normalized
 }
 
 function defaultPlanName() {
@@ -1237,7 +1234,7 @@ function defaultPlanName() {
 function addIndicatorRule() {
   indicatorRules.value.push({
     id: `metric-${Date.now()}-${indicatorRules.value.length}`,
-    metric: 'indicator',
+    metric: 'price',
     operator: '>=',
     value: 0.5,
     enabled: true,
@@ -1258,17 +1255,6 @@ function buildCondition(rules: IndicatorRule[]) {
 function formatRuleValue(value: unknown) {
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? String(numericValue) : '0'
-}
-
-function maxValue(key: string) {
-  const values = matches.value.map((row) => toFiniteNumber(row[key])).filter((value) => value !== undefined)
-  return values.length ? Math.max(...values) : undefined
-}
-
-function avgValue(key: string) {
-  const values = matches.value.map((row) => toFiniteNumber(row[key])).filter((value) => value !== undefined)
-  if (!values.length) return undefined
-  return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
 function toFiniteNumber(value: unknown) {
@@ -1308,13 +1294,6 @@ function displayValue(value: unknown) {
   return text || '-'
 }
 
-function scoreClass(value: unknown) {
-  const numericValue = toFiniteNumber(value)
-  if (numericValue === undefined) return 'is-empty'
-  if (numericValue >= 0.7) return 'is-strong'
-  if (numericValue >= 0.45) return 'is-medium'
-  return 'is-muted'
-}
 </script>
 
 <style scoped>
@@ -1469,6 +1448,14 @@ function scoreClass(value: unknown) {
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
+}
+
+.scanner-edit-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--el-color-warning-dark-2);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .scanner-plan-dialog-shell.is-create {
