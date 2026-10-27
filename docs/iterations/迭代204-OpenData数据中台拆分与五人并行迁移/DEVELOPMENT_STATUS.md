@@ -2,7 +2,7 @@
 
 ## 当前开发基线（2026-10-27）
 
-截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58、#62 与 OpenData PR #5–#8 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
+截至今日，ai-for-investor 与 OpenData 均以 `dev` 为开发基线，本地与远程只保留 `master`、`dev`。AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 已合入；合并只表示各 PR 的交付范围已集成，验收范围与未完成项仍以本文后续记录为准，迭代204整体尚未完成。
 
 ## 历史记录：隔离集成状态
 
@@ -203,3 +203,35 @@ PR #56 仅覆盖上证50 benchmark 读路径，不改变全 A 股权威全集、
 ## AFI PR #62 benchmark 区间对齐
 
 AFI PR #62 已合入 `dev`，对齐 benchmark 与个股回报的区间边界；定向验证为 **24 项后端、2 项前端测试通过**，覆盖区间匹配、年化以及 ledger fail-closed degraded/UI 提示行为。生产 NAV、收盘盯市、TWR 和实盘行为仍未验证，FF 问题仍未解决；不能据此宣称 benchmark 全链路已完成或改变迭代204整体未完成的状态。
+
+## 2026-10-27 AFI PR #64–#66 与 OpenData PR #9–#10 局部进展
+
+### AFI PR #64：SSE50 历史重算 fail-closed
+
+[AFI PR #64](https://github.com/cloudQuant/ai-for-investor/pull/64) 已合入 `dev`。当请求日期不是当天时，在读取日历、获取成分股或创建 run 之前拒绝历史和未来重算；当天流程仍使用 Asia/Shanghai，并保留 19:10 收盘后边界。run snapshot/key 记录 universe evidence 和 digest，但当前成分仅是 current-only，仍为 **UNVERIFIED**；provider-attested 数据只检查合同与时间边界，没有独立来源验证。
+
+两个定向 stock-signal 测试文件 **11 项隔离测试通过**，使用 synthetic providers 与内存 SQLite；pytest-timeout 未加载，出现 `timeout`、`timeout_method` 两项配置警告。历史拒绝（含注入 PIT provider）、收盘时间、scope/evidence 和幂等均有覆盖。历史重放仍不可用：没有可信的历史成分、输入和预测时点语义；19:10 是固定限制，较早的自定义 cron 会被拒绝。真实 provider 和生产数据库未测试。
+
+### AFI PR #65：来源授权证据记录
+
+[AFI PR #65](https://github.com/cloudQuant/ai-for-investor/pull/65) 已合入，新增新浪、Eastmoney、THS/Fuyao 及相关交易所/指数数据的官方公开条款和未决许可问题。文档评审包含 whitespace check 与独立来源/适用性审查；没有访问实时金融源、用户数据库或生产授权。公开页面、公开 API 文档不等于获得自动采集、留存或下游使用授权；实际合同适用性仍须确认。因此来源授权状态仍为 **UNKNOWN**，该文档不是法律结论，也不自动创建 grant。
+
+### OpenData PR #9：股票历史窗口候选规划
+
+[OpenData PR #9](https://github.com/cloudQuant/opendata/pull/9) 已合入 `dev`。它基于传入的 instrument registry、task 和 dataset contract，生成确定性的股票日线回补窗口候选：按已验证的 alias segment 拆分为现有查询合同接受的有界闭区间；unknown 起点、过时 lifecycle、alias gap、未验证 BSE 路由和不确定退市边界保留为 blocker。定向 **16 项隔离内存测试通过**，目标 pipeline 模块 statement+branch 综合覆盖率 **94.8949%**；Ruff、format、Bandit、导入静默的 mypy 与独立 lifecycle/alias review 通过。
+
+候选是可构造的 RunRequest DTO，但 planner 不执行 dispatch；当前股票 job 仍 disabled、unreviewed，若候选被另行提交给其他 reviewed job，RunService 不会自动强制这些 blockers。它不检查 publications、交易日历或 source retention，因此窗口只是基于生命周期证据的计划范围，不是观测到的真实 head/interior/tail gap。未装载权威全 A、未发生产 grant，也没有采集数据；恢复与生产验收仍开放。
+
+### OpenData PR #10：四个独立指数日线数据集
+
+[OpenData PR #10](https://github.com/cloudQuant/opendata/pull/10) 已合入 `dev`，离线准备上证50、沪深300、沪深500、沪深800四个相互独立且不可混读的 index-daily dataset contract 与 reviewed-job 模板。各自固定一个指数并校验请求代码、区间、归一化记录和 publication identity；拒绝空/非法 batch。**24 项隔离测试通过**，使用 synthetic THS 记录、临时 SQLite 与进程内 v2 API；provider contract 覆盖率 **92.857%**、pipeline **98.214%**，定向静态检查和独立审查通过。
+
+作业仍 disabled、unscheduled、unreviewed，source rights 为 **UNKNOWN**；生产 fetch guard 会在 provider 调用前拒绝，fixture 测试替换了 guard 与 transport，不代表获得真实授权。未测试 live provider、生产数据库或自动调度。当前映射中 OHLC 单位为指数点、volume 为股、amount 排除；来源权利、质量、历史覆盖和 provenance 对照仍未验证，000016 与 000906 尚无独立跨源比对。该 v2 immutable publication 也不是旧 DWD pipeline 验收。
+
+### AFI PR #66：默认关闭的 OpenData 指数 benchmark reader
+
+[AFI PR #66](https://github.com/cloudQuant/ai-for-investor/pull/66) 已合入，新增默认关闭的 OpenData v2 published-snapshot 路径，范围为沪深300、沪深500和沪深800风险 benchmark endpoint。路径检查当前用户 `READ_DATA` 权限、专用 route capability、display/backtest source-use authorization，再检查 coverage 并绑定到已取证 publication；失败不回退到 AkShare。
+
+定向 **219 项 synthetic 隔离测试通过**，使用内存 SQLite、进程内 ASGI 和 MockTransport；pytest-timeout 配置警告保留。覆盖率优先拒绝、grant/purpose/capability、publication pin、分页、旧路由回退保护和响应映射有测试，但当前 OpenData coverage 恒为 **UNKNOWN**，source rights 与数据质量也 UNKNOWN，index jobs disabled/unreviewed，生产 grants/config 未验证；因此该 reader 不是生产可用功能。它仅校验 SHA 字段格式和 identity binding，不在 client 重算 row/content hash；真实 source、生产数据库及全量指数历史均未测试。
+
+Portfolio Fama–French（FF）路径尚未迁移。启用该 flag 后，三个指数的其他旧 `BenchmarkService` 调用（包括 FF 路径）会 fail closed，而不是继续旧源回退。该增量不改变父级控制任务分母或完成统计，也不能关闭指数来源授权、历史覆盖、生产部署等开放事项。

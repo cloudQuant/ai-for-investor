@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-27（Asia/Shanghai）。当前状态：**AFI PR #52/#53 与 OpenData PR #5 已合入 `dev`。PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。** PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+编制日期：2026-10-27（Asia/Shanghai）。当前局部状态：**AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 均已合入 `dev`；这只表示各 PR 的提交范围已集成，迭代204整体尚未完成。** PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
 
 AFI PR #56 已合入：新增默认关闭的 OpenData 上证50 benchmark reader。#56 合并后又补充了三场景 `score_pending → apply_outcome` 内存 SQLite ORM 回归；补测与本文档更新一并交付。测试文件整套 **23 passed**，Provider HTTP 使用 `MockTransport`、股票行情使用 fake；运行时有两项 timeout 插件配置警告。这不代表生产 source、生产授权或生产数据库验收。生产数据源授权与落库、逐日历史 coverage、Eastmoney 跨源对照及告警仍未验收。个股 20 日收益可算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；原因只写日志，没有持久化原因或告警。此增量不改变全 A 与逐标的全历史仍待验收的状态。
 
@@ -11,6 +11,8 @@ OpenData PR #7 已合入：仅增加离线 SQLite source attempt token-bucket ga
 OpenData PR #8 已合入：352 项隔离测试通过；HTTP client 模块语句+分支综合覆盖率为 90.446%，request budget 模块为 98.571%。HTTP 门禁通过显式注入验证，并使用 SQLite；未接真实新浪来源或调度，其他调用路径也未受门禁保护。这些证据不代表生产授权、跨主机并发、生产数据库或上线验收。
 
 AFI PR #62 已合入 benchmark 区间对齐，定向验证为 24 项后端、2 项前端测试通过，覆盖区间匹配、年化以及 ledger fail-closed degraded/UI 提示行为。生产 NAV、收盘盯市、TWR 和实盘行为仍未验证，FF 问题仍未解决；该改动不表示 benchmark 全链路或迭代204已完成。
+
+AFI PR #64/#65/#66 与 OpenData PR #9/#10 已合入；这些是有明确局部边界的增量，不改变父级任务完成统计。#64 用 11 项隔离测试拒绝无可信 PIT 证据的历史/未来重算；#65 记录来源授权证据但不构成法律授权；#9 只生成历史窗口候选，不 dispatch，也不表示已识别真实 gap。#10 离线准备四个独立指数数据集（上证50、沪深300、沪深500、沪深800），来源授权与数据质量仍 UNKNOWN。#66 默认关闭，219 项 synthetic 隔离测试通过；当前 OpenData coverage 为 UNKNOWN，不能用于生产；启用 flag 会让未迁移的旧 benchmark 调用 fail closed，FF 尚未接入。详见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
 
 波次历史摘要：W8—W11 的局部隔离验证及归档仍按对应状态文件保留；此前列出的覆盖率、收据和静态检查是历史范围证据，不代表当前 HEAD 整仓门禁或生产验收。当前 PR 与未完成范围以 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 为准。
 
