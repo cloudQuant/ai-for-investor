@@ -518,3 +518,9 @@ source-attempt gate 尚未在真实接线下验收；季度数据为单季还是
 | [OpenData PR #52](https://github.com/cloudQuant/opendata/pull/52) | 已合入（`78bb6846fa934c5bd6ab33479b5f12e27a38f9aa`），增加纯财报期间覆盖评估器；最终 **38 项隔离测试通过**，目标模块覆盖率 **91%**；首次测试 **1 项失败**的记录保留。它使用显式期间槽位和证据：`observed` 只表示存在对应证据；`missing` 只有在所有适用证据门禁同时通过时才可判定，包括期间应期、到期后扫描完成、inventory 一致、lifecycle 与精确 obligation/due 关联、扫描 scope/crosswalk/cursor 与失败/隔离项核对、source-history 一致，以及不存在冲突、未来或不可用版本证据。证据见 [`2026-10-28-financial-period-coverage`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-financial-period-coverage>)。 | 评估器不采集或自行验证上游来源，也不证明证据覆盖完整或来源保留边界。该切片不建立 PIT/修订历史，也没有真实全 A 股接线；生产采集、全市场范围与完整历史仍未验收。 |
 
 PR #51–#52 的局部通过不改变 PR #50 的运行边界：Fuyao helper 尚未注册到系统、调度、API 或财报存储；source-attempt gate 仍需在真实接线时验收。季度单季/累计语义、单位真实性、PIT/修订历史、全 A 股与生产运行仍开放。本文不包含 API key 或原始响应数据。
+
+## OpenData PR #53：Fuyao observation capture prepare bridge
+
+[OpenData PR #53](https://github.com/cloudQuant/opendata/pull/53) 已 squash 合入 `dev`（`c99268b73006017f6dbe462f0ca7b6bd64725f1f`）。它把显式提供的 Fuyao fetch result 接到 raw-evidence 写入和现有 store prepare 流程，产出供调用方事务使用的 prepared capture；最终 **32 项 synthetic 隔离测试通过**，目标分支覆盖率 **100%**。源码 `opendata/pipeline/fuyao_observation_capture.py` SHA-256 为 `9d1a1d6e4504e0b22df97517ca56c766e986e9cca9129d515077c05a0a1c2e5f`；测试 `tests/test_fuyao_observation_capture.py` SHA-256 为 `3b2567069ed701a86e4d30d759539f00c8d145d866eab6eb276ae62551fd1693`。私有失败与最终验证收据（含最终 pytest/coverage 日志及较早失败记录）保存在 [`2026-10-28-fuyao-capture-bridge`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-capture-bridge>)。
+
+此 bridge 不提交数据库事务、不接调度，也不验证真实来源血缘；来源、attempt/reservation、profile 与映射等上下文仍由调用方声明。文件系统 raw evidence 与数据库事务不原子，prepare 后续失败可能留下 orphan；当前 manifest 不能单独恢复完整业务上下文。重复调用没有跨调用幂等保证，可能产生新的 manifest/capture ID，但不能据此声称每次调用必定生成不同 manifest；同一 prepared 对象在调用方事务内的重用遵循现有 store 语义。结果不构成 PIT、财报修订历史、全 A 股覆盖或完整历史验收。
