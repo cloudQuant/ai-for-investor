@@ -11,8 +11,13 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.services.market_instrument import MarketInstrumentService
 from app.services.news_intelligence import get_news_intelligence_service
+from app.services.stock_analysis.opendata_financial_archive import (
+    OpenDataFinancialArchiveError,
+    OpenDataFinancialArchiveReader,
+)
 
 
 class StockAnalysisDataCollector:
@@ -45,9 +50,17 @@ class StockAnalysisDataCollector:
         "监管",
     )
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        settings: Any | None = None,
+        financial_archive_reader: OpenDataFinancialArchiveReader | None = None,
+    ) -> None:
         self.db = db
         self.market_service = MarketInstrumentService()
+        self._settings = settings
+        self._financial_archive_reader = financial_archive_reader
 
     async def collect(
         self,
@@ -88,6 +101,10 @@ class StockAnalysisDataCollector:
         degraded_reasons: list[str] = []
         if not self._has_financial_data(financials):
             degraded_reasons.append("财务数据为空")
+            if isinstance(financials.get("raw_archive"), dict):
+                degraded_reasons.append(
+                    self._financial_archive_degradation_reason(financials["raw_archive"])
+                )
         if not news.get("items"):
             degraded_reasons.append("新闻数据为空")
         data_quality = {
@@ -261,6 +278,55 @@ class StockAnalysisDataCollector:
         if not self._is_cn_stock(symbol, market_type):
             return financials
 
+        active_settings = self._settings or get_settings()
+        if bool(
+            getattr(
+                active_settings,
+                "STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ENABLED",
+                False,
+            )
+        ):
+            instrument_id = self._opendata_instrument_id(symbol)
+            try:
+                if instrument_id is None:
+                    raise OpenDataFinancialArchiveError("instrument_id_invalid")
+                reader = self._financial_archive_reader
+                if reader is None:
+                    reader = OpenDataFinancialArchiveReader.from_environment(
+                        allowed_hosts=getattr(
+                            active_settings,
+                            "STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ALLOWED_HOSTS",
+                            "",
+                        )
+                    )
+                archive_evidence = await reader.fetch_analysis_evidence(
+                    instrument_id=instrument_id,
+                    analysis_date=analysis_date,
+                )
+            except OpenDataFinancialArchiveError as exc:
+                archive_evidence = self._empty_financial_archive_evidence(
+                    symbol=symbol,
+                    analysis_date=analysis_date,
+                    reason_code=exc.code,
+                )
+            except Exception:
+                # Never switch providers after the explicit OpenData selection.
+                # Keep a stable, credential-free failure visible to the caller.
+                archive_evidence = self._empty_financial_archive_evidence(
+                    symbol=symbol,
+                    analysis_date=analysis_date,
+                    reason_code="reader_error",
+                )
+            financials.update(
+                {
+                    "annual": [],
+                    "quarterly": [],
+                    "provider": "opendata",
+                    "raw_archive": archive_evidence,
+                }
+            )
+            return financials
+
         try:
             abstract, indicators = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -287,6 +353,125 @@ class StockAnalysisDataCollector:
                 }
             )
         return financials
+
+    @classmethod
+    def _opendata_instrument_id(cls, symbol: str) -> str | None:
+        """Return a conservatively resolved suffix-form A-share identifier."""
+        normalized = symbol.strip().upper()
+        explicit_exchange: str | None = None
+        if "." in normalized:
+            if normalized.count(".") != 1:
+                return None
+            code, explicit_exchange = normalized.split(".", 1)
+            if explicit_exchange not in {"SH", "SZ", "BJ"}:
+                return None
+        elif normalized.startswith(("SH", "SZ", "BJ")):
+            explicit_exchange, code = normalized[:2], normalized[2:]
+        else:
+            code = normalized
+
+        if re.fullmatch(r"[0-9]{6}", code, re.ASCII) is None:
+            return None
+
+        if code.startswith("6"):
+            exchange = "SH"
+        elif code.startswith(("0", "3")):
+            exchange = "SZ"
+        elif code.startswith("920") or code.startswith(("43", "83", "87", "88")):
+            exchange = "BJ"
+        else:
+            # This excludes B-share and ambiguous 9/2-prefixed symbols. The
+            # older generic exchange guesser remains for legacy display paths.
+            return None
+
+        if explicit_exchange is not None and explicit_exchange != exchange:
+            return None
+        return f"{code}.{exchange}"
+
+    @classmethod
+    def _empty_financial_archive_evidence(
+        cls,
+        *,
+        symbol: str,
+        analysis_date: date,
+        reason_code: str,
+    ) -> dict[str, Any]:
+        start_period = date(max(1, analysis_date.year - 2), 1, 1)
+        instrument_id = cls._opendata_instrument_id(symbol)
+        return {
+            "source": "opendata",
+            "source_id": "ths_fuyao",
+            "instrument_id": instrument_id,
+            "status": "unavailable",
+            "requested_window": {
+                "start_report_period": start_period.isoformat(),
+                "end_report_period": analysis_date.isoformat(),
+            },
+            "queries": [
+                {
+                    "statement_type": statement_type,
+                    "periodicity": periodicity,
+                    "status": "failed",
+                    "record_count": 0,
+                    "reason_code": reason_code,
+                }
+                for statement_type in ("income", "balance", "cashflow")
+                for periodicity in ("annual", "quarterly")
+            ],
+            "records": [],
+            "single_page_limit": 199,
+            "pagination_supported": False,
+            "future_disclosure_record_count": 0,
+            "historical_as_of_status": "unavailable",
+            "analysis_date_filtering": "report_period_only",
+            "completeness": "unknown",
+            "point_in_time_reconstruction": "unavailable",
+            "period_amount_semantics": "unknown",
+            "provenance_status": "incomplete",
+            "observation_time_semantics": "deduplicated_observation_timestamp_not_capture_time",
+            "normalization_status": "unreviewed",
+            "eligible_for_decision_or_backtest": False,
+        }
+
+    @staticmethod
+    def _financial_archive_degradation_reason(archive: dict[str, Any]) -> str:
+        status = archive.get("status")
+        raw_only_context = (
+            "指标、单位和季度语义未审核，provenance不完整，"
+            "观察时间不是采集时间，PIT不可用"
+        )
+        future_count = archive.get("future_disclosure_record_count")
+        future_disclosure_note = (
+            f"；{future_count}条记录披露日晚于分析日，不能用于历史时点分析"
+            if isinstance(future_count, int) and future_count > 0
+            else ""
+        )
+        if status == "observed":
+            return (
+                f"OpenData财报仅保留为来源原生证据；{raw_only_context}"
+                f"{future_disclosure_note}"
+            )
+        if status == "empty":
+            return (
+                "OpenData财报归档请求成功但未返回记录，覆盖完整性仍未知；"
+                f"{raw_only_context}{future_disclosure_note}"
+            )
+        reason_codes = sorted(
+            {
+                str(query.get("reason_code"))
+                for query in archive.get("queries", [])
+                if isinstance(query, dict) and query.get("reason_code")
+            }
+        )
+        if reason_codes:
+            return (
+                f"OpenData财报归档不可完整读取；{raw_only_context}；"
+                f"原因代码：{', '.join(reason_codes)}{future_disclosure_note}"
+            )
+        return (
+            f"OpenData财报归档不可用；来源和覆盖完整性未验证；"
+            f"{raw_only_context}{future_disclosure_note}"
+        )
 
     @staticmethod
     def _build_financials(payload: dict[str, Any]) -> dict[str, Any]:
