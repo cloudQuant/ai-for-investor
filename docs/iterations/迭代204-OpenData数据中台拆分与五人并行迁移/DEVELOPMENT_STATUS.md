@@ -552,3 +552,9 @@ attempt trace 只随最终成功响应暴露；如果中间尝试失败后请求
 最终定向验证为 **152 项 synthetic 隔离测试通过**，branch-inclusive 覆盖率 **97%**；首次运行 **148 项通过、4 项失败**，失败集中在 fetch-result 元数据拒绝用例的校验顺序，首轮日志予以保留。既有 capture bridge 回归另有 **32 项通过**，但该测试没有使用或验证新增的 attempt trace，因此不能据此声称 trace 已与 archive/prepare 流程联调。证据保存在 OpenData 本机私有目录 [`2026-10-28-fuyao-fetcher-attempt-trace`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-fetcher-attempt-trace>)。对最终源码、测试和收据的独立检查确认：终态 transport 错误不会返回带轨迹的 fetch result，旧构造方式保留空 tuple，成功结果仅承载本地记录；不把这一切片解释为持久审计。
 
 attempt trace 只有成功 fetch result 可携带；终止网络失败或响应后校验失败不会返回该结果，故无法从调用方结果读取其最终尝试轨迹。空 tuple 也不证明请求未发送。此切片没有新增持久化审计或来源授权核验，不能证明失败请求最终状态、全 A 股采集、完整历史或 PIT/修订历史；204-A04-03 与生产接线仍保持开放，迭代204整体仍未完成。
+
+## OpenData PR #58：capture bridge 本地 trace 一致性校验（2026-10-28）
+
+[OpenData PR #58](https://github.com/cloudQuant/opendata/pull/58) 已 squash 合入 `dev`（`f6638cf33fb0f5c1d01c84a631fbc41c76ea073c`）。当 fetch result 带有非空 attempt trace 时，capture bridge 会在写入文件前将 trace 字段与调用方声明的本地字段比对；旧调用方提供空 trace 时仍兼容。缺失的 source ID 保持 unavailable，不据此补造标识。源码、单元测试和集成测试 SHA-256 分别为 `97a51bfa8c9ac941219c854c5748c20fa6975b0ec40f0261d25191b7a5d07720`、`60b161e2590882aa04ba50bc8b0306ec2bc86879177726c7bfe4cea0bdf43f2a`、`f9891c3e9aaf921327f7e80248e8559530f63f212154fc4c3651d54ee8d35670`。合成隔离测试 **47 项通过**，目标模块 branch-inclusive 覆盖率 **98%**。另有一项本地集成测试使用临时 SQLite source-attempt gate、`MockTransport` 和 fetcher→bridge 路径；r1/r2 因 `source_attempts=4` 超过 gate 上限 `3` 失败，r3/r4 对同一测试项重跑通过。验证收据保存在 OpenData 本机私有目录 [`2026-10-28-fuyao-bridge-local-trace`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-bridge-local-trace>)。
+
+trace 与声明字段的匹配仅是本地一致性检查，不独立认证来源、上游接收或处理，也不将 trace 持久化为审计记录。该合入不代表生产数据库落库或调度完成，也不证明全 A 股覆盖、财报完整历史、PIT/修订历史或数据完整性；迭代204整体仍未完成。
