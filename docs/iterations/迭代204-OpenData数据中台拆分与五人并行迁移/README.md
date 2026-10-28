@@ -1,6 +1,6 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-27（Asia/Shanghai）；计数口径核对更新：2026-10-28（Asia/Shanghai）。当前局部状态：**AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 均已合入 `dev`；这只表示各 PR 的提交范围已集成，迭代204整体尚未完成。** PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+编制日期：2026-10-27（Asia/Shanghai）；计数口径核对更新：2026-10-29（Asia/Shanghai）。当前局部状态：**AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 均已合入 `dev`；这只表示各 PR 的提交范围已集成，迭代204整体尚未完成。** PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
 
 AFI PR #56 已合入：新增默认关闭的 OpenData 上证50 benchmark reader。#56 合并后又补充了三场景 `score_pending → apply_outcome` 内存 SQLite ORM 回归；补测与本文档更新一并交付。测试文件整套 **23 passed**，Provider HTTP 使用 `MockTransport`、股票行情使用 fake；运行时有两项 timeout 插件配置警告。这不代表生产 source、生产授权或生产数据库验收。生产数据源授权与落库、逐日历史 coverage、Eastmoney 跨源对照及告警仍未验收。个股 20 日收益可算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；原因只写日志，没有持久化原因或告警。此增量不改变全 A 与逐标的全历史仍待验收的状态。
 
@@ -27,7 +27,7 @@ AFI PR #64/#65/#66 与 OpenData PR #9/#10 已合入；这些是有明确局部�
 | 文件 | 用途 |
 | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统边界、数据生命周期、REST 契约、存储、调度、安全与可观测性 |
-| [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) | 主任务矩阵含98个唯一可分派控制任务ID及依赖、验收面；状态按 DEVELOPMENT_STATUS.md 截至2026-10-28（Asia/Shanghai）的最新快照：8 DEV_DONE、9 IN_PROGRESS、81 PLANNED。DEV_DONE仅表示该行局部交付；逐批子范围进展单列 |
+| [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) | 主任务矩阵含98个唯一可分派控制任务ID及依赖、验收面；状态截至2026-10-29（Asia/Shanghai）：8 DEV_DONE、11 IN_PROGRESS、79 PLANNED。DEV_DONE仅表示该行局部交付；逐批子范围进展单列 |
 | [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) | 双仓隔离分支、提交、测试、限制与后续接线 |
 | [WAVE2_STATUS.md](WAVE2_STATUS.md) | 11条并行开发任务、真实运行清单、事务决定、审查与剩余范围 |
 | [WAVE3_STATUS.md](WAVE3_STATUS.md) | 执行器/证据/主机清单/提交/迁移预演/兼容门禁和wire身份修正 |

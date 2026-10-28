@@ -452,7 +452,7 @@ OpenData PR #39 只为后续 discovery 查询提供索引基础，没有启用 S
 | OpenData Fuyao fetcher 与受限采集 | OpenData PR #50 已合入 `dev`，当前交付为显式 DI helper：**147 项 synthetic isolated 测试通过**，目标模块 statement+branch 覆盖率 **99%**，Ruff 通过。先前两个受控 run 得到的六种 endpoint/期间样本、manifest pin 与六实体 hash/size 核对详见本文末尾。 | helper 未注册到系统、未调度、未接入 API 或财报存储，smoke 不含 archive。source-attempt gate 仍待真实接线时验收；官方文档单位说明不代表实际数据单位已验证。PIT/修订、季度单季/累计语义、全 A 股及完整历史、生产接线均未验收。 |
 | [OpenData PR #46](https://github.com/cloudQuant/opendata/pull/46)：publication outbox 本地事件 | 已 squash 合入 `dev`（`9201370133e6207480ed1f7ecc3899d79af2ba6a`）；**246 项隔离测试通过**，Store 覆盖率 **90%**、outbox 覆盖率 **98%**。隔离合成 MySQL 8.4 验收通过，包括强制 outbox INSERT 故障（errno 1644）后恢复到已提交 baseline、并发场景及 `0017→0018` 迁移。证据见本机私有目录 [`mysql-acceptance-forced-failure`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-publication-outbox/mysql-acceptance-forced-failure>)；首次部分结果与第二次完整结果均保留。 | 仅验收本地 publication outbox 事件切片，不代表控制任务 **204-A04-03** 完成。此次 MySQL 验收未覆盖 `0017` 之前的迁移链；跨服务 relay、独立 receipt、post-commit visibility seal、生产数据库/接线及生产历史可见性仍未验收；不补造历史可见时间。 |
 
-AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结果继续标记为 `legacy_unverified`。PR #96–#97 只修正授权判定，不会启用扫描或使旧结果变成可信数据。迭代计划最新记录的任务快照为 **98 项（8 DEV_DONE、9 IN_PROGRESS、81 PLANNED）**；各局部 PR 与合成/隔离测试不会自动关闭父级控制任务。
+AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结果继续标记为 `legacy_unverified`。PR #96–#97 只修正授权判定，不会启用扫描或使旧结果变成可信数据。迭代计划任务快照截至2026-10-29（Asia/Shanghai）为 **98 项（8 DEV_DONE、11 IN_PROGRESS、79 PLANNED）**；各局部 PR 与合成/隔离测试不会自动关闭父级控制任务。
 
 全 A 股逐标的真实采集和逐证券 head/interior/tail 历史核对、PIT/修订历史、Fuyao 财报完整来源响应与语义验收、完整旧任务迁移、生产 MySQL/API/授权/自然调度与备份恢复仍未完成或未验收。Fuyao 当前只有本文记录的受限 partial 响应观察。**迭代204整体仍未完成。**
 

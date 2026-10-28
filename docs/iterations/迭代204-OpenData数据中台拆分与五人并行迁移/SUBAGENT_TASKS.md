@@ -1,6 +1,6 @@
 # 迭代204子代理任务清单
 
-本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **98个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；当前8个子任务为DEV_DONE，9项为IN_PROGRESS，81项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
+本清单把 IMPLEMENTATION_PLAN.md 的35个工作包细化为 **98个**可独立分派、可验收的子任务。它是执行拆分，不是完成报告；截至2026-10-29（Asia/Shanghai），8个子任务为DEV_DONE，11项为IN_PROGRESS，79项为PLANNED；第二批跨多个父工作包的局部交付另见WAVE2_STATUS，不以局部能力关闭整行验收。DEV_DONE仅覆盖该行交付，不会把父工作包标成完成，也不表示已合入dev、已部署或真实数据已验证。实际提交与验证记录见 DEVELOPMENT_STATUS.md。
 
 第二批已按独占文件集成11条开发任务，第三批按6个控制任务拆成7条执行任务，跨多个父工作包推进；其实际交付与剩余验收面见 [WAVE2_STATUS.md](WAVE2_STATUS.md)。下表保留完整任务验收门槛，库内能力或局部链路完成不会自动关闭要求外部证据、生产worker或完整业务场景的任务。
 
@@ -58,7 +58,7 @@
 | 204-B02-02 | B02 | PLANNED | B / 证券代理 | REAL_SOURCE | 对选定股票真实抓取日线，核对源参数、交易日、原始响应、字段及许可/历史保留边界。 | 204-B02-01 | 样本与真实源可逐字段比对；上市起点证据与源最早返回日分开记录，异常不被填平。 |
 | 204-B02-03 | B02 | PLANNED | B / 证券代理 | CODE/OFFLINE | 形成股票universe/上市退市、公司行动和独立复权数据集方案。 | 204-A03-02, 204-B02-01 | fixture覆盖换码、退市、除权、复权锚点和因子版本；复权与raw不混表、不覆盖；来源公告时刻与平台visibility seal分开，无证据时source/market-known PIT标UNKNOWN。 |
 | 204-B02-04 | B02 | PLANNED | B / 股票日线源代理 | CODE/OFFLINE+REAL_SOURCE | 将AkShare适配到OpenData股票日线Provider，首版只输出经源字段核对的raw价格和源端原生量/额单位；按AkShare函数→实际来源产品→字段登记映射证据，保留source、参数、`business_date`、`observed_at`、空值语义与raw evidence引用。用户已允许本迭代使用AkShare，无需再次索取授权。 | 204-A02-02, 204-A05-05, 204-B02-01 | 离线fixture覆盖真实列映射、单位、NULL/零及重试幂等；有界真实沪深样本的AkShare函数/实际来源产品/字段逐项对照，再从source→ODS/DWD→visibility seal→REST核验并留脱敏请求/版本/hash。不得以该样本声称全A、BSE或全历史完整。 |
-| 204-B02-05 | B02 | PLANNED | B / 财报源代理 | CODE/OFFLINE+REAL_SOURCE | 将Fuyao已提供的财报数据接入OpenData reviewed v2 annual/quarterly dataset；按原样保留报告期业务日期、源字段、source、原生金额单位/币种、可核验的原始时间及平台visibility seal和raw evidence引用。没有可核验证据的公告时间保持UNKNOWN，不把本任务描述为PIT财报。用户已允许本迭代使用Fuyao，无需再次索取授权。 | 204-A02-02, 204-A05-05, 204-A05-06, 204-B01-02 | 离线fixture覆盖年度/季度、报告期key、多次修订、NULL与0、单位/币种、来源时间原文/时区转换规则；至少一组有界真实返回经采集、post-commit封存、发布、REST逐字段对照。覆盖范围和源保留边界逐标的/报告期记录；不推断全市场或任意历史PIT。 |
+| 204-B02-05 | B02 | IN_PROGRESS（仅预检和合成门禁切片；真实源/发布未验收） | B / 财报源代理 | CODE/OFFLINE+REAL_SOURCE | 将Fuyao已提供的财报数据接入OpenData reviewed v2 annual/quarterly dataset；按原样保留报告期业务日期、源字段、source、原生金额单位/币种、可核验的原始时间及平台visibility seal和raw evidence引用。没有可核验证据的公告时间保持UNKNOWN，不把本任务描述为PIT财报。用户已允许本迭代使用Fuyao，无需再次索取授权。 | 204-A02-02, 204-A05-05, 204-A05-06, 204-B01-02 | 离线fixture覆盖年度/季度、报告期key、多次修订、NULL与0、单位/币种、来源时间原文/时区转换规则；至少一组有界真实返回经采集、post-commit封存、发布、REST逐字段对照。覆盖范围和源保留边界逐标的/报告期记录；不推断全市场或任意历史PIT。 |
 | 204-B03-01 | B03 | PLANNED | B / 证券代理 | CODE/OFFLINE | 建立基金/ETF交易价格、单位净值、累计净值、万份收益和七日年化的独立数据集及映射。 | 204-A03-02 | 合同测试证明字段不混用、单位与公布时点明确；缺失NAV不会由交易价格补值。 |
 | 204-B03-02 | B03 | PLANNED | B / 证券代理 | CODE/OFFLINE | 建立可转债个券与国债/信用收益率曲线的分离模型及证券字段映射。 | 204-A03-02 | fixture验证曲线tenor/日期/单位和个券价格、收益率不是同一表义；源/历史证据列待核项。 |
 | 204-B04-01 | B04 | PLANNED | B / 证券代理 | CODE/OFFLINE | 接入指数定义、历史成分有效期和估值分母，支持退市证券与历史universe回测。 | 204-A03-02 | fixture按as_of重建历史成分；当前成分不被反向套用到历史。 |
@@ -102,7 +102,7 @@
 | 204-D02-03 | D02 | DEV_DONE（MySQL/SQLite迁移） | D / 运维代理 | CODE/OFFLINE | 为Run ledger分配唯一Alembic迁移序列并集成到目标数据库迁移体系，保持双库版本治理。 | 204-D02-02 | 迁移owner确认revision无多head；warehouse 0010唯一head承接至0011；literal up/down已在独立MySQL8.0.46与SQLite验证，metadata head0006保持独立。PostgreSQL行为未验证；父D02未关闭。 |
 | 204-D02-04 | D02 | IN_PROGRESS | D / wave4_worker | CODE/OFFLINE | 把持久ledger接入统一Run service与worker入口，加入持久环境下多进程竞争/崩溃恢复测试。 | 204-D02-02, 204-D02-03, 204-D03-01 | worker只能经Run service领取和结算；重启后租约可恢复，旧token不能写入终态或事实数据。 |
 | 204-D03-01 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 实现Provider task executor协议、统一日志/退出码和可终止的有界子进程执行器。 | 204-D02-01 | 使用冻结合成job/provider fixture推进离线开发；fake provider验证超时、取消、stdout/stderr截断和临时资源回收；API事件循环不被阻塞。 |
-| 204-D03-02 | D03 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现重试/预算/并发/供应商限速/退避、自然槽与显式补数分流及分片规则。 | 204-D03-01 | fake时钟/源模拟证明限速共享、Retry-After受尊重、源WAF不无限重试、历史恢复有独立预算。 |
+| 204-D03-02 | D03 | IN_PROGRESS（仅补数规划预算；重试、并发等未完成） | D / 运维代理 | CODE/OFFLINE | 实现重试/预算/并发/供应商限速/退避、自然槽与显式补数分流及分片规则。 | 204-D03-01 | fake时钟/源模拟证明限速共享、Retry-After受尊重、源WAF不无限重试、历史恢复有独立预算。 |
 | 204-D03-03 | D03 | IN_PROGRESS | D / 运维代理 | CODE/OFFLINE | 让APScheduler、手工API、CLI、systemd外壳统一提交同一Run入口。 | 204-D02-01 | 入口只依赖提交SPI，不依赖worker或真实Provider；多入口相同任务映射同一occurrence身份；systemd不再直写warehouse或绕过fencing。 |
 | 204-D04-01 | D04 | PLANNED | D / 运维代理 | CODE/OFFLINE | 提供管理员JobDefinition/Run/DQ/coverage后端接口、授权scope、操作者审计和安全取消。 | 204-A02-03, 204-D02-04, 204-A06-02 | 未授权请求被拒绝；审计包含操作者/对象/动作/request_id；取消不可中断阶段真实显示状态。 |
 | 204-D04-02 | D04 | PLANNED | D / 运维代理 | CODE/OFFLINE | 实现opendata运维控制台的任务、执行、下次运行、覆盖、隔离、补数/取消/重放和容量页面。 | 204-D04-01 | 页面仅调用受权限保护API，关键操作有确认/结果反馈，失败原因可追踪，不内嵌任意脚本参数。 |
