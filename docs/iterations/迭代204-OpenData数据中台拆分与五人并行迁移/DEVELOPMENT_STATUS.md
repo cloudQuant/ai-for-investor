@@ -536,3 +536,11 @@ PR #51–#52 的局部通过不改变 PR #50 的运行边界：Fuyao helper 尚�
 [OpenData PR #55](https://github.com/cloudQuant/opendata/pull/55) 已 squash 合入 `dev`（`bd9a7ebd482e53548f0fbc7c78df1a376497bcc3`），增加 HTTP client 成功路径的 attempt trace。最终 **152 项 synthetic 隔离测试通过**，输出有 **2 条 `PytestUnknownMarkWarning`**；`http_client.py` statement+branch 综合覆盖率为 **97%**。首轮 **60 项通过**，但 coverage 为 **62%**、未达到 90% 门槛；该轮记录保留在私有证据中。`opendata/data/providers/ths/transport/http_client.py` 与 `tests/test_fuyao_transport.py` 的 SHA-256 分别为 `e55bf322a8e2c68d03f10bd431f75d732727b496b311db168533d5dc2b015c81` 和 `11a5bf0cfe9964c8d9ac8a21500d9a5dbd8b8c4570cd95633dec1b2548b48452`。验证收据位于 OpenData 本机私有目录 [`2026-10-28-fuyao-transport-attempt-trace`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-transport-attempt-trace>)。
 
 attempt trace 只随最终成功响应暴露；如果中间尝试失败后请求最终成功，响应可带有这些尝试的 trace。终止错误没有 trace 载体，因此不能据此推断所有请求尝试都可由调用方读取。记录本身不能证明请求已被上游接收，也不能证明来源授权有效。目前该功能尚未接入 Fuyao fetcher、capture bridge 或持久化审计流程。故 204-A04-03 及生产审计接线状态仍为 **OPEN**；此 PR 不证明真实采集、持久可追溯性、数据授权、全 A 股范围或完整历史已验收，迭代204整体仍未完成。
+
+## OpenData PR #56：财报归档读取器分页与并发边界（2026-10-28）
+
+[OpenData PR #56](https://github.com/cloudQuant/opendata/pull/56) 已 squash 合入 `dev`（`ec256076bb76e4514253a7796b199234caacce7c`）。最终 **33 项 synthetic 隔离测试通过**，statement+branch 综合覆盖率 **98.49%**。早期一轮 **16 项通过**，但覆盖率 **89.45%**，低于门槛；该轮未达标结果保留，不作为验收依据。源码与测试 SHA-256 分别为 `a034a13e0b3dfe57c6aafcb1abcdf0d8926b147ec19c200e0d82bbca55fcf397`、`6815c9c570a12b7eb0edb843ced49d8fa0ad87802acf50d0ae9cf3f09d51054f`。日志及隔离收据见 OpenData 本机私有目录 [`2026-10-28-financial-archive-reader`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-financial-archive-reader/>)。
+
+一次性合成 **MySQL 8.4** 场景仅应用空归档上的 `migration_0001`，随后以两个 `REPEATABLE READ` 连接读取 **6 行、每页 2 行**。在事务快照期间并发插入/更新未改变该快照的分页结果；事务结束后，旧游标被拒绝。另验证小数、`NULL` 和 UTC datetime 微秒保真。已通过 pidfd 确认 `mysqld` 与 SQL worker 退出。验收记录同时保留组件加载信息、空 root 密码与自签 CA 提示。EXPLAIN 摘要对两个查询记录 `using_filesort=false`，但该值可能来自 runner 在字段缺失时采用的默认值，因此不能确认实际执行计划是否使用 filesort；不同键范围中的 2,500 条 filler 数据也不证明性能。
+
+该读取器尚未接入 REST。并发一致性依赖调用方在事务开始前设置 `REPEATABLE READ`；本次合成结果不验证 PIT/修订语义、全 A 股范围、生产数据或生产性能，也不代表财报完整历史和迭代204整体已验收。
