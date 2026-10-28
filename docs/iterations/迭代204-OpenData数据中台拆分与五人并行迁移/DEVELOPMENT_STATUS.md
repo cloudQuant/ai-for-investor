@@ -610,3 +610,14 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 | [OpenData PR #69](https://github.com/cloudQuant/opendata/pull/69) | 增加默认禁用的单标的 Fuyao 财报 reviewed-job 切片；**#69 专用隔离套件 238 项 synthetic 测试通过**，三个目标模块 branch-inclusive 覆盖率分别为 **95.00% / 91.23% / 94.22%**，定向 Ruff、format、Bandit、Gitleaks 与 mypy 检查通过。收据见 OpenData 本机私有目录 [`2026-10-28-fuyao-reviewed-job-r6-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-reviewed-job-r6-final>)。 | 测试中的成功采集路径使用进程内 handler 替换与 `MockTransport`，未证明真实子进程成功请求 Fuyao。任务尚未生产装配或启用；生产数据库、调度、崩溃恢复、真实来源数据、全 A 股及全历史均未验收。目标静态检查不等于 canonical A2；canonical A2 与整仓 `make gate` 均未执行，canonical A2 所需历史 evidence 仍缺失。 |
 
 以上合并不改变控制任务完成统计。真实成功子进程、生产任务装配、恢复执行与全 A 股/全历史验收仍开放；不得把合成回放或单标的离线测试解释为这些工作已完成。
+
+## OpenData PR #70–#71：日线补数预算与历史缺口对账候选
+
+以下仅记录规划与对账代码切片的定向隔离验收，不改变迭代任务完成统计；迭代204整体仍未完成。
+
+| PR | 已合入的限定范围与测试结果 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #70](https://github.com/cloudQuant/opendata/pull/70) | 为日线历史补数规划增加资源预算约束；预算耗尽不会掩盖非法证券代码及北交所路由 blocker。定向 **27 项通过**，`stock_daily_backfill_plan.py` 语句与分支合计覆盖率 **94.58%**；报告的定向 Ruff lint/format、mypy、Bandit 与 Gitleaks 检查通过。证据见 OpenData 本机私有目录 [`2026-10-29-stock-daily-plan-budget-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-stock-daily-plan-budget-final>)。 | 规划结果仍是依据输入证据生成的候选请求，不执行派发、抓取或落库；预算测试不证明来源权限、真实数据覆盖或任何证券的历史完整性。完整 A2 未运行，不能据此宣称整仓或生产验收通过。 |
+| [OpenData PR #71](https://github.com/cloudQuant/opendata/pull/71) | 增加离线、review-only 的日线历史缺口诊断与候选对账，按精确证券/来源及调用方提供的日历、publication、预期观测、生命周期、保留边界和 alias-pinned 计划证据判断可报告的缺口。定向 **92 项通过**，`stock_daily_reconcile.py` 语句与分支合计覆盖率 **96.61%**。Ruff lint/format、Bandit、Gitleaks 与目标文件限定 `--follow-imports=silent` 的 mypy 检查通过。证据见 OpenData 本机私有目录 [`2026-10-29-stock-daily-reconcile-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-stock-daily-reconcile-final>)。 | 只输出供人工复核的诊断和候选，不执行补数；未连接真实来源、数据库、API、调度器或生产规模数据，候选也不证明证券或日期区间已经完整。模块固定将 `all_a_universe_complete` 与 `universe_census_attested` 置为 false。目标文件限定 mypy 通过不代表导入模块全仓通过；较宽的检查因四个其他并行修改模块中的 11 个错误退出非零。完整 canonical A2 未运行，所需 immutable 历史 classification evidence 缺失。 |
+
+这两项不证明全 A 股证券分母、北交所/退市生命周期、真实来源保留边界或逐证券 head/interior/tail 已核实；不增加任务完成数，也不构成生产数据采集或全历史恢复验收。
