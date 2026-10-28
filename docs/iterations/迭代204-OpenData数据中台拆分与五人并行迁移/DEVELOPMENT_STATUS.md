@@ -639,3 +639,10 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 [OpenData PR #75](https://github.com/cloudQuant/opendata/pull/75) 已合入 `dev`，增加内部股票 publication 的 market/symbol selector 与对应身份和迁移处理。专用隔离套件 **326 项通过**；在一次性 **MySQL 8.4** 实例上，以合成 `0018` 状态执行至 `0019`，并注入部分 DDL 后的客户端中断场景。详细收据见 OpenData 本机私有证据 [`2026-10-29-stock-selector-v2-final-326-mysql/EVIDENCE.md`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-stock-selector-v2-final-326-mysql/EVIDENCE.md>)。
 
 selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数或股票筛选接口，不能据此认为 ai-for-investor 可通过 REST 按 market/symbol 查询。测试与合成迁移不等于完整 canonical A2、生产迁移或生产规模查询性能验收。旧 publication 中 selector 为空的记录不会因同键重发自动补齐；历史记录处置/重建方案仍待审查。未使用真实股票数据验证证券身份、来源语义或覆盖范围。上述 A2、生产性能与迁移、旧 NULL 记录处理及真实数据验收均尚未通过；本 PR 只关闭其明确的隔离代码范围，不改变迭代204整体未完成状态。
+
+
+## 2026-10-29 OpenData PR #76：只读 grant 检查
+
+[OpenData PR #76](https://github.com/cloudQuant/opendata/pull/76) 已合入 `dev`，增加只读的 source-attempt grant 检查接口。专用 synthetic SQLite 隔离套件 **185 项通过**；来源门禁模块语句与分支合计覆盖率 **90.1567%**，迁移包覆盖率 **86.4865%**。本次结果包含 **9 条 Alembic 弃用警告**；完整 canonical A2 未运行。验收证据见 OpenData 本机私有目录 [`2026-10-29-grant-inspection-final/README.md`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-grant-inspection-final/README.md>)。
+
+该检查仅提供 advisory 信息，不构成来源授权，也不创建、批准或执行 grant；尚未接入 Fuyao 手工预检，未查询或验证真实生产 grant 状态，亦未执行 Fuyao 请求或数据采集。测试查询的是测试自有临时 SQLite 中的合成 grant 记录，不能据此推断生产库或共置数据库上的行为。实现仍存在同一 OS 用户可在检查期间替换目标文件的 TOCTOU 风险；SQLite/WAL 检查也可能产生文件系统副作用。完整 A2、生产授权及部署验收仍未完成，迭代204整体保持开放。
