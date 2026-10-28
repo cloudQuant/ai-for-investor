@@ -467,3 +467,9 @@ AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结�
 | [OpenData PR #43](https://github.com/cloudQuant/opendata/pull/43) | 增加基于显式快照输入的历史回补候选规划适配。**7 项合成/隔离测试通过**，目标模块覆盖率 **100%**。 | Planner 只生成不可执行的候选，不 dispatch、不采集、不写库；它不证明 publication 中真实存在对应缺口，也不证明数据源保留范围、逐标的真实起点或 head/interior/tail 历史完整。 |
 
 PR #41–#43、#45 与 #46 均只关闭各自限定的代码范围，不改变 Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据且未验收/未合并的状态，也不改变受限 Fuyao recorder 尚未进行真实上游采集的状态。Sina discovery API/Store 已按 OpenData PR #44 合入 `dev`，但 API 继续硬关闭。PR #46 的 publication outbox 本地事件已通过所列隔离验收；跨服务 relay、独立 receipt、post-commit visibility seal 与生产接线仍未完成，因此 204-A04-03 继续开放。以上切片均不证明生产接线、全 A 股真实覆盖、完整历史、PIT/修订历史或迭代204整体完成。
+
+## OpenData PR #47：metadata receipt schema 与 migration 0008
+
+[OpenData PR #47](https://github.com/cloudQuant/opendata/pull/47) 已合入 `dev`（`8f83a609855e5859c099004bc31d13193778a51b`），增加空 metadata receipt schema 与 migration `0008`。SQLite 隔离测试 **22 项通过**，两个目标模块的 branch-inclusive 覆盖率均为 **100%**。在合成 MySQL 8.4 场景中，实际执行 `0007` 与 `0008` 的 upgrade bodies；验收覆盖无历史回填、InnoDB、collation、unique、9 项选定 CHECK，以及空表和非空表 downgrade。证据保存在本机私有目录 [`2026-10-28-pending-metadata-receipt`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-metadata-receipt>)。
+
+此 PR 只验收 schema/migration 的限定范围：未运行完整迁移链，未实现或验收 receipt writer、relay、API 或 JSON hash，也未在生产环境验收。最初两次 MySQL harness 失败记录仍保留；失败收据仅记录 stage 与 error type，根因属于事后分析推断，不能从收据独立复核。这些失败记录不改变本次限定通过范围，也不应被删除或改写为成功。PR #47 不关闭 **204-A04-03**；relay、独立 receipt 流程、visibility seal 与生产接线仍待验收，迭代204整体仍未完成。
