@@ -205,6 +205,22 @@ class Settings(BaseSettings):
     MARKET_DATA_OPENDATA_INSTRUMENT_CONTRACT_SHA256: str = Field(
         default="", description="Pinned canonical contract SHA-256 for the reference catalog"
     )
+    STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Read source-native ths_fuyao financial archive evidence for A-share stock analysis. "
+            "This is default-off, never falls back to AkShare when selected, and does not make "
+            "the evidence eligible for normalized analysis or point-in-time decisions."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ALLOWED_HOSTS: str = Field(
+        default="",
+        description=(
+            "Comma-separated exact hosts allowed for remote HTTPS OpenData API requests. "
+            "A hostname permits port 443; use host:port to permit another exact port. "
+            "Loopback hosts remain available for local development; non-loopback HTTP is rejected."
+        ),
+    )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
         default=False,
         description=(
