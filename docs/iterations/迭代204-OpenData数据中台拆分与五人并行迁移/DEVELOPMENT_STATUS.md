@@ -574,3 +574,15 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 定向离线 fake-engine/ASGI 测试 **45 项通过**，目标模块 statement+branch 综合覆盖率 **98%**；另有 **2 项隔离 OpenAPI 测试通过**。临时隔离 **MySQL 8.4** 合成数据与只读账户验收通过，验证了该切片的读取与响应边界。该 MySQL harness 用测试认证依赖覆盖，并把应用配置的 TCP 连接映射到私有 Unix socket；因此没有验证真实 JWT/API key 认证，也没有验证生产 TCP 路径、真实财报数据、PIT、全历史或部署。结果不代表真实来源授权、数据语义、全市场覆盖或生产服务可用。
 
 现有 capture-candidates 路由保持硬关闭，访问返回 **404**。其 OpenAPI 声明将参数标为可选，但若将路由启用，handler 仍要求这些参数；该契约不一致仍待单独修正和验收。本 PR 不启用该旧路由。迭代204整体仍未完成。
+
+## 2026-10-28 AFI PR #116 与 OpenData PR #62–#63 局部进展
+
+以下记录只覆盖三个 PR 明确交付的代码切片，不改变迭代控制任务数量或完成状态。迭代204整体仍未完成。
+
+| PR | 已合入的限定范围 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [AFI PR #116](https://github.com/cloudQuant/ai-for-investor/pull/116) | 已 squash 合入 `dev`（`36628e5f05671f6c135b1487584582f14477f710`）。新增默认关闭的股票分析 OpenData 路径，消费 OpenData raw-only 数据；定向 **60 项 MockTransport 与旧 collector 测试**。 | 该路径采用降级决策；数据仍是非 PIT，指标映射也未验收。真实 OpenData 端点尚未验收，因此不表示已切换线上消费、已具备生产可用性或完成股票分析迁移。 |
+| [OpenData PR #62](https://github.com/cloudQuant/opendata/pull/62) | 已 squash 合入 `dev`（`8419820ce04bac0214058e39cbb8449537495a6e`），新增 SQLite 合成测试与说明，验证既有的数据库失败回滚及重试流程；共 **4 项 synthetic SQLite** 场景。 | PR 未增加运行时代码。验证范围限于合成 SQLite 场景；不证明真实 job 接线、真实数据库方言行为或生产运行与恢复已验收。 |
+| [OpenData PR #63](https://github.com/cloudQuant/opendata/pull/63) | 已 squash 合入 `dev`（`af383d52b11f28d23c9fc87ad304923cfc3e2f42`），增加 codec/sidecar 的局部支持；定向 **144 项 synthetic 测试**，branch-inclusive 覆盖率记录为 **91.59% / 98.89%**。 | codec/sidecar 尚未接入实际财报 job，也没有 production 验收；sidecar 改动带有类兼容风险，需在后续接线与调用方审查中继续核对。该合入不证明生产采集已启用。 |
+
+这些 PR 不改变全 A 股及退市证券全集、完整历史 head/interior/tail、财报修订/PIT、来源授权核验、生产调度与自然周期验收等开放范围，也不修改控制任务计数。
