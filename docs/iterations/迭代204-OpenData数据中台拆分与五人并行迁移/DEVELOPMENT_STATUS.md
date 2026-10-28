@@ -586,3 +586,15 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 | [OpenData PR #63](https://github.com/cloudQuant/opendata/pull/63) | 已 squash 合入 `dev`（`af383d52b11f28d23c9fc87ad304923cfc3e2f42`），增加 codec/sidecar 的局部支持；定向 **144 项 synthetic 测试**，branch-inclusive 覆盖率记录为 **91.59% / 98.89%**。 | codec/sidecar 尚未接入实际财报 job，也没有 production 验收；sidecar 改动带有类兼容风险，需在后续接线与调用方审查中继续核对。该合入不证明生产采集已启用。 |
 
 这些 PR 不改变全 A 股及退市证券全集、完整历史 head/interior/tail、财报修订/PIT、来源授权核验、生产调度与自然周期验收等开放范围，也不修改控制任务计数。
+
+## 2026-10-28 OpenData PR #64–#66 局部进展
+
+以下仅记录三个已合入切片的代码范围和隔离验证证据；不改变迭代控制任务数量或完成状态，迭代204整体仍未完成。
+
+| PR | 已合入的限定范围 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #64](https://github.com/cloudQuant/opendata/pull/64) | 已 squash 合入 `dev`（`1c086ce67e099dae058375b565a75bf02ea4b046`），增加 Fuyao 财报 bundle 配置加载和结构校验。最终 **46 项 synthetic 测试通过**，`fuyao_financial_bundle.py` branch-inclusive 覆盖率 **92.94%**。 | bundle 中的证券范围、registry 与单位 profile 均依赖调用方/操作员声明；配置 pin 与映射摘要不证明来源授权、真实计量单位或生命周期声明。该切片不创建 grant、不发真实请求、不访问生产数据或数据库；真实 Fuyao 财报任务、来源授权与单位语义仍待验收。离线证据见 OpenData 本机私有目录 [`2026-10-28-fuyao-financial-bundle`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-financial-bundle>)。 |
+| [OpenData PR #65](https://github.com/cloudQuant/opendata/pull/65) | 已 squash 合入 `dev`（`049b0e26b10dc000e134eca82db37e9a3a9d54d4`），为 `RunService` 增加在 SQL 提交事务开启前校验/解码财报 payload 的固定 decoder seam。隔离套件 **151 项 synthetic 测试通过**，`run_service.py` statement+branch 综合覆盖率 **91.37%**。 | decoder seam 不等于真实财报 job 已注册或运行；raw 文件与数据库事务仍非原子，且没有持久化 intent、跨进程恢复队列或崩溃自动对账。本次没有生产数据库、真实供应商响应或生产运行验收。 |
+| [OpenData PR #66](https://github.com/cloudQuant/opendata/pull/66) | 已 squash 合入 `dev`（`cf561b8ed025da385ab428a28173654642c00c94`），新增 Eastmoney-shaped 沪深日线 source-native 字段解析；raw evidence 校验限定为本地 body/manifest hash 与请求摘要的一致性，原文本 token 按字段保留。**66 项 synthetic 测试通过**，模块 branch-inclusive 覆盖率 **99.08%**。 | parser 尚未接入真实 `stock_daily` job 或采集执行路径。合约尚未通过真实 Eastmoney 响应验收；caller-declared 元数据不认证上游，测试不证明真实来源行为或授权。价格复权含义、数值单位/NULL 语义及历史保留边界仍未知；未验收上市至今及内部缺口覆盖，也未接入生产数据库、REST 或调度。 |
+
+上述切片均不改变控制任务计数，也不证明全 A 股及退市证券全集、全历史 head/interior/tail 覆盖、财报 PIT/修订语义、来源授权、生产调度或自然周期已验收。
