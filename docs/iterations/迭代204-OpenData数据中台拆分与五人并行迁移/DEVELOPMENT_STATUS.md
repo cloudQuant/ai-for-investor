@@ -633,3 +633,9 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 | [OpenData PR #74](https://github.com/cloudQuant/opendata/pull/74) | 增加显式 opt-in 的跨仓 synthetic wire 合同用例，**1 项通过**，只覆盖一条 `income/annual` synthetic 观察路径；其余五个 statement/cadence scope 为空。隔离证据见 OpenData 本机私有目录 [`fuyao-wire-isolated-r5-2026-10-28`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-wire-isolated-r5-2026-10-28>)。 | 测试将 MySQL archive reader 替换为临时 SQLite fixture，将 principal 替换为 synthetic principal，并将 process executor 替换为进程内 synthetic child；HTTP 使用 MockTransport。因此不证明真实子进程、真实 MySQL、真实 Fuyao 数据或来源授权，也不证明单位、PIT/修订历史、全 A 股或全历史完整性。该单节点结果不等于仓库联合回归或生产验收。 |
 
 以上 PR 不增加任务完成数。完整 canonical A2 未运行；来源门禁的 SQLite 路径竞态与共置检测、Fuyao grant 验证、真实子进程/供应商请求、生产装配，以及全 A 股与逐证券全历史验收仍保持开放。
+
+## 2026-10-29 OpenData PR #75：股票 publication selector
+
+[OpenData PR #75](https://github.com/cloudQuant/opendata/pull/75) 已合入 `dev`，增加内部股票 publication 的 market/symbol selector 与对应身份和迁移处理。专用隔离套件 **326 项通过**；在一次性 **MySQL 8.4** 实例上，以合成 `0018` 状态执行至 `0019`，并注入部分 DDL 后的客户端中断场景。详细收据见 OpenData 本机私有证据 [`2026-10-29-stock-selector-v2-final-326-mysql/EVIDENCE.md`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-stock-selector-v2-final-326-mysql/EVIDENCE.md>)。
+
+selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数或股票筛选接口，不能据此认为 ai-for-investor 可通过 REST 按 market/symbol 查询。测试与合成迁移不等于完整 canonical A2、生产迁移或生产规模查询性能验收。旧 publication 中 selector 为空的记录不会因同键重发自动补齐；历史记录处置/重建方案仍待审查。未使用真实股票数据验证证券身份、来源语义或覆盖范围。上述 A2、生产性能与迁移、旧 NULL 记录处理及真实数据验收均尚未通过；本 PR 只关闭其明确的隔离代码范围，不改变迭代204整体未完成状态。
