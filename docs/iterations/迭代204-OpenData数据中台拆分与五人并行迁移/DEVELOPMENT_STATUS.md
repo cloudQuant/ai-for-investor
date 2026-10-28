@@ -473,3 +473,9 @@ PR #41–#43、#45 与 #46 均只关闭各自限定的代码范围，不改变 F
 [OpenData PR #47](https://github.com/cloudQuant/opendata/pull/47) 已合入 `dev`（`8f83a609855e5859c099004bc31d13193778a51b`），增加空 metadata receipt schema 与 migration `0008`。SQLite 隔离测试 **22 项通过**，两个目标模块的 branch-inclusive 覆盖率均为 **100%**。在合成 MySQL 8.4 场景中，实际执行 `0007` 与 `0008` 的 upgrade bodies；验收覆盖无历史回填、InnoDB、collation、unique、9 项选定 CHECK，以及空表和非空表 downgrade。证据保存在本机私有目录 [`2026-10-28-pending-metadata-receipt`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-metadata-receipt>)。
 
 此 PR 只验收 schema/migration 的限定范围：未运行完整迁移链，未实现或验收 receipt writer、relay、API 或 JSON hash，也未在生产环境验收。最初两次 MySQL harness 失败记录仍保留；失败收据仅记录 stage 与 error type，根因属于事后分析推断，不能从收据独立复核。这些失败记录不改变本次限定通过范围，也不应被删除或改写为成功。PR #47 不关闭 **204-A04-03**；relay、独立 receipt 流程、visibility seal 与生产接线仍待验收，迭代204整体仍未完成。
+
+## OpenData PR #48：受限单票 Eastmoney 试采工具
+
+[OpenData PR #48](https://github.com/cloudQuant/opendata/pull/48) 已合入 OpenData `dev`（`09dde2dd8e751909f95307bb73f6a914dfcc2356`），增加受限单票试采工具。**59 项无网络合成测试通过**，脚本 statement+branch 综合覆盖率 **99%**，`ruff check` 与 `ruff format` 均通过。证据日志保存在本机私有目录 [`pytest-final.log`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-akshare-pilot/pytest-final.log>)。
+
+工具的采集路径直连 Eastmoney，并将试采限制为固定股票与固定时间窗口；生产 policy 保持不变，admission 仅在本地短期有效，同一私有目录内使用同一 nonce 防重，不构成全局幂等保证。**15 秒是软截止时间**，不能视作严格的网络/进程硬超时。本次没有发起真实上游请求；因此未验证行情数值、源端行为、真实数据落库或任务运行表现，也不证明完整历史、全 A 股覆盖或生产可用性。Fuyao 仍未验收。PR #48 只关闭该工具的代码与合成测试范围，不改变迭代204整体未完成状态。
