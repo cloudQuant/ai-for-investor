@@ -544,3 +544,11 @@ attempt trace 只随最终成功响应暴露；如果中间尝试失败后请求
 一次性合成 **MySQL 8.4** 场景仅应用空归档上的 `migration_0001`，随后以两个 `REPEATABLE READ` 连接读取 **6 行、每页 2 行**。在事务快照期间并发插入/更新未改变该快照的分页结果；事务结束后，旧游标被拒绝。另验证小数、`NULL` 和 UTC datetime 微秒保真。已通过 pidfd 确认 `mysqld` 与 SQL worker 退出。验收记录同时保留组件加载信息、空 root 密码与自签 CA 提示。EXPLAIN 摘要对两个查询记录 `using_filesort=false`，但该值可能来自 runner 在字段缺失时采用的默认值，因此不能确认实际执行计划是否使用 filesort；不同键范围中的 2,500 条 filler 数据也不证明性能。
 
 该读取器尚未接入 REST。并发一致性依赖调用方在事务开始前设置 `REPEATABLE READ`；本次合成结果不验证 PIT/修订语义、全 A 股范围、生产数据或生产性能，也不代表财报完整历史和迭代204整体已验收。
+
+## OpenData PR #57：Fuyao fetch result 的本地成功尝试轨迹（2026-10-28）
+
+[OpenData PR #57](https://github.com/cloudQuant/opendata/pull/57) 已 squash 合入 `dev`（`f7800938e57a2d6a52f6bbe0252235dd09e87f0d`）。`FinancialObservationFetchResult` 现在可携带 Fuyao transport 返回的本地 attempt trace；旧调用方未传该字段时仍得到空 tuple。`transport_request_id`、`attempt_id`、HTTP status 与 response envelope 中的 `source_request_id` 分字段保存，并只做本地格式和一致性校验：它们不构成上游回执，也不证明来源收到或处理了请求。源码 `opendata/data/providers/ths/models/financial_observation_fetcher.py` SHA-256 为 `a68578f9a375c16738815de6972c767d3fedad10514ef480df978e653656f181`；测试 `tests/test_ths_financial_observation_fetcher.py` SHA-256 为 `774412ff26df3cfa8bd7deff656415c9b4621bb2556d2aec22bf70134c4d8551`。
+
+最终定向验证为 **152 项 synthetic 隔离测试通过**，branch-inclusive 覆盖率 **97%**；首次运行 **148 项通过、4 项失败**，失败集中在 fetch-result 元数据拒绝用例的校验顺序，首轮日志予以保留。既有 capture bridge 回归另有 **32 项通过**，但该测试没有使用或验证新增的 attempt trace，因此不能据此声称 trace 已与 archive/prepare 流程联调。证据保存在 OpenData 本机私有目录 [`2026-10-28-fuyao-fetcher-attempt-trace`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-fetcher-attempt-trace>)。对最终源码、测试和收据的独立检查确认：终态 transport 错误不会返回带轨迹的 fetch result，旧构造方式保留空 tuple，成功结果仅承载本地记录；不把这一切片解释为持久审计。
+
+attempt trace 只有成功 fetch result 可携带；终止网络失败或响应后校验失败不会返回该结果，故无法从调用方结果读取其最终尝试轨迹。空 tuple 也不证明请求未发送。此切片没有新增持久化审计或来源授权核验，不能证明失败请求最终状态、全 A 股采集、完整历史或 PIT/修订历史；204-A04-03 与生产接线仍保持开放，迭代204整体仍未完成。
