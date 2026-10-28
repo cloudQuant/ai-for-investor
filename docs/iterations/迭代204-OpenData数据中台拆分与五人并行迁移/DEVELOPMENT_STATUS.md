@@ -598,3 +598,15 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 | [OpenData PR #66](https://github.com/cloudQuant/opendata/pull/66) | 已 squash 合入 `dev`（`cf561b8ed025da385ab428a28173654642c00c94`），新增 Eastmoney-shaped 沪深日线 source-native 字段解析；raw evidence 校验限定为本地 body/manifest hash 与请求摘要的一致性，原文本 token 按字段保留。**66 项 synthetic 测试通过**，模块 branch-inclusive 覆盖率 **99.08%**。 | parser 尚未接入真实 `stock_daily` job 或采集执行路径。合约尚未通过真实 Eastmoney 响应验收；caller-declared 元数据不认证上游，测试不证明真实来源行为或授权。价格复权含义、数值单位/NULL 语义及历史保留边界仍未知；未验收上市至今及内部缺口覆盖，也未接入生产数据库、REST 或调度。 |
 
 上述切片均不改变控制任务计数，也不证明全 A 股及退市证券全集、全历史 head/interior/tail 覆盖、财报 PIT/修订语义、来源授权、生产调度或自然周期已验收。
+
+## OpenData PR #67–#69：恢复设计、财报回放与单标的任务切片
+
+以下记录三个已合入 OpenData `dev` 的限定范围，不增加迭代控制任务的完成数，也不代表迭代204整体完成。
+
+| PR | 已合入的限定范围 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #67](https://github.com/cloudQuant/opendata/pull/67) | 仅交付历史采集崩溃恢复设计。 | 这是设计交付，不包含已验收的恢复执行、生产装配或可运行恢复 worker；真实恢复流程仍未验收。 |
+| [OpenData PR #68](https://github.com/cloudQuant/opendata/pull/68) | 对依据捕获响应结构改写的固定 synthetic Fuyao 财报样本进行 **81 项隔离回放**。收据保存在 OpenData 本机私有目录 [`2026-10-29-fuyao-sanitized-replay`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-fuyao-sanitized-replay>)。 | 回放只说明这些固定样本在隔离环境中的解析/合同路径；不认证上游来源，不证明响应覆盖完整、来源保留边界、全 A 股范围或全历史完整性。 |
+| [OpenData PR #69](https://github.com/cloudQuant/opendata/pull/69) | 增加默认禁用的单标的 Fuyao 财报 reviewed-job 切片；**#69 专用隔离套件 238 项 synthetic 测试通过**，三个目标模块 branch-inclusive 覆盖率分别为 **95.00% / 91.23% / 94.22%**，定向 Ruff、format、Bandit、Gitleaks 与 mypy 检查通过。收据见 OpenData 本机私有目录 [`2026-10-28-fuyao-reviewed-job-r6-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-reviewed-job-r6-final>)。 | 测试中的成功采集路径使用进程内 handler 替换与 `MockTransport`，未证明真实子进程成功请求 Fuyao。任务尚未生产装配或启用；生产数据库、调度、崩溃恢复、真实来源数据、全 A 股及全历史均未验收。目标静态检查不等于 canonical A2；canonical A2 与整仓 `make gate` 均未执行，canonical A2 所需历史 evidence 仍缺失。 |
+
+以上合并不改变控制任务完成统计。真实成功子进程、生产任务装配、恢复执行与全 A 股/全历史验收仍开放；不得把合成回放或单标的离线测试解释为这些工作已完成。
