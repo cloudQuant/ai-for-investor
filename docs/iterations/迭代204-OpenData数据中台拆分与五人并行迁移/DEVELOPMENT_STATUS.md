@@ -281,11 +281,11 @@ OpenData 发布/coverage wire 与 AFI v2 消费端已完成本机 synthetic 联�
 
 ## 未合并的 Fuyao 精确财报入口
 
-当前有一项 Fuyao 精确财报入口实现保留在 OpenData 本地，只有 **2 个未跟踪文件**（源码与测试），尚未验收或合入 `dev`。其合成测试为 **147 passed**，statement+branch 综合覆盖率 **99.16%**，双重 review 已完成；这些证据只覆盖 synthetic 数据下的代码路径。
+截至该候选状态记录时，Fuyao 精确财报入口实现保留在 OpenData 本地，只有 **2 个未跟踪文件**（源码与测试），尚未验收或合入 `dev`。其合成测试为 **147 passed**，statement+branch 综合覆盖率 **99.16%**，双重 review 已完成；这些证据只覆盖 synthetic 数据下的代码路径。
 
-按 `CODE_QUALITY.md` §5.2，验收还需要真实来源的 income、balance、cashflow 响应证据。当前缺少这三类真实响应样本，因此不能将该入口视为验收完成或提交合并。源码和测试仍保留在本地；受限权限备份及测试证据位于 `/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-exact-fetcher/`。
+按 `CODE_QUALITY.md` §5.2，验收还需要真实来源的 income、balance、cashflow 响应证据。截至该候选阶段，三类真实响应样本均缺失，因此不能将该入口视为验收完成或提交合并；文末记录的后续 partial run 只补充了部分观察，不满足完整验收要求。源码和测试仍保留在本地；受限权限备份及测试证据位于 `/home/yun/Documents/opendata/var/reports/afi204/2026-10-27-pending-exact-fetcher/`。
 
-当前执行进程未发现 Fuyao API key；这只描述当前进程环境，不证明其他环境或部署不存在凭证。用户已声明 AkShare 与 Fuyao 可使用，无需重复确认该声明；真实响应证据和具体入口验收仍未完成。该本地实现不代表全 A 股覆盖、历史 PIT 能力、生产调度或生产落库已经完成。
+截至 **2026-10-27** 的该次检查，当前执行进程未发现 Fuyao API key；这只描述当时该进程环境，不证明其他环境或后续运行的凭证状态。该本地实现不代表全 A 股覆盖、历史 PIT 能力、生产调度或生产落库已经完成。后续一次受控 Fuyao 运行的有限响应证据见本文末尾；不在文档中记录凭证值。
 
 ## 2026-10-27 OpenData PR #23–#25 增量
 
@@ -412,7 +412,7 @@ PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源�
 | --- | --- | --- |
 | [OpenData PR #37](https://github.com/cloudQuant/opendata/pull/37) | 已合入 `dev`，修正离线 Sina fixture 成功发布用例的 worker 长租约设置。对应成功用例 **1 项通过**；timeout/cancel 用例 **2 项通过**。 | 先前 **12 个文件的组合运行有失败**，后续针对用例修正与重跑不代表该 12 文件组合整套通过；本次不记录为整套绿灯。验证使用离线 fixture，不证明真实 Sina 抓取、生产租约/并发或全量财报发布。 |
 | [OpenData PR #38](https://github.com/cloudQuant/opendata/pull/38) | 已合入 `dev`，允许旧股票日线 ODS 的 `成交额` 保留 `NULL`，并与真实数值 `0` 区分；不填零、不删行。定向隔离测试 **106 项通过**，迁移 `0016` statement+branch 覆盖率 **100%**，迁移脚本 **88.12%**；覆盖率收据保存在本地私有、非仓库存档 [`coverage-final.txt`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-legacy-null/coverage-final.txt>)。一次性隔离合成 **MySQL 8.4** 验收成功，初次失败及重跑记录均保留在私有证据目录。 | MySQL 结果仅是合成 schema/数据场景，不能证明生产迁移、全量旧数据迁移、`0001`–`0016` 完整历史链、DWD 消费、REST/API、迁移锁或生产运行安全。上述覆盖率只描述聚焦测试中指定模块，不能单独证明迁移工具和数据迁移已完整验收。全量数据对账与下游 `NULL` 处理仍待完成。 |
-| Fuyao one-shot 私有候选 | 离线合成用例 **34 项通过**，实现保存在本地私有候选中。 | 未制作或验证真实上游录制；当前执行环境未确认可用凭证。该候选不构成真实 Fuyao 响应、采集或数据语义验收。 |
+| Fuyao one-shot 私有候选 | 离线合成用例 **34 项通过**，实现保存在本地私有候选中。 | 截至该候选记录时，未制作或验证真实上游录制；当时的执行环境未确认可用凭证。该候选本身不构成真实 Fuyao 响应、采集或数据语义验收。 |
 
 截至本段记录时，Sina capture discovery API 与 Fuyao financial fetcher 均未合并；后续 Sina API/Store 合入状态见 OpenData PR #44。Sina discovery 继续硬关闭。上述局部测试与 MySQL 合成验证都不改变来源真实性、生产权限配置、全 A 股及逐标的全历史、PIT、调度与部署仍开放的结论。
 
@@ -426,7 +426,7 @@ PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源�
 | [AFI PR #91](https://github.com/cloudQuant/ai-for-investor/pull/91) | 已合入 `dev`。因扫描器可能把代理指标当成真实报价，停用所有即时、计划和预计算扫描；旧历史数据不删除并标记为 `legacy_unverified`，管理功能保留。前端新建计划表单默认关闭 schedule；编辑时保留已知设置。后端 **8 项**、前端 **21 项与 44 项**测试通过，定向 typecheck 与 Ruff 通过。 | 相关扫描功能现处于暂停状态。OpenData 数据来源、字段单位及时间语义合同尚未验收。现存历史记录被标为未验证，不应作为真实报价或有效扫描结果使用。 |
 | [AFI PR #93](https://github.com/cloudQuant/ai-for-investor/pull/93) | 已合入 `dev`。API/ORM 新建记录的 `schedule_enabled` 默认值改为 `false`；POST upsert 和 PATCH 在请求省略该字段时保留已有值；非布尔输入在写入前以 **400** 拒绝。**21 项隔离测试通过**，Ruff 通过，收据见本机私有目录 [`ruff-final.log`](</home/yun/Documents/ai-for-investor/var/reports/afi204/2026-10-28-pending-scanner-schedule/ruff-final.log>)。 | 数据库列的 server default 仍为 `true`，此次未修改；本次未批量改写既有行。请求省略该字段时保留原值，显式传入 `true` 或 `false` 仍可更新既有行。恢复任何扫描执行前必须先盘点现存启用记录，并确认启用范围。即时、计划和预计算扫描仍全部停用；此修正不恢复执行，也不改变该状态。 |
 
-OpenData PR #39 只为后续 discovery 查询提供索引基础，没有启用 Sina discovery，也未补足 source evidence 或 PIT。AFI PR #91 暂停相关扫描，直到消费端可依赖经验证的 OpenData 数据合同。Fuyao one-shot fetcher 仍未合并：没有完成真实来源响应取证，真实 income、balance、cashflow 证据仍待补齐。以上进展均不证明全 A 股真实数据、全历史恢复、生产调度或端到端查询链路已验收。
+OpenData PR #39 只为后续 discovery 查询提供索引基础，没有启用 Sina discovery，也未补足 source evidence 或 PIT。AFI PR #91 暂停相关扫描，直到消费端可依赖经验证的 OpenData 数据合同。**截至本段记录时**，Fuyao one-shot fetcher 尚未合并，真实 income、balance、cashflow 响应证据仍待补齐；后续受控运行只取得有限响应，见文末更新，不能追溯改变该段当时状态或替代完整验收。以上进展均不证明全 A 股真实数据、全历史恢复、生产调度或端到端查询链路已验收。
 
 ## 2026-10-28 AFI PR #96–#97：数据治理管理员权限边界
 
@@ -443,18 +443,18 @@ OpenData PR #39 只为后续 discovery 查询提供索引基础，没有启用 S
 
 ## 2026-10-28 当前局部能力与待验收项
 
-OpenData 凭证检查仅在仓库和当前可见运行环境范围内进行：只找到 `.env.example` 中空白的 `FUYAO_API_KEY` 配置项，未发现已配置的凭证。Docker 配置未检查；此结果不能推断其他运行环境不存在凭证，也不改变用户已声明可使用 AkShare/Fuyao 的范围。当前没有真实 Fuyao 响应证据。
+此前的 OpenData 凭证检查仅覆盖当时仓库和当前可见运行环境：只找到 `.env.example` 中空白的 `FUYAO_API_KEY` 配置项，Docker 配置未检查；此记录不推断其他环境或后续运行的凭证状态。后续受控 Fuyao run 已取得有限真实响应，具体结果见本文末尾；该记录不包含任何凭证值。
 
 | 待验收项 | 当前证据 | 仍未验收的范围 |
 | --- | --- | --- |
 | [OpenData PR #45](https://github.com/cloudQuant/opendata/pull/45)：旧 `stock_daily` 只读源盘点计算器 | 已合入 `dev`（`fb12786ca86885e8378bcfbb261f64148d63beba`）；**50 项 fake-only 测试通过**，branch-inclusive 覆盖率 **99.18%**。一次性隔离测试 harness 中，合成 **MySQL 8.4** 两连接 MDL 检查通过。 | 这是一次 harness 观察，未绑定源实例元数据，不是生产 publisher/迁移链路验收；只支持该合成两连接场景。工具不执行迁移，也不证明真实源库快照/内容、真实数据对账或全历史恢复。 |
 | OpenData Sina capture discovery API/Store | [OpenData PR #44](https://github.com/cloudQuant/opendata/pull/44) 已 squash 合入 `dev`（`e883aea8172228d56c50e112093d023e2c7a2111`）。当前主干四文件离线/隔离回归 **116 项通过**，包含一份已录制 Sina FZB fixture 及合成用例；此前候选回归 **232 项通过**，Store branch-inclusive 覆盖 **90.43%**、API **88.64%**。一次性合成 **MySQL 8.4.0** 上，基于 `0017` 索引完成受控查询验收：同一事务 `REPEATABLE READ`、查询计划检查及 **10,000/10,001** 逻辑结果边界通过；publication 超过 10,000 条时在 facts 查询前拒绝，返回行溢出时通过 10,001 行逻辑上限拒绝。验收收据位于 OpenData 私有目录 [`mysql-query-acceptance`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-sina-guard-v2/mysql-query-acceptance>)。 | API 仍硬关闭。回归包含录制 fixture 与合成样本，不代表实时抓取或广泛市场覆盖。MySQL 结果仅代表一次性隔离验收；10,000 行预算是逻辑结果边界，不是物理 I/O 上限，也不代表真实数据或生产 MySQL/API 行为。真实来源数据、PIT、历史完整性与生产接线仍未验收。 |
-| OpenData Fuyao 财报入口与有限采集器 | 未合并的精确财报入口有 **147 项 synthetic 测试**、statement+branch 覆盖率 **99.16%**；受限 recorder 原型有 **34 项 synthetic 隔离测试**，限三个 endpoint、两个期间、`600519.SH` 一个标的且最多六次 GET，不重试。 | 未取得真实 income、balance、cashflow 响应样本；没有进行上游实时采集，也未验收 source-attempt gate、生产凭证、生产落库或自然周期。凭证检查仅确认当前可见范围内未找到已配置值。 |
+| OpenData Fuyao 财报入口与有限采集器 | 未合并的精确财报入口有 **147 项 synthetic 测试**、statement+branch 覆盖率 **99.16%**；受限 recorder 原型有 **34 项 synthetic 隔离测试**，限三个 endpoint、两个期间、`600519.SH` 一个标的且最多六次 GET，不重试。后续受控 run `20261028T024955Z-43949558cbc5` 为 partial：income 年报/季报与 balance 年报共三项各返回 **HTTP 200、1 行**，对应 entity SHA 与私有记录匹配。 | balance 季报的业务状态为 `transport_failed`，记录中 `http_status` 字段缺失，故 HTTP 状态码未知；cashflow 年报/季报 `not_attempted`，没有重试。该 run 未检查 source-attempt gate，不能据此确认 producer 身份或 contract；不是 PIT、完整财报覆盖或历史验收。生产调度、生产落库、全 A 股覆盖及完整历史仍未验收。完整收据见文末链接。 |
 | [OpenData PR #46](https://github.com/cloudQuant/opendata/pull/46)：publication outbox 本地事件 | 已 squash 合入 `dev`（`9201370133e6207480ed1f7ecc3899d79af2ba6a`）；**246 项隔离测试通过**，Store 覆盖率 **90%**、outbox 覆盖率 **98%**。隔离合成 MySQL 8.4 验收通过，包括强制 outbox INSERT 故障（errno 1644）后恢复到已提交 baseline、并发场景及 `0017→0018` 迁移。证据见本机私有目录 [`mysql-acceptance-forced-failure`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-publication-outbox/mysql-acceptance-forced-failure>)；首次部分结果与第二次完整结果均保留。 | 仅验收本地 publication outbox 事件切片，不代表控制任务 **204-A04-03** 完成。此次 MySQL 验收未覆盖 `0017` 之前的迁移链；跨服务 relay、独立 receipt、post-commit visibility seal、生产数据库/接线及生产历史可见性仍未验收；不补造历史可见时间。 |
 
 AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结果继续标记为 `legacy_unverified`。PR #96–#97 只修正授权判定，不会启用扫描或使旧结果变成可信数据。迭代计划最新记录的任务快照为 **98 项（8 DEV_DONE、9 IN_PROGRESS、81 PLANNED）**；各局部 PR 与合成/隔离测试不会自动关闭父级控制任务。
 
-全 A 股逐标的真实采集和逐证券 head/interior/tail 历史核对、PIT/修订历史、Fuyao 真实响应、完整旧任务迁移、生产 MySQL/API/授权/自然调度与备份恢复仍未完成或未验收。**迭代204整体仍未完成。**
+全 A 股逐标的真实采集和逐证券 head/interior/tail 历史核对、PIT/修订历史、Fuyao 财报完整来源响应与语义验收、完整旧任务迁移、生产 MySQL/API/授权/自然调度与备份恢复仍未完成或未验收。Fuyao 仅有本文记录的受限 partial 响应观察。**迭代204整体仍未完成。**
 
 ## 2026-10-28 OpenData PR #41–#43：快照、回补规划与重复键规则
 
@@ -466,7 +466,7 @@ AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结�
 | [OpenData PR #42](https://github.com/cloudQuant/opendata/pull/42) | 增加证券参考数据快照编解码切片。**24 项合成/隔离测试通过**，语句+分支覆盖率 **93%**。 | 快照是合成样本，不是经权威来源核实的全 A 股证券目录；不证明北交所、退市证券、跨代码身份、实际上市起点或生命周期历史完整。 |
 | [OpenData PR #43](https://github.com/cloudQuant/opendata/pull/43) | 增加基于显式快照输入的历史回补候选规划适配。**7 项合成/隔离测试通过**，目标模块覆盖率 **100%**。 | Planner 只生成不可执行的候选，不 dispatch、不采集、不写库；它不证明 publication 中真实存在对应缺口，也不证明数据源保留范围、逐标的真实起点或 head/interior/tail 历史完整。 |
 
-PR #41–#43、#45 与 #46 均只关闭各自限定的代码范围，不改变 Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据且未验收/未合并的状态，也不改变受限 Fuyao recorder 尚未进行真实上游采集的状态。Sina discovery API/Store 已按 OpenData PR #44 合入 `dev`，但 API 继续硬关闭。PR #46 的 publication outbox 本地事件已通过所列隔离验收；跨服务 relay、独立 receipt、post-commit visibility seal 与生产接线仍未完成，因此 204-A04-03 继续开放。以上切片均不证明生产接线、全 A 股真实覆盖、完整历史、PIT/修订历史或迭代204整体完成。
+截至本段记录时，PR #41–#43、#45 与 #46 均只关闭各自限定的代码范围；当时 Fuyao 三类真实响应证据仍缺失、recorder 未进行真实上游采集。后续受控 Fuyao run 仅形成本文末尾所述的 partial 观察，不改变未验收状态。Sina discovery API/Store 已按 OpenData PR #44 合入 `dev`，但 API 继续硬关闭。PR #46 的 publication outbox 本地事件已通过所列隔离验收；跨服务 relay、独立 receipt、post-commit visibility seal 与生产接线仍未完成，因此 204-A04-03 继续开放。以上切片均不证明生产接线、全 A 股真实覆盖、完整历史、PIT/修订历史或迭代204整体完成。
 
 ## OpenData PR #47：metadata receipt schema 与 migration 0008
 
@@ -478,4 +478,18 @@ PR #41–#43、#45 与 #46 均只关闭各自限定的代码范围，不改变 F
 
 [OpenData PR #48](https://github.com/cloudQuant/opendata/pull/48) 已合入 OpenData `dev`（`09dde2dd8e751909f95307bb73f6a914dfcc2356`），增加受限单票试采工具。**59 项无网络合成测试通过**，脚本 statement+branch 综合覆盖率 **99%**，`ruff check` 与 `ruff format` 均通过。证据日志保存在本机私有目录 [`pytest-final.log`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-akshare-pilot/pytest-final.log>)。
 
-工具的采集路径直连 Eastmoney，并将试采限制为固定股票与固定时间窗口；生产 policy 保持不变，admission 仅在本地短期有效，同一私有目录内使用同一 nonce 防重，不构成全局幂等保证。**15 秒是软截止时间**，不能视作严格的网络/进程硬超时。本次没有发起真实上游请求；因此未验证行情数值、源端行为、真实数据落库或任务运行表现，也不证明完整历史、全 A 股覆盖或生产可用性。Fuyao 仍未验收。PR #48 只关闭该工具的代码与合成测试范围，不改变迭代204整体未完成状态。
+工具的采集路径直连 Eastmoney，并将试采限制为固定股票与固定时间窗口；生产 policy 保持不变，admission 仅在本地短期有效，同一私有目录内使用同一 nonce 防重，不构成全局幂等保证。**15 秒是软截止时间**，不能视作严格的网络/进程硬超时。PR #48 的合成验证未发起真实上游请求；后续一次固定窗口试采观察另见下文。PR #48 不验证行情数值、全历史、全 A 股覆盖或生产可用性，也不改变迭代204整体未完成状态。
+
+## OpenData PR #49：本地 receipt writer 与 #48 后续试采观察
+
+[OpenData PR #49](https://github.com/cloudQuant/opendata/pull/49) 已 squash 合入 OpenData `dev`（`5bd4a6f61988c00080b324b1fe5879c2bd0c79de`），实现本地 receipt writer。`sqlite/pytest-v6.log` 与 `pytest-v4.log` 各记录 **54 项隔离测试通过**；目标模块 statement+branch 综合覆盖率 **98.4%**（`coverage.xml`：179/181 lines、70/72 branches）。同目录 `pytest-final.log` 记录的是 **32 项**，不作为此处 54 项或覆盖率的依据。在合成 MySQL 8.4 场景中，以合成 `0006` 状态实际执行 `0007` 与 `0008`；双连接 `REPEATABLE READ` current-read、身份冲突、rollback、选定 CHECK 与存储引擎守卫均按该隔离场景验证通过。证据保存在本机私有目录 [`2026-10-28-pending-receipt-writer`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-receipt-writer>)。
+
+此验收不认证 producer 身份，也未独立验证 receipt contract；现有 publisher 标签范围较 writer 接受范围更宽，部分事件会被拒收。跨服务 relay、API、完整迁移链及生产环境仍未验收，因此 PR #49 不关闭 204-A04-03，也不代表生产发布链路已完成。
+
+另一次 OpenData PR #48 的 AkShare-labelled Eastmoney 固定窗口试采记录为 network failure，状态码为 null，响应 body 未保存。现有记录无法确定请求是否实际发送，且没有重试；不能据此认定 Eastmoney 已收到请求或返回了错误，也不能证明行情数值、真实采集成功、历史完整性或全 A 股覆盖。证据保存在本机私有目录 [`2026-10-28-akshare-live-pilot-attempt`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-akshare-live-pilot-attempt>)。Fuyao 仍未验收；迭代204整体仍未完成。
+
+## OpenData Fuyao 受控财报运行：partial 响应观察
+
+运行 `20261028T024955Z-43949558cbc5` 的结果为 **partial**。income 年报、income 季报与 balance 年报各返回一行 `HTTP 200`，对应 entity SHA 与私有记录匹配；balance 季报的业务状态为 `transport_failed`，记录中 `http_status` 字段缺失，因此 HTTP 状态码未知；cashflow 年报与季报均为 `not_attempted`。没有重试。证据保存在 OpenData 本机私有目录 [`20261028T024955Z-43949558cbc5`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-fuyao-financial-capture/20261028T024955Z-43949558cbc5>)。
+
+这次运行没有检查 source-attempt gate，不证明 producer 身份或 contract 已验证；有限响应也不构成 PIT、完整财报类型、修订历史、全 A 股数据、全历史或生产运行验收。生产调度、历史覆盖与端到端接线仍待验收。文档不记录凭证值。
