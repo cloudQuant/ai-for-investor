@@ -686,3 +686,9 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 最终 v12 专用隔离套件 **532 项通过、2 条 warning、0 项排除**；CLI、runtime_roles、reviewed_runtime 的 statement+branch 覆盖率分别为 **92.36% / 94.44% / 94.95%**。定向 Ruff、Bandit、Gitleaks 检查通过；mypy 仍报告 **3 项基线错误**，完整 canonical A2 未运行。测试 pytest 相关版本与项目固定 pins 有差异。隔离验收证据位于 OpenData 本机私有目录 [`od204-cli-runtime-v11-v12-static-20261029`](</home/yun/Documents/opendata/var/reports/afi204/od204-cli-runtime-v11-v12-static-20261029>)。
 
 未验收事项仍包括真实 Fuyao 请求与数据采集、生产来源授权及生产 composition、旧 worker fleet 停止/升级后的兼容核验，以及全 A 股范围和逐证券 head/interior/tail 历史完整性。PR #83 只关闭受控 CLI/runtime role 接线的限定代码范围，不改变迭代控制任务完成数；迭代204整体仍未完成。
+
+## OpenData PR #84：单机 SQLite self-declared grant provisioning 与不确定状态对账
+
+[OpenData PR #84](https://github.com/cloudQuant/opendata/pull/84) 已 squash 合入 `dev`，提交为 `5bb7a17117628c1f5e673a65adb6ddc9ef580212`。本切片增加单机 SQLite 上的 self-declared grant provisioning 事务与 sealed event，并补充提交/清理处于不确定状态时的对账流程。专用隔离套件 **115 项通过、0 项排除**，目标覆盖率 **98.49%**；定向 pinned 静态检查通过。早期多轮失败及曾误报的记录均保留在证据目录，没有用最终结果覆盖或改写。pytest 相关依赖版本与项目固定版本存在偏差，完整 canonical A2 未运行。证据见 OpenData 本机私有目录 [`source-grant-v6-static-20261029`](</home/yun/Documents/opendata/var/reports/afi204/source-grant-v6-static-20261029>) 与 [`source-grant-v1-v5-20261029`](</home/yun/Documents/opendata/var/reports/afi204/source-grant-v1-v5-20261029>)。
+
+该实现面向单机 SQLite，grant 授权声明由本地操作者提供；验收没有独立证明 Fuyao 凭证有效，也没有证明供应商合同或产品权限范围。没有创建生产 grant，没有发起真实 Fuyao 请求或执行真实采集；本次 scope 也未包含具体证券及日期范围。旧 worker fleet 停止/升级兼容性、Fuyao 生产接线、全 A 股范围与逐证券 head/interior/tail 历史仍未验收。该 PR 只关闭其本地 provisioning 与不确定状态对账的限定代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
