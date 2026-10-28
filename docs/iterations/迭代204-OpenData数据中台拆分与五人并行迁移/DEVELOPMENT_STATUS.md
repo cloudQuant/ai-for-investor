@@ -672,3 +672,9 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 [OpenData PR #80](https://github.com/cloudQuant/opendata/pull/80) 已 squash 合入 `dev`，提交为 `5bf309dbca29a039307972bb93858d687b568a85`。交付范围包括内部一次性 claim、service/worker primitive 与迁移 `0020`。专用隔离套件 **325 项通过**；该隔离运行的 pytest、pytest-asyncio、pytest-cov 均与项目固定版本不同。coverage ledger、service、worker 的 statement+branch 覆盖率分别为 **91.27% / 90.49% / 91.27%**。迁移另在隔离 MySQL 8.4 场景获得部分验证；该结果不代表完整迁移链或生产数据库验收。
 
 定向 Ruff、Bandit 与 Gitleaks 检查通过；mypy 仍报告 **3 项基线错误**，完整 canonical A2 未运行。该 primitive 尚未接入生产 CLI，没有发起 Fuyao 请求或真实采集。全市场证券范围、来源授权及逐证券 head/interior/tail 历史覆盖仍未验收；本 PR 只关闭其限定的内部代码范围，迭代204整体仍未完成。
+
+## OpenData PR #82：one-shot job contract 与受限 dispatcher/runtime role
+
+[OpenData PR #82](https://github.com/cloudQuant/opendata/pull/82) 已 squash 合入 `dev`，提交为 `ce74c25399ead699f4af8fcf63dc1cdf098c9ddc`。本切片增加 `one_shot_only` job contract，并为手工 dispatcher 与 runtime role 增加封闭式范围检查。最终专用隔离套件 **401 项通过**；五个目标模块按验收收据顺序的 statement+branch 覆盖率为 **91.27% / 90.21% / 91.27% / 95.17% / 94.87%**，无排除项。早期 v9 运行 **400 项通过、1 项失败**的记录保留，不作为最终验收结果。定向静态检查通过；mypy 仍报告 **3 项基线错误**。本轮 pytest/pytest-asyncio/pytest-cov 依赖版本与项目固定版本有偏差，完整 canonical A2 未运行。
+
+该切片不等于生产 CLI 已接通或真实 Fuyao 请求/采集已完成；也未验证旧 worker fleet 已停止、升级并完成兼容性核验。真实来源授权、生产部署、全 A 股范围以及逐证券 head/interior/tail 完整历史仍未验收；本 PR 仅关闭其受限 job contract 与 dispatcher/runtime role 代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
