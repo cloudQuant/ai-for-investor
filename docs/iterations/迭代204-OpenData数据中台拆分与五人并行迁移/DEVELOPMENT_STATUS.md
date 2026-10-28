@@ -621,3 +621,15 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 | [OpenData PR #71](https://github.com/cloudQuant/opendata/pull/71) | 增加离线、review-only 的日线历史缺口诊断与候选对账，按精确证券/来源及调用方提供的日历、publication、预期观测、生命周期、保留边界和 alias-pinned 计划证据判断可报告的缺口。定向 **92 项通过**，`stock_daily_reconcile.py` 语句与分支合计覆盖率 **96.61%**。Ruff lint/format、Bandit、Gitleaks 与目标文件限定 `--follow-imports=silent` 的 mypy 检查通过。证据见 OpenData 本机私有目录 [`2026-10-29-stock-daily-reconcile-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-stock-daily-reconcile-final>)。 | 只输出供人工复核的诊断和候选，不执行补数；未连接真实来源、数据库、API、调度器或生产规模数据，候选也不证明证券或日期区间已经完整。模块固定将 `all_a_universe_complete` 与 `universe_census_attested` 置为 false。目标文件限定 mypy 通过不代表导入模块全仓通过；较宽的检查因四个其他并行修改模块中的 11 个错误退出非零。完整 canonical A2 未运行，所需 immutable 历史 classification evidence 缺失。 |
 
 这两项不证明全 A 股证券分母、北交所/退市生命周期、真实来源保留边界或逐证券 head/interior/tail 已核实；不增加任务完成数，也不构成生产数据采集或全历史恢复验收。
+
+## OpenData PR #72–#74：来源门禁与 Fuyao 预检/合成联调
+
+以下记录三项限定范围及其隔离证据，不改变控制任务完成统计。完整 A2 未运行，迭代204整体仍未完成。
+
+| PR | 已合入的限定范围与测试结果 | 验收边界与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #72](https://github.com/cloudQuant/opendata/pull/72) | 来源尝试门禁 v2 与迁移切片的定向隔离套件 **153 项通过**；`source_attempt_gate.py` 语句+分支覆盖率 **90.7393%**，迁移包覆盖率 **86.4865%**。定向 Ruff、mypy、Bandit 与 Gitleaks 检查通过。验收收据见 OpenData 本机私有目录 [`2026-10-29-source-gate-v2-r7-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-source-gate-v2-r7-final>)。 | 测试有 9 条 Alembic deprecation warning 和一条迁移脚本未导入的 coverage warning。隔离验证未访问真实数据库或网络；SQLite 路径竞态、门禁数据库与 warehouse 共置时的检测，以及真实数据库迁移行为仍未验证。完整 A2 未运行。 |
+| [OpenData PR #73](https://github.com/cloudQuant/opendata/pull/73) | 增加默认禁用的 Fuyao 单标的手工组装预检。专用隔离套件 **24 项通过**，目标模块语句与分支覆盖率 **100%**；定向静态检查通过。证据见 OpenData 本机私有目录 [`2026-10-29-fuyao-manual-composition-r4-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-fuyao-manual-composition-r4-final>)。 | 预检报告将 `gate_grant_status` 标为 `not_checked`：不查询/验证持久化 source-attempt gate grant 状态，仅检查传入 grant ID/revision 的结构或格式。它会另行读取并检查本地 operator policy 的声明、条件及有效期；这些检查不等于验证供应商授权，也不代表持久化 gate grant 已获授权。预检不 reserve attempt、不派发/执行，不启动 worker 或 scheduler，也不发 Fuyao 请求。真实授权、来源响应和生产装配未验收；完整 A2 未运行，较宽依赖检查另报告 3 个错误。 |
+| [OpenData PR #74](https://github.com/cloudQuant/opendata/pull/74) | 增加显式 opt-in 的跨仓 synthetic wire 合同用例，**1 项通过**，只覆盖一条 `income/annual` synthetic 观察路径；其余五个 statement/cadence scope 为空。隔离证据见 OpenData 本机私有目录 [`fuyao-wire-isolated-r5-2026-10-28`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-wire-isolated-r5-2026-10-28>)。 | 测试将 MySQL archive reader 替换为临时 SQLite fixture，将 principal 替换为 synthetic principal，并将 process executor 替换为进程内 synthetic child；HTTP 使用 MockTransport。因此不证明真实子进程、真实 MySQL、真实 Fuyao 数据或来源授权，也不证明单位、PIT/修订历史、全 A 股或全历史完整性。该单节点结果不等于仓库联合回归或生产验收。 |
+
+以上 PR 不增加任务完成数。完整 canonical A2 未运行；来源门禁的 SQLite 路径竞态与共置检测、Fuyao grant 验证、真实子进程/供应商请求、生产装配，以及全 A 股与逐证券全历史验收仍保持开放。
