@@ -678,3 +678,11 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 [OpenData PR #82](https://github.com/cloudQuant/opendata/pull/82) 已 squash 合入 `dev`，提交为 `ce74c25399ead699f4af8fcf63dc1cdf098c9ddc`。本切片增加 `one_shot_only` job contract，并为手工 dispatcher 与 runtime role 增加封闭式范围检查。最终专用隔离套件 **401 项通过**；五个目标模块按验收收据顺序的 statement+branch 覆盖率为 **91.27% / 90.21% / 91.27% / 95.17% / 94.87%**，无排除项。早期 v9 运行 **400 项通过、1 项失败**的记录保留，不作为最终验收结果。定向静态检查通过；mypy 仍报告 **3 项基线错误**。本轮 pytest/pytest-asyncio/pytest-cov 依赖版本与项目固定版本有偏差，完整 canonical A2 未运行。
 
 该切片不等于生产 CLI 已接通或真实 Fuyao 请求/采集已完成；也未验证旧 worker fleet 已停止、升级并完成兼容性核验。真实来源授权、生产部署、全 A 股范围以及逐证券 head/interior/tail 完整历史仍未验收；本 PR 仅关闭其受限 job contract 与 dispatcher/runtime role 代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
+
+## OpenData PR #83：受控 one-shot CLI 与 runtime role 接线
+
+[OpenData PR #83](https://github.com/cloudQuant/opendata/pull/83) 已 squash 合入 `dev`，提交为 `cc4836f7445d505fc6acf050dddb7cf26b4bd3fb`。本切片为专用 submitter/executor runtime roles 增加受控 CLI 注入路径，显式绑定 run key，并提供 dry-run 与 `not_claimed` / `uncertain` 结果边界。该 CLI 能力是受限代码路径，不表示生产凭证、来源授权或真实来源调用已完成。
+
+最终 v12 专用隔离套件 **532 项通过、2 条 warning、0 项排除**；CLI、runtime_roles、reviewed_runtime 的 statement+branch 覆盖率分别为 **92.36% / 94.44% / 94.95%**。定向 Ruff、Bandit、Gitleaks 检查通过；mypy 仍报告 **3 项基线错误**，完整 canonical A2 未运行。测试 pytest 相关版本与项目固定 pins 有差异。隔离验收证据位于 OpenData 本机私有目录 [`od204-cli-runtime-v11-v12-static-20261029`](</home/yun/Documents/opendata/var/reports/afi204/od204-cli-runtime-v11-v12-static-20261029>)。
+
+未验收事项仍包括真实 Fuyao 请求与数据采集、生产来源授权及生产 composition、旧 worker fleet 停止/升级后的兼容核验，以及全 A 股范围和逐证券 head/interior/tail 历史完整性。PR #83 只关闭受控 CLI/runtime role 接线的限定代码范围，不改变迭代控制任务完成数；迭代204整体仍未完成。
