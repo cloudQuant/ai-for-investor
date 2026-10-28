@@ -507,3 +507,14 @@ AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结�
 一项离线 smoke 通过：使用 `MockTransport` 提供六个真实捕获 entity，并以 synthetic、未验证的单位声明和临时 SQLite gate 验证受限路径；该 smoke 不包含 archive。证据见 [`2026-10-28-fuyao-six-fixture-smoke`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-six-fixture-smoke>)。此前官方 Fuyao 文档关于单位（金额原币元、EPS 元/股）及时间说明的核对证据保存在 [`2026-10-28-fuyao-public-contract`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-public-contract>)；这只记录文档口径，不验证捕获数据的单位真实性。日志和证据均不在本文复述原始响应内容。
 
 source-attempt gate 尚未在真实接线下验收；季度数据为单季还是累计、PIT/修订语义、全 A 股与完整历史及生产运行仍未验收。PR #50 合并并不等于 fetcher 已注册、运行或验收完成；文档不包含凭证或原始数据。
+
+## OpenData PR #51–#52：参数摘要与财报期间覆盖评估器
+
+以下 PR 已合入 OpenData `dev`，只记录局部代码和隔离证据，不表示 Fuyao 生产采集或完整历史已验收。
+
+| PR | 已合入范围与局部验证 | 限制与兼容性边界 |
+| --- | --- | --- |
+| [OpenData PR #51](https://github.com/cloudQuant/opendata/pull/51) | 已合入（`cea574596fed991a591847312edcd98fb848c3bb`），实现冻结参数的 v1 summary，并抽取 legacy helper。**173 项 synthetic 测试通过**；三个目标范围覆盖率记录为 **93% / 99% / 96%**。首次 `umask` 相关失败记录保留。证据见 [`2026-10-28-fuyao-request-summary`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-request-summary>)。 | 客户端提供的参数声明不是上游请求参数或响应内容的证明。`RawEvidenceError.__module__` 已变更；异常的 pickle 兼容性随之改变，新异常 pickle 与旧版本也不兼容。调用方或跨版本持久化消费者仍需检查该兼容边界。 |
+| [OpenData PR #52](https://github.com/cloudQuant/opendata/pull/52) | 已合入（`78bb6846fa934c5bd6ab33479b5f12e27a38f9aa`），增加纯财报期间覆盖评估器；最终 **38 项隔离测试通过**，目标模块覆盖率 **91%**；首次测试 **1 项失败**的记录保留。它使用显式期间槽位和证据：`observed` 只表示存在对应证据；`missing` 只有在所有适用证据门禁同时通过时才可判定，包括期间应期、到期后扫描完成、inventory 一致、lifecycle 与精确 obligation/due 关联、扫描 scope/crosswalk/cursor 与失败/隔离项核对、source-history 一致，以及不存在冲突、未来或不可用版本证据。证据见 [`2026-10-28-financial-period-coverage`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-financial-period-coverage>)。 | 评估器不采集或自行验证上游来源，也不证明证据覆盖完整或来源保留边界。该切片不建立 PIT/修订历史，也没有真实全 A 股接线；生产采集、全市场范围与完整历史仍未验收。 |
+
+PR #51–#52 的局部通过不改变 PR #50 的运行边界：Fuyao helper 尚未注册到系统、调度、API 或财报存储；source-attempt gate 仍需在真实接线时验收。季度单季/累计语义、单位真实性、PIT/修订历史、全 A 股与生产运行仍开放。本文不包含 API key 或原始响应数据。
