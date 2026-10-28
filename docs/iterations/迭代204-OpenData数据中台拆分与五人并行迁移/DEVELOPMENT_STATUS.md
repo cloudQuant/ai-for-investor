@@ -651,4 +651,10 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 
 [OpenData PR #77](https://github.com/cloudQuant/opendata/pull/77) 已合入 `dev`，增加了显式 opt-in 的本地 grant advisory 检查，并将其接入 Fuyao 手工预检。默认关闭此检查；默认结果仍为 `gate_grant_status=not_checked`，并且不执行 gate 检查或 gate I/O，`dispatch=false`。启用时的检查只提供 advisory 状态，不代替供应商授权核验，也不创建或批准 grant。
 
-专用 stub 隔离套件 **33 项通过**；`fuyao_manual_composition.py` 的 statement+branch 组合覆盖率为 **97.18%**，不是 pipeline 整体覆盖率。这些测试未在真实 grant 与数据库联合环境中验收，也没有发出真实 Fuyao 请求或验证全量数据；完整 canonical A2 未运行。证据见 OpenData 本机私有目录 [`2026-10-29-fuyao-manual-inspection-r5-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-fuyao-manual-inspection-r5-final/README.md>)。真实 grant/数据库联合行为、真实来源请求、证券全集及完整历史数据仍保持开放，迭代204整体未完成。
+专用 stub 隔离套件 **33 项通过**；`fuyao_manual_composition.py` 的 statement+branch 组合覆盖率为 **97.18%**，不是 pipeline 整体覆盖率。**在 PR #77 当时**，这些测试没有联合验证真实 SourceAttemptGate 与预检，也没有发出真实 Fuyao 请求或验证全量数据；完整 canonical A2 未运行。证据见 OpenData 本机私有目录 [`2026-10-29-fuyao-manual-inspection-r5-final`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-fuyao-manual-inspection-r5-final/README.md>)。真实生产 grant/数据库行为、真实来源请求、证券全集及完整历史数据仍保持开放，迭代204整体未完成。
+
+## 2026-10-29 OpenData PR #78：Fuyao 手工预检与来源门禁联合切片
+
+[OpenData PR #78](https://github.com/cloudQuant/opendata/pull/78) 已合入 `dev`。在合成 SQLite 与 MockTransport 的隔离环境中，真实 `SourceAttemptGate` 与 Fuyao preflight 完成 **7 项联合测试**，包括 grant 匹配后被撤销时，实际传输 gate 拒绝请求。测试手建 v2 schema，并使用 stub policy/bundle；没有访问真实网络、生产 grant 或真实数据。
+
+本切片未验证部署，也未执行完整迁移链；完整 canonical A2 未运行。证据见 OpenData 本机私有目录 [`2026-10-29-fuyao-gate-integration-v1-final/acceptance-summary.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-fuyao-gate-integration-v1-final/acceptance-summary.json>)。真实生产 grant/数据库、部署与完整迁移、Fuyao 来源数据、证券全集及完整历史仍未验收，迭代204整体未完成。
