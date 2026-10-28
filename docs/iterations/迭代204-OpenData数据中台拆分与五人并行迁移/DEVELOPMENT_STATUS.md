@@ -566,3 +566,11 @@ trace 与声明字段的匹配仅是本地一致性检查，不独立认证来�
 最终 **89 项离线合成测试通过**，包含 SQLite fixtures 与 MySQL DDL/stub；该数字不代表 89 项均在 SQLite 上实测。writer、schema 与 migration 的 branch-inclusive 覆盖率分别为 **98% / 100% / 90%**。另在隔离合成 **MySQL 8.4** 上从 synthetic `0007` marker 开始执行 `0008 → 0009 → 0008`，覆盖 ASCII hash、128/64 Unicode label 与 replay、downgrade preflight，以及确定性并发冲突（errno `3819`）后数据、约束和 revision 保持成功。验证收据位于 OpenData 本机私有目录 [`2026-10-28-receipt-unicode-contract`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-receipt-unicode-contract>)。早期失败报告的根因分别是 harness SQL 空白匹配错误，以及 hook 实际未注入后的误判；原失败记录保留，不作为最终失败或成功证据。
 
 该验收从 synthetic marker 开始，不覆盖完整迁移链或生产数据库，也不独立认证 producer、上游来源或 receipt 内容。上线顺序应先完成目标数据库的迁移与兼容性检查，再启用依赖新 Unicode opaque label 合同的 writer；降级前须按前述限制协调停写。跨服务 relay、真实生产接线、全 A 股覆盖、完整历史及 PIT/修订历史仍未验收；迭代204整体仍未完成。
+
+## OpenData PR #61：财报归档 REST 读取切片（2026-10-28）
+
+[OpenData PR #61](https://github.com/cloudQuant/opendata/pull/61) 已合入 OpenData `dev`（squash commit `e1867004192432c528c826ba5ccf1e6a4ad8c29c`），新增有界的 `/api/v2/data/financial-statements/archive` 读取端点，使用单独配置的财报归档连接读取指定来源、证券、报表类型、周期与日期范围；单次返回记录数与响应体均有预算限制，并保留 `report_period`、披露日期和观察时间的不同语义。端点把完整性标记为未知、PIT 重建标记为不可用，不推断数据完整或可用于历史时点回放。
+
+定向离线 fake-engine/ASGI 测试 **45 项通过**，目标模块 statement+branch 综合覆盖率 **98%**；另有 **2 项隔离 OpenAPI 测试通过**。临时隔离 **MySQL 8.4** 合成数据与只读账户验收通过，验证了该切片的读取与响应边界。该 MySQL harness 用测试认证依赖覆盖，并把应用配置的 TCP 连接映射到私有 Unix socket；因此没有验证真实 JWT/API key 认证，也没有验证生产 TCP 路径、真实财报数据、PIT、全历史或部署。结果不代表真实来源授权、数据语义、全市场覆盖或生产服务可用。
+
+现有 capture-candidates 路由保持硬关闭，访问返回 **404**。其 OpenAPI 声明将参数标为可选，但若将路由启用，handler 仍要求这些参数；该契约不一致仍待单独修正和验收。本 PR 不启用该旧路由。迭代204整体仍未完成。
