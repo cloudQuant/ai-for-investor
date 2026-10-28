@@ -666,3 +666,9 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 本次隔离运行使用的 pytest、pytest-asyncio 与 pytest-cov 版本不同于 `requirements.txt` 固定版本；完整 canonical A2 未运行。内部 quality 摘要保持 **warning**，股票 market REST selector 继续关闭。独立的 vertical-flow 测试确认公开 REST 返回 **404**，且未调用 `create_snapshot` 或 `read_page`；这不代表 REST 股票筛选已开放。
 
 测试使用 synthetic fixtures，不证明真实上游来源、来源授权与留存/分发权利、数据质量或逐证券历史完整性。真实来源、rights、全 A 股范围及 head/interior/tail 历史覆盖仍为 **UNKNOWN/未验收**；本 PR 只关闭其限定的内部归一化证据代码范围，迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #80：一次性 claim/service/worker primitive
+
+[OpenData PR #80](https://github.com/cloudQuant/opendata/pull/80) 已 squash 合入 `dev`，提交为 `5bf309dbca29a039307972bb93858d687b568a85`。交付范围包括内部一次性 claim、service/worker primitive 与迁移 `0020`。专用隔离套件 **325 项通过**；该隔离运行的 pytest、pytest-asyncio、pytest-cov 均与项目固定版本不同。coverage ledger、service、worker 的 statement+branch 覆盖率分别为 **91.27% / 90.49% / 91.27%**。迁移另在隔离 MySQL 8.4 场景获得部分验证；该结果不代表完整迁移链或生产数据库验收。
+
+定向 Ruff、Bandit 与 Gitleaks 检查通过；mypy 仍报告 **3 项基线错误**，完整 canonical A2 未运行。该 primitive 尚未接入生产 CLI，没有发起 Fuyao 请求或真实采集。全市场证券范围、来源授权及逐证券 head/interior/tail 历史覆盖仍未验收；本 PR 只关闭其限定的内部代码范围，迭代204整体仍未完成。
