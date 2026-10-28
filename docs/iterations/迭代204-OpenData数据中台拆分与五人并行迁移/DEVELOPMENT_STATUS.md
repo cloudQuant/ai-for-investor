@@ -414,7 +414,7 @@ PR #34–#35 的合入与隔离测试只支持各自限定范围；真实来源�
 | [OpenData PR #38](https://github.com/cloudQuant/opendata/pull/38) | 已合入 `dev`，允许旧股票日线 ODS 的 `成交额` 保留 `NULL`，并与真实数值 `0` 区分；不填零、不删行。定向隔离测试 **106 项通过**，迁移 `0016` statement+branch 覆盖率 **100%**，迁移脚本 **88.12%**；覆盖率收据保存在本地私有、非仓库存档 [`coverage-final.txt`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-legacy-null/coverage-final.txt>)。一次性隔离合成 **MySQL 8.4** 验收成功，初次失败及重跑记录均保留在私有证据目录。 | MySQL 结果仅是合成 schema/数据场景，不能证明生产迁移、全量旧数据迁移、`0001`–`0016` 完整历史链、DWD 消费、REST/API、迁移锁或生产运行安全。上述覆盖率只描述聚焦测试中指定模块，不能单独证明迁移工具和数据迁移已完整验收。全量数据对账与下游 `NULL` 处理仍待完成。 |
 | Fuyao one-shot 私有候选 | 离线合成用例 **34 项通过**，实现保存在本地私有候选中。 | 未制作或验证真实上游录制；当前执行环境未确认可用凭证。该候选不构成真实 Fuyao 响应、采集或数据语义验收。 |
 
-Sina capture discovery API 与 Fuyao financial fetcher 仍未合并，状态和限制维持此前记录；Sina discovery 继续硬关闭。上述局部测试与 MySQL 合成验证都不改变来源真实性、生产权限配置、全 A 股及逐标的全历史、PIT、调度与部署仍开放的结论。
+截至本段记录时，Sina capture discovery API 与 Fuyao financial fetcher 均未合并；后续 Sina API/Store 合入状态见 OpenData PR #44。Sina discovery 继续硬关闭。上述局部测试与 MySQL 合成验证都不改变来源真实性、生产权限配置、全 A 股及逐标的全历史、PIT、调度与部署仍开放的结论。
 
 ## 2026-10-28 OpenData PR #39 与 AFI PR #91、#93
 
@@ -448,10 +448,22 @@ OpenData 凭证检查仅在仓库和当前可见运行环境范围内进行：�
 | 待验收项 | 当前证据 | 仍未验收的范围 |
 | --- | --- | --- |
 | OpenData 旧 `stock_daily` 只读源盘点计算器 | 本地未合并候选 `opendata/scripts/ops/legacy_stock_daily_inventory.py`；**50 项 fake-only 测试通过**，branch-inclusive 覆盖率 **99.18%**。 | 不执行实际迁移，不证明真实数据库一致性快照、真实源数据对账、逐证券历史完整性或生产运行；候选未合并。 |
-| OpenData Sina capture discovery API/Store | 本地候选回归 **232 项隔离测试通过**；Store branch-inclusive 覆盖 **90.43%**，API **88.64%**。隔离 MySQL 已通过分页、同连接 `REPEATABLE READ` 和 **10,000/10,001** 逻辑结果边界验证；查询 API 仍硬关闭。 | 最终 MySQL 验收仍未通过：`EXPLAIN ANALYZE` 格式断言失败，且外层清理阶段无法确认进程身份；内层 pidfd cleanup 报告成功。当前证据不代表 EXPLAIN/扫描预算验收或生产行为通过；候选未合并，也没有真实数据或生产 MySQL 验收。 |
+| OpenData Sina capture discovery API/Store | [OpenData PR #44](https://github.com/cloudQuant/opendata/pull/44) 已 squash 合入 `dev`（`e883aea8172228d56c50e112093d023e2c7a2111`）。当前主干四文件离线/隔离回归 **116 项通过**，包含一份已录制 Sina FZB fixture 及合成用例；此前候选回归 **232 项通过**，Store branch-inclusive 覆盖 **90.43%**、API **88.64%**。一次性合成 **MySQL 8.4.0** 上，基于 `0017` 索引完成受控查询验收：同一事务 `REPEATABLE READ`、查询计划检查及 **10,000/10,001** 逻辑结果边界通过；publication 超过 10,000 条时在 facts 查询前拒绝，返回行溢出时通过 10,001 行逻辑上限拒绝。验收收据位于 OpenData 私有目录 [`mysql-query-acceptance`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-pending-sina-guard-v2/mysql-query-acceptance>)。 | API 仍硬关闭。回归包含录制 fixture 与合成样本，不代表实时抓取或广泛市场覆盖。MySQL 结果仅代表一次性隔离验收；10,000 行预算是逻辑结果边界，不是物理 I/O 上限，也不代表真实数据或生产 MySQL/API 行为。真实来源数据、PIT、历史完整性与生产接线仍未验收。 |
 | OpenData Fuyao 财报入口与有限采集器 | 未合并的精确财报入口有 **147 项 synthetic 测试**、statement+branch 覆盖率 **99.16%**；受限 recorder 原型有 **34 项 synthetic 隔离测试**，限三个 endpoint、两个期间、`600519.SH` 一个标的且最多六次 GET，不重试。 | 未取得真实 income、balance、cashflow 响应样本；没有进行上游实时采集，也未验收 source-attempt gate、生产凭证、生产落库或自然周期。凭证检查仅确认当前可见范围内未找到已配置值。 |
 | OpenData publication outbox 与 visibility seal | 本地候选及设计审查指出，需要以 warehouse RunLedger 与 publication 的同一事务产生可证明的新 outbox 记录，并由独立的 post-commit 读路径完成 seal。 | 当前候选不能证明 outbox 与新 publication 同事务，也未形成独立 receipt/seal；未合并、未做生产验证。不能回填或伪造历史可见时间。 |
 
 AFI 扫描器仍按 PR #91 的 fail-closed 状态暂停；用户看到的旧结果继续标记为 `legacy_unverified`。PR #96–#97 只修正授权判定，不会启用扫描或使旧结果变成可信数据。迭代计划最新记录的任务快照为 **98 项（8 DEV_DONE、9 IN_PROGRESS、81 PLANNED）**；各局部 PR 与合成/隔离测试不会自动关闭父级控制任务。
 
 全 A 股逐标的真实采集和逐证券 head/interior/tail 历史核对、PIT/修订历史、Fuyao 真实响应、完整旧任务迁移、生产 MySQL/API/授权/自然调度与备份恢复仍未完成或未验收。**迭代204整体仍未完成。**
+
+## 2026-10-28 OpenData PR #41–#43：快照、回补规划与重复键规则
+
+以下 PR 已合入 OpenData `dev`，结果均来自合成数据和隔离测试，只支持各自限定的代码范围，不表示真实全 A 股数据、历史覆盖或生产数据质量已验收。
+
+| PR | 已合入范围与局部证据 | 限制与未完成事项 |
+| --- | --- | --- |
+| [OpenData PR #41](https://github.com/cloudQuant/opendata/pull/41) | 发布前按规范化业务键拒绝同批重复记录。选定回归 **61 项合成/隔离测试通过**，目标模块覆盖率 **98%**。 | 这是一个局部重复键数据质量规则，不是完整 DQ 框架；不证明跨批/历史仓库无重复，也不验证其他字段、单位、来源真实性或数据完整性。 |
+| [OpenData PR #42](https://github.com/cloudQuant/opendata/pull/42) | 增加证券参考数据快照编解码切片。**24 项合成/隔离测试通过**，语句+分支覆盖率 **93%**。 | 快照是合成样本，不是经权威来源核实的全 A 股证券目录；不证明北交所、退市证券、跨代码身份、实际上市起点或生命周期历史完整。 |
+| [OpenData PR #43](https://github.com/cloudQuant/opendata/pull/43) | 增加基于显式快照输入的历史回补候选规划适配。**7 项合成/隔离测试通过**，目标模块覆盖率 **100%**。 | Planner 只生成不可执行的候选，不 dispatch、不采集、不写库；它不证明 publication 中真实存在对应缺口，也不证明数据源保留范围、逐标的真实起点或 head/interior/tail 历史完整。 |
+
+PR #41–#43 不改变 Fuyao 精确财报入口仍缺真实 income、balance、cashflow 响应证据且未验收/未合并的状态，也不改变受限 Fuyao recorder 尚未进行真实上游采集的状态。Sina discovery API/Store 已按 OpenData PR #44 合入 `dev`，但 API 继续硬关闭；publication outbox/visibility seal 仍未完成，尚不能证明新 publication 的原子 outbox 与独立 post-commit seal。以上切片均不证明生产接线、全 A 股真实覆盖、完整历史、PIT/修订历史或迭代204整体完成。
