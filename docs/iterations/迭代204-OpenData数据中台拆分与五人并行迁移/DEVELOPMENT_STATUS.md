@@ -658,3 +658,11 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 [OpenData PR #78](https://github.com/cloudQuant/opendata/pull/78) 已合入 `dev`。在合成 SQLite 与 MockTransport 的隔离环境中，真实 `SourceAttemptGate` 与 Fuyao preflight 完成 **7 项联合测试**，包括 grant 匹配后被撤销时，实际传输 gate 拒绝请求。测试手建 v2 schema，并使用 stub policy/bundle；没有访问真实网络、生产 grant 或真实数据。
 
 本切片未验证部署，也未执行完整迁移链；完整 canonical A2 未运行。证据见 OpenData 本机私有目录 [`2026-10-29-fuyao-gate-integration-v1-final/acceptance-summary.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-fuyao-gate-integration-v1-final/acceptance-summary.json>)。真实生产 grant/数据库、部署与完整迁移、Fuyao 来源数据、证券全集及完整历史仍未验收，迭代204整体未完成。
+
+## 2026-10-29 OpenData PR #79：股票日线版本化归一化证据
+
+[OpenData PR #79](https://github.com/cloudQuant/opendata/pull/79) 已合入 `dev`，为股票日线归一化增加版本化 evidence，并由定向 RunService 测试验证其写入内部 publication provenance。专用隔离套件 **112 项通过**；目标模块 statement+branch 覆盖率为 **553/608（90.95%）**。证据见 OpenData 本机私有目录 [`2026-10-29-stock-normalization-evidence-final/README.md`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-stock-normalization-evidence-final/README.md>)。
+
+本次隔离运行使用的 pytest、pytest-asyncio 与 pytest-cov 版本不同于 `requirements.txt` 固定版本；完整 canonical A2 未运行。内部 quality 摘要保持 **warning**，股票 market REST selector 继续关闭。独立的 vertical-flow 测试确认公开 REST 返回 **404**，且未调用 `create_snapshot` 或 `read_page`；这不代表 REST 股票筛选已开放。
+
+测试使用 synthetic fixtures，不证明真实上游来源、来源授权与留存/分发权利、数据质量或逐证券历史完整性。真实来源、rights、全 A 股范围及 head/interior/tail 历史覆盖仍为 **UNKNOWN/未验收**；本 PR 只关闭其限定的内部归一化证据代码范围，迭代204整体仍未完成。
