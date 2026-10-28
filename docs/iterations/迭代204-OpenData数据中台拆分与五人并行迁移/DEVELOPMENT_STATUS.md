@@ -558,3 +558,11 @@ attempt trace 只有成功 fetch result 可携带；终止网络失败或响应�
 [OpenData PR #58](https://github.com/cloudQuant/opendata/pull/58) 已 squash 合入 `dev`（`f6638cf33fb0f5c1d01c84a631fbc41c76ea073c`）。当 fetch result 带有非空 attempt trace 时，capture bridge 会在写入文件前将 trace 字段与调用方声明的本地字段比对；旧调用方提供空 trace 时仍兼容。缺失的 source ID 保持 unavailable，不据此补造标识。源码、单元测试和集成测试 SHA-256 分别为 `97a51bfa8c9ac941219c854c5748c20fa6975b0ec40f0261d25191b7a5d07720`、`60b161e2590882aa04ba50bc8b0306ec2bc86879177726c7bfe4cea0bdf43f2a`、`f9891c3e9aaf921327f7e80248e8559530f63f212154fc4c3651d54ee8d35670`。合成隔离测试 **47 项通过**，目标模块 branch-inclusive 覆盖率 **98%**。另有一项本地集成测试使用临时 SQLite source-attempt gate、`MockTransport` 和 fetcher→bridge 路径；r1/r2 因 `source_attempts=4` 超过 gate 上限 `3` 失败，r3/r4 对同一测试项重跑通过。验证收据保存在 OpenData 本机私有目录 [`2026-10-28-fuyao-bridge-local-trace`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-fuyao-bridge-local-trace>)。
 
 trace 与声明字段的匹配仅是本地一致性检查，不独立认证来源、上游接收或处理，也不将 trace 持久化为审计记录。该合入不代表生产数据库落库或调度完成，也不证明全 A 股覆盖、财报完整历史、PIT/修订历史或数据完整性；迭代204整体仍未完成。
+
+## OpenData PR #59：receipt Unicode opaque label 合同修复（2026-10-28）
+
+[OpenData PR #59](https://github.com/cloudQuant/opendata/pull/59) 已 squash 合入 `dev`（`68d0bca401af2905866d2f7bee2f99b7b55150fc`），修复 producer 与接收端对 Unicode opaque label 的兼容。原始 event bytes、对应 hash 与 producer 身份认证状态均保持不变；该修复不认证 producer。SQLite 的字符长度约束保持不变；MySQL migration `0009` 改用 `CHAR_LENGTH`。降级前会对超出目标 byte 限制的标签 fail closed，因此降级需要先协调停写及兼容性检查。
+
+最终 **89 项离线合成测试通过**，包含 SQLite fixtures 与 MySQL DDL/stub；该数字不代表 89 项均在 SQLite 上实测。writer、schema 与 migration 的 branch-inclusive 覆盖率分别为 **98% / 100% / 90%**。另在隔离合成 **MySQL 8.4** 上从 synthetic `0007` marker 开始执行 `0008 → 0009 → 0008`，覆盖 ASCII hash、128/64 Unicode label 与 replay、downgrade preflight，以及确定性并发冲突（errno `3819`）后数据、约束和 revision 保持成功。验证收据位于 OpenData 本机私有目录 [`2026-10-28-receipt-unicode-contract`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-28-receipt-unicode-contract>)。早期失败报告的根因分别是 harness SQL 空白匹配错误，以及 hook 实际未注入后的误判；原失败记录保留，不作为最终失败或成功证据。
+
+该验收从 synthetic marker 开始，不覆盖完整迁移链或生产数据库，也不独立认证 producer、上游来源或 receipt 内容。上线顺序应先完成目标数据库的迁移与兼容性检查，再启用依赖新 Unicode opaque label 合同的 writer；降级前须按前述限制协调停写。跨服务 relay、真实生产接线、全 A 股覆盖、完整历史及 PIT/修订历史仍未验收；迭代204整体仍未完成。
