@@ -774,3 +774,9 @@ mypy 对测试文件报告 **5 项显式诊断**；该结果不能外推到生�
 候选迭代记录为：R1 因 builder 预检未找到精确 pin 文件而退出、未运行 pytest；R2 为 **19 项通过、1 项失败**，综合覆盖率 **86.19%**；修正候选后 R3 才得到上述结果。定向 Ruff、生产模块 mypy、Bandit 与 Gitleaks 检查通过；全包 mypy 仍有 **9 项既存诊断**，与本切片无关。测试使用的 pytest/pytest-asyncio/pytest-cov 版本与仓库 pins 不同；canonical A2 未运行，所需历史分类 evidence 缺失。因此这些定向结果不代表整仓 A2 或全局质量门禁通过。
 
 内嵌 SHA-256 只能检查文档内容与同一文档所带摘要自洽；若内容和摘要一并被改写，仍可得到匹配值，只有与可信外部摘要比对才可发现对应字节变动。该 codec 不证明快照来源真实性、供应商授权或证券全集权威性，也未增加持久化、REST/API 或真实主数据接入。它不证明全 A 股覆盖或逐证券历史完整性，不增加迭代控制任务完成数；迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #95：时间身份版本化分块存储
+
+[OpenData PR #95](https://github.com/cloudQuant/opendata/pull/95) 已合入 `dev`，squash 提交为 `2897a878ed4b63b86ee39a8b5f8e700887602948`。该切片新增 Alembic `0021` 和显式注入数据库 engine 的版本化、分块时间身份快照存储；提交前校验外部提供的完整快照 SHA-256，并在版本冲突时 fail closed。专用 R2 合成隔离测试 **141 项通过**，statement+branch 综合覆盖率 **95.27%，0 行排除**。验收材料归档于 OpenData 本机私有目录 [`temporal-identity-store-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/temporal-identity-store-acceptance-20261029/README.md>)。
+
+R1 曾出现 **140 项通过、1 项失败**，原因是 SQLite TEXT/BLOB 表示处理，修正后 R2 通过。并发双 worker 和连接池大小为 2 的合成测试不能证明底层 DBAPI 实际取得了两条独立连接；MySQL 仅做模拟，未连接真实 MySQL。实现只存储显式提交的完整版本，不做 delta 合并；不会自动建表或执行迁移，尚未接入 REST/API 或采集任务。持久化本身不认证调用方、身份命名空间权威性、供应商授权或主数据来源；此前 codec 摘要没有覆盖 namespace authority/registry，因此该存储不能补足来源认证。测试 pytest 版本与仓库 pins 不一致，canonical A2 未运行；全包 mypy 有 **15 项既存诊断**。本 PR 仅完成限定的持久化切片，不增加迭代控制任务完成数；迭代204整体仍未完成。
