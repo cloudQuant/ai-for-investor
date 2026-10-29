@@ -812,3 +812,13 @@ mapper 只在调用方提供的 operator pin registry 与身份 registry 满足�
 | [AFI PR #152](https://github.com/cloudQuant/ai-for-investor/pull/152) | `3eb658058068a752dd4abad7a285102c57422951`。**5 项通过，9.42 秒**；本次没有采集 coverage，故无覆盖率结论。 | synthetic 跨仓 wire 用例在固定 AFI #151 (`8f7b1581febabc899c9046ca38c355aa83772bde`) 与 OpenData #101 (`261a23e36e7dde2fc512ad1bb9b0ac21d406867d`) 上运行，经受限进程内 transport 调用真实 FastAPI ASGI route；迁移 `0021` 仅应用于临时 SQLite，API keys、grants、pins 和 snapshot rows 均为 synthetic。此结果只验证协议路径，不证明生产 MySQL/TLS/grants、部署上线、供应商授权或数据完整性，也不表示 AFI 现有业务已切换到该 client。证据见 [`temporal-identity-wire-acceptance-20261029`](</home/yun/Documents/ai-for-investor/var/reports/afi204/temporal-identity-wire-acceptance-20261029/README.md>)。 |
 
 以上合成测试和本地 SQLite 结果均不证明权威全 A 股证券全集（含北交所及退市证券）、来源授权、真实行情或身份数据质量、全历史 head/interior/tail 覆盖、生产 MySQL 权限与运行、可信 pin 发布或 AFI 业务路径迁移。迭代204整体仍未完成，生产启用及完整历史恢复保持开放。
+
+## 2026-10-29 OpenData PR #102–#103 与 Fuyao 单次试采
+
+[OpenData PR #102](https://github.com/cloudQuant/opendata/pull/102) 与 [PR #103](https://github.com/cloudQuant/opendata/pull/103) 均已合入 `dev`。各自隔离验收分别为 **196 项通过、95.84% statement+branch 综合覆盖率、0 项排除**，以及 **67 项通过、86% statement+branch 综合覆盖率、0 项排除**。这些数字仅代表各 PR 的限定测试与覆盖范围，不表示全市场数据治理或生产链路已经验收。相关收据均保存在 OpenData 本机私有 `var/reports/afi204` 目录下：#102 [`fuyao-bounded-stream-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-bounded-stream-acceptance-20261029>)，#103 [`fuyao-stock-daily-pilot-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-stock-daily-pilot-acceptance-20261029>)。
+
+另完成 Fuyao 单次受限试采：标的 `600519.SH`，日期范围 `2026-10-19` 至 `2026-10-23`，本机观测到 **HTTP 200、5 条记录**，请求预算为 **1**。这是本地运行记录，不是供应商签名的收据，也不独立证明执行期间全局只有一次请求。证据首选长期归档于 OpenData 本机私有目录 [`fuyao-stock-daily-live-20261029`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-stock-daily-live-20261029>)；原始 cache evidence 仍保留在 [`evidence`](</home/yun/.cache/od204-fuyao-live-wD1cBDHW9Z/evidence>)。
+
+同一五日窗口的 Fuyao 与 AkShare 双源对照中，价格和成交额逐日吻合；成交量约相差 **100 倍**，单位尚未通过供应商契约核实，不能据此认定量纲一致或直接混用。该对照只覆盖这五个交易日，不构成更长区间或其他证券的交叉验证。
+
+该单票短窗口结果不证明全 A 股覆盖、逐证券从上市至今的历史完整性、复权语义或单位，也未验收生产调度、存储、REST 服务或 AFI 业务调用链。全市场历史 head/interior/tail 对账与生产接线仍保持开放，迭代204整体尚未完成。
