@@ -858,3 +858,11 @@ OpenData [PR #107](https://github.com/cloudQuant/opendata/pull/107) 已合入 `d
 OpenData [PR #108](https://github.com/cloudQuant/opendata/pull/108) 已合入 `dev`（`816e7f03cbd156a11c10ab6311096344d3e9b082`）。该切片新增离线数据结构，用于保留证券来源字段观察、调用方声明的请求/响应哈希及分页字段，并评估所提交的分页链是否自洽；哈希仅作格式检查，未校验对应字节。专用合成离线测试 **40 项通过**；目标模块 statement+branch 综合覆盖率 **93.49%（632/676，0 项排除）**。验收范围见 OpenData 本机私有证据 [`scope.json`](</home/yun/Documents/opendata/var/reports/afi204/instrument-source-census-acceptance-20261030/scope.json>)。
 
 分页回执和页链信息由调用方声明；内部自洽不验证原生页码连续性或来源真实性，也不证明任何市场证券全集及历史生命周期完整。本切片没有接入 API、数据库或真实采集；北交所覆盖缺口仍未验收。全 A 股权威目录、退市生命周期及逐证券上市至今的历史完整性继续开放，迭代204整体未完成。
+
+## 2026-10-30 OpenData PR #109：Fuyao 证券普查候选解析
+
+OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `dev`（`34f19355d90654a92652dd81b68d55f9a3c5b75e`）。该切片从调用方提供的 Fuyao 普查响应结构生成证券候选，并保留来源字段观察及未验证状态；专用 synthetic offline suite **110 项通过**，目标文件 `fuyao_instrument_census.py` statement+branch 覆盖率 **557/559（99.6422%），0 项排除**。隔离收据位于 OpenData 本机私有目录 [`fuyao-instrument-census-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-instrument-census-acceptance-20261030>)，其 `SHA256SUMS` 中所列文件均已核对匹配。
+
+另有 AkShare 真实本地样本的 R5 离线解析结果，由集成者执行并提供结果，归档者未独立重跑；记录在 OpenData 私有证据 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/identity-v2-real-sample-acceptance-20261030/README.md>)：解析 **10 行、110 个原生来源 token**，源 token 与候选 token 的摘要相同；其中 **1 行身份为调用方声明且未验证，9 行身份未知**。原响应字节由 SHA-256 标识并作为原始来源记录保留；JSON 解码进入浮点数时仍可能产生数值舍入，因此不能把解码候选视为逐字节等价的响应副本。归档 wrapper 的时间是本地重包时间，原 `retrieved_at` 是未签名的调用方声明值。
+
+该 R5 结果只证明既有本地捕获样本在离线流程中的解析观察。请求绑定仍是调用方声明的摘要，不能证明实际 wire 请求；来源分页、市场范围、证券身份、退市生命周期及历史完整性仍未知。#109 与该样本结果均未接入定时采集、数据库持久化或 REST API，也未验证真实 Fuyao 普查链路。全 A 股权威全集与逐证券上市至今的 head/interior/tail 对账仍开放，迭代204整体未完成。
