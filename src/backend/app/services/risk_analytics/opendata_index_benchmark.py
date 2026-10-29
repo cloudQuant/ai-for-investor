@@ -453,22 +453,22 @@ def _records_from_snapshot(
     previous_date: str | None = None
     snapshot_sequence = snapshot["sequence"]
     snapshot_publication = snapshot["publication_id"]
+    publication_id_by_sequence = {snapshot_sequence: snapshot_publication}
+    sequence_by_publication_id = {snapshot_publication: snapshot_sequence}
     for row in records:
         if not isinstance(row, Mapping) or set(row) != _ROW_FIELDS:
             raise OpenDataIndexBenchmarkError("opendata_record_identity_invalid")
         business_date = row.get("business_date")
         payload = row.get("payload")
+        publication_sequence = row.get("publication_sequence")
+        publication_id = row.get("publication_id")
         if (
             row.get("dataset_id") != snapshot.get("dataset_id")
             or type(row.get("revision")) is not int
             or row["revision"] < 1
-            or type(row.get("publication_sequence")) is not int
-            or not 1 <= row["publication_sequence"] <= snapshot_sequence
-            or _HEX_32.fullmatch(str(row.get("publication_id", ""))) is None
-            or (
-                row["publication_sequence"] == snapshot_sequence
-                and row["publication_id"] != snapshot_publication
-            )
+            or type(publication_sequence) is not int
+            or not 1 <= publication_sequence <= snapshot_sequence
+            or _HEX_32.fullmatch(str(publication_id or "")) is None
             or not isinstance(row.get("business_key"), str)
             or not isinstance(business_date, str)
             or not isinstance(payload, Mapping)
@@ -478,6 +478,14 @@ def _records_from_snapshot(
             or _HEX_64.fullmatch(str(row.get("record_hash", ""))) is None
         ):
             raise OpenDataIndexBenchmarkError("opendata_record_identity_invalid")
+        known_publication_id = publication_id_by_sequence.get(publication_sequence)
+        known_sequence = sequence_by_publication_id.get(publication_id)
+        if (known_publication_id is not None and known_publication_id != publication_id) or (
+            known_sequence is not None and known_sequence != publication_sequence
+        ):
+            raise OpenDataIndexBenchmarkError("opendata_record_identity_invalid")
+        publication_id_by_sequence[publication_sequence] = publication_id
+        sequence_by_publication_id[publication_id] = publication_sequence
         try:
             parsed_date = date.fromisoformat(business_date)
         except ValueError as exc:
