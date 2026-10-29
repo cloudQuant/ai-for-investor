@@ -221,6 +221,20 @@ class Settings(BaseSettings):
             "Loopback hosts remain available for local development; non-loopback HTTP is rejected."
         ),
     )
+    STOCK_ANALYSIS_OPENDATA_SINA_FZB_SNAPSHOT_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Enable explicit per-request OpenData reads of a pinned Sina FZB publication/capture. "
+            "Requires the request selector and never discovers or falls back to another provider."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_SINA_FZB_ALLOWED_HOSTS: str = Field(
+        default="",
+        description=(
+            "Comma-separated exact hosts allowed for explicit Sina FZB OpenData API reads. "
+            "Remote endpoints require HTTPS and an exact host allowlist."
+        ),
+    )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
         default=False,
         description=(

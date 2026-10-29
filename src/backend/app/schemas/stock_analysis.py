@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 StockAnalysisStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 StockAnalysisExportFormat = Literal["markdown", "html", "docx", "pdf"]
@@ -18,6 +18,16 @@ def _default_stock_analysis_modules() -> list[StockAnalysisModule]:
 
 def _default_stock_analysis_export_formats() -> list[StockAnalysisExportFormat]:
     return ["markdown", "html", "docx", "pdf"]
+
+
+class StockAnalysisSinaFzbSnapshotSelection(BaseModel):
+    """One explicit OpenData publication/capture selector for the requested instrument."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: str = Field(pattern=r"^[0-9]{6}\.(?:SH|SZ)$")
+    publication_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    capture_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class StockAnalysisParams(BaseModel):
@@ -34,6 +44,7 @@ class StockAnalysisParams(BaseModel):
     include_risk: bool = True
     language: str = Field("zh-CN", max_length=16)
     model_id: str | None = Field(None, max_length=200)
+    opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None
 
     @field_validator("symbol")
     @classmethod
@@ -42,6 +53,34 @@ class StockAnalysisParams(BaseModel):
         if not normalized:
             raise ValueError("symbol must not be blank")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_sina_fzb_instrument_scope(self) -> StockAnalysisParams:
+        selection = self.opendata_sina_fzb_snapshot
+        if selection is None:
+            return self
+        if self.market_type != "A股":
+            raise ValueError("Sina FZB snapshot selection requires market_type='A股'")
+
+        symbol = self.symbol.strip().upper()
+        if "." in symbol:
+            if symbol.count(".") != 1:
+                raise ValueError("Sina FZB snapshot symbol must identify one SH/SZ instrument")
+            code, exchange = symbol.split(".", 1)
+        elif symbol.startswith(("SH", "SZ")):
+            exchange, code = symbol[:2], symbol[2:]
+        else:
+            code = symbol
+            if code.startswith("6"):
+                exchange = "SH"
+            elif code.startswith(("0", "3")):
+                exchange = "SZ"
+            else:
+                raise ValueError("Sina FZB snapshot requires an explicit SH/SZ A-share symbol")
+
+        if selection.instrument_id != f"{code}.{exchange}":
+            raise ValueError("Sina FZB snapshot instrument_id must match the analysis symbol")
+        return self
 
 
 class StockAnalysisTaskCard(BaseModel):
