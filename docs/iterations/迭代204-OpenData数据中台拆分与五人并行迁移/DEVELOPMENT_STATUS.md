@@ -755,6 +755,12 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 
 该工具只比较调用方提供的两份集合，不判断两组数据是否可比，也不证明证券全集的权威性、真实性或完整性；不检查分页、数据时效、上市/退市边界或逐证券历史。它不连接 provider、采集任务、数据库或 API。测试运行时 CPython/pytest/pytest-asyncio/pytest-cov/coverage 与仓库 pins 有差异；标准库未纳入完整哈希，测试可写入 evidence 目录，不能据此宣称证据具备防恶意篡改能力。测试文件的 Bandit 报告包含 **32 项 LOW B101**；全包 mypy 仍有 **9 项既存诊断**，与基线一致。canonical A2 未验收。该 PR 只关闭离线集合差异诊断的限定代码范围，不增加迭代控制任务完成数；迭代204整体仍未完成。
 
+## 2026-10-29 OpenData PR #93：离线证券身份时间区间解析
+
+[OpenData PR #93](https://github.com/cloudQuant/opendata/pull/93) 已合入 `dev`，squash 提交为 `8417fe727bebfe06b169dee1d73284bb7a37da14`。新增纯离线 temporal identity resolver，以显式交易所代码和证券代码组成 identity，并按半开时间区间解析身份对应关系；未知 pair 或时间间隙返回 `UNKNOWN`；pair 映射区间重叠，或同一 instrument 在请求窗口内同时映射多个 pair（时间重叠）时拒绝解析，按顺序更名、时间不重叠的多个 pair 合法。允许不同交易所出现相同裸代码。专用合成测试 **23 项通过**，statement+branch 综合覆盖率 **100%，0 项排除**。首次测试 **17 项通过、2 项失败，覆盖率 88.22%**；修复后复测通过。证据见 OpenData 本机归档 [`temporal-instrument-identity-acceptance-20261029/README.md`](</home/yun/Documents/opendata/var/reports/afi204/temporal-instrument-identity-acceptance-20261029/README.md>)。
+
+mypy 对测试文件报告 **5 项显式诊断**；该结果不能外推到生产模块或仓库常规类型检查。测试使用的 pytest 相关版本与项目固定版本存在差异；canonical A2 未运行，缺少所需分类 evidence。此实现没有生产数据源接入、持久化、API 或规范化 registry digest；`source_sha256` 是调用方提供的声明，不能证明身份全集权威、全 A 覆盖、来源真实性或历史完整性。本 PR 仅完成离线时间区间解析的限定范围，不增加迭代控制任务完成数；迭代204整体仍未完成。
+
 ## 2026-10-29 北交所目录 endpoint 受控探测记录
 
 北交所目录 endpoint 的调用参数来源于 vendored AkShare 脚本 `src/backend/app/data_fetch/scripts/stocks/weekly/stock_info_bj_name_code.py`。2026-10-29 的两次受控、非凭证 POST 单页探测均返回 **HTTP 307、164 字节**；第二次响应的 `Location` 指向相同 URL。请求没有跟随重定向，响应中没有目录数据。这一有限探测结果不构成接口故障判断、证券目录完整性结论或真实数据采集证明。
