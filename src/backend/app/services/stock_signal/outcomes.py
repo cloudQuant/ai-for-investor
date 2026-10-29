@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Any, Literal
+
+
+BenchmarkStatus = Literal["available", "unknown"]
+BENCHMARK_UNKNOWN_REASON = "benchmark_20d_return_not_recorded"
 
 
 def _parse_date(value: Any) -> date | None:
@@ -17,11 +22,33 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
     try:
         numeric = float(value)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return None
-    return numeric if numeric > 0 else None
+    return numeric if math.isfinite(numeric) and numeric > 0 else None
+
+
+def normalize_benchmark_20d_return(value: Any) -> float | None:
+    """Return a finite 20-day benchmark value suitable for JSON output."""
+    if isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def benchmark_status_for_20d_return(value: Any) -> tuple[BenchmarkStatus, str | None]:
+    """Describe stored 20-day value presence without asserting provider provenance."""
+    if normalize_benchmark_20d_return(value) is None:
+        return "unknown", BENCHMARK_UNKNOWN_REASON
+    return "available", None
 
 
 @dataclass(frozen=True)
@@ -37,6 +64,8 @@ class OutcomeEvaluation:
     excess_returns: dict[int, float | None]
     buy_is_correct_20d: bool | None
     sell_is_correct_20d: bool | None
+    benchmark_status: BenchmarkStatus = "unknown"
+    benchmark_status_reason: str | None = BENCHMARK_UNKNOWN_REASON
 
 
 def _row_index(rows: list[dict[str, Any]], target: date) -> int | None:
@@ -60,7 +89,8 @@ def _return_at(
     close = _number(rows[target_index].get("close"))
     if close is None:
         return None
-    return close / entry_price - 1.0 - cost
+    result = close / entry_price - 1.0 - cost
+    return result if math.isfinite(result) else None
 
 
 def _benchmark_return_at(
@@ -77,7 +107,8 @@ def _benchmark_return_at(
     target_close = _number(benchmark_rows[target_index].get("close"))
     if entry_open is None or target_close is None:
         return None
-    return target_close / entry_open - 1.0
+    result = target_close / entry_open - 1.0
+    return result if math.isfinite(result) else None
 
 
 def evaluate_outcome(
@@ -144,6 +175,10 @@ def evaluate_outcome(
             result - benchmark if result is not None and benchmark is not None else None
         )
 
+    benchmark_status, benchmark_status_reason = benchmark_status_for_20d_return(
+        benchmark_returns[20]
+    )
+
     if all(value is None for value in horizon_returns.values()):
         return OutcomeEvaluation(
             "unscorable",
@@ -155,6 +190,8 @@ def evaluate_outcome(
             excess_returns,
             None,
             None,
+            benchmark_status,
+            benchmark_status_reason,
         )
     status = "scored" if horizon_returns[20] is not None else "partial"
     buy_correct: bool | None = None
@@ -182,4 +219,6 @@ def evaluate_outcome(
         excess_returns,
         buy_correct,
         sell_correct,
+        benchmark_status,
+        benchmark_status_reason,
     )
