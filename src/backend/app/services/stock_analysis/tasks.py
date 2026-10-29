@@ -316,6 +316,7 @@ class StockAnalysisTaskService:
             symbol=task.symbol,
             market_type=task.market_type,
             analysis_date=analysis_date,
+            opendata_sina_fzb_snapshot=params.opendata_sina_fzb_snapshot,
         )
         task.symbol_name = (snapshot.get("info") or {}).get("name") or task.symbol
         task.data_quality_json = snapshot.get("data_quality") or {}

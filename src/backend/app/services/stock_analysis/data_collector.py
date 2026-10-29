@@ -12,11 +12,16 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.schemas.stock_analysis import StockAnalysisSinaFzbSnapshotSelection
 from app.services.market_instrument import MarketInstrumentService
 from app.services.news_intelligence import get_news_intelligence_service
 from app.services.stock_analysis.opendata_financial_archive import (
     OpenDataFinancialArchiveError,
     OpenDataFinancialArchiveReader,
+)
+from app.services.stock_analysis.opendata_sina_fzb_snapshot import (
+    OpenDataSinaFzbSnapshotError,
+    OpenDataSinaFzbSnapshotReader,
 )
 
 
@@ -56,11 +61,13 @@ class StockAnalysisDataCollector:
         *,
         settings: Any | None = None,
         financial_archive_reader: OpenDataFinancialArchiveReader | None = None,
+        sina_fzb_snapshot_reader: OpenDataSinaFzbSnapshotReader | None = None,
     ) -> None:
         self.db = db
         self.market_service = MarketInstrumentService()
         self._settings = settings
         self._financial_archive_reader = financial_archive_reader
+        self._sina_fzb_snapshot_reader = sina_fzb_snapshot_reader
 
     async def collect(
         self,
@@ -69,6 +76,7 @@ class StockAnalysisDataCollector:
         symbol: str,
         market_type: str,
         analysis_date: date,
+        opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None,
     ) -> dict[str, Any]:
         market_payload = await self._collect_market(symbol=symbol, analysis_date=analysis_date)
         quote = self._build_quote(market_payload)
@@ -83,6 +91,7 @@ class StockAnalysisDataCollector:
             market_type=market_type,
             analysis_date=analysis_date,
             market_payload=market_payload,
+            opendata_sina_fzb_snapshot=opendata_sina_fzb_snapshot,
         )
         technicals = {"factors": market_payload.get("indicators") or {}}
         news = await self._collect_news(user_id, symbol, market_type)
@@ -104,6 +113,12 @@ class StockAnalysisDataCollector:
             if isinstance(financials.get("raw_archive"), dict):
                 degraded_reasons.append(
                     self._financial_archive_degradation_reason(financials["raw_archive"])
+                )
+            snapshot_evidence = financials.get("opendata_sina_fzb_snapshot")
+            if isinstance(snapshot_evidence, dict):
+                degraded_reasons.append(
+                    "新浪 FZB 来源原生记录仅作证据引用，未进入标准化财务分析；"
+                    f"状态：{snapshot_evidence.get('status', 'unavailable')}"
                 )
         if not news.get("items"):
             degraded_reasons.append("新闻数据为空")
@@ -273,8 +288,21 @@ class StockAnalysisDataCollector:
         market_type: str,
         analysis_date: date,
         market_payload: dict[str, Any],
+        opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None,
     ) -> dict[str, Any]:
         financials = self._build_financials(market_payload)
+        active_settings = self._settings or get_settings()
+        sina_snapshot_enabled = bool(
+            getattr(active_settings, "STOCK_ANALYSIS_OPENDATA_SINA_FZB_SNAPSHOT_ENABLED", False)
+        )
+        if opendata_sina_fzb_snapshot is not None or (sina_snapshot_enabled and market_type == "A股"):
+            return await self._collect_sina_fzb_snapshot_financials(
+                financials=financials,
+                symbol=symbol,
+                market_type=market_type,
+                selection=opendata_sina_fzb_snapshot,
+                feature_enabled=sina_snapshot_enabled,
+            )
         if not self._is_cn_stock(symbol, market_type):
             return financials
 
@@ -352,6 +380,106 @@ class StockAnalysisDataCollector:
                     "provider": "akshare",
                 }
             )
+        return financials
+
+    async def _collect_sina_fzb_snapshot_financials(
+        self,
+        *,
+        financials: dict[str, Any],
+        symbol: str,
+        market_type: str,
+        selection: StockAnalysisSinaFzbSnapshotSelection | None,
+        feature_enabled: bool,
+    ) -> dict[str, Any]:
+        """Read one caller-pinned source snapshot and retain only safe provenance."""
+        # Source-native records are intentionally not normalized into annual or
+        # quarterly metrics. Clearing those fields also prevents another
+        # provider's financial values from appearing as if they came from this
+        # explicit selection.
+        financials.update(
+            {
+                "annual": [],
+                "quarterly": [],
+                "provider": "opendata",
+            }
+        )
+        summary: dict[str, Any] = {
+            "status": "unavailable",
+            "source": "sina-fzb",
+            "dataset_id": "sina_fzb_report_observations",
+            "instrument_id": selection.instrument_id if selection is not None else None,
+            "publication_id": selection.publication_id if selection is not None else None,
+            "capture_id": selection.capture_id if selection is not None else None,
+            "record_count": 0,
+            "page_count": 0,
+            "reason_code": None,
+            "temporal_semantics": "none",
+            "eligible_for_decision_or_backtest": False,
+        }
+
+        active_settings = self._settings or get_settings()
+
+        if not feature_enabled:
+            summary["reason_code"] = "feature_disabled"
+            financials["opendata_sina_fzb_snapshot"] = summary
+            return financials
+
+        if selection is None:
+            summary["reason_code"] = "selector_missing"
+            financials["opendata_sina_fzb_snapshot"] = summary
+            return financials
+
+        expected_instrument_id = self._opendata_instrument_id(symbol)
+        if (
+            market_type != "A股"
+            or expected_instrument_id is None
+            or expected_instrument_id != selection.instrument_id
+        ):
+            summary["reason_code"] = "instrument_scope_mismatch"
+            financials["opendata_sina_fzb_snapshot"] = summary
+            return financials
+
+        try:
+            reader = self._sina_fzb_snapshot_reader
+            if reader is None:
+                reader = OpenDataSinaFzbSnapshotReader.from_environment(
+                    allowed_hosts=getattr(
+                        active_settings, "STOCK_ANALYSIS_OPENDATA_SINA_FZB_ALLOWED_HOSTS", ""
+                    )
+                )
+            result = await reader.fetch_capture(
+                instrument_id=selection.instrument_id,
+                publication_id=selection.publication_id,
+                capture_id=selection.capture_id,
+            )
+        except OpenDataSinaFzbSnapshotError as exc:
+            summary["reason_code"] = exc.code
+        except Exception:
+            # Do not expose URLs, credentials, or response bodies in task/report
+            # data and never switch providers after an explicit selection.
+            summary["reason_code"] = "reader_error"
+        else:
+            snapshot = result.snapshot
+            summary.update(
+                {
+                    "status": "ok" if result.records else "empty",
+                    "snapshot_id": snapshot.get("snapshot_id"),
+                    "publication_sequence": snapshot.get("sequence"),
+                    "record_count": len(result.records),
+                    "page_count": result.page_count,
+                    "selection_sha256": snapshot.get("selection_sha256"),
+                    "content_sha256": snapshot.get("content_sha256"),
+                    "contract_sha256": snapshot.get("contract_sha256"),
+                    "as_of": snapshot.get("as_of"),
+                    "expires_at": snapshot.get("expires_at"),
+                    "completeness": result.completeness,
+                    "historical_as_of_status": result.historical_as_of_status,
+                }
+            )
+            if not result.records:
+                summary["reason_code"] = "snapshot_empty"
+
+        financials["opendata_sina_fzb_snapshot"] = summary
         return financials
 
     @classmethod

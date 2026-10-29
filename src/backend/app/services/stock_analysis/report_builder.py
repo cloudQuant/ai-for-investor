@@ -64,6 +64,12 @@ class StockAnalysisReportBuilder:
             and isinstance(financials.get("raw_archive"), dict)
         ):
             data_sources.append("opendata:financial_archive")
+        sina_fzb_snapshot = financials.get("opendata_sina_fzb_snapshot")
+        if (
+            isinstance(sina_fzb_snapshot, dict)
+            and sina_fzb_snapshot.get("status") in {"ok", "empty"}
+        ):
+            data_sources.append("opendata:sina_fzb_snapshot")
 
         return {
             "meta": {
