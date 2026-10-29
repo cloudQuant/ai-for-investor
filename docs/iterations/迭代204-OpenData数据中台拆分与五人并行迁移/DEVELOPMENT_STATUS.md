@@ -872,3 +872,9 @@ OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `d
 [OpenData PR #110](https://github.com/cloudQuant/opendata/pull/110) 已合入 `dev`，提交为 `ea4c6f7f664a7ba33c3e1dc2fae37adb8f40f5c4`。隔离验收运行 **165 项 mock/offline tests**；目标 `opendata/data/providers/ths/transport/http_client.py` 的 statement+branch 综合覆盖率为 **781/845（92.4260%），0 行排除**。归档收据位于 OpenData 本机私有目录 [`fuyao-raw-exchange-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-raw-exchange-acceptance-20261030>)；归档 `SHA256SUMS` 所列 **10 个文件均已核对匹配**。归档说明本次只用 mock 和临时测试 fixture，并排除了 `.env`、数据库文件及原始供应商响应。
 
 本次没有发起真实 Fuyao 请求，没有验证数据库写入或生产服务，也没有接入或运行定时调度；结果不证明数据单位、历史覆盖或生产运行行为。Fuyao 原始响应、错误和日志可能回显凭据；调用方必须在归档前检查并脱敏这些输出。当前验收归档声明其 allowlist 文件已按常见 Fuyao/API-key、Bearer 与 secret-like 模式扫描且未发现匹配，但这不是通用秘密扫描器，也不替代归档者逐项检查。已有 mypy 诊断仍未解决，本收据不构成 mypy 通过结论。权威全 A 股底册（含退市及北交所生命周期）和逐证券从实际上市起点至今的 head/interior/tail 全历史对账仍未完成；迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #111：Fuyao A 股当前目录有界采集器
+
+[OpenData PR #111](https://github.com/cloudQuant/opendata/pull/111) 已合入 `dev`，提交为 `4fb0ba2826fcff09afe5429d6c3c3ffd42868727`。本切片增加一次性、最多读取两页的当前证券目录采集器，并对有限的凭据编码回显样例及本机同用户 nonce 范围进行检查。合成离线专项 **59 项测试通过**；目标模块语句与分支合计覆盖 **744/815（91.2883%）**，排除 **0**。收据范围及限制见 OpenData 本机私有证据 [`SCOPE.md`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-a-share-catalog-capture-acceptance-20261030/SCOPE.md>)；该目录 `SHA256SUMS` 所列文件均已核对匹配。
+
+本次没有发起真实 Fuyao 或 AkShare 请求，也未验证这些上游端点的行为、具体端点权限或字段语义；没有访问生产数据库或 API，也没有接入或运行定时调度。有限编码样例不构成全面凭据泄漏审计；同用户本机 nonce 检查不证明跨用户、跨进程重启或跨主机的全局唯一性。最多两页的当前目录结果也不证明权威全 A 股证券全集、北交所及退市生命周期，或逐证券从上市至今的 head/interior/tail 全历史覆盖。生产接线与完整历史验收仍开放，迭代204整体未完成。
