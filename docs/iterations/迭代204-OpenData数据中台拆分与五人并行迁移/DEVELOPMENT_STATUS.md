@@ -822,3 +822,13 @@ mapper 只在调用方提供的 operator pin registry 与身份 registry 满足�
 同一五日窗口的 Fuyao 与 AkShare 双源对照中，价格和成交额逐日吻合；成交量约相差 **100 倍**，单位尚未通过供应商契约核实，不能据此认定量纲一致或直接混用。该对照只覆盖这五个交易日，不构成更长区间或其他证券的交叉验证。
 
 该单票短窗口结果不证明全 A 股覆盖、逐证券从上市至今的历史完整性、复权语义或单位，也未验收生产调度、存储、REST 服务或 AFI 业务调用链。全市场历史 head/interior/tail 对账与生产接线仍保持开放，迭代204整体尚未完成。
+
+## 2026-10-30 OpenData PR #104、AFI PR #155 与 Fuyao MySQL 竖向验收
+
+OpenData [PR #104](https://github.com/cloudQuant/opendata/pull/104) 已合入 `dev`（`a3ae9d5642b2dd60ffafe5842c239058b1f5813a`）；离线转换专项 **45 项测试通过**，statement+branch 综合覆盖率 **98.08%，0 项排除**。验收摘要见 OpenData 本机私有证据 [`SCOPE.md`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-stock-daily-observations-acceptance-20261030/final-r3/SCOPE.md>)。
+
+AFI [PR #155](https://github.com/cloudQuant/ai-for-investor/pull/155) 已合入 `dev`（`a3bf64d498453136acbdc05123b2c4fff83b50bb`）；handler→provider 接线专项 **5 项测试通过，0 项 skip**。测试使用 synthetic capability/auth/storage 与 MockTransport，未调用 ASGI route，未测试 API-key 认证、生产 API key 或生产数据库。验收摘要见 AFI 本机私有证据 [`summary.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/opendata-unadjusted-query-acceptance-20261030/final-r6/summary.md>)。以上结果仅覆盖各自限定代码路径。
+
+另以此前受限试采留存的 Fuyao 样本（本次未重新认证来源真实性），完成一次新的隔离 MySQL 8.4 ODS/DWD 幂等写入与真实 ASGI route 联合验证。ODS 与 DWD 各对 **5 行**执行两次写入，重放后行数仍各为 **5**。数据库域权限使用 synthetic override：有权限请求返回 **200**，无权限请求返回 **403**；route 返回的 **5 行**与存储值一致。principal override 为 synthetic；未测试 API-key 认证，也未使用生产 key。MySQL 临时实例禁用网络，验收结束后子进程正常退出，owned datadir 已确认移除。验收证据已归档于 OpenData 本机私有目录 [`acceptance-summary.json`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-stock-daily-mysql-vertical-20261030/acceptance-summary.json>)。运行日志有两条 `MY-010338` (`errmsg.sys` 缺失) 警告；实例随后进入 ready 状态，验收和 shutdown 均正常，但这不构成 MySQL 完整配置健康的证明。
+
+此结果使用非生产临时数据库，不访问生产数据库；只验证既有样本上的指定写入、幂等和读取路径，不验收全历史覆盖、北交所范围、成交量单位或 QFQ 复权语义，也不代表生产部署与权限已验收。迭代204整体仍未完成。
