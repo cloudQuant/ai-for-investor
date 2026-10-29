@@ -904,3 +904,15 @@ OpenData [PR #112](https://github.com/cloudQuant/opendata/pull/112) 已合入 `d
 OpenData [PR #113](https://github.com/cloudQuant/opendata/pull/113) 已合入 `dev`，提交为 `805b3e6e31708138fbc42db3870e5c0fc3a921f9`。离线 synthetic 专项 **64 项测试通过**；目标 `opendata/pipeline/szse_lifecycle_xlsx_adapter.py` 的 statement+branch 综合覆盖率为 **792/817（96.9400%），0 行排除**。验收证据位于 OpenData 本机私有目录 [`szse-lifecycle-xlsx-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-xlsx-acceptance-20261030>)；已逐项核对其 `SHA256SUMS` 所列文件，全部匹配。
 
 本切片使用 synthetic 工作簿表头进行离线解析验收；没有验证真实深交所 XLSX 的表格格式、字段及日期/生命周期语义，也没有证明普查和历史数据完整性。未验证数据库写入、REST API 或定时调度。权威全 A 股证券全集（含北交所及退市生命周期）和逐证券从实际上市起点至今的 head/interior/tail 全历史对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #114：上交所生命周期采集工具隔离验收
+
+OpenData [PR #114](https://github.com/cloudQuant/opendata/pull/114) 已合入 `dev`（`490a1cd09ebc10381b1b68337f51eb3c51723937`）。synthetic 隔离测试 **39 项通过**；目标采集脚本 statement+branch 综合覆盖率 **453/457 = 99.1247%**，**0 项排除**。证据归档位于 [`sse-lifecycle-capture-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/sse-lifecycle-capture-acceptance-20261030>)；`SHA256SUMS.sha256` 对 `SHA256SUMS` 的校验通过，且清单中全部归档文件均匹配。`acceptance.json` 记录的源脚本 SHA-256 为 `ee866efda1c7afca0bdb88200e482d36fa072ef356614bf6b5c3a8dbc0c9de6a`、测试文件为 `642c881d1dc1d381ebe55f08fefd67d3d15ba80d73f6d383210d276343c71d45`；runner SHA-256 为 `755e1f7bdc74bee716a412510062f1743bf15d836db117893375cceeb1307ff1`，source snapshot manifest SHA-256 为 `5d42c95a03d853dd0cb5c29e7b24a12ee56d65c78152ce1109e40b93178b172c`。这些源哈希由已校验的验收记录保存；本次未重新构建或执行采集器。
+
+本 PR 没有发起真实 SSE 请求，也未验收真实字段、分页、市场范围或生命周期语义；数据库、REST API、scheduler 和全历史覆盖均未验收。中断的 reservation 与 page receipt 之间的结果仍为 **UNKNOWN**，raw receipts 也没有 commit record。该离线工具验收不代表上交所目录、采集完成或任何股票历史完整。
+
+## 2026-10-30 OpenData PR #115：深交所生命周期采集工具隔离验收
+
+OpenData [PR #115](https://github.com/cloudQuant/opendata/pull/115) 已合入 `dev`（`0c1fb8f324c49baa2f0204fe537815db5508ec9a`）。synthetic 隔离测试 **37 项通过**；目标采集脚本 statement+branch 综合覆盖率 **389/408 = 95.3431%**，**0 项排除**。证据归档位于 [`szse-lifecycle-capture-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-capture-acceptance-20261030>)；`SHA256SUMS` 中全部归档文件均匹配。`source-hashes.json` 记录的源脚本 SHA-256 为 `c5b03b8726b7d6aecd4ea339cfde2d9058ea0617924c0a3ec29dd18c28d7de6f`、测试文件为 `4b035e0534c6a4bda087bfe3e380d7b008f21d7be9cce1f4e26f267274024e88`；source snapshot manifest SHA-256 `8ae8d14071749e400b203571acab154e65c998cdaa7b5e78536e0d688840e2bc` 同时由 `result.json` 与 `run-spec.json` 声明。底层 source snapshot manifest 未包含在归档中，因此该 manifest hash 不能从归档内独立重算。
+
+本 PR 的 XLSX parser 使用 synthetic headers 进行离线验收，没有发起真实 SZSE 请求，也未验收真实文件字段、分页、市场范围或生命周期语义；数据库、REST API、scheduler 和全历史覆盖均未验收。该结果不证明深交所证券生命周期数据的权威性、完整性或可用于生产。
