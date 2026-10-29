@@ -704,3 +704,11 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 股票信号页已为 benchmark 状态补充展示映射：历史无记录显示 `unknown`，有效值显示 `available`，非有限值显示为 `null`；状态展示不改变信号计算结果或 outcome。定向隔离验证为后端 **43 passed**、前端 **4 passed**，证据目录为 [`/tmp/afi204-benchmark-status.D8bt77/out`](/tmp/afi204-benchmark-status.D8bt77/out)。
 
 这组结果只验收状态映射与展示边界，不证明真实数据来源或其授权已经验证，也不代表全 A 股数据或历史覆盖已经验收。旧 `partial` 数据重新评分时可能覆盖既有评分的风险仍待修复；AFI 中旧的直连 AKShare 路径仍然存在。本项不调整迭代任务矩阵完成数，迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #86：Fuyao 尝试次数上限的子进程部署绑定
+
+[OpenData PR #86](https://github.com/cloudQuant/opendata/pull/86) 已合入 `dev`，合并提交为 `e39f64b74a629bda55e2279ba9dd084fc987d462`。父进程部署绑定兼容 v1（缺省尝试次数为 3），并通过 v2 显式传递配置的 `transport_max_attempts`；子进程据此构造 Fuyao fetcher，结果校验要求返回值与父端绑定一致。专用隔离套件 **292 项通过、0 项排除**，三个目标文件的 statement+branch 覆盖率分别为 **93.75% / 90.67% / 93.63%**。证据见 OpenData 本机私有目录 [`fuyao-binding-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-binding-acceptance-20261029>)。
+
+隔离运行的 pytest 相关依赖版本与项目固定版本有差异；mypy 的 **3 项错误为已记录基线错误**，canonical A2 因缺少所需历史 evidence 未执行。专用子进程 `HOME`/`USER` 配置不是操作系统安全隔离。本 PR 仍未接入实际 one-shot 生产路径，未发起真实 Fuyao 请求或采集真实来源数据，也未验收全 A 股证券全集及逐证券 head/interior/tail 历史完整性。本项只关闭尝试次数沿部署绑定传递的限定代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
+
+本次仅保留 tracked source tar 的 SHA 收据；验收归档及原始 evidence 均未保留 tar 文件本体，因此无法从当前归档直接重算并独立核对该 tar 哈希。
