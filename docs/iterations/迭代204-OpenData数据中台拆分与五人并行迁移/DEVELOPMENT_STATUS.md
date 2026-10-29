@@ -890,3 +890,11 @@ OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `d
 根代理对一次真实采集样本进行离线聚合，隔离进程读取了原始响应；归档者只根据根代理提供的结果撰写摘要，没有读取原始响应、环境文件、数据库或凭证。摘要报告一页 **5,579** 行，provider `thscode` 为 **5,579** 个非空字符串且互异，重复及冲突均为 **0**；原始交易所 token 统计为 `SH` **2,319**、`SZ` **2,905**、`BJ` **355**；`list_date` **5,579** 条全部为 null。该[私有摘要](</home/yun/Documents/opendata/var/reports/afi204/fuyao-catalog-profile-20261030/README.md>)已在归档目录内按 `SHA256SUMS` 核对，SHA-256 为 `48e9c5f219f4205dce36a8cae183d6891db0f944dd1bfcf14b946cc2ea77b8eb`。这些数字是摘要自报的观察，不是签名执行证明，也不验证 provider 代码、来源真实性或安全主数据身份；运行时的部分只读挂载没有逐文件哈希固定。
 
 样本只有一页，分页是否完整、来源真实性及全市场覆盖均未知；其中不含或未能证明退市证券，`list_date` 全空也不能推断证券实际上市起点。该 profile 不构成权威全 A 股目录、北交所及退市生命周期或逐证券上市至今 head/interior/tail 历史完整性的验收。相关工作与迭代204整体仍未完成。
+
+## 2026-10-30 OpenData PR #112：上交所证券普查离线解析
+
+OpenData [PR #112](https://github.com/cloudQuant/opendata/pull/112) 已合入 `dev`，提交为 `c109c1d829b4c5cc189a2a132c0704c1819be9b1`。离线 synthetic 专项 **134 项测试通过**；目标 `opendata/pipeline/sse_instrument_census.py` 的 statement+branch 综合覆盖率为 **649/663（97.8884%），0 行排除**。验收归档位于 OpenData 本机私有目录 [`sse-instrument-census-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/sse-instrument-census-acceptance-20261030>)，其中 `SHA256SUMS` 所列文件已逐项校验匹配。
+
+覆盖率使用 pipeline 目录作为采集 selector，再从覆盖率 JSON 读取精确目标模块的 statement/branch 计数。该 selector 是集成者基于当前运行环境作出的技术决定：此前 dotted module selector 出现包预导入/模块移除风险。reviewer 曾提出优先直接选择精确模块的意见；复核未发现仓库规则强制要求该 selector，因此本次按归档中记录的目录 selector 与精确目标统计验收。完整 pipeline 覆盖率不作为本模块的验收结论。
+
+本切片只验证 synthetic 离线解析和普查结构，不证明来源页面的真实性或分页完整性，也不证明任何企业/证券的权威身份、上市或退市日期、真实上交所行为或全 A 股全集。未调用真实 SSE、未访问数据库或 REST API，也未运行定时任务；逐证券上市至今的全历史 head/interior/tail 覆盖仍未验收。迭代204整体继续开放。
