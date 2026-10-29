@@ -952,3 +952,9 @@ OpenData [PR #119](https://github.com/cloudQuant/opendata/pull/119) 已合入 `d
 验收过程中的失败证据均保留：r1 有 **140 项通过、13 项失败**，原因是 Fetcher scope 与请求 source 不一致；r2 有 **153 项通过**，但目标模块覆盖仅 **1,179/1,389（84.8812%）**，未达到 90% 门槛。修正覆盖统计选择器后，r3 才达到上述接受结果；r2 对全仓宽范围产生的 **1.9954%** 聚合值不作为目标模块覆盖结论。
 
 本次只验收离线传输合同和回归，不曾真实请求北交所（BSE）来源，也未证明 BSE 市场目录、证券身份、生命周期、数据质量或历史完整性。生产数据库、部署、生产运维、REST API 和定时任务未验收；全 A 股权威全集及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #120：北交所单页目录采集器离线验收
+
+OpenData [PR #120](https://github.com/cloudQuant/opendata/pull/120) 已合入 `dev`（`3b18e1f4221c40254be0233b85600ea5a4d3ce85`）。synthetic 离线专项 **20 项测试通过**；目标采集脚本 statement+branch 综合覆盖率为 **249/275 = 90.5455%**，排除 **0 行、0 个分支**。验收证据位于 OpenData 本机私有目录 [`bse-single-page-capture-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/bse-single-page-capture-acceptance-20261030>)。
+
+随后启动一次 BSE POST canary。本机未签名匿名回执报告一次本地 attempt 预留，`http_status=null`、`request_failed_or_outcome_unknown`；这不能证明请求实际发出或抵达源站。没有保存原始响应，响应未解析，且没有重试。回执归档位于 OpenData 本机私有目录 [`bse-live-canary-3b18e1f4-once`](</home/yun/Documents/opendata/var/reports/afi204/bse-live-canary-3b18e1f4-once>)。该结果不能用于断定来源故障。市场完整性、分页、证券身份、字段语义及历史覆盖均未建立；数据库写入、发布、定时采集也均未执行。北交所目录与生命周期仍未验收，全 A 股权威全集及逐证券从实际起点至今的 head/interior/tail 对账仍开放，迭代204整体继续开放。
