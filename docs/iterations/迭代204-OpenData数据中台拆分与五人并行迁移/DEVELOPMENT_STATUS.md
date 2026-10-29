@@ -898,3 +898,9 @@ OpenData [PR #112](https://github.com/cloudQuant/opendata/pull/112) 已合入 `d
 覆盖率使用 pipeline 目录作为采集 selector，再从覆盖率 JSON 读取精确目标模块的 statement/branch 计数。该 selector 是集成者基于当前运行环境作出的技术决定：此前 dotted module selector 出现包预导入/模块移除风险。reviewer 曾提出优先直接选择精确模块的意见；复核未发现仓库规则强制要求该 selector，因此本次按归档中记录的目录 selector 与精确目标统计验收。完整 pipeline 覆盖率不作为本模块的验收结论。
 
 本切片只验证 synthetic 离线解析和普查结构，不证明来源页面的真实性或分页完整性，也不证明任何企业/证券的权威身份、上市或退市日期、真实上交所行为或全 A 股全集。未调用真实 SSE、未访问数据库或 REST API，也未运行定时任务；逐证券上市至今的全历史 head/interior/tail 覆盖仍未验收。迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #113：深交所生命周期 XLSX 离线解析
+
+OpenData [PR #113](https://github.com/cloudQuant/opendata/pull/113) 已合入 `dev`，提交为 `805b3e6e31708138fbc42db3870e5c0fc3a921f9`。离线 synthetic 专项 **64 项测试通过**；目标 `opendata/pipeline/szse_lifecycle_xlsx_adapter.py` 的 statement+branch 综合覆盖率为 **792/817（96.9400%），0 行排除**。验收证据位于 OpenData 本机私有目录 [`szse-lifecycle-xlsx-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-xlsx-acceptance-20261030>)；已逐项核对其 `SHA256SUMS` 所列文件，全部匹配。
+
+本切片使用 synthetic 工作簿表头进行离线解析验收；没有验证真实深交所 XLSX 的表格格式、字段及日期/生命周期语义，也没有证明普查和历史数据完整性。未验证数据库写入、REST API 或定时调度。权威全 A 股证券全集（含北交所及退市生命周期）和逐证券从实际上市起点至今的 head/interior/tail 全历史对账仍未完成，迭代204整体继续开放。
