@@ -884,3 +884,9 @@ OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `d
 根代理在 OpenData HEAD `4fb0ba2826fcff09afe5429d6c3c3ffd42868727` 上运行受审查的 launcher，运行记录报告 **1 页、HTTP 200、5,579 行、1,124,308 字节**。本次详情只保存在 OpenData 本机私有摘要 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-catalog-live-summary-20261030/README.md>)；已核对其 `SHA256SUMS`，README SHA-256 为 `fce9560ed00562c1e0bd29950ede2583b9a80783fc86e57907fd26c5e4b2ff70`。摘要报告的 launcher SHA-256 为 `78b273f2a257ef639d4fce7ad7e20bc08157a8b1f6fb9a96b41012dcb52cb3b5`；这是运行记录中的值，不是签名证明。
 
 该观察只覆盖一次当前目录单页：分页是否完整未知，当前列表不含退市证券，市场全集（包括北交所及退市生命周期）、历史生命周期和来源真实性均未证明。回执没有把 nonce 摘要与源码哈希绑定；根代理的运行记录不是签名的执行证明。执行环境没有操作系统级网络隔离，项目完整 `.env` 被加载到进程内存，运行时依赖也没有按哈希锁定。本次没有生产数据库写入、REST API 发布/调用或定时任务执行；不能据此宣称目录已入库、已对外提供或已具备周期更新能力。全 A 股权威全集与逐证券从实际上市起点至今的 head/interior/tail 对账仍开放，迭代204整体未完成。
+
+## 2026-10-30 Fuyao 当前目录样本的离线 profile
+
+根代理对一次真实采集样本进行离线聚合，隔离进程读取了原始响应；归档者只根据根代理提供的结果撰写摘要，没有读取原始响应、环境文件、数据库或凭证。摘要报告一页 **5,579** 行，provider `thscode` 为 **5,579** 个非空字符串且互异，重复及冲突均为 **0**；原始交易所 token 统计为 `SH` **2,319**、`SZ` **2,905**、`BJ` **355**；`list_date` **5,579** 条全部为 null。该[私有摘要](</home/yun/Documents/opendata/var/reports/afi204/fuyao-catalog-profile-20261030/README.md>)已在归档目录内按 `SHA256SUMS` 核对，SHA-256 为 `48e9c5f219f4205dce36a8cae183d6891db0f944dd1bfcf14b946cc2ea77b8eb`。这些数字是摘要自报的观察，不是签名执行证明，也不验证 provider 代码、来源真实性或安全主数据身份；运行时的部分只读挂载没有逐文件哈希固定。
+
+样本只有一页，分页是否完整、来源真实性及全市场覆盖均未知；其中不含或未能证明退市证券，`list_date` 全空也不能推断证券实际上市起点。该 profile 不构成权威全 A 股目录、北交所及退市生命周期或逐证券上市至今 head/interior/tail 历史完整性的验收。相关工作与迭代204整体仍未完成。
