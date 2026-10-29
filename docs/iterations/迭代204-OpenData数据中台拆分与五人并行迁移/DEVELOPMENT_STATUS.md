@@ -932,3 +932,9 @@ OpenData [PR #117](https://github.com/cloudQuant/opendata/pull/117) 已合入 `d
 深交所采样于 **2026-10-29** 发起 **3 次 GET**，均为 HTTP 200；累计响应 **559,707 字节**，3 份原始来源文件均已私有保存。现有解析器按 synthetic sheet/header 契约处理真实文件时以 `sheet_unsupported` 失败，解析 **0 行**；真实文件格式尚未适配。采集器配置为 **45 秒协作式任务期限**；执行者通过外层 **90 秒 timeout** 启动，但匿名收据未记录外层期限，因此该期限不能由收据独立证明。记录只证明有界请求和原始响应留存，不代表完整目录、完整生命周期数据或已解析数据。匿名收据和摘要归档于 OpenData 本机私有目录 [`szse-lifecycle-live-20261029T211056Z-752c1a37e64836fa`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-live-20261029T211056Z-752c1a37e64836fa>)。
 
 两次采样均未证明分页完整、证券身份映射、全市场覆盖或逐证券全历史 head/interior/tail；也未完成数据库、REST API、定时调度或生产接线验收。真实采样不能关闭全 A 股权威证券全集与完整历史恢复事项，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #118：深交所真实表头解析器离线验收
+
+OpenData [PR #118](https://github.com/cloudQuant/opendata/pull/118) 已合入 `dev`（`56837681ef9a6dfd44370c0fa3bc3432dcd5422d`）。本次隔离验收共 **117 项 synthetic 测试通过**；采集器 statement+branch 覆盖率 **430/462 = 93.0736%**，解析器覆盖率 **877/916 = 95.7424%**，两项均 **0 项排除**。验收证据归档于 OpenData 本机私有目录 [`szse-real-header-combined-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-real-header-combined-acceptance-20261030>)；此前 r6 失败证据保留。
+
+深交所真实文件回放仍在准备中；本次结果不表示真实文件已成功解析，也未证明真实字段、证券身份、分页、市场范围或生命周期语义。数据库、REST API、scheduler、生产接线和逐证券全历史覆盖均未验收，迭代204整体继续开放。
