@@ -20,7 +20,12 @@ from app.services.asset_research.stock_dual_write import (
 )
 from app.services.stock_signal.decision_policy import SignalPolicy
 from app.services.stock_signal.features import calculate_features
-from app.services.stock_signal.outcomes import OutcomeEvaluation, evaluate_outcome
+from app.services.stock_signal.outcomes import (
+    OutcomeEvaluation,
+    benchmark_status_for_20d_return,
+    evaluate_outcome,
+    normalize_benchmark_20d_return,
+)
 from app.services.stock_signal.performance import build_performance_summary
 from app.services.stock_signal.quality import DataQualityGate
 from app.services.stock_signal.types import ACTION_LABELS
@@ -382,6 +387,10 @@ class StockSignalService:
 
     @staticmethod
     def record_payload(record: StockSignalPrediction) -> dict[str, Any]:
+        benchmark_20d_return = normalize_benchmark_20d_return(record.benchmark_20d_return)
+        benchmark_status, benchmark_status_reason = benchmark_status_for_20d_return(
+            benchmark_20d_return
+        )
         return {
             "id": record.id,
             "source": record.source,
@@ -409,7 +418,9 @@ class StockSignalService:
             "horizon_1d_return": record.horizon_1d_return,
             "horizon_5d_return": record.horizon_5d_return,
             "horizon_20d_return": record.horizon_20d_return,
-            "benchmark_20d_return": record.benchmark_20d_return,
+            "benchmark_20d_return": benchmark_20d_return,
+            "benchmark_status": benchmark_status,
+            "benchmark_status_reason": benchmark_status_reason,
             "excess_20d_return": record.excess_20d_return,
             "buy_is_correct_20d": record.buy_is_correct_20d,
             "sell_is_correct_20d": record.sell_is_correct_20d,

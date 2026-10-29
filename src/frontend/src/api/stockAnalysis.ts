@@ -5,6 +5,7 @@ export type StockAnalysisModule = 'market' | 'social' | 'news' | 'fundamentals' 
 export type StockSignalAction = 'BUY' | 'SELL' | 'WATCH'
 export type StockSignalEligibility = 'eligible' | 'degraded' | 'rejected'
 export type StockSignalOutcomeStatus = 'pending' | 'partial' | 'scored' | 'unscorable'
+export type StockSignalBenchmarkStatus = 'available' | 'unknown'
 
 export interface StockAnalysisCreateTaskParams {
   symbol: string
@@ -98,6 +99,8 @@ export interface StockSignalRecord {
   horizon_1d_return?: number | null
   horizon_5d_return?: number | null
   horizon_20d_return?: number | null
+  benchmark_status?: StockSignalBenchmarkStatus | null
+  benchmark_status_reason?: string | null
   benchmark_20d_return?: number | null
   excess_20d_return?: number | null
   buy_is_correct_20d?: boolean | null

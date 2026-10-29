@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 StockSignalAction = Literal["BUY", "SELL", "WATCH"]
 StockSignalEligibility = Literal["eligible", "degraded", "rejected"]
 StockSignalOutcomeStatus = Literal["pending", "partial", "scored", "unscorable"]
+StockSignalBenchmarkStatus = Literal["available", "unknown"]
 
 
 class StockSignalRecordResponse(BaseModel):
@@ -36,6 +37,8 @@ class StockSignalRecordResponse(BaseModel):
     model_version: str
     outcome_status: StockSignalOutcomeStatus
     outcome_reason: str | None = None
+    benchmark_status: StockSignalBenchmarkStatus = "unknown"
+    benchmark_status_reason: str | None = "benchmark_20d_return_not_recorded"
     entry_date: date | None = None
     entry_price: float | None = None
     horizon_1d_return: float | None = None
