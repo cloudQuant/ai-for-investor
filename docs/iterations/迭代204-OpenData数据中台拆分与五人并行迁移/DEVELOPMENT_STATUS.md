@@ -877,4 +877,4 @@ OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `d
 
 [OpenData PR #111](https://github.com/cloudQuant/opendata/pull/111) 已合入 `dev`，提交为 `4fb0ba2826fcff09afe5429d6c3c3ffd42868727`。本切片增加一次性、最多读取两页的当前证券目录采集器，并对有限的凭据编码回显样例及本机同用户 nonce 范围进行检查。合成离线专项 **59 项测试通过**；目标模块语句与分支合计覆盖 **744/815（91.2883%）**，排除 **0**。收据范围及限制见 OpenData 本机私有证据 [`SCOPE.md`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-a-share-catalog-capture-acceptance-20261030/SCOPE.md>)；该目录 `SHA256SUMS` 所列文件均已核对匹配。
 
-本次没有发起真实 Fuyao 或 AkShare 请求，也未验证这些上游端点的字段语义；没有访问生产数据库或 API，也没有接入或运行定时调度。有限编码样例不构成全面凭据泄漏审计；同用户本机 nonce 检查不证明跨用户、跨进程重启或跨主机的全局唯一性。最多两页的当前目录结果也不证明权威全 A 股证券全集、北交所及退市生命周期，或逐证券从上市至今的 head/interior/tail 全历史覆盖。生产接线与完整历史验收仍开放，迭代204整体未完成。
+本次没有发起真实 Fuyao 或 AkShare 请求，也未验证这些上游端点的行为、具体端点权限或字段语义；没有访问生产数据库或 API，也没有接入或运行定时调度。有限编码样例不构成全面凭据泄漏审计；同用户本机 nonce 检查不证明跨用户、跨进程重启或跨主机的全局唯一性。最多两页的当前目录结果也不证明权威全 A 股证券全集、北交所及退市生命周期，或逐证券从上市至今的 head/interior/tail 全历史覆盖。生产接线与完整历史验收仍开放，迭代204整体未完成。
