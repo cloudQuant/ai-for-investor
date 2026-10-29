@@ -916,3 +916,9 @@ OpenData [PR #114](https://github.com/cloudQuant/opendata/pull/114) 已合入 `d
 OpenData [PR #115](https://github.com/cloudQuant/opendata/pull/115) 已合入 `dev`（`0c1fb8f324c49baa2f0204fe537815db5508ec9a`）。synthetic 隔离测试 **37 项通过**；目标采集脚本 statement+branch 综合覆盖率 **389/408 = 95.3431%**，**0 项排除**。证据归档位于 [`szse-lifecycle-capture-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-capture-acceptance-20261030>)；`SHA256SUMS` 中全部归档文件均匹配。`source-hashes.json` 记录的源脚本 SHA-256 为 `c5b03b8726b7d6aecd4ea339cfde2d9058ea0617924c0a3ec29dd18c28d7de6f`、测试文件为 `4b035e0534c6a4bda087bfe3e380d7b008f21d7be9cce1f4e26f267274024e88`；source snapshot manifest SHA-256 `8ae8d14071749e400b203571acab154e65c998cdaa7b5e78536e0d688840e2bc` 同时由 `result.json` 与 `run-spec.json` 声明。底层 source snapshot manifest 未包含在归档中，因此该 manifest hash 不能从归档内独立重算。
 
 本 PR 的 XLSX parser 使用 synthetic headers 进行离线验收，没有发起真实 SZSE 请求，也未验收真实文件字段、分页、市场范围或生命周期语义；数据库、REST API、scheduler 和全历史覆盖均未验收。该结果不证明深交所证券生命周期数据的权威性、完整性或可用于生产。
+
+## 2026-10-30 OpenData PR #116：深交所采集限速等待修复
+
+OpenData [PR #116](https://github.com/cloudQuant/opendata/pull/116) 已合入 `dev`（`c9a8e05ecc8ee30299cbd7ee87c76c19baf32b80`），修复深交所多 selector 采集时受每秒限速影响、后续请求可能在本地被拒绝的问题。synthetic 离线专项 **38 项测试通过**；目标采集脚本 statement+branch 合计覆盖 **390/409 = 95.3545%**，**0 项排除**。验收摘要位于 OpenData 本机私有证据 [`szse-lifecycle-rate-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-rate-acceptance-20261030>)。
+
+该修复尚未通过真实深交所来源运行验收，不能证明真实工作簿格式、字段、分页、市场范围或生命周期语义；数据库、REST API、scheduler 与全历史覆盖也未验收。上交所 status=3 采集路径与供应商接口路径存在差异，正在修复并待独立验收。权威全 A 股证券全集（含北交所及退市生命周期）和逐证券从实际上市起点至今的 head/interior/tail 全历史对账仍未完成，迭代204整体继续开放。
