@@ -786,3 +786,15 @@ R1 曾出现 **140 项通过、1 项失败**，原因是 SQLite TEXT/BLOB 表示
 本机 `capture.json` 将一次受限手工 pilot 记录为底层 Eastmoney 日线 endpoint **HTTP 200**、`attempts_used=1`，范围为 **1 只证券的短日期窗口**。这些状态和尝试次数是本机 manifest 的声明；原始 body 本身不能独立证明 HTTP 状态、实际发送次数，也不能证明执行前后没有其他请求或提供上游签名。保存的 body 为 **1,048 字节**，SHA-256 为 `2d707ecd928e70a8d7695b621ee437aa90644036600b5c5e9ed19f302f32c509`，与 `capture.json` 中记录的长度和摘要匹配。body 含 **10 条**记录，观察日期范围为 **2026-10-12 至 2026-10-23**；本地 wire 与 source-native 解析对 11 个字段的逐行结果一致。证据位于 OpenData 本机私有目录 [`capture.json`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-akshare-live.2JIE6I1L/capture/capture.json>) 与 [`raw-response.bin`](</home/yun/Documents/opendata/var/reports/afi204/2026-10-29-akshare-live.2JIE6I1L/capture/raw-response.bin>)；本文不记录证券代码或行情值。
 
 本次只记录该单票短窗口的 body 及本地解析观察，不证明 HTTP 状态、实际发送次数、字段单位、复权语义、来源法律身份、Eastmoney 合同或其数据授权已核验、生产采集授权、全 A 股覆盖或逐证券完整历史。解析走 body-only 路径，不等同于经 `RawResponseArtifactWriter` 验证的 capture，也不证明内容寻址 artifact 全链路已验收。capture manifest 的 `state` 仍记为 `attempt_reserved_before_transport`，与其中记录的 HTTP 200 和已有响应 body 不一致；应通过后续独立改动修复状态生成逻辑并保留这份历史证据原样，不回写或重写本次 artifact。仓内 source-rights 记录的是用户对 AkShare 与 Fuyao 可使用的部署方声明；这不扩大为 Eastmoney 合同或具体 endpoint 权利已独立核验。本次观察不增加迭代控制任务完成数；迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #97：离线 stock_daily 时态身份 mapper
+
+[OpenData PR #97](https://github.com/cloudQuant/opendata/pull/97) 已合入 `dev`，合并提交为 `9d388174914b4896bb82e127942991b836d65110`。该切片新增纯离线 mapper，把通过本地 native 合同校验的 AkShare/Eastmoney 日线响应逐行绑定到指定时态身份，保留原始 source tokens，并显式将结果标记为 `identity_bound_candidate`。专用合成隔离测试 **32 项通过**；`stock_daily_mapper.py` 语句与分支合计覆盖率为 **97.58%（242/248，0 项排除）**。最终验收记录见 OpenData 本机私有目录 [`ACCEPTANCE_ADDENDUM.md`](</home/yun/Documents/opendata/var/reports/afi204/stock-daily-mapper-acceptance-20261029/final-run-4iiwbEpA/ACCEPTANCE_ADDENDUM.md>)。
+
+mapper 只在调用方提供的 operator pin registry 与身份 registry 满足绑定关系、且完整身份快照规范字节的 SHA-256 与 pin 相符时产出候选；可信 pin registry 必须来自已校验的 operator-owned runtime 或等价的受审边界。mapper 本身不认证 pin 发布者、调用方、来源权限或数据完整性，也不抓取、落库、发布或补造记录。当前验收仅覆盖离线合成输入，不证明真实 provider 行为、单位/复权含义、市场范围、逐证券历史完整性或生产接线；全 A 股及 head/interior/tail 完整性仍未验收，迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #98：时间身份只读 REST API 与 runtime
+
+[OpenData PR #98](https://github.com/cloudQuant/opendata/pull/98) 已合入 `dev`，合并提交为 `1ee7be9c07af6b5eb5aa271de9bc4bb2fd054e98`。该切片接通 `POST /api/v2/identity/resolve` 只读解析接口、operator pin 校验 runtime 与应用 lifespan 配置。`TEMPORAL_IDENTITY_ENABLED` 默认关闭；启用时要求 operator-owned pin 文件及独立配置的 SHA-256（可信发布流程尚未验收），并通过受限只读 store 查询，不在应用启动时自动迁移数据库。最终隔离运行 **359 项通过**，五个改动模块语句与分支合计覆盖率 **96.25%（1,410/1,465，0 项排除）**。验收使用真实 FastAPI lifespan、临时 SQLite 上的 Alembic `0021`、合成身份行与本地 ASGI 请求；不是生产数据库或服务验证。验收记录见 OpenData 本机私有目录 [`temporal-identity-lifespan-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/temporal-identity-lifespan-acceptance-20261029/final-run/README.md>)。
+
+本次不证明真实 MySQL/InnoDB 行为、实际 `GRANT` 权限、生产凭证与 pin 配置、部署上线、真实市场身份或全 A 股市场覆盖；逐证券上市至今及 head/interior/tail 历史也未验收。该隔离测试使用 CPython 3.13.5 和本机测试依赖版本，项目最低支持版本的干净安装及 canonical A2 未验收。因此 API/runtime 目前保持默认关闭；生产启用须先完成独立的 MySQL 只读授权与部署核验、可信 pin 发布流程及市场/历史覆盖证据。以上 PR 只关闭各自限定代码范围，不代表迭代204整体验收或全量历史恢复完成。
