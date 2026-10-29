@@ -843,4 +843,4 @@ AFI [PR #155](https://github.com/cloudQuant/ai-for-investor/pull/155) 已合入 
 
 MySQL 启动日志中有 `MY-010338`/`errmsg.sys` 配置诊断 2 行、`utf8mb3` 弃用提示 4 行、自签 CA/证书提示 1 行及临时实例 root 空密码初始化提示 1 行。脱敏分类计数和原始日志 SHA-256 见 [warning-review.md](</home/yun/Documents/opendata/var/reports/afi204/afi-opendata-mysql-bridge-20261030/mysql-warning-review/warning-review.md>)；原始日志未复制或摘录。这些提示仅来自本次使用私有 Unix socket、禁网的临时实例，不构成部署建议或生产安全结论。
 
-AFI #157 的时间身份 v2 是方案；OpenData I0 DTO 仅有未合入候选，尚未接入 API 或发布流程，也未验收。
+AFI #157 的时间身份 v2 是方案；OpenData #105 已合入 `dev`（`ea0642e14565bf76f6011300aad12a3b8088fed2`），I0 DTO 的定向隔离验收为 **12 项通过**、statement+branch 综合覆盖率 **95.33%**、**0 项排除**；范围说明见 OpenData 本机私有证据 [`SCOPE.md`](</home/yun/Documents/opendata/var/reports/afi204/identity-bound-stock-v2-contract-acceptance-20261030/SCOPE.md>)。这些合成测试验证了 identity-bound stock v2 DTO 合同；尚未用真实 provider 响应生成或验证 candidate，也未接入 API 或 persistence。真实身份、BSE、QFQ 和全历史均未验收。canonicalizer 必须针对固定快照重新解析身份，不得信任候选 DTO。
