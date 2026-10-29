@@ -938,3 +938,9 @@ OpenData [PR #117](https://github.com/cloudQuant/opendata/pull/117) 已合入 `d
 OpenData [PR #118](https://github.com/cloudQuant/opendata/pull/118) 已合入 `dev`（`56837681ef9a6dfd44370c0fa3bc3432dcd5422d`）。本次隔离验收共 **117 项 synthetic 测试通过**；采集器 statement+branch 覆盖率 **430/462 = 93.0736%**，解析器覆盖率 **877/916 = 95.7424%**，两项均 **0 项排除**。验收证据归档于 OpenData 本机私有目录 [`szse-real-header-combined-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-real-header-combined-acceptance-20261030>)；此前 r6 失败证据保留。
 
 深交所真实文件回放仍在准备中；本次结果不表示真实文件已成功解析，也未证明真实字段、证券身份、分页、市场范围或生命周期语义。数据库、REST API、scheduler、生产接线和逐证券全历史覆盖均未验收，迭代204整体继续开放。
+
+## 2026-10-30 深交所真实文件离线回放补记
+
+在 PR #118 合入后，对此前真实深交所采样保存的三份工作簿进行离线回放。此前 live capture 使用旧解析器时因真实工作表/表头不匹配而失败，未能解析；本次是对已保存文件用新解析器离线处理，不是再次访问深交所。`current_a`、`suspended`、`terminated` 三个 selector 的结果 `count` 分别为 **2,905、0、212**，均表示对应工作表表头后的 XML `row` 元素计数，不表示证券数、非证券数、有效业务记录数或解析记录数。`suspended=0` 只表示本次文件对应工作表没有表头后的 XML `row` 元素，不能证明不存在停牌证券。结果文件位于 OpenData 本机私有目录 [`results.json`](</home/yun/Documents/opendata/var/reports/afi204/szse-offline-real-replay-56837681-20261030/results.json>)。
+
+同目录的 [`EXECUTION.md`](</home/yun/Documents/opendata/var/reports/afi204/szse-offline-real-replay-56837681-20261030/EXECUTION.md>) 记录了 pins 和实际执行命令，但该记录未签名，且 `results.json` 未内嵌 pins，因此无法独立证明执行者、命令、固定源码与结果之间的绑定。三个 selector 的来源身份、生命周期语义、市场范围与来源完整性均为 **UNKNOWN**。这些 XML 行元素计数不能证明权威目录、分页/市场完整性、有效证券总数或全 A 股生命周期覆盖。此次离线回放未写数据库、发布 REST API 或运行 scheduler；逐证券从实际上市起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
