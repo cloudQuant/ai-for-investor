@@ -734,3 +734,9 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 该改动把定时/builtin 增量 job 从 DWD 派生 universe 的默认上限提高到 **10,000**；这只适用于此前省略 `limit` 的相应任务，显式设置的 **5,000** 保持不变。手动 REST 请求仍默认 **200**、最大 **10,000**；增量 cron 可显式传入 **1–50,000** 的上限。测试覆盖 **10,000 个 symbols 的 ASGI 请求范围**，但这不是实际 HTTP client、反向代理或部署链路能够完整接收该请求的证明；部署前仍需核验 query string / URL 长度限制和端到端传输边界，并盘点省略 `limit` 的定时/builtin 增量任务及实际规模。
 
 隔离运行的 pytest 相关依赖版本与项目固定版本有差异；mypy 留有 **4 项基线错误**，canonical A2 因缺少所需历史 evidence 未执行。主归档静态日志记录的两个测试文件 SHA 早于最终测试文件版本，而三个生产源码文件 SHA 与最终版一致；最终测试版的独立静态检查记录见 [`/tmp/od204-final-api-doc-static.kuudhy`](</tmp/od204-final-api-doc-static.kuudhy>) 和 [`/tmp/od204-universe-test-static.vkYILM`](</tmp/od204-universe-test-static.vkYILM>)。因此主归档静态日志不能作为最终两个测试文件的静态检查证据。support 文件校验受同一操作系统用户可并发替换文件的 TOCTOU 限制，不能作为对抗同用户恶意改写的安全边界。该 PR 未证明真实行情采集、权威全 A 股证券全集、北交所/上市退市边界，或逐证券 head/interior/tail 完整历史；迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #90：universe 查询错误的安全呈现
+
+[OpenData PR #90](https://github.com/cloudQuant/opendata/pull/90) 已合入 `dev`，合并提交为 `ad62ffc010191a517e98ebb9e7f385e3b17b2d41`。DWD universe 查询遇到受支持数据库错误时返回固定安全消息，并避免保留底层异常上下文；“无可用 universe”与容量超限继续使用 `ValueError` 子类。calendar fallback 行为保持原样，同时清理了相关日志输出。专用隔离套件 **132 项通过、21 条 warning**；`jobs.py`、calendar 与错误类相关目标的 statement+branch 覆盖率分别为 **94.15% / 97.41% / 100%**，综合 **0 项排除**。定向 Ruff、Bandit、Gitleaks 检查通过。验收证据见 OpenData 本机私有目录 [`universe-errors-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/universe-errors-acceptance-20261029>)。
+
+隔离运行所用 pytest 相关依赖与项目固定版本有差异；mypy 仍报告已记录的 **4 项基线错误**。canonical A2 未运行，缺少所需 `classification.json`。本次只清理了所覆盖代码路径的日志，不表示其他路径均已安全脱敏；查询错误仍未区分缺表与其他数据库故障，scheduler 重试策略也未改变。没有连接真实 provider、生产数据库或全 A 股历史数据，因此本 PR 不证明真实采集、全 A 股证券全集或逐证券 head/interior/tail 完整性；不增加迭代控制任务完成数，迭代204整体仍未完成。
