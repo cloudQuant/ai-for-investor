@@ -922,3 +922,13 @@ OpenData [PR #115](https://github.com/cloudQuant/opendata/pull/115) 已合入 `d
 OpenData [PR #116](https://github.com/cloudQuant/opendata/pull/116) 已合入 `dev`（`c9a8e05ecc8ee30299cbd7ee87c76c19baf32b80`），修复深交所多 selector 采集时受每秒限速影响、后续请求可能在本地被拒绝的问题。synthetic 离线专项 **38 项测试通过**；目标采集脚本 statement+branch 合计覆盖 **390/409 = 95.3545%**，**0 项排除**。验收摘要位于 OpenData 本机私有证据 [`szse-lifecycle-rate-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-rate-acceptance-20261030>)。
 
 该修复尚未通过真实深交所来源运行验收，不能证明真实工作簿格式、字段、分页、市场范围或生命周期语义；数据库、REST API、scheduler 与全历史覆盖也未验收。上交所 status=3 采集路径与供应商接口路径存在差异，正在修复并待独立验收。权威全 A 股证券全集（含北交所及退市生命周期）和逐证券从实际上市起点至今的 head/interior/tail 全历史对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #117：真实交易所目录受限采样
+
+OpenData [PR #117](https://github.com/cloudQuant/opendata/pull/117) 已合入 `dev`，提交为 `90a4825f5e462f3553acf85eed5a7180b411600c`。离线隔离专项 **39 项测试通过**；目标采集器 statement+branch 覆盖 **458/462 = 99.1342%**。以下真实来源观察用于验证受限传输和原始响应留存，不代表证券目录或历史数据已完整。
+
+上交所采样共发起 **5 次请求并收到 5 页 HTTP 200**：当前主板 A 候选返回 **1,700 行**，科创板候选 **618 行**，status=3 主板候选 **145 行**、科创板候选 **3 行**。这里的数字只表示接口响应中的行数；status=3 是查询条件标签，尚未验证其退市/生命周期语义。分页是否完整、证券身份、来源真实性、市场覆盖和历史覆盖均为 **UNKNOWN**，没有据此发布或入库。匿名收据和摘要归档于 OpenData 本机私有目录 [`sse-live-canary-20261030-90a4825`](</home/yun/Documents/opendata/var/reports/afi204/sse-live-canary-20261030-90a4825>)。
+
+深交所采样于 **2026-10-29** 发起 **3 次 GET**，均为 HTTP 200；累计响应 **559,707 字节**，3 份原始来源文件均已私有保存。现有解析器按 synthetic sheet/header 契约处理真实文件时以 `sheet_unsupported` 失败，解析 **0 行**；真实文件格式尚未适配。采集器配置为 **45 秒协作式任务期限**；执行者通过外层 **90 秒 timeout** 启动，但匿名收据未记录外层期限，因此该期限不能由收据独立证明。记录只证明有界请求和原始响应留存，不代表完整目录、完整生命周期数据或已解析数据。匿名收据和摘要归档于 OpenData 本机私有目录 [`szse-lifecycle-live-20261029T211056Z-752c1a37e64836fa`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-live-20261029T211056Z-752c1a37e64836fa>)。
+
+两次采样均未证明分页完整、证券身份映射、全市场覆盖或逐证券全历史 head/interior/tail；也未完成数据库、REST API、定时调度或生产接线验收。真实采样不能关闭全 A 股权威证券全集与完整历史恢复事项，迭代204整体继续开放。
