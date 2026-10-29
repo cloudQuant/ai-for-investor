@@ -958,3 +958,11 @@ OpenData [PR #119](https://github.com/cloudQuant/opendata/pull/119) 已合入 `d
 OpenData [PR #120](https://github.com/cloudQuant/opendata/pull/120) 已合入 `dev`（`3b18e1f4221c40254be0233b85600ea5a4d3ce85`）。synthetic 离线专项 **20 项测试通过**；目标采集脚本 statement+branch 综合覆盖率为 **249/275 = 90.5455%**，排除 **0 行、0 个分支**。验收证据位于 OpenData 本机私有目录 [`bse-single-page-capture-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/bse-single-page-capture-acceptance-20261030>)。
 
 随后启动一次 BSE POST canary。本机未签名匿名回执报告一次本地 attempt 预留，`http_status=null`、`request_failed_or_outcome_unknown`；这不能证明请求实际发出或抵达源站。没有保存原始响应，响应未解析，且没有重试。回执归档位于 OpenData 本机私有目录 [`bse-live-canary-3b18e1f4-once`](</home/yun/Documents/opendata/var/reports/afi204/bse-live-canary-3b18e1f4-once>)。该结果不能用于断定来源故障。市场完整性、分页、证券身份、字段语义及历史覆盖均未建立；数据库写入、发布、定时采集也均未执行。北交所目录与生命周期仍未验收，全 A 股权威全集及逐证券从实际起点至今的 head/interior/tail 对账仍开放，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #121：北交所单页重定向诊断
+
+OpenData [PR #121](https://github.com/cloudQuant/opendata/pull/121) 已合入 `dev`（`8638f40ee4c22e8110884a285336d8c7fe520bf2`）。synthetic 离线专项 **27 项测试通过**；目标采集脚本 statement+branch 综合覆盖率 **296/326 = 90.7975%**，排除 **0 行、0 个分支**。证据位于 OpenData 本机私有目录 [`bse-capture-diagnostics-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/bse-capture-diagnostics-acceptance-20261030>)。
+
+随后一次 BSE 单页诊断的本机 receipt 记录 HTTP **307**，分类为重定向；客户端没有跟随重定向，也没有保存原始响应正文，未取得或解析北交所股票名录。receipt 位于 [`bse-live-canary-8638f40e-diagnostics-once`](</home/yun/Documents/opendata/var/reports/afi204/bse-live-canary-8638f40e-diagnostics-once>)。reviewer 事后报告核对了 receipt、stdout 与 request 摘要的一致性，以及一次 reservation/attempt 和发送上限为 1；但来源端点身份和响应来源未独立认证。reviewer 事后报告静态复核了 SHA 前缀为 `bdd0abff` 的 launcher，并称其与此前 SHA 前缀 `54349` 的审查版本只有三处静态审计 metadata 差异、请求行为未变；这项差异归因来自事后审查报告，旧审查版本和独立审查 artifact 未归档，本文无法独立复验该比较。reviewer 报告相关证据归档存在且校验通过，但运行 receipt 的 launcher SHA 仍来自 sidecar 自行声明；没有签名或独立执行证明可将该值与实际运行文件绑定，因此运行版本关联仍未获独立证明。
+
+该次 307 诊断不能证明来源返回了可用目录，也不能据此判断来源故障。市场范围、分页、证券身份及上市/退市生命周期仍未知，逐证券从实际起点至今的 head/interior/tail 历史完整性未验收。数据库、REST 发布与定时采集也未由此验收；全 A 股权威全集和迭代204整体仍开放。
