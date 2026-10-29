@@ -754,3 +754,9 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 [OpenData PR #92](https://github.com/cloudQuant/opendata/pull/92) 已合入 `dev`，提交为 `0e1ec526d2f64c184f42bf679d74cec7f1a1a5fe`。新增纯离线工具，对两份调用方提供的证券 identity 集合做差异诊断：校验显式 SH/SZ/BJ 身份与六位代码，并稳定排序后呈现集合差异及跨交易所重复裸代码诊断。专用合成测试 **20 项通过**，目标模块 statement+branch 综合覆盖率 **93.51%，0 项排除**。定向 Ruff、单文件生产 mypy、生产 Bandit 与 Gitleaks 检查通过。证据见 OpenData 本机私有目录 [`current-instrument-census-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/current-instrument-census-acceptance-20261029/README.md>)。
 
 该工具只比较调用方提供的两份集合，不判断两组数据是否可比，也不证明证券全集的权威性、真实性或完整性；不检查分页、数据时效、上市/退市边界或逐证券历史。它不连接 provider、采集任务、数据库或 API。测试运行时 CPython/pytest/pytest-asyncio/pytest-cov/coverage 与仓库 pins 有差异；标准库未纳入完整哈希，测试可写入 evidence 目录，不能据此宣称证据具备防恶意篡改能力。测试文件的 Bandit 报告包含 **32 项 LOW B101**；全包 mypy 仍有 **9 项既存诊断**，与基线一致。canonical A2 未验收。该 PR 只关闭离线集合差异诊断的限定代码范围，不增加迭代控制任务完成数；迭代204整体仍未完成。
+
+## 2026-10-29 北交所目录 endpoint 受控探测记录
+
+北交所目录 endpoint 的调用参数来源于 vendored AkShare 脚本 `src/backend/app/data_fetch/scripts/stocks/weekly/stock_info_bj_name_code.py`。2026-10-29 的两次受控、非凭证 POST 单页探测均返回 **HTTP 307、164 字节**；第二次响应的 `Location` 指向相同 URL。请求没有跟随重定向，响应中没有目录数据。这一有限探测结果不构成接口故障判断、证券目录完整性结论或真实数据采集证明。
+
+探测的脱敏响应材料与边界说明归档于 OpenData 本机私有目录 [`bse-directory-probe-20261029`](</home/yun/Documents/opendata/var/reports/afi204/bse-directory-probe-20261029/README.md>)。证据仅保存第二次响应的 headers；首次 307 及两次 POST 的事实依据为执行记录和 README，未留存首次 headers 或逐次完整请求回执。后续仍需取得可核验的上游原始样本，并在明确边界和限额后谨慎实现受控 POST 与解析验证；本次探测没有完成这些工作。权威全 A 股目录、北交所及退市证券生命周期仍未验收，相关控制任务保持开放，本记录不改变迭代任务计数。
