@@ -852,3 +852,9 @@ OpenData [PR #106](https://github.com/cloudQuant/opendata/pull/106) 已合入 `d
 OpenData [PR #107](https://github.com/cloudQuant/opendata/pull/107) 已合入 `dev`（`2dadb7e367acc64af12198c9ee13afdb63c5cf9b`）。它新增离线组合流程：读取已捕获的 raw response artifact，校验调用方提供的 pin 文档与完整身份快照的哈希及关联一致性，再将逐日观测映射为 identity-bound raw candidate；该校验不认证 pin 发布者。定向隔离验收 **49 项通过**；目标 `identity_bound_stock_candidate_v2.py` statement+branch 综合覆盖率 **94.59%**、**0 项排除**。完整 pipeline 覆盖率为 **2.42%**，不作为此目标的验收结论。范围与收据见 OpenData 本机私有证据 [`SCOPE.md`](</home/yun/Documents/opendata/var/reports/afi204/identity-v2-native-candidate-acceptance-20261030/SCOPE.md>)。
 
 #107 只消费离线 synthetic/local artifacts，不发网络请求、不写数据库或发布 candidate；未知身份区间保持 unknown，不补造日期。`request_binding_status=caller_declared_summary_hash_only` 明确表示请求摘要由调用方声明，不证明实际 HTTP query bytes；source adapter version、历史覆盖、native units、调整语义及代码 provenance 中的 rights 状态仍记为 unknown。用户已声明 AkShare 与 Fuyao 可用于本项目；本次离线验收不独立核对具体供应商合同或 endpoint 条款，这不构成对该授权声明的否定。虽然对外错误文本使用固定脱敏代码，异常的 `__context__` 仍可能暴露原异常，需在后续边界处理中解决。目标文件的 scoped mypy 检查通过；import-follow 另外报告 **7 条已有依赖诊断**，不应据此宣称全仓 mypy 通过。真实身份与来源、北交所及退市生命周期、逐证券上市至今的 head/interior/tail 全历史、生产 API/数据库行为仍未验收，迭代204整体未完成。
+
+## 2026-10-30 OpenData PR #108：证券来源分页观察与普查判定
+
+OpenData [PR #108](https://github.com/cloudQuant/opendata/pull/108) 已合入 `dev`（`816e7f03cbd156a11c10ab6311096344d3e9b082`）。该切片新增离线数据结构，用于保留证券来源字段观察、调用方声明的请求/响应哈希及分页字段，并评估所提交的分页链是否自洽；哈希仅作格式检查，未校验对应字节。专用合成离线测试 **40 项通过**；目标模块 statement+branch 综合覆盖率 **93.49%（632/676，0 项排除）**。验收范围见 OpenData 本机私有证据 [`scope.json`](</home/yun/Documents/opendata/var/reports/afi204/instrument-source-census-acceptance-20261030/scope.json>)。
+
+分页回执和页链信息由调用方声明；内部自洽不验证原生页码连续性或来源真实性，也不证明任何市场证券全集及历史生命周期完整。本切片没有接入 API、数据库或真实采集；北交所覆盖缺口仍未验收。全 A 股权威目录、退市生命周期及逐证券上市至今的历史完整性继续开放，迭代204整体未完成。
