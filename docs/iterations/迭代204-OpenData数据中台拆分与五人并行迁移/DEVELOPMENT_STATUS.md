@@ -944,3 +944,11 @@ OpenData [PR #118](https://github.com/cloudQuant/opendata/pull/118) 已合入 `d
 在 PR #118 合入后，对此前真实深交所采样保存的三份工作簿进行离线回放。此前 live capture 使用旧解析器时因真实工作表/表头不匹配而失败，未能解析；本次是对已保存文件用新解析器离线处理，不是再次访问深交所。`current_a`、`suspended`、`terminated` 三个 selector 的结果 `count` 分别为 **2,905、0、212**，均表示对应工作表表头后的 XML `row` 元素计数，不表示证券数、非证券数、有效业务记录数或解析记录数。`suspended=0` 只表示本次文件对应工作表没有表头后的 XML `row` 元素，不能证明不存在停牌证券。结果文件位于 OpenData 本机私有目录 [`results.json`](</home/yun/Documents/opendata/var/reports/afi204/szse-offline-real-replay-56837681-20261030/results.json>)。
 
 同目录的 [`EXECUTION.md`](</home/yun/Documents/opendata/var/reports/afi204/szse-offline-real-replay-56837681-20261030/EXECUTION.md>) 记录了 pins 和实际执行命令，但该记录未签名，且 `results.json` 未内嵌 pins，因此无法独立证明执行者、命令、固定源码与结果之间的绑定。三个 selector 的来源身份、生命周期语义、市场范围与来源完整性均为 **UNKNOWN**。这些 XML 行元素计数不能证明权威目录、分页/市场完整性、有效证券总数或全 A 股生命周期覆盖。此次离线回放未写数据库、发布 REST API 或运行 scheduler；逐证券从实际上市起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #119：有界表单 POST HTTP 客户端
+
+OpenData [PR #119](https://github.com/cloudQuant/opendata/pull/119) 已合入 `dev`，提交为 `7abec32939175541700b932f13d819f0e0d00723`。本切片支持受限的单次表单 POST 传输路径；冻结源码上的离线 synthetic 专项 **216 项测试通过**，目标 `opendata/data/http_client.py` statement+branch 综合覆盖为 **1,259/1,393（90.3805%）**，排除 **0 行、0 个分支**。验收摘要位于 OpenData 本机私有证据 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/bounded-form-post-acceptance-20261030/README.md>)；摘要 SHA-256 为 `ece1d2ec81cc04e8286529063fd0e978f1b2c9244df2b3ed8056083aaaed0dee`。
+
+验收过程中的失败证据均保留：r1 有 **140 项通过、13 项失败**，原因是 Fetcher scope 与请求 source 不一致；r2 有 **153 项通过**，但目标模块覆盖仅 **1,179/1,389（84.8812%）**，未达到 90% 门槛。修正覆盖统计选择器后，r3 才达到上述接受结果；r2 对全仓宽范围产生的 **1.9954%** 聚合值不作为目标模块覆盖结论。
+
+本次只验收离线传输合同和回归，不曾真实请求北交所（BSE）来源，也未证明 BSE 市场目录、证券身份、生命周期、数据质量或历史完整性。生产数据库、部署、生产运维、REST API 和定时任务未验收；全 A 股权威全集及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
