@@ -766,3 +766,11 @@ mypy 对测试文件报告 **5 项显式诊断**；该结果不能外推到生�
 北交所目录 endpoint 的调用参数来源于 vendored AkShare 脚本 `src/backend/app/data_fetch/scripts/stocks/weekly/stock_info_bj_name_code.py`。2026-10-29 的两次受控、非凭证 POST 单页探测均返回 **HTTP 307、164 字节**；第二次响应的 `Location` 指向相同 URL。请求没有跟随重定向，响应中没有目录数据。这一有限探测结果不构成接口故障判断、证券目录完整性结论或真实数据采集证明。
 
 探测的脱敏响应材料与边界说明归档于 OpenData 本机私有目录 [`bse-directory-probe-20261029`](</home/yun/Documents/opendata/var/reports/afi204/bse-directory-probe-20261029/README.md>)。证据仅保存第二次响应的 headers；首次 307 及两次 POST 的事实依据为执行记录和 README，未留存首次 headers 或逐次完整请求回执。后续仍需取得可核验的上游原始样本，并在明确边界和限额后谨慎实现受控 POST 与解析验证；本次探测没有完成这些工作。权威全 A 股目录、北交所及退市证券生命周期仍未验收，相关控制任务保持开放，本记录不改变迭代任务计数。
+
+## 2026-10-29 OpenData PR #94：时间身份快照规范 JSON codec
+
+[OpenData PR #94](https://github.com/cloudQuant/opendata/pull/94) 已合入 `dev`（`edb9cfa73fc95ed9f469bed8415d864afca9e8a0`）。本切片新增时间身份快照的规范 JSON 编码/解码：固定规范字节及内嵌内容 SHA-256、要求显式 `snapshot_type`、限制文档大小与嵌套深度、拒绝重复 JSON 键，并在往返编码/解码中保留半开时间区间语义。专用合成隔离测试 **41 项通过**，statement+branch 综合覆盖率 **98.07%，0 行排除**。验收收据见 OpenData 本机私有目录 [`temporal-identity-snapshot-codec-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/temporal-identity-snapshot-codec-acceptance-20261029/README.md>)。
+
+候选迭代记录为：R1 因 builder 预检未找到精确 pin 文件而退出、未运行 pytest；R2 为 **19 项通过、1 项失败**，综合覆盖率 **86.19%**；修正候选后 R3 才得到上述结果。定向 Ruff、生产模块 mypy、Bandit 与 Gitleaks 检查通过；全包 mypy 仍有 **9 项既存诊断**，与本切片无关。测试使用的 pytest/pytest-asyncio/pytest-cov 版本与仓库 pins 不同；canonical A2 未运行，所需历史分类 evidence 缺失。因此这些定向结果不代表整仓 A2 或全局质量门禁通过。
+
+内嵌 SHA-256 只能检查文档内容与同一文档所带摘要自洽；若内容和摘要一并被改写，仍可得到匹配值，只有与可信外部摘要比对才可发现对应字节变动。该 codec 不证明快照来源真实性、供应商授权或证券全集权威性，也未增加持久化、REST/API 或真实主数据接入。它不证明全 A 股覆盖或逐证券历史完整性，不增加迭代控制任务完成数；迭代204整体仍未完成。
