@@ -980,3 +980,11 @@ OpenData [PR #122](https://github.com/cloudQuant/opendata/pull/122) 已合入 `d
 冻结的离线 R3 专项结果为 **129 passed、1 failed**；目标 `opendata/api/published_data.py` 的 statement+branch 覆盖为 **1,030/1,164（88.488%），0 项排除**。该模块数字是目标覆盖率；API 目录合计覆盖为 37.066%，不作为此模块结果。唯一失败是 OpenAPI contract gate，诊断涉及 v1 pipeline 参数合同值变化及 v2 对 `#/$defs/Exchange` 的不支持引用。相同冻结环境在 base-dev 上复现了同一 OpenAPI gate failure；完整测试套件没有通过。按用户要求，CI/OpenAPI 问题暂缓处理，但此结果不记为 CI 或完整套件通过。验收使用临时 SQLite 和离线测试环境；Python 3.13.5、pytest 8.3.4，运行依赖未完全锁定。证据见 OpenData 私有归档 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/sina-published-api-hardening-acceptance-20261030/README.md>)。
 
 该 PR 只验收上述 API 代码切片及定向离线回归；未验证真实 API key、真实供应商响应、生产数据库、部署或自动调度。capture discovery 仍关闭，Sina FZB reader 尚未接入业务消费；SH/SZ 选择器不意味着全 A 股范围，北交所、权威证券全集及逐证券从实际起点至今的 head/interior/tail 覆盖仍未验收。迭代204整体继续开放。
+
+## 2026-10-30 AFI PR #179：Sina 显式 selector 业务接入
+
+AFI [PR #179](https://github.com/cloudQuant/ai-for-investor/pull/179) 已合入 `dev`，提交为 `2879e17eeaeea8bc0e90b0ec00e31be9f483f34a`。Sina snapshot/provenance 接入默认关闭，消费路径要求显式 selector；原始行不进入 score、LLM 或报告输入。开关启用时，缺少 selector 的旧 A 股请求会得到空的财务输入，不回退到旧来源。已登录用户可在 stock-analysis task 请求中提交固定数据集 selector 创建任务；AFI 没有额外的角色授权或 dataset 授权检查，OpenData 侧的真实授权也未验收。
+
+执行者报告的 **102 项 mock 测试**没有保留完整日志，故不作为可独立复核的验收结果。归档日志记录两个测试文件共 **13 项通过**，其中 **1 项**覆盖 HTTP/SQLite/login/owner roundtrip；pytest 日志和快照清单见 AFI 本机私有证据 [`README.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/sina-manual-business-acceptance-20261030/README.md>)。manifest pins 表明 **5 个生产文件未变**；哈希比对显示 route test 文件仅有末尾两个 LF 的差异。执行者报告称这两个 LF 在运行后被删除；该时序来自未签名的本机记录，不能作为签名执行证明。
+
+这组测试没有使用真实 OpenData key、真实服务或生产环境；AFI 提交任务的能力不证明 OpenData 真实授权配置或生产访问控制已验收。自动 capture 清单、北交所、Sina 三表接入及逐证券从实际起点至今的全历史仍未验收；完整生产部署和迭代204整体继续开放。
