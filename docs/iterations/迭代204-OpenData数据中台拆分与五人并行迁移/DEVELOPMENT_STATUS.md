@@ -692,3 +692,9 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 [OpenData PR #84](https://github.com/cloudQuant/opendata/pull/84) 已 squash 合入 `dev`，提交为 `5bb7a17117628c1f5e673a65adb6ddc9ef580212`。本切片增加单机 SQLite 上的 self-declared grant provisioning 事务与 sealed event，并补充提交/清理处于不确定状态时的对账流程。专用隔离套件 **115 项通过、0 项排除**，目标覆盖率 **98.49%**；定向 pinned 静态检查通过。早期多轮失败及曾误报的记录均保留在证据目录，没有用最终结果覆盖或改写。pytest 相关依赖版本与项目固定版本存在偏差，完整 canonical A2 未运行。证据见 OpenData 本机私有目录 [`source-grant-v6-static-20261029`](</home/yun/Documents/opendata/var/reports/afi204/source-grant-v6-static-20261029>) 与 [`source-grant-v1-v5-20261029`](</home/yun/Documents/opendata/var/reports/afi204/source-grant-v1-v5-20261029>)。
 
 该实现面向单机 SQLite，grant 授权声明由本地操作者提供；验收没有独立证明 Fuyao 凭证有效，也没有证明供应商合同或产品权限范围。没有创建生产 grant，没有发起真实 Fuyao 请求或执行真实采集；本次 scope 也未包含具体证券及日期范围。旧 worker fleet 停止/升级兼容性、Fuyao 生产接线、全 A 股范围与逐证券 head/interior/tail 历史仍未验收。该 PR 只关闭其本地 provisioning 与不确定状态对账的限定代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
+
+## OpenData PR #85：Fuyao fetcher 最大请求尝试次数上限
+
+[OpenData PR #85](https://github.com/cloudQuant/opendata/pull/85) 已合入 `dev`，提交为 `50babc5378588e134f1dede5d082beb46fdebf05`。Fuyao fetcher 现在显式接受 `max_attempts`，范围为 **1–3**，默认值为 **3**。专用隔离套件 **170 项通过、0 项排除**，目标模块 statement+branch 覆盖率 **97%**；定向 pinned 静态检查通过。pytest 相关依赖版本与项目固定版本存在差异，完整 canonical A2 未运行。验收证据见 OpenData 本机私有目录 [`fuyao-attempt-cap-20261029`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-attempt-cap-20261029>)。
+
+现有 `process` 默认尝试次数为 3，尚未接入生产 one-shot 路径。该限制不防御恶意同进程篡改；本次未发起真实 Fuyao 请求，也未验收全 A 股或逐证券 head/interior/tail 历史完整性。该 PR 只关闭 fetcher 尝试次数上限的限定代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
