@@ -966,3 +966,17 @@ OpenData [PR #121](https://github.com/cloudQuant/opendata/pull/121) 已合入 `d
 随后一次 BSE 单页诊断的本机 receipt 记录 HTTP **307**，分类为重定向；客户端没有跟随重定向，也没有保存原始响应正文，未取得或解析北交所股票名录。receipt 位于 [`bse-live-canary-8638f40e-diagnostics-once`](</home/yun/Documents/opendata/var/reports/afi204/bse-live-canary-8638f40e-diagnostics-once>)。reviewer 事后报告核对了 receipt、stdout 与 request 摘要的一致性，以及一次 reservation/attempt 和发送上限为 1；但来源端点身份和响应来源未独立认证。reviewer 事后报告静态复核了 SHA 前缀为 `bdd0abff` 的 launcher，并称其与此前 SHA 前缀 `54349` 的审查版本只有三处静态审计 metadata 差异、请求行为未变；这项差异归因来自事后审查报告，旧审查版本和独立审查 artifact 未归档，本文无法独立复验该比较。reviewer 报告相关证据归档存在且校验通过，但运行 receipt 的 launcher SHA 仍来自 sidecar 自行声明；没有签名或独立执行证明可将该值与实际运行文件绑定，因此运行版本关联仍未获独立证明。
 
 该次 307 诊断不能证明来源返回了可用目录，也不能据此判断来源故障。市场范围、分页、证券身份及上市/退市生命周期仍未知，逐证券从实际起点至今的 head/interior/tail 历史完整性未验收。数据库、REST 发布与定时采集也未由此验收；全 A 股权威全集和迭代204整体仍开放。
+
+## 2026-10-30 AFI PR #177：Sina FZB raw-only reader 与跨仓桥接
+
+AFI [PR #177](https://github.com/cloudQuant/ai-for-investor/pull/177) 已合入 `dev`，提交为 `ed507135d45c2d4bba2073e6d8813687a87deea0`。本切片固定 publication 与 capture 的单一 SH/SZ Sina FZB raw-only reader。离线专项测试报告 **67 项通过**；跨仓验收执行者报告称，通过真实 `published_data` router 的 `ASGITransport` 路径，使用合成 SQLite 数据和 synthetic principal，以 **2 页、31 条记录**完成桥接。该桥接使用 OpenData 基线 `8638f40ee4c22e8110884a285336d8c7fe520bf2`，并覆盖当时 worktree 中 SHA-256 为 `16f645a883f955fddd1063f09535a46ae78a741b7ba13ec760c7de70013e893b` 的 `published_data` router；该 router 后续随 OpenData [PR #122](https://github.com/cloudQuant/opendata/pull/122) 合入 `dev`，提交为 `75bb3d49`。证据摘要位于 AFI 本机私有目录 [`README.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/sina-reader-bridge-acceptance-20261030/README.md>)。
+
+以上运行结果由执行者报告；完整 stdout、bridge result、stderr、JUnit 和退出码未留存，因而不能从持久日志独立复核。桥接使用 synthetic 数据和 principal，未验证真实 API key、生产数据库或部署。reader 尚未接入业务消费、自动发现或定时调度；北交所未覆盖，三表全历史恢复仍未完成。OpenData API hardening 已随 PR #122 合入，但全 OpenAPI gate 在同一环境仍有既有失败，不能记作通过。全 A 股权威证券全集及逐证券从实际起点至今的 head/interior/tail 对账继续开放，迭代204整体仍未完成。
+
+## 2026-10-30 OpenData PR #122：Sina FZB 发布 API 合同加固
+
+OpenData [PR #122](https://github.com/cloudQuant/opendata/pull/122) 已合入 `dev`，合并提交为 `75bb3d49fd101b9e48c698f63242deb6f250de81`。本切片将 Sina FZB 固定到数据集 `sina_fzb_report_observations`，要求调用方指定 publication、六位证券代码和 capture；证券选择器只接受 `NNNNNN.SH` 或 `NNNNNN.SZ`，不包含北交所。AFI 单次 capture 读取合同先向 `POST /api/v2/snapshots` 提交精确的 dataset/publication/instrument/capture 选择，再以固定 `snapshot_id` 和 cursor 从 `/api/v2/datasets/{dataset_id}/records` 分页读取；返回的是 OpenData source-native 投影，不执行数值转换。自动 capture discovery endpoint `/api/v2/datasets/{dataset_id}/capture-candidates` 保持硬关闭，当前请求会在授权和 store 查询前返回 404；没有“latest”自动发现回退。
+
+冻结的离线 R3 专项结果为 **129 passed、1 failed**；目标 `opendata/api/published_data.py` 的 statement+branch 覆盖为 **1,030/1,164（88.488%），0 项排除**。该模块数字是目标覆盖率；API 目录合计覆盖为 37.066%，不作为此模块结果。唯一失败是 OpenAPI contract gate，诊断涉及 v1 pipeline 参数合同值变化及 v2 对 `#/$defs/Exchange` 的不支持引用。相同冻结环境在 base-dev 上复现了同一 OpenAPI gate failure；完整测试套件没有通过。按用户要求，CI/OpenAPI 问题暂缓处理，但此结果不记为 CI 或完整套件通过。验收使用临时 SQLite 和离线测试环境；Python 3.13.5、pytest 8.3.4，运行依赖未完全锁定。证据见 OpenData 私有归档 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/sina-published-api-hardening-acceptance-20261030/README.md>)。
+
+该 PR 只验收上述 API 代码切片及定向离线回归；未验证真实 API key、真实供应商响应、生产数据库、部署或自动调度。capture discovery 仍关闭，Sina FZB reader 尚未接入业务消费；SH/SZ 选择器不意味着全 A 股范围，北交所、权威证券全集及逐证券从实际起点至今的 head/interior/tail 覆盖仍未验收。迭代204整体继续开放。
