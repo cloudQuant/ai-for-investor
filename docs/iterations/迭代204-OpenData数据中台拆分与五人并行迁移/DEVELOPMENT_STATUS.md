@@ -740,3 +740,11 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 [OpenData PR #90](https://github.com/cloudQuant/opendata/pull/90) 已合入 `dev`，合并提交为 `ad62ffc010191a517e98ebb9e7f385e3b17b2d41`。DWD universe 查询遇到受支持数据库错误时返回固定安全消息，并避免保留底层异常上下文；“无可用 universe”与容量超限继续使用 `ValueError` 子类。calendar fallback 行为保持原样，同时清理了相关日志输出。专用隔离套件 **132 项通过、21 条 warning**；`jobs.py`、calendar 与错误类相关目标的 statement+branch 覆盖率分别为 **94.15% / 97.41% / 100%**，综合 **0 项排除**。定向 Ruff、Bandit、Gitleaks 检查通过。验收证据见 OpenData 本机私有目录 [`universe-errors-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/universe-errors-acceptance-20261029>)。
 
 隔离运行所用 pytest 相关依赖与项目固定版本有差异；mypy 仍报告已记录的 **4 项基线错误**。canonical A2 未运行，缺少所需 `classification.json`。本次只清理了所覆盖代码路径的日志，不表示其他路径均已安全脱敏；查询错误仍未区分缺表与其他数据库故障，scheduler 重试策略也未改变。没有连接真实 provider、生产数据库或全 A 股历史数据，因此本 PR 不证明真实采集、全 A 股证券全集或逐证券 head/interior/tail 完整性；不增加迭代控制任务完成数，迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #91：universe 确定性错误停止重试
+
+[OpenData PR #91](https://github.com/cloudQuant/opendata/pull/91) 已合入 `dev`，合并提交为 `dc293dd339de96304b1caa97e3ec0dcde8c08607`。pipeline 遇到证券 universe 为空或超过上限这两类确定性错误时，记录失败并结束本次执行，不再按调度策略重试；失败通知标记为最终失败。数据库查询错误及其他异常保留原有重试行为。专用隔离套件 **37 项通过**，`scheduler.py` statement+branch 综合覆盖率 **60.59%，0 项排除**。证据见 OpenData 本机私有目录 [`scheduler-universe-retry-acceptance-20261029/README.md`](</home/yun/Documents/opendata/var/reports/afi204/scheduler-universe-retry-acceptance-20261029/README.md>)。
+
+新确定性失败路径中的失败状态更新与提交由 mock 断言；同套件其他既有 SQLite 回归覆盖成功、撤权后失败及普通异常/超时场景的 `TaskExecution` 持久化，但没有验证这两类新确定性错误对应的失败记录实际持久化。临时 SQLite 测试另验证 scheduler task state 可在重启后加载。隔离测试运行的 pytest 相关版本与仓库固定版本不同。定向 Ruff 与 Gitleaks 检查通过；Bandit 未发现 scheduler 问题，但对测试断言报告 19 项 LOW B101；mypy 当前与基线相同，仍有 4 项既存错误且没有 scheduler 诊断。canonical A2 因缺少所需分类 evidence 未获验收，不能据此宣称全仓或全局静态检查通过。
+
+本 PR 不验收真实调度服务、provider、生产数据库或网络，也不证明真实行情采集、全 A 股证券全集或逐证券 head/interior/tail 历史完整性；不增加迭代控制任务完成数，迭代204整体仍未完成。
