@@ -878,3 +878,9 @@ OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `d
 [OpenData PR #111](https://github.com/cloudQuant/opendata/pull/111) 已合入 `dev`，提交为 `4fb0ba2826fcff09afe5429d6c3c3ffd42868727`。本切片增加一次性、最多读取两页的当前证券目录采集器，并对有限的凭据编码回显样例及本机同用户 nonce 范围进行检查。合成离线专项 **59 项测试通过**；目标模块语句与分支合计覆盖 **744/815（91.2883%）**，排除 **0**。收据范围及限制见 OpenData 本机私有证据 [`SCOPE.md`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-a-share-catalog-capture-acceptance-20261030/SCOPE.md>)；该目录 `SHA256SUMS` 所列文件均已核对匹配。
 
 本次没有发起真实 Fuyao 或 AkShare 请求，也未验证这些上游端点的行为、具体端点权限或字段语义；没有访问生产数据库或 API，也没有接入或运行定时调度。有限编码样例不构成全面凭据泄漏审计；同用户本机 nonce 检查不证明跨用户、跨进程重启或跨主机的全局唯一性。最多两页的当前目录结果也不证明权威全 A 股证券全集、北交所及退市生命周期，或逐证券从上市至今的 head/interior/tail 全历史覆盖。生产接线与完整历史验收仍开放，迭代204整体未完成。
+
+## 2026-10-30 Fuyao A 股当前目录真实单页受限采样
+
+根代理在 OpenData HEAD `4fb0ba2826fcff09afe5429d6c3c3ffd42868727` 上运行受审查的 launcher，运行记录报告 **1 页、HTTP 200、5,579 行、1,124,308 字节**。本次详情只保存在 OpenData 本机私有摘要 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-catalog-live-summary-20261030/README.md>)；已核对其 `SHA256SUMS`，README SHA-256 为 `fce9560ed00562c1e0bd29950ede2583b9a80783fc86e57907fd26c5e4b2ff70`。摘要报告的 launcher SHA-256 为 `78b273f2a257ef639d4fce7ad7e20bc08157a8b1f6fb9a96b41012dcb52cb3b5`；这是运行记录中的值，不是签名证明。
+
+该观察只覆盖一次当前目录单页：分页是否完整未知，当前列表不含退市证券，市场全集（包括北交所及退市生命周期）、历史生命周期和来源真实性均未证明。回执没有把 nonce 摘要与源码哈希绑定；根代理的运行记录不是签名的执行证明。执行环境没有操作系统级网络隔离，项目完整 `.env` 被加载到进程内存，运行时依赖也没有按哈希锁定。本次没有生产数据库写入、REST API 发布/调用或定时任务执行；不能据此宣称目录已入库、已对外提供或已具备周期更新能力。全 A 股权威全集与逐证券从实际上市起点至今的 head/interior/tail 对账仍开放，迭代204整体未完成。
