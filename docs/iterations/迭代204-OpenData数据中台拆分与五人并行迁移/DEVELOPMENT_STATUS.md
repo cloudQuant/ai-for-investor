@@ -712,3 +712,17 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 隔离运行的 pytest 相关依赖版本与项目固定版本有差异；mypy 的 **3 项错误为已记录基线错误**，canonical A2 因缺少所需历史 evidence 未执行。专用子进程 `HOME`/`USER` 配置不是操作系统安全隔离。本 PR 仍未接入实际 one-shot 生产路径，未发起真实 Fuyao 请求或采集真实来源数据，也未验收全 A 股证券全集及逐证券 head/interior/tail 历史完整性。本项只关闭尝试次数沿部署绑定传递的限定代码范围，不增加迭代控制任务完成数，迭代204整体仍未完成。
 
 本次仅保留 tracked source tar 的 SHA 收据；验收归档及原始 evidence 均未保留 tar 文件本体，因此无法从当前归档直接重算并独立核对该 tar 哈希。
+
+## 2026-10-29 OpenData PR #87：Fuyao 非执行声明契约
+
+[OpenData PR #87](https://github.com/cloudQuant/opendata/pull/87) 已合入 `dev`，合并提交为 `7b6cdfdc98202d098d000f552a1067e129b59064`。本切片为 Fuyao one-shot 增加仅表达调用方声明、不会自行执行请求的契约。专用合成隔离测试 **86 项通过**；`fuyao_one_shot_contract.py` statement+branch 综合覆盖率为 **273/275（99.27%），0 行排除**。证据见 OpenData 本机私有目录 [`fuyao-contract-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-contract-acceptance-20261029/README.md>)，最终运行材料位于其 [`run-86-passed-99_27pct`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-contract-acceptance-20261029/run-86-passed-99_27pct>) 子目录。
+
+测试采用 `opendata.pipeline` namespace-package 快照，刻意绕过正常包初始化；正常 initializer 会导入 runner/ORM，并加载 settings、构造 SQLAlchemy engine。因此这组结果不验证应用正常导入、启动或 provider composition。调用方声明自身不能证明供应商权利、授权范围、请求是否发送或被上游接收。本次没有真实 Fuyao 请求、生产 grant、数据库、服务或 provider 执行。隔离运行的 pytest/pytest-cov/coverage 为 **8.3.4 / 6.2.1 / 7.9.2**，与项目固定的 pytest **8.3.3**、pytest-cov **6.0.0** 不同。本次归档没有 mypy 运行记录，不能据此说明本次或当前 mypy 错误数；此前 PR #86 的独立记录报告过 3 项基线错误，该数字不代表本次复测结果。canonical A2 未运行，因缺少 `docs/evidence/C100/quality-scope-audit/immutable-wave9-exact5055/classification.json`。本 PR 仅关闭非执行声明契约的限定代码范围，不增加迭代控制任务完成数；迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #88：股票 universe 超限拒绝与截断保护
+
+[OpenData PR #88](https://github.com/cloudQuant/opendata/pull/88) 已合入 `dev`，合并提交为 `04495b2f5294a5db313a40039022bfd95e289602`。`derive_universe` 对调用方配置的 `limit` 多读取一条记录作为超限证据；默认 `limit` 为 **5000**，调用方可指定更大的值。超过所配置上限时会在 catalog/provider/pipeline 执行前 fail closed，避免静默截断。非空显式 `symbols` 仍按既有设计绕过派生集合上限。定向隔离验证 **78 项通过、15 条 warning**；`jobs.py` statement+branch 综合覆盖率为 **428/441（97.05%），0 行排除**。证据见 OpenData 本机私有目录 [`universe-truncation-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/universe-truncation-acceptance-20261029/README.md>)，成功运行材料位于其 [`success`](</home/yun/Documents/opendata/var/reports/afi204/universe-truncation-acceptance-20261029/success>) 子目录。
+
+这组测试以 OpenData `dev` 的 `e39f64b74a629bda55e2279ba9dd084fc987d462` 为 base，早于 PR #87 合并。静态对比认为 #87 与本次测试目标没有调用关系，但没有在 #87 合并后重跑，因此不能据此断言合并后的结果已复验或必然不受影响。运行使用 pytest/pytest-asyncio/pytest-cov **8.3.4 / 1.0.0 / 6.2.1**，与项目固定的 **8.3.3 / 0.24.0 / 6.0.0** 不同。本次归档没有 mypy 运行记录，不能据此说明本次或当前 mypy 错误数；此前 PR #86 的独立记录报告过 3 项基线错误，该数字不代表本次复测结果。canonical A2 未运行，缺少 `docs/evidence/C100/quality-scope-audit/immutable-wave9-exact5055/classification.json`。
+
+超限保护只约束从 `dwd_stock_daily` 观察到的证券代码集合；该 DWD 集合不能证明全 A 股证券主数据、北交所范围、上市/退市边界或逐证券完整历史。超过所配置的 `limit` 会停止；默认值是 5000，调用方可传入更大上限，显式名单也可绕过派生集合限制。当前查询失败会被 `symbol_universe` 转为空集合，后续虽会拒绝执行，操作员可能只看到“universe 为空”而看不到原始查询错误；调度层重试与错误根因保留仍待处理。此 PR 不证明真实行情采集、供应商授权、全 A 股覆盖或 head/interior/tail 完整性，也不增加迭代控制任务完成数；迭代204整体仍未完成。
