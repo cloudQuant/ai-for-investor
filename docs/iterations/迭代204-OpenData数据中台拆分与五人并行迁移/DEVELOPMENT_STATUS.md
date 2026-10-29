@@ -832,3 +832,15 @@ AFI [PR #155](https://github.com/cloudQuant/ai-for-investor/pull/155) 已合入 
 另以此前受限试采留存的 Fuyao 样本（本次未重新认证来源真实性），完成一次新的隔离 MySQL 8.4 ODS/DWD 幂等写入与真实 ASGI route 联合验证。ODS 与 DWD 各对 **5 行**执行两次写入，重放后行数仍各为 **5**。数据库域权限使用 synthetic override：有权限请求返回 **200**，无权限请求返回 **403**；route 返回的 **5 行**与存储值一致。principal override 为 synthetic；未测试 API-key 认证，也未使用生产 key。MySQL 临时实例禁用网络，验收结束后子进程正常退出，owned datadir 已确认移除。验收证据已归档于 OpenData 本机私有目录 [`acceptance-summary.json`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-stock-daily-mysql-vertical-20261030/acceptance-summary.json>)。运行日志有两条 `MY-010338` (`errmsg.sys` 缺失) 警告；实例随后进入 ready 状态，验收和 shutdown 均正常，但这不构成 MySQL 完整配置健康的证明。
 
 此结果使用非生产临时数据库，不访问生产数据库；只验证既有样本上的指定写入、幂等和读取路径，不验收全历史覆盖、北交所范围、成交量单位或 QFQ 复权语义，也不代表生产部署与权限已验收。迭代204整体仍未完成。
+
+## 2026-10-30 AFI→OpenData 双仓隔离 MySQL 桥接验收
+
+在同一轮隔离验收中，以 **5 条合成数据**完成 AFI Python `query_market_data` handler → 实际 `OpendataProvider` → `httpx.ASGITransport` → OpenData 实际 `GET /api/v1/data/equity/stock_daily` route 的跨仓查询。请求将 `unadjusted` 映射为 `none`，单次查询使用 `[2026-10-19, 2026-10-24)` 半开窗口（OpenData route 对应含首尾的 2026-10-19 至 2026-10-23），发出 **1 个**内部请求；返回 **5 行**，逐行与合成预期及数据库值相符，业务键唯一，窗口和字段合同校验通过。该链路经过 AFI Python handler，但**未经过 AFI HTTP 入口**。
+
+实际本机临时 **MySQL 8.4.0** 上，合成样本分别写入 ODS 与 DWD，各执行两次幂等写入；两次写入计数均为 5，重放后两表仍各有 5 行且值一致。实例仅使用 Unix socket 并启用 `skip-networking`，本次外网请求数为 **0**。验收结束后 mysqld 子进程正常退出，受本次验收管理的实例目录已移除。脱敏摘要和归档清单位于 OpenData 本机私有证据目录 [`afi-opendata-mysql-bridge-20261030`](</home/yun/Documents/opendata/var/reports/afi204/afi-opendata-mysql-bridge-20261030>)；归档未包含原始日志、行情明细、运行器或凭据。
+
+认证边界仍为合成环境：AFI auth/resolver/store 与 OpenData principal 均由 synthetic 依赖提供；只检查合成 key header 的传递和匹配，没有测试真实 API-key 认证或真实 key。样本与数据库行均为合成数据，未验证来源真实性或授权；价格/成交量等原生单位、调整因子语义、权威证券身份、北交所与退市生命周期、任何标的从上市至今的全历史 head/interior/tail 完整性均未验收。运行时依赖未由锁文件固定，因此结果不能代表其他环境的依赖组合，也不构成生产部署、权限或服务验收。
+
+MySQL 启动日志中有 `MY-010338`/`errmsg.sys` 配置诊断 2 行、`utf8mb3` 弃用提示 4 行、自签 CA/证书提示 1 行及临时实例 root 空密码初始化提示 1 行。脱敏分类计数和原始日志 SHA-256 见 [warning-review.md](</home/yun/Documents/opendata/var/reports/afi204/afi-opendata-mysql-bridge-20261030/mysql-warning-review/warning-review.md>)；原始日志未复制或摘录。这些提示仅来自本次使用私有 Unix socket、禁网的临时实例，不构成部署建议或生产安全结论。
+
+AFI #157 的时间身份 v2 是方案；OpenData I0 DTO 仅有未合入候选，尚未接入 API 或发布流程，也未验收。
