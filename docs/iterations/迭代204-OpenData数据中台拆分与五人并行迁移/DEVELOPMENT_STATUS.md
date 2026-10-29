@@ -726,3 +726,11 @@ selector 能力保持 **hard off**；本 PR 不启用对外 REST selector 参数
 这组测试以 OpenData `dev` 的 `e39f64b74a629bda55e2279ba9dd084fc987d462` 为 base，早于 PR #87 合并。静态对比认为 #87 与本次测试目标没有调用关系，但没有在 #87 合并后重跑，因此不能据此断言合并后的结果已复验或必然不受影响。运行使用 pytest/pytest-asyncio/pytest-cov **8.3.4 / 1.0.0 / 6.2.1**，与项目固定的 **8.3.3 / 0.24.0 / 6.0.0** 不同。本次归档没有 mypy 运行记录，不能据此说明本次或当前 mypy 错误数；此前 PR #86 的独立记录报告过 3 项基线错误，该数字不代表本次复测结果。canonical A2 未运行，缺少 `docs/evidence/C100/quality-scope-audit/immutable-wave9-exact5055/classification.json`。
 
 超限保护只约束从 `dwd_stock_daily` 观察到的证券代码集合；该 DWD 集合不能证明全 A 股证券主数据、北交所范围、上市/退市边界或逐证券完整历史。超过所配置的 `limit` 会停止；默认值是 5000，调用方可传入更大上限，显式名单也可绕过派生集合限制。当前查询失败会被 `symbol_universe` 转为空集合，后续虽会拒绝执行，操作员可能只看到“universe 为空”而看不到原始查询错误；调度层重试与错误根因保留仍待处理。此 PR 不证明真实行情采集、供应商授权、全 A 股覆盖或 head/interior/tail 完整性，也不增加迭代控制任务完成数；迭代204整体仍未完成。
+
+## 2026-10-29 OpenData PR #89：股票 universe 容量上限与兼容性
+
+[OpenData PR #89](https://github.com/cloudQuant/opendata/pull/89) 已合入 `dev`，提交为 `cf47f06a22c254591899face3b1956305d729406`。最终隔离套件 **103 passed、15 warnings**；`jobs.py` statement+branch 综合覆盖率 **97.12%，0 项排除**。同一目标模块的 API 覆盖率 **54.44%**、schema 覆盖率 **82.11%**，是聚焦测量，不等同于 jobs.py 门槛或全链路覆盖。初次运行 **101 passed、2 failed**（`InvalidURL`），该失败记录予以保留。证据见 OpenData 本机私有目录 [`universe-capacity-acceptance-20261029`](</home/yun/Documents/opendata/var/reports/afi204/universe-capacity-acceptance-20261029>)。
+
+该改动把定时/builtin 增量 job 从 DWD 派生 universe 的默认上限提高到 **10,000**；这只适用于此前省略 `limit` 的相应任务，显式设置的 **5,000** 保持不变。手动 REST 请求仍默认 **200**、最大 **10,000**；增量 cron 可显式传入 **1–50,000** 的上限。测试覆盖 **10,000 个 symbols 的 ASGI 请求范围**，但这不是实际 HTTP client、反向代理或部署链路能够完整接收该请求的证明；部署前仍需核验 query string / URL 长度限制和端到端传输边界，并盘点省略 `limit` 的定时/builtin 增量任务及实际规模。
+
+隔离运行的 pytest 相关依赖版本与项目固定版本有差异；mypy 留有 **4 项基线错误**，canonical A2 因缺少所需历史 evidence 未执行。主归档静态日志记录的两个测试文件 SHA 早于最终测试文件版本，而三个生产源码文件 SHA 与最终版一致；最终测试版的独立静态检查记录见 [`/tmp/od204-final-api-doc-static.kuudhy`](</tmp/od204-final-api-doc-static.kuudhy>) 和 [`/tmp/od204-universe-test-static.vkYILM`](</tmp/od204-universe-test-static.vkYILM>)。因此主归档静态日志不能作为最终两个测试文件的静态检查证据。support 文件校验受同一操作系统用户可并发替换文件的 TOCTOU 限制，不能作为对抗同用户恶意改写的安全边界。该 PR 未证明真实行情采集、权威全 A 股证券全集、北交所/上市退市边界，或逐证券 head/interior/tail 完整历史；迭代204整体仍未完成。
