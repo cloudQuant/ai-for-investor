@@ -866,3 +866,9 @@ OpenData [PR #109](https://github.com/cloudQuant/opendata/pull/109) 已合入 `d
 另有 AkShare 真实本地样本的 R5 离线解析结果，由集成者执行并提供结果，归档者未独立重跑；记录在 OpenData 私有证据 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/identity-v2-real-sample-acceptance-20261030/README.md>)：解析 **10 行、110 个原生来源 token**，源 token 与候选 token 的摘要相同；其中 **1 行身份为调用方声明且未验证，9 行身份未知**。原响应字节由 SHA-256 标识并作为原始来源记录保留；JSON 解码进入浮点数时仍可能产生数值舍入，因此不能把解码候选视为逐字节等价的响应副本。归档 wrapper 的时间是本地重包时间，原 `retrieved_at` 是未签名的调用方声明值。
 
 该 R5 结果只证明既有本地捕获样本在离线流程中的解析观察。请求绑定仍是调用方声明的摘要，不能证明实际 wire 请求；来源分页、市场范围、证券身份、退市生命周期及历史完整性仍未知。#109 与该样本结果均未接入定时采集、数据库持久化或 REST API，也未验证真实 Fuyao 普查链路。全 A 股权威全集与逐证券上市至今的 head/interior/tail 对账仍开放，迭代204整体未完成。
+
+## 2026-10-30 OpenData PR #110：Fuyao 有界原始 HTTP 交换
+
+[OpenData PR #110](https://github.com/cloudQuant/opendata/pull/110) 已合入 `dev`，提交为 `ea4c6f7f664a7ba33c3e1dc2fae37adb8f40f5c4`。隔离验收运行 **165 项 mock/offline tests**；目标 `opendata/data/providers/ths/transport/http_client.py` 的 statement+branch 综合覆盖率为 **781/845（92.4260%），0 行排除**。归档收据位于 OpenData 本机私有目录 [`fuyao-raw-exchange-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/fuyao-raw-exchange-acceptance-20261030>)；归档 `SHA256SUMS` 所列 **10 个文件均已核对匹配**。归档说明本次只用 mock 和临时测试 fixture，并排除了 `.env`、数据库文件及原始供应商响应。
+
+本次没有发起真实 Fuyao 请求，没有验证数据库写入或生产服务，也没有接入或运行定时调度；结果不证明数据单位、历史覆盖或生产运行行为。Fuyao 原始响应、错误和日志可能回显凭据；调用方必须在归档前检查并脱敏这些输出。当前验收归档声明其 allowlist 文件已按常见 Fuyao/API-key、Bearer 与 secret-like 模式扫描且未发现匹配，但这不是通用秘密扫描器，也不替代归档者逐项检查。已有 mypy 诊断仍未解决，本收据不构成 mypy 通过结论。权威全 A 股底册（含退市及北交所生命周期）和逐证券从实际上市起点至今的 head/interior/tail 全历史对账仍未完成；迭代204整体继续开放。
