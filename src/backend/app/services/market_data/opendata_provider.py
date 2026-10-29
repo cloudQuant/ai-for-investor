@@ -654,6 +654,12 @@ class OpendataProvider:
                 if len(records) != record_count:
                     raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_INCOMPLETE")
                 break
+            if total_bytes >= _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES:
+                # A cursor proves another page is required. Do not issue a
+                # zero-byte-budget request after this page consumed the total
+                # response budget; return the same bounded-read failure used
+                # when a response exceeds the snapshot limit.
+                raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_LIMIT_EXCEEDED")
             if page_count >= _PUBLISHED_SNAPSHOT_MAX_PAGES:
                 raise OpendataProviderError("OPENDATA_INDEX_SNAPSHOT_LIMIT_EXCEEDED")
             if (
