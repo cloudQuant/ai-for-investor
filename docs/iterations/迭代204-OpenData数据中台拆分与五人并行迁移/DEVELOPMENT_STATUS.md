@@ -1034,3 +1034,9 @@ OpenData [PR #127](https://github.com/cloudQuant/opendata/pull/127) 已合入 `d
 AFI [PR #188](https://github.com/cloudQuant/ai-for-investor/pull/188) 已合入 `dev`，合并提交为 `751712297f8ac850a593e3785637d07a2b71b0f8`。本切片增加默认关闭的 Sina LRB snapshot 消费路径，沿用 OpenData 固定 publication/capture 选择及 source-native 记录；reader 对每条记录的哈希进行独立重算和核验。R18 隔离验收为 **107 项离线测试及 2 项 API route 测试通过**。离线组覆盖 LRB reader/integration 与 FZB、collector 回归；route 组使用临时 SQLite 和测试身份，拦截 worker 执行，不调用真实来源。验收证据及运行边界见 AFI 本机私有归档 [`README.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/sina-lrb-consumer-acceptance-20261030/README.md>)。
 
 OpenData 返回值不包含计算 `content_sha256` 所需的 `access_scope`，因此 AFI 无法独立重算并验证内容根；该值仅能作为服务端回显，不能记为客户端验证通过。此次未使用真实凭证或 OpenData 授权，也未验收全历史完整性、细粒度用户证券 ACL、真实服务或生产部署。功能保持默认关闭；全 A 股权威证券全集、逐证券从实际起点至今的 head/interior/tail 对账及迭代204整体仍未完成。
+
+## 2026-10-30 OpenData PR #128：Sina LRB raw capture 接入发布流程
+
+OpenData [PR #128](https://github.com/cloudQuant/opendata/pull/128) 已合入 `dev`，合并提交为 `529ec06b0efe9df9d9e5c53c8ad60c1a5852ec18`。R17 冻结验收专项 **295 项测试通过**；一项既有 OpenAPI gate 被明确跳过，不计入通过数，也不表示该 gate 或全仓 CI 通过。raw capture 目标覆盖率为 **99.13%**。验收证据归档于 OpenData 本机私有目录 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-raw-integrated-r17-acceptance-20261030/README.md>)。
+
+该 job 仍为 **disabled、unreviewed、unscheduled**，没有生产任务注册。来源授权状态来自用户声明，未在本次验收中独立核验供应商合同或技术授权。实现尚无持久化 capture journal、崩溃恢复或跨运行 quota 控制；查询摘要覆盖固定的五个查询参数，不是完整 HTTP 请求指纹。该切片验收不构成真实全市场或全历史数据覆盖证明：全 A 股权威证券全集、北交所及生命周期范围，以及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
