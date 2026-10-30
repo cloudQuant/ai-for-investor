@@ -65,11 +65,17 @@ class StockAnalysisReportBuilder:
         ):
             data_sources.append("opendata:financial_archive")
         sina_fzb_snapshot = financials.get("opendata_sina_fzb_snapshot")
-        if (
-            isinstance(sina_fzb_snapshot, dict)
-            and sina_fzb_snapshot.get("status") in {"ok", "empty"}
-        ):
+        if isinstance(sina_fzb_snapshot, dict) and sina_fzb_snapshot.get("status") in {
+            "ok",
+            "empty",
+        }:
             data_sources.append("opendata:sina_fzb_snapshot")
+        sina_lrb_snapshot = snapshot.get("opendata_sina_lrb_snapshot")
+        if isinstance(sina_lrb_snapshot, dict) and sina_lrb_snapshot.get("status") in {
+            "ok",
+            "empty",
+        }:
+            data_sources.append("opendata:sina_lrb_snapshot")
 
         return {
             "meta": {
