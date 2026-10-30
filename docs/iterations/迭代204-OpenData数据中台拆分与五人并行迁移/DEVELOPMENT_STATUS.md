@@ -988,3 +988,11 @@ AFI [PR #179](https://github.com/cloudQuant/ai-for-investor/pull/179) 已合入 
 执行者报告的 **102 项 mock 测试**没有保留完整日志，故不作为可独立复核的验收结果。归档日志记录两个测试文件共 **13 项通过**，其中 **1 项**覆盖 HTTP/SQLite/login/owner roundtrip；pytest 日志和快照清单见 AFI 本机私有证据 [`README.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/sina-manual-business-acceptance-20261030/README.md>)。manifest pins 表明 **5 个生产文件未变**；哈希比对显示 route test 文件仅有末尾两个 LF 的差异。执行者报告称这两个 LF 在运行后被删除；该时序来自未签名的本机记录，不能作为签名执行证明。
 
 这组测试没有使用真实 OpenData key、真实服务或生产环境；AFI 提交任务的能力不证明 OpenData 真实授权配置或生产访问控制已验收。自动 capture 清单、北交所、Sina 三表接入及逐证券从实际起点至今的全历史仍未验收；完整生产部署和迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #123：Sina LRB 单页原始采集与受限来源采样
+
+OpenData [PR #123](https://github.com/cloudQuant/opendata/pull/123) 已合入 `dev`，提交为 `0766b658693df6d9c1177bcc6d6cfe5a303b9670`。本切片新增固定 `600519.SH` 的新浪 LRB（利润表）单页原始采集器，只保存来源响应原始字节；未解析、清洗、入库或发布利润表数据。冻结采集器的离线专项 **17 项测试通过**，目标覆盖率 **87.17%**，**0 项排除**。
+
+随后针对 `600519.SH` 执行了一次真实来源采样，收到 HTTP **200**，响应大小 **2,002,959 字节**。采样回执位于 OpenData 本机私有目录 [`receipt.json`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-live-600519.SH-20261030T002422Z-3143030/receipt.json>)。该单次响应尚未证明来源真实性、报表身份、分页完整性或历史覆盖；固定单证券、单页采样不能证明全 A 股覆盖，也不能代表全市场或完整历史采集。
+
+LRB 解析、数据质量校验、数据库存储、REST API 发布、定时任务及 AFI 消费接线均未实现或验收；Sina 资产负债表（FZB）与利润表（LRB）的合同和解析也不能互相替代。权威全 A 股证券全集（含北交所及退市生命周期）及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
