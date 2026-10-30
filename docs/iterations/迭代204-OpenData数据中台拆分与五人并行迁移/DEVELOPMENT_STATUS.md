@@ -995,4 +995,12 @@ OpenData [PR #123](https://github.com/cloudQuant/opendata/pull/123) 已合入 `d
 
 随后针对 `600519.SH` 执行了一次真实来源采样，收到 HTTP **200**，响应大小 **2,002,959 字节**。采样回执位于 OpenData 本机私有目录 [`receipt.json`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-live-600519.SH-20261030T002422Z-3143030/receipt.json>)。该单次响应尚未证明来源真实性、报表身份、分页完整性或历史覆盖；固定单证券、单页采样不能证明全 A 股覆盖，也不能代表全市场或完整历史采集。
 
-LRB 解析、数据质量校验、数据库存储、REST API 发布、定时任务及 AFI 消费接线均未实现或验收；Sina 资产负债表（FZB）与利润表（LRB）的合同和解析也不能互相替代。权威全 A 股证券全集（含北交所及退市生命周期）及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+在 PR #123 合入及上述采样时，LRB 解析、数据质量校验、数据库存储、REST API 发布、定时任务及 AFI 消费接线尚未实现或验收；后续 parser 与单样本离线重放进展见下节。Sina 资产负债表（FZB）与利润表（LRB）的合同和解析不能互相替代。权威全 A 股证券全集（含北交所及退市生命周期）及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #124：Sina LRB 原始结构解析器与样本离线重放
+
+OpenData [PR #124](https://github.com/cloudQuant/opendata/pull/124) 已合入 `dev`，提交为 `97cc9e8a37db2027c81a295a16ce284022978294`。本切片新增独立的 Sina LRB 原始结构 parser，不复用 FZB 解析合同。冻结代码的隔离专项 **19 项测试通过**；目标覆盖率为 **280/298（93.96%）**，**0 项排除**。验收证据位于 OpenData 本机私有目录 [`sina-lrb-parser-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-parser-acceptance-20261030>)。
+
+对 PR #123 保存的 `600519.SH` 单股票、单页真实响应进行了离线重放，parser 输出 **103 条报表、7,931 项数据**；重放结果位于 [`replay.json`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-parser-replay-acceptance-20261030/output/replay.json>)。这只证明该样本在当前 parser 下可解析，不证明来源真实性、报表身份、财务字段与数值语义、分页或数据完整性，也不能外推为全市场或全历史覆盖。parser 的内存上限不是进程 RSS 上限，运行环境依赖也未以哈希锁定。
+
+本 PR 未验收财务语义及质量规则，未接入数据库写入、REST API 发布、定时调度或 AFI 消费。权威全 A 股证券全集（含北交所及退市生命周期）和逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
