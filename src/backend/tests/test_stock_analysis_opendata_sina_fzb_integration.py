@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -87,6 +87,47 @@ def _collector(*, enabled: bool, reader: _FakeReader) -> StockAnalysisDataCollec
         ),
         sina_fzb_snapshot_reader=reader,  # type: ignore[arg-type]
     )
+
+
+async def _collect_with_sina_reader(
+    collector: StockAnalysisDataCollector,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    selection: StockAnalysisSinaFzbSnapshotSelection | None,
+) -> dict[str, Any]:
+    market_payload = {
+        "symbol": _INSTRUMENT_ID,
+        "name": "sample",
+        "provider": "fixture",
+        "snapshot": {"symbol": _INSTRUMENT_ID, "name": "sample", "price": 100.0},
+        "history": {"rows": [{"trade_date": "2026-10-30"}]},
+        "indicators": {"rsi": 50.0},
+    }
+    monkeypatch.setattr(
+        collector, "_collect_market", AsyncMock(return_value=market_payload)
+    )
+    monkeypatch.setattr(
+        collector,
+        "_collect_company_context",
+        AsyncMock(return_value=({"symbol": _INSTRUMENT_ID}, {"items": [], "total": 0})),
+    )
+    monkeypatch.setattr(
+        collector,
+        "_collect_news",
+        AsyncMock(return_value={"items": [{"title": "fixture"}], "total": 1}),
+    )
+
+    akshare_fetch = Mock(return_value=(None, None))
+    monkeypatch.setattr(collector, "_fetch_cn_financial_frames", akshare_fetch)
+    result = await collector.collect(
+        user_id="user-1",
+        symbol=_INSTRUMENT_ID,
+        market_type="A股",
+        analysis_date=date(2026, 10, 30),
+        opendata_sina_fzb_snapshot=selection,
+    )
+    akshare_fetch.assert_not_called()
+    return result
 
 
 @pytest.mark.parametrize(
@@ -182,10 +223,8 @@ async def test_explicit_sina_snapshot_keeps_only_provenance_and_never_uses_aksha
     reader = _FakeReader(_reader_result(records=({"raw_value": raw_marker},)))
     collector = _collector(enabled=True, reader=reader)
 
-    def unexpected_akshare(*_args: Any, **_kwargs: Any) -> Any:
-        raise AssertionError("explicit OpenData selection must not fall back to AkShare")
-
-    monkeypatch.setattr(collector, "_fetch_cn_financial_frames", unexpected_akshare)
+    akshare_fetch = Mock(return_value=(None, None))
+    monkeypatch.setattr(collector, "_fetch_cn_financial_frames", akshare_fetch)
     financials = await collector._collect_financials(
         symbol=_INSTRUMENT_ID,
         market_type="A股",
@@ -198,6 +237,7 @@ async def test_explicit_sina_snapshot_keeps_only_provenance_and_never_uses_aksha
         opendata_sina_fzb_snapshot=_selection(),
     )
 
+    akshare_fetch.assert_not_called()
     assert reader.calls == [
         {
             "instrument_id": _INSTRUMENT_ID,
@@ -250,10 +290,8 @@ async def test_sina_snapshot_requires_both_server_switch_and_request_selector(
     reader = _FakeReader(_reader_result(records=()))
     collector = _collector(enabled=enabled, reader=reader)
 
-    def unexpected_akshare(*_args: Any, **_kwargs: Any) -> Any:
-        raise AssertionError("Sina selector handling must not fall back to AkShare")
-
-    monkeypatch.setattr(collector, "_fetch_cn_financial_frames", unexpected_akshare)
+    akshare_fetch = Mock(return_value=(None, None))
+    monkeypatch.setattr(collector, "_fetch_cn_financial_frames", akshare_fetch)
     financials = await collector._collect_financials(
         symbol=_INSTRUMENT_ID,
         market_type="A股",
@@ -262,6 +300,7 @@ async def test_sina_snapshot_requires_both_server_switch_and_request_selector(
         opendata_sina_fzb_snapshot=selection,
     )
 
+    akshare_fetch.assert_not_called()
     assert reader.calls == []
     assert financials["opendata_sina_fzb_snapshot"]["reason_code"] == expected_reason
     assert financials["annual"] == []
@@ -282,10 +321,8 @@ async def test_reader_failure_or_empty_capture_is_fail_closed_without_raw_rows(
     ):
         collector = _collector(enabled=True, reader=reader)
 
-        def unexpected_akshare(*_args: Any, **_kwargs: Any) -> Any:
-            raise AssertionError("reader failures and empty snapshots must not fall back")
-
-        monkeypatch.setattr(collector, "_fetch_cn_financial_frames", unexpected_akshare)
+        akshare_fetch = Mock(return_value=(None, None))
+        monkeypatch.setattr(collector, "_fetch_cn_financial_frames", akshare_fetch)
         financials = await collector._collect_financials(
             symbol=_INSTRUMENT_ID,
             market_type="A股",
@@ -294,12 +331,135 @@ async def test_reader_failure_or_empty_capture_is_fail_closed_without_raw_rows(
             opendata_sina_fzb_snapshot=_selection(),
         )
 
+        akshare_fetch.assert_not_called()
         evidence = financials["opendata_sina_fzb_snapshot"]
         assert evidence["status"] == expected_status
         assert evidence["reason_code"] == expected_reason
         assert "records" not in evidence
         assert financials["annual"] == []
         assert financials["quarterly"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "error_code",
+        "expected_code",
+        "expected_description",
+        "injected_sensitive_markers",
+    ),
+    [
+        (
+            "http_503",
+            "http_503",
+            "OpenData 服务暂时不可用（503）。",
+            (),
+        ),
+        (
+            "http_server_error",
+            "http_server_error",
+            "OpenData 服务返回了服务器错误。",
+            (),
+        ),
+        (
+            "http_403_forbidden",
+            "http_403_forbidden",
+            "OpenData 数据集或操作权限不足（403）。",
+            (),
+        ),
+        (
+            "Authorization: Bearer sk-test-secret-marker; "
+            "URL=https://private.example.test/path; body=private-response-body",
+            "reader_error",
+            "OpenData 未能提供符合冻结合同的完整快照。",
+            (
+                "sk-test-secret-marker",
+                "private.example.test",
+                "Authorization",
+                "private-response-body",
+            ),
+        ),
+    ],
+)
+async def test_explicit_sina_failure_has_safe_reason_in_collector_and_report(
+    error_code: str,
+    expected_code: str,
+    expected_description: str,
+    injected_sensitive_markers: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader = _FakeReader(OpenDataSinaFzbSnapshotError(error_code))
+    result = await _collect_with_sina_reader(
+        _collector(enabled=True, reader=reader), monkeypatch, selection=_selection()
+    )
+
+    evidence = result["financials"]["opendata_sina_fzb_snapshot"]
+    assert evidence["status"] == "unavailable"
+    assert evidence["reason_code"] == expected_code
+    failure_reason = next(
+        reason
+        for reason in result["data_quality"]["degraded_reasons"]
+        if reason.startswith("新浪 FZB OpenData 快照读取失败（")
+    )
+    assert f"（{expected_code}）：" in failure_reason
+    assert expected_description in failure_reason
+
+    report = StockAnalysisReportBuilder().build(
+        symbol=_INSTRUMENT_ID,
+        symbol_name="sample",
+        market_type="A股",
+        analysis_date="2026-10-30",
+        research_depth="标准",
+        snapshot=result,
+        pipeline_output={},
+    )
+    assert report["data_quality"] == result["data_quality"]
+    assert (
+        report["source_snapshot"]["financials"]["opendata_sina_fzb_snapshot"]["reason_code"]
+        == expected_code
+    )
+    serialized_report = repr(report)
+    for marker in injected_sensitive_markers:
+        assert marker not in serialized_report
+
+
+@pytest.mark.asyncio
+async def test_sina_failure_detail_is_limited_to_explicit_failed_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader = _FakeReader(_reader_result(records=()))
+    result = await _collect_with_sina_reader(
+        _collector(enabled=True, reader=reader), monkeypatch, selection=None
+    )
+
+    assert reader.calls == []
+    assert result["financials"]["opendata_sina_fzb_snapshot"]["reason_code"] == (
+        "selector_missing"
+    )
+    assert all(
+        "快照读取失败" not in reason
+        for reason in result["data_quality"]["degraded_reasons"]
+    )
+    assert "selector_missing" not in repr(result["data_quality"])
+
+
+@pytest.mark.asyncio
+async def test_successful_sina_selection_does_not_add_failure_degraded_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_marker = "source-native-secret-shaped-value"
+    reader = _FakeReader(_reader_result(records=({"raw_value": raw_marker},)))
+    result = await _collect_with_sina_reader(
+        _collector(enabled=True, reader=reader), monkeypatch, selection=_selection()
+    )
+
+    assert result["financials"]["opendata_sina_fzb_snapshot"]["status"] == "ok"
+    assert result["financials"]["opendata_sina_fzb_snapshot"]["reason_code"] is None
+    assert all(
+        "快照读取失败" not in reason
+        for reason in result["data_quality"]["degraded_reasons"]
+    )
+    assert raw_marker not in repr(result)
 
 
 @pytest.mark.asyncio
