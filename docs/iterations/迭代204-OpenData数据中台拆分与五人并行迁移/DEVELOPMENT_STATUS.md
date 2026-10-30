@@ -1054,3 +1054,13 @@ R11 冻结验收为 **949 passed、7 个 e2e deselected、7 warnings**。八个�
 OpenData [PR #130](https://github.com/cloudQuant/opendata/pull/130) 已合入 `dev`，合并提交为 `ed2f6f5005e2b69487cdc574c66cd669f9913bd9`。本切片仅实现三类离线工作簿聚合，不连接真实来源。R3 冻结验收的 synthetic XLSX 专项 **125 项测试通过**；生产适配器分支覆盖率为 **90.79%**，排除 **0 行、0 个分支**。Ruff、Bandit 与 strict mypy skip 检查通过；完整 follow mypy 仍有 **4 项既有相关依赖诊断**。验收证据见 OpenData 本机私有归档 [`ACCEPTANCE.md`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-census-acceptance-r3-20261030/ACCEPTANCE.md>)。
 
 这只是合成 XLSX 下的离线结构验收；来源身份、生命周期语义、分页、市场全集与历史覆盖均为 **UNKNOWN**，未验证真实授权、工作簿完整性或生命周期正确性。该结果不能视为全 A 股市场目录或历史数据完成，迭代204整体仍开放。
+
+## 2026-10-30 OpenData PR #131：Sina LRB 财报字段与报告期映射
+
+OpenData [PR #131](https://github.com/cloudQuant/opendata/pull/131) 已合入 `dev`，合并提交为 `4f0aa7c7c29fcf176eb25fdf6bdc01a626fac4af`。此切片增加保守的字段/期间映射评估：字段只按精确来源键与标题匹配，不做单位或数值换算；报告期只接受显式、带时效的映射声明，并只报告符合条件的精确期间观测。R4 隔离验收专项 **59 项测试通过**；目标映射模块 statement+branch 综合覆盖率 **96.09%**，排除 **0 行、0 个分支**。Ruff、针对性 mypy 与 Bandit 检查通过。验收使用禁网隔离环境、合成输入和 testing 配置，没有访问真实数据源或生产数据库。证据见 OpenData 本机私有归档 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-financial-mapping-acceptance-r4-20261030/README.md>)。
+
+字段映射、期间语义、证券身份 crosswalk、证据引用及隔离状态均由 caller 提供，验收只检查形状、冲突和时点规则，未独立核对其事实或来源。评估会排除晚于 `as_of` 的映射证据；晚于 `as_of` 的报告期按 `Asia/Shanghai` 日期判为不可评估，留在 unknown 计数中。该时点规则由合成测试验证，不构成对真实历史数据无未来信息污染的证明。映射声明不证明财报项目语义、报告完整性、公告时点、修订版本链或 point-in-time 可用性；本切片不提供完整历史覆盖结论，也未接入生产调度或生产消费。迭代204仍开放。
+
+## 2026-10-30 AFI PR #193：snapshot 授权策略
+
+AFI [PR #193](https://github.com/cloudQuant/ai-for-investor/pull/193) 已合入 `dev`，合并提交为 `0fba790a4c7b0d02448056475eae1bc2908173c8`。R2 冻结专项 **69 项测试通过**，Ruff 与格式检查通过；证据见 AFI 本机私有归档 [`manifest.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/snapshot-authorization-policy-acceptance-r2-20261030/manifest.md>)。此次仅实现纯授权策略，限定 SH/SZ 并拒绝 BJ；尚未接入真实用户 grant 与来源 registry 信任、MAC、数据库签发/撤销、route/task 运行或保存后重验，因此不构成真实数据授权或生产访问控制验收。
