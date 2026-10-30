@@ -1064,3 +1064,15 @@ OpenData [PR #131](https://github.com/cloudQuant/opendata/pull/131) 已合入 `d
 ## 2026-10-30 AFI PR #193：snapshot 授权策略
 
 AFI [PR #193](https://github.com/cloudQuant/ai-for-investor/pull/193) 已合入 `dev`，合并提交为 `0fba790a4c7b0d02448056475eae1bc2908173c8`。R2 冻结专项 **69 项测试通过**，Ruff 与格式检查通过；证据见 AFI 本机私有归档 [`manifest.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/snapshot-authorization-policy-acceptance-r2-20261030/manifest.md>)。此次仅实现纯授权策略，限定 SH/SZ 并拒绝 BJ；尚未接入真实用户 grant 与来源 registry 信任、MAC、数据库签发/撤销、route/task 运行或保存后重验，因此不构成真实数据授权或生产访问控制验收。
+
+## 2026-10-30 OpenData PR #132：Sina LRB raw capture 签名恢复日志
+
+OpenData [PR #132](https://github.com/cloudQuant/opendata/pull/132) 已合入 `dev`，合并提交为 `1bbc85bd4559634bb24ba2a6894f339efa136b97`。R5 冻结验收共 **487 项通过**（384 + 28 + 1 + 74），其中 **1 项既有 OpenAPI 检查明确 deselect**，不计为通过；各目标模块覆盖率为 **92%–97.41%**，目标模块合并覆盖率 **93.28%**，API 覆盖率 **89.06%**，排除 **0 项**。完整 follow mypy 仍有 **3 条既有诊断未通过**，不记为通过。验收记录和失败尝试证据保存在 OpenData 本机私有目录 [`sina-lrb-recovery-r5-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-recovery-r5-acceptance-20261030>)；R2、R3、R4 失败记录均保留，最终验收结论仅对应 R5。
+
+该切片增加签名事件验证和私有持久化恢复日志，但任务仍为 **disabled、unregistered**，没有 scheduler；账本和进程内任务依赖可信运行环境，尚未验证生产部署，也没有生产签名器、密钥生命周期或真实来源/历史完整性验收。日志不能自动恢复所有孤儿状态，ledger 提交与日志发布之间也没有原子链接。因此该实现不证明生产环境可自动恢复、全 A 股数据已采集，或逐证券全历史完整。
+
+## 配额 V3 未合入：保留位置与切换阻断
+
+OpenData 配额 V3 尚未合入 `dev`，也未通过生产验收。未提交实现的完整私有备份保存在 [`/home/yun/.local/share/opendata-v3-quota-full-backup-20261030-fv5ljr3d`](</home/yun/.local/share/opendata-v3-quota-full-backup-20261030-fv5ljr3d>)，已独立校验；30 个文件已从 OpenData 主工作区清除。该备份不含密钥。R2–R4 失败记录与配额 V3 是不同工作项；前者的失败证据分别保留在 OpenData 的 R2、R3、R4 本机归档中。
+
+配额 V3 暂缓合入的主要原因是混跑切换尚未被安全证明：迁移后仍可能有 V2 worker 或已提交 permit 绕过 V3 lease/每日额度；目前没有可信控制面证据证明旧 worker 与在途 permit 已停止或排空，也没有针对旧进程网络或凭证的可信 fence。人工声明不足以作为切换门槛，必须有可验证的停机/排空证明，并确保 V3 在没有可信 verifier 时默认不可启用，同时保留既有 V2 工作路径。另有 THS HTTP 客户端绕过 gate 的风险需要在请求发送前 fail closed，lease 释放持久化也需专项验收。上述问题解决并完成隔离测试、独立审查前，配额 V3 不进入 `dev` 或生产启用。
