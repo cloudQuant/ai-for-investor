@@ -1048,3 +1048,9 @@ OpenData [PR #129](https://github.com/cloudQuant/opendata/pull/129) 已合入 `d
 R11 冻结验收为 **949 passed、7 个 e2e deselected、7 warnings**。八个变更的 data/pipeline 模块合并 statement+branch 覆盖率为 **92.18%**，均达到 ≥90%，排除 **0**。Ruff 与 Bandit 检查通过；完整 follow mypy 报告 **3 个既有错误**。验收证据位于 OpenData 本机私有归档 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/csi500-manual-backfill-acceptance-r11-20261030/README.md>)。该隔离验收未访问真实网络或供应商。
 
 单次最长窗口不代表指数全部历史；来源最早可用日期和实际历史覆盖仍未知。该入口未注册生产调度。跨运行的累计请求量及并发控制状态也未知，因此不能据此认定全历史回补已完成或任务已具备长期自动运行条件。
+
+## 2026-10-30 OpenData PR #130：深交所生命周期工作簿离线聚合
+
+OpenData [PR #130](https://github.com/cloudQuant/opendata/pull/130) 已合入 `dev`，合并提交为 `ed2f6f5005e2b69487cdc574c66cd669f9913bd9`。本切片仅实现三类离线工作簿聚合，不连接真实来源。R3 冻结验收的 synthetic XLSX 专项 **125 项测试通过**；生产适配器分支覆盖率为 **90.79%**，排除 **0 行、0 个分支**。Ruff、Bandit 与 strict mypy skip 检查通过；完整 follow mypy 仍有 **4 项既有相关依赖诊断**。验收证据见 OpenData 本机私有归档 [`ACCEPTANCE.md`](</home/yun/Documents/opendata/var/reports/afi204/szse-lifecycle-census-acceptance-r3-20261030/ACCEPTANCE.md>)。
+
+这只是合成 XLSX 下的离线结构验收；来源身份、生命周期语义、分页、市场全集与历史覆盖均为 **UNKNOWN**，未验证真实授权、工作簿完整性或生命周期正确性。该结果不能视为全 A 股市场目录或历史数据完成，迭代204整体仍开放。
