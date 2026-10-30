@@ -1016,3 +1016,9 @@ AFI [PR #183](https://github.com/cloudQuant/ai-for-investor/pull/183) 已合入 
 OpenData [PR #125](https://github.com/cloudQuant/opendata/pull/125) 已合入 `dev`，提交为 `fc8a88f18d8762f52324e3476445a33a8d92aeec`。本切片为 SSE 与 Fuyao 候选来源增加目录对账逻辑，显式保留来源间重复冲突并限制对比计算量；当来源分页情况未知时，不将记录缺席解释为证券不存在，也不将已取得的候选记录称为完整目录。synthetic 隔离专项 **125 项测试通过**；目标代码覆盖率为 **1,074/1,078（99.63%）**，**0 项排除**。验收证据归档于 OpenData 本机私有目录 [`instrument-catalog-reconciliation-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/instrument-catalog-reconciliation-acceptance-20261030>)。
 
 该结果只验收 synthetic 输入下的对账行为；未包含 SZSE 或 BSE，未融合真实来源响应，也未证明权威证券全集、市场/生命周期完整性或分页完整性。尚未接入运行调度。验收环境的 Anaconda 依赖未完全 pin。全 A 股权威证券全集（含北交所及退市生命周期）及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #126：运行时、静态目录与迁移候选对账
+
+OpenData [PR #126](https://github.com/cloudQuant/opendata/pull/126) 已合入 `dev`，提交为 `1afef33f515db8fa9a14dd346e24c98a3b01e687`。本切片对既有运行时 inventory 与静态脚本/provider catalog 做离线候选对账，并保留证据不完整、来源未知及部分匹配等状态，避免把静态发现直接当作已验证的运行时任务或可迁移结论。隔离 synthetic 专项 **84 项测试通过**；目标模块 statement+branch 覆盖为 **743/779（95.3787%）**，**0 项排除**。验收证据位于 OpenData 本机私有目录 [`migration-host-reconciliation-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/migration-host-reconciliation-acceptance-20261030>)。
+
+此验收使用合成清单与固定源码快照；没有刷新真实运行时 inventory，也没有验证生产 writer、真实数据库行为或切换 scheduler。运行依赖虽记录了 Python/pytest 等版本，但未以哈希锁定。候选归属及来源证据仍有 **UNKNOWN/PARTIAL** 项，迁移计划仍为 **BOUNDED/BLOCKED**；此切片没有解除运行时来源、当前配置和生产写入验证等阻塞，也不证明任何任务已迁移或切换到 OpenData。全 A 股权威证券全集、北交所与退市生命周期，以及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
