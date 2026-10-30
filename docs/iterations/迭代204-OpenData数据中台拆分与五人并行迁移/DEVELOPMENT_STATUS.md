@@ -1004,3 +1004,9 @@ OpenData [PR #124](https://github.com/cloudQuant/opendata/pull/124) 已合入 `d
 对 PR #123 保存的 `600519.SH` 单股票、单页真实响应进行了离线重放，parser 输出 **103 条报表、7,931 项数据**；重放结果位于 [`replay.json`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-parser-replay-acceptance-20261030/output/replay.json>)。这只证明该样本在当前 parser 下可解析，不证明来源真实性、报表身份、财务字段与数值语义、分页或数据完整性，也不能外推为全市场或全历史覆盖。parser 的内存上限不是进程 RSS 上限，运行环境依赖也未以哈希锁定。
 
 本 PR 未验收财务语义及质量规则，未接入数据库写入、REST API 发布、定时调度或 AFI 消费。权威全 A 股证券全集（含北交所及退市生命周期）和逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 AFI PR #183：Sina FZB 快照失败的安全提示
+
+AFI [PR #183](https://github.com/cloudQuant/ai-for-investor/pull/183) 已合入 `dev`，合并提交为 `f6194d4c826b71a7a0021d96baad946a96c09345`。显式选择 Sina FZB OpenData snapshot 后，若读取不可用，任务的数据质量说明会给出固定错误码及安全提示；未知错误会映射到通用提示，不把异常内容、凭据、URL 或响应正文带入任务结果。显式 selector 失败不会回退到 AkShare。隔离 mock 专项 **18 项测试通过**；验收摘要位于 AFI 本机私有证据 [`README.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/sina-error-visibility-acceptance-20261030/README.md>)。归档 pytest 日志已脱敏；测试依赖未锁定，记录保留了原始临时日志哈希，但归档副本无法重建其原始字节。
+
+该结果只证明 mock 下的错误显示与脱敏行为；没有验收真实 OpenData API key、实际授权、生产连接或部署行为。自动 discovery 仍关闭，真实 FZB 数据质量、数据库发布、调度运行、全 A 股及逐证券全历史覆盖仍未验收，迭代204整体继续开放。
