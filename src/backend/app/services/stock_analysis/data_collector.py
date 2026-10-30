@@ -24,6 +24,103 @@ from app.services.stock_analysis.opendata_sina_fzb_snapshot import (
     OpenDataSinaFzbSnapshotReader,
 )
 
+_SINA_FZB_SAFE_REASON_CODES = frozenset(
+    {
+        "OPENDATA_BASE_URL_INVALID",
+        "OPENDATA_CREDENTIAL_INVALID",
+        "allowed_hosts_invalid",
+        "base_url_host_not_allowed",
+        "base_url_insecure_transport",
+        "base_url_invalid",
+        "capture_entry_limit_exceeded",
+        "capture_id_invalid",
+        "configuration_invalid",
+        "content_type_invalid",
+        "credential_missing",
+        "credential_reflected_in_response",
+        "deadline_exceeded",
+        "duplicate_business_key",
+        "feature_disabled",
+        "http_401_unauthorized",
+        "http_403_forbidden",
+        "http_404_not_found",
+        "http_410_snapshot_expired",
+        "http_413_too_large",
+        "http_422_invalid_request",
+        "http_429_rate_limited",
+        "http_503",
+        "http_error",
+        "http_server_error",
+        "instrument_id_invalid",
+        "instrument_scope_mismatch",
+        "publication_id_invalid",
+        "reader_error",
+        "record_business_key_invalid",
+        "record_business_key_mismatch",
+        "record_entries_invalid",
+        "record_entry_invalid",
+        "record_hash_invalid",
+        "record_metadata_invalid",
+        "record_observation_time_mismatch",
+        "record_order_invalid",
+        "record_ordinals_invalid",
+        "record_payload_invalid",
+        "record_payload_scope_mismatch",
+        "record_payload_shape_invalid",
+        "record_publication_invalid",
+        "record_publication_mismatch",
+        "record_scope_mismatch",
+        "record_shape_invalid",
+        "record_temporal_scope_invalid",
+        "record_too_large",
+        "records_page_count_invalid",
+        "records_page_invalid",
+        "records_page_meta_invalid",
+        "records_page_meta_mismatch",
+        "records_snapshot_mismatch",
+        "response_json_invalid",
+        "response_read_failed",
+        "response_too_large",
+        "selector_missing",
+        "snapshot_contract_mismatch",
+        "snapshot_cursor_repeated",
+        "snapshot_empty",
+        "snapshot_expiry_invalid",
+        "snapshot_hash_invalid",
+        "snapshot_incomplete",
+        "snapshot_metadata_invalid",
+        "snapshot_page_limit_exceeded",
+        "snapshot_row_limit_exceeded",
+        "snapshot_scope_mismatch",
+        "snapshot_selection_mismatch",
+        "snapshot_window_invalid",
+        "timestamp_invalid",
+        "total_response_too_large",
+        "transport_error",
+    }
+)
+_SINA_FZB_REASON_DESCRIPTIONS = {
+    "OPENDATA_BASE_URL_INVALID": "OpenData 服务地址配置无效。",
+    "OPENDATA_CREDENTIAL_INVALID": "OpenData consumer key 配置无效。",
+    "allowed_hosts_invalid": "OpenData 服务主机允许列表配置无效。",
+    "base_url_host_not_allowed": "OpenData 服务主机不在允许列表中。",
+    "base_url_insecure_transport": "远程 OpenData 服务必须使用 HTTPS。",
+    "base_url_invalid": "OpenData 服务地址配置无效。",
+    "credential_missing": "OpenData consumer key 未配置。",
+    "feature_disabled": "AFI 的 Sina FZB OpenData 读取功能未启用。",
+    "http_401_unauthorized": "OpenData 拒绝了 consumer key（401），请检查密钥状态。",
+    "http_403_forbidden": "OpenData 数据集或操作权限不足（403）。",
+    "http_404_not_found": "指定的 OpenData publication 或资源不可用（404）。",
+    "http_410_snapshot_expired": "OpenData snapshot 已过期（410）。",
+    "http_429_rate_limited": "OpenData 请求达到限流上限（429）。",
+    "http_503": "OpenData 服务暂时不可用（503）。",
+    "http_server_error": "OpenData 服务返回了服务器错误。",
+    "instrument_scope_mismatch": "选择的证券与当前分析对象不匹配。",
+    "snapshot_empty": "指定的 OpenData snapshot 没有可读取记录。",
+    "transport_error": "AFI 无法连接到 OpenData 服务。",
+}
+_SINA_FZB_GENERIC_FAILURE_DESCRIPTION = "OpenData 未能提供符合冻结合同的完整快照。"
+
 
 class StockAnalysisDataCollector:
     """Collect current-project data used by the stock analysis pipeline."""
@@ -120,6 +217,15 @@ class StockAnalysisDataCollector:
                     "新浪 FZB 来源原生记录仅作证据引用，未进入标准化财务分析；"
                     f"状态：{snapshot_evidence.get('status', 'unavailable')}"
                 )
+                if (
+                    opendata_sina_fzb_snapshot is not None
+                    and snapshot_evidence.get("status") == "unavailable"
+                ):
+                    degraded_reasons.append(
+                        self._sina_fzb_failure_degraded_reason(
+                            snapshot_evidence.get("reason_code")
+                        )
+                    )
         if not news.get("items"):
             degraded_reasons.append("新闻数据为空")
         data_quality = {
@@ -453,7 +559,7 @@ class StockAnalysisDataCollector:
                 capture_id=selection.capture_id,
             )
         except OpenDataSinaFzbSnapshotError as exc:
-            summary["reason_code"] = exc.code
+            summary["reason_code"] = self._safe_sina_fzb_reason_code(exc.code)
         except Exception:
             # Do not expose URLs, credentials, or response bodies in task/report
             # data and never switch providers after an explicit selection.
@@ -481,6 +587,22 @@ class StockAnalysisDataCollector:
 
         financials["opendata_sina_fzb_snapshot"] = summary
         return financials
+
+    @staticmethod
+    def _safe_sina_fzb_reason_code(reason_code: object) -> str:
+        """Return a known stable error code without exposing arbitrary exception data."""
+        if isinstance(reason_code, str) and reason_code in _SINA_FZB_SAFE_REASON_CODES:
+            return reason_code
+        return "reader_error"
+
+    @classmethod
+    def _sina_fzb_failure_degraded_reason(cls, reason_code: object) -> str:
+        """Build a credential-free explanation for an explicit failed snapshot read."""
+        safe_code = cls._safe_sina_fzb_reason_code(reason_code)
+        description = _SINA_FZB_REASON_DESCRIPTIONS.get(
+            safe_code, _SINA_FZB_GENERIC_FAILURE_DESCRIPTION
+        )
+        return f"新浪 FZB OpenData 快照读取失败（{safe_code}）：{description}"
 
     @classmethod
     def _opendata_instrument_id(cls, symbol: str) -> str | None:
