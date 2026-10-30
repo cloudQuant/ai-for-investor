@@ -1040,3 +1040,11 @@ OpenData 返回值不包含计算 `content_sha256` 所需的 `access_scope`，�
 OpenData [PR #128](https://github.com/cloudQuant/opendata/pull/128) 已合入 `dev`，合并提交为 `529ec06b0efe9df9d9e5c53c8ad60c1a5852ec18`。R17 冻结验收专项 **295 项测试通过**；一项既有 OpenAPI gate 被明确跳过，不计入通过数，也不表示该 gate 或全仓 CI 通过。raw capture 目标覆盖率为 **99.13%**。验收证据归档于 OpenData 本机私有目录 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/sina-lrb-raw-integrated-r17-acceptance-20261030/README.md>)。
 
 该 job 仍为 **disabled、unreviewed、unscheduled**，没有生产任务注册。来源授权状态来自用户声明，未在本次验收中独立核验供应商合同或技术授权。实现尚无持久化 capture journal、崩溃恢复或跨运行 quota 控制；查询摘要覆盖固定的五个查询参数，不是完整 HTTP 请求指纹。该切片验收不构成真实全市场或全历史数据覆盖证明：全 A 股权威证券全集、北交所及生命周期范围，以及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #129：CSI500 指数单次手工回补
+
+OpenData [PR #129](https://github.com/cloudQuant/opendata/pull/129) 已合入 `dev`，合并提交为 `775045ac5e408157235fee57bb9224bcfff4e8b2`。本切片针对 `000905.SH`（CSI500 价格指数），提供单次手工回补入口，单次请求跨度最长 **3,650 天**。任务在事务中核对 grant 与 expected reference 后才允许请求；来源授权依据仍为用户声明，未独立验证。重复的 V1 scope 不保存授权 reference，因此不能据此授权重发；V2 遇到非空 reference 会拒绝执行。
+
+R11 冻结验收为 **949 passed、7 个 e2e deselected、7 warnings**。八个变更的 data/pipeline 模块合并 statement+branch 覆盖率为 **92.18%**，均达到 ≥90%，排除 **0**。Ruff 与 Bandit 检查通过；完整 follow mypy 报告 **3 个既有错误**。验收证据位于 OpenData 本机私有归档 [`README.md`](</home/yun/Documents/opendata/var/reports/afi204/csi500-manual-backfill-acceptance-r11-20261030/README.md>)。该隔离验收未访问真实网络或供应商。
+
+单次最长窗口不代表指数全部历史；来源最早可用日期和实际历史覆盖仍未知。该入口未注册生产调度。跨运行的累计请求量及并发控制状态也未知，因此不能据此认定全历史回补已完成或任务已具备长期自动运行条件。
