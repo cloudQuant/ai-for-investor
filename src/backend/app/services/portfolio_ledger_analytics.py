@@ -5,6 +5,7 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.schemas.portfolio_ledger import (
     PortfolioLedgerBenchmarkMetricsResult,
     PortfolioLedgerBrinsonRequest,
@@ -14,6 +15,7 @@ from app.schemas.portfolio_ledger import (
     PortfolioLedgerPositionSizingResult,
     PortfolioLedgerVarCvarResult,
 )
+from app.services.market_data.opendata_contracts import OPENDATA_INDEX_BENCHMARK_DATASETS
 from app.services.perf_attribution import BrinsonAttributionService, FamaFrenchAttributionService
 from app.services.portfolio_ledger import PortfolioLedgerService, get_portfolio_ledger_service
 from app.services.risk_analytics import (
@@ -173,12 +175,26 @@ class PortfolioLedgerAnalyticsService:
         context = await self.ledger_service.analytics_context(user_id, portfolio_id)
         if context is None:
             return None
-        strategy_returns = self.benchmark_metrics_service.returns_from_equity_curve(
-            list(context["equity_curve"])
-        )
         benchmark_id = self._resolve_benchmark_id(
             request.benchmark_id,
             context["portfolio"].get("benchmark_symbol"),
+        )
+        if bool(getattr(get_settings(), "MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED", False)):
+            reason = (
+                "fama_french_dated_alignment_required"
+                if benchmark_id in OPENDATA_INDEX_BENCHMARK_DATASETS
+                else "benchmark_unsupported_by_opendata"
+            )
+            return PortfolioLedgerFamaFrenchResult(
+                portfolio_id=portfolio_id,
+                benchmark_id=benchmark_id,
+                status="degraded",
+                observation_count=0,
+                reason=reason,
+            )
+
+        strategy_returns = self.benchmark_metrics_service.returns_from_equity_curve(
+            list(context["equity_curve"])
         )
         market_returns = list(request.market_returns or [])
         if not market_returns:
