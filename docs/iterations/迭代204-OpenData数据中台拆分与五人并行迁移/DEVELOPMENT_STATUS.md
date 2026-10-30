@@ -1082,3 +1082,11 @@ OpenData 配额 V3 尚未合入 `dev`，也未通过生产验收。未提交实�
 OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `dev`，提交为 `cc79654171bd00b00d9909f7973547a10790a945`。R4 冻结隔离验收 **68 项测试通过**；目标模块 statement+branch 综合覆盖率为 **96.77%**，排除 **0 行、0 个分支**；Ruff、mypy 与 Bandit 检查通过。R3 的 coverage gate 失败记录仍保留在独立归档中，不以 R4 结果覆盖。验收证据位于 OpenData 本机私有目录 [`RUN_STATUS.md`](</home/yun/Documents/opendata/var/reports/afi204/csi500-history-reconciliation-r4-runner-pass-20261030/RUN_STATUS.md>)。
 
 对账模型将有独立证据的证券起始边界与来源当前最早观测分开记录，并且只评估到本次请求的 `request_end`。日历、来源权限及来源保留范围是调用方提交的输入声明，未在本次验收中认证。测试使用合成数据，不证明真实 CSI500 来源真实性、实际全历史完整性、交易日历正确性、来源分页或保留范围；该功能也未接入生产调度或生产数据库。因此本 PR 不构成真实历史已从起点补齐的证明，迭代204整体仍开放。
+
+## 2026-10-30 Asia/Shanghai 主机采集状态只读快照
+
+本节记录本次只读主机清点的时间快照，不代表当前实时状态。将 2026-10-26 的脚本 CSV 与本机现存文件比较，在 `data_fetch` 子树范围内得到 **1,066 行**：**1,057 个文件仍存在、1,013 个哈希相同、44 个内容已变更、9 个文件缺失、0 个新增文件**。这只是指定子树与该份 CSV 的文件比对，不是全量运行任务清单，也不能据此判断数据覆盖或任务迁移完整性。数据库 registry 本次未读取；**1,103** 仍是历史快照数字，不是当前数据库实测结果。
+
+本次观察到 **6 个用户级 timer 处于 active/waiting 状态，但关联 service 均为 failed**。`full-history-recovery` 每分钟触发并以 exit 2 结束，原因是预期的 `run_full_history_recovery_worker.py` 不存在；`policy-expiry-watchdog` 以 exit 2 结束，预期脚本缺失。`dce-browser`、`dce-option`、`stock-tail` 处于 203 EXEC 状态，目标脚本缺失。`stock-amount` 以 exit 2 结束且目标缺失，但现有证据不足以确认完整因果。后端和 4 个 ETF 回补服务显示 active 只说明进程状态，不证明采集完整、历史无缺口或结果已发布。
+
+清点期间未停止或重启服务。迁移前不能猜测替代脚本目标，也不能启用新的采集任务；应先核实现行任务定义、目标入口及其授权，再安排受控迁移和数据对账。
