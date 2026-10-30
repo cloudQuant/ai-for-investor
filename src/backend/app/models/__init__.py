@@ -163,6 +163,13 @@ from app.models.stock_analysis import (
     StockAnalysisReportModel,
     StockAnalysisTaskModel,
 )
+from app.models.stock_analysis_snapshot_grant import (
+    ImmutableStockSnapshotGrantError,
+    InvalidStockSnapshotGrantRecord,
+    StockSnapshotGrantAudit,
+    StockSnapshotSourceResearchGrant,
+    StockSnapshotUserReadGrant,
+)
 from app.models.stock_signal import StockSignalPrediction, StockSignalRun
 from app.models.strategy import Strategy
 from app.models.strategy_explanation import StrategyExplanationModel
@@ -322,6 +329,11 @@ __all__ = [
     "StockAnalysisExportModel",
     "StockAnalysisReportModel",
     "StockAnalysisTaskModel",
+    "ImmutableStockSnapshotGrantError",
+    "InvalidStockSnapshotGrantRecord",
+    "StockSnapshotGrantAudit",
+    "StockSnapshotSourceResearchGrant",
+    "StockSnapshotUserReadGrant",
     "StockSignalPrediction",
     "StockSignalRun",
     "StrategyVersion",
