@@ -30,6 +30,16 @@ class StockAnalysisSinaFzbSnapshotSelection(BaseModel):
     capture_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class StockAnalysisSinaLrbSnapshotSelection(BaseModel):
+    """One explicit OpenData publication/capture selector for Sina LRB evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: str = Field(pattern=r"^[0-9]{6}\.(?:SH|SZ)$")
+    publication_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    capture_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class StockAnalysisParams(BaseModel):
     """User-facing stock analysis parameters."""
 
@@ -45,6 +55,7 @@ class StockAnalysisParams(BaseModel):
     language: str = Field("zh-CN", max_length=16)
     model_id: str | None = Field(None, max_length=200)
     opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None
+    opendata_sina_lrb_snapshot: StockAnalysisSinaLrbSnapshotSelection | None = None
 
     @field_validator("symbol")
     @classmethod
@@ -55,17 +66,22 @@ class StockAnalysisParams(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_sina_fzb_instrument_scope(self) -> StockAnalysisParams:
-        selection = self.opendata_sina_fzb_snapshot
+    def validate_sina_snapshot_instrument_scope(self) -> StockAnalysisParams:
+        fzb_selection = self.opendata_sina_fzb_snapshot
+        lrb_selection = self.opendata_sina_lrb_snapshot
+        if fzb_selection is not None and lrb_selection is not None:
+            raise ValueError("Sina FZB and LRB snapshots cannot be selected together")
+
+        selection = fzb_selection or lrb_selection
         if selection is None:
             return self
         if self.market_type != "A股":
-            raise ValueError("Sina FZB snapshot selection requires market_type='A股'")
+            raise ValueError("Sina financial snapshot selection requires market_type='A股'")
 
         symbol = self.symbol.strip().upper()
         if "." in symbol:
             if symbol.count(".") != 1:
-                raise ValueError("Sina FZB snapshot symbol must identify one SH/SZ instrument")
+                raise ValueError("Sina snapshot symbol must identify one SH/SZ instrument")
             code, exchange = symbol.split(".", 1)
         elif symbol.startswith(("SH", "SZ")):
             exchange, code = symbol[:2], symbol[2:]
@@ -76,10 +92,10 @@ class StockAnalysisParams(BaseModel):
             elif code.startswith(("0", "3")):
                 exchange = "SZ"
             else:
-                raise ValueError("Sina FZB snapshot requires an explicit SH/SZ A-share symbol")
+                raise ValueError("Sina snapshot requires an explicit SH/SZ A-share symbol")
 
         if selection.instrument_id != f"{code}.{exchange}":
-            raise ValueError("Sina FZB snapshot instrument_id must match the analysis symbol")
+            raise ValueError("Sina snapshot instrument_id must match the analysis symbol")
         return self
 
 

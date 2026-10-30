@@ -235,6 +235,21 @@ class Settings(BaseSettings):
             "Remote endpoints require HTTPS and an exact host allowlist."
         ),
     )
+    STOCK_ANALYSIS_OPENDATA_SINA_LRB_SNAPSHOT_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Enable explicit per-request OpenData reads of a pinned Sina LRB source-native "
+            "snapshot. The atemporal node-table evidence is provenance only and never enters "
+            "financial metrics, scoring, or AI prompts."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_SINA_LRB_ALLOWED_HOSTS: str = Field(
+        default="",
+        description=(
+            "Comma-separated exact hosts allowed for explicit Sina LRB OpenData API reads. "
+            "Remote endpoints require HTTPS and an exact host allowlist."
+        ),
+    )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
         default=False,
         description=(

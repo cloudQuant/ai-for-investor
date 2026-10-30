@@ -317,7 +317,12 @@ class StockAnalysisTaskService:
             market_type=task.market_type,
             analysis_date=analysis_date,
             opendata_sina_fzb_snapshot=params.opendata_sina_fzb_snapshot,
+            opendata_sina_lrb_snapshot=params.opendata_sina_lrb_snapshot,
         )
+        # LRB captures are source-native atemporal node tables. Keep their
+        # provenance out of signal scoring and every compatibility/AI prompt;
+        # attach the summary to the persisted report only after those stages.
+        sina_lrb_provenance = snapshot.pop("opendata_sina_lrb_snapshot", None)
         task.symbol_name = (snapshot.get("info") or {}).get("name") or task.symbol
         task.data_quality_json = snapshot.get("data_quality") or {}
         signal_prediction = await StockSignalService(self.db).create_prediction(
@@ -397,6 +402,8 @@ class StockAnalysisTaskService:
         if commit_progress:
             await self._commit_progress()
             await self._stop_if_cancelled(task)
+        if isinstance(sina_lrb_provenance, dict):
+            snapshot["opendata_sina_lrb_snapshot"] = sina_lrb_provenance
         payload = self.report_builder.build(
             symbol=task.symbol,
             symbol_name=task.symbol_name or task.symbol,

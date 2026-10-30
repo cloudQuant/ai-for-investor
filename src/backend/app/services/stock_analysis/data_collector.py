@@ -12,7 +12,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.schemas.stock_analysis import StockAnalysisSinaFzbSnapshotSelection
+from app.schemas.stock_analysis import (
+    StockAnalysisSinaFzbSnapshotSelection,
+    StockAnalysisSinaLrbSnapshotSelection,
+)
 from app.services.market_instrument import MarketInstrumentService
 from app.services.news_intelligence import get_news_intelligence_service
 from app.services.stock_analysis.opendata_financial_archive import (
@@ -22,6 +25,10 @@ from app.services.stock_analysis.opendata_financial_archive import (
 from app.services.stock_analysis.opendata_sina_fzb_snapshot import (
     OpenDataSinaFzbSnapshotError,
     OpenDataSinaFzbSnapshotReader,
+)
+from app.services.stock_analysis.opendata_sina_lrb_snapshot import (
+    OpenDataSinaLrbSnapshotError,
+    OpenDataSinaLrbSnapshotReader,
 )
 
 _SINA_FZB_SAFE_REASON_CODES = frozenset(
@@ -120,6 +127,72 @@ _SINA_FZB_REASON_DESCRIPTIONS = {
     "transport_error": "AFI 无法连接到 OpenData 服务。",
 }
 _SINA_FZB_GENERIC_FAILURE_DESCRIPTION = "OpenData 未能提供符合冻结合同的完整快照。"
+_SINA_LRB_SAFE_REASON_CODES = frozenset(
+    {
+        "OPENDATA_BASE_URL_INVALID",
+        "OPENDATA_CREDENTIAL_INVALID",
+        "allowed_hosts_invalid",
+        "base_url_host_not_allowed",
+        "base_url_insecure_transport",
+        "base_url_invalid",
+        "capture_id_invalid",
+        "configuration_invalid",
+        "content_type_invalid",
+        "credential_missing",
+        "credential_reflected_in_response",
+        "deadline_exceeded",
+        "feature_disabled",
+        "http_401_unauthorized",
+        "http_403_forbidden",
+        "http_404_not_found",
+        "http_410_snapshot_expired",
+        "http_413_too_large",
+        "http_422_invalid_request",
+        "http_429_rate_limited",
+        "http_error",
+        "http_server_error",
+        "instrument_id_invalid",
+        "instrument_scope_mismatch",
+        "publication_id_invalid",
+        "reader_error",
+        "response_json_invalid",
+        "response_read_failed",
+        "response_too_large",
+        "snapshot_empty",
+        "snapshot_incomplete",
+        "snapshot_metadata_invalid",
+        "snapshot_scope_mismatch",
+        "snapshot_selection_mismatch",
+        "snapshot_contract_mismatch",
+        "snapshot_contract_hash_mismatch",
+        "snapshot_hash_invalid",
+        "snapshot_expiry_invalid",
+        "snapshot_window_invalid",
+        "record_shape_invalid",
+        "record_scope_mismatch",
+        "record_publication_invalid",
+        "record_publication_mismatch",
+        "record_temporal_scope_invalid",
+        "record_hash_invalid",
+        "record_hash_mismatch",
+        "record_payload_invalid",
+        "record_identity_mismatch",
+        "record_order_invalid",
+        "duplicate_business_key",
+        "snapshot_cursor_repeated",
+        "snapshot_page_limit_exceeded",
+        "snapshot_row_limit_exceeded",
+        "record_too_large",
+        "records_page_invalid",
+        "records_page_meta_invalid",
+        "records_page_mismatch",
+        "records_page_count_invalid",
+        "snapshot_temporal_scope_invalid",
+        "timestamp_invalid",
+        "total_response_too_large",
+        "transport_error",
+    }
+)
 
 
 class StockAnalysisDataCollector:
@@ -159,12 +232,14 @@ class StockAnalysisDataCollector:
         settings: Any | None = None,
         financial_archive_reader: OpenDataFinancialArchiveReader | None = None,
         sina_fzb_snapshot_reader: OpenDataSinaFzbSnapshotReader | None = None,
+        sina_lrb_snapshot_reader: OpenDataSinaLrbSnapshotReader | None = None,
     ) -> None:
         self.db = db
         self.market_service = MarketInstrumentService()
         self._settings = settings
         self._financial_archive_reader = financial_archive_reader
         self._sina_fzb_snapshot_reader = sina_fzb_snapshot_reader
+        self._sina_lrb_snapshot_reader = sina_lrb_snapshot_reader
 
     async def collect(
         self,
@@ -174,6 +249,7 @@ class StockAnalysisDataCollector:
         market_type: str,
         analysis_date: date,
         opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None,
+        opendata_sina_lrb_snapshot: StockAnalysisSinaLrbSnapshotSelection | None = None,
     ) -> dict[str, Any]:
         market_payload = await self._collect_market(symbol=symbol, analysis_date=analysis_date)
         quote = self._build_quote(market_payload)
@@ -189,7 +265,9 @@ class StockAnalysisDataCollector:
             analysis_date=analysis_date,
             market_payload=market_payload,
             opendata_sina_fzb_snapshot=opendata_sina_fzb_snapshot,
+            opendata_sina_lrb_snapshot=opendata_sina_lrb_snapshot,
         )
+        sina_lrb_provenance = financials.pop("opendata_sina_lrb_snapshot", None)
         technicals = {"factors": market_payload.get("indicators") or {}}
         news = await self._collect_news(user_id, symbol, market_type)
 
@@ -222,9 +300,7 @@ class StockAnalysisDataCollector:
                     and snapshot_evidence.get("status") == "unavailable"
                 ):
                     degraded_reasons.append(
-                        self._sina_fzb_failure_degraded_reason(
-                            snapshot_evidence.get("reason_code")
-                        )
+                        self._sina_fzb_failure_degraded_reason(snapshot_evidence.get("reason_code"))
                     )
         if not news.get("items"):
             degraded_reasons.append("新闻数据为空")
@@ -234,7 +310,7 @@ class StockAnalysisDataCollector:
             "degraded_reasons": degraded_reasons,
         }
 
-        return {
+        result = {
             "symbol": symbol,
             "market_type": market_type,
             "analysis_date": analysis_date.isoformat(),
@@ -247,6 +323,9 @@ class StockAnalysisDataCollector:
             "news": news,
             "data_quality": data_quality,
         }
+        if isinstance(sina_lrb_provenance, dict):
+            result["opendata_sina_lrb_snapshot"] = sina_lrb_provenance
+        return result
 
     async def _collect_news(self, user_id: str, symbol: str, market_type: str) -> dict[str, Any]:
         local_news = {"items": [], "total": 0, "status": "degraded"}
@@ -395,13 +474,36 @@ class StockAnalysisDataCollector:
         analysis_date: date,
         market_payload: dict[str, Any],
         opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None,
+        opendata_sina_lrb_snapshot: StockAnalysisSinaLrbSnapshotSelection | None = None,
     ) -> dict[str, Any]:
         financials = self._build_financials(market_payload)
         active_settings = self._settings or get_settings()
+        if opendata_sina_fzb_snapshot is not None and opendata_sina_lrb_snapshot is not None:
+            raise ValueError("Sina FZB and LRB snapshots cannot be selected together")
+
+        # LRB is source-native atemporal evidence. A pinned LRB request bypasses
+        # every other financial provider and never maps node values to metrics.
+        if opendata_sina_lrb_snapshot is not None:
+            return await self._collect_sina_lrb_snapshot_financials(
+                financials=financials,
+                symbol=symbol,
+                market_type=market_type,
+                selection=opendata_sina_lrb_snapshot,
+                feature_enabled=bool(
+                    getattr(
+                        active_settings,
+                        "STOCK_ANALYSIS_OPENDATA_SINA_LRB_SNAPSHOT_ENABLED",
+                        False,
+                    )
+                ),
+            )
+
         sina_snapshot_enabled = bool(
             getattr(active_settings, "STOCK_ANALYSIS_OPENDATA_SINA_FZB_SNAPSHOT_ENABLED", False)
         )
-        if opendata_sina_fzb_snapshot is not None or (sina_snapshot_enabled and market_type == "A股"):
+        if opendata_sina_fzb_snapshot is not None or (
+            sina_snapshot_enabled and market_type == "A股"
+        ):
             return await self._collect_sina_fzb_snapshot_financials(
                 financials=financials,
                 symbol=symbol,
@@ -487,6 +589,140 @@ class StockAnalysisDataCollector:
                 }
             )
         return financials
+
+    async def _collect_sina_lrb_snapshot_financials(
+        self,
+        *,
+        financials: dict[str, Any],
+        symbol: str,
+        market_type: str,
+        selection: StockAnalysisSinaLrbSnapshotSelection,
+        feature_enabled: bool,
+    ) -> dict[str, Any]:
+        """Read a pinned LRB capture and retain only bounded provenance metadata."""
+        financials.update(
+            {
+                "annual": [],
+                "quarterly": [],
+                "provider": "opendata",
+            }
+        )
+        summary: dict[str, Any] = {
+            "status": "unavailable",
+            "source": "sina-lrb",
+            "dataset_id": "sina_lrb_report_observations",
+            "instrument_id": selection.instrument_id,
+            "publication_id": selection.publication_id,
+            "capture_id": selection.capture_id,
+            "record_count": 0,
+            "report_count": 0,
+            "page_count": 0,
+            "response_bytes": 0,
+            "reason_code": None,
+            "temporal_semantics": "atemporal_source_native_node_table",
+            "completeness": "unknown",
+            "historical_as_of_status": "unavailable",
+            "eligible_for_decision_or_backtest": False,
+        }
+        if not feature_enabled:
+            summary["reason_code"] = "feature_disabled"
+            financials["opendata_sina_lrb_snapshot"] = summary
+            return financials
+
+        expected_instrument_id = self._opendata_instrument_id(symbol)
+        if (
+            market_type != "A股"
+            or expected_instrument_id is None
+            or expected_instrument_id != selection.instrument_id
+        ):
+            summary["reason_code"] = "instrument_scope_mismatch"
+            financials["opendata_sina_lrb_snapshot"] = summary
+            return financials
+
+        active_settings = self._settings or get_settings()
+        try:
+            reader = self._sina_lrb_snapshot_reader
+            if reader is None:
+                reader = OpenDataSinaLrbSnapshotReader.from_environment(
+                    allowed_hosts=getattr(
+                        active_settings, "STOCK_ANALYSIS_OPENDATA_SINA_LRB_ALLOWED_HOSTS", ""
+                    )
+                )
+            result = await reader.fetch_capture(
+                instrument_id=selection.instrument_id,
+                publication_id=selection.publication_id,
+                capture_id=selection.capture_id,
+            )
+        except OpenDataSinaLrbSnapshotError as exc:
+            summary["reason_code"] = self._safe_sina_lrb_reason_code(exc.code)
+        except Exception:
+            # Never expose response bodies, URLs, credentials or provider errors.
+            summary["reason_code"] = "reader_error"
+        else:
+            source_snapshot = result.snapshot
+            verification_states = {
+                "record_hash_verification": self._safe_sina_lrb_verification_state(
+                    getattr(result, "record_hash_verification", None), expected="verified"
+                ),
+                "selection_hash_verification": self._safe_sina_lrb_verification_state(
+                    getattr(
+                        result,
+                        "selection_hash_verification",
+                        None,
+                    ),
+                    expected="unavailable_access_scope_not_returned",
+                ),
+                "content_hash_verification": self._safe_sina_lrb_verification_state(
+                    getattr(result, "content_hash_verification", None),
+                    expected="unavailable_access_scope_not_returned",
+                ),
+            }
+            summary.update(verification_states)
+            if "unverified" in verification_states.values():
+                # A changed or malformed reader status must never be persisted
+                # as successful evidence or accompanied by its server digests.
+                summary["reason_code"] = "reader_error"
+                financials["opendata_sina_lrb_snapshot"] = summary
+                return financials
+            summary.update(
+                {
+                    "status": "ok" if result.records else "empty",
+                    "snapshot_id": source_snapshot.get("snapshot_id"),
+                    "publication_sequence": source_snapshot.get("sequence"),
+                    "record_count": len(result.records),
+                    "report_count": result.report_count,
+                    "page_count": result.page_count,
+                    "response_bytes": result.response_bytes,
+                    "content_sha256": source_snapshot.get("content_sha256"),
+                    "contract_sha256": source_snapshot.get("contract_sha256"),
+                    "as_of": source_snapshot.get("as_of"),
+                    "expires_at": source_snapshot.get("expires_at"),
+                    "completeness": result.completeness,
+                    "historical_as_of_status": result.historical_as_of_status,
+                    # The LRB contract is atemporal. Do not let a future reader
+                    # implementation make this source decision-eligible.
+                    "eligible_for_decision_or_backtest": False,
+                }
+            )
+            if not result.records:
+                summary["reason_code"] = "snapshot_empty"
+
+        financials["opendata_sina_lrb_snapshot"] = summary
+        return financials
+
+    @staticmethod
+    def _safe_sina_lrb_reason_code(reason_code: object) -> str:
+        """Limit persisted LRB errors to stable, non-sensitive reader codes."""
+        if isinstance(reason_code, str) and reason_code in _SINA_LRB_SAFE_REASON_CODES:
+            return reason_code
+        return "reader_error"
+
+    @staticmethod
+    def _safe_sina_lrb_verification_state(value: object, *, expected: str) -> str:
+        """Expose only the reader's fixed status for this LRB hash boundary."""
+        if type(value) is str and value == expected:
+            return expected
+        return "unverified"
 
     async def _collect_sina_fzb_snapshot_financials(
         self,
@@ -687,8 +923,7 @@ class StockAnalysisDataCollector:
     def _financial_archive_degradation_reason(archive: dict[str, Any]) -> str:
         status = archive.get("status")
         raw_only_context = (
-            "指标、单位和季度语义未审核，provenance不完整，"
-            "观察时间不是采集时间，PIT不可用"
+            "指标、单位和季度语义未审核，provenance不完整，观察时间不是采集时间，PIT不可用"
         )
         future_count = archive.get("future_disclosure_record_count")
         future_disclosure_note = (
@@ -697,10 +932,7 @@ class StockAnalysisDataCollector:
             else ""
         )
         if status == "observed":
-            return (
-                f"OpenData财报仅保留为来源原生证据；{raw_only_context}"
-                f"{future_disclosure_note}"
-            )
+            return f"OpenData财报仅保留为来源原生证据；{raw_only_context}{future_disclosure_note}"
         if status == "empty":
             return (
                 "OpenData财报归档请求成功但未返回记录，覆盖完整性仍未知；"
