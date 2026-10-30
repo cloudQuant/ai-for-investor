@@ -1076,3 +1076,9 @@ OpenData [PR #132](https://github.com/cloudQuant/opendata/pull/132) 已合入 `d
 OpenData 配额 V3 尚未合入 `dev`，也未通过生产验收。未提交实现的完整私有备份保存在 [`/home/yun/.local/share/opendata-v3-quota-full-backup-20261030-fv5ljr3d`](</home/yun/.local/share/opendata-v3-quota-full-backup-20261030-fv5ljr3d>)，已独立校验；30 个文件已从 OpenData 主工作区清除。该备份不含密钥。R2–R4 失败记录与配额 V3 是不同工作项；前者的失败证据分别保留在 OpenData 的 R2、R3、R4 本机归档中。
 
 配额 V3 暂缓合入的主要原因是混跑切换尚未被安全证明：迁移后仍可能有 V2 worker 或已提交 permit 绕过 V3 lease/每日额度；目前没有可信控制面证据证明旧 worker 与在途 permit 已停止或排空，也没有针对旧进程网络或凭证的可信 fence。人工声明不足以作为切换门槛，必须有可验证的停机/排空证明，并确保 V3 在没有可信 verifier 时默认不可启用，同时保留既有 V2 工作路径。另有 THS HTTP 客户端绕过 gate 的风险需要在请求发送前 fail closed，lease 释放持久化也需专项验收。上述问题解决并完成隔离测试、独立审查前，配额 V3 不进入 `dev` 或生产启用。
+
+## 2026-10-30 OpenData PR #133：CSI500 历史覆盖对账
+
+OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `dev`，提交为 `cc79654171bd00b00d9909f7973547a10790a945`。R4 冻结隔离验收 **68 项测试通过**；目标模块 statement+branch 综合覆盖率为 **96.77%**，排除 **0 行、0 个分支**；Ruff、mypy 与 Bandit 检查通过。R3 的 coverage gate 失败记录仍保留在独立归档中，不以 R4 结果覆盖。验收证据位于 OpenData 本机私有目录 [`RUN_STATUS.md`](</home/yun/Documents/opendata/var/reports/afi204/csi500-history-reconciliation-r4-runner-pass-20261030/RUN_STATUS.md>)。
+
+对账模型将有独立证据的证券起始边界与来源当前最早观测分开记录，并且只评估到本次请求的 `request_end`。日历、来源权限及来源保留范围是调用方提交的输入声明，未在本次验收中认证。测试使用合成数据，不证明真实 CSI500 来源真实性、实际全历史完整性、交易日历正确性、来源分页或保留范围；该功能也未接入生产调度或生产数据库。因此本 PR 不构成真实历史已从起点补齐的证明，迭代204整体仍开放。
