@@ -1010,3 +1010,9 @@ OpenData [PR #124](https://github.com/cloudQuant/opendata/pull/124) 已合入 `d
 AFI [PR #183](https://github.com/cloudQuant/ai-for-investor/pull/183) 已合入 `dev`，合并提交为 `f6194d4c826b71a7a0021d96baad946a96c09345`。显式选择 Sina FZB OpenData snapshot 后，若读取不可用，任务的数据质量说明会给出固定错误码及安全提示；未知错误会映射到通用提示，不把异常内容、凭据、URL 或响应正文带入任务结果。显式 selector 失败不会回退到 AkShare。隔离 mock 专项 **18 项测试通过**；验收摘要位于 AFI 本机私有证据 [`README.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/sina-error-visibility-acceptance-20261030/README.md>)。归档 pytest 日志已脱敏；测试依赖未锁定，记录保留了原始临时日志哈希，但归档副本无法重建其原始字节。
 
 该结果只证明 mock 下的错误显示与脱敏行为；没有验收真实 OpenData API key、实际授权、生产连接或部署行为。自动 discovery 仍关闭，真实 FZB 数据质量、数据库发布、调度运行、全 A 股及逐证券全历史覆盖仍未验收，迭代204整体继续开放。
+
+## 2026-10-30 OpenData PR #125：上交所与扶摇证券候选目录对账
+
+OpenData [PR #125](https://github.com/cloudQuant/opendata/pull/125) 已合入 `dev`，提交为 `fc8a88f18d8762f52324e3476445a33a8d92aeec`。本切片为 SSE 与 Fuyao 候选来源增加目录对账逻辑，显式保留来源间重复冲突并限制对比计算量；当来源分页情况未知时，不将记录缺席解释为证券不存在，也不将已取得的候选记录称为完整目录。synthetic 隔离专项 **125 项测试通过**；目标代码覆盖率为 **1,074/1,078（99.63%）**，**0 项排除**。验收证据归档于 OpenData 本机私有目录 [`instrument-catalog-reconciliation-acceptance-20261030`](</home/yun/Documents/opendata/var/reports/afi204/instrument-catalog-reconciliation-acceptance-20261030>)。
+
+该结果只验收 synthetic 输入下的对账行为；未包含 SZSE 或 BSE，未融合真实来源响应，也未证明权威证券全集、市场/生命周期完整性或分页完整性。尚未接入运行调度。验收环境的 Anaconda 依赖未完全 pin。全 A 股权威证券全集（含北交所及退市生命周期）及逐证券从实际起点至今的 head/interior/tail 对账仍未完成，迭代204整体继续开放。
