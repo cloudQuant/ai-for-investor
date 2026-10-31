@@ -19,6 +19,7 @@ PREVIOUS_REVISION = "20260910_market_data_capability_ledger"
 REVISION = "20260911_market_data_deferred_publications"
 PRE_OPTIMIZATION_HEAD_REVISION = "20260911_market_data_b2_completeness_evidence"
 INTEGRATED_HEAD_REVISION = "20261012_optimization_objective_direction"
+CURRENT_HEAD_REVISION = "20261031_stock_daily_snapshot_grants"
 TABLE = "md_publication_release_holds"
 UTC = timezone.utc
 NOW = datetime(2026, 9, 11, 12, tzinfo=UTC)
@@ -67,7 +68,7 @@ def test_deferred_publication_revision_is_an_ancestor_of_the_single_alembic_head
     assert revision.down_revision == PREVIOUS_REVISION
     assert integrated_head is not None
     assert integrated_head.down_revision == PRE_OPTIMIZATION_HEAD_REVISION
-    assert script.get_heads() == [INTEGRATED_HEAD_REVISION]
+    assert script.get_heads() == [CURRENT_HEAD_REVISION]
 
 
 def test_sqlite_upgrade_keeps_evidence_parents_and_enforces_hold_state_contracts(
