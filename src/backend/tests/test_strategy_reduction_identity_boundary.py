@@ -38,12 +38,13 @@ def _settings_without_dotenv(self, *args, **kwargs):
 _BaseSettings.__init__ = _settings_without_dotenv
 os.environ = dict(_SYNTHETIC_ENV)  # noqa: B003 - isolate synthetic DB/settings only
 try:
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+
     import app.models  # noqa: F401,E402
     from app.db.database import Base  # noqa: E402
     from app.models.strategy import Strategy  # noqa: E402
     from app.models.strategy_target_approval import (  # noqa: E402
         StrategyTargetApproval,
-        StrategyTargetApprovalEvent,
     )
     from app.models.strategy_version import StrategyVersion, VersionBranch  # noqa: E402
     from app.models.user import User  # noqa: E402
@@ -55,12 +56,11 @@ try:
     from app.services.strategy_target_approvals import (  # noqa: E402
         StrategyTargetApprovalError,
         canonical_target_sha256,
-        create_approved_order_target,
         consume_approved_target_v1,
+        create_approved_order_target,
         reserve_approved_target_operation,
         resolve_approved_target_v1,
     )
-    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
 finally:
     _BaseSettings.__init__ = _ORIGINAL_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore caller environment

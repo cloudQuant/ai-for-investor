@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 import sqlalchemy as sa
-from fastapi import HTTPException
 from pydantic_settings import BaseSettings as _BaseSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -55,10 +54,6 @@ try:
         StrategyOrderApprovalPolicyHead,
         StrategyOrderApprovalPolicyVersion,
     )
-    from app.models.strategy_target_approval import (  # noqa: E402
-        StrategyTargetApproval,
-        StrategyTargetApprovalEvent,
-    )
     from app.models.strategy_version import StrategyVersion, VersionBranch  # noqa: E402
     from app.models.user import User  # noqa: E402
     from app.schemas.portfolio_composition import (  # noqa: E402
@@ -66,6 +61,8 @@ try:
         PortfolioCompositionMember,
     )
     from app.schemas.strategy_version import VersionUpdate  # noqa: E402
+    from app.services.portfolio_composition import PortfolioCompositionService  # noqa: E402
+    from app.services.strategy.version import VersionControlService  # noqa: E402
     from app.services.strategy_approval_authority import (
         StrategyOrderTargetCurrentStateProvider,
         approve_strategy_order_target,
@@ -79,8 +76,6 @@ try:
         consume_approved_target_v1,
         reserve_approved_target_operation,
     )  # noqa: E402
-    from app.services.portfolio_composition import PortfolioCompositionService  # noqa: E402
-    from app.services.strategy.version import VersionControlService  # noqa: E402
 finally:
     _BaseSettings.__init__ = _ORIGINAL_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore caller process settings

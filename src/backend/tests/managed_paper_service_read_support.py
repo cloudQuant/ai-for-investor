@@ -8,11 +8,10 @@ test still starts the real SDK worker and Execution ServiceHost.
 
 from __future__ import annotations
 
-import multiprocessing
 import socket
+from collections.abc import Callable
 from contextlib import suppress
-from typing import Any, Callable
-
+from typing import Any
 
 _SERVICE_ID = "afi-execution-service"
 _SERVICE_PRINCIPAL = "afi-execution-principal"

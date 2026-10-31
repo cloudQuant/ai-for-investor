@@ -14,17 +14,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .client import (
+    PAPER_LEGACY_IMPORT_OPERATIONS,
     AccountBinding,
     AccountBookBinding,
     ApprovedTargetSubmitBinding,
     AuthorizedServiceReadClient,
     MonitorBinding,
-    PortfolioAnalyticsBinding,
     OrderBinding,
     OrderSubmitBinding,
     PaperLegacyImportBinding,
-    PAPER_LEGACY_IMPORT_OPERATIONS,
     PaperSubmitBinding,
+    PortfolioAnalyticsBinding,
     RiskAccountPolicyBinding,
     RiskPolicyBudgetBinding,
     ServiceReadUnavailableError,

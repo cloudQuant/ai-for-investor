@@ -20,7 +20,6 @@ from typing import Any
 
 import pytest
 
-
 _DOMAIN = "paper:afi-account-observation-http"
 _ACCOUNT_REF = "afi-observation-account"
 _ACCOUNT_ID = "synthetic-private-provider-account-id"
@@ -95,7 +94,7 @@ def _account_observation_service_process(
 ) -> None:
     """Spawn target: an actual Gateway ServiceHost with a synthetic provider."""
 
-    from bt_api_base.account_protocol import AccountKey, AccountObservation, AccountResourceKey
+    from bt_api_base.account_protocol import AccountKey, AccountObservation
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
     from bt_api_gateway import GatewayEventJournal
     from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
@@ -1287,18 +1286,14 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
 ) -> None:
     """Exercise AccountObservation → ServiceAccountClient → authorized HTTP projection."""
 
-    import bt_api_gateway
-    import bt_api_py
     import httpx
-    import jwt
     import zmq
-
     from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+    from bt_api_py import service_account as sdk_service_account
+    from bt_api_py.service_runtime import ServiceClientRuntime
     from pydantic import SecretStr
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import StaticPool
-    from bt_api_py import service_account as sdk_service_account
-    from bt_api_py.service_runtime import ServiceClientRuntime
 
     import app
     import app.api.portfolio.api as portfolio_api

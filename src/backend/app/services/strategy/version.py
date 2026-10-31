@@ -4,14 +4,16 @@ Strategy version control service.
 Supports versioning, branch management, rollback, and comparisons.
 """
 
-import logging
 import inspect
-from functools import wraps
+import logging
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, cast
 
-from app.db.sql_repository import SQLRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.database import async_session_maker
+from app.db.sql_repository import SQLRepository
 from app.models.strategy import Strategy
 from app.models.strategy_version import (
     StrategyVersion,
@@ -30,7 +32,6 @@ from app.services.version_diff_service import (
 )
 from app.utils.tracing import business_span
 from app.websocket_manager import manager as ws_manager
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

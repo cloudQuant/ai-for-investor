@@ -14,9 +14,6 @@ from typing import Any
 
 import pytest
 import zmq
-from pydantic import SecretStr
-from sqlalchemy import insert, update
-
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_service_config
@@ -27,6 +24,10 @@ from bt_api_risk.budget_admission import (
     PolicyCatalogBudgetAdmissionResolver,
 )
 from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore
+from pydantic import SecretStr
+from sqlalchemy import insert, update
+
+import app.main as main_module
 from app.db.database import async_session_maker
 from app.models.permission import Role, user_roles
 from app.models.user import User
@@ -39,9 +40,6 @@ from app.services.service_read.client import (
     RISK_POLICY_BUDGET_CHECKER_OPERATIONS,
     RISK_POLICY_BUDGET_MAKER_OPERATIONS,
 )
-
-import app.main as main_module
-
 
 _DOMAIN = "afi-risk-budget-owner-checker"
 _PORTFOLIO = "afi-budget-owner-checker-v1"
@@ -262,7 +260,7 @@ def _application_profile(
         "scope_claims": {
             _MANAGEMENT_SCOPE_REF: {
                 "execution_domain_ref": _DOMAIN,
-                "account_refs": list(sorted(_ACCOUNTS)),
+                "account_refs": sorted(_ACCOUNTS),
                 "portfolio_ref": _PORTFOLIO,
             },
             **{
@@ -512,7 +510,6 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
     prior_deployment = getattr(application.state, "service_read_deployment", None)
     assert prior_deployment is None or prior_deployment.closed, prior_deployment
     deployment = None
-    host_started = False
     host_closed = False
     stores_closed = False
     monkeypatch.setattr(main_module.settings, "DB_AUTO_CREATE_SCHEMA", True)
@@ -552,7 +549,6 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
     }
     try:
         host_owner.start()
-        host_started = True
         async with main_module.lifespan(application):
             deployment = application.state.service_read_deployment
             assert deployment is not None and not deployment.closed

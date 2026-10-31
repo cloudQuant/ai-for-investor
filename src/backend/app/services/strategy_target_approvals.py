@@ -498,7 +498,7 @@ async def reserve_approved_target_operation(
                     False,
                     conflict.record_version,
                 )
-            raise StrategyTargetApprovalError("APPROVAL_OPERATION_CONFLICT")
+            raise StrategyTargetApprovalError("APPROVAL_OPERATION_CONFLICT") from None
         raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
     except SQLAlchemyError:
         await db.rollback()

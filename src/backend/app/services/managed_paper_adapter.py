@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from decimal import Decimal, InvalidOperation
-from typing import Any, Callable
+from typing import Any
 
 from app.schemas.ai_trading import OrderType as AIOrderType
 from app.schemas.ai_trading import TradeAction, TradingIntent
@@ -399,7 +399,9 @@ class ManagedPaperOrderAdapter:
             try:
                 from app.api.service_read import resolve_paper_submit_access
             except ImportError:
-                raise ManagedPaperOrderError("PAPER_SERVICE_NOT_CONFIGURED", status_code=503)
+                raise ManagedPaperOrderError(
+                    "PAPER_SERVICE_NOT_CONFIGURED", status_code=503
+                ) from None
             resolver = resolve_paper_submit_access
         try:
             resolved = resolver(subject, legacy_account_id)

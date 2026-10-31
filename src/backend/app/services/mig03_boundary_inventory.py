@@ -13,10 +13,11 @@ import asyncio
 import hashlib
 import json
 import math
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from sqlalchemy import JSON, LargeBinary, String, Text, cast, func, select
 from sqlalchemy import inspect as sa_inspect
@@ -26,12 +27,12 @@ from app.models.approved_target_http_operation import ApprovedTargetHttpOperatio
 from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.paper_trading import Account, Order, PaperTrade, Position
-from app.models.workspace import StrategyUnit, Workspace
 from app.models.service_order_operation import ServiceOrderOperation
 from app.models.strategy_target_approval import (
     StrategyTargetApproval,
     StrategyTargetApprovalEvent,
 )
+from app.models.workspace import StrategyUnit, Workspace
 from app.services.paper_runtime_scheduler import PaperRuntimeSnapshotScheduler
 
 CODE_INVALID_BOUNDARY_SCOPE = "AFI_MIG03_INVALID_BOUNDARY_SCOPE"

@@ -28,7 +28,6 @@ from typing import Any
 import pytest
 import zmq
 
-
 _AFI_BACKEND_ROOT_ENV = "AFI11_BACKEND_ROOT"
 _SDK_SOURCE_ROOT_ENV = "AFI11_SDK_EXPORT_ROOT"
 _RISK_SOURCE_ROOT_ENV = "AFI11_RISK_EXPORT_ROOT"
@@ -115,21 +114,9 @@ def _assert_r236_sources() -> dict[str, Path]:
     assert "TASK_WORKER_START_TIMEOUT" in analytics_source
     assert "_WORKER_STARTUP_TIMEOUT_NS: Final[int] = 10_000_000_000" in analytics_source
 
-    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+    from bt_api_base.service_protocol import WireIdentity
     from bt_api_execution import ExecutionScope, ProviderObservation, SqliteExecutionStore
     from bt_api_execution.service_order_entry import ExecutionOrderEntryService
-    from bt_api_risk import (
-        AccountScope,
-        DurableRiskAdmissionAdapter,
-        DurableRiskGate,
-        ExposureAccountingMode,
-        INSTRUMENT_METADATA_DIGEST_TAG,
-        InstrumentRiskAdmissionMapper,
-        InstrumentRiskMetadata,
-        InstrumentRiskRegistry,
-        RiskDeniedError,
-        RiskPolicy,
-    )
     from bt_api_py.service_components import ComponentResources
     from bt_api_py.service_config import parse_client_config, parse_service_config
     from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
@@ -138,6 +125,17 @@ def _assert_r236_sources() -> dict[str, Path]:
         ClientCurveKeys,
         ServiceClientRuntime,
         ZmqTransportFactory,
+    )
+    from bt_api_risk import (
+        INSTRUMENT_METADATA_DIGEST_TAG,
+        AccountScope,
+        DurableRiskAdmissionAdapter,
+        DurableRiskGate,
+        ExposureAccountingMode,
+        InstrumentRiskMetadata,
+        InstrumentRiskRegistry,
+        RiskDeniedError,
+        RiskPolicy,
     )
 
     module_paths = (
@@ -279,12 +277,12 @@ def _owner_process(
 ) -> None:
     """Spawn target for the independent, real execution and risk owner."""
 
-    from bt_api_base.service_protocol import WireIdentity, WireScope
+    from bt_api_base.service_protocol import WireScope
     from bt_api_execution import ProviderObservation, SqliteExecutionStore
     from bt_api_py.service_components import ComponentResources
     from bt_api_py.service_config import parse_service_config
     from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+    from bt_api_py.service_registry import PrincipalGrant
     from bt_api_risk import (
         DurableRiskAdmissionAdapter,
         DurableRiskGate,
@@ -734,40 +732,30 @@ async def test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_ow
     source_roots = _assert_r236_sources()
     backend_root = source_roots["afi_backend"]
 
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+    from bt_api_execution import ExecutionScope
+    from bt_api_py.service_config import parse_client_config
+    from bt_api_py.service_registry import ResourceGrant
+    from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
+    from bt_api_risk import (
+        INSTRUMENT_METADATA_DIGEST_TAG,
+        AccountScope,
+        ExposureAccountingMode,
+        InstrumentRiskMetadata,
+        RiskPolicy,
+    )
     from pydantic import SecretStr
 
     from app import main as main_module
+    from app.api.portfolio import analytics_tasks as analytics_routes
     from app.config import get_settings
     from app.db import database as database_module
     from app.db.database import async_session_maker
     from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel
-    from app.utils.security import decode_access_token
-    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-    from bt_api_execution import ExecutionScope
-    from bt_api_execution import ProviderObservation, SqliteExecutionStore
-    from bt_api_execution.service_order_entry import ExecutionOrderEntryService
-    from bt_api_py.service_components import ComponentResources
-    from bt_api_py.service_config import parse_client_config
-    from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
-    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-    from bt_api_py.service_registry import ResourceGrant
-    from bt_api_risk import (
-        AccountScope,
-        DurableRiskAdmissionAdapter,
-        DurableRiskGate,
-        ExposureAccountingMode,
-        INSTRUMENT_METADATA_DIGEST_TAG,
-        InstrumentRiskAdmissionMapper,
-        InstrumentRiskMetadata,
-        InstrumentRiskRegistry,
-        RiskDeniedError,
-        RiskPolicy,
-    )
-
-    from app.api.portfolio import analytics_tasks as analytics_routes
     from app.services import portfolio_analytics_tasks as analytics_service
     from app.services.service_read import deployment as service_read_deployment
     from app.services.service_read import worker as service_read_worker
+    from app.utils.security import decode_access_token
 
     app_module_origins = (
         (main_module, backend_root / "app" / "main.py"),

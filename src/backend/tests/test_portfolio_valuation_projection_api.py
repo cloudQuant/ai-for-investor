@@ -10,9 +10,9 @@ from types import MappingProxyType
 from typing import Any
 
 import pytest
+from bt_api_base.account_protocol import AccountKey
 from pydantic import SecretStr
 from sqlalchemy import delete, insert
-from bt_api_base.account_protocol import AccountKey
 
 import app.main as main_module
 import app.services.portfolio_valuation_bindings as valuation_bindings_module
@@ -23,7 +23,7 @@ from app.models.asset_research import AssetDataSourceRegistry
 from app.models.market_data_platform import MdCapabilityLedgerEntry
 from app.models.permission import Role, user_roles
 from app.models.portfolio_composition import PortfolioCompositionVersion
-from app.schemas.asset_research import FxIdentityDetails, FuturesIdentityDetails, InstrumentIdentity
+from app.schemas.asset_research import FuturesIdentityDetails, FxIdentityDetails, InstrumentIdentity
 from app.schemas.market_data_platform import MarketDataQueryRequest, ResolvedMarketDataQuery
 from app.services.market_data.access import MarketDataQueryAccess
 from app.services.market_data.capability_ledger import (

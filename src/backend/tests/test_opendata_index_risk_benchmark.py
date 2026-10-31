@@ -10,6 +10,8 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import HTTPException
+
 from app.api import risk_analytics
 from app.api.data import queries
 from app.db.database import async_session_maker
@@ -52,7 +54,6 @@ from app.services.risk_analytics.opendata_index_benchmark import (
     OpenDataIndexBenchmarkError,
     OpenDataIndexBenchmarkReader,
 )
-from fastapi import HTTPException
 
 _START = "2024-01-01"
 _END_EXCLUSIVE = "2024-01-04"

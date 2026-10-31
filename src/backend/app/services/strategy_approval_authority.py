@@ -13,7 +13,6 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -34,14 +33,14 @@ from app.models.strategy_version import StrategyVersion, VersionBranch, VersionS
 from app.services.strategy_target_approvals import (
     ApprovedTargetCurrentStateV1,
     StrategyTargetApprovalError,
-    _validate_target,
-    canonical_target_sha256,
-    create_approved_order_target,
     _delegate_storage_value,
     _identity_field,
     _identity_role,
     _scope_payload,
     _target_from_row,
+    _validate_target,
+    canonical_target_sha256,
+    create_approved_order_target,
 )
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")

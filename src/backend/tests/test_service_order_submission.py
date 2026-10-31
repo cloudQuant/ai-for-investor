@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import os
 import tempfile
+from collections.abc import Mapping
 
 import pytest
 import pytest_asyncio
@@ -55,12 +55,12 @@ try:
         reserve_manual_order_operation,
         sha256_canonical_json,
     )
+    from app.services.service_read.client import OrderSubmitBinding  # noqa: E402
     from app.services.service_read.deployment import (  # noqa: E402
         ServiceReadDeploymentError,
         _create_runtime,
         _parse_deployment,
     )
-    from app.services.service_read.client import OrderSubmitBinding  # noqa: E402
 finally:
     _BaseSettings.__init__ = _ORIGINAL_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore process environment

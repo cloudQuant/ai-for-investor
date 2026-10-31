@@ -630,11 +630,10 @@ def _run_reg04_dual_worker_one_owner(tmp_path: Any) -> None:
 
     from pathlib import Path
 
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from sqlalchemy.pool import NullPool
-
     from bt_api_py.service_execution import ServiceExecutionClient
     from bt_api_py.service_runtime import ServiceRuntimeError
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
 
     context = multiprocessing.get_context("spawn")
     endpoint = _order._endpoint()
@@ -1005,11 +1004,10 @@ def _run_reg04_late_worker_under_claim(tmp_path: Any, monkeypatch: pytest.Monkey
 
     from pathlib import Path
 
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from sqlalchemy.pool import NullPool
-
     from bt_api_py.service_execution import ServiceExecutionClient
     from bt_api_py.service_runtime import ServiceRuntimeError
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
 
     context = multiprocessing.get_context("spawn")
     endpoint = _order._endpoint()

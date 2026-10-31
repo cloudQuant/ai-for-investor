@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import time
 import uuid
-from collections.abc import Mapping
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -43,7 +41,6 @@ from app.services.strategy_approval_authority import (
 )
 from app.services.strategy_target_approvals import (
     StrategyTargetApprovalError,
-    canonical_target_sha256,
     revoke_approved_order_target,
 )
 

@@ -6,9 +6,10 @@ import json
 from collections.abc import Callable
 
 import pytest
+from pydantic import ValidationError
+
 from app.config import Settings, get_settings
 from app.config_parsing import parse_ai_providers, parse_strategy_score_weights
-from pydantic import ValidationError
 
 
 class TestConfig:
