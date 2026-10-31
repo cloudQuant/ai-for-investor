@@ -4,7 +4,7 @@
 
 ## 当前基线与限定验收（2026-10-31 更新，Asia/Shanghai）
 
-**2026-10-31 基线**：AFI `dev` HEAD 为 `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`，OpenData `dev` HEAD 为 `7cc613bfc15fc3e35da9213d204955e269ae1b83`。该基线不包含本次文档改动；后续执行必须记录执行时的新 HEAD 及 dirty diff hash。
+**2026-10-31 基线**：AFI `dev` HEAD 为 `b825f921476b6e698881e1be68993c8a4ac610e1`，OpenData `dev` HEAD 为 `373211d246ab3099ac8c551681c0f1703fcbd964`。该基线不包含本次文档改动；后续执行必须记录执行时的新 HEAD 及 dirty diff hash。
 
 **2026-10-30 历史快照**：本轮编辑这些计划文档之前，AFI `dev` 与 `origin/dev` HEAD 为 `73c7b2f7537cacab2ab75daf4381e850a0977b9b`，OpenData 两者 HEAD 为 `cc79654171bd00b00d9909f7973547a10790a945`；当时两仓工作树干净。
 
@@ -14,7 +14,9 @@
 | OpenData #133 CSI500历史对账器 | 限定合成回归68项通过、statement+branch 96.77%、0项排除。 | 未验证真实来源、calendar、source grant/retention、生产DB/调度或实际覆盖；不能关闭AC05/AC10/AC14。 |
 | AFI #193 snapshot授权策略 | 纯策略的离线行为已验收。 | 授权持久模型/迁移仍在本地开发中，未合入当前 AFI HEAD、未验收；尚无可信grant registry/数据库签发撤销、route/task接线和读取/保存前复核；不能关闭AC09或AC18。 |
 
-**2026-10-31 更正与新增证据**：AFI #201（`1af1366cccbdeef57d7c84c15820d556124c8cf8`）已合入精确 snapshot grant 的 ORM 模型与 Alembic 迁移 `20261030_stock_analysis_snapshot_grants`，因此上表 #193 行“授权持久模型/迁移仍在本地开发中”只适用于 2026-10-30 时点。当前存储默认为空，不签发权限、不认证签发人、不强制完整审计链；该合入提交也没有可信 adapter、route/task 接线、读取/保存前复核或数据库级 UPDATE/DELETE 保护；AC09/AC18 仍不能关闭。AFI #202（`076caa979498f0e930f5454bf7b48b766e3d29e1`）新增固定 stock-daily publication reader，但未接业务路径/授权/fallback，且上游路由硬禁用。OpenData #144–#149 只交付隔离 source-gate 样本准备、离线缺口对账、硬禁用的 v2 日线路由、job 请求预算、MySQL 反射 CHECK 校验和模拟 THS 的 MySQL 竖向验收夹具；提交与文档未记录测试通过数，均不构成真实源、生产部署、自然周期或历史覆盖证据。
+**2026-10-31 更正与新增证据**：AFI #201（`1af1366cccbdeef57d7c84c15820d556124c8cf8`）已合入精确 snapshot grant 的 ORM 模型与 Alembic 迁移 `20261030_stock_analysis_snapshot_grants`，因此上表 #193 行“授权持久模型/迁移仍在本地开发中”只适用于 2026-10-30 时点。当前存储默认为空，不签发权限、不认证签发人、不强制完整审计链；该合入提交也没有可信 adapter、route/task 接线、读取/保存前复核或数据库级 UPDATE/DELETE 保护；AC09/AC18 仍不能关闭。AFI #202（`076caa979498f0e930f5454bf7b48b766e3d29e1`）新增固定 stock-daily publication reader，但未接业务路径/授权/fallback，且上游路由当时硬禁用（#150 后改为默认关闭的容量门禁，默认仍返回 404）。OpenData #144–#149 只交付隔离 source-gate 样本准备、离线缺口对账、当时硬禁用的 v2 日线路由、job 请求预算、MySQL 反射 CHECK 校验和模拟 THS 的 MySQL 竖向验收夹具；提交与文档未记录测试通过数，均不构成真实源、生产部署、自然周期或历史覆盖证据。
+
+**2026-10-31 Wave 15 合入与 CI 状态**：OpenData #150（`a76b48580c2f71ac3dc6a045a05edafba1f896e5`）合入默认关闭的股票日线容量门禁、仅执行回补执行器/CLI 与跨仓/回放 fixture；#151（`56d4cb38869c0fb8114c917be78e720506f659de`）合入 opt-in Fuyao 六 scope 真实字节回放（1 项通过、52 项观察 13/13/7/7/6/6，六个 manifest 实体 hash 校验）；#152（`373211d246ab3099ac8c551681c0f1703fcbd964`）合入离线当前 A 股 universe 候选（SZSE 真实样本 2,905 条、0 冲突；分页/完整性 `UNKNOWN`、无退市生命周期、`universe_census_attested=false`，SSE/BSE/Fuyao 真实响应体 `NOT_RUN`）；AFI #204（`b825f921476b6e698881e1be68993c8a4ac610e1`）合入股票日线精确 grant 扩展、默认关闭的授权 adapter、迁移与跨仓/回放测试（138 项定向）。这些只推进 `CODE/OFFLINE`，不关闭 AC05/AC09/AC10/AC14/AC17/AC18：容量门禁不是数据授权，Fuyao 回放不是实时来源，universe 候选不是权威全 A 分母。**CI 不是绿色**：上述 PR 按用户要求在 CI 清理前合入，已知 OpenData quality gate 与 full-history secret scan、AFI Governance Gate（PR body，合入后已更正）、Backend Security Scan、Doc Links、No Generated Artifacts 与 MySQL 9.4 Contract 失败；修复作为独立后续跟进，不能据此写成已通过。
 
 用户已声明AkShare、Fuyao可用于自动采集、保存及两个内部服务间使用；该声明无需重复询问，但具体AkShare函数的上游产品/endpoint、dataset/市场/历史/频率/留存范围仍须映射并记入运营grant。用户目标范围为全A股，包含计划定义的北交所及退市证券。当前API尚不支持BSE是实现限制，不得作为缩小全集分母的理由。完整范围的判定须有每个纳入交易所的当前证券目录、退市证券与跨板/换码事件、稳定身份及实际分页完整性证据；任何一项未知时全A股完整性保持 `UNKNOWN`。
 
