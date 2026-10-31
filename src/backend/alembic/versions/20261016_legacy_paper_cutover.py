@@ -274,6 +274,8 @@ def downgrade() -> None:
             "trg_lpc_receipt_no_delete",
             "trg_lpc_account_update",
             "trg_lpc_account_delete",
+            "trg_lpc_ounts_update",
+            "trg_lpc_ounts_delete",
             *[f"trg_lpc_{table[-5:]}_{action.lower()}" for table in _TABLES for action in ("INSERT", "UPDATE", "DELETE")],
         ]
         for name in names:
@@ -291,11 +293,16 @@ def downgrade() -> None:
             "trg_lpc_receipt_no_delete",
             "trg_lpc_account_update",
             "trg_lpc_account_delete",
+            "trg_lpc_ounts_update",
+            "trg_lpc_ounts_delete",
             *[f"trg_lpc_{table[-5:]}_{action.lower()}" for table in _TABLES for action in ("INSERT", "UPDATE", "DELETE")],
         ]
         for name in names:
             op.execute(sa.text(f"DROP TRIGGER IF EXISTS {name}"))
-    op.drop_index("ix_legacy_paper_writer_leases_account", table_name=_LEASE)
+    # MySQL uses the named account index to support the lease foreign key;
+    # drop_table removes it together with the constraint.
+    if dialect != "mysql":
+        op.drop_index("ix_legacy_paper_writer_leases_account", table_name=_LEASE)
     op.drop_table(_LEASE)
     op.drop_index("ix_legacy_paper_cutover_owner", table_name=_RECEIPT)
     op.drop_table(_RECEIPT)
