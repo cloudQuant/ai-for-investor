@@ -8,7 +8,7 @@
 
 现有盘点不能作为当前实时分母：2026-10-26 的逐文件 CSV 有 **1,066** 个脚本条目，其中 **0** 项标为完成（1,056 项为待盘点/待映射，10 项待辅助审查）。历史数据库快照为 **1,103** 个任务；历史迁移 dry-run 为 **1,103 BLOCKED、0 ready**。之后的记录指出这仍是历史快照，且部分盘点没有重新查询数据库。因此不能据此断言当前仍恰有这些脚本/任务，也不能断言现实中“绝对没有”已迁项目；开工先只读刷新运行清单，再建立各自日期和环境绑定的当前分母。
 
-当前有已合入的 Provider、采集/归档、REST、AFI reader 等局部代码和合成联调；涉及迭代204的新采集/消费路径保持默认关闭，未证明生产部署和定时运行。已有 THS 单股票日线 R7 隔离结果只覆盖模拟链路，尚无真实 THS 请求、真实目标 MySQL、v1 REST 返回和 AFI 实际业务调用串成的闭环，也未据此切换旧任务（2026-10-31 补充：已有实现但硬禁用的 v2 日线读取路由和 AFI 固定 publication reader，二者仍未接通真实链路）。Fuyao 财报已有原始归档合同和 AFI raw-only 消费设计；mock/合成或已有样本回放不等于六个真实查询端到端验收。**当前不能把代码已合入、API 已存在、合成测试通过或少量历史样本等同于生产迁移完成。**
+当前有已合入的 Provider、采集/归档、REST、AFI reader 等局部代码和合成联调；涉及迭代204的新采集/消费路径保持默认关闭，未证明生产部署和定时运行。已有 THS 单股票日线 R7 隔离结果只覆盖模拟链路，尚无真实 THS 请求、真实目标 MySQL、v1 REST 返回和 AFI 实际业务调用串成的闭环，也未据此切换旧任务（2026-10-31 补充：已有实现但默认关闭的 v2 日线读取路由和 AFI 固定 publication reader，二者仍未接通真实链路；#150 后路由由容量门禁控制，默认配置下返回 404）。Fuyao 财报已有原始归档合同和 AFI raw-only 消费设计；mock/合成或已有样本回放不等于六个真实查询端到端验收。**当前不能把代码已合入、API 已存在、合成测试通过或少量历史样本等同于生产迁移完成。**
 
 本计划将范围明确为两个先行垂直切片；每个切片完成真实单标的闭环后再扩展标的和任务。全 A 股含北交所、退市证券及从各证券实际起点开始的完整历史仍为目标，不因首批切片而缩小。
 
@@ -77,7 +77,7 @@ A 每次刷新后分别公布分母和状态，禁止把它们合成一个含糊
 
 - 当前任务/脚本/消费者运行态清单需要只读刷新；旧快照不足以声称当前总数与迁移比例。
 - THS R7 是隔离模拟；待补真实来源、目标 MySQL、v1 REST、AFI consumer 的一条身份绑定证据链。
-- Fuyao 三表六查询的端到端归档与 AFI raw evidence 需要真实闭环；既有 mock 和受限样本不能证明完整六查询、PIT 或全历史。
+- Fuyao 三表六查询的端到端归档与 AFI raw evidence 需要真实闭环；#151 已有六 scope 真实字节离线回放（1 项通过、52 项观察），但仍不是实时请求，不能证明完整六查询、PIT 或全历史。
 - 北交所接口/证券目录、退市与跨板生命周期、来源实际保留边界及真实数据质量仍未知。对 AkShare 的用户声明不自动确定每个底层 endpoint 或字段语义；逐项映射后记录。
 - 定时任务是否部署、启用及何时成功，必须通过当前只读运行清单和后续自然周期证据证明；本计划本身不启用任何任务，也不代表已经部署。
 - 财报 PIT、版本/修订规则、行业评分、成交量单位/复权语义等未验收前，保持限制并禁止静默归一化、评分或回测使用。
@@ -86,37 +86,38 @@ A 每次刷新后分别公布分母和状态，禁止把它们合成一个含糊
 
 ## 2026-10-31 当前前沿与下一步
 
-本节按 2026-10-31 两仓 `dev` HEAD 的合入内容记录，不包含工作树未提交改动；任何后续验收仍须重新绑定实际 HEAD。
+本节按 2026-10-31 Wave 15 合入后的两仓 `dev` HEAD 记录（AFI `b825f921476b6e698881e1be68993c8a4ac610e1`、OpenData `373211d246ab3099ac8c551681c0f1703fcbd964`）；任何后续验收仍须重新绑定实际 HEAD。
 
 ### 已实现的代码/离线前沿
 
-- 股票日线 v2 读取路由已实现但**硬禁用**：OpenData #146 的 `/api/v2/stock-daily/records` 固定 publication/snapshot/cursor 语义，但依赖强制返回 404，且不在 OpenAPI 中。
-- AFI 已有**固定 publication 读取器**：#202 新增 provider 方法与独立 reader，校验请求、publication/sequence、行、单位与 coverage；未接业务任务、授权或 fallback，且上游路由仍禁用。
+- 股票日线 v2 读取路由已实现，默认配置下返回 404：OpenData #146 的 `/api/v2/stock-daily/records` 固定 publication/snapshot/cursor 语义；#150 将原先无条件 404 的依赖替换为默认关闭的 digest-pinned 容量门禁，只有显式配置与证明文件同时有效才读取，且路由仍不在 OpenAPI 中。
+- AFI 已有**固定 publication 读取器**：#202 新增 provider 方法与独立 reader，校验请求、publication/sequence、行、单位与 coverage；未接业务任务、授权或 fallback，且上游路由默认关闭（#150 后由容量门禁控制）。
 - 已有可作为补采规划输入的**离线缺口对账**：#145 从调用方证据目录输出确定性 head/interior/tail 报告，不访问数据库/网络，不生成补采计划，也不执行补采。
 - 已有**模拟 THS 的 MySQL 竖向验收夹具**：#149 的 opt-in e2e 在专用 MySQL 8 上走 job→ODS/DWD→v1 REST，THS HTTP 仅用 `MockTransport`；提交/文档未记录其实际运行通过。
 - 已有**请求预算传递**：#147 支持单个 THS `stock_daily` job 的进程内预算；#136–#140 提供一次性 gate、quota provisioning 和 transport 限定。
 
 以上均属 `CODE/OFFLINE`，不包含 `REAL_SOURCE`、`DEPLOYMENT`、`NATURAL_CYCLE` 或历史覆盖证据。
 
-**2026-10-31 工作树增量（未提交，未合并）**：
+**2026-10-31 Wave 15 合入增量**：
 
-- 容量/部署门禁已实现为默认关闭的 digest-pinned attestation（`opendata/api/stock_daily_capacity.py`），仍不是生产启用；40 项定向测试通过。
-- 跨仓固定 publication wire 已用合成数据通过（9 项）；并用此前捕获的真实 Eastmoney 响应做离线回放，10 行经 job→publication→真实 v2 路由→AFI reader 通过（9 项）。回放没有重新请求来源。
-- 股票日线精确 grant 存储/策略已扩展到 `cn-equity-stock-daily`/`akshare.daily`，并新增默认关闭的读取前/响应后授权 adapter（138 项定向测试）。仍无签发/撤销 API、生产 grant registry、业务任务接线或报告保存前复核。
-- 回补执行器/CLI 已实现逐分片可恢复、失败停止、dry-run 默认和 `execution_only` 任务（49 项定向测试；容量、执行器与共享回归合并 434 项通过）。它只做本地 ledger/离线 fixture，不接真实来源、生产 MySQL 或调度。
-- 上述结果只把股票日线切片推进到 `CODE/OFFLINE` + 真实捕获字节回放；容量门禁不是数据授权，回放不是实时来源，执行器不是调度器。
+- 容量/部署门禁已随 OpenData #150（`a76b48580c2f71ac3dc6a045a05edafba1f896e5`）合入，实现为默认关闭的 digest-pinned attestation（`opendata/api/stock_daily_capacity.py`），仍不是生产启用；40 项定向测试通过。同批合入的仅执行回补执行器/CLI 支持逐分片可恢复、失败停止、dry-run 默认和 `execution_only` 任务（49 项定向；容量、执行器与共享回归合并 434 项通过），只做本地 ledger/离线 fixture，不接真实来源、生产 MySQL 或调度。
+- 跨仓固定 publication wire 已随 #150/#204 合入：合成数据 9 项通过；并用此前捕获的真实 Eastmoney 响应做离线回放，10 行经 job→publication→真实 v2 路由→AFI reader 通过（9 项）。回放没有重新请求来源。
+- 股票日线精确 grant 存储/策略已随 AFI #204（`b825f921476b6e698881e1be68993c8a4ac610e1`）扩展到 `cn-equity-stock-daily`/`akshare.daily`，并新增默认关闭的读取前/响应后授权 adapter（138 项定向测试；授权开启回放 11 项通过、1 项跳过）。仍无签发/撤销 API、生产 grant registry、业务任务接线或报告保存前复核。
+- Fuyao 六 scope（三表 × annual/quarterly）真实字节回放随 OpenData #151（`56d4cb38869c0fb8114c917be78e720506f659de`）合入：opt-in 测试 **1 项通过、52 项观察（13/13/7/7/6/6）**，校验六个 manifest 实体 hash；仍是对此前捕获真实字节的离线回放，不是实时请求。
+- 离线当前 A 股 universe 候选随 OpenData #152（`373211d246ab3099ac8c551681c0f1703fcbd964`）合入：真实 SZSE 样本 **21 项通过、2,905 条候选、0 冲突**，synthetic 20 项通过、1 项跳过；分页终止 `UNKNOWN`、无退市生命周期、`universe_census_attested=false`，SSE/BSE/Fuyao 真实响应体 `NOT_RUN`，新模块另有 16 项 scoped mypy 诊断留待 CI 清理。
+- 上述结果把股票日线切片推进到 `CODE/OFFLINE` + 真实捕获字节回放，并为 Fuyao/universe 增加离线证据；容量门禁不是数据授权，回放不是实时来源，执行器不是调度器，universe 候选不是权威全 A 分母。CI 不是绿色（OpenData quality gate/full-history secret scan；AFI Governance Gate、Backend Security Scan、Doc Links、No Generated Artifacts、MySQL 9.4 Contract 失败），修复另行跟进。
 
 ### 剩余关键路径（按顺序）
 
 1. ~~显式的容量/部署门禁~~：代码已实现并默认关闭；仍需在目标部署环境完成操作者证明、时钟/数据库/容量核验后才能启用。
 2. ~~跨仓固定 publication 的 wire 验收~~：合成 wire 与真实捕获字节离线回放已通过；仍需实时来源与生产部署下的同链证据。
 3. 精确的 stock-daily grant/授权：存储与 adapter 已具备默认关闭的代码路径；仍需真实用户 `READ_DATA`、来源研究 grant 的签发/撤销、后台执行与报告保存前复核。
-4. 真实且受限的来源样本：一次有界的 THS/AkShare 实时请求，记录参数、响应摘要、字段/单位、观测时间和来源边界；现有真实捕获回放不能替代。
+4. 真实且受限的来源样本：一次有界的 THS/AkShare 实时请求，记录参数、响应摘要、字段/单位、观测时间和来源边界；现有真实捕获回放（含 Fuyao 六 scope）不能替代。
 5. 生产 MySQL/部署：在目标环境完成迁移、读写、权限与恢复证据。
 6. 受控影子对账：只读比较旧数据与新 publication，逐项解释差异。
 7. 单写者切换：停止旧 writer 新 claim、排空在途任务并 fence 旧凭证/进程。
 8. 自然周期：观察真实调度周期及 watermark/告警/重试恢复。
-9. 全 A 历史：按权威分母逐 `instrument_id × dataset_id` 核验实际起点至目标终点。
+9. 全 A 历史：按权威分母逐 `instrument_id × dataset_id` 核验实际起点至目标终点；#152 的 universe 候选只是离线捕获样本，不是权威分母。
 
 ### 外部阻塞
 

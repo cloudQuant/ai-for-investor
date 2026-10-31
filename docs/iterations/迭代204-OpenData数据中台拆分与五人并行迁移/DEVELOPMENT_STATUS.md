@@ -1163,11 +1163,11 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 
 ### 本批共同边界
 
-上述 PR 合计只推进了代码、离线工具、隔离夹具和计划文本。仍无真实 THS/Fuyao 来源请求、生产 MySQL 部署、AFI 业务接线、自然调度周期、单写者切换或逐标的全历史对账证据；没有证据表明这些新入口已注册为生产任务，v2 日线路由保持硬禁用。全 A 股（含北交所、退市证券）分母、来源授权/保留范围、BSE 目录和 MySQL/InnoDB 生产行为继续为 `UNKNOWN` 或 `NOT_RUN`。
+上述 PR 合计只推进了代码、离线工具、隔离夹具和计划文本。仍无真实 THS/Fuyao 来源请求、生产 MySQL 部署、AFI 业务接线、自然调度周期、单写者切换或逐标的全历史对账证据；没有证据表明这些新入口已注册为生产任务，v2 日线路由保持硬禁用。全 A 股（含北交所、退市证券）分母、来源授权/保留范围、BSE 目录和 MySQL/InnoDB 生产行为继续为 `UNKNOWN` 或 `NOT_RUN`。该结论限于 #134–#149 批次；#150 合入后改为默认关闭的容量门禁，默认配置下仍返回 404。
 
-## 2026-10-31 Wave 13/14：容量门禁、股票日线授权、回补执行器与真实捕获字节回放
+## 2026-10-31 Wave 13/14（已合入）：容量门禁、股票日线授权、回补执行器与真实捕获字节回放
 
-本节记录**两仓工作树中尚未提交**的 Wave 13/14 增量；它不改变上一节“按已合入 HEAD 核对”的基线，也不表示这些改动已合并、已部署或已获生产接受。两仓 HEAD 仍分别为 AFI `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`、OpenData `7cc613bfc15fc3e35da9213d204955e269ae1b83`。
+本节记录 Wave 13/14 增量的**合入**状态：OpenData 部分随 #150 `a76b48580c2f71ac3dc6a045a05edafba1f896e5` 合入，AFI 部分随 #204 `b825f921476b6e698881e1be68993c8a4ac610e1` 合入。合入只表示这些代码与离线测试进入两仓 `dev`，**不表示已部署、已启用或已获生产接受**；上一节“按已合入 HEAD 核对”的结论仍分别适用于其自身批次。四个合入提交的汇总、证据边界与 CI 状态见下节“Wave 15：合入记录”。
 
 ### 1. OpenData：受 digest-pinned 容量证明保护的股票日线 v2 读取门禁
 
@@ -1203,7 +1203,7 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 ### 6. 质量门禁与开放边界
 
 - 新增/修改文件的 Ruff check/format 通过；scoped mypy 在修复后无新增问题；AFI 定向测试与 Ruff 通过。
-- `make published-openapi-check` 在当前 HEAD/工作树仍失败于既有 `unsupported OpenAPI reference: #/$defs/Exchange`；stock-daily 路由 `include_in_schema=False`，该失败不是本批路由改动引入的，但也不能写成通过。
+- `make published-openapi-check` 的既有失败（`unsupported OpenAPI reference: #/$defs/Exchange`）来自 Wave 13/14 记录，本次未在 Wave 15 HEAD 重跑，不能写成通过；stock-daily 路由 `include_in_schema=False`，该失败不是本批路由改动引入的。
 - `make a2-check` 本轮运行以 **30 个既有 finding** 结束（例如 `tests/test_ths_dwd_integration.py`、`tests/test_watermark.py` 等）；日志中未将 finding 归到本批新增的 stock-daily 文件，但这仍是全仓门禁失败，不能写成通过。
 - 覆盖率因当前环境的 pytest-cov 提前导入触发既有 `Settings` 初始化错误而未采集，不能补造覆盖率数字。上述测试结果均为定向/隔离运行，不等于整仓 `make gate`、远端 CI 或 Python 3.10 runtime 通过。
 - 本批证据摘要与文件哈希位于 [`wave13-14-20261031/SUMMARY.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/wave13-14-20261031/SUMMARY.md>) 与同目录 `SHA256SUMS`。
@@ -1219,3 +1219,25 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 | 204-E03-05 | 固定 publication/content hash 的 AFI reader 与回放证据 | 报告工件、publication/vector 长期保留、真实数据与 PIT 证据 |
 | 204-E06-03 | 跨仓合成 wire + 真实捕获字节回放（离线） | 真实来源、生产部署、真实 grant、影子/自然周期 |
 | 204-B02-04/05 | 真实 body 的离线回放与字段/单位通过 reader 验证 | 实时来源、真实授权、全历史与单位/复权独立校准 |
+
+## 2026-10-31 Wave 15：合入记录
+
+本节记录四个后续合入；两仓当前 HEAD 分别为 AFI `b825f921476b6e698881e1be68993c8a4ac610e1`（#204）、OpenData `373211d246ab3099ac8c551681c0f1703fcbd964`（#152）。合入只表示各 PR 声明的代码/离线与测试范围进入 `dev`，不改变上方 Wave 13/14 的证据边界，也不表示迭代204完成、已部署或已获生产接受。
+
+| 仓库/PR | 合入提交 | 本次合入范围 |
+| --- | --- | --- |
+| OpenData [#150](https://github.com/cloudQuant/opendata/pull/150) | `a76b48580c2f71ac3dc6a045a05edafba1f896e5` | 股票日线 v2 路由的 digest-pinned 容量门禁（默认关闭）；仅执行模式的回补执行器与 CLI（计划摘要/分块幂等绑定、终态跳过、失败停止、dry-run 默认、`execution_only` 任务）；跨仓与真实捕获回放的 fixture server。门禁绑定 dataset/source/semantic version/contract SHA-256/publication/窗口/页大小/有效期，任一不符返回 404。 |
+| OpenData [#151](https://github.com/cloudQuant/opendata/pull/151) | `56d4cb38869c0fb8114c917be78e720506f659de` | opt-in 的 Fuyao 六 scope（利润表/资产负债表/现金流量表 × annual/quarterly）真实样本回放测试：经 reviewed job、临时 SQLite archive、真实 archive route 与 AFI financial-archive reader，校验 manifest 与实体 hash，漂移时失败关闭。 |
+| OpenData [#152](https://github.com/cloudQuant/opendata/pull/152) | `373211d246ab3099ac8c551681c0f1703fcbd964` | 离线当前 A 股 universe 候选模块、CLI、测试与文档：从捕获的 SSE/SZSE/BSE/Fuyao 目录构建确定性候选，保留市场限定身份，报告重复/冲突而不合并，completeness/pagination 保持显式 `UNKNOWN`；不发布到数据库或 API。 |
+| AFI [#204](https://github.com/cloudQuant/ai-for-investor/pull/204) | `b825f921476b6e698881e1be68993c8a4ac610e1` | 股票日线精确 grant 扩展到 `cn-equity-stock-daily`/`akshare.daily`；默认关闭的读取前/响应后授权 adapter；迁移 `20261031_stock_daily_snapshot_grants`；跨仓合成 wire 与真实捕获字节回放测试及文档。 |
+
+**证据**（均为定向/离线运行，不等于整仓 `make gate`、remote CI 或 Python 3.10 runtime）：
+
+- 股票日线：OpenData 定向 **434 项通过**（容量 40、执行器/CLI/plan/budget 49、共享 ledger/worker/job 回归 345）；AFI 授权 **138 项通过**（storage/policy/reader/adapter，adapter 14 项）；合成跨仓 wire **9 项通过**；真实捕获字节回放 **9 项通过**；授权开启回放 **11 项通过、1 项跳过**（缺 grant 请求前拒绝、读取后撤销失败关闭）。
+- Fuyao 六 scope：#151 opt-in 回放 **1 项通过**，覆盖 **52 项观察（13/13/7/7/6/6）**，六个 manifest 实体 hash 校验一致。回放的是此前捕获的真实字节，不是实时请求。
+- Universe 候选：#152 synthetic **20 项通过、1 项跳过**；真实 SZSE opt-in **21 项通过**，得到 **2,905 条候选记录、0 冲突**；分页终止仍为 `UNKNOWN`，无退市生命周期，`universe_census_attested=false`；SSE/BSE/Fuyao 真实响应体为 `NOT_RUN`；新模块另有 **16 项 scoped mypy 诊断**，留待 CI 清理。
+- `make published-openapi-check` 与 `make a2-check` 的 Wave 13/14 既有失败未在本节重跑，不能写成通过；AFI #204 迁移未在生产 MySQL 运行，测试中的 grant、principal、API key 均为合成。
+
+**CI 状态：不是绿色。** 上述 PR 按用户要求在 CI 清理前合入。已知失败：OpenData quality gate 与 full-history secret scan；AFI Governance Gate（PR body，合入后已更正）、Backend Security Scan、Doc Links、No Generated Artifacts 与 MySQL 9.4 Contract。CI 修复计划作为独立后续跟进，不能以本节的合入事实或定向测试替代。
+
+**共同非声明**：四个合入均没有实时来源请求、生产 MySQL/部署、自然周期、全历史/覆盖完整性或来源权利/PIT 证明；合成 grant/principal/API key 不代表生产授权；Fuyao/universe 原始样本仍保存在私有归档，未进入 Git。v2 日线路由在默认配置下仍返回 404，容量门禁不是数据授权，回补执行器不是调度器，universe 候选不是权威全 A 分母。**父任务保持开放**，逐子任务影响见 [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) 的 Wave 13/14/15 合入证据节。
