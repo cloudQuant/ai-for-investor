@@ -1,7 +1,6 @@
 """Behavioral storage contract for exact OpenData snapshot grants.
 
-These tests use only an isolated in-memory SQLite database. The implementation
-agent did not run this file under the parent task's no-DB/no-test instruction.
+These tests use only isolated in-memory or temporary-file SQLite databases.
 """
 
 from __future__ import annotations
@@ -13,13 +12,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, event, func, inspect, select
-from sqlalchemy.engine import Engine
+from sqlalchemy import create_engine, event, func, inspect, select, text
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from alembic import command
 from app.db.database import Base
 from app.models import (
     ImmutableStockSnapshotGrantError,
@@ -42,6 +43,9 @@ _STOCK_DAILY_MIGRATION_PATH = (
     / "versions"
     / "20261031_stock_daily_snapshot_grants.py"
 )
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_PRE_GRANT_REVISION = "20261017_legacy_paper_import_cutover"
+_STOCK_DAILY_REVISION = "20261031_stock_daily_snapshot_grants"
 _STOCK_DAILY_DATASET = "cn-equity-stock-daily"
 _STOCK_DAILY_SOURCE = "akshare.daily"
 _TABLES = (
@@ -49,6 +53,7 @@ _TABLES = (
     StockSnapshotSourceResearchGrant.__table__,
     StockSnapshotGrantAudit.__table__,
 )
+_TABLES_BY_NAME = tuple(table.name for table in _TABLES)
 _USER_ID = "4a5a77a0-8db9-4e20-b8a3-070aef54e417"
 _OTHER_USER_ID = "7ec9aefe-f57a-47cc-955b-8b94e0105578"
 _USER_GRANT_ID = "88919c8f-6bd3-44ca-a96b-26c5b0551960"
@@ -177,6 +182,129 @@ def _run_migration(engine: Engine, migration: Any, operation: str) -> None:
     with engine.begin() as connection:
         with Operations.context(MigrationContext.configure(connection)):
             getattr(migration, operation)()
+
+
+def _run_alembic(database_url: str, action: str, target: str) -> None:
+    """Run one Alembic command against an isolated SQLite file."""
+    config = Config(str(_BACKEND_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
+    config.set_main_option("sqlalchemy.url", database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            getattr(command, action)(config, target)
+    finally:
+        engine.dispose()
+
+
+_USER_CHECK_NAMES = {
+    "ck_stock_snapshot_user_permission",
+    "ck_stock_snapshot_user_dataset",
+    "ck_stock_snapshot_user_market",
+    "ck_stock_snapshot_user_snapshot_ids",
+    "ck_stock_snapshot_user_purpose",
+    "ck_stock_snapshot_user_revision",
+    "ck_stock_snapshot_user_validity",
+}
+_SOURCE_CHECK_NAMES = {
+    "ck_stock_snapshot_source_dataset",
+    "ck_stock_snapshot_source_market",
+    "ck_stock_snapshot_source_snapshot_ids",
+    "ck_stock_snapshot_source_purpose",
+    "ck_stock_snapshot_source_revision",
+    "ck_stock_snapshot_source_registry_revision",
+    "ck_stock_snapshot_source_validity",
+}
+_RAW_TIMESTAMP = "2026-10-30 09:00:00.000000"
+_RAW_EXPIRES_AT = "2026-10-30 10:00:00.000000"
+
+
+def _insert_user_row(connection: Connection) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO users (id, username, email, hashed_password) "
+            "VALUES (:id, :username, :email, :hashed_password)"
+        ),
+        {
+            "id": _USER_ID,
+            "username": "migration-grant-owner",
+            "email": "migration-grant-owner@example.test",
+            "hashed_password": "test-only-hash",
+        },
+    )
+
+
+def _insert_user_grant_row(
+    connection: Connection,
+    *,
+    grant_id: str = _USER_GRANT_ID,
+    dataset_id: str = _STOCK_DAILY_DATASET,
+) -> None:
+    """Insert via raw SQL so the database CHECK, not the ORM, decides validity."""
+    connection.execute(
+        text(
+            "INSERT INTO stock_snapshot_user_read_grants ("
+            "id, user_id, permission, dataset_id, instrument_id, market, "
+            "publication_id, capture_id, purpose, revision, valid_from, expires_at, created_at"
+            ") VALUES ("
+            ":id, :user_id, 'data:read', :dataset_id, '600000.SH', 'SH', "
+            ":publication_id, :capture_id, 'RESEARCH', 1, :valid_from, :expires_at, :created_at"
+            ")"
+        ),
+        {
+            "id": grant_id,
+            "user_id": _USER_ID,
+            "dataset_id": dataset_id,
+            "publication_id": "e" * 32,
+            "capture_id": "f" * 64,
+            "valid_from": _RAW_TIMESTAMP,
+            "expires_at": _RAW_EXPIRES_AT,
+            "created_at": _RAW_TIMESTAMP,
+        },
+    )
+
+
+def _insert_source_grant_row(
+    connection: Connection,
+    *,
+    dataset_id: str = _STOCK_DAILY_DATASET,
+    source_id: str = _STOCK_DAILY_SOURCE,
+) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO stock_snapshot_source_research_grants ("
+            "id, user_id, source_id, dataset_id, instrument_id, market, "
+            "publication_id, capture_id, purpose, source_registry_revision, revision, "
+            "valid_from, expires_at, created_at"
+            ") VALUES ("
+            ":id, :user_id, :source_id, :dataset_id, '600000.SH', 'SH', "
+            ":publication_id, :capture_id, 'RESEARCH', 'source-policy-r17', 1, "
+            ":valid_from, :expires_at, :created_at"
+            ")"
+        ),
+        {
+            "id": _SOURCE_GRANT_ID,
+            "user_id": _USER_ID,
+            "source_id": source_id,
+            "dataset_id": dataset_id,
+            "publication_id": "e" * 32,
+            "capture_id": "f" * 64,
+            "valid_from": _RAW_TIMESTAMP,
+            "expires_at": _RAW_EXPIRES_AT,
+            "created_at": _RAW_TIMESTAMP,
+        },
+    )
+
+
+def _check_constraint_names(engine: Engine, table_name: str) -> list[str]:
+    return [item["name"] for item in inspect(engine).get_check_constraints(table_name)]
+
+
+def _check_constraint_sql(engine: Engine, table_name: str) -> dict[str, str]:
+    return {
+        item["name"]: item["sqltext"] for item in inspect(engine).get_check_constraints(table_name)
+    }
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -637,7 +765,7 @@ def test_orm_rejects_naive_grant_and_audit_timestamps() -> None:
         engine.dispose()
 
 
-def test_migration_creates_empty_tables_and_downgrade_fails_closed() -> None:
+def test_migration_creates_empty_tables_and_empty_downgrade_succeeds() -> None:
     engine = _engine()
     migration = _load_migration()
     try:
@@ -647,14 +775,21 @@ def test_migration_creates_empty_tables_and_downgrade_fails_closed() -> None:
         assert set(migration._TABLES).issubset(set(inspect(engine).get_table_names()))
         with Session(engine) as session:
             assert session.scalar(select(func.count()).select_from(StockSnapshotGrantAudit)) == 0
-        with pytest.raises(RuntimeError, match="STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"):
-            _run_migration(engine, migration, "downgrade")
+
+        _run_migration(engine, migration, "downgrade")
+        remaining = set(inspect(engine).get_table_names())
+        assert set(migration._TABLES).isdisjoint(remaining)
+        assert User.__tablename__ in remaining
+        with engine.begin() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
+
+        _run_migration(engine, migration, "upgrade")
         assert set(migration._TABLES).issubset(set(inspect(engine).get_table_names()))
     finally:
         engine.dispose()
 
 
-def test_migration_downgrade_refuses_to_delete_grant_evidence() -> None:
+def test_migration_downgrade_refuses_to_delete_user_grant_evidence() -> None:
     engine = _engine()
     migration = _load_migration()
     try:
@@ -668,11 +803,82 @@ def test_migration_downgrade_refuses_to_delete_grant_evidence() -> None:
         with pytest.raises(RuntimeError, match="STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"):
             _run_migration(engine, migration, "downgrade")
         assert set(migration._TABLES).issubset(set(inspect(engine).get_table_names()))
+        with Session(engine) as session:
+            assert session.get(StockSnapshotUserReadGrant, _USER_GRANT_ID) is not None
     finally:
         engine.dispose()
 
 
-def test_offline_migration_downgrade_fails_before_emitting_destructive_ddl() -> None:
+def test_migration_downgrade_refuses_to_delete_source_grant_evidence() -> None:
+    engine = _engine()
+    migration = _load_migration()
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+        _run_migration(engine, migration, "upgrade")
+        with Session(engine) as session:
+            _add_user(session)
+            session.add(_source_grant())
+            session.commit()
+        with pytest.raises(RuntimeError, match="STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"):
+            _run_migration(engine, migration, "downgrade")
+        assert set(migration._TABLES).issubset(set(inspect(engine).get_table_names()))
+        with Session(engine) as session:
+            assert session.get(StockSnapshotSourceResearchGrant, _SOURCE_GRANT_ID) is not None
+    finally:
+        engine.dispose()
+
+
+def test_migration_downgrade_refuses_to_delete_audit_evidence() -> None:
+    """Probe the audit table independently, even with grant foreign keys unenforced."""
+    engine = create_engine("sqlite://")
+    migration = _load_migration()
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+        _run_migration(engine, migration, "upgrade")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, username, email, hashed_password) "
+                    "VALUES (:id, 'audit-owner', 'audit-owner@example.test', 'test-only-hash')"
+                ),
+                {"id": _USER_ID},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO stock_snapshot_grant_audits ("
+                    "id, user_grant_id, subject_user_id, actor_user_id, event_type, "
+                    "grant_revision, revocation_revision, policy_version, occurred_at, "
+                    "reason_code, idempotency_key_sha256"
+                    ") VALUES ("
+                    "'00000000-0000-0000-0000-0000000000ff', :grant_id, :user_id, :user_id, "
+                    "'ISSUED', 1, 1, 'stock-analysis-opendata-access-v1', :occurred_at, "
+                    "'audit_only_probe', :idempotency_hash"
+                    ")"
+                ),
+                {
+                    "grant_id": _USER_GRANT_ID,
+                    "user_id": _USER_ID,
+                    "occurred_at": _RAW_TIMESTAMP,
+                    "idempotency_hash": "9" * 64,
+                },
+            )
+        with pytest.raises(RuntimeError, match="STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"):
+            _run_migration(engine, migration, "downgrade")
+        assert set(migration._TABLES).issubset(set(inspect(engine).get_table_names()))
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM stock_snapshot_grant_audits")
+                ).scalar()
+                == 1
+            )
+    finally:
+        engine.dispose()
+
+
+def test_offline_migration_downgrade_emits_precheck_and_drops() -> None:
     migration = _load_migration()
     output = StringIO()
     context = MigrationContext.configure(
@@ -680,9 +886,16 @@ def test_offline_migration_downgrade_fails_before_emitting_destructive_ddl() -> 
         opts={"as_sql": True, "output_buffer": output},
     )
     with Operations.context(context):
-        with pytest.raises(RuntimeError, match="STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"):
-            migration.downgrade()
-    assert output.getvalue() == ""
+        migration.downgrade()
+    sql = output.getvalue()
+    assert "STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED" in sql
+    for probe in migration._DOWNGRADE_PROBES:
+        assert str(probe) in sql
+    for table_name in migration._DROP_ORDER:
+        assert f"DROP TABLE {table_name}" in sql
+    drop_position = sql.index(f"DROP TABLE {migration._DROP_ORDER[0]}")
+    for probe in migration._DOWNGRADE_PROBES:
+        assert sql.index(str(probe)) < drop_position
 
 
 def test_stock_daily_dataset_and_source_grants_round_trip() -> None:
@@ -781,16 +994,10 @@ def test_stock_daily_migration_widens_checks_and_preserves_constraints() -> None
         _run_migration(engine, migration, "upgrade")
 
         inspector = inspect(engine)
-        user_checks = {
-            item["name"]: item["sqltext"]
-            for item in inspector.get_check_constraints(StockSnapshotUserReadGrant.__tablename__)
-        }
-        source_checks = {
-            item["name"]: item["sqltext"]
-            for item in inspector.get_check_constraints(
-                StockSnapshotSourceResearchGrant.__tablename__
-            )
-        }
+        user_checks = _check_constraint_sql(engine, StockSnapshotUserReadGrant.__tablename__)
+        source_checks = _check_constraint_sql(
+            engine, StockSnapshotSourceResearchGrant.__tablename__
+        )
         assert _STOCK_DAILY_DATASET in user_checks["ck_stock_snapshot_user_dataset"]
         assert _STOCK_DAILY_DATASET in source_checks["ck_stock_snapshot_source_dataset"]
         assert _STOCK_DAILY_SOURCE in source_checks["ck_stock_snapshot_source_dataset"]
@@ -812,8 +1019,55 @@ def test_stock_daily_migration_widens_checks_and_preserves_constraints() -> None
             for item in inspector.get_indexes(StockSnapshotSourceResearchGrant.__tablename__)
         } == {"ix_stock_snapshot_source_lookup"}
 
-        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED"):
-            _run_migration(engine, migration, "downgrade")
+        # A clean schema downgrades: both CHECKs narrow and nothing is duplicated.
+        _run_migration(engine, migration, "downgrade")
+        assert sorted(
+            _check_constraint_names(engine, StockSnapshotUserReadGrant.__tablename__)
+        ) == sorted(_USER_CHECK_NAMES)
+        assert sorted(
+            _check_constraint_names(engine, StockSnapshotSourceResearchGrant.__tablename__)
+        ) == sorted(_SOURCE_CHECK_NAMES)
+        narrowed_user = _check_constraint_sql(engine, StockSnapshotUserReadGrant.__tablename__)
+        narrowed_source = _check_constraint_sql(
+            engine, StockSnapshotSourceResearchGrant.__tablename__
+        )
+        assert _STOCK_DAILY_DATASET not in narrowed_user["ck_stock_snapshot_user_dataset"]
+        assert _STOCK_DAILY_DATASET not in narrowed_source["ck_stock_snapshot_source_dataset"]
+        assert _STOCK_DAILY_SOURCE not in narrowed_source["ck_stock_snapshot_source_dataset"]
+        assert {
+            item["name"]
+            for item in inspect(engine).get_indexes(StockSnapshotUserReadGrant.__tablename__)
+        } == {"ix_stock_snapshot_user_lookup"}
+
+        with engine.begin() as connection:
+            _insert_user_row(connection)
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                _insert_user_grant_row(connection)
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                _insert_source_grant_row(connection)
+
+        # Re-upgrade restores exactly one widened CHECK per table and accepts pairs.
+        _run_migration(engine, migration, "upgrade")
+        assert len(
+            _check_constraint_names(engine, StockSnapshotUserReadGrant.__tablename__)
+        ) == len(_USER_CHECK_NAMES)
+        assert len(
+            _check_constraint_names(engine, StockSnapshotSourceResearchGrant.__tablename__)
+        ) == len(_SOURCE_CHECK_NAMES)
+        with engine.begin() as connection:
+            _insert_user_grant_row(connection)
+            _insert_source_grant_row(connection)
+        with Session(engine) as session:
+            stored_user = session.get(StockSnapshotUserReadGrant, _USER_GRANT_ID)
+            stored_source = session.get(StockSnapshotSourceResearchGrant, _SOURCE_GRANT_ID)
+            assert stored_user is not None and stored_user.dataset_id == _STOCK_DAILY_DATASET
+            assert stored_source is not None
+            assert (stored_source.dataset_id, stored_source.source_id) == (
+                _STOCK_DAILY_DATASET,
+                _STOCK_DAILY_SOURCE,
+            )
     finally:
         engine.dispose()
 
@@ -828,14 +1082,194 @@ def test_stock_daily_migration_refuses_an_unreviewed_schema() -> None:
         engine.dispose()
 
 
-def test_stock_daily_offline_downgrade_fails_before_emitting_ddl() -> None:
+def test_stock_daily_downgrade_refuses_persisted_stock_daily_user_grant() -> None:
+    engine = _engine()
+    baseline = _load_migration()
+    migration = _load_stock_daily_migration()
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+        _run_migration(engine, baseline, "upgrade")
+        _run_migration(engine, migration, "upgrade")
+        with engine.begin() as connection:
+            _insert_user_row(connection)
+            _insert_user_grant_row(connection)
+
+        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED"):
+            _run_migration(engine, migration, "downgrade")
+
+        # Schema is still widened, the row survives, and one CHECK remains per table.
+        assert (
+            _STOCK_DAILY_DATASET
+            in _check_constraint_sql(engine, StockSnapshotUserReadGrant.__tablename__)[
+                "ck_stock_snapshot_user_dataset"
+            ]
+        )
+        assert sorted(
+            _check_constraint_names(engine, StockSnapshotUserReadGrant.__tablename__)
+        ) == sorted(_USER_CHECK_NAMES)
+        with Session(engine) as session:
+            stored = session.get(StockSnapshotUserReadGrant, _USER_GRANT_ID)
+            assert stored is not None and stored.dataset_id == _STOCK_DAILY_DATASET
+    finally:
+        engine.dispose()
+
+
+def test_stock_daily_downgrade_refuses_persisted_stock_daily_source_grant() -> None:
+    engine = _engine()
+    baseline = _load_migration()
+    migration = _load_stock_daily_migration()
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+        _run_migration(engine, baseline, "upgrade")
+        _run_migration(engine, migration, "upgrade")
+        with engine.begin() as connection:
+            _insert_user_row(connection)
+            _insert_source_grant_row(connection)
+
+        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED"):
+            _run_migration(engine, migration, "downgrade")
+
+        assert (
+            _STOCK_DAILY_SOURCE
+            in _check_constraint_sql(engine, StockSnapshotSourceResearchGrant.__tablename__)[
+                "ck_stock_snapshot_source_dataset"
+            ]
+        )
+        with Session(engine) as session:
+            stored = session.get(StockSnapshotSourceResearchGrant, _SOURCE_GRANT_ID)
+            assert stored is not None and stored.source_id == _STOCK_DAILY_SOURCE
+    finally:
+        engine.dispose()
+
+
+def test_stock_daily_downgrade_narrows_clean_sqlite_schema_one_revision() -> None:
+    """Fresh upgrade to head, one-revision downgrade, then upgrade again on SQLite."""
+    engine = _engine()
+    baseline = _load_migration()
+    migration = _load_stock_daily_migration()
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+        _run_migration(engine, baseline, "upgrade")
+        _run_migration(engine, migration, "upgrade")
+        with engine.begin() as connection:
+            _insert_user_row(connection)
+            _insert_user_grant_row(
+                connection,
+                grant_id="00000000-0000-0000-0000-0000000000aa",
+                dataset_id="sina_lrb_report_observations",
+            )
+
+        _run_migration(engine, migration, "downgrade")
+        with Session(engine) as session:
+            preserved = session.get(
+                StockSnapshotUserReadGrant, "00000000-0000-0000-0000-0000000000aa"
+            )
+            assert preserved is not None
+            assert preserved.dataset_id == "sina_lrb_report_observations"
+        _run_migration(engine, migration, "upgrade")
+
+        with engine.begin() as connection:
+            _insert_user_grant_row(connection)
+        with Session(engine) as session:
+            assert session.get(StockSnapshotUserReadGrant, _USER_GRANT_ID) is not None
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("dialect_name", "drop_fragment", "add_fragment"),
+    [
+        ("mysql", "DROP CHECK", "ADD CONSTRAINT ck_stock_snapshot_user_dataset"),
+        ("postgresql", "DROP CONSTRAINT", "ADD CONSTRAINT ck_stock_snapshot_user_dataset"),
+    ],
+)
+def test_stock_daily_offline_downgrade_compiles_narrowing_ddl(
+    dialect_name: str, drop_fragment: str, add_fragment: str
+) -> None:
+    """Compile the downgrade DDL for MySQL/PostgreSQL without a live database."""
     migration = _load_stock_daily_migration()
     output = StringIO()
     context = MigrationContext.configure(
-        dialect_name="sqlite",
+        dialect_name=dialect_name,
         opts={"as_sql": True, "output_buffer": output},
     )
     with Operations.context(context):
-        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED"):
-            migration.downgrade()
-    assert output.getvalue() == ""
+        migration.downgrade()
+    sql = output.getvalue()
+    assert "STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED" in sql
+    assert str(migration._USER_GRANT_DOWNGRADE_PROBE) in sql
+    assert str(migration._SOURCE_GRANT_DOWNGRADE_PROBE) in sql
+    assert f"ALTER TABLE stock_snapshot_user_read_grants {drop_fragment}" in sql
+    assert f"ALTER TABLE stock_snapshot_source_research_grants {drop_fragment}" in sql
+    assert add_fragment in sql
+    user_add = sql.split(add_fragment, 1)[1].split(";", 1)[0]
+    assert "sina_fzb_report_observations" in user_add
+    assert "sina_lrb_report_observations" in user_add
+    assert _STOCK_DAILY_DATASET not in user_add
+    assert "akshare.daily" not in user_add
+
+
+@pytest.mark.parametrize("dialect_name", ["mysql", "postgresql"])
+def test_offline_grant_downgrade_compiles_drops_after_precheck(dialect_name: str) -> None:
+    migration = _load_migration()
+    output = StringIO()
+    context = MigrationContext.configure(
+        dialect_name=dialect_name,
+        opts={"as_sql": True, "output_buffer": output},
+    )
+    with Operations.context(context):
+        migration.downgrade()
+    sql = output.getvalue()
+    assert "STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED" in sql
+    positions = [sql.index(f"DROP TABLE {table}") for table in migration._DROP_ORDER]
+    assert positions == sorted(positions)
+    for probe in migration._DOWNGRADE_PROBES:
+        assert sql.index(str(probe)) < positions[0]
+
+
+def test_grant_revision_chain_round_trips_on_empty_sqlite_database(tmp_path) -> None:
+    """Stamp the pre-grant revision, upgrade head, downgrade both grants, re-upgrade."""
+    database_url = f"sqlite:///{tmp_path / 'grant-chain.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE users (id VARCHAR(36) PRIMARY KEY)")
+    finally:
+        engine.dispose()
+
+    _run_alembic(database_url, "stamp", _PRE_GRANT_REVISION)
+    _run_alembic(database_url, "upgrade", _STOCK_DAILY_REVISION)
+    engine = create_engine(database_url)
+    try:
+        assert set(_TABLES_BY_NAME).issubset(set(inspect(engine).get_table_names()))
+    finally:
+        engine.dispose()
+
+    _run_alembic(database_url, "downgrade", _PRE_GRANT_REVISION)
+    engine = create_engine(database_url)
+    try:
+        remaining = set(inspect(engine).get_table_names())
+        assert set(_TABLES_BY_NAME).isdisjoint(remaining)
+        assert {"users", "alembic_version"}.issubset(remaining)
+        with engine.connect() as connection:
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == _PRE_GRANT_REVISION
+            )
+    finally:
+        engine.dispose()
+
+    _run_alembic(database_url, "upgrade", "head")
+    engine = create_engine(database_url)
+    try:
+        assert set(_TABLES_BY_NAME).issubset(set(inspect(engine).get_table_names()))
+        with engine.connect() as connection:
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == _STOCK_DAILY_REVISION
+            )
+    finally:
+        engine.dispose()

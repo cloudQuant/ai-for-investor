@@ -7,10 +7,17 @@ Create Date: 2026-10-31
 This revision only widens the dataset/source CHECK constraints on the existing
 user-read and source-research grant tables. It preserves every existing
 constraint, unique key, index, and audit foreign key. No grant is seeded and no
-issuer or API is added. Downgrade remains intentionally unsupported: narrowing
-the CHECK would either fail on persisted stock-daily grants or silently make
-stored grant evidence unreadable, and concurrent writers cannot be ruled out
-across the three supported databases.
+issuer or API is added.
+
+Downgrade narrows the two CHECK constraints back to the pre-migration form, but
+only after proving that no persisted stock-daily grant row would become
+unreadable. Any such row keeps the revision fail-closed with
+``STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED`` and no schema or data changes. The
+probe, DDL, and revision update share one connection/transaction where the
+dialect supports transactional DDL; MySQL implicitly commits each DDL statement,
+so a concurrent writer cannot be excluded there, which is why the pre-check
+still runs before the first ALTER. Offline (``--sql``) generation cannot read
+data and therefore emits a manual precheck query instead.
 """
 
 from __future__ import annotations
@@ -42,6 +49,23 @@ _SOURCE_DATASET_CHECK = (
     "(dataset_id = 'sina_fzb_report_observations' AND source_id = 'sina-fzb') OR "
     "(dataset_id = 'sina_lrb_report_observations' AND source_id = 'sina-lrb') OR "
     "(dataset_id = 'cn-equity-stock-daily' AND source_id = 'akshare.daily')"
+)
+_USER_DATASET_CHECK_PREVIOUS = (
+    "dataset_id IN ('sina_fzb_report_observations', 'sina_lrb_report_observations')"
+)
+_SOURCE_DATASET_CHECK_PREVIOUS = (
+    "(dataset_id = 'sina_fzb_report_observations' AND source_id = 'sina-fzb') OR "
+    "(dataset_id = 'sina_lrb_report_observations' AND source_id = 'sina-lrb')"
+)
+_STOCK_DAILY_DATASET = "cn-equity-stock-daily"
+_STOCK_DAILY_SOURCE = "akshare.daily"
+_USER_GRANT_DOWNGRADE_PROBE = sa.text(
+    f"SELECT 1 FROM {_USER_GRANT} WHERE dataset_id = '{_STOCK_DAILY_DATASET}' LIMIT 1"
+)
+_SOURCE_GRANT_DOWNGRADE_PROBE = sa.text(
+    f"SELECT 1 FROM {_SOURCE_GRANT} "
+    f"WHERE dataset_id = '{_STOCK_DAILY_DATASET}' "
+    f"OR source_id = '{_STOCK_DAILY_SOURCE}' LIMIT 1"
 )
 _PIT_DATETIME = sa.DateTime(timezone=True).with_variant(mysql.DATETIME(fsp=6), "mysql")
 
@@ -75,7 +99,7 @@ def _assert_expected_schema() -> None:
         raise RuntimeError("STOCK_DAILY_GRANT_SCHEMA_CONFLICT")
 
 
-def _user_grant_copy() -> sa.Table:
+def _user_grant_copy(dataset_check: str = _USER_DATASET_CHECK) -> sa.Table:
     """Offline copy source for the existing user-read grant table."""
     return sa.Table(
         _USER_GRANT,
@@ -97,10 +121,7 @@ def _user_grant_copy() -> sa.Table:
             "permission = 'data:read'",
             name="ck_stock_snapshot_user_permission",
         ),
-        sa.CheckConstraint(
-            "dataset_id IN ('sina_fzb_report_observations', 'sina_lrb_report_observations')",
-            name=_USER_DATASET_CONSTRAINT,
-        ),
+        sa.CheckConstraint(dataset_check, name=_USER_DATASET_CONSTRAINT),
         sa.CheckConstraint(
             "market IN ('SH', 'SZ') AND length(instrument_id) = 9 "
             "AND substr(instrument_id, 8, 2) = market",
@@ -144,7 +165,7 @@ def _user_grant_copy() -> sa.Table:
     )
 
 
-def _source_grant_copy() -> sa.Table:
+def _source_grant_copy(dataset_check: str = _SOURCE_DATASET_CHECK) -> sa.Table:
     """Offline copy source for the existing source-research grant table."""
     return sa.Table(
         _SOURCE_GRANT,
@@ -163,11 +184,7 @@ def _source_grant_copy() -> sa.Table:
         sa.Column("valid_from", _PIT_DATETIME, nullable=False),
         sa.Column("expires_at", _PIT_DATETIME, nullable=False),
         sa.Column("created_at", _PIT_DATETIME, nullable=False),
-        sa.CheckConstraint(
-            "(dataset_id = 'sina_fzb_report_observations' AND source_id = 'sina-fzb') OR "
-            "(dataset_id = 'sina_lrb_report_observations' AND source_id = 'sina-lrb')",
-            name=_SOURCE_DATASET_CONSTRAINT,
-        ),
+        sa.CheckConstraint(dataset_check, name=_SOURCE_DATASET_CONSTRAINT),
         sa.CheckConstraint(
             "market IN ('SH', 'SZ') AND length(instrument_id) = 9 "
             "AND substr(instrument_id, 8, 2) = market",
@@ -217,15 +234,42 @@ def _source_grant_copy() -> sa.Table:
     )
 
 
-def _replace_check(table_name: str, constraint_name: str, condition_sql: str) -> None:
+def _replace_check(
+    table_name: str,
+    constraint_name: str,
+    condition_sql: str,
+    copy_table: sa.Table,
+) -> None:
     """Drop and recreate one named CHECK without changing any other schema."""
     with op.batch_alter_table(
         table_name,
         recreate="always",
-        copy_from=_user_grant_copy() if table_name == _USER_GRANT else _source_grant_copy(),
+        copy_from=copy_table,
     ) as batch:
         batch.drop_constraint(constraint_name, type_="check")
         batch.create_check_constraint(constraint_name, condition_sql)
+
+
+def _assert_no_stock_daily_grants() -> None:
+    """Refuse downgrade while any stock-daily grant evidence would be stranded.
+
+    Both probes run against the migration connection before the first DDL
+    statement, so a blocked downgrade leaves schema and data untouched. A failed
+    probe propagates and aborts the migration instead of being swallowed.
+    """
+    bind = op.get_bind()
+    if op.get_context().as_sql:
+        op.execute(
+            "-- MANUAL PRECHECK: STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED; abort before "
+            "applying this downgrade if either query returns a row."
+        )
+        op.execute(_USER_GRANT_DOWNGRADE_PROBE)
+        op.execute(_SOURCE_GRANT_DOWNGRADE_PROBE)
+        return
+    if bind.execute(_USER_GRANT_DOWNGRADE_PROBE).first() is not None:
+        raise RuntimeError("STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED")
+    if bind.execute(_SOURCE_GRANT_DOWNGRADE_PROBE).first() is not None:
+        raise RuntimeError("STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED")
 
 
 def upgrade() -> None:
@@ -235,8 +279,18 @@ def upgrade() -> None:
 
     dialect = op.get_context().dialect.name
     if dialect == "sqlite":
-        _replace_check(_USER_GRANT, _USER_DATASET_CONSTRAINT, _USER_DATASET_CHECK)
-        _replace_check(_SOURCE_GRANT, _SOURCE_DATASET_CONSTRAINT, _SOURCE_DATASET_CHECK)
+        _replace_check(
+            _USER_GRANT,
+            _USER_DATASET_CONSTRAINT,
+            _USER_DATASET_CHECK,
+            _user_grant_copy(_USER_DATASET_CHECK_PREVIOUS),
+        )
+        _replace_check(
+            _SOURCE_GRANT,
+            _SOURCE_DATASET_CONSTRAINT,
+            _SOURCE_DATASET_CHECK,
+            _source_grant_copy(_SOURCE_DATASET_CHECK_PREVIOUS),
+        )
         return
 
     op.drop_constraint(_USER_DATASET_CONSTRAINT, _USER_GRANT, type_="check")
@@ -254,5 +308,36 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Refuse downgrade; narrowing the CHECK could hide persisted grant evidence."""
-    raise RuntimeError("STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED")
+    """Narrow the CHECKs only when no stock-daily grant evidence would be lost."""
+    if not op.get_context().as_sql:
+        _assert_expected_schema()
+    _assert_no_stock_daily_grants()
+
+    dialect = op.get_context().dialect.name
+    if dialect == "sqlite":
+        _replace_check(
+            _USER_GRANT,
+            _USER_DATASET_CONSTRAINT,
+            _USER_DATASET_CHECK_PREVIOUS,
+            _user_grant_copy(_USER_DATASET_CHECK),
+        )
+        _replace_check(
+            _SOURCE_GRANT,
+            _SOURCE_DATASET_CONSTRAINT,
+            _SOURCE_DATASET_CHECK_PREVIOUS,
+            _source_grant_copy(_SOURCE_DATASET_CHECK),
+        )
+        return
+
+    op.drop_constraint(_USER_DATASET_CONSTRAINT, _USER_GRANT, type_="check")
+    op.create_check_constraint(
+        _USER_DATASET_CONSTRAINT,
+        _USER_GRANT,
+        _USER_DATASET_CHECK_PREVIOUS,
+    )
+    op.drop_constraint(_SOURCE_DATASET_CONSTRAINT, _SOURCE_GRANT, type_="check")
+    op.create_check_constraint(
+        _SOURCE_DATASET_CONSTRAINT,
+        _SOURCE_GRANT,
+        _SOURCE_DATASET_CHECK_PREVIOUS,
+    )
