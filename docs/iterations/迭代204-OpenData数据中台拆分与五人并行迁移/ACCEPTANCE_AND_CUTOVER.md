@@ -2,15 +2,19 @@
 
 本矩阵中的生产、全范围、端到端和cutover验收均为 `NOT_RUN`，除非下方记录了与该验收ID相符的当前证据。源码/离线PR验收只更新精确代码范围，不等于系统已迁移。
 
-## 当前基线与限定验收（2026-10-30，Asia/Shanghai）
+## 当前基线与限定验收（2026-10-31 更新，Asia/Shanghai）
 
-本轮编辑这些计划文档之前，AFI `dev` 与 `origin/dev` HEAD 为 `73c7b2f7537cacab2ab75daf4381e850a0977b9b`，OpenData 两者 HEAD 为 `cc79654171bd00b00d9909f7973547a10790a945`；当时两仓工作树干净。该基线不包含本次文档改动。后续执行必须记录执行时的新HEAD及dirty diff hash。
+**2026-10-31 基线**：AFI `dev` HEAD 为 `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`，OpenData `dev` HEAD 为 `7cc613bfc15fc3e35da9213d204955e269ae1b83`。该基线不包含本次文档改动；后续执行必须记录执行时的新 HEAD 及 dirty diff hash。
+
+**2026-10-30 历史快照**：本轮编辑这些计划文档之前，AFI `dev` 与 `origin/dev` HEAD 为 `73c7b2f7537cacab2ab75daf4381e850a0977b9b`，OpenData 两者 HEAD 为 `cc79654171bd00b00d9909f7973547a10790a945`；当时两仓工作树干净。
 
 | 已合入交付 | 可确认范围 | 仍未通过的验收 |
 | --- | --- | --- |
 | OpenData #132 签名恢复日志 | 限定隔离回归487项通过、1项既有OpenAPI检查明确deselect；full-follow mypy有3项既有诊断。 | job仍disabled/unregistered、无scheduler和生产签名器；ledger与日志发布没有原子链接。不能关闭AC06/AC13/AC14或真实历史验收。 |
 | OpenData #133 CSI500历史对账器 | 限定合成回归68项通过、statement+branch 96.77%、0项排除。 | 未验证真实来源、calendar、source grant/retention、生产DB/调度或实际覆盖；不能关闭AC05/AC10/AC14。 |
 | AFI #193 snapshot授权策略 | 纯策略的离线行为已验收。 | 授权持久模型/迁移仍在本地开发中，未合入当前 AFI HEAD、未验收；尚无可信grant registry/数据库签发撤销、route/task接线和读取/保存前复核；不能关闭AC09或AC18。 |
+
+**2026-10-31 更正与新增证据**：AFI #201（`1af1366cccbdeef57d7c84c15820d556124c8cf8`）已合入精确 snapshot grant 的 ORM 模型与 Alembic 迁移 `20261030_stock_analysis_snapshot_grants`，因此上表 #193 行“授权持久模型/迁移仍在本地开发中”只适用于 2026-10-30 时点。当前存储默认为空，不签发权限、不认证签发人、不强制完整审计链；该合入提交也没有可信 adapter、route/task 接线、读取/保存前复核或数据库级 UPDATE/DELETE 保护；AC09/AC18 仍不能关闭。AFI #202（`076caa979498f0e930f5454bf7b48b766e3d29e1`）新增固定 stock-daily publication reader，但未接业务路径/授权/fallback，且上游路由硬禁用。OpenData #144–#149 只交付隔离 source-gate 样本准备、离线缺口对账、硬禁用的 v2 日线路由、job 请求预算、MySQL 反射 CHECK 校验和模拟 THS 的 MySQL 竖向验收夹具；提交与文档未记录测试通过数，均不构成真实源、生产部署、自然周期或历史覆盖证据。
 
 用户已声明AkShare、Fuyao可用于自动采集、保存及两个内部服务间使用；该声明无需重复询问，但具体AkShare函数的上游产品/endpoint、dataset/市场/历史/频率/留存范围仍须映射并记入运营grant。用户目标范围为全A股，包含计划定义的北交所及退市证券。当前API尚不支持BSE是实现限制，不得作为缩小全集分母的理由。完整范围的判定须有每个纳入交易所的当前证券目录、退市证券与跨板/换码事件、稳定身份及实际分页完整性证据；任何一项未知时全A股完整性保持 `UNKNOWN`。
 

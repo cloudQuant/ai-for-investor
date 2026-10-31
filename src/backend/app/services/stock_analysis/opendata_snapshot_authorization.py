@@ -1,14 +1,21 @@
-"""Pure policy for user-scoped reads of pinned OpenData financial snapshots.
+"""Pure policy for user-scoped reads of pinned OpenData research snapshots.
 
-This module evaluates evidence supplied by a future persistence adapter. It
-does not load grants, authenticate a database snapshot, or call OpenData. The
-adapter must obtain every evidence object with current reads from the
-authoritative database; a caller-created object is not an authorization proof.
-Do not synthesize a per-user source grant from ``AssetDataSourceRegistry``
-alone: that registry has no user, dataset, instrument, or publication scope.
-This policy is not connected to task creation, background reads, or report
-storage. Its receipt digest is unkeyed; an untrusted persistence boundary must
-authenticate the receipt with a server-side MAC or signature.
+Scopes cover both financial-statement observations and the pinned stock-daily
+time-series publication (``cn-equity-stock-daily`` / ``akshare.daily``). For a
+time-series publication with no source-native capture, ``capture_id`` is the
+publication's exact ``content_sha256``: a platform publication content digest,
+not a source capture or an issuer signature. The authorized caller must pass
+that digest explicitly and must not infer it from a fetched response.
+
+This module evaluates evidence supplied by a persistence adapter. It does not
+load grants, authenticate a database snapshot, or call OpenData. The adapter
+must obtain every evidence object with current reads from the authoritative
+database; a caller-created object is not an authorization proof. Do not
+synthesize a per-user source grant from ``AssetDataSourceRegistry`` alone: that
+registry has no user, dataset, instrument, or publication scope. This policy is
+not connected to task creation, background reads, or report storage. Its
+receipt digest is unkeyed; an untrusted persistence boundary must authenticate
+the receipt with a server-side MAC or signature.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ RECEIPT_VERSION: Final = "stock-analysis-opendata-access-v1"
 _DATASET_SOURCE: Final = {
     "sina_fzb_report_observations": "sina-fzb",
     "sina_lrb_report_observations": "sina-lrb",
+    "cn-equity-stock-daily": "akshare.daily",
 }
 _INSTRUMENT_ID = re.compile(r"[0-9]{6}\.(?:SH|SZ)\Z", re.ASCII)
 _PUBLICATION_ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
