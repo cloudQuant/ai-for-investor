@@ -1235,9 +1235,16 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 
 - 股票日线：OpenData 定向 **434 项通过**（容量 40、执行器/CLI/plan/budget 49、共享 ledger/worker/job 回归 345）；AFI 授权 **138 项通过**（storage/policy/reader/adapter，adapter 14 项）；合成跨仓 wire **9 项通过**；真实捕获字节回放 **9 项通过**；授权开启回放 **11 项通过、1 项跳过**（缺 grant 请求前拒绝、读取后撤销失败关闭）。
 - Fuyao 六 scope：#151 opt-in 回放 **1 项通过**，覆盖 **52 项观察（13/13/7/7/6/6）**，六个 manifest 实体 hash 校验一致。回放的是此前捕获的真实字节，不是实时请求。
-- Universe 候选：#152 synthetic **20 项通过、1 项跳过**；真实 SZSE opt-in **21 项通过**，得到 **2,905 条候选记录、0 冲突**；分页终止仍为 `UNKNOWN`，无退市生命周期，`universe_census_attested=false`；SSE/BSE/Fuyao 真实响应体为 `NOT_RUN`；新模块另有 **16 项 scoped mypy 诊断**，留待 CI 清理。
+- Universe 候选：#152 synthetic **20 项通过、1 项跳过**；真实 SZSE opt-in **21 项通过**，得到 **2,905 条候选记录、0 冲突**；分页终止仍为 `UNKNOWN`，无退市生命周期，`universe_census_attested=false`；SSE/BSE/Fuyao 真实响应体为 `NOT_RUN`；新模块的 16 项 scoped mypy 诊断已由 #153 清零。
 - `make published-openapi-check` 与 `make a2-check` 的 Wave 13/14 既有失败未在本节重跑，不能写成通过；AFI #204 迁移未在生产 MySQL 运行，测试中的 grant、principal、API key 均为合成。
 
-**CI 状态：不是绿色。** 上述 PR 按用户要求在 CI 清理前合入。已知失败：OpenData quality gate 与 full-history secret scan；AFI Governance Gate（PR body，合入后已更正）、Backend Security Scan、Doc Links、No Generated Artifacts 与 MySQL 9.4 Contract。CI 修复计划作为独立后续跟进，不能以本节的合入事实或定向测试替代。
+**CI 状态：可归因项已修复，但仍非全绿。** 上述 PR 按用户要求在 CI 清理前合入；后续 #206–#209 已修复本批可归因问题：
+
+- #206：两处授权迁移空库安全降级、Binance 行身份 MD5 的 `usedforsecurity=False`、文档链接检查器（angle-bracket/本地证据树）与 AFI11 历史证据包 allowlist。
+- #207：全部迁移测试的当前 head 断言更新到 `20261031_stock_daily_snapshot_grants`。
+- #208：修复既有 `20261016_legacy_paper_import` MySQL 触发器缺少右括号、账户 fence 触发器降级清理、lease 索引随表删除；在隔离 MySQL 8.4 上完成 upgrade→`alembic check`（无新操作）→downgrade 到 `20260911_market_data_semantic_record_keys`→upgrade head；资产研究迁移测试 **12 passed**，MySQL 合同测试 **1 passed/2 skipped**（本地版本常量改为 8.4）。
+- #209：刷新 dev/prod 锁（brotli、certifi、dnspython、OpenTelemetry 1.45/0.66、Pillow 13、akshare Linux racer 依赖），`pip-audit` 从 **45 条公告降为 0**。
+
+最新 `dev` 上 MySQL 9.4 Contract、Backend Security Scan、Deps Sync、Doc Links、No Generated Artifacts、Alembic、OpenAPI 等检查已不再出现在失败列表。仍失败的均为既有全仓债务或与本批无关：OpenData `quality gate`（A2 30 项均在既有测试/脚本，新 stock-daily/universe/Fuyao 文件不在其中）与 full-history secret scan；AFI Backend Lint（205 项 Ruff，均既有文件；新 adapter 模块 mypy 0 错误、新文件 Ruff 通过）、Mypy Ratchet（quote、utils+schemas）、Frontend Lint、Secret Scan 与 E2E Chromium。**CI 尚未全绿，不能写成通过**；上述修复收据与剩余失败分类保留在本节，供后续清理。
 
 **共同非声明**：四个合入均没有实时来源请求、生产 MySQL/部署、自然周期、全历史/覆盖完整性或来源权利/PIT 证明；合成 grant/principal/API key 不代表生产授权；Fuyao/universe 原始样本仍保存在私有归档，未进入 Git。v2 日线路由在默认配置下仍返回 404，容量门禁不是数据授权，回补执行器不是调度器，universe 候选不是权威全 A 分母。**父任务保持开放**，逐子任务影响见 [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) 的 Wave 13/14/15 合入证据节。
