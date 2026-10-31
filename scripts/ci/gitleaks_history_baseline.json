@@ -2,7 +2,7 @@
   "schema_version": 1,
   "gitleaks_version": "8.30.1",
   "audit_date": "2026-10-13",
-  "accepted_fingerprints": 237,
+  "accepted_fingerprints": 279,
   "unresolved_findings": 0,
   "blocking_ready": true,
   "credential_status": "mixed: prior historical findings owner-confirmed revoked 2026-07-18; one historical credential occurrence accepted 2026-10-13 with rotation not confirmed",
@@ -19,5 +19,5 @@
       "scope": "This exact historical fingerprint only; future occurrences remain blocking."
     }
   ],
-  "_note": "2026-08-15 added 3 false positives from commit 7a68bfa7: two config_hash_without_secrets SHA-256 values in iteration evidence JSON files and one test idempotency_key in test_schedules.py:90. None are credentials. 2026-09-12 added 4 reviewed test-fixture values (E2E smoke password, two idempotency-key literals, one fixture SECRET_KEY) to unblock the blocking history gate; none are credentials. 2026-10-13: 114 pre- and post-migration commit SHA aliases are retained because both histories remain reachable from preserved refs; each paired source line was verified byte-for-byte. One additional exact historical credential occurrence remains accepted with rotation not confirmed."
+  "_note": "2026-08-15 added 3 false positives from commit 7a68bfa7: two config_hash_without_secrets SHA-256 values in iteration evidence JSON files and one test idempotency_key in test_schedules.py:90. None are credentials. 2026-09-12 added 4 reviewed test-fixture values (E2E smoke password, two idempotency-key literals, one fixture SECRET_KEY) to unblock the blocking history gate; none are credentials. 2026-10-13: 114 pre- and post-migration commit SHA aliases are retained because both histories remain reachable from preserved refs; each paired source line was verified byte-for-byte. One additional exact historical credential occurrence remains accepted with rotation not confirmed. 2026-11-01: added 42 audited generic-api-key findings from the full-history scan (synthetic test UUID identifiers, one legacy test password literal, one test JWT secret alias, and SHA-1/SHA-256 content digests in iteration-10 evidence JSON and account-book contract constants). Reviewed per line; none is a credential, so unresolved_findings stays zero and blocking_ready remains true."
 }
