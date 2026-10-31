@@ -18,6 +18,10 @@ SENSITIVE_PATH_RE = re.compile(
 ALLOWLIST: dict[str, str] = {
     "src/clientportal.gw/root/demo.zip": "Vendored IBKR Client Portal Gateway demo archive.",
     "src/clientportal.gw/root/vertx.jks": "Vendored IBKR Client Portal Gateway demo keystore.",
+    "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/raw-r6.zip": (
+        "Reviewed iteration-10 AFI11 failure evidence packet (markers, JUnit, stdout/stderr, "
+        "and source pins); no credentials or source tree."
+    ),
 }
 
 PLACEHOLDER_REQUIRED: dict[str, str] = {}
@@ -52,7 +56,9 @@ def check_ibkr_cookie_example() -> str | None:
         return f"{IBKR_COOKIES_EXAMPLE} is not a readable JSON example: {exc}"
 
     if payload != IBKR_COOKIE_PLACEHOLDERS:
-        return f"{IBKR_COOKIES_EXAMPLE} must contain only the approved placeholder schema"
+        return (
+            f"{IBKR_COOKIES_EXAMPLE} must contain only the approved placeholder schema"
+        )
     return None
 
 
@@ -71,10 +77,14 @@ def main() -> int:
             try:
                 content = open(path, encoding="utf-8").read()
             except OSError as exc:
-                failures.append(f"{path} could not be read for placeholder check: {exc}")
+                failures.append(
+                    f"{path} could not be read for placeholder check: {exc}"
+                )
                 continue
             if required not in content:
-                failures.append(f"{path} is allowlisted but does not contain placeholder marker")
+                failures.append(
+                    f"{path} is allowlisted but does not contain placeholder marker"
+                )
 
     ibkr_example_failure = check_ibkr_cookie_example()
     if ibkr_example_failure:
@@ -84,7 +94,9 @@ def main() -> int:
         print("Sensitive tracked file check failed:")
         for item in failures:
             print(f"- {item}")
-        print("\nAllowlist intentional examples in scripts/ci/check_sensitive_tracked_files.py.")
+        print(
+            "\nAllowlist intentional examples in scripts/ci/check_sensitive_tracked_files.py."
+        )
         return 1
 
     print(

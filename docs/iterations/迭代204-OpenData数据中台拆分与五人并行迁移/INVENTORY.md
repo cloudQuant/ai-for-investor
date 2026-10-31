@@ -38,7 +38,7 @@
 
 `services/`在上表ai条目中相对于 `src/backend/app/`，opendata条目使用其仓库根路径。精确实现是否上线由后续环境验收证明。
 
-203最新相关台账位于 [EXECUTION_STATUS.md](/home/yun/Documents/ai-for-investor/docs/iterations/迭代203-全量数据补齐与持续调度治理/EXECUTION_STATUS.md)：
+203 最新相关台账（历史本地路径，当前 checkout 未包含该文件）：`docs/iterations/迭代203-全量数据补齐与持续调度治理/EXECUTION_STATUS.md`；当前仓库可核对的相关文档见 [迭代203-底层依赖收口与产品化基线](</home/yun/Documents/ai-for-investor/docs/iterations/迭代203-底层依赖收口与产品化基线/README.md>)：
 
 - 2026-10-26 15:26记录：1,103个task，1,098 active，5个helper inactive；69 curated是子集，不能继续以69作为总迁移分母。所有task含inactive都要去向清晰，未来新增项按变更控制纳入。
 - 2026-10-25记录六个user timer/service：full-history-recovery、policy-expiry-watchdog、dce-browser-capture、dce-option-daily、stock-tail-daily、stock-amount-daily；另有四个ETF NAV shard。实际已安装配置、checkpoint和进程须开工时重新只读核对。

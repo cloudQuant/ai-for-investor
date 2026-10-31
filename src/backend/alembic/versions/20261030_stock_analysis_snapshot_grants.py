@@ -7,9 +7,17 @@ Create Date: 2026-10-30
 This migration stores user-read grants, source-research grants, and their
 issue/revocation audit events. It does not seed grants or add an issuer/API.
 Database-level immutable-write guards are not installed in this revision.
-Downgrade is intentionally unsupported on all dialects: an empty-check followed
-by table drops cannot be proven free from concurrent writers across the three
-supported databases, and grant/audit evidence must never be implicitly erased.
+
+Downgrade is fail-closed only when persisted evidence exists: audits, user-read
+grants, and source-research grants are probed before the first DDL statement.
+Any persisted row keeps the revision with
+``STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED`` and leaves schema and data
+untouched. A provably empty schema drops the audit table first and then both
+grant tables, so no foreign key can block the drop. MySQL implicitly commits
+each DDL statement, so a concurrent writer cannot be excluded there; the
+pre-check still runs before the first ``DROP TABLE``. Offline (``--sql``)
+generation cannot read data and therefore emits manual precheck queries before
+the drops.
 """
 
 from __future__ import annotations
@@ -28,6 +36,17 @@ _USER_GRANT = "stock_snapshot_user_read_grants"
 _SOURCE_GRANT = "stock_snapshot_source_research_grants"
 _AUDIT = "stock_snapshot_grant_audits"
 _TABLES = (_USER_GRANT, _SOURCE_GRANT, _AUDIT)
+# Child table first: the audit table owns the only foreign keys into the two
+# grant tables, so dropping it first leaves nothing referencing the parents.
+_DROP_ORDER = (_AUDIT, _USER_GRANT, _SOURCE_GRANT)
+_DOWNGRADE_UNSUPPORTED = "STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"
+_DOWNGRADE_PROBE_COMMENT = (
+    "-- MANUAL PRECHECK: STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED; abort before "
+    "applying this downgrade if any of these queries returns a row."
+)
+_DOWNGRADE_PROBES = tuple(
+    sa.text(f"SELECT 1 FROM {table_name} LIMIT 1") for table_name in _DROP_ORDER
+)
 _PIT_DATETIME = sa.DateTime(timezone=True).with_variant(mysql.DATETIME(fsp=6), "mysql")
 
 
@@ -281,6 +300,28 @@ def upgrade() -> None:
     )
 
 
+def _assert_no_grant_evidence() -> None:
+    """Refuse downgrade while any persisted grant or audit evidence exists.
+
+    All probes run against the migration connection before the first DDL
+    statement, so a blocked downgrade leaves schema and data untouched. A
+    failed probe propagates and aborts the migration instead of being
+    swallowed. Because the audit table is dropped first, foreign keys cannot
+    block the remaining empty grant-table drops on SQLite or MySQL.
+    """
+    bind = op.get_bind()
+    if op.get_context().as_sql:
+        op.execute(_DOWNGRADE_PROBE_COMMENT)
+        for probe in _DOWNGRADE_PROBES:
+            op.execute(probe)
+        return
+    for probe in _DOWNGRADE_PROBES:
+        if bind.execute(probe).first() is not None:
+            raise RuntimeError(_DOWNGRADE_UNSUPPORTED)
+
+
 def downgrade() -> None:
-    """Refuse downgrade because no portable empty-check/drop lock is guaranteed."""
-    raise RuntimeError("STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED")
+    """Drop the empty grant/audit tables, or fail closed on persisted evidence."""
+    _assert_no_grant_evidence()
+    for table_name in _DROP_ORDER:
+        op.drop_table(table_name)

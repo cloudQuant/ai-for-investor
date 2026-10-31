@@ -83,7 +83,9 @@ class BinanceToMySql(MysqlBase):
     #: extra reference columns matching the warehouse convention
     reference_code: str = "CRYPTO_DAILY"
 
-    def __init__(self, db_config: dict[str, Any] | None = None, logger: logging.Logger | None = None):
+    def __init__(
+        self, db_config: dict[str, Any] | None = None, logger: logging.Logger | None = None
+    ):
         super().__init__(db_config or DB_CONFIG, logger or logging.getLogger("BinanceToMySql"))
         self.client = BinanceClient(logger=self.logger)
 
@@ -110,7 +112,8 @@ class BinanceToMySql(MysqlBase):
                     # Deterministic so a re-run keeps row identity instead of
                     # churning the primary key on every upsert.
                     "R_ID": hashlib.md5(
-                        f"{BINANCE_MARKET}|{symbol.upper()}|{stamp}|{self.interval}".encode()
+                        f"{BINANCE_MARKET}|{symbol.upper()}|{stamp}|{self.interval}".encode(),
+                        usedforsecurity=False,
                     ).hexdigest(),
                     "MARKET": BINANCE_MARKET,
                     "SYMBOL": symbol.upper(),
@@ -166,7 +169,9 @@ class BinanceToMySql(MysqlBase):
         """
         until = end or datetime.now(tz=timezone.utc).date()
         if source == "archive":
-            bars = list(self.client.iter_archive_bars(symbol, self.interval, start=start, end=until))
+            bars = list(
+                self.client.iter_archive_bars(symbol, self.interval, start=start, end=until)
+            )
         else:
             bars = list(
                 self.client.iter_klines(
