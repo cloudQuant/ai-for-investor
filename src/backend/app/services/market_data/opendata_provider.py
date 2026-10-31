@@ -70,6 +70,8 @@ _PUBLISHED_SNAPSHOT_MAX_ROWS = 50_000
 _PUBLISHED_SNAPSHOT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES = 64 * 1024 * 1024
 _PUBLISHED_SNAPSHOT_DEADLINE_SECONDS = 60.0
+_PUBLISHED_STOCK_DAILY_DATASET_ID = "cn-equity-stock-daily"
+_PUBLISHED_STOCK_DAILY_PATH = "/stock-daily/records"
 _TRADE_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 #: 中台 REST 响应信封的成功标识字段。
@@ -676,6 +678,205 @@ class OpendataProvider:
         return OpendataPublishedSnapshotResult(
             snapshot=snapshot,
             coverage=dict(coverage_payload),
+            records=tuple(records),
+            page_count=page_count,
+        )
+
+    async def fetch_published_stock_daily_snapshot(
+        self,
+        request: MarketDataProviderRequest,
+        *,
+        publication_id: str,
+    ) -> OpendataPublishedSnapshotResult:
+        """Read one stock symbol from an explicitly pinned stock-daily publication.
+
+        OpenData's dedicated endpoint creates a snapshot on the first request
+        and returns that page. Further pages use only the returned snapshot ID
+        and opaque cursor. The endpoint's coverage remains ``unknown`` until
+        independent stock-history evidence is available; this method carries
+        that value through without treating it as complete.
+        """
+        if not isinstance(request, MarketDataProviderRequest):
+            raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_REQUEST_INVALID")
+        if self._credentials is None:
+            raise OpendataProviderError("OPENDATA_CREDENTIAL_MISSING")
+        try:
+            contract = _reviewed_contract_for_request(request)
+        except ProviderContractError as exc:
+            raise OpendataProviderError(
+                "OPENDATA_STOCK_DAILY_SNAPSHOT_REQUEST_INVALID", detail=exc.code
+            ) from exc
+        if (
+            contract.contract_id != "opendata.stock.daily.contract-v1"
+            or request.asset_type != "stock"
+            or request.market not in {"CN-SSE", "CN-SZSE"}
+            or request.data_kind != "bars"
+            or request.frequency != "1d"
+            or request.adjustment not in {None, "unadjusted"}
+            or request.price_basis not in {None, "close"}
+            or request.currency != "CNY"
+            or request.unit != "share"
+            or not re.fullmatch(r"[0-9]{6}", request.provider_symbol)
+            or request.canonical_id
+            != f"instrument:stock:{request.market}:{request.provider_symbol}"
+            or request.start_at.utcoffset() != timedelta(0)
+            or request.end_at.utcoffset() != timedelta(0)
+            or request.start_at.time() != time.min
+            or request.end_at.time() != time.min
+            or request.start_at >= request.end_at
+        ):
+            raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_REQUEST_INVALID")
+        symbol_prefix_matches_market = (
+            request.market == "CN-SSE" and request.provider_symbol.startswith("6")
+        ) or (request.market == "CN-SZSE" and request.provider_symbol.startswith(("0", "3")))
+        if not symbol_prefix_matches_market:
+            raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_REQUEST_INVALID")
+        if (
+            not isinstance(publication_id, str)
+            or re.fullmatch(r"[0-9a-f]{32}", publication_id) is None
+        ):
+            raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_REQUEST_INVALID")
+
+        start_date = request.start_at.date().isoformat()
+        end_date = request.end_at.date().isoformat()
+        deadline = _monotonic() + _PUBLISHED_SNAPSHOT_DEADLINE_SECONDS
+        total_bytes = 0
+        records: list[Mapping[str, Any]] = []
+        seen_cursors: set[str] = set()
+        cursor: str | None = None
+        page_count = 0
+        snapshot: dict[str, Any] | None = None
+        coverage: dict[str, Any] | None = None
+        while True:
+            if page_count >= _PUBLISHED_SNAPSHOT_MAX_PAGES:
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_LIMIT_EXCEEDED")
+            if page_count == 0:
+                params = {
+                    "market": request.market,
+                    "symbol": request.provider_symbol,
+                    "publication_id": publication_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "page_size": str(_PUBLISHED_SNAPSHOT_PAGE_SIZE),
+                }
+            else:
+                if snapshot is None:
+                    raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_PAGE_INVALID")
+                params = {
+                    "market": request.market,
+                    "symbol": request.provider_symbol,
+                    "publication_id": publication_id,
+                    "snapshot_id": str(snapshot["snapshot_id"]),
+                }
+                if cursor is not None:
+                    params["cursor"] = cursor
+            page_payload, response_bytes = await self._published_json_request(
+                "GET",
+                _PUBLISHED_STOCK_DAILY_PATH,
+                params=params,
+                expected_status=200,
+                request_id=request.request_id,
+                deadline=deadline,
+                max_response_bytes=min(
+                    _PUBLISHED_SNAPSHOT_MAX_RESPONSE_BYTES,
+                    _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES - total_bytes,
+                ),
+            )
+            total_bytes += response_bytes
+            page_count += 1
+            page_snapshot = page_payload.get("meta")
+            page_snapshot = (
+                page_snapshot.get("snapshot") if isinstance(page_snapshot, Mapping) else None
+            )
+            page_coverage = page_payload.get("coverage")
+            page_records = page_payload.get("rows")
+            count = page_payload.get("count")
+            has_more = page_payload.get("has_more")
+            next_cursor = page_payload.get("next_cursor")
+            if not isinstance(page_snapshot, Mapping):
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_PAGE_INVALID")
+            if snapshot is None:
+                snapshot = dict(page_snapshot)
+            if coverage is None and isinstance(page_coverage, Mapping):
+                coverage = dict(page_coverage)
+            expected_page_keys = set(snapshot) | {
+                "coverage",
+                "rows",
+                "count",
+                "next_cursor",
+                "has_more",
+                "meta",
+            }
+            page_meta = page_payload.get("meta")
+            if (
+                set(page_payload) != expected_page_keys
+                or dict(page_snapshot) != snapshot
+                or snapshot.get("dataset_id") != _PUBLISHED_STOCK_DAILY_DATASET_ID
+                or snapshot.get("publication_id") != publication_id
+                or {key: page_payload.get(key) for key in snapshot} != snapshot
+                or page_payload.get("stock_selection")
+                != {"market": request.market, "symbol": request.provider_symbol}
+                or snapshot.get("stock_selection")
+                != {"market": request.market, "symbol": request.provider_symbol}
+                or not isinstance(page_coverage, Mapping)
+                or dict(page_coverage) != coverage
+                or not isinstance(page_records, list)
+                or type(count) is not int
+                or count != len(page_records)
+                or count > _PUBLISHED_SNAPSHOT_PAGE_SIZE
+                or type(snapshot.get("page_size")) is not int
+                or snapshot["page_size"] != _PUBLISHED_SNAPSHOT_PAGE_SIZE
+                or count > snapshot["page_size"]
+                or type(has_more) is not bool
+                or (
+                    next_cursor is not None
+                    and (not isinstance(next_cursor, str) or not next_cursor)
+                )
+                or has_more != (next_cursor is not None)
+                or (has_more and not page_records)
+                or not isinstance(page_meta, Mapping)
+                or set(page_meta)
+                != {"snapshot", "ordering_fields", "storage_order", "identity_key_encoding"}
+                or page_meta.get("ordering_fields") != snapshot.get("ordering_fields")
+                or page_meta.get("storage_order") != snapshot.get("storage_order")
+                or page_meta.get("identity_key_encoding") != snapshot.get("identity_key_encoding")
+                or any(not isinstance(row, Mapping) for row in page_records)
+            ):
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_PAGE_INVALID")
+            records.extend(page_records)
+            record_count = snapshot.get("record_count")
+            if (
+                len(records) > _PUBLISHED_SNAPSHOT_MAX_ROWS
+                or type(record_count) is not int
+                or record_count > _PUBLISHED_SNAPSHOT_MAX_ROWS
+                or len(records) > record_count
+                or total_bytes > _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES
+            ):
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_LIMIT_EXCEEDED")
+            if not has_more:
+                if len(records) != record_count:
+                    raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_INCOMPLETE")
+                break
+            if total_bytes >= _PUBLISHED_SNAPSHOT_MAX_TOTAL_BYTES:
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_LIMIT_EXCEEDED")
+            if page_count >= _PUBLISHED_SNAPSHOT_MAX_PAGES:
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_LIMIT_EXCEEDED")
+            if (
+                next_cursor is None
+                or next_cursor == cursor
+                or next_cursor in seen_cursors
+                or len(next_cursor) > 8192
+                or any(ord(character) < 32 for character in next_cursor)
+            ):
+                raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_CURSOR_INVALID")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+
+        if snapshot is None or coverage is None:
+            raise OpendataProviderError("OPENDATA_STOCK_DAILY_SNAPSHOT_PAGE_INVALID")
+        return OpendataPublishedSnapshotResult(
+            snapshot=snapshot,
+            coverage=coverage,
             records=tuple(records),
             page_count=page_count,
         )
