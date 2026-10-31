@@ -222,7 +222,7 @@ def _install_receipt_guards() -> None:
             "AND ((OLD.state = 'PREPARED' AND NEW.state IN ('COMMITTED', 'ABORTED')) "
             "OR (OLD.state = 'COMMITTED' AND NEW.state IN ('ACTIVE', 'ABORTED'))) "
             "AND ((NEW.state = 'ABORTED' AND NEW.active_fence_key IS NULL) "
-            "OR (NEW.state <> 'ABORTED' AND NEW.active_fence_key <=> NEW.legacy_account_id)"
+            "OR (NEW.state <> 'ABORTED' AND NEW.active_fence_key <=> NEW.legacy_account_id))"
         )
         op.execute(
             sa.text(
