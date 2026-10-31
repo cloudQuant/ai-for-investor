@@ -23,6 +23,7 @@ _PREVIOUS = "20260908_ai_research_holdout_executions"
 _HEAD = "20260908_ai_research_approval_authority"
 _B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 _INTEGRATED_HEAD = "20261012_optimization_objective_direction"
+_CURRENT_HEAD = "20261031_stock_daily_snapshot_grants"
 _GRANT_TABLE = "ai_research_approval_grants"
 _GRANT_AUDIT_TABLE = "ai_research_approval_grant_audits"
 _PROFILE_TABLE = "ai_research_capability_profiles"
@@ -265,7 +266,7 @@ def test_approval_authority_revision_has_an_integrated_successor() -> None:
     assert migration.down_revision == _PREVIOUS
     assert integrated_head is not None
     assert integrated_head.down_revision == _B2_COMPLETENESS_EVIDENCE_REVISION
-    assert script.get_heads() == [_INTEGRATED_HEAD]
+    assert script.get_heads() == [_CURRENT_HEAD]
 
 
 @pytest.mark.parametrize(
