@@ -7,7 +7,7 @@ import json
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import (
     AfterValidator,
@@ -61,7 +61,10 @@ def _decimal_text(value: str) -> str:
     if not parsed.is_finite():
         raise ValueError("decimal text must be finite")
     parts = parsed.as_tuple()
-    if len(parts.digits) > 64 or abs(parts.exponent) > 36:
+    # is_finite() above has already excluded the NaN/Infinity tuples, whose
+    # exponent is a sentinel string instead of an int.
+    exponent = cast(int, parts.exponent)
+    if len(parts.digits) > 64 or abs(exponent) > 36:
         raise ValueError("decimal text exceeds the supported range")
     canonical = format(parsed, "f")
     if "." in canonical:

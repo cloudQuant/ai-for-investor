@@ -920,9 +920,10 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
     )
     curve_keys = MappingProxyType(
         {
-            security_ref: tuple(
-                _curve_key(curve_profile[name])
-                for name in ("server_key", "public_key", "secret_key")
+            security_ref: (
+                _curve_key(curve_profile["server_key"]),
+                _curve_key(curve_profile["public_key"]),
+                _curve_key(curve_profile["secret_key"]),
             )
         }
     )
@@ -997,12 +998,12 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
             or key.timeframe != timeframe
         ):
             raise ServiceMarketDeploymentError("UNSUPPORTED_HISTORY_BINDING")
-        route = (source, symbol, timeframe)
-        if route in history_routes:
+        history_route = (source, symbol, timeframe)
+        if history_route in history_routes:
             raise ServiceMarketDeploymentError("DUPLICATE_HISTORY_BINDING")
         if key in routes.values():
             raise ServiceMarketDeploymentError("STREAM_HISTORY_KEY_COLLISION")
-        history_routes[route] = key
+        history_routes[history_route] = key
     if not routes and not history_routes:
         raise ServiceMarketDeploymentError("EMPTY_MARKET_BINDINGS")
     return _MarketProfile(
