@@ -1063,7 +1063,7 @@ OpenData [PR #131](https://github.com/cloudQuant/opendata/pull/131) 已合入 `d
 
 ## 2026-10-30 AFI PR #193：snapshot 授权策略
 
-AFI [PR #193](https://github.com/cloudQuant/ai-for-investor/pull/193) 已合入 `dev`，合并提交为 `0fba790a4c7b0d02448056475eae1bc2908173c8`。R2 冻结专项 **69 项测试通过**，Ruff 与格式检查通过；证据见 AFI 本机私有归档 [`manifest.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/snapshot-authorization-policy-acceptance-r2-20261030/manifest.md>)。此次仅实现纯授权策略，限定 SH/SZ 并拒绝 BJ；尚未接入真实用户 grant 与来源 registry 信任、MAC、数据库签发/撤销、route/task 运行或保存后重验，因此不构成真实数据授权或生产访问控制验收。
+AFI [PR #193](https://github.com/cloudQuant/ai-for-investor/pull/193) 已合入 `dev`，合并提交为 `0fba790a4c7b0d02448056475eae1bc2908173c8`。R2 冻结专项 **69 项测试通过**，Ruff 与格式检查通过；证据见 AFI 本机私有归档 [`manifest.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/snapshot-authorization-policy-acceptance-r2-20261030/manifest.md>)。此次仅实现纯授权策略，限定 SH/SZ 并拒绝 BJ；尚未接入真实用户 grant 与来源 registry 信任、MAC、数据库签发/撤销、route/task 运行或保存后重验，因此不构成真实数据授权或生产访问控制验收。**2026-10-31 更正**：持久化存储已由 AFI #201 合入（仍不含可信 adapter、route/task 或真实授权），见下文 #201 条目。
 
 ## 2026-10-30 OpenData PR #132：Sina LRB raw capture 签名恢复日志
 
@@ -1090,3 +1090,132 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 本次观察到 **6 个用户级 timer 处于 active/waiting 状态，但关联 service 均为 failed**。`full-history-recovery` 每分钟触发并以 exit 2 结束，原因是预期的 `run_full_history_recovery_worker.py` 不存在；`policy-expiry-watchdog` 以 exit 2 结束，预期脚本缺失。`dce-browser`、`dce-option`、`stock-tail` 处于 203 EXEC 状态，目标脚本缺失。`stock-amount` 以 exit 2 结束且目标缺失，但现有证据不足以确认完整因果。后端和 4 个 ETF 回补服务显示 active 只说明进程状态，不证明采集完整、历史无缺口或结果已发布。
 
 清点期间未停止或重启服务。迁移前不能猜测替代脚本目标，也不能启用新的采集任务；应先核实现行任务定义、目标入口及其授权，再安排受控迁移和数据对账。
+
+## 2026-10-30 至 2026-10-31 OpenData PR #134–#149：一次性来源门禁、离线对账与受门禁的日线读取
+
+以下条目截至 2026-10-31（Asia/Shanghai），按两仓 `dev` 的实际合入提交整理，不包含任一工作树的未提交改动。OpenData 本批全部提交只证明各自声明的代码/离线范围：没有真实 THS/Fuyao 请求、生产调度、自然周期或全历史覆盖证据。除特别注明外，提交信息与仓库文档均未记录本次运行的测试通过数或覆盖率，本节不补造这些数字；本文件更新时也未运行测试或采集。
+
+### OpenData PR #134–#143：durable one-shot gate 与 CSI500 隔离准备
+
+- [PR #134](https://github.com/cloudQuant/opendata/pull/134)（`50078e7a549d78ba8e804e76069c0314c36e6758`）：仅新增一次性样本门禁设计文档，无运行代码。
+- [PR #135](https://github.com/cloudQuant/opendata/pull/135)（`cf535ef84ecb45872819488106b38b3df29e9122`）：source attempt 绑定 v3 请求 scope，新增 `sg0003` 迁移。
+- [PR #136](https://github.com/cloudQuant/opendata/pull/136)（`ea3cb1c46824df3203f59d80c98ef9af48636d34`）：durable one-shot gate 与 `sg0004` 迁移；证据限于隔离测试，未验证生产数据库或跨主机并发。
+- [PR #137](https://github.com/cloudQuant/opendata/pull/137)（`83d39f2cd9dc11c4943db39cacaf8d8e47d7a7dd`）、[#138](https://github.com/cloudQuant/opendata/pull/138)（`92f462c8615a25d269096ce5de15366d54e1f2bf`）、[#139](https://github.com/cloudQuant/opendata/pull/139)（`30de20cc3a497f93f3271bfbcb914c6c1b650456`）：THS 请求/transport 绑定 v3 scope，reservation 必须持有已锁定的 one-shot gate，并加入一次性 transport 边界。它们没有发送真实请求，也没有创建生产授权。
+- [PR #140](https://github.com/cloudQuant/opendata/pull/140)（`03945282522139708aa8639a794b5bc19c4c82f0`）：一次性 source quota provisioning；证据限于隔离测试，不是跨运行持久额度或供应商配额证明。
+- [PR #141](https://github.com/cloudQuant/opendata/pull/141)（`d9e776bf542f603a7f05234992383d8bef1651f4`）、[#142](https://github.com/cloudQuant/opendata/pull/142)（`87cf9d2d0e29c756414a5fdd5b4bebe4b00ca08f`）：仅新增离线 CSI500 请求预览，并将 CSI500 单日样本绑定到 one-shot gate；不执行候选、不请求 Fuyao。
+- [PR #143](https://github.com/cloudQuant/opendata/pull/143)（内容提交 `be6b87b77c4d85629a4654b3d8be72a4589ab78f`，合并 `942eb6440626192eee41b6eb0d2921223302aa0a`）：允许初始化空的独立 source-gate schema；仍要求空库前置条件，不代表 warehouse 迁移或采集完成。
+
+### OpenData PR #144：隔离的 CSI500 source-gate 样本准备
+
+[PR #144](https://github.com/cloudQuant/opendata/pull/144) 已合入 `dev`，提交为 `1108a26aeaeb6f00e1af6e2306b4f92a835aeb71`。新增 `opendata/pipeline/ths_csi500_sample_composition.py`、`scripts/ops/run_csi500_one_shot_sample.py` 与运维文档。CLI 仅提供 `init`、`migrate`、`authorize`、`prepare`、`preview`：只操作程序新建的隔离 SQLite target，只应用 source-gate schema 并显式保持 `warehouse_schema_status=NOT_APPLIED`；本地 grant 标记为 `USER_DECLARED_UNVERIFIED`，候选固定为 `000905.SH` 单个交易日、transport/attempt 上限均为 1，manifest 中的 `CANDIDATE_NOT_LOCKED` 不是 gate receipt。
+
+该 PR 不提供 preflight、submit、execute、verify 或 cleanup，不读取 `.env`/API key、不请求 Fuyao、不锁定 scope、不排队、不启动 worker。新增 6 个测试文件，但提交与文档未记录测试通过数或覆盖率。**非声明**：本地自我声明授权不等于供应商授权或保留范围证据；未产生真实样本、行情数据或全历史结论。
+
+### OpenData PR #145：离线股票日线缺口对账（可作为补采规划输入）
+
+[PR #145](https://github.com/cloudQuant/opendata/pull/145) 已合入 `dev`，提交为 `2ca3e5afdb1d4112a5b3c1476485a34a8770d667`。新增 `stock_daily_gap_evidence_bundle.py`、`scripts/ops/reconcile_stock_daily_history.py` 及运维文档：从调用方显式准备的本地证据目录读取 manifest 与 artifact，复用 head/interior/tail 缺口核验并输出确定性 JSON。CLI 只读文件，不访问数据库、`.env`、供应商、网络或系统时钟，不写业务数据、不派发任务、不生成自动修复动作；输入有大小/数量上限并拒绝符号链接。
+
+报告中的 SHA-256 只证明输入字节与 manifest pin 一致，不是签名，也不证明来源、审核人、授权或历史可回溯性；publication 身份是调用方 envelope 的声明，且报告始终将 `all_a_universe_complete` 与 `universe_census_attested` 标为 `false`。新增 4 个测试文件，测试计数未记录。**非声明**：该报告可作为后续补采规划的输入证据，但工具本身不创建补采计划、不执行补采，也不是任一标的或全 A 股覆盖完整性的证明。
+
+### OpenData PR #146：受硬门禁保护的股票日线 v2 读取路由
+
+[PR #146](https://github.com/cloudQuant/opendata/pull/146) 已合入 `dev`，提交为 `2b616245d3fc3b38abc1389a3ee1917245b52ec2`。新增 `opendata/api/stock_daily_publication.py` 并挂载 `/api/v2/stock-daily/records`：按显式 `publication_id` 和半开日期窗口返回固定 publication 的分页 records，使用 snapshot ID 与 opaque cursor 固定同一 publication/窗口/选择/grant scope，校验 schema、单位、币种、`adjustment_basis=raw` 及 publication/sequence 一致性；coverage 保持 `unknown`。
+
+路由带 `_require_stock_daily_api_disabled` 依赖，当前**始终返回 404** 且 `include_in_schema=False`；测试明确断言门禁路径不会读取 publication store。新增 2 个测试文件，测试计数未记录。**非声明**：路由已实现但硬禁用，不等于容量验收、生产启用、真实授权或真实跨仓读取；不得据此声称股票日线 v2 已可供 AFI 业务使用。
+
+### OpenData PR #147：向 THS 股票 job 传递请求预算
+
+[PR #147](https://github.com/cloudQuant/opendata/pull/147) 已合入 `dev`，提交为 `b5957ad32862d7e20bd33a753a4aaba117b668e2`。`make_fetch_symbol_async` 与 `run_incremental_job` 增加可选 `request_budget`：仅接受单源 THS `stock_daily`，要求 fetcher 声明精确 canonical model；同一 job 内多个 symbol 共享同一线程安全计数器，每个 symbol 使用独立 `FetchContext` 的超时/取消生命周期。双源或其他 domain/source 显式拒绝。
+
+该参数必须由可信应用代码提供，本身不创建 grant 或网络权限；预算是进程内 scope，不协调其他 job 或 worker 进程，也未接入调度/配额控制面。新增 1 个测试文件，测试计数未记录。**非声明**：不证明跨进程限流、生产预算执行或真实请求已受控。
+
+### OpenData PR #148：反射后的时态身份 CHECK 校验
+
+[PR #148](https://github.com/cloudQuant/opendata/pull/148) 已合入 `dev`，提交为 `97aaa59e1df97e9a2c5ed803ac076cb12a9d62a2`。修改 `alembic_data/versions/20261029-0021_temporal_identity_snapshot.py`，新增受限 CHECK 表达式解析器，使 MySQL 反射后的冗余括号、`LENGTH`/`CHAR_LENGTH` 别名及 `BETWEEN`/比较组合仍能按已审阅语法校验，并拒绝不完整或未知语法；同时新增纯函数测试与一个 opt-in MySQL publication acceptance 测试文件（需专用空 schema 和显式环境变量）。
+
+提交与文档未记录该 opt-in MySQL 测试是否实际运行及通过数。**非声明**：纯解析器测试不等于真实 MySQL 迁移已执行；也不证明时态身份、publication 或来源数据正确。
+
+### OpenData PR #149：DWD diff 标记口径修正与 THS MySQL 竖向验收夹具
+
+[PR #149](https://github.com/cloudQuant/opendata/pull/149) 已合入 `dev`，提交为 `7cc613bfc15fc3e35da9213d204955e269ae1b83`。修正 `DwdMergeService`：`affected_keys` 只用于扩展源读取/重算范围，不再作为 `extra_diff_keys` 强行打标；行是否差异由 `merge_source_frames` 按源值比较决定（同值修订重算保持 `_diff_flag=0`）。新增 `docs/operations-dwd-diff-flag-correction.md`，记录当前 `_diff_flag`、`dq_diff_report` 与历史 C48/C52 矛盾记载的边界，并明确存量错误标记不会自动修复，需另行有界双源重算核对。
+
+同时新增 opt-in `tests/test_ths_stock_mysql_vertical_acceptance.py`：在专用临时 MySQL 8 实例上走 THS→ODS/DWD→v1 REST 竖向链路，THS HTTP 仅由 `httpx.MockTransport` 提供，要求操作者显式确认实例/空 schema 隔离，不请求真实凭据。提交与文档未记录该 e2e 是否实际运行、通过数或覆盖率。**非声明**：这是模拟 THS 的隔离验收夹具，不是真实 THS 请求、生产 MySQL、AFI 消费或自然周期证据；也不表示历史 `_diff_flag` 已纠正。
+
+## 2026-10-31 AFI PR #201–#203：授权存储、固定日线读取与迁移计划
+
+以下 AFI 提交同样只覆盖代码/离线或文档范围；提交信息与仓库文档未记录测试通过数，本节不补造数字。
+
+### AFI PR #201：精确 snapshot grant 存储
+
+[PR #201](https://github.com/cloudQuant/ai-for-investor/pull/201) 已合入 `dev`，提交为 `1af1366cccbdeef57d7c84c15820d556124c8cf8`。新增 `stock_snapshot_user_read_grants`、`stock_snapshot_source_research_grants`、`stock_snapshot_grant_audits` 三个 ORM 模型及 Alembic 迁移 `20261030_stock_analysis_snapshot_grants`（`down_revision=20261017_legacy_paper_import_cutover`），以标量列和不可变 scope、issue/revocation audit、精确 ASCII 标识及检查约束保存授权事实；ORM 事件拒绝普通对象变更。
+
+该存储**默认为空**，不签发权限、不认证签发人，也不强制完整的 issue/revoke 审计链；bulk ORM/SQL 可绕过 ORM 监听，数据库级 UPDATE/DELETE 保护属于另行部署的控制。该合入提交未包含可信 adapter、OpenData registry 信任、route/task、后台执行/读取/保存前复核，迁移在真实 MySQL/生产库的运行也未记录。**更正**：#193 条目中“授权持久模型/迁移仍在本地开发中”的表述已过时；#201 只把持久化基础合入，仍不能关闭 AC09/AC18，也不构成可信 grant registry 或可用授权功能。新增 1 个测试文件（使用内存 SQLite），测试计数未记录；未记录 MySQL/PostgreSQL 运行。
+
+### AFI PR #202：固定股票日线 publication 的 AFI 读取器
+
+[PR #202](https://github.com/cloudQuant/ai-for-investor/pull/202) 已合入 `dev`，提交为 `076caa979498f0e930f5454bf7b48b766e3d29e1`。`OpendataProvider` 新增 `fetch_published_stock_daily_snapshot`：只读一个显式 pin 的 stock-daily publication，首屏要求 `publication_id` 与半开窗口，后续页只使用返回的 snapshot ID/opaque cursor，执行 deadline、页数/字节上限、重复 cursor 拒绝和 response 字节预算；`OpendataStockDailySnapshotReader` 独立校验请求身份、publication/sequence、snapshot 绑定、行字段/单位/币种/复权基准，coverage 原样保留 `unknown`。
+
+该 reader 有意**未接入**股票业务任务、授权策略或 fallback provider，也没有业务调用点；它依赖的 OpenData 路由当前硬禁用（#146），因此本次只有离线/mock 合同验证，没有真实跨仓读取。新增 1 个测试文件（`httpx.MockTransport`），测试计数未记录。**非声明**：不构成 AFI 消费迁移、真实数据读取、生产授权或全历史覆盖。
+
+### AFI PR #203：按可验证数据闭环排序的迁移计划
+
+[PR #203](https://github.com/cloudQuant/ai-for-investor/pull/203) 已合入 `dev`，提交为 `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`。仅新增 [PRACTICAL_MIGRATION_PLAN.md](PRACTICAL_MIGRATION_PLAN.md)，提出按“合同 → 写入/发布/API → AFI 消费 → 隔离端到端 → 有界真实影子 → 自然周期 → 单写者切换”排序的执行计划，并区分 `CODE/OFFLINE`、`REAL_SOURCE`、`DEPLOYMENT`、`NATURAL_CYCLE` 与历史覆盖口径。该文档是计划与停止条件，不是任何任务的完成证据。
+
+### 本批共同边界
+
+上述 PR 合计只推进了代码、离线工具、隔离夹具和计划文本。仍无真实 THS/Fuyao 来源请求、生产 MySQL 部署、AFI 业务接线、自然调度周期、单写者切换或逐标的全历史对账证据；没有证据表明这些新入口已注册为生产任务，v2 日线路由保持硬禁用。全 A 股（含北交所、退市证券）分母、来源授权/保留范围、BSE 目录和 MySQL/InnoDB 生产行为继续为 `UNKNOWN` 或 `NOT_RUN`。
+
+## 2026-10-31 Wave 13/14：容量门禁、股票日线授权、回补执行器与真实捕获字节回放
+
+本节记录**两仓工作树中尚未提交**的 Wave 13/14 增量；它不改变上一节“按已合入 HEAD 核对”的基线，也不表示这些改动已合并、已部署或已获生产接受。两仓 HEAD 仍分别为 AFI `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`、OpenData `7cc613bfc15fc3e35da9213d204955e269ae1b83`。
+
+### 1. OpenData：受 digest-pinned 容量证明保护的股票日线 v2 读取门禁
+
+新增 `opendata/api/stock_daily_capacity.py`。路由仍保持 `include_in_schema=False`，但把原先无条件 404 的依赖替换为：`STOCK_DAILY_PUBLICATION_API_ENABLED=true`、`STOCK_DAILY_PUBLICATION_CAPACITY_FILE`、`STOCK_DAILY_PUBLICATION_CAPACITY_SHA256` 三项同时有效，且证明文件必须绑定 `dataset_id=cn-equity-stock-daily`、`source_id=akshare.daily`、`semantic_version=stock-daily-raw-v1`、contract SHA-256、窗口/页大小上限与有效期。任一缺失、过期、摘要不符或已解析 publication 与证明不匹配都返回统一 404。该门禁只证明部署配置与请求边界被显式声明，**不是**数据授权、来源权利、容量测量或真实数据证明。
+
+验证：`tests/test_stock_daily_capacity_attestation.py`、`test_stock_daily_publication_api.py`、`test_stock_daily_publication_contract_edges.py` 合计 **40 passed**（本次重跑 4.03s）；Ruff 通过。新增运维说明 `docs/operations-stock-daily-publication-capacity.md`。
+
+### 2. AFI：股票日线精确 grant 存储扩展与读取前授权 adapter
+
+- `app/models/stock_analysis_snapshot_grant.py` 与纯策略 `opendata_snapshot_authorization.py` 的 dataset→source 映射新增 `cn-equity-stock-daily → akshare.daily`，CHECK 约束同步扩展；新增迁移 `20261031_stock_daily_snapshot_grants`（`down_revision=20261030_stock_analysis_snapshot_grants`）。股票日线没有源端 capture，grant 的 `capture_id` 明确定义为**平台 publication `content_sha256`**，不是来源 capture。
+- 新增 `StockDailySnapshotAuthorizationAdapter`：从调用方异步 session 重新读取当前 principal、最大 revision 的 user/source grant 及其 ISSUED/REVOKED audit、`AssetDataSourceRegistry` 行，再调用既有纯策略；读取前授权、响应校验后再次复核。`OpendataStockDailySnapshotReader.read_authorized(...)` 为默认关闭的 opt-in 路径；原 `read()` 签名与行为保持不变。没有接入业务任务、调度或报告生成。
+
+验证：adapter/storage/policy/reader 四文件合计 **138 passed**（本次重跑 62.38s；其中 adapter 14 项）。Ruff 通过。该切片仍不认证签发人，不提供生产 grant registry/签发 API，不证明真实数据或部署；receipt 仍是无密钥摘要。
+
+### 3. 跨仓固定 publication wire 验收（合成数据）
+
+新增 OpenData fixture server `tests/test_stock_daily_cross_repository_fixture_server.py` 与 AFI opt-in 测试 `test_opendata_stock_daily_publication_cross_repository_wire.py`：在隔离子进程中用 SQLite 合成 publication 挂载**真实** stock-daily 路由，AFI 用真实 `OpendataStockDailySnapshotReader` 经 IPv4 loopback 读取。验证 2 行、日期、publication/content hash、unknown coverage、仅 1 次 records 请求；错误 publication 失败关闭且无重试。本次重跑 **9 passed（3.64s）**；未加 opt-in 时 9 skipped。证据摘要见 `var/reports/afi204/stock-daily-publication-cross-repo-wire-20261031/`。
+
+### 4. OpenData：可恢复的回补执行器与 CLI
+
+新增 `opendata/pipeline/stock_daily_backfill_executor.py` 与 `scripts/ops/execute_stock_daily_backfill.py`：从 digest-pinned instrument snapshot 重建计划，校验 `plan_sha256`/chunk 幂等键/任务绑定，按计划顺序经现有 RunLedger/RunService/RunDispatcher 执行有界分片；已成功分片跳过，遇到 failed/cancelled/leased/uncertain 立即停止，不重试终态失败，不生成新 identity。新增 `execution_only` reviewed job 路径，使任务保持 disabled/无 schedule；dry-run 为默认，`--execute` 需要显式本地 SQLite、离线响应 fixture、artifact root 和授权 token。CLI 拒绝远程/非 SQLite URL、摘要不符、未知 target 与不安全路径。
+
+验证：executor/CLI/plan/budget 四文件 **49 passed**（3.23s）；`run_service`/`run_dispatch`/one-shot/worker/stock_daily_job 共享回归 **345 passed**（18.59s）；Ruff 通过；scoped mypy（`--follow-imports=skip`）在修复新增 CLI 类型标注后无问题。完整 follow-mypy 仍有既有诊断，不能宣称整仓 mypy 通过。
+
+### 5. 真实捕获字节回放（非实时）
+
+使用 2026-10-29 已捕获的真实 Eastmoney 日线响应（10 行，body SHA-256 `2d707ecd...c509`），在隔离 SQLite 上走通：真实捕获 JSON → stock-daily job → publication → **真实** v2 路由 → AFI 真实 reader。最终验收 publication 为 `3485fb5f48b94c4e8cbfa3bded44a888`，scoped content SHA-256 `2dbde8e8...dd942`，10 行，日期 `2026-10-12..2026-10-23`，coverage=`unknown`，AFI 仅 1 次 records 请求、无重试。AFI opt-in 测试 **9 passed**（4.27s）；OpenData executor/plan/job 回归 **142 passed**。证据见 `var/reports/afi204/stock-daily-real-sample-replay-20261031/`。
+
+授权开启模式另跑 **11 passed、1 skipped**（11.39s）：使用文件型隔离 SQLite 中的合成 user/role、精确 user/source grant、ISSUED audit 和 `AssetDataSourceRegistry` 行调用 `read_authorized`，成功读取同一真实捕获 publication 的 10 行；缺少 user grant 时在**任何 records 请求前**以 `stock_daily_user_grant_missing` 失败关闭；在 provider 返回后注入 REVOKED audit 时以 `user_grant_revoked` 失败关闭且不返回行。授权主体、grant、registry 和撤销均为测试注入，不是生产签发/撤销服务或真实用户授权。
+
+**该回放的真实性边界**：body 是此前捕获的真实响应，但本次没有重新请求来源；它是离线回放，不是 `REAL_SOURCE` 实时请求或来源授权证明。publication ID 每次运行随机生成；样本自身记录 `completeness_assessment=not_evaluated`，不证明窗口完整、全历史、自然周期或生产部署。
+
+### 6. 质量门禁与开放边界
+
+- 新增/修改文件的 Ruff check/format 通过；scoped mypy 在修复后无新增问题；AFI 定向测试与 Ruff 通过。
+- `make published-openapi-check` 在当前 HEAD/工作树仍失败于既有 `unsupported OpenAPI reference: #/$defs/Exchange`；stock-daily 路由 `include_in_schema=False`，该失败不是本批路由改动引入的，但也不能写成通过。
+- `make a2-check` 本轮运行以 **30 个既有 finding** 结束（例如 `tests/test_ths_dwd_integration.py`、`tests/test_watermark.py` 等）；日志中未将 finding 归到本批新增的 stock-daily 文件，但这仍是全仓门禁失败，不能写成通过。
+- 覆盖率因当前环境的 pytest-cov 提前导入触发既有 `Settings` 初始化错误而未采集，不能补造覆盖率数字。上述测试结果均为定向/隔离运行，不等于整仓 `make gate`、远端 CI 或 Python 3.10 runtime 通过。
+- 本批证据摘要与文件哈希位于 [`wave13-14-20261031/SUMMARY.md`](</home/yun/Documents/ai-for-investor/var/reports/afi204/wave13-14-20261031/SUMMARY.md>) 与同目录 `SHA256SUMS`。
+- 仍开放：实时 THS/Fuyao 有界请求与操作者批准、真实来源授权/保留证据、生产 MySQL/部署、AFI 业务接线、影子对账、单写者切换、自然周期、备份恢复、权威全 A（含 BSE/退市）分母与逐 `instrument_id × dataset_id` 全历史。Wave 13/14 只把股票日线切片推进到 `CODE/OFFLINE` + 真实捕获字节回放；不得据此宣称迭代204完成或生产可用。
+
+### 7. 对任务矩阵的影响（不自动关闭父任务）
+
+| 子任务 | 本次新增的可确认子范围 | 仍未完成 |
+| --- | --- | --- |
+| 204-A05-04 | v2 日线路由的默认关闭容量门禁、contract/source/窗口/页大小绑定，合成 wire 验收 | 真实部署容量/时钟/数据库、生产 grant、真实来源 |
+| 204-B05-03 | 逐分片可恢复执行器、ledger 幂等/跳过/停止语义、离线 CLI 与真实捕获字节回放 | 真实全 A 分母、逐标的全历史、生产 MySQL、预算/worker 部署、自然周期 |
+| 204-E03-04 | 股票日线精确 grant 存储扩展与读取前/响应后授权 adapter（默认关闭）；授权开启的真实捕获回放 11 passed（缺 grant 请求前拒绝、读取后撤销失败关闭） | 真实用户 grant registry、签发/撤销 API、业务任务接线、报告保存前复核；测试 grant/registry 为合成 |
+| 204-E03-05 | 固定 publication/content hash 的 AFI reader 与回放证据 | 报告工件、publication/vector 长期保留、真实数据与 PIT 证据 |
+| 204-E06-03 | 跨仓合成 wire + 真实捕获字节回放（离线） | 真实来源、生产部署、真实 grant、影子/自然周期 |
+| 204-B02-04/05 | 真实 body 的离线回放与字段/单位通过 reader 验证 | 实时来源、真实授权、全历史与单位/复权独立校准 |

@@ -18,11 +18,15 @@
 
 证券/衍生品长尾任务进入开发时继续按一个模型族或不超过20个源条目拆执行批次，每批绑定独占文件清单和台账行；98项是截至2026-10-29的计划拆分规模，不代表当前有效控制任务数量，也不要求把2026-10-26快照的607/449个候选文件塞给一个长期子代理。源脚本、运行任务和数据集分属不同分母，需在本轮只读清单刷新后再报告当前数量。并行数量依据依赖和资源预算调整。
 
-## 当前基线与近期执行矩阵（2026-10-30，Asia/Shanghai）
+## 当前基线与近期执行矩阵（2026-10-31 更新，Asia/Shanghai）
 
-本轮编辑这些计划文档之前 AFI `dev` 与 `origin/dev` 的 HEAD 为 `73c7b2f7537cacab2ab75daf4381e850a0977b9b`，OpenData `dev` 与 `origin/dev` 的 HEAD 为 `cc79654171bd00b00d9909f7973547a10790a945`；当时两仓工作树均干净。该基线不包含本次文档改动。开始任何后续改动或验收时须重取实际 HEAD 并记录脏文件哈希。
+**2026-10-31 基线**：AFI `dev` HEAD 为 `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`，OpenData `dev` HEAD 为 `7cc613bfc15fc3e35da9213d204955e269ae1b83`；该基线不包含本次文档改动，开始任何后续改动或验收时仍须重取实际 HEAD 并记录脏文件哈希。
 
-OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查deselect；follow-mypy仍有3项既有诊断。它增加签名恢复日志，但任务disabled、unregistered、无scheduler/生产签名器，且账本提交与日志发布非原子。OpenData PR #133 的限定合成对账回归68项通过、statement+branch覆盖率96.77%、0项排除；它不验证真实CSI500来源、交易日历、授权/保留、生产运行或实际全历史。AFI PR #193 仅实现纯授权策略；本地授权持久模型和迁移仍在开发中，未合入当前 AFI HEAD、未验收，不构成可信grant registry。尚无持久签发/撤销、业务路由或报告保存前复核。上述PR只证明各自声明的代码/离线范围，不能自动更新或完成矩阵中的父工作包。详细边界见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+OpenData #134–#149 把一次性 source gate/配额与 THS transport 逐步绑定到 v3 scope（#134–#143），并新增隔离 CSI500 样本 CLI（#144）、可作为补采规划输入的离线股票日线缺口对账（#145）、硬禁用的 v2 日线读取路由（#146）、THS job 请求预算传递（#147）、MySQL 反射 CHECK 校验（#148）以及 DWD diff 标记修正和模拟 THS 的 MySQL 竖向验收夹具（#149）。AFI #201–#203 新增精确 snapshot grant 存储、固定股票日线 publication 读取器和按真实数据闭环排序的迁移计划。以上提交信息与文档均未记录测试通过数/覆盖率；它们只覆盖各自的代码/离线范围，没有真实 THS/Fuyao 请求、生产 MySQL、AFI 业务接线、自然周期、单写者切换或全历史验收。逐项范围、SHA 与非声明见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 的 2026-10-31 条目。
+
+**2026-10-30 历史快照**：本轮编辑这些计划文档之前 AFI `dev` 与 `origin/dev` 的 HEAD 为 `73c7b2f7537cacab2ab75daf4381e850a0977b9b`，OpenData `dev` 与 `origin/dev` 的 HEAD 为 `cc79654171bd00b00d9909f7973547a10790a945`；当时两仓工作树均干净。该基线不包含当时的文档改动。
+
+OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查deselect；follow-mypy仍有3项既有诊断。它增加签名恢复日志，但任务disabled、unregistered、无scheduler/生产签名器，且账本提交与日志发布非原子。OpenData PR #133 的限定合成对账回归68项通过、statement+branch覆盖率96.77%、0项排除；它不验证真实CSI500来源、交易日历、授权/保留、生产运行或实际全历史。AFI PR #193 仅实现纯授权策略；本地授权持久模型和迁移仍在开发中，未合入当前 AFI HEAD、未验收，不构成可信grant registry。尚无持久签发/撤销、业务路由或报告保存前复核。上述PR只证明各自声明的代码/离线范围，不能自动更新或完成矩阵中的父工作包。**2026-10-31 更正**：AFI PR #201 已合入精确 snapshot grant 的 ORM 模型与迁移 `20261030_stock_analysis_snapshot_grants`，但存储默认为空，该合并范围未接可信 adapter、签发/撤销认证、业务路由或读取前复核，因此仍不构成可信 grant registry。详细边界见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
 
 用户已声明AkShare和Fuyao可用于自动采集、保存及两内部服务间使用，不重复询问这三项用途。仍须把AkShare每个函数映射至实际上游产品/endpoint，并将market、dataset、历史范围、限额、保留及撤销行为落到可审计grant；没有独立登记的端点或范围保持UNKNOWN。
 
@@ -37,6 +41,37 @@ OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查d
 | E：AFI consumers、async REST、数据管理UI；只改AFI客户端/业务/UI | `204-E01-01/02`、`204-E02-03/04`、`204-E03-01/02/03/04/05`、`204-E04-01/02/03`、`204-E05-01/02` | 盘点AFI的行情/财报/搜索/扫描器/页面/后台任务、本地库和直连SDK；先实现异步REST、deadline/有限重试/错误映射，再按冻结records/vector合同迁移业务路径。将数据管理入口指向OpenData需等待其受保护的管理API。 | #193纯策略需接真实user/grant revision，并在后台执行、读前及报告落盘前重验；不存在固定vector、可信coverage或权限时明确不可用，不写本地事实缓存、不回退旧源。 |
 
 执行顺序：先重新核对任务/脚本/消费者输入清单并冻结共享合同；A/B分别推进证券身份与源字段语义，C独立处理其他域小批次，D盘点运行态并完善预算/worker，E并行完成consumer inventory及async client；合同就绪后做受预算约束的有界端到端样本；最后才逐证券补历史、自然周期、备份恢复和单写者切换。局部PR合入后只记录它通过的范围，不改变原要求的交易所、证券或历史分母。
+
+### 2026-10-31 增量证据（不重算 98 项状态）
+
+本节只登记可由 2026-10-31 合入提交直接支持的部分证据，不改变上方表格的历史状态列，也不据此推算当前完成数量或比例。未列出的子任务不因本批 PR 获得状态更新。
+
+| 子任务 | 本批可引用的部分证据 | 仍开放的范围 |
+| --- | --- | --- |
+| `204-A05-04` | OpenData #146 实现了股票日线 v2 records 合同形状：显式 `publication_id`、半开窗口、snapshot/cursor 固定同一 publication/窗口/选择/grant scope，并校验 schema、单位、币种和 `adjustment_basis=raw`。 | 路由由依赖强制返回 404 且不在 OpenAPI 中；无容量验收、生产启用、真实 publication/visibility seal 读取或授权；不能视为该合同已验收。 |
+| `204-A05-05` | AFI #201 新增用户读授权、来源研究授权和审计三类持久表及精确 scope 约束；OpenData #146 路由参数包含读 grant 依赖。 | 存储默认为空、不签发/认证/强制审计链，未接可信 adapter、registry revision 比对、后台执行/读取/保存前复核；无真实 grant 或撤销验收。 |
+| `204-B02-04` | #145 提供离线 head/interior/tail 缺口对账（可作为补采规划输入）；#146/#202 提供固定 publication 的读取合同。 | 仍缺 AkShare 函数→上游产品/endpoint→字段/单位的有界真实样本、真实来源 ODS/DWD→v2 REST→AFI 的链路；不能关闭真实源验收。 |
+| `204-B02-05` | 仅共享 #136–#140 的一次性 gate/quota/transport 基础。 | Fuyao 财报数据集本身没有新实现或证据；六查询、单位/币种、修订语义和真实返回仍未验收。 |
+| `204-B05-03` | #145 的离线对账 CLI 可作为逐 `instrument_id × dataset_id` 回补前的缺口输入工具；#149 提供模拟 THS 的 MySQL 竖向夹具。 | 无权威全市场/退市分母、无回补执行、持久 checkpoint、真实 MySQL 或自然周期；全历史仍 OPEN。 |
+| `204-D02-04` | #147 允许可信调用方向单个 THS `stock_daily` job 传入进程内请求预算；#149 夹具覆盖 job→ODS/DWD→v1 REST。 | Run service/worker 未接该预算，无多进程竞争、租约恢复或崩溃后旧 token 拒绝证据。 |
+| `204-D03-02` | #136–#140 提供一次性 gate、quota provisioning 和 transport 限定；#147 提供 job 级共享请求预算。 | 重试/退避、并发上限、跨运行额度、Retry-After 和 WAF 停止规则仍未完成；本地 bucket 不是持久一次性上限。 |
+| `204-D03-03` | #144 新增隔离运维 CLI（`init/migrate/authorize/prepare/preview`）。 | 它不是统一 Run 提交入口，不接 APScheduler/手工 API/CLI/systemd；仅能说明存在一个隔离 CLI，不构成统一入口证据。 |
+| `204-E03-04` | AFI #202 新增独立固定 publication 读取器并校验请求/行/单位/coverage。 | reader 未接任何股票分析业务路径、授权或 fallback 策略；上游路由硬禁用，无真实跨仓读取或报告调用。 |
+| `204-E03-05` | 无直接证据；#201 的 grant 存储与 #202 的 reader 只是未来报告溯源所需的部件。 | 报告必需数据/coverage 门槛、publication vector 持久化与重放、保留期均未实现或验收。 |
+
+### 2026-10-31 Wave 13/14 工作树增量（未提交，未合并）
+
+以下证据来自当前两仓工作树，不改变上方“按已合入 HEAD”的表格状态；在提交、合并和重新验收前不能计为 PR 交付。
+
+| 子任务 | 工作树新增的可确认子范围 | 仍开放的范围 |
+| --- | --- | --- |
+| `204-A05-04` | 新增默认关闭的 digest-pinned 容量门禁，绑定 dataset/source/semantic/contract/publication/窗口/页大小/有效期；合成 route 测试 40 项通过；跨仓合成 wire 9 项通过；真实捕获字节回放 9 项通过。 | 目标部署的操作者证明、时钟/数据库/容量核验；生产 grant/API key；真实来源与 visibility seal；不能把门禁或合成 wire 当作生产启用。 |
+| `204-B05-03` | 新增可恢复回补执行器/CLI：计划摘要校验、ledger 幂等跳过、失败停止、dry-run 默认、`execution_only` 任务、离线 fixture 与真实捕获字节回放；49 项定向测试，容量/执行器/共享回归合并 434 项通过。 | 权威全市场/退市分母、逐 `instrument_id × dataset_id` 全历史、生产 MySQL、真实预算/worker 部署、自然周期；执行器不是调度器，不授权实时发送。 |
+| `204-E03-04` | 精确 grant 存储/策略扩展到 `cn-equity-stock-daily`/`akshare.daily`；新增读取前/响应后授权 adapter（默认关闭，138 项定向测试通过）；真实捕获字节回放使用真实 reader 读取固定 publication。 | 真实用户 grant 的签发/撤销/审计认证、生产 registry revision、业务任务接线、报告保存前复核；adapter 未接业务路径。 |
+| `204-E03-05` | 固定 publication/content SHA、reader 严格校验与离线回放证据。 | 报告必需数据/coverage 门槛、publication vector 持久化/重放、保留期、真实数据/PIT；回放不构成报告验收。 |
+| `204-E06-03` | 跨仓合成 publication wire 与真实捕获字节离线回放均通过真实 OpenData 路由 + 真实 AFI reader。 | 实时来源、生产部署、真实 grant、影子对账与自然周期；合成 principal/grant/API key 不是生产授权。 |
+| `204-B02-04/05` | 真实 Eastmoney 捕获 body 经 job→publication→v2 路由→AFI reader 回放，10 行字段/单位通过 reader 校验；公开证据记录 body SHA 和 publication content hash。 | 未重新请求来源；未验证实时来源、授权/保留、全历史、复权/单位独立校准；不能作为 `REAL_SOURCE` 验收。 |
+| `204-D02-04`/`204-D03-02`/`204-D03-03` | 回补执行器复用现有 RunLedger/RunService/RunDispatcher，新增 `execution_only` 提交路径；容量/执行器/共享 one-shot/worker 回归合并 434 项通过。 | 生产 worker/调度、跨进程预算、租约/崩溃恢复、Retry-After/WAF、统一入口与 systemd 接线仍未验收。 |
 
 ## A：平台与数据契约
 

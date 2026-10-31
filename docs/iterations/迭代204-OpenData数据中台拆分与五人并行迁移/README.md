@@ -1,6 +1,10 @@
 # 迭代204 OpenData数据中台拆分与五人并行迁移
 
-编制日期：2026-10-27（Asia/Shanghai）；计数口径核对更新：2026-10-29（Asia/Shanghai）。当前局部状态：**AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 均已合入 `dev`；这只表示各 PR 的提交范围已集成，迭代204整体尚未完成。** PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+编制日期：2026-10-27（Asia/Shanghai）；计数口径核对更新：2026-10-29（Asia/Shanghai）。**2026-10-27 局部状态（历史收据，非当前前沿）**：AFI PR #52–#58、#62、#64–#66 与 OpenData PR #5–#10 均已合入 `dev`；这只表示各 PR 的提交范围已集成，迭代204整体尚未完成。 PR #5 只交付默认不接生产的 Sina 离线 enqueue/journal 组件：132 项 SQLite/scheduler-stub 测试通过，fanout pipeline 覆盖率 94%、journal pipeline 98%、合计 96%；0013 迁移仅有 SQLite 专项 44 项通过、覆盖率 79%，MySQL/PostgreSQL 未验证。真实 job 仍禁用且未经审查，grant 为 UNKNOWN，固定 manifest 只覆盖 SH/SZ；这些测试不是新浪真实采集或生产验收。PR #53 的定向 21 项测试中，Provider HTTP 使用 `httpx.MockTransport`，其他依赖使用隔离 SQLite/stubs；隔离运行禁用了 timeout 插件，并产生 `timeout`、`timeout_method` 两项 pytest 配置警告。Sina 停机漏槽、日历对账/告警、全局配额、来源权利、BSE 和全历史仍开放；qfq 因子、成交量质量也未验收。详细进展见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md)。
+
+**当前核对基线（2026-10-31，Asia/Shanghai）**：AFI `dev` HEAD 为 `733655f8a3dcf20bd37ee0fb72e1d147b54194a6`，OpenData `dev` HEAD 为 `7cc613bfc15fc3e35da9213d204955e269ae1b83`。上方 #52–#58、#62、#64–#66 与 #5–#10 段落是历史收据，不再代表当前前沿。新合入的增量为 OpenData #134–#149（一次性 source gate/配额与 THS transport 绑定、CSI500 隔离样本准备、股票日线离线缺口对账、硬禁用的 v2 日线读取路由、THS job 请求预算传递、MySQL 反射 CHECK 校验、DWD diff 标记修正与模拟 THS 的 MySQL 竖向验收夹具）和 AFI #201–#203（snapshot grant 持久存储、固定股票日线 publication 读取器、按真实数据闭环排序的迁移计划）。这些只覆盖各自的代码/离线范围，没有真实来源请求、生产部署、AFI 业务接线、自然周期或全历史验收；按该 HEAD 的合入内容（不含工作树未提交改动），没有证据表明这些新入口已注册为生产任务，v2 日线路由仍硬返回 404。逐项范围、提交 SHA、测试证据缺口与非声明见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 的 2026-10-31 条目。
+
+**2026-10-31 工作树增量（未提交，未合并）**：Wave 13/14 在当前两仓工作树新增了（1）股票日线 v2 路由的 digest-pinned 容量门禁（默认关闭，40 项定向测试通过）；（2）AFI 股票日线精确 grant 存储扩展与读取前/响应后授权 adapter（138 项定向测试通过，默认关闭）；（3）跨仓合成 publication wire（9 项通过）与（4）真实捕获字节离线回放（10 行、publication→真实 v2 路由→AFI reader，9 项通过）；（5）可恢复的股票日线回补执行器/CLI（49 项定向测试；容量、执行器与共享回归合并 434 项通过）。真实捕获回放没有重新请求来源、不使用生产 MySQL、不证明全历史/覆盖/自然周期/生产权限；容量门禁不是数据授权。上述改动尚未提交，不能写成已合入或生产验收。详见 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) 的 “Wave 13/14” 节。
 
 AFI PR #56 已合入：新增默认关闭的 OpenData 上证50 benchmark reader。#56 合并后又补充了三场景 `score_pending → apply_outcome` 内存 SQLite ORM 回归；补测与本文档更新一并交付。测试文件整套 **23 passed**，Provider HTTP 使用 `MockTransport`、股票行情使用 fake；运行时有两项 timeout 插件配置警告。这不代表生产 source、生产授权或生产数据库验收。生产数据源授权与落库、逐日历史 coverage、Eastmoney 跨源对照及告警仍未验收。个股 20 日收益可算、但 benchmark 不可用时，`outcome_status` 仍可能为 `scored`，相应的 `benchmark_*_return` / `excess_*_return` 字段可能为 null；原因只写日志，没有持久化原因或告警。此增量不改变全 A 与逐标的全历史仍待验收的状态。
 
@@ -27,7 +31,7 @@ AFI PR #64/#65/#66 与 OpenData PR #9/#10 已合入；这些是有明确局部�
 | 文件 | 用途 |
 | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统边界、数据生命周期、REST 契约、存储、调度、安全与可观测性 |
-| [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) | 主任务矩阵含98个唯一可分派控制任务ID及依赖、验收面；状态截至2026-10-29（Asia/Shanghai）：8 DEV_DONE、11 IN_PROGRESS、79 PLANNED。DEV_DONE仅表示该行局部交付；逐批子范围进展单列 |
+| [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) | 主任务矩阵含98个唯一可分派控制任务ID及依赖、验收面；表格状态为2026-10-29（Asia/Shanghai）快照：8 DEV_DONE、11 IN_PROGRESS、79 PLANNED；2026-10-31 基线与增量证据单列。DEV_DONE仅表示该行局部交付 |
 | [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) | 双仓隔离分支、提交、测试、限制与后续接线 |
 | [WAVE2_STATUS.md](WAVE2_STATUS.md) | 11条并行开发任务、真实运行清单、事务决定、审查与剩余范围 |
 | [WAVE3_STATUS.md](WAVE3_STATUS.md) | 执行器/证据/主机清单/提交/迁移预演/兼容门禁和wire身份修正 |

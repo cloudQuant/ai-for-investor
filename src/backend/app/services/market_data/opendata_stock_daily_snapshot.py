@@ -1,8 +1,11 @@
 """Read one explicitly pinned OpenData stock-daily publication.
 
 This standalone reader validates the stock-daily v2 route against AFI's
-existing OpenData stock-bar provider contract. It is intentionally not wired
-into stock business tasks, authorization policy, or fallback providers.
+existing OpenData stock-bar provider contract. The default ``read`` method is
+not wired into stock business tasks, authorization policy, or fallback
+providers. ``read_authorized`` is an opt-in path that requires current exact
+user/source grants through ``StockDailySnapshotAuthorizationAdapter`` and runs
+the policy both before provider I/O and again before returning the response.
 Coverage is returned as ``unknown`` because no independent full-history
 evidence is currently bound to this publication.
 """
@@ -16,6 +19,8 @@ from collections.abc import Mapping
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.market_data.opendata_contracts import OPENDATA_PROVIDER_CONTRACT_REGISTRY
 from app.services.market_data.opendata_provider import (
     OpendataProvider,
@@ -24,6 +29,19 @@ from app.services.market_data.opendata_provider import (
 )
 from app.services.market_data.provider_contracts import ProviderContract, ProviderContractError
 from app.services.market_data.provider_models import MarketDataProviderRequest
+from app.services.stock_analysis.opendata_snapshot_authorization import (
+    StockAnalysisSnapshotScope,
+)
+from app.services.stock_analysis.stock_daily_snapshot_authorization_adapter import (
+    DATASET_ID as _AUTHORIZATION_DATASET_ID,
+)
+from app.services.stock_analysis.stock_daily_snapshot_authorization_adapter import (
+    SOURCE_ID as _AUTHORIZATION_SOURCE_ID,
+)
+from app.services.stock_analysis.stock_daily_snapshot_authorization_adapter import (
+    StockDailySnapshotAuthorizationAdapter,
+    StockDailySnapshotAuthorizationError,
+)
 
 _UTC = timezone.utc
 _DATASET_ID = "cn-equity-stock-daily"
@@ -128,12 +146,19 @@ class OpendataStockDailySnapshotReader:
     """Read and validate one exact symbol/window/publication tuple.
 
     The OpenData service performs API-key authentication and its dataset grant
-    checks. This reader adds no authorization layer and never selects a
-    fallback provider.
+    checks. ``read`` adds no authorization layer and never selects a fallback
+    provider. ``read_authorized`` additionally requires current exact AFI
+    grants and fails closed on any denial, expiry, or revocation.
     """
 
-    def __init__(self, provider: OpendataProvider) -> None:
+    def __init__(
+        self,
+        provider: OpendataProvider,
+        *,
+        authorization_adapter: StockDailySnapshotAuthorizationAdapter | None = None,
+    ) -> None:
         self._provider = provider
+        self._authorization_adapter = authorization_adapter
 
     async def read(
         self,
@@ -152,6 +177,87 @@ class OpendataStockDailySnapshotReader:
                 row identity, or business data differs from the reviewed shape.
         """
         contract = _validate_request(request, publication_id)
+        return await self._read_validated(
+            request,
+            publication_id=publication_id,
+            contract=contract,
+        )
+
+    async def read_authorized(
+        self,
+        request: MarketDataProviderRequest,
+        *,
+        publication_id: str,
+        content_sha256: str,
+        user_id: str,
+        session: AsyncSession,
+    ) -> OpendataPublishedSnapshotResult:
+        """Read one publication after exact current grants allow its content hash.
+
+        Authorization runs after route validation and before provider I/O. The
+        expected ``content_sha256`` is taken explicitly from the caller and is
+        used as the policy ``capture_id``; it is never inferred from a response.
+        A second revalidation runs after the response is validated and before
+        it is returned.
+
+        Args:
+            request: Exact AFI OpenData stock daily request.
+            publication_id: Lowercase publication ID selected by the caller.
+            content_sha256: Expected platform publication content digest.
+            user_id: Current authenticated principal.
+            session: Caller-provided async session for current grant reads.
+
+        Raises:
+            OpendataStockDailySnapshotError: With the stable adapter denial code
+                on any authorization failure, or with the ordinary contract
+                codes on malformed route/snapshot/row content.
+        """
+        contract = _validate_request(request, publication_id)
+        adapter = self._authorization_adapter
+        if adapter is None:
+            raise OpendataStockDailySnapshotError("stock_daily_authorization_unavailable")
+        if not isinstance(content_sha256, str) or _HEX_64.fullmatch(content_sha256) is None:
+            raise OpendataStockDailySnapshotError("invalid_content_sha256")
+        scope = _authorized_scope(
+            request,
+            publication_id=publication_id,
+            content_sha256=content_sha256,
+            user_id=user_id,
+        )
+        try:
+            receipt = await adapter.authorize(
+                session=session,
+                user_id=user_id,
+                scope=scope,
+            )
+        except StockDailySnapshotAuthorizationError as exc:
+            raise OpendataStockDailySnapshotError(exc.code) from exc
+        result = await self._read_validated(
+            request,
+            publication_id=publication_id,
+            contract=contract,
+        )
+        if result.snapshot["content_sha256"] != content_sha256:
+            raise OpendataStockDailySnapshotError("opendata_snapshot_content_changed")
+        try:
+            await adapter.revalidate(
+                session=session,
+                user_id=user_id,
+                scope=scope,
+                receipt=receipt,
+            )
+        except StockDailySnapshotAuthorizationError as exc:
+            raise OpendataStockDailySnapshotError(exc.code) from exc
+        return result
+
+    async def _read_validated(
+        self,
+        request: MarketDataProviderRequest,
+        *,
+        publication_id: str,
+        contract: ProviderContract,
+    ) -> OpendataPublishedSnapshotResult:
+        """Perform provider I/O and validate the complete published response."""
         fetch_snapshot = getattr(self._provider, "fetch_published_stock_daily_snapshot", None)
         if not callable(fetch_snapshot):
             raise OpendataStockDailySnapshotError("opendata_route_contract_invalid")
@@ -189,6 +295,26 @@ class OpendataStockDailySnapshotReader:
         ):
             raise OpendataStockDailySnapshotError("opendata_snapshot_incomplete")
         return result
+
+
+def _authorized_scope(
+    request: MarketDataProviderRequest,
+    *,
+    publication_id: str,
+    content_sha256: str,
+    user_id: str,
+) -> StockAnalysisSnapshotScope:
+    """Map the validated request to the policy's exact grant scope."""
+    market = {"CN-SSE": "SH", "CN-SZSE": "SZ"}[request.market]
+    return StockAnalysisSnapshotScope(
+        user_id=user_id,
+        dataset_id=_AUTHORIZATION_DATASET_ID,
+        source_id=_AUTHORIZATION_SOURCE_ID,
+        instrument_id=f"{request.provider_symbol}.{market}",
+        market=market,
+        publication_id=publication_id,
+        capture_id=content_sha256,
+    )
 
 
 def _validate_request(

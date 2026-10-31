@@ -80,6 +80,61 @@ SOURCE_REGISTRY = CurrentSourceRegistryEvidence(
     research_allowed=True,
 )
 
+STOCK_DAILY_PUBLICATION = "d" * 32
+STOCK_DAILY_CONTENT_SHA256 = "e" * 64
+STOCK_DAILY_SCOPE = StockAnalysisSnapshotScope(
+    user_id="user-1",
+    dataset_id="cn-equity-stock-daily",
+    source_id="akshare.daily",
+    instrument_id="600519.SH",
+    market="SH",
+    publication_id=STOCK_DAILY_PUBLICATION,
+    capture_id=STOCK_DAILY_CONTENT_SHA256,
+)
+STOCK_DAILY_USER_GRANT = UserReadDataGrantEvidence(
+    grant_id="user-grant-stock-daily",
+    revision=2,
+    revocation_revision=1,
+    permission="data:read",
+    user_id="user-1",
+    dataset_id="cn-equity-stock-daily",
+    instrument_id="600519.SH",
+    market="SH",
+    publication_id=STOCK_DAILY_PUBLICATION,
+    capture_id=STOCK_DAILY_CONTENT_SHA256,
+    purpose="RESEARCH",
+    valid_from=NOW - timedelta(hours=1),
+    expires_at=NOW + timedelta(hours=2),
+    revoked_at=None,
+)
+STOCK_DAILY_SOURCE_GRANT = SourceResearchGrantEvidence(
+    grant_id="source-grant-stock-daily",
+    revision=3,
+    revocation_revision=1,
+    source_registry_revision="registry-12",
+    user_id="user-1",
+    source_id="akshare.daily",
+    dataset_id="cn-equity-stock-daily",
+    instrument_id="600519.SH",
+    market="SH",
+    publication_id=STOCK_DAILY_PUBLICATION,
+    capture_id=STOCK_DAILY_CONTENT_SHA256,
+    purpose="RESEARCH",
+    valid_from=NOW - timedelta(hours=1),
+    expires_at=NOW + timedelta(hours=1),
+    revoked_at=None,
+)
+STOCK_DAILY_SOURCE_REGISTRY = CurrentSourceRegistryEvidence(
+    principal_user_id="user-1",
+    entitlement_revision="entitlement-3",
+    source_id="akshare.daily",
+    dataset_id="cn-equity-stock-daily",
+    market="SH",
+    purpose="RESEARCH",
+    revision="registry-12",
+    research_allowed=True,
+)
+
 
 def _authorize(
     *,
@@ -506,3 +561,127 @@ def test_revalidation_rejects_receipt_claimed_from_the_future() -> None:
         _revalidate(future_receipt)
 
     assert error.value.code == "authorization_receipt_invalid"
+
+
+def _authorize_stock_daily(
+    *,
+    scope: StockAnalysisSnapshotScope = STOCK_DAILY_SCOPE,
+    principal: CurrentPrincipalEvidence | None = PRINCIPAL,
+    user_grant: UserReadDataGrantEvidence | None = STOCK_DAILY_USER_GRANT,
+    source_grant: SourceResearchGrantEvidence | None = STOCK_DAILY_SOURCE_GRANT,
+    source_registry: CurrentSourceRegistryEvidence | None = STOCK_DAILY_SOURCE_REGISTRY,
+    now: datetime = NOW,
+) -> StockAnalysisSnapshotAuthorizationReceipt:
+    return authorize_stock_analysis_snapshot(
+        scope=scope,
+        principal=principal,
+        user_grant=user_grant,
+        source_grant=source_grant,
+        source_registry=source_registry,
+        now=now,
+    )
+
+
+def _assert_stock_daily_denied(code: str, **overrides: object) -> None:
+    arguments: dict[str, object] = {
+        "scope": STOCK_DAILY_SCOPE,
+        "principal": PRINCIPAL,
+        "user_grant": STOCK_DAILY_USER_GRANT,
+        "source_grant": STOCK_DAILY_SOURCE_GRANT,
+        "source_registry": STOCK_DAILY_SOURCE_REGISTRY,
+        "now": NOW,
+    }
+    arguments.update(overrides)
+    with pytest.raises(StockAnalysisSnapshotAuthorizationError) as error:
+        authorize_stock_analysis_snapshot(**arguments)  # type: ignore[arg-type]
+    assert error.value.code == code
+
+
+def test_stock_daily_exact_scope_returns_a_receipt() -> None:
+    receipt = _authorize_stock_daily()
+
+    assert receipt.user_grant_id == STOCK_DAILY_USER_GRANT.grant_id
+    assert receipt.source_grant_id == STOCK_DAILY_SOURCE_GRANT.grant_id
+    assert receipt.expires_at == STOCK_DAILY_SOURCE_GRANT.expires_at
+    assert receipt.decision_sha256
+
+
+@pytest.mark.parametrize(
+    ("scope", "code"),
+    [
+        (
+            replace(
+                STOCK_DAILY_SCOPE,
+                instrument_id="600519.SZ",
+                market="SZ",
+            ),
+            "user_grant_scope_mismatch",
+        ),
+        (
+            replace(
+                STOCK_DAILY_SCOPE,
+                dataset_id="cn-equity-stock-daily",
+                source_id="sina-lrb",
+            ),
+            "authorization_scope_invalid",
+        ),
+        (
+            replace(STOCK_DAILY_SCOPE, publication_id="f" * 32),
+            "user_grant_scope_mismatch",
+        ),
+        (
+            replace(STOCK_DAILY_SCOPE, capture_id="a" * 64),
+            "user_grant_scope_mismatch",
+        ),
+    ],
+)
+def test_stock_daily_scope_permutations_deny(scope: StockAnalysisSnapshotScope, code: str) -> None:
+    _assert_stock_daily_denied(code, scope=scope)
+
+
+def test_stock_daily_wrong_symbol_or_market_in_grants_denies() -> None:
+    _assert_stock_daily_denied(
+        "user_grant_scope_mismatch",
+        user_grant=replace(STOCK_DAILY_USER_GRANT, instrument_id="000001.SH"),
+    )
+    _assert_stock_daily_denied(
+        "source_grant_scope_mismatch",
+        source_grant=replace(STOCK_DAILY_SOURCE_GRANT, market="SZ"),
+    )
+
+
+def test_stock_daily_wrong_content_hash_in_source_grant_denies() -> None:
+    _assert_stock_daily_denied(
+        "source_grant_scope_mismatch",
+        source_grant=replace(STOCK_DAILY_SOURCE_GRANT, capture_id="a" * 64),
+    )
+
+
+def test_stock_daily_wrong_publication_in_source_grant_denies() -> None:
+    _assert_stock_daily_denied(
+        "source_grant_scope_mismatch",
+        source_grant=replace(STOCK_DAILY_SOURCE_GRANT, publication_id="f" * 32),
+    )
+
+
+@pytest.mark.parametrize("grant_name", ["user_grant", "source_grant"])
+def test_stock_daily_revoked_grant_denies(grant_name: str) -> None:
+    grant = STOCK_DAILY_USER_GRANT if grant_name == "user_grant" else STOCK_DAILY_SOURCE_GRANT
+    _assert_stock_daily_denied(
+        f"{grant_name}_revoked",
+        **{grant_name: replace(grant, revoked_at=NOW - timedelta(seconds=1))},
+    )
+
+
+def test_stock_daily_expired_grant_denies() -> None:
+    _assert_stock_daily_denied(
+        "authorization_expired",
+        now=STOCK_DAILY_SOURCE_GRANT.expires_at,
+    )
+
+
+def test_stock_daily_registry_must_allow_research() -> None:
+    _assert_stock_daily_denied(
+        "source_registry_research_denied",
+        source_registry=replace(STOCK_DAILY_SOURCE_REGISTRY, research_allowed=False),
+    )

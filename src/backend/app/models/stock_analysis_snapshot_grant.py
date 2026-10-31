@@ -1,5 +1,10 @@
 """Persist exact user and source grants for OpenData stock snapshots.
 
+Datasets include financial-statement observations and the pinned stock-daily
+time-series publication (``cn-equity-stock-daily`` / ``akshare.daily``). The
+time-series dataset has no source-native capture; its grant ``capture_id`` is
+the platform publication ``content_sha256``, not a source capture.
+
 These rows are an empty-by-default storage foundation. They do not issue
 authority, authenticate the issuer, or make client-supplied ORM objects
 authoritative. A trusted adapter must load current rows from the database,
@@ -79,6 +84,7 @@ class InvalidStockSnapshotGrantRecord(ValueError):
 _DATASET_SOURCE = {
     "sina_fzb_report_observations": "sina-fzb",
     "sina_lrb_report_observations": "sina-lrb",
+    "cn-equity-stock-daily": "akshare.daily",
 }
 _INSTRUMENT_ID = re.compile(r"[0-9]{6}\.(?:SH|SZ)\Z", re.ASCII)
 _PUBLICATION_ID = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
@@ -103,7 +109,8 @@ class StockSnapshotUserReadGrant(Base):
             name="ck_stock_snapshot_user_permission",
         ),
         CheckConstraint(
-            "dataset_id IN ('sina_fzb_report_observations', 'sina_lrb_report_observations')",
+            "dataset_id IN ('sina_fzb_report_observations', "
+            "'sina_lrb_report_observations', 'cn-equity-stock-daily')",
             name="ck_stock_snapshot_user_dataset",
         ),
         CheckConstraint(
@@ -183,7 +190,8 @@ class StockSnapshotSourceResearchGrant(Base):
     __table_args__ = (
         CheckConstraint(
             "(dataset_id = 'sina_fzb_report_observations' AND source_id = 'sina-fzb') OR "
-            "(dataset_id = 'sina_lrb_report_observations' AND source_id = 'sina-lrb')",
+            "(dataset_id = 'sina_lrb_report_observations' AND source_id = 'sina-lrb') OR "
+            "(dataset_id = 'cn-equity-stock-daily' AND source_id = 'akshare.daily')",
             name="ck_stock_snapshot_source_dataset",
         ),
         CheckConstraint(

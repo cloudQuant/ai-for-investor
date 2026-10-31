@@ -36,6 +36,14 @@ _MIGRATION_PATH = (
     / "versions"
     / "20261030_stock_analysis_snapshot_grants.py"
 )
+_STOCK_DAILY_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "20261031_stock_daily_snapshot_grants.py"
+)
+_STOCK_DAILY_DATASET = "cn-equity-stock-daily"
+_STOCK_DAILY_SOURCE = "akshare.daily"
 _TABLES = (
     StockSnapshotUserReadGrant.__table__,
     StockSnapshotSourceResearchGrant.__table__,
@@ -148,6 +156,16 @@ def _audit(
 def _load_migration():
     spec = importlib.util.spec_from_file_location(
         "stock_analysis_snapshot_grants_migration", _MIGRATION_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_stock_daily_migration():
+    spec = importlib.util.spec_from_file_location(
+        "stock_daily_snapshot_grants_migration", _STOCK_DAILY_MIGRATION_PATH
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -663,5 +681,161 @@ def test_offline_migration_downgrade_fails_before_emitting_destructive_ddl() -> 
     )
     with Operations.context(context):
         with pytest.raises(RuntimeError, match="STOCK_SNAPSHOT_GRANT_DOWNGRADE_UNSUPPORTED"):
+            migration.downgrade()
+    assert output.getvalue() == ""
+
+
+def test_stock_daily_dataset_and_source_grants_round_trip() -> None:
+    engine = _engine()
+    try:
+        _create_model_schema(engine)
+        with Session(engine) as session:
+            _add_user(session)
+            user_grant = _user_grant(
+                dataset_id=_STOCK_DAILY_DATASET,
+                publication_id="e" * 32,
+                capture_id="f" * 64,
+            )
+            source_grant = _source_grant(
+                dataset_id=_STOCK_DAILY_DATASET,
+                source_id=_STOCK_DAILY_SOURCE,
+                publication_id="e" * 32,
+                capture_id="f" * 64,
+            )
+            session.add_all([user_grant, source_grant])
+            session.flush()
+            session.add_all(
+                [
+                    _audit(
+                        event_type="ISSUED",
+                        idempotency_hash="e" * 64,
+                        user_grant_id=_USER_GRANT_ID,
+                    ),
+                    _audit(
+                        event_type="ISSUED",
+                        idempotency_hash="f" * 64,
+                        source_grant_id=_SOURCE_GRANT_ID,
+                    ),
+                ]
+            )
+            session.commit()
+
+            loaded_user = session.get(StockSnapshotUserReadGrant, _USER_GRANT_ID)
+            loaded_source = session.get(StockSnapshotSourceResearchGrant, _SOURCE_GRANT_ID)
+            assert loaded_user is not None
+            assert loaded_source is not None
+            assert loaded_user.dataset_id == _STOCK_DAILY_DATASET
+            assert (loaded_source.dataset_id, loaded_source.source_id) == (
+                _STOCK_DAILY_DATASET,
+                _STOCK_DAILY_SOURCE,
+            )
+            assert loaded_user.capture_id == "f" * 64
+            assert loaded_source.capture_id == "f" * 64
+    finally:
+        engine.dispose()
+
+
+def test_stock_daily_source_grant_rejects_a_mismatched_dataset_source_pair() -> None:
+    engine = _engine()
+    try:
+        _create_model_schema(engine)
+        with Session(engine) as session:
+            _add_user(session)
+            session.flush()
+            invalid_pairs = (
+                {
+                    "dataset_id": _STOCK_DAILY_DATASET,
+                    "source_id": "sina-lrb",
+                },
+                {
+                    "dataset_id": "sina_lrb_report_observations",
+                    "source_id": _STOCK_DAILY_SOURCE,
+                },
+            )
+            for index, pair in enumerate(invalid_pairs):
+                session.add(
+                    _source_grant(
+                        id=f"00000000-0000-0000-0000-00000000001{index}",
+                        **pair,
+                    )
+                )
+                with pytest.raises(
+                    InvalidStockSnapshotGrantRecord, match="source_grant_scope_invalid"
+                ):
+                    session.flush()
+                session.rollback()
+                _add_user(session)
+                session.flush()
+    finally:
+        engine.dispose()
+
+
+def test_stock_daily_migration_widens_checks_and_preserves_constraints() -> None:
+    engine = _engine()
+    baseline = _load_migration()
+    migration = _load_stock_daily_migration()
+    try:
+        with engine.begin() as connection:
+            User.__table__.create(connection)
+        _run_migration(engine, baseline, "upgrade")
+        _run_migration(engine, migration, "upgrade")
+
+        inspector = inspect(engine)
+        user_checks = {
+            item["name"]: item["sqltext"]
+            for item in inspector.get_check_constraints(StockSnapshotUserReadGrant.__tablename__)
+        }
+        source_checks = {
+            item["name"]: item["sqltext"]
+            for item in inspector.get_check_constraints(
+                StockSnapshotSourceResearchGrant.__tablename__
+            )
+        }
+        assert _STOCK_DAILY_DATASET in user_checks["ck_stock_snapshot_user_dataset"]
+        assert _STOCK_DAILY_DATASET in source_checks["ck_stock_snapshot_source_dataset"]
+        assert _STOCK_DAILY_SOURCE in source_checks["ck_stock_snapshot_source_dataset"]
+        audit_foreign_keys = {
+            item["name"]
+            for item in inspector.get_foreign_keys(StockSnapshotGrantAudit.__tablename__)
+        }
+        assert {
+            "fk_stock_snapshot_audit_user_scope",
+            "fk_stock_snapshot_audit_source_scope",
+            "fk_stock_snapshot_audit_subject",
+            "fk_stock_snapshot_audit_actor",
+        }.issubset(audit_foreign_keys)
+        assert {
+            item["name"] for item in inspector.get_indexes(StockSnapshotUserReadGrant.__tablename__)
+        } == {"ix_stock_snapshot_user_lookup"}
+        assert {
+            item["name"]
+            for item in inspector.get_indexes(StockSnapshotSourceResearchGrant.__tablename__)
+        } == {"ix_stock_snapshot_source_lookup"}
+
+        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED"):
+            _run_migration(engine, migration, "downgrade")
+    finally:
+        engine.dispose()
+
+
+def test_stock_daily_migration_refuses_an_unreviewed_schema() -> None:
+    engine = _engine()
+    migration = _load_stock_daily_migration()
+    try:
+        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_SCHEMA_CONFLICT"):
+            _run_migration(engine, migration, "upgrade")
+    finally:
+        engine.dispose()
+
+
+def test_stock_daily_offline_downgrade_fails_before_emitting_ddl() -> None:
+    migration = _load_stock_daily_migration()
+    output = StringIO()
+    context = MigrationContext.configure(
+        dialect_name="sqlite",
+        opts={"as_sql": True, "output_buffer": output},
+    )
+    with Operations.context(context):
+        with pytest.raises(RuntimeError, match="STOCK_DAILY_GRANT_DOWNGRADE_UNSUPPORTED"):
             migration.downgrade()
     assert output.getvalue() == ""
