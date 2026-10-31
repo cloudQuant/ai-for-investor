@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.service_read.client import PaperSubmitBinding
 from app.services.service_read.contracts import ServiceReadContractError
 from app.services.service_read.deployment import (
     ServiceReadDeploymentError,

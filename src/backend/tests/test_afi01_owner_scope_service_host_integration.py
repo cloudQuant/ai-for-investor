@@ -19,10 +19,13 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
     """Bind two persisted personal owners to distinct real service grants."""
 
     import httpx
+    from bt_api_py.service_execution import ServiceExecutionClient
     from fastapi import FastAPI
 
+    import app.config as app_config
     from app.api.portfolio.compositions import router as composition_router
-    from app.api.service_read import configure_service_read, router as service_read_router
+    from app.api.service_read import configure_service_read
+    from app.api.service_read import router as service_read_router
     from app.db.database import get_db
     from app.models.portfolio_composition import PortfolioCompositionVersion
     from app.models.user import User
@@ -30,9 +33,7 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
     from app.services.service_read.client import OrderBinding
     from app.services.service_read.session import SdkServiceReadSession
     from app.services.service_read.worker import ServiceReadWorker
-    import app.config as app_config
     from app.utils import security
-    from bt_api_py.service_execution import ServiceExecutionClient
 
     # R93's accepted helper module verifies that it was imported under its
     # own synthetic settings. Application modules are already loaded by this
@@ -464,10 +465,7 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
         for event in identity_events
     )
     assert all(event[4] != main_thread_ident for event in identity_events)
-    for subject, expected_order in (
-        (r93._SUBJECT_A, r93._INTENT_A),
-        (r93._SUBJECT_B, r93._INTENT_B),
-    ):
+    for subject in (r93._SUBJECT_A, r93._SUBJECT_B):
         subject_events = [event for event in session_events if event[0] == subject]
         assert any(event[1] == "read_order" for event in subject_events)
         assert any(event[1] == "close" for event in subject_events)

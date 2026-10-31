@@ -7,7 +7,6 @@ Create Date: 2026-10-16
 
 from __future__ import annotations
 
-
 revision = "20261016_afi04_analytics_paper_merge"
 down_revision = (
     "20261016_portfolio_analytics_datasets_v1",

@@ -8,9 +8,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from alembic import command
 from alembic.config import Config
 
+from alembic import command
 
 _BASE_REVISION = "20261016_approved_target_http_operations"
 _MERGED_REVISION = "20261016_afi04_analytics_paper_merge"

@@ -486,7 +486,7 @@ def test_mig03_afi_inventory_preserves_operation_approval_fills_fees_and_positio
             "99899.9",
         ) in before.amounts
         assert (
-            f"trade:paper-trade-mig03-1:commission",
+            "trade:paper-trade-mig03-1:commission",
             "0.1",
         ) in before.amounts
         assert before.positions == ((f"{_PAPER_ACCOUNT}:SYNTH-USD:paper-position-mig03-1", "2"),)

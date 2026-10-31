@@ -11,11 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.schemas.auth import TokenPayload
+from app.schemas.portfolio_analytics_tasks import PortfolioAnalyticsTaskCreate
 from app.schemas.portfolio_analytics_v1 import (
     PortfolioAnalyticsDatasetCreateV1,
     PortfolioAnalyticsTaskCreateV1,
 )
-from app.schemas.portfolio_analytics_tasks import PortfolioAnalyticsTaskCreate
 from app.services.portfolio_analytics_datasets_v1 import (
     PortfolioAnalyticsDatasetV1Error,
     PortfolioAnalyticsDatasetV1Service,

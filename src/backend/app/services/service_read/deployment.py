@@ -24,20 +24,20 @@ from app.services.service_read.access import (
     StrategyBookBinding,
 )
 from app.services.service_read.client import (
+    _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS,
+    PAPER_CONTROL_MODES,
+    PAPER_LEGACY_IMPORT_OPERATIONS,
     AccountBinding,
     AccountBookBinding,
     ApprovedTargetSubmitBinding,
     MonitorBinding,
     OrderBinding,
     OrderSubmitBinding,
-    PortfolioAnalyticsBinding,
     PaperLegacyImportBinding,
     PaperSubmitBinding,
-    PAPER_CONTROL_MODES,
+    PortfolioAnalyticsBinding,
     RiskAccountPolicyBinding,
     RiskPolicyBudgetBinding,
-    PAPER_LEGACY_IMPORT_OPERATIONS,
-    _MAX_ORDER_INSTRUMENT_METADATA_VERSIONS,
 )
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
@@ -612,7 +612,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
     if paper_submit_bindings and (order_submit_bindings or approved_target_bindings):
         raise ServiceReadDeploymentError("MIXED_PAPER_ORDER_WRITE_PROFILE")
-    if set(binding.scope_ref for binding in paper_submit_bindings.values()) & set(
+    if {binding.scope_ref for binding in paper_submit_bindings.values()} & set(
         order_submit_bindings
     ):
         raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")

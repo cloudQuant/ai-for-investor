@@ -17,13 +17,12 @@ import socket
 import sys
 import textwrap
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 
 _OPTIONAL_DISTRIBUTIONS = {
     "bt-api-py",
@@ -430,6 +429,8 @@ async def _exercise_installed_afi_backtest_service(
     from app import config
 
     assert config.get_settings().DATABASE_URL == f"sqlite+aiosqlite:///{db_path.as_posix()}"
+    from fastapi import FastAPI
+
     from app import models
     from app.api import backtest_enhanced as backtest_api
     from app.db import cache as db_cache
@@ -440,7 +441,6 @@ async def _exercise_installed_afi_backtest_service(
     from app.services.market_data_precheck_service import MarketDataPrecheckService
     from app.services.strategy import core as strategy_core
     from app.utils import response_cache
-    from fastapi import FastAPI
 
     assert models is not None
     _assert_no_repository_import_roots()

@@ -15,9 +15,15 @@ from typing import Any
 
 import pytest
 import zmq
-from sqlalchemy import insert
 from bt_api_base.account_protocol import AccountKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_py.bt_api import BtApi
+from bt_api_py.service_components import ComponentResources
+from bt_api_py.service_config import parse_service_config
+from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceAuthority
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
+from bt_api_py.service_risk_order_journal import RiskOrderJournal
 from bt_api_risk import (
     AccountScope,
     DurableRiskAdmissionAdapter,
@@ -38,17 +44,11 @@ from bt_api_risk.service_component import (
     PolicyCatalogService,
     PolicyCatalogStore,
 )
-from bt_api_py.bt_api import BtApi
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
 from pydantic import SecretStr
+from sqlalchemy import insert
 
-from app.api.service_read import configure_service_read
 import app.main as main_module
+from app.api.service_read import configure_service_read
 from app.db.database import async_session_maker
 from app.models.permission import Role, user_roles
 from app.utils.security import decode_access_token

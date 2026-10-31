@@ -168,7 +168,7 @@ async def reserve_approved_target_http_operation(
             return ApprovedTargetHttpOperationClaim(existing.intent_id, False)
         approval_mapping = await _load_mapping(db, (approval_filter,))
         if approval_mapping is not None:
-            raise ApprovedTargetHttpOperationError("APPROVAL_OPERATION_CONFLICT")
+            raise ApprovedTargetHttpOperationError("APPROVAL_OPERATION_CONFLICT") from None
         raise ApprovedTargetHttpOperationError(
             "APPROVAL_STORE_UNAVAILABLE", ambiguous=True
         ) from None

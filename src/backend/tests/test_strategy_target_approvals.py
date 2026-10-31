@@ -12,14 +12,14 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-import sqlalchemy as sa
 import pytest
 import pytest_asyncio
+import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from pydantic_settings import BaseSettings as _BaseSettings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from pydantic_settings import BaseSettings as _BaseSettings
 
 _SYNTHETIC_ENV = {
     "DEBUG": "false",
@@ -52,12 +52,12 @@ os.environ = dict(_SYNTHETIC_ENV)  # noqa: B003 - isolate settings from ambient/
 try:
     import app.models  # noqa: F401,E402
     from app.db.database import Base, async_session_maker, engine  # noqa: E402
+    from app.models.strategy_approval_authority import (  # noqa: E402
+        StrategyApprovalAuthorityEpoch,
+    )
     from app.models.strategy_target_approval import (  # noqa: E402
         StrategyTargetApproval,
         StrategyTargetApprovalEvent,
-    )
-    from app.models.strategy_approval_authority import (  # noqa: E402
-        StrategyApprovalAuthorityEpoch,
     )
     from app.services.strategy_target_approvals import (  # noqa: E402
         ApprovedTargetCurrentStateV1,

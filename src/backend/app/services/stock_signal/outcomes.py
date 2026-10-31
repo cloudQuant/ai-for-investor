@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
 
-
 BenchmarkStatus = Literal["available", "unknown"]
 BENCHMARK_UNKNOWN_REASON = "benchmark_20d_return_not_recorded"
 

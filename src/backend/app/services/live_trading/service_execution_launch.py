@@ -461,9 +461,9 @@ def _validate_server_attested_ai_research_strategy_source(
         raise ServiceStrategyProfileError("PAPER_RUNTIME_PROFILE_INVALID")
     try:
         from app.services.ai_research_provenance import (
-            ai_research_paper_materialized_runtime_digest,
             _runtime_config_payload,
             _runtime_python_file_digests,
+            ai_research_paper_materialized_runtime_digest,
         )
 
         runtime_dir = script_path.parent.resolve(strict=True)

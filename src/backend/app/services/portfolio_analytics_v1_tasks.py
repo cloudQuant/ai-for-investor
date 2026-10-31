@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-import json
 import re
 from collections.abc import Mapping
 from datetime import date
@@ -17,6 +16,7 @@ from app.schemas.portfolio_analytics_v1 import (
     PortfolioAnalyticsFactsV1,
     PortfolioAnalyticsTaskCreateV1,
 )
+
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _TASK_STATES = frozenset(
     {"pending", "running", "succeeded", "unavailable", "failed", "cancelled", "expired"}

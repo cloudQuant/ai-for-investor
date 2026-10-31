@@ -13,12 +13,13 @@ import hashlib
 import json
 import math
 import uuid
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
-from typing import Any, AsyncIterator, Mapping
+from typing import Any
 
 from sqlalchemy import inspect as sa_inspect
 

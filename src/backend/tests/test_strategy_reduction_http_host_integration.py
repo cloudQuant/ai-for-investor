@@ -8,11 +8,9 @@ connectivity or provider account position.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import queue
 import socket
-import sqlite3
 import threading
 import time
 from decimal import Decimal
@@ -23,38 +21,20 @@ import httpx
 import jwt
 import pytest
 import zmq
-from fastapi import FastAPI
-from pydantic import SecretStr
-from sqlalchemy import insert
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
-
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     ExecutionAdmissionValidatorRegistry,
     ExecutionBasicAdmissionGate,
     ExecutionProviderValidatorV1,
     ExecutionScope,
-    ExecutionState,
     OrderType,
     PositionEffect,
-    ProviderObservation,
     Side,
     SqliteExecutionStore,
     TimeInForce,
 )
 from bt_api_execution.approved_target import (
     ApprovedTargetOwnerBindingV1,
-    ApprovedTargetOwnerBindingsV1,
-    ProtectedApprovedTargetScopesV1,
-)
-from bt_api_risk import (
-    AccountScope,
-    DurableRiskAdmissionAdapter,
-    DurableRiskGate,
-    IntentAction,
-    RiskIntent,
-    RiskPolicy,
 )
 from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_client_config, parse_service_config
@@ -65,9 +45,18 @@ from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ZmqTransportFactory,
 )
+from bt_api_risk import (
+    AccountScope,
+    DurableRiskAdmissionAdapter,
+    DurableRiskGate,
+    RiskPolicy,
+)
+from pydantic import SecretStr
+from sqlalchemy import insert
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 import app.models  # noqa: F401 - register the complete ORM model set
-
 
 _SUBJECT = "afi-reduction-http-owner"
 _PRINCIPAL = "afi-reduction-http-principal"
@@ -311,16 +300,7 @@ def _paper_graph(paths: dict[str, str]):
     from bt_api_execution import (
         PAPER_ENVIRONMENT,
         PAPER_PROVIDER,
-        ExecutionAdmissionValidatorRegistry,
-        ExecutionBasicAdmissionGate,
-        ExecutionProviderValidatorV1,
-        ExecutionScope,
-        OrderType,
         PaperMatchingPort,
-        PositionEffect,
-        Side,
-        SqliteExecutionStore,
-        TimeInForce,
     )
     from bt_api_execution.paper_execution import (
         PAPER_MODEL_REF,
@@ -330,21 +310,17 @@ def _paper_graph(paths: dict[str, str]):
     )
     from bt_api_execution.paper_execution_risk import PaperExecutionCloseAuthority
     from bt_api_execution.paper_risk import PaperRiskAdmissionAdapter
-    from bt_api_risk import (
-        AccountScope,
-        DurableRiskAdmissionAdapter,
-        DurableRiskGate,
-        InstrumentRiskAdmissionMapper,
-        InstrumentRiskMetadata,
-        InstrumentRiskRegistry,
-        RiskPolicy,
-    )
     from bt_api_py import bt_api as bt_api_module
     from bt_api_py.service_components import TrustedRiskPolicyBinding
     from bt_api_py.service_risk_order_entry import (
         RiskBtApiProviderContract,
         RiskOrderJournal,
         RiskOrderTarget,
+    )
+    from bt_api_risk import (
+        InstrumentRiskAdmissionMapper,
+        InstrumentRiskMetadata,
+        InstrumentRiskRegistry,
     )
 
     bt_api_module._ensure_plugins_loaded = lambda: None
@@ -563,12 +539,6 @@ def _start_owner_thread(
     database_url: str,
     authority_module: Any,
 ):
-    from bt_api_execution.approved_target import (
-        ApprovedTargetOwnerBindingV1,
-        ProtectedApprovedTargetScopesV1,
-    )
-    from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-    from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
     from app.services.service_read.approved_target_authority import (
         create_execution_approved_target_resources,
     )
@@ -720,18 +690,15 @@ def _start_owner_thread(
 
 
 async def _seed_approved_close_target(factory):
-    from sqlalchemy import insert
 
     from app.models.permission import Role, user_roles
     from app.models.strategy import Strategy
-    from app.models.strategy_target_approval import StrategyTargetApproval
     from app.models.strategy_version import StrategyVersion, VersionBranch
     from app.models.user import User
     from app.services.strategy_approval_authority import (
         approve_strategy_order_target,
         publish_strategy_order_approval_policy,
     )
-    from app.services.strategy_target_approvals import canonical_target_sha256
 
     now_ns = time.time_ns()
     async with factory() as db:
@@ -873,16 +840,16 @@ async def _seed_approved_close_target(factory):
 async def test_http_reduce_reaches_real_paper_risk_owner_and_replay_is_single_dispatch(
     tmp_path, monkeypatch
 ) -> None:
+    from app.api import service_read as service_read_api
     from app.api import strategy_reduction as reduction_api
     from app.db import database as database_module
     from app.db.database import Base
+    from app.main import app as afi_app
     from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
+    from app.services.service_read import approved_target_authority as target_authority_module
     from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
     from app.services.service_read.client import ApprovedTargetSubmitBinding
-    from app.services.service_read import approved_target_authority as target_authority_module
-    from app.api import service_read as service_read_api
     from app.utils import security as security_module
-    from app.main import app as afi_app
 
     db_path = tmp_path / "afi-reduction-approval.sqlite3"
     db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
@@ -927,7 +894,6 @@ async def test_http_reduce_reaches_real_paper_risk_owner_and_replay_is_single_di
         state, detail = ready.get(timeout=10)
         assert state == "ready", detail
         assert detail == "started"
-        owner_client_identity = WireIdentity(WireRole.SERVICE, _PRINCIPAL, _ACTOR, _DELEGATE)
         strategy_runtime = ServiceClientRuntime(
             _strategy_client_config(owner_endpoint),
             identity=_STRATEGY_IDENTITY,
@@ -980,7 +946,6 @@ async def test_http_reduce_reaches_real_paper_risk_owner_and_replay_is_single_di
         )
         service_read_api.configure_service_read(ServiceReadAccessDirectory({_SUBJECT: access}))
 
-        host_scope = _TEMPLATE_SCOPE
         allowlisted_client_config = _reduction_client_config(owner_endpoint)
         profile = {
             "profile_ref": "afi-reduction-profile-v1",

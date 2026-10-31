@@ -9,7 +9,7 @@ import re
 from collections.abc import Mapping
 from typing import Any, Protocol
 
-from fastapi import HTTPException, status
+from fastapi import status
 
 from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.schemas.portfolio_analytics_tasks import PortfolioAnalyticsTaskCreate

@@ -31,7 +31,10 @@ from app.api.service_read import configure_service_read  # noqa: E402
 from app.db.database import get_db  # noqa: E402
 from app.models.asset_research import AssetAnalysisReport, AssetAnalysisTask  # noqa: E402
 from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
-from app.models.portfolio_ledger import PortfolioLedgerImportModel, PortfolioLedgerModel  # noqa: E402
+from app.models.portfolio_ledger import (  # noqa: E402
+    PortfolioLedgerImportModel,
+    PortfolioLedgerModel,
+)
 from app.models.strategy_approval_authority import StrategyApprovalAuthorityEpoch  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 from app.services.asset_research.data import canonical_json_hash  # noqa: E402

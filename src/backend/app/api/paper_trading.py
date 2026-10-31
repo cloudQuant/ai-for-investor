@@ -22,12 +22,12 @@ from app.schemas.paper_trading import (
     PositionResponse,
     TradeListResponse,
 )
-from app.services.paper_trading_service import PaperTradingService
+from app.services.legacy_paper_migration import LegacyPaperInventoryError
 from app.services.managed_paper_adapter import (
     ManagedPaperOrderAdapter,
     ManagedPaperOrderError,
 )
-from app.services.legacy_paper_migration import LegacyPaperInventoryError
+from app.services.paper_trading_service import PaperTradingService
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

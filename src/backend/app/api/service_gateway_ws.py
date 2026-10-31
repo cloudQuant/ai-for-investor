@@ -7,8 +7,8 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.afi_owner_scope import require_persisted_owner_scope
 from app.api._dependencies import get_websocket_current_user
+from app.api.afi_owner_scope import require_persisted_owner_scope
 from app.api.service_gateway import _gateway_health_payload
 from app.api.service_read import _resolve_access
 from app.db.database import get_db

@@ -916,7 +916,7 @@ async def confirm_budget_member(
     membership = await _require_current_generation_membership(
         db, current_user, portfolio_ref, binding, current
     )
-    result = await _catalog_call(
+    await _catalog_call(
         access,
         portfolio_ref,
         "policy.budget.owner_confirm_member",

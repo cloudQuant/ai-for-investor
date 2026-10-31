@@ -8,10 +8,10 @@ from app.schemas.ai_trading import (
     AITradingRequest,
     RiskAssessment,
     RiskLevel,
+    TradeAction,
     TradeConfirmRequest,
     TradeStatus,
     TradingIntent,
-    TradeAction,
 )
 from app.services import ai_trading_service as ai_module
 from app.services.ai_trading_service import AITradingService

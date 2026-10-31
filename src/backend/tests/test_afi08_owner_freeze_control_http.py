@@ -27,44 +27,43 @@ pytest.importorskip("bt_api_monitor", reason="optional Monitor SDK package is re
 pytest.importorskip("bt_api_risk", reason="optional Risk SDK package is required")
 zmq = pytest.importorskip("zmq")
 
-from app.api import monitoring as monitoring_api
-from app.db.database import async_session_maker
-from app.main import app
-from app.models.alerts import Alert, AlertSeverity, AlertStatus, AlertType
-from app.models.paper_trading import Account
-from app.models.user import User
-from app.services.monitoring_control import OwnerControlDeployment, OwnerControlError
-from app.services import monitoring_control as monitoring_control_service
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_execution import (
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_execution import (  # noqa: E402
     CancelObservation,
     ExecutionScope,
     ProviderObservation,
     SqliteExecutionStore,
 )
-from bt_api_monitor.control import (
+from bt_api_monitor.control import (  # noqa: E402
     ControlAction,
     ControlCommandBinding,
     ControlIngress,
     ControlStatus,
     DurableControlLedger,
 )
-from bt_api_monitor.ingress import (
+from bt_api_monitor.ingress import (  # noqa: E402
     ControlIssuerPolicy,
     ControlScopeGrant,
     HmacControlCommandVerifier,
     HmacControlKey,
 )
-from bt_api_monitor.service_control import MonitorControlService, MonitorControlTarget
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_client_config, parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_monitor_control import MonitorControlRuntime, MonitorRiskControlOwner
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
-from bt_api_py.service_execution_risk_cancel import RiskExecutionCancelAdmissionGate
-from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
-from bt_api_risk import (
+from bt_api_monitor.service_control import MonitorControlService, MonitorControlTarget  # noqa: E402
+from bt_api_py.service_components import ComponentResources  # noqa: E402
+from bt_api_py.service_config import parse_client_config, parse_service_config  # noqa: E402
+from bt_api_py.service_execution_risk_cancel import RiskExecutionCancelAdmissionGate  # noqa: E402
+from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_monitor_control import (  # noqa: E402
+    MonitorControlRuntime,
+    MonitorRiskControlOwner,
+)
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
+from bt_api_py.service_risk_order_journal import RiskOrderJournal  # noqa: E402
+from bt_api_py.service_runtime import (  # noqa: E402
+    ClientCurveKeys,
+    ServiceClientRuntime,
+    ZmqTransportFactory,
+)
+from bt_api_risk import (  # noqa: E402
     AccountScope,
     DurableRiskGate,
     IntentAction,
@@ -72,6 +71,15 @@ from bt_api_risk import (
     RiskIntent,
     RiskPolicy,
 )
+
+from app.api import monitoring as monitoring_api  # noqa: E402
+from app.db.database import async_session_maker  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models.alerts import Alert, AlertSeverity, AlertStatus, AlertType  # noqa: E402
+from app.models.paper_trading import Account  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.services import monitoring_control as monitoring_control_service  # noqa: E402
+from app.services.monitoring_control import OwnerControlDeployment, OwnerControlError  # noqa: E402
 
 _SERVICE_ID = "afi08-monitor-control-service"
 _SERVICE_PRINCIPAL = "service:afi08-monitor-control"

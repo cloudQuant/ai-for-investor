@@ -32,10 +32,11 @@ from app.api.deps import get_current_user  # noqa: E402
 from app.api.service_read import configure_service_read  # noqa: E402
 from app.db import database  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.legacy_paper_import import LegacyPaperImportReceipt  # noqa: E402
 from app.models.legacy_paper_cutover import LegacyPaperCutoverReceipt  # noqa: E402
+from app.models.legacy_paper_import import LegacyPaperImportReceipt  # noqa: E402
 from app.models.paper_trading import Account, Order, PaperTrade, Position  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.schemas.paper_trading import OrderRequest  # noqa: E402
 from app.services.legacy_paper_import_migration import (  # noqa: E402
     LegacyPaperImportError,
     _require_active_import_row_for_cutover,
@@ -46,17 +47,16 @@ from app.services.legacy_paper_import_migration import (  # noqa: E402
 )
 from app.services.legacy_paper_migration import (  # noqa: E402
     LegacyPaperInventoryError,
+    _paper_binding_payload,
     inspect_stable_legacy_paper_account,
     legacy_paper_writer_lease,
     paper_binding_fingerprint,
-    _paper_binding_payload,
     require_active_paper_cutover_receipt,
 )
 from app.services.managed_paper_adapter import (  # noqa: E402
     ManagedPaperOrderAdapter,
     ManagedPaperOrderError,
 )
-from app.schemas.paper_trading import OrderRequest  # noqa: E402
 from app.services.mig03_boundary_inventory import (  # noqa: E402
     assert_afi_state_conserved,
     capture_afi_boundary,

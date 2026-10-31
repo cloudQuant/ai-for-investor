@@ -5,17 +5,24 @@ from __future__ import annotations
 import json
 import socket
 import sys
-import tempfile
 import time
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, AsyncIterator, Mapping
+from typing import Any
 
 import pytest
 import zmq
 from bt_api_base.account_protocol import AccountKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_py.bt_api import BtApi
+from bt_api_py.service_components import ComponentResources
+from bt_api_py.service_config import parse_service_config
+from bt_api_py.service_host import TrustedServiceAuthority
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
+from bt_api_py.service_risk_order_journal import RiskOrderJournal
 from bt_api_risk import (
     AccountScope,
     DurableRiskAdmissionAdapter,
@@ -23,32 +30,22 @@ from bt_api_risk import (
     InstrumentRiskAdmissionMapper,
     InstrumentRiskMetadata,
     InstrumentRiskRegistry,
-    IntentAction,
-    RiskIntent,
 )
 from bt_api_risk.policy_admission import (
-    PolicyCatalogAccountAdmissionResolver,
     PolicyAdmissionResolutionError,
+    PolicyCatalogAccountAdmissionResolver,
 )
 from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore
-from bt_api_py.bt_api import BtApi
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
 from pydantic import SecretStr
 
+import app.main as main_module
 from app.api.service_read import configure_service_read
 from app.services.service_read.client import (
     RISK_ACCOUNT_POLICY_CHECKER_OPERATIONS,
     RISK_ACCOUNT_POLICY_MAKER_OPERATIONS,
 )
-import app.main as main_module
 from tests import test_afi_budget_manual_admission_host as manual
 from tests import test_afi_policy_budget_owner_checker_host as policy_control
-
 
 _DOMAIN = policy_control._DOMAIN
 _ACCOUNT_A = "afi-ordinary-policy-account-a"
@@ -166,11 +163,9 @@ def _application_profile(
     if actor_role == "maker":
         principal_ref, actor_ref = _MAKER_PRINCIPAL, _MAKER_ACTOR
         key_prefix = "maker"
-        policy_operations = RISK_ACCOUNT_POLICY_MAKER_OPERATIONS
     else:
         principal_ref, actor_ref = _CHECKER_PRINCIPAL, _CHECKER_ACTOR
         key_prefix = "checker"
-        policy_operations = RISK_ACCOUNT_POLICY_CHECKER_OPERATIONS
 
     risk_bindings = [
         {
@@ -893,7 +888,6 @@ async def test_authenticated_ordinary_account_policy_partially_activates_a_and_r
     )
     catalog_attempted = False
     owners: list[Any] = []
-    app = main_module.app
     try:
         catalog_attempted = True
         catalog_host.start()

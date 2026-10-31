@@ -42,10 +42,10 @@ from app.services.legacy_paper_migration import (
     MAX_INVENTORY_ROWS_PER_TABLE,
     LegacyPaperInventory,
     LegacyPaperInventoryError,
+    _binding_value,
     _decimal,
     _identifier,
     _model_row,
-    _binding_value,
     _paper_binding_payload,
     inspect_stable_legacy_paper_account,
     paper_binding_fingerprint,
@@ -1129,6 +1129,7 @@ async def _load_verified_import_for_cutover(
 
     try:
         from bt_api_execution.paper_legacy_import import PaperLegacyImportV1
+
         from app.services.service_read.client import PaperLegacyImportBinding
     except Exception:
         raise LegacyPaperInventoryError("EXECUTION_IMPORT_CONTRACT_UNAVAILABLE") from None

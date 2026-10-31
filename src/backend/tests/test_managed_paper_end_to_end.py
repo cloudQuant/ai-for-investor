@@ -32,8 +32,8 @@ pytest.importorskip("bt_api_execution")
 zmq = pytest.importorskip("zmq")
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
-from tests import managed_paper_service_read_support as _order  # noqa: E402
 
+from tests import managed_paper_service_read_support as _order  # noqa: E402
 
 _JWT_SECRET = "afi-managed-paper-synthetic-jwt-secret-20261016"
 _JWT_ALGORITHM = "HS256"
@@ -387,7 +387,6 @@ def _deployment_profile(
     server_key: bytes,
     legacy_account_id: str | None,
 ) -> dict[str, Any]:
-    from bt_api_base.service_protocol import WireScope
 
     identity = WireIdentity(WireRole.APPLICATION_CLIENT, principal, actor)
     if legacy_account_id is None:

@@ -15,8 +15,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from app.db.sql_repository import SQLRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.database import async_session_maker
+from app.db.sql_repository import SQLRepository
 from app.models.strategy import Strategy
 from app.schemas.strategy import (
     AIStrategyDraft,
@@ -47,7 +49,6 @@ from app.services.strategy.templates import STRATEGIES_DIR
 from app.utils.datetime_utils import utc_now_naive
 from app.utils.response_cache import invalidate_cache
 from app.utils.tracing import business_span
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 

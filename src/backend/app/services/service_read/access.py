@@ -19,12 +19,11 @@ from typing import Any
 from app.services.service_read.client import (
     ApprovedTargetSubmitBinding,
     OrderSubmitBinding,
+    PaperLegacyImportBinding,
+    PaperSubmitBinding,
     PortfolioAnalyticsBinding,
     RiskAccountPolicyBinding,
     RiskPolicyBudgetBinding,
-
-    PaperLegacyImportBinding,
-    PaperSubmitBinding,
 )
 
 __all__ = [

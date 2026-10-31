@@ -30,7 +30,6 @@ from typing import Any
 import pytest
 import zmq
 
-
 _BACKEND_ENV = "AFI11_BACKEND_ROOT"
 _SDK_ENV = "AFI11_SDK_EXPORT_ROOT"
 _RISK_ENV = "AFI11_RISK_EXPORT_ROOT"
@@ -171,13 +170,20 @@ def _assert_source_closure() -> tuple[Any, dict[str, Path], Path]:
     _required_directory(_RISK_ENV)
     _required_directory(_R236_RISK_ENV)
 
+    from bt_api_monitor import control, ingress, service_component, service_control
+    from bt_api_py import (
+        service_components,
+        service_config,
+        service_host,
+        service_monitor_control,
+        service_registry,
+        service_runtime,
+    )
+
     from app import main as main_module
     from app.api import monitoring as monitoring_routes
     from app.config import get_settings
     from app.services import monitoring_control as control_deployment
-    from bt_api_monitor import control, ingress, service_component, service_control
-    from bt_api_py import service_monitor_control
-    from bt_api_py import service_components, service_config, service_host, service_registry, service_runtime
 
     app_sources = (
         (main_module, backend_root / "app" / "main.py"),
@@ -324,7 +330,6 @@ def _monitor_process(control_pipe: Any, values: dict[str, Any]) -> None:
         ControlAction,
         ControlCommandBinding,
         ControlIngress,
-        ControlStatus,
         DurableControlLedger,
     )
     from bt_api_monitor.ingress import (
@@ -656,23 +661,23 @@ async def test_monitor_process_failure_recovers_same_owner_policy_and_strategy_s
 ) -> None:
     r263, _source_roots, _backend_root = _assert_source_closure()
 
-    from app import main as main_module
-    from app.api import monitoring as monitoring_routes
-    from app.db.database import async_session_maker
-    from app.services.monitoring_control import OwnerControlDeployment
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
     from bt_api_execution import ExecutionScope
     from bt_api_py.service_config import parse_client_config
-    from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
     from bt_api_py.service_registry import ResourceGrant
+    from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
     from bt_api_risk import (
+        INSTRUMENT_METADATA_DIGEST_TAG,
         AccountScope,
         ExposureAccountingMode,
-        INSTRUMENT_METADATA_DIGEST_TAG,
         InstrumentRiskMetadata,
         RiskPolicy,
     )
     from pydantic import SecretStr
+
+    from app import main as main_module
+    from app.api import monitoring as monitoring_routes
+    from app.services.monitoring_control import OwnerControlDeployment
 
     user_data, headers = auth_user
     subject, afi_account_id, alert_id = await _create_alert(auth_user)

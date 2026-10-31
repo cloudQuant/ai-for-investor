@@ -4684,7 +4684,6 @@ def _run_manual_order_submission_integration(
     monkeypatch.setattr(os.path, "isfile", _without_optional_dotenv_probe)
     import app.main as main_module
     import app.services.quote_service as quote_service
-
     from app.api.service_read import configure_service_read
     from app.db import database
     from app.models.permission import Role, user_roles
@@ -6012,6 +6011,7 @@ def _approved_target_service_process(
         from bt_api_execution.approved_target import (
             ApprovedTargetOwnerBindingV1,
         )
+
         from app.services.service_read.approved_target_authority import (
             create_execution_approved_target_resources,
         )
@@ -6264,8 +6264,9 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
 ) -> None:
     """Run policy/approval/submit over HTTP, the real SDK worker and a CURVE Host."""
 
-    import httpx
     from pathlib import Path
+
+    import httpx
     from pydantic import SecretStr
     from sqlalchemy import insert
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -6483,7 +6484,6 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
                 base_url="http://approved-target.synthetic.test",
             ) as client:
                 auth_a = {"Authorization": f"Bearer {token_a}"}
-                auth_b = {"Authorization": f"Bearer {token_b}"}
                 policy = {
                     "schema_id": "afi.strategy_order_approval_policy",
                     "schema_version": 1,
@@ -7557,9 +7557,9 @@ def _afi07_group_fact(group_store: Any) -> dict[str, Any]:
 async def _afi07_prepare_owner_database(engine: Any, session_factory: Any) -> None:
     """Create the AFI authority tables used by the approved-target owner binding."""
 
-    import app.models  # noqa: F401 - register all mapped models before create_all
     from sqlalchemy import insert
 
+    import app.models  # noqa: F401 - register all mapped models before create_all
     from app.db import database
     from app.models.permission import Role, user_roles
     from app.models.strategy import Strategy
@@ -7779,6 +7779,7 @@ def _afi07_combined_owner_process(
         ):
             raise RuntimeError("AFI07_RESOURCE_PROFILE_INVALID")
         from bt_api_execution.approved_target import ApprovedTargetOwnerBindingV1
+
         from app.services.service_read.approved_target_authority import (
             create_execution_approved_target_resources,
         )
@@ -8066,15 +8067,15 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
 
     monkeypatch.setattr(Path, "is_file", _without_optional_dotenv_file)
     monkeypatch.setattr(os.path, "isfile", _without_optional_dotenv_probe)
+    from bt_api_execution import SqliteExecutionStore
+    from bt_api_py.service_execution import ServiceExecutionClient
+
     import app.main as main_module
     import app.services.quote_service as quote_service
     from app.api.service_read import configure_service_read
     from app.db import database
     from app.services.service_read.session import SdkServiceReadSession
     from app.utils import security
-
-    from bt_api_execution import SqliteExecutionStore
-    from bt_api_py.service_execution import ServiceExecutionClient
 
     monkeypatch.setattr(
         security,
@@ -8571,15 +8572,14 @@ def _run_afi07_group_leg_namespace_isolation(
     from decimal import Decimal
     from pathlib import Path
 
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from sqlalchemy.pool import NullPool
-
     from bt_api_execution import (
         SqliteExecutionStore,
         SqliteOrderGroupStore,
         group_leg_intent_id,
     )
     from bt_api_py.service_execution import ServiceExecutionClient, ServiceExecutionError
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
 
     context = multiprocessing.get_context("spawn")
     endpoint = _order._endpoint()

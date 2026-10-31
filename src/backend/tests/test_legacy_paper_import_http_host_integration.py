@@ -13,6 +13,14 @@ from typing import Any
 
 import pytest
 import zmq
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_execution import SqliteExecutionStore
+from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1
+from bt_api_py.service_components import ComponentResources
+from bt_api_py.service_config import parse_client_config, parse_service_config
+from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
 from sqlalchemy import select
 
 from app.api.deps import get_current_user
@@ -29,23 +37,13 @@ from app.models.strategy_approval_authority import (
 from app.models.strategy_target_approval import StrategyTargetApproval, StrategyTargetApprovalEvent
 from app.models.workspace import StrategyUnit, Workspace
 from app.services.legacy_paper_migration import _model_row, inspect_stable_legacy_paper_account
-from app.services.paper_trading_service import PaperTradingService
 from app.services.paper_runtime_service import PaperRuntimeService
+from app.services.paper_trading_service import PaperTradingService
 from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
 from app.services.service_read.client import PaperLegacyImportBinding, PaperSubmitBinding
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_execution import SqliteExecutionStore
-from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_client_config, parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
-
 from tests import test_legacy_paper_import_migration as legacy
-
 
 _SERVICE_ID = "afi12-http-host-service"
 _SERVICE_PRINCIPAL = "afi12-http-host-service-principal"
