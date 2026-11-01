@@ -1294,4 +1294,32 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 
 **未闭合项（不得写成完成）**：E2E 的 503 部署决策；OpenData `quality gate` 的 mypy/bandit 平面；`test_afi11_monitor_process_failure` 对 `monitoring_control.py` 的字节数指纹在本次改动前就已过期（35,973 vs 60,992），需要单独复核；Node 20 支持已在本轮移除，任何仍固定在 Node < 22.13 的环境会按设计被引擎门禁拒绝。
 
+### Wave 16 追加：OpenData A2 全平面、前端干净检出与"重新可见"的单测债务
+
+**OpenData A2 门禁整体通过。** [#156](https://github.com/cloudQuant/opendata/pull/156)、[#157](https://github.com/cloudQuant/opendata/pull/157)、[#158](https://github.com/cloudQuant/opendata/pull/158)（`6b5116d75`、`e739a8dc1`、`9f71cf9ae`）之后，用 CI 同构环境（Python 3.11 venv 从 `.[web,dev,providers]` 安装：ruff 0.15.20 + bandit + 类型 stub）实测：
+
+```
+PATH=/tmp/od-venv/bin:$PATH /tmp/od-venv/bin/python scripts/quality/a2_check.py
+OK: A2 files meet the full A2 standard (ruff + format + mypy + bandit).
+exit=0            # 920 个 mypy 目标，1,538 个 A2 文件
+```
+
+mypy 36 个失败目标 → 0；bandit 6 项**全部靠消除不安全构造**解决（`/tmp` 私有根改 0o700、表名走固定白名单、`subprocess` 用字面量 argv 且 `shell=False`），没有用 `nosec` 掩盖。**教训（已写入 PR）**：这个门禁只能用锁定 extra 跑——我第一次用了环境里的 ruff 0.14.11，得到的 30 项与"修法"在 0.15.20 下都不成立，反而制造了 16 条 unused-noqa。**仍红**：`quality gate` 作业还包含 `test-cov`、前端、`published-openapi-check` 等成员；后者因 **v1 契约漂移**（`/api/pipeline/run` 的 `symbols` 新增 `maxItems`、`limit` 上限 5000→10000）仍失败，那是 owner 的容量决策，本轮不冻结。
+
+**前端干净检出问题（[#226](https://github.com/cloudQuant/ai-for-investor/pull/226)，`3fad48a28`）。** 49 条 eslint warning 清零；同时发现更严重的一处：`components.d.ts` 是构建产物且被 gitignore，而 CI 在**构建前**跑 `vue-tsc`，所以干净检出上一直有 50 个 `TS2558` 错误。新增 9 行 types-only 的 `element-plus/global` 引用修复，不含运行时代码。渲染等价性用 `@vue/compiler-sfc` 编译前后 AST 对比证明（2 个文件 9 个纯文本节点各多一个空格，HTML 折叠后无差异）。
+
+**Backend - Unit Tests：从"假绿"到"真的可见"（[#228](https://github.com/cloudQuant/ai-for-investor/pull/228)，`af0856b26`）。** 该作业此前两周是 `skipped`（依赖 lint），恢复执行后立刻以 **pytest exit 2（收集错误）** 失败：19 个测试模块在模块级 import `zmq`/`bt_api_*`，而这些包不在任一条依赖路径里（`src/bt_api_*` 是无打包元数据的源码树，装不上）。按仓库既有约定（`test_afi08_owner_freeze_control_http.py` 的 `pytest.importorskip`）给其余模块加上同样的守卫：
+
+```
+before: 2030 collected, 14 errors, Interrupted
+after : 9143 collected, 0 errors (24 deselected)
+```
+
+收集修好后整套**真的跑起来**：**183 failed / 8789 passed / 201 skipped**（34 分钟）。这些失败是"刚被看见"，不是"刚被引入"——先前的 `skipped` 让它们完全不可见。按错误类别分诊（供后续波次使用）：`DATASET_FILESYSTEM_CONFIGURATION_INVALID` 62、`'Depends' object has no attribute 'scalar'` 36、`dotenv reads are disabled by the service-read integration test` 30（测试隔离泄漏）、`No module named 'bt_api_execution'` 28、`assert False is True` 26、`no such table: users` 24、陈旧签名（`get_paper_order() missing ... 'response'` 等）20。**该作业仍红，不得写成通过**；修复正在按类别推进。
+
+**报告证据 vector 首个增量（[#229](https://github.com/cloudQuant/ai-for-investor/pull/229)，`cbd4ca930`）。** 迭代计划的 E03-04/05、E06-03 要求"报告只可引用有持久证据的 vector"并在保存前重验。此前 `_build_and_save_report` 完全没有来源记录。本次加入：冻结的 `StockDailyReportEvidence`/`Vector`（严格校验 dataset/source/instrument/market/publication/sequence/content+contract hash/UTC 时间/principal/grant 版本/有效期/purpose，并拒绝重复与 receipt 不一致）、保存前逐条 `revalidate` 的闸门、`evidence_vector_json` 列与迁移 `20261101_stock_analysis_report_evidence_vector`（单一 head），22 项测试通过、仓库级 mypy 保持 0。**重要边界**：**尚无生产者接线**——没有任何真实任务会构造并提交该 vector，因此这道闸门在真实运行中不会被触发；它让要求"可实现且已测试"，**不是"已满足"**。
+
+**流程教训**：`dev` 只接受 `feature|fix|docs|refactor|test` 前缀，`feat/*` 会被治理门禁拒绝（我因此重开过一次 PR）；治理门禁若在作者自审提交前跑完会"假失败"，需要重新触发一次。
+
+
 
