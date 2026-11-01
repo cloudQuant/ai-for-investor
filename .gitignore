@@ -168,3 +168,6 @@ strategies/simulate/ctp_simnow_certification/reports/
 strategies/live/ctp_hongyuan_penetration/.env
 strategies/live/ctp_hongyuan_penetration/reports/
 strategies/live/ctp_hongyuan_penetration/*.docx
+
+# Qoder agent worktrees / local tool state
+.qoder/

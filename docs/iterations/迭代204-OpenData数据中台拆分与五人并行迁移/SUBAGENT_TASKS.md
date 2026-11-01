@@ -214,3 +214,25 @@ OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查d
 | 204-D02-02 | dev_ledger（独立分支 opendata-od204-ledger） | Alembic/运行接线/warehouse write fence；该ledger必须由root与dev_runs契约集成后再并入主线。 |
 
 下一波可按接口和文件owner把PLANNED任务重分配给现有子代理或新代理。若任务依赖的合同尚未合入，可先用本清单的fixture/冻结接口推进离线代码；涉及共享文件、真实凭据、生产写操作、部署或自然周期的工作按对应owner和验收面排队，不能因代理空闲而并发改同一文件或提前标记通过。
+
+## CI 门禁债务（2026-11-01 起，独立于本迭代验收面）
+
+本迭代开发期间发现的两仓 CI 状态与迭代204交付无关，但它决定后续 PR 能否被判定，因此单列跟踪。**这些条目全部不是迭代204的验收证据，也不改变任何 CODE/OFFLINE、REAL_SOURCE、DEPLOYMENT、NATURAL_CYCLE 结论。**
+
+关键更正：AFI `Backend - Unit Tests` 自 2026-10-19 起是 `skipped` 而非 `passed`（`needs: backend-lint`，而 lint 自那次 snapshot 合入起一直为红），即整仓后端测试在 CI 中未运行；#212 合入后恢复并通过。
+
+| 条目 | 状态 | 证据/剩余工作 |
+|---|---|---|
+| AFI 整仓 Ruff lint | DONE (#212) | 206→0；30 个受影响测试文件在 `dev` 与分支上给出逐字节相同的 17 项既有失败 |
+| AFI 纯 `ruff format` | DONE (#215) | 121 文件；121/121 `ast.dump` 前后一致 |
+| AFI mypy 分域棘轮（utils+schemas、quote） | DONE (#213) | 两域 `Success`；CI 已转 success |
+| AFI full-history 密钥扫描 | DONE (#214) | 42 项逐行审阅后按指纹登记；gitleaks 8.30.1 `no leaks found`；CI 已转 success |
+| AFI large-file 棘轮 | DONE (#216) | 16 处超限增长 + 21 处未登记，全部列入可见 diff；写入 5 波 `decomposition_plan` |
+| OpenData full-history 密钥扫描 | DONE (#154) | 10 项 → 0；`docs/evidence/C150/` 三臂反事实 |
+| AFI 整仓 mypy 棘轮 0→329 | DONE (#217/#218/#219/#221/#223，#224 吸收 typing 增长) | 用户决定**真实修复**而非重设基线；5 个波次全部以真实类型修复完成，**0 处新增 `# type: ignore`**；合入后 `dev` 实测 `mypy app` → `Success: no issues found in 738 source files`。跨波次合并暴露并修复了两个问题：ORM 现代化使 4 处 `cast(str, ...)` 变冗余、`contracts.py` 循环变量命名冲突；ORM 等价性以 168 表 DDL/索引零差异证明 |
+| AFI Frontend 依赖审计 | DONE (#220) | `vue-i18n` 9.14.5→11.4.16；未降级 monaco，改用 `dompurify` override 3.4.16→3.4.17 清掉 `monaco→dompurify` critical 链；`npm audit --omit=dev` 5 high/2 critical → **0/0**；170 文件 / 2,034 测试通过、build/typecheck/lint/node-engine 全绿。**代价**：vue-i18n 11 要求 node≥22，engines 收紧为 `^22.13 || ^24`，Node 20 不再受支持（CI/.nvmrc/3 个容器/部署脚本已同步） |
+| AFI E2E 四浏览器作业 | PARTIAL (#222) | 第一个确定原因已修：`afi09-gateway-health.spec.ts` 被通用 Playwright config 误收集（它需要只有专用 config 才提供的 `AFI09_E2E_*`）。**仍未绿**：`/trading/gateways` 在未配置 operator 时按设计返回 503，而 spec 拒绝 5xx——需产品/部署决定是否在 E2E 提供合成 operator 配置，故不得写成已修复 |
+| OpenData `quality gate`（A2 平面） | PARTIAL (#156) | ruff 30 项与 7 个未格式化文件已清零（S603 逐处 noqa/nosec + 理由、S608 表名为常量、3 个仅注解导入移入 TYPE_CHECKING），编辑过的测试 206 passed / 4 failed（4 项在 pristine `dev` 上同样失败）。**gate 仍未绿**：其 mypy 与 bandit 平面需要 CI 环境（bandit 与类型 stub 来自 `.[web,dev,providers]`），本轮未处理 |
+
+收口条件：上表全部转为 DONE 且对应 CI 作业在 `dev` 上实测为 success，才可称"CI 全绿"。任何单项通过、PR 合并或本地定向测试都不构成该结论。
+

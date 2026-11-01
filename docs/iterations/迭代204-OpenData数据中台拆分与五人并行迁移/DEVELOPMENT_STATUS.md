@@ -1248,3 +1248,50 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 最新 `dev` 上 MySQL 9.4 Contract、Backend Security Scan、Deps Sync、Doc Links、No Generated Artifacts、Alembic、OpenAPI 等检查已不再出现在失败列表。仍失败的均为既有全仓债务或与本批无关：OpenData `quality gate`（A2 30 项均在既有测试/脚本，新 stock-daily/universe/Fuyao 文件不在其中）与 full-history secret scan；AFI Backend Lint（205 项 Ruff，均既有文件；新 adapter 模块 mypy 0 错误、新文件 Ruff 通过）、Mypy Ratchet（quote、utils+schemas）、Frontend Lint、Secret Scan 与 E2E Chromium。**CI 尚未全绿，不能写成通过**；上述修复收据与剩余失败分类保留在本节，供后续清理。
 
 **共同非声明**：四个合入均没有实时来源请求、生产 MySQL/部署、自然周期、全历史/覆盖完整性或来源权利/PIT 证明；合成 grant/principal/API key 不代表生产授权；Fuyao/universe 原始样本仍保存在私有归档，未进入 Git。v2 日线路由在默认配置下仍返回 404，容量门禁不是数据授权，回补执行器不是调度器，universe 候选不是权威全 A 分母。**父任务保持开放**，逐子任务影响见 [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) 的 Wave 13/14/15 合入证据节。
+
+## 2026-11-01 Wave 16：CI 债务清理（AFI #212–#216、OpenData #154）
+
+本节记录 CI 债务清理，不属于迭代204的功能交付。它不改变上方任何证据边界，也不构成数据、来源或部署验收。
+
+**关键事实（此前被误报）**：`Backend - Unit Tests` 自 2026-10-19 起是 `skipped` 而不是 `passed`——`backend-test` 依赖 `backend-lint`，而 lint 门禁自那次 snapshot 合入起一直为红，整仓后端测试因此从未在 CI 中运行。#212 合入后该作业恢复执行并通过。
+
+| 仓库/PR | 合入提交 | 范围与验证 |
+| --- | --- | --- |
+| AFI [#212](https://github.com/cloudQuant/ai-for-investor/pull/212) | `34756425441c34ed93e7612df33c7131245599d1` | 清掉整仓 Ruff lint（206 项 → 0，ruff 0.16.2）：F401/F811/I001/UP035/C413/F541、3 处 `raise ... from None`、8 处未读取的局部绑定、`app.models.__all__` 补 3 个 LegacyPaper 模型、AFI08 optional-SDK 测试的 `# noqa: E402`。验证：30 个受影响测试文件在 `dev` 工作树与分支上给出**逐字节相同**的 17 项既有失败；OpenAPI `paths` 无差异。 |
+| AFI [#213](https://github.com/cloudQuant/ai-for-investor/pull/213) | `afb94a8a6f80497c6178017dcf9e00b4b91f98e2` | 清零 `mypy app/utils app/schemas`（1 项）与 `mypy app/services/quote`（3 项）：`service_market.py` 的 `route` 变量复用导致二/三元组类型冲突、`curve_keys` 显式三元组、`portfolio_analytics_v1.py` 对 `Decimal.as_tuple().exponent` 的 `cast`（`is_finite()` 已排除哨兵值）。 |
+| AFI [#214](https://github.com/cloudQuant/ai-for-investor/pull/214) | `7ba51f411177b93b9f48af04ca9c3402ec2fe757` | full-history 密钥扫描：逐行审阅 42 项 `generic-api-key` 命中（UUID 测试标识、测试口令、JWT 别名、SHA-1/SHA-256 内容摘要、跨行表达式片段），按 `commit:path:rule:line` 指纹登记；`unresolved_findings` 保持 0、`blocking_ready` 保持 true。gitleaks 8.30.1 全历史 **42 项 → no leaks found**。 |
+| AFI [#215](https://github.com/cloudQuant/ai-for-investor/pull/215) | `72c35355a07c8d24928d2c02769e6c473f063d84` | 纯 `ruff format`（121 文件）。语义不变的证明是机械的：121/121 文件格式化前后 `ast.dump(ast.parse(...))` 完全一致；整仓 mypy 计数不变。 |
+| AFI [#216](https://github.com/cloudQuant/ai-for-investor/pull/216) | `4d35da65b695e417b408da9577ae590b7d9b710d` | large-file 棘轮刷新：**16 个已登记文件超限增长**（最大 PortfolioPage.vue 1885→3572、useDataPage.ts 4167→4912、query_service.py 1603→1778）**+ 21 个 ≥1000 行但从未登记**（最大 service_read/deployment.py 1793）；登记为“只可缩小”，并写入 `decomposition_plan`（5 个波次、逐文件拆分目标与前置条件）。PR 正文列出每一处上限变更。 |
+| OpenData [#154](https://github.com/cloudQuant/opendata/pull/154) | `e940fd7d68302e8da73b66577dae926978823063` | `make secret-check` 的 10 项命中（8 个 fixture 运行/配额字面量）以字面量枚举加入 `generic-api-key` allowlist，并按仓库既有标准补 `docs/evidence/C150/` 三臂反事实测量（去掉该正则 → 10 项全部回归；任一字符变体 → 仍报告；同槽位植入凭据 → 仍报告）。全历史 **10 项 → no leaks found**。 |
+
+**CI 结果（合入后实测，非推断）**：AFI `dev` 上 `Security - Secret Scan`、`Backend - Unit Tests`、四个 Mypy Ratchet 分域作业（utils+schemas、quote、api subset、services subset）均为 success；OpenData `dev` 上 `secret scan (full history)` 为 success。**仍未全绿**：AFI `Backend - Lint & Type Check`（仅剩整仓 mypy 棘轮 0→329）、`Frontend - Lint & Type Check`（npm audit 生产依赖 high 0→5/critical 0→2）、E2E 四个浏览器作业；OpenData `quality gate`（A2 平面，本次未动）。以上均不得写成通过。
+
+**边界**：本轮只改静态检查、测试门禁与依赖/基线声明，没有触碰任何数据事实、授权判定或发布语义；格式化与基线刷新都不构成对既有数据或来源证据的重新验收。
+
+### Wave 16 补充（同日夜）：mypy 归零、前端依赖与 E2E 定因
+
+用户决定“真实修掉 329 个 mypy 错误”后，按 5 个波次并行修复，全部以真实类型修复完成，**未新增任何 `# type: ignore`**（逐支测量）：
+
+| 波次/PR | 合入提交 | 范围 | 分支上 `mypy app` |
+| --- | --- | --- | --- |
+| [#217](https://github.com/cloudQuant/ai-for-investor/pull/217) | `531a2b4a9` | `service_read` 全包（含 `contracts.py`） | 329 → 214 |
+| [#218](https://github.com/cloudQuant/ai-for-investor/pull/218) | `4fc29e887` | api 层、data-fetch 适配器、db | 329 → 310 |
+| [#219](https://github.com/cloudQuant/ai-for-investor/pull/219) | `77b5b4565` | risk-policy/budget/monitoring/approval-authority | 329 → 264 |
+| [#221](https://github.com/cloudQuant/ai-for-investor/pull/221) | `0ae31915f` | portfolio analytics/composition/ledger | 329 → 269 |
+| [#223](https://github.com/cloudQuant/ai-for-investor/pull/223) | `47e467dfd` | 其余 service 模块 + 4 个 legacy ORM 模型现代化 | 329 → 213（合并 dev 后 **0**） |
+| [#224](https://github.com/cloudQuant/ai-for-investor/pull/224) | `979284848` | 吸收 typing 造成的 12 个文件 +286 行增长 | — |
+
+**合入后 `dev` 实测**：`mypy app` → `Success: no issues found in 738 source files`（0 错误），`ruff check .` 与 `ruff format --check .` 干净，`large_file_ratchet` 通过（95 文件）。
+
+两个只在**跨波次合并**时才显现的事实，已记录并修复：ORM 现代化把 4 个 legacy 模型改成 `Mapped`/`mapped_column` 后，其他波次为读同一批属性加的 4 处 `cast(str, ...)` 变成 `warn_redundant_casts` 错误（运行时无变化，已删除）；`contracts.py` 被两个波次以不同变量名改到同一处循环，按 `decimal_code` 解决。ORM 改动的等价性不是断言而是测量：两棵树的全量 metadata 对比 **168 张表、0 处 `CreateTable` DDL 差异、0 处索引差异**。
+
+其余合入与结论：
+
+- **前端 [#220](https://github.com/cloudQuant/ai-for-investor/pull/220)**（`3ced550ed`）：`vue-i18n` 9.14.5 → 11.4.16；`dompurify` override 3.4.16 → 3.4.17、`follow-redirects` 1.16.2。`npm audit --omit=dev` 由 **5 high / 2 critical → 0 / 0**。**monaco 未降级**——critical 链是 `monaco 0.56 → dompurify ≤3.4.16`，抬 override 即可清除，比原计划的 0.55.1 降级更小且已验证。代价是 `vue-i18n@11` 要求 `node >= 22`，因此 engines 从 `^20.19 || ^22.13 || ^24` 收紧为 **`^22.13 || ^24`**，CI/e2e/nightly、`.nvmrc`、3 个容器定义与部署脚本同步；**Node 20 不再受支持**属于部署面变更。验证：audit 0/0、eslint 0 warning、`vue-tsc` 通过、**vitest 170 文件 / 2,034 测试通过**、`npm run build` 与 node-engine 门禁通过；7 个 locale × 5,042 条消息在 9.14.5 与 11.4.16 下逐字节一致。
+- **E2E [#222](https://github.com/cloudQuant/ai-for-investor/pull/222)**（`cce202873`）：四个浏览器作业自 2026-10-17 起全红的**第一个确定原因**，是 `e2e/tests/afi09-gateway-health.spec.ts` 需要 `AFI09_E2E_*`（只有专用 config 提供），却被通用 `playwright.config.ts` 收集，因此每个 project 都必然失败；通用配置排除该 spec 后收集数 90 → 89，专用 config 仍收集它。**第二个原因未修且不应猜**：`/trading/gateways` 在未配置 `SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON` 时按设计返回 503 `OPERATOR_NOT_CONFIGURED`，而 `product-domain-pages.spec.ts:155` 拒绝任何 5xx —— 这需要“E2E 部署是否提供合成 operator 配置”的产品/部署决定。
+- **OpenData [#155](https://github.com/cloudQuant/opendata/pull/155)**（`5e75e9c27`）：`/api/v2/identity/resolve` 的 `openapi_extra` 嵌入了带相对 `$defs` 引用的 Pydantic schema，在 OpenAPI 3.1 下是**悬空 `$ref`**（客户端生成器同样会失败）；改为发布前内联（字段/类型/边界/描述不变），并据此把 v2 评审批次刷新为“+1 path、+2 个标准校验组件、0 删除、0 既有路径变更”。**v1 漂移未冻结**：`/api/pipeline/run` 的 `symbols` 增加 `maxItems:10000`、`limit` 上限 5000→10000，属容量决策，留给 owner。
+- **OpenData [#156](https://github.com/cloudQuant/opendata/pull/156)**（`6b5116d75`）：A2 静态工具面 30 项 ruff + 7 个未格式化文件清零（`S603` 逐处 `noqa/nosec` 并注明 literal argv、`S608` 一处表名为模块常量、3 个仅注解导入移入 `TYPE_CHECKING`）。**A2 gate 仍未绿**：其 mypy 与 bandit 平面需要 CI 环境（bandit 与类型 stub 来自 `.[web,dev,providers]`），本轮未处理。
+
+**未闭合项（不得写成完成）**：E2E 的 503 部署决策；OpenData `quality gate` 的 mypy/bandit 平面；`test_afi11_monitor_process_failure` 对 `monitoring_control.py` 的字节数指纹在本次改动前就已过期（35,973 vs 60,992），需要单独复核；Node 20 支持已在本轮移除，任何仍固定在 Node < 22.13 的环境会按设计被引擎门禁拒绝。
+
+
