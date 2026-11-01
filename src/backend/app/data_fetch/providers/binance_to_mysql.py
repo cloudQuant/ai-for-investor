@@ -76,6 +76,10 @@ BAR_COLUMNS = (
 class BinanceToMySql(MysqlBase):
     """Stores Binance spot klines in one warehouse table per frequency."""
 
+    #: supplied by the concrete per-frequency subclass (e.g. CryptoDailyMarket)
+    table_name: str
+    create_table_sql: str
+
     #: column holding the bar timestamp -- DATE for daily, DATETIME for hourly
     time_column: str = "TRADE_DATE"
     #: the Binance interval this provider writes
