@@ -7,7 +7,7 @@ import inspect
 import json
 import re
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from fastapi import status
 
@@ -52,6 +52,11 @@ class PortfolioAnalyticsTaskError(RuntimeError):
 
 class PortfolioAnalyticsTaskService:
     """Bind typed V2 inputs and task references to one owned membership cut."""
+
+    _worker: PortfolioAnalyticsWorker
+    _scope_ref: str
+    _owner_subject: str
+    _membership: PortfolioCompositionVersion
 
     def __init__(
         self,
@@ -99,7 +104,9 @@ class PortfolioAnalyticsTaskService:
             facts,
         )
         input_result = self._require_success(upload)
-        input_sha256 = self._validate_input_result(input_result, input_snapshot_id, row.source_type)
+        input_sha256 = self._validate_input_result(
+            input_result, input_snapshot_id, _column_text(row.source_type)
+        )
 
         submitted = await self._call(
             "submit_portfolio_analytics_task",
@@ -145,7 +152,7 @@ class PortfolioAnalyticsTaskService:
     def _task_identity(self, idempotency_key: str) -> tuple[str, str]:
         row = self._membership
         owner_tag = _digest(self._owner_subject)[:16]
-        portfolio_tag = _digest(row.portfolio_ref)[:16]
+        portfolio_tag = _digest(_column_text(row.portfolio_ref))[:16]
         key_tag = _digest(idempotency_key)[:24]
         version_tag = f"v{row.membership_version}"
         membership_tag = row.membership_sha256[:16]
@@ -162,7 +169,7 @@ class PortfolioAnalyticsTaskService:
             raise PortfolioAnalyticsTaskError("ANALYTICS_TASK_NOT_FOUND", 404)
         row = self._membership
         owner_tag = _digest(self._owner_subject)[:16]
-        portfolio_tag = _digest(row.portfolio_ref)[:16]
+        portfolio_tag = _digest(_column_text(row.portfolio_ref))[:16]
         prefix = (
             f"afi2:{owner_tag}:{portfolio_tag}:v{row.membership_version}:"
             f"{row.membership_sha256[:16]}:"
@@ -354,6 +361,11 @@ class PortfolioAnalyticsTaskService:
             raise PortfolioAnalyticsTaskError("ANALYTICS_REPLY_INVALID", 503) from None
         if hashlib.sha256(encoded).hexdigest() != claimed_digest:
             raise PortfolioAnalyticsTaskError("ANALYTICS_REPLY_INVALID", 503)
+
+
+def _column_text(value: object) -> str:
+    """Read a legacy ``Column[str]`` instance attribute as its runtime string."""
+    return cast(str, value)
 
 
 def _digest(value: str) -> str:

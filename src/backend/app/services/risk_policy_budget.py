@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
+from typing import cast
 
 from bt_api_risk.portfolio_analytics import FxObservationV1
 
@@ -181,7 +182,7 @@ def compile_static_portfolio_budget(
         else:
             required_fx_currencies.add(source_currency)
             fx_observation = fx_by_currency.get(source_currency)
-            if type(fx_observation) is not FxObservationV1:
+            if fx_observation is None or type(fx_observation) is not FxObservationV1:
                 raise RiskPolicyBudgetError("BUDGET_FX_REQUIRED")
             if (
                 fx_observation.base_currency != source_currency
@@ -250,7 +251,7 @@ def compile_static_portfolio_budget(
         _amount(amount_text, "INVALID_CONVERTED_ALLOCATION_AMOUNT")
         for _, _, _, _, amount_text, _ in normalized
     ]
-    scale = max(max(0, -amount.as_tuple().exponent) for amount in all_amounts)
+    scale = max(max(0, -_decimal_exponent(amount)) for amount in all_amounts)
     conserved_units = sum(_amount_units(amount, scale) for amount in all_amounts[1:])
     if conserved_units != _amount_units(total_amount, scale):
         raise RiskPolicyBudgetError("BUDGET_NOT_CONSERVED")
@@ -374,7 +375,7 @@ def _amount(value: object, code: str) -> Decimal:
     parts = amount.as_tuple()
     if (
         len(parts.digits) > _MAX_DECIMAL_DIGITS
-        or -parts.exponent > _MAX_DECIMAL_SCALE
+        or -_decimal_exponent(amount) > _MAX_DECIMAL_SCALE
         or amount.adjusted() > 63
     ):
         raise RiskPolicyBudgetError(code)
@@ -392,16 +393,27 @@ def _decimal_text(amount: Decimal) -> str:
     return text
 
 
+def _decimal_exponent(amount: Decimal) -> int:
+    """Return the exponent of a Decimal already validated as finite by ``_amount``.
+
+    ``DecimalTuple.exponent`` is a ``Literal["n", "N", "F"]`` only for the
+    non-finite Decimal values that ``_amount`` rejects, so the finite value
+    reaching this helper always carries an integer exponent.
+    """
+
+    return cast(int, amount.as_tuple().exponent)
+
+
 def _amount_units(amount: Decimal, scale: int) -> int:
     """Convert a validated Decimal to exact integer units without context rounding."""
 
     if amount == 0:
         return 0
-    sign, digits, exponent = amount.as_tuple()
+    sign, digits, _ = amount.as_tuple()
     coefficient = int("".join(str(digit) for digit in digits) or "0")
     if sign:
         coefficient = -coefficient
-    return coefficient * (10 ** (exponent + scale))
+    return coefficient * (10 ** (_decimal_exponent(amount) + scale))
 
 
 def _fraction_as_decimal(value: Fraction) -> Decimal:

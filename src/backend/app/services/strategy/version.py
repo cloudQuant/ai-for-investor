@@ -6,9 +6,10 @@ Supports versioning, branch management, rollback, and comparisons.
 
 import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, cast
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,18 +36,23 @@ from app.websocket_manager import manager as ws_manager
 
 logger = logging.getLogger(__name__)
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-def _freshness_mutation(method):
+
+def _freshness_mutation(
+    method: Callable[Concatenate["VersionControlService", _P], Awaitable[_R]],
+) -> Callable[Concatenate["VersionControlService", _P], Awaitable[_R]]:
     """Run an eligibility-source write under its owner's shared epoch lock."""
 
     @wraps(method)
-    async def wrapped(self, *args, **kwargs):
+    async def wrapped(self: "VersionControlService", *args: _P.args, **kwargs: _P.kwargs) -> _R:
         bound = inspect.signature(method).bind(self, *args, **kwargs)
         owner_subject = bound.arguments.get("user_id")
         if type(owner_subject) is not str or not owner_subject:
             raise ValueError("owner subject is required for a strategy source mutation")
 
-        async def apply(session: AsyncSession):
+        async def apply(session: AsyncSession) -> _R:
             from app.services.strategy_approval_authority import (
                 advance_strategy_approval_authority_epoch,
                 lock_strategy_approval_authority_epoch,
@@ -73,15 +79,17 @@ def _freshness_mutation(method):
         # transaction; a websocket failure must not roll back a committed
         # strategy source mutation.
         if method.__name__ == "update_version" and result is not None:
+            # Only update_version is declared to return a StrategyVersion.
+            updated_version = cast("StrategyVersion", result)
             await ws_manager.send_to_task(
-                f"strategy_version:{result.strategy_id}",
+                f"strategy_version:{updated_version.strategy_id}",
                 {
                     "type": "version_updated",
-                    "version_id": result.id,
+                    "version_id": updated_version.id,
                     "data": {
-                        "status": result.status,
-                        "is_active": result.is_active,
-                        "is_default": result.is_default,
+                        "status": updated_version.status,
+                        "is_active": updated_version.is_active,
+                        "is_default": updated_version.is_default,
                     },
                 },
             )

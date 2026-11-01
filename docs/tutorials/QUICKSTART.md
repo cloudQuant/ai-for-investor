@@ -2,7 +2,7 @@
 
 本指南帮助你从零开始，在 5 分钟内启动 ai-for-investor 并完成一次策略回测。
 
-> **前置条件**：Python 3.10+、Node.js 20+、Git
+> **前置条件**：Python 3.10+、Node.js 22+、Git
 
 ---
 

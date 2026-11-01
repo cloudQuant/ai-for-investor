@@ -357,6 +357,7 @@ class OpendataProvider:
             payload, page_response_bytes = await self._get_page(
                 endpoint,
                 {**params, "page": page},
+                credentials=self._credentials,
                 max_bytes=min(self._max_response_bytes, remaining_response_bytes),
                 deadline=deadline,
                 request_id=request.request_id,
@@ -996,12 +997,13 @@ class OpendataProvider:
         endpoint: str,
         params: Mapping[str, Any],
         *,
+        credentials: OpendataCredentials,
         max_bytes: int | None = None,
         deadline: float,
         request_id: str,
     ) -> tuple[Mapping[str, Any], int]:
         """流式读取一页，受 fetch 总 deadline 与有限重试共同约束。"""
-        url = f"{self._credentials.base_url}{endpoint}"
+        url = f"{credentials.base_url}{endpoint}"
         response_limit = self._max_response_bytes if max_bytes is None else max_bytes
         for retry_number in range(self._max_retries + 1):
             remaining = self._remaining_seconds(deadline)
@@ -1010,6 +1012,7 @@ class OpendataProvider:
                     self._read_page_attempt(
                         url,
                         params,
+                        api_key=credentials.api_key,
                         request_id=request_id,
                         response_limit=response_limit,
                         timeout_seconds=min(self._timeout_seconds, remaining),
@@ -1072,6 +1075,7 @@ class OpendataProvider:
         url: str,
         params: Mapping[str, Any],
         *,
+        api_key: str,
         request_id: str,
         response_limit: int,
         timeout_seconds: float,
@@ -1083,7 +1087,7 @@ class OpendataProvider:
             url,
             params=dict(params),
             headers={
-                "X-API-Key": self._credentials.api_key,
+                "X-API-Key": api_key,
                 "X-Request-ID": request_id,
             },
             timeout=timeout_seconds,

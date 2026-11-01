@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import AsyncGenerator
+from typing import cast
 
 import sqlalchemy as sa
 from sqlalchemy import Table, event, insert, select, text
@@ -904,7 +905,8 @@ async def create_default_admin() -> None:
             aliases = [
                 user
                 for user in all_users.scalars().all()
-                if normalize_reserved_username(user.username) == configured_identity
+                # SQLAlchemy Column(String) attributes are Column[str] to mypy but str on instances.
+                if normalize_reserved_username(cast(str, user.username)) == configured_identity
             ]
             if aliases:
                 raise RuntimeError(

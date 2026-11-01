@@ -19,6 +19,7 @@ from collections import Counter, defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TypedDict
 
 _SOURCE_MODULES = frozenset(
     {
@@ -90,6 +91,21 @@ class CallEdge:
     line: int
 
 
+class ScanSummary(TypedDict):
+    """Countable totals and per-file evidence emitted by ``ScanResult.summary``."""
+
+    root: str
+    python_files: int
+    parse_errors: list[str]
+    hit_count: int
+    category_counts: dict[str, int]
+    role_counts: dict[str, int]
+    files_with_findings: int
+    entrypoints: list[str]
+    source_reachable_entrypoints: list[str]
+    findings_by_file: dict[str, dict[str, int]]
+
+
 @dataclass(frozen=True, slots=True)
 class ScanResult:
     """Deterministic scan output suitable for review or JSON serialization."""
@@ -102,7 +118,7 @@ class ScanResult:
     entrypoints: tuple[str, ...]
     source_reachable_entrypoints: tuple[str, ...]
 
-    def summary(self) -> dict[str, object]:
+    def summary(self) -> ScanSummary:
         """Return countable findings without losing per-file evidence."""
         counts = Counter(hit.category for hit in self.hits)
         by_role = Counter(hit.role for hit in self.hits)

@@ -4,7 +4,7 @@ This section walks through a minimal, verifiable research loop: start the servic
 
 ## Prerequisites
 
-- Python 3.10+, Node.js 20+, and Git.
+- Python 3.10+, Node.js 22+, and Git.
 - Install the `backtrader` extra to run backtests, the `data` extra for online AkShare data, and the `rag` extra for semantic retrieval.
 - SQLite is suitable for the default application database; PostgreSQL or MySQL is recommended for production or team environments.
 

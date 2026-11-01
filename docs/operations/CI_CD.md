@@ -201,7 +201,7 @@ Edit `NODE_VERSION` in workflow files:
 
 ```yaml
 env:
-  NODE_VERSION: "22"  # Change from "20"
+  NODE_VERSION: "22"  # Must satisfy src/frontend/package.json engines
 ```
 
 #### Modify Test Timeout

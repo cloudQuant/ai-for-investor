@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -25,7 +25,7 @@ def _control(request: Request) -> ServiceGatewayOperatorControl:
     return control
 
 
-def _raise_http(error: ServiceGatewayOperatorError) -> None:
+def _raise_http(error: ServiceGatewayOperatorError) -> NoReturn:
     if error.code in {"PROFILE_NOT_CONFIGURED"}:
         code = status.HTTP_404_NOT_FOUND
     elif error.code in {"OWNER_NOT_AUTHORIZED", "OPERATION_NOT_GRANTED"}:

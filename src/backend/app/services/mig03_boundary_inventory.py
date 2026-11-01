@@ -13,13 +13,14 @@ import asyncio
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from typing import cast as typing_cast
 
-from sqlalchemy import JSON, LargeBinary, String, Text, cast, func, select
+from sqlalchemy import JSON, ColumnElement, LargeBinary, String, Text, cast, func, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -834,7 +835,7 @@ def _preflight_query_budget(
         raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
 
     columns = tuple(model.__table__.columns)
-    byte_lengths = []
+    byte_lengths: list[ColumnElement[Any]] = []
     for column in columns:
         if isinstance(column.type, LargeBinary):
             byte_lengths.append(func.coalesce(func.sum(func.length(column)), 0))
@@ -1274,7 +1275,7 @@ def _participant_facts(
     configuration_sha256: str,
     named_rows: tuple[tuple[str, tuple[dict[str, Any], ...]], ...],
     links: tuple[tuple[str, str, str, str], ...],
-    models: tuple[type, ...],
+    models: tuple[type[Any], ...],
     session: Session,
 ) -> AfiParticipantFacts:
     schema = _inspected_schema_rows(session, models)
@@ -1306,7 +1307,7 @@ def _participant_facts(
     )
 
 
-def _inspected_schema_rows(session: Session, models: tuple[type, ...]) -> tuple[Any, ...]:
+def _inspected_schema_rows(session: Session, models: tuple[type[Any], ...]) -> tuple[Any, ...]:
     try:
         inspector = sa_inspect(session.get_bind())
         rows = []
@@ -1655,6 +1656,9 @@ def _decimal(value: Any) -> Decimal:
 
 def _decimal_text(value: Decimal) -> str:
     sign, digits_tuple, exponent = value.as_tuple()
+    if not isinstance(exponent, int):
+        # ``is_finite()`` excluded the Decimal special-value exponents.
+        raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
     if not any(digit != 0 for digit in digits_tuple):
         return "0"
     digits = "".join(str(digit) for digit in digits_tuple)
@@ -1673,13 +1677,17 @@ def _decimal_text(value: Decimal) -> str:
 
 
 def _text_set(values: Iterable[str]) -> tuple[str, ...]:
-    if type(values) not in (tuple, list) or len(values) > _MAX_BOUNDARY_ROWS:
+    if type(values) not in (tuple, list):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
-    if any(type(value) is not str or not value for value in values) or len(set(values)) != len(
-        values
-    ):
+    # The exact tuple/list check above guarantees a sized collection.
+    sized_values = typing_cast("Collection[str]", values)
+    if len(sized_values) > _MAX_BOUNDARY_ROWS:
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
+    if any(type(value) is not str or not value for value in sized_values) or len(
+        set(sized_values)
+    ) != len(sized_values):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    result = tuple(sorted(values))
+    result = tuple(sorted(sized_values))
     return result
 
 

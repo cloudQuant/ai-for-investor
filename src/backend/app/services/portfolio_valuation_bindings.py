@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 from typing import Any, Literal
@@ -544,11 +544,11 @@ async def attach_market_valuation_inputs(
         position["valuation_inputs"]["market_cut"] = _cut(
             position.get("observed_at_utc"), execution, observation, price_binding
         )
-        source_currency = mark.get("currency") or position.get("price_currency")
+        mark_currency = mark.get("currency") or position.get("price_currency")
         target_currency = str(projection.get("base_currency") or "").upper()
-        if not source_currency:
+        if not mark_currency:
             _input(position, "fx_rate", "missing", "POSITION_PRICE_CURRENCY_MISSING")
-        elif source_currency.upper() == target_currency:
+        elif mark_currency.upper() == target_currency:
             _input(
                 position,
                 "fx_rate",
@@ -561,8 +561,8 @@ async def attach_market_valuation_inputs(
         else:
             await _project_fx(
                 position,
-                registry.fx_pair(source_currency, target_currency),
-                source_currency=source_currency,
+                registry.fx_pair(mark_currency, target_currency),
+                source_currency=mark_currency,
                 target_currency=target_currency,
                 position_at=position_at,
                 now=now,
@@ -618,7 +618,10 @@ async def _execute_query(
     if request.query_fingerprint in cache:
         return cache[request.query_fingerprint]
     if len(cache) >= _MAX_QUERIES_PER_PROJECTION:
-        result = (None, "MARKET_DATA_QUERY_LIMIT_REACHED")
+        result: tuple[MarketDataQueryExecution | None, str | None] = (
+            None,
+            "MARKET_DATA_QUERY_LIMIT_REACHED",
+        )
         cache[request.query_fingerprint] = result
         return result
     try:
@@ -745,7 +748,7 @@ def _project_market_input(
     expected_rate_convention: str | None = None,
 ) -> tuple[dict[str, Any], Any | None]:
     if error_code is not None or execution is None:
-        code = error_code or "MARKET_DATA_QUERY_UNAVAILABLE"
+        code: str | None = error_code or "MARKET_DATA_QUERY_UNAVAILABLE"
         status: InputStatus = "unavailable" if code in _ACCESS_DENIALS else "error"
         return _input_record(status, code, binding), None
     identity = execution.context.identity
@@ -1124,7 +1127,7 @@ def _active(start: datetime, end: datetime | None, at: datetime) -> bool:
 def _aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamp must include an offset")
-    return value.astimezone(UTC)
+    return value.astimezone(timezone.utc)
 
 
 def _parse_time(value: object) -> datetime | None:
@@ -1180,4 +1183,4 @@ def _skew_ns(first: datetime | None, second: datetime | None) -> str | None:
 
 
 def _utc_now() -> datetime:
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)

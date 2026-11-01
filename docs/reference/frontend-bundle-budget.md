@@ -58,9 +58,9 @@ Build date: 2026-09-22. Runtime: Node.js v20.20.2, npm 10.8.2, Vite 6.4.3.
 Command:
 
 ```bash
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
-  /opt/homebrew/opt/node@20/bin/npm --prefix src/frontend run build
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
+PATH="/opt/homebrew/opt/node@22/bin:$PATH" \
+  /opt/homebrew/opt/node@22/bin/npm --prefix src/frontend run build
+PATH="/opt/homebrew/opt/node@22/bin:$PATH" \
   bash scripts/ci/check_bundle_size.sh src/frontend/dist
 ```
 
@@ -110,16 +110,16 @@ tab is an async component mounted on first tab activation. The unused
 
 ## Reproduce the route report and gates
 
-Run from the repository root with Node 20 on `PATH`:
+Run from the repository root with Node 22 on `PATH`:
 
 ```bash
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
+PATH="/opt/homebrew/opt/node@22/bin:$PATH" \
   node scripts/ci/list_route_assets.mjs /login src/frontend/dist --format=json
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
+PATH="/opt/homebrew/opt/node@22/bin:$PATH" \
   node scripts/ci/list_route_assets.mjs /strategies src/frontend/dist --kind=initial-js
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
+PATH="/opt/homebrew/opt/node@22/bin:$PATH" \
   node scripts/ci/list_route_assets.mjs /strategies src/frontend/dist --kind=delayed-js
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
+PATH="/opt/homebrew/opt/node@22/bin:$PATH" \
   bash scripts/ci/check_bundle_size.sh src/frontend/dist
 ```
 

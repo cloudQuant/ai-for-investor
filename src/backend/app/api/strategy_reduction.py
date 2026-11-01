@@ -276,10 +276,11 @@ def _validate_persisted_close_target(
             detail={"code": "APPROVAL_SCOPE_MISMATCH"},
         )
     try:
-        target = json.loads(approval.canonical_target_json)
+        canonical_target = approval.canonical_target_json
+        target = json.loads(canonical_target)
         if (
             type(target) is not dict
-            or canonical_target_json(target) != approval.canonical_target_json
+            or canonical_target_json(target) != canonical_target
             or canonical_target_sha256(target) != approval.target_sha256
         ):
             raise ValueError("stale target")

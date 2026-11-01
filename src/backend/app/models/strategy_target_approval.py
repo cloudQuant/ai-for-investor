@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
-    Column,
     DateTime,
     ForeignKey,
     Index,
@@ -22,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -102,64 +102,66 @@ class StrategyTargetApproval(Base):
         ),
     )
 
-    approval_ref = Column(String(128), primary_key=True, default=lambda: uuid.uuid4().hex)
-    approval_version = Column(Integer, nullable=False, default=1)
-    record_version = Column(Integer, nullable=False, default=1)
-    state = Column(String(16), nullable=False, default="APPROVED")
+    approval_ref: Mapped[str] = mapped_column(
+        String(128), primary_key=True, default=lambda: uuid.uuid4().hex
+    )
+    approval_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    record_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="APPROVED")
 
-    owner_subject = Column(String(256), nullable=False)
-    principal_ref = Column(String(128), nullable=False)
-    actor_ref = Column(String(128), nullable=False)
-    delegate_ref = Column(String(128), nullable=False, default="")
-    scope_ref = Column(String(128), nullable=False)
-    execution_domain_ref = Column(String(128), nullable=False)
-    account_ref = Column(String(128), nullable=False)
-    strategy_ref = Column(String(128), nullable=False)
-    strategy_version = Column(Integer, nullable=False)
+    owner_subject: Mapped[str] = mapped_column(String(256), nullable=False)
+    principal_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    delegate_ref: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    scope_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    execution_domain_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    strategy_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    strategy_version: Mapped[int] = mapped_column(Integer, nullable=False)
     # AFI-internal binding to the exact branch-local row. These columns are
     # deliberately outside the frozen SDK target JSON v1.
-    strategy_version_source_id = Column(
+    strategy_version_source_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("strategy_versions.id", ondelete="RESTRICT"), nullable=True
     )
-    strategy_version_branch = Column(String(50), nullable=True)
-    strategy_version_sha256 = Column(String(64), nullable=True)
-    membership_version = Column(Integer, nullable=True)
-    membership_sha256 = Column(String(64), nullable=True)
+    strategy_version_branch: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    strategy_version_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    membership_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    membership_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    target_ref = Column(String(128), nullable=False)
-    target_version = Column(Integer, nullable=False)
-    target_sha256 = Column(String(64), nullable=False)
-    canonical_target_json = Column(Text, nullable=False)
-    policy_ref = Column(String(128), nullable=False)
-    policy_version = Column(Integer, nullable=False)
-    policy_sha256 = Column(String(64), nullable=False)
+    target_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_target_json: Mapped[str] = mapped_column(Text, nullable=False)
+    policy_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    approved_by_subject = Column(String(256), nullable=False)
-    approved_by_principal_ref = Column(String(128), nullable=False)
-    approved_by_actor_ref = Column(String(128), nullable=False)
-    approved_by_delegate_ref = Column(String(128), nullable=False, default="")
-    approved_at_ns = Column(BigInteger, nullable=False)
-    expires_at_ns = Column(BigInteger, nullable=False)
+    approved_by_subject: Mapped[str] = mapped_column(String(256), nullable=False)
+    approved_by_principal_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    approved_by_actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    approved_by_delegate_ref: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    approved_at_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expires_at_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    operation_key_sha256 = Column(String(64), nullable=True)
-    operation_request_sha256 = Column(String(64), nullable=True)
-    intent_id = Column(String(128), nullable=True)
-    operation_reserved_at_ns = Column(BigInteger, nullable=True)
+    operation_key_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    operation_request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intent_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    operation_reserved_at_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    revoked_by_subject = Column(String(256), nullable=True)
-    revoked_by_actor_ref = Column(String(128), nullable=True)
-    revoked_at_ns = Column(BigInteger, nullable=True)
-    revocation_reason_code = Column(String(128), nullable=True)
+    revoked_by_subject: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    revoked_by_actor_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    revoked_at_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    revocation_reason_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    consumption_ref = Column(String(128), nullable=True)
-    consumed_intent_sha256 = Column(String(64), nullable=True)
-    consumed_at_ns = Column(BigInteger, nullable=True)
-    consumed_record_version = Column(Integer, nullable=True)
+    consumption_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    consumed_intent_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consumed_at_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    consumed_record_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -185,24 +187,24 @@ class StrategyTargetApprovalEvent(Base):
         Index("ix_strategy_target_approval_event_owner_time", "owner_subject", "occurred_at_ns"),
     )
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    approval_ref = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    approval_ref: Mapped[str] = mapped_column(
         String(128),
         ForeignKey("strategy_target_approvals.approval_ref", ondelete="RESTRICT"),
         nullable=False,
     )
-    approval_version = Column(Integer, nullable=False)
-    record_version = Column(Integer, nullable=False)
-    event_type = Column(String(24), nullable=False)
-    owner_subject = Column(String(256), nullable=False)
-    actor_subject = Column(String(256), nullable=False)
-    principal_ref = Column(String(128), nullable=False)
-    actor_ref = Column(String(128), nullable=False)
-    delegate_ref = Column(String(128), nullable=False, default="")
-    target_sha256 = Column(String(64), nullable=False)
-    occurred_at_ns = Column(BigInteger, nullable=False)
-    reason_code = Column(String(128), nullable=True)
-    operation_key_sha256 = Column(String(64), nullable=True)
-    intent_id = Column(String(128), nullable=True)
-    intent_sha256 = Column(String(64), nullable=True)
-    consumption_ref = Column(String(128), nullable=True)
+    approval_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    record_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    owner_subject: Mapped[str] = mapped_column(String(256), nullable=False)
+    actor_subject: Mapped[str] = mapped_column(String(256), nullable=False)
+    principal_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    delegate_ref: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    target_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    occurred_at_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    operation_key_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intent_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    intent_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consumption_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
