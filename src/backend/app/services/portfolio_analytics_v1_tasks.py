@@ -8,7 +8,7 @@ import re
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from app.models.portfolio_analytics_dataset import PortfolioAnalyticsDatasetV1
 from app.models.portfolio_composition import PortfolioCompositionVersion
@@ -56,6 +56,11 @@ class PortfolioAnalyticsV1TaskError(RuntimeError):
 
 class PortfolioAnalyticsV1TaskService:
     """Run V1 against one persisted dataset and exact owner membership cut."""
+
+    _worker: PortfolioAnalyticsV1Worker
+    _scope_ref: str
+    _owner_subject: str
+    _membership: PortfolioCompositionVersion
 
     def __init__(
         self,
@@ -161,7 +166,7 @@ class PortfolioAnalyticsV1TaskService:
 
         row = self._membership
         owner_tag = _digest(self._owner_subject)[:12]
-        portfolio_tag = _digest(row.portfolio_ref)[:12]
+        portfolio_tag = _digest(_column_text(row.portfolio_ref))[:12]
         prefix = (
             f"afi1:{owner_tag}:{portfolio_tag}:v{row.membership_version}:"
             f"{row.membership_sha256[:12]}:"
@@ -210,7 +215,7 @@ class PortfolioAnalyticsV1TaskService:
         dataset_tag = _dataset_tag(dataset_ref)
         key_tag = _digest(idempotency_key)[:20]
         owner_tag = _digest(self._owner_subject)[:12]
-        portfolio_tag = _digest(row.portfolio_ref)[:12]
+        portfolio_tag = _digest(_column_text(row.portfolio_ref))[:12]
         membership_tag = row.membership_sha256[:12]
         version_tag = f"v{row.membership_version}"
         identity = (
@@ -225,7 +230,7 @@ class PortfolioAnalyticsV1TaskService:
     def _input_for_task(self, task_ref: str, dataset: PortfolioAnalyticsDatasetV1) -> str:
         row = self._membership
         owner_tag = _digest(self._owner_subject)[:12]
-        portfolio_tag = _digest(row.portfolio_ref)[:12]
+        portfolio_tag = _digest(_column_text(row.portfolio_ref))[:12]
         prefix = (
             f"afi1:{owner_tag}:{portfolio_tag}:v{row.membership_version}:"
             f"{row.membership_sha256[:12]}:"
@@ -615,6 +620,11 @@ def _dataset_tag(dataset_ref: str) -> str:
 
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _column_text(value: object) -> str:
+    """Read a legacy ``Column[str]`` instance attribute as its runtime string."""
+    return cast(str, value)
 
 
 def _canonical_decimal(value: Decimal) -> str:

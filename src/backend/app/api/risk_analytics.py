@@ -441,7 +441,7 @@ async def _authorized_opendata_index_benchmark_reader(
 def _opendata_fetcher(
     reader: OpenDataIndexBenchmarkReader,
     benchmark_id: str,
-):
+) -> typing.Callable[[str, str, str], typing.Awaitable[list[dict[str, object]]]]:
     """Bind one public benchmark selector to the reader's fixed allowlist."""
 
     async def fetch(symbol: str, start_date: str, end_date: str) -> list[dict[str, object]]:

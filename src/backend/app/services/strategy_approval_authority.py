@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from typing import Protocol, cast
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -21,6 +22,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.persistence_boundaries import cursor_rowcount
 from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.models.strategy import Strategy
 from app.models.strategy_approval_authority import (
@@ -67,6 +69,29 @@ _POLICY_KEYS = frozenset(
 _LIMIT_KEYS = frozenset({"max_quantity", "max_notional", "min_price", "max_price"})
 
 
+class _EpochRow(Protocol):
+    """Scalar view of an authority epoch row returned by SQLAlchemy."""
+
+    epoch: int
+
+
+class _PolicyHeadRow(Protocol):
+    """Scalar view of the single current policy head row."""
+
+    policy_ref: str
+    policy_version: int
+    policy_sha256: str
+    head_version: int
+    updated_at: datetime
+
+
+class _PolicyVersionRow(Protocol):
+    """Scalar view of immutable policy content used for digest checks."""
+
+    canonical_policy_json: str
+    policy_sha256: str
+
+
 def canonical_policy_json(policy: Mapping[str, object]) -> str:
     normalized = _validate_policy(policy)
     try:
@@ -86,7 +111,7 @@ def canonical_policy_sha256(policy: Mapping[str, object]) -> str:
 
 
 def strategy_version_content_sha256(version: StrategyVersion) -> str:
-    document = {
+    document: dict[str, object] = {
         "code": version.code,
         "params": version.params or {},
         "tags": version.tags or [],
@@ -187,19 +212,20 @@ async def advance_strategy_approval_authority_epoch(db: AsyncSession, owner_subj
     """Increment the epoch after its source rows changed in this transaction."""
 
     epoch = await lock_strategy_approval_authority_epoch(db, owner_subject)
-    next_epoch = epoch.epoch + 1
+    epoch_row = cast(_EpochRow, epoch)
+    next_epoch = epoch_row.epoch + 1
     try:
         result = await db.execute(
             update(StrategyApprovalAuthorityEpoch)
             .where(
                 StrategyApprovalAuthorityEpoch.owner_subject == owner_subject,
-                StrategyApprovalAuthorityEpoch.epoch == epoch.epoch,
+                StrategyApprovalAuthorityEpoch.epoch == epoch_row.epoch,
             )
             .values(epoch=next_epoch, updated_at=datetime.now(timezone.utc))
         )
-        if result.rowcount != 1:
+        if cursor_rowcount(result) != 1:
             raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True)
-        epoch.epoch = next_epoch
+        epoch_row.epoch = next_epoch
         return next_epoch
     except StrategyTargetApprovalError:
         raise
@@ -273,11 +299,12 @@ async def publish_strategy_order_approval_policy(
             )
             db.add(head)
         else:
-            head.policy_ref = policy_ref
-            head.policy_version = version_number
-            head.policy_sha256 = policy_hash
-            head.head_version += 1
-            head.updated_at = datetime.now(timezone.utc)
+            head_row = cast(_PolicyHeadRow, head)
+            head_row.policy_ref = policy_ref
+            head_row.policy_version = version_number
+            head_row.policy_sha256 = policy_hash
+            head_row.head_version += 1
+            head_row.updated_at = datetime.now(timezone.utc)
         await advance_strategy_approval_authority_epoch(db, owner_subject)
         await db.flush()
         return row
@@ -433,7 +460,9 @@ def validate_target_against_policy(
 
     normalized_policy = _validate_policy(policy)
     instrument = target.get("instrument")
-    if instrument not in normalized_policy["allowed_instruments"]:
+    # ``_validate_policy`` normalizes every enum field to a list of strings.
+    allowed_instruments = cast("list[str]", normalized_policy["allowed_instruments"])
+    if instrument not in allowed_instruments:
         raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
     for target_key, policy_key in (
         ("side", "allowed_sides"),
@@ -441,7 +470,8 @@ def validate_target_against_policy(
         ("order_type", "allowed_order_types"),
         ("time_in_force", "allowed_time_in_force"),
     ):
-        if target.get(target_key) not in normalized_policy[policy_key]:
+        policy_choices = cast("list[str]", normalized_policy[policy_key])
+        if target.get(target_key) not in policy_choices:
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
     policy_limits = normalized_policy["limits"]
     target_limits = target.get("limits")
@@ -660,13 +690,14 @@ async def approve_strategy_order_target(
 
 
 def _policy_row_digest(row: StrategyOrderApprovalPolicyVersion) -> str:
+    row_view = cast(_PolicyVersionRow, row)
     try:
-        parsed = json.loads(row.canonical_policy_json)
+        parsed = json.loads(row_view.canonical_policy_json)
         canonical = canonical_policy_json(parsed)
     except (TypeError, ValueError, StrategyTargetApprovalError):
         raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE") from None
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    if canonical != row.canonical_policy_json or digest != row.policy_sha256:
+    if canonical != row_view.canonical_policy_json or digest != row_view.policy_sha256:
         raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
     return digest
 

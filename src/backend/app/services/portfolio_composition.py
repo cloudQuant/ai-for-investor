@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -169,13 +169,14 @@ class PortfolioCompositionService:
     ) -> dict[str, Any]:
         """Project only facts available from the membership's exact source."""
 
+        members = _membership_members(row)
         base = {
             "portfolio_ref": row.portfolio_ref,
             "membership_version": row.membership_version,
             "membership_sha256": row.membership_sha256,
             "source_type": row.source_type,
             "base_currency": row.base_currency,
-            "members": list(row.members),
+            "members": list(members),
             "projection_kind": "display_only",
             "creditable": False,
             "overlap_policy": "non_additive_display_only",
@@ -194,9 +195,9 @@ class PortfolioCompositionService:
                     "value": None,
                 },
                 "accounts": [],
-                "strategies": _strategy_views(row.members),
+                "strategies": _strategy_views(members),
                 "strategy_attribution": _unavailable_attribution(
-                    None, sum(member["kind"] == "strategy" for member in row.members)
+                    None, sum(member["kind"] == "strategy" for member in members)
                 ),
                 "coverage": {
                     "complete": False,
@@ -214,7 +215,8 @@ class PortfolioCompositionService:
     ) -> dict[str, Any]:
         """Project provider totals separately from trusted execution owner books."""
 
-        account_members = [member for member in row.members if member["kind"] == "account"]
+        members = _membership_members(row)
+        account_members = [member for member in members if member["kind"] == "account"]
         selected_account_refs = {member["ref"] for member in account_members}
         account_access_by_ref = {
             member["ref"]: _resolve_access(current_user, member["ref"], "account_member")
@@ -266,8 +268,8 @@ class PortfolioCompositionService:
         )
         provider_snapshot_consistency = _provider_snapshot_consistency(reads)
         account_facts_complete = account_total["status"] == "current"
-        strategy_members = [member for member in row.members if member["kind"] == "strategy"]
-        strategy_rows = _strategy_views(row.members)
+        strategy_members = [member for member in members if member["kind"] == "strategy"]
+        strategy_rows = _strategy_views(members)
         strategy_row_by_ref = {item["strategy_ref"]: item for item in strategy_rows}
         book_views: dict[str, AccountBookReadView] = {}
         book_sources: dict[str, dict[str, Any]] = {}
@@ -481,10 +483,11 @@ class PortfolioCompositionService:
     ) -> dict[str, Any]:
         """Project owner-held import source documents without deriving valuations."""
 
-        if not row.members or any(member["kind"] != "imported_ledger" for member in row.members):
+        members = _membership_members(row)
+        if not members or any(member["kind"] != "imported_ledger" for member in members):
             return _unavailable_imported_projection(base, "IMPORTED_SOURCE_MEMBERS_INVALID")
 
-        member_refs = [member["ref"] for member in row.members]
+        member_refs = [member["ref"] for member in members]
         result = await self.db.execute(
             select(PortfolioLedgerImportModel, PortfolioLedgerModel)
             .join(
@@ -613,7 +616,8 @@ class PortfolioCompositionService:
     ) -> dict[str, Any]:
         """Read owner-scoped published research reports without treating them as holdings."""
 
-        if not row.members or any(member["kind"] != "research_artifact" for member in row.members):
+        members = _membership_members(row)
+        if not members or any(member["kind"] != "research_artifact" for member in members):
             return {
                 **base,
                 "source_status": "adapter_not_integrated",
@@ -631,7 +635,7 @@ class PortfolioCompositionService:
                 },
             }
 
-        member_refs = [member["ref"] for member in row.members]
+        member_refs = [member["ref"] for member in members]
         result = await self.db.execute(
             select(AssetAnalysisReport, AssetAnalysisTask)
             .join(AssetAnalysisTask, AssetAnalysisTask.id == AssetAnalysisReport.task_id)
@@ -795,7 +799,7 @@ def _published_research_decision(report_sections: Any) -> dict[str, Any] | None:
         "quality_status": {"ELIGIBLE", "DEGRADED", "REJECTED"},
     }
     string_fields = (*allowed_values, "horizon_code")
-    result = {
+    result: dict[str, Any] = {
         field: value[:256] if isinstance(value, str) else None
         for field in string_fields
         if (value := decision.get(field)) is not None
@@ -852,7 +856,9 @@ def _project_account_total(
         )
         by_identity[identity] = (best_ref, best_view, included)
         if included:
-            total += best_view.value
+            # `included` already requires a non-null value; the cast keeps Decimal
+            # arithmetic typed without adding a branch.
+            total += cast(Decimal, best_view.value)
         else:
             complete = False
         if conflict:
@@ -1347,6 +1353,11 @@ def _has_explicit_trade_date(source_row: dict[str, Any]) -> bool:
             return False
         return True
     return parsed_date.isoformat() == value
+
+
+def _membership_members(row: PortfolioCompositionVersion) -> list[dict[str, str]]:
+    """Read the legacy Column-backed JSON members as their runtime key-part list."""
+    return cast("list[dict[str, str]]", row.members)
 
 
 def _strategy_views(members: list[dict[str, str]]) -> list[dict[str, Any]]:

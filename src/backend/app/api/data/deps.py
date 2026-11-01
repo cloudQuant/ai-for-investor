@@ -11,6 +11,7 @@ from app.api.deps import security
 from app.db.database import get_db
 from app.models.permission import Role, user_roles
 from app.models.user import User
+from app.schemas.auth import TokenPayload
 from app.services.market_data.access import (
     MarketDataAccessAuthorizer,
     MarketDataAuthorizationError,
@@ -68,7 +69,7 @@ def get_market_data_access_authorizer(
 
 
 async def _authorize_market_data_read(
-    current_user: User = Depends(get_current_db_user),
+    current_user: User | TokenPayload = Depends(get_current_db_user),
     access_authorizer: MarketDataAccessAuthorizer = Depends(get_market_data_access_authorizer),
 ) -> tuple[MarketDataPrincipal, MarketDataAccessAuthorizer]:
     """Authorize v2 data reads before resolving controls or services."""
@@ -92,7 +93,7 @@ async def require_authorized_market_data_read(
 
 
 async def get_authorized_market_data_access(
-    current_user: User = Depends(get_current_db_user),
+    current_user: User | TokenPayload = Depends(get_current_db_user),
     access_authorizer: MarketDataAccessAuthorizer = Depends(get_market_data_access_authorizer),
 ) -> MarketDataQueryAccess:
     """Build a typed v2 execution context after authorization succeeds."""

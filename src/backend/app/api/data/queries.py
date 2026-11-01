@@ -221,7 +221,7 @@ def _default_source_policy_registry(
         )
 
     ths_provider = _shared_ths_provider() if ths_enabled else None
-    routes: list[MarketDataProviderRoute] = []
+    routes = []
     if ths_provider is not None:
         # THS 为 A 股主源：THS stock 路由排在 AkShare 之前。频率仅 1d，
         # 分钟频 THS 不 supports，自动落到 AkShare/OpenBB 或 UNSUPPORTED。

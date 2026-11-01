@@ -13,8 +13,9 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Collection
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, TypeGuard, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -245,13 +246,19 @@ def _binding(current_user: TokenPayload, portfolio_ref: str) -> tuple[ReadAccess
 
 
 def _require_budget_operation(binding: Any, operation: str) -> None:
-    operations = getattr(binding, "operations", frozenset())
+    operations: Collection[str] = getattr(binding, "operations", frozenset())
     if operation not in operations:
         raise _error(
             "RISK_POLICY_BUDGET_ACTOR_NOT_AUTHORIZED",
             status.HTTP_403_FORBIDDEN,
             "The configured budget role cannot perform this operation.",
         )
+
+
+def _is_member_sequence(value: object) -> TypeGuard[list[Any] | tuple[Any, ...]]:
+    """Recognize the list/tuple member collections returned by a worker reply."""
+
+    return type(value) in (list, tuple)
 
 
 async def _latest_live_membership(
@@ -464,22 +471,22 @@ def _plan_objects(
         if request.fx_observations:
             from bt_api_risk.portfolio_analytics import FxObservationV1
 
-            for item in request.fx_observations:
-                if item.base_currency in observations:
+            for fx_item in request.fx_observations:
+                if fx_item.base_currency in observations:
                     raise RiskPolicyBudgetError("DUPLICATE_BUDGET_FX_FACT")
-                observations[item.base_currency] = FxObservationV1(
-                    observation_ref=item.observation_ref,
-                    base_currency=item.base_currency,
-                    quote_currency=item.quote_currency,
-                    direction=item.direction,
-                    rate_unit=item.rate_unit,
-                    rate=Decimal(item.rate),
-                    as_of_ns=item.as_of_ns,
-                    valid_until_ns=item.valid_until_ns,
-                    source_ref=item.source_ref,
-                    source_version=item.source_version,
-                    source_generation=item.source_generation,
-                    source_cursor=item.source_cursor,
+                observations[fx_item.base_currency] = FxObservationV1(
+                    observation_ref=fx_item.observation_ref,
+                    base_currency=fx_item.base_currency,
+                    quote_currency=fx_item.quote_currency,
+                    direction=fx_item.direction,
+                    rate_unit=fx_item.rate_unit,
+                    rate=Decimal(fx_item.rate),
+                    as_of_ns=fx_item.as_of_ns,
+                    valid_until_ns=fx_item.valid_until_ns,
+                    source_ref=fx_item.source_ref,
+                    source_version=fx_item.source_version,
+                    source_generation=fx_item.source_generation,
+                    source_cursor=fx_item.source_cursor,
                 )
         plan = StaticPortfolioBudgetPlan(
             portfolio_ref=portfolio_ref,
@@ -556,8 +563,12 @@ def _budget_proposal(
 
 
 def _compiled_membership_digest(catalog_requests: tuple[dict[str, object], ...]) -> str:
-    first = catalog_requests[0]["content"]["afi_budget"]
-    return str(first["membership_sha256"])
+    # The budget compiler emits each request as a JSON object whose ``content``
+    # and ``afi_budget`` members are objects; re-indexing keeps the same runtime
+    # errors for a malformed compiler result.
+    content = cast(dict[str, object], catalog_requests[0]["content"])
+    budget = cast(dict[str, object], content["afi_budget"])
+    return str(budget["membership_sha256"])
 
 
 def _generation_view(
@@ -630,7 +641,7 @@ async def _read_generation(
         "state",
     }
     if (
-        type(members) not in (list, tuple)
+        not _is_member_sequence(members)
         or len(members) != len(expected_accounts)
         or any(
             type(member) is not dict
