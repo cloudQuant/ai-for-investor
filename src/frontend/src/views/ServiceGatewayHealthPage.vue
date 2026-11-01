@@ -34,15 +34,23 @@ function statusLabel(value: string): string {
 </script>
 
 <template>
-  <main class="service-gateway-health" aria-labelledby="service-gateway-health-title">
+  <main
+    class="service-gateway-health"
+    aria-labelledby="service-gateway-health-title"
+  >
     <header class="service-gateway-health__header">
       <div>
-        <h1 id="service-gateway-health-title">{{ t('gatewayHealth.title') }}</h1>
+        <h1 id="service-gateway-health-title">
+          {{ t('gatewayHealth.title') }}
+        </h1>
         <p>{{ t('gatewayHealth.description') }}</p>
       </div>
     </header>
 
-    <form class="service-gateway-health__selector" @submit.prevent="readHealth">
+    <form
+      class="service-gateway-health__selector"
+      @submit.prevent="readHealth"
+    >
       <label for="service-gateway-account-ref">{{ t('gatewayHealth.accountRef') }}</label>
       <div class="service-gateway-health__controls">
         <input
@@ -53,27 +61,48 @@ function statusLabel(value: string): string {
           spellcheck="false"
           :placeholder="t('gatewayHealth.accountRefPlaceholder')"
         >
-        <button type="submit" :disabled="loading || !accountRef.trim()">
+        <button
+          type="submit"
+          :disabled="loading || !accountRef.trim()"
+        >
           {{ loading ? t('common.loading') : t('gatewayHealth.readHealth') }}
         </button>
       </div>
     </form>
 
-    <p class="service-gateway-health__note">{{ t('gatewayHealth.noCredentialNote') }}</p>
-    <p v-if="error" class="service-gateway-health__error" role="alert">{{ error }}</p>
+    <p class="service-gateway-health__note">
+      {{ t('gatewayHealth.noCredentialNote') }}
+    </p>
+    <p
+      v-if="error"
+      class="service-gateway-health__error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
 
-    <section v-if="health" class="service-gateway-health__facts" aria-live="polite">
+    <section
+      v-if="health"
+      class="service-gateway-health__facts"
+      aria-live="polite"
+    >
       <h2>{{ health.account_ref }}</h2>
       <dl>
         <div>
           <dt>{{ t('gatewayHealth.serviceConnection') }}</dt>
-          <dd data-testid="service-connection-status" :data-status="health.service_connection.rpc_status">
+          <dd
+            data-testid="service-connection-status"
+            :data-status="health.service_connection.rpc_status"
+          >
             {{ statusLabel(health.service_connection.rpc_status) }}
           </dd>
         </div>
         <div>
           <dt>{{ t('gatewayHealth.gatewaySession') }}</dt>
-          <dd data-testid="gateway-session-status" :data-status="health.gateway_session.status">
+          <dd
+            data-testid="gateway-session-status"
+            :data-status="health.gateway_session.status"
+          >
             {{ statusLabel(health.gateway_session.status) }}
           </dd>
           <small v-if="health.gateway_session.session_generation">
@@ -82,7 +111,10 @@ function statusLabel(value: string): string {
         </div>
         <div>
           <dt>{{ t('gatewayHealth.accountObservation') }}</dt>
-          <dd data-testid="account-observation-status" :data-status="health.account_observation.status">
+          <dd
+            data-testid="account-observation-status"
+            :data-status="health.account_observation.status"
+          >
             {{ statusLabel(health.account_observation.status) }}
           </dd>
           <small>{{ t('gatewayHealth.quality') }}: {{ health.account_observation.quality }}</small>
@@ -92,7 +124,10 @@ function statusLabel(value: string): string {
         </div>
         <div>
           <dt>{{ t('gatewayHealth.marketFeed') }}</dt>
-          <dd data-testid="market-feed-status" :data-status="health.market_data_feed.status">
+          <dd
+            data-testid="market-feed-status"
+            :data-status="health.market_data_feed.status"
+          >
             {{ statusLabel(health.market_data_feed.status) }}
           </dd>
         </div>

@@ -624,7 +624,9 @@
                       ) }} equity ·
                       <code>{{ account.provider_observation.valuation.observed_at_utc }}</code>
                     </p>
-                    <p v-else>估值字段缺失 / Provider valuation missing.</p>
+                    <p v-else>
+                      估值字段缺失 / Provider valuation missing.
+                    </p>
                     <p>逐币种余额（不换汇）/ Balances by original currency (no FX conversion)</p>
                     <ul data-test="portfolio-provider-account-balances">
                       <li
@@ -714,7 +716,10 @@
                       / Display only: no market value is calculated without a mark, contract multiplier, and FX fact; these facts do not affect cash, credit, or admission.
                     </p>
                   </template>
-                  <p v-else data-test="portfolio-provider-observation-unsupported">
+                  <p
+                    v-else
+                    data-test="portfolio-provider-observation-unsupported"
+                  >
                     Unsupported provider observation state.
                   </p>
                 </details>
@@ -838,7 +843,9 @@
                         {{ compositionAmount(amount.amount, amount.currency) }}
                       </li>
                     </ul>
-                    <p v-else>未报告现金条目 / No cash rows reported.</p>
+                    <p v-else>
+                      未报告现金条目 / No cash rows reported.
+                    </p>
                     <p>持仓成本 / Position cost basis</p>
                     <ul v-if="book.positions.length > 0">
                       <li
@@ -855,7 +862,9 @@
                         · metadata {{ position.metadata_version }}
                       </li>
                     </ul>
-                    <p v-else>未报告持仓成本 / No position costs reported.</p>
+                    <p v-else>
+                      未报告持仓成本 / No position costs reported.
+                    </p>
                     <p>累计费用 / Cumulative fees</p>
                     <ul
                       v-if="book.cumulative_fees.length > 0"
@@ -868,7 +877,9 @@
                         {{ compositionAmount(amount.amount, amount.currency) }}
                       </li>
                     </ul>
-                    <p v-else>未报告费用条目 / No fee rows reported.</p>
+                    <p v-else>
+                      未报告费用条目 / No fee rows reported.
+                    </p>
                     <p>已实现盈亏 / Realized PnL</p>
                     <ul v-if="book.realized_pnl.length > 0">
                       <li
@@ -878,7 +889,9 @@
                         {{ compositionAmount(amount.amount, amount.currency) }}
                       </li>
                     </ul>
-                    <p v-else>未报告盈亏条目 / No realized PnL rows reported.</p>
+                    <p v-else>
+                      未报告盈亏条目 / No realized PnL rows reported.
+                    </p>
                     <p>
                       成本基础完整 / Cost basis complete:
                       {{ book.cost_basis_complete ? '是 / Yes' : '否 / No' }}
@@ -895,7 +908,9 @@
                         {{ compositionAmount(amount.amount, amount.currency) }}
                       </li>
                     </ul>
-                    <p v-else>未报告现金条目 / No cash rows reported.</p>
+                    <p v-else>
+                      未报告现金条目 / No cash rows reported.
+                    </p>
                     <p>持仓数量 / Position quantities</p>
                     <ul v-if="source.financial.unallocated.positions.length > 0">
                       <li
@@ -905,7 +920,9 @@
                         {{ position.instrument }} · {{ position.quantity }}
                       </li>
                     </ul>
-                    <p v-else>未报告持仓 / No positions reported.</p>
+                    <p v-else>
+                      未报告持仓 / No positions reported.
+                    </p>
                     <p>费用 / Fees</p>
                     <ul v-if="source.financial.unallocated.fees.length > 0">
                       <li
@@ -915,7 +932,9 @@
                         {{ compositionAmount(amount.amount, amount.currency) }}
                       </li>
                     </ul>
-                    <p v-else>未报告费用条目 / No fee rows reported.</p>
+                    <p v-else>
+                      未报告费用条目 / No fee rows reported.
+                    </p>
                   </section>
                 </template>
               </section>

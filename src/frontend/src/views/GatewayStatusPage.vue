@@ -295,7 +295,6 @@
                 [{{ err.source }}] {{ err.message }}
               </span>
             </div>
-
           </article>
         </div>
 
@@ -380,7 +379,6 @@
         </el-table>
       </template>
     </el-card>
-
   </div>
 </template>
 
