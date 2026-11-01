@@ -462,7 +462,9 @@ class ScannerUniverseService:
             )
         )
         if isinstance(snapshot, dict):
-            logger.warning("Ignoring legacy scanner metric snapshot without a verified data contract")
+            logger.warning(
+                "Ignoring legacy scanner metric snapshot without a verified data contract"
+            )
         return None
 
     def _with_latest_snapshot(self, user_id: str, pool: dict[str, Any]) -> dict[str, Any]:

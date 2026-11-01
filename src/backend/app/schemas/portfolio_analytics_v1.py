@@ -82,7 +82,9 @@ def _unique_sorted(values: list[str]) -> list[str]:
     return values
 
 
-Reference = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=128), AfterValidator(_reference)]
+Reference = Annotated[
+    str, StringConstraints(strict=True, min_length=1, max_length=128), AfterValidator(_reference)
+]
 VersionedReference = Annotated[
     str,
     StringConstraints(strict=True, min_length=3, max_length=128),
@@ -277,7 +279,10 @@ class PortfolioAnalyticsDatasetCreateV1(_StrictPayload):
 
     @model_validator(mode="after")
     def validate_idempotency_key(self) -> PortfolioAnalyticsDatasetCreateV1:
-        if self.idempotency_key != self.idempotency_key.strip() or not self.idempotency_key.isprintable():
+        if (
+            self.idempotency_key != self.idempotency_key.strip()
+            or not self.idempotency_key.isprintable()
+        ):
             raise ValueError("idempotency key is invalid")
         if len(_canonical_json(self.facts.model_dump(mode="json"))) > _MAX_FACTS_BYTES:
             raise ValueError("facts exceed the offline dataset size limit")
@@ -307,7 +312,10 @@ class PortfolioAnalyticsTaskCreateV1(_StrictPayload):
 
     @model_validator(mode="after")
     def validate_idempotency_key(self) -> PortfolioAnalyticsTaskCreateV1:
-        if self.idempotency_key != self.idempotency_key.strip() or not self.idempotency_key.isprintable():
+        if (
+            self.idempotency_key != self.idempotency_key.strip()
+            or not self.idempotency_key.isprintable()
+        ):
             raise ValueError("idempotency key is invalid")
         return self
 

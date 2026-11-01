@@ -119,38 +119,26 @@ class PaperRuntimeService:
         )
         rows = list(result.all())
         if len(rows) > _MAX_RUNTIME_SNAPSHOT_ROWS:
-            raise PaperRuntimeSnapshotWriteDenied(
-                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
-            )
+            raise PaperRuntimeSnapshotWriteDenied("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
         if not rows:
             return None
         account_ids: set[str] = set()
         has_unbound_history = False
         for row_workspace_id, row_unit_id, account_id in rows:
-            if (
-                (row_workspace_id, row_unit_id) != (workspace_id, unit_id)
-            ):
-                raise PaperRuntimeSnapshotWriteDenied(
-                    "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
-                )
+            if (row_workspace_id, row_unit_id) != (workspace_id, unit_id):
+                raise PaperRuntimeSnapshotWriteDenied("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
             if account_id is None:
                 has_unbound_history = True
             elif type(account_id) is str and account_id:
                 account_ids.add(account_id)
             else:
-                raise PaperRuntimeSnapshotWriteDenied(
-                    "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
-                )
+                raise PaperRuntimeSnapshotWriteDenied("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
         if not account_ids and has_unbound_history:
             return None
         if has_unbound_history:
-            raise PaperRuntimeSnapshotWriteDenied(
-                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
-            )
+            raise PaperRuntimeSnapshotWriteDenied("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
         if len(account_ids) != 1:
-            raise PaperRuntimeSnapshotWriteDenied(
-                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
-            )
+            raise PaperRuntimeSnapshotWriteDenied("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
         account_id = next(iter(account_ids))
         account = await session.scalar(
             select(Account.id).where(
@@ -159,9 +147,7 @@ class PaperRuntimeService:
             )
         )
         if account != account_id:
-            raise PaperRuntimeSnapshotWriteDenied(
-                "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
-            )
+            raise PaperRuntimeSnapshotWriteDenied("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
         return account_id
 
     @staticmethod
@@ -212,9 +198,7 @@ class PaperRuntimeService:
                     )
                 return
             if await self._account_has_active_legacy_import(session, account_id):
-                raise PaperRuntimeSnapshotWriteDenied(
-                    "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
-                )
+                raise PaperRuntimeSnapshotWriteDenied("MANAGED_PAPER_LEGACY_ACCOUNT_FENCED")
 
     async def record_snapshot(
         self,
@@ -234,9 +218,7 @@ class PaperRuntimeService:
                     # takes the same no-op UPDATE before validating all owned
                     # runtime links and locking the source account.
                     await session.execute(
-                        update(User)
-                        .where(User.id == user_id)
-                        .values(updated_at=User.updated_at)
+                        update(User).where(User.id == user_id).values(updated_at=User.updated_at)
                     )
                     result = await session.execute(
                         self._runtime_query(user_id, instance_id).with_for_update()
@@ -278,9 +260,7 @@ class PaperRuntimeService:
                             raise PaperRuntimeSnapshotWriteDenied(
                                 "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
                             )
-                        if await self._account_has_active_legacy_import(
-                            session, linked_account_id
-                        ):
+                        if await self._account_has_active_legacy_import(session, linked_account_id):
                             raise PaperRuntimeSnapshotWriteDenied(
                                 "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
                             )
@@ -332,9 +312,7 @@ class PaperRuntimeService:
         except IntegrityError:
             if linked_account_id is not None:
                 async with async_session_maker() as session:
-                    if await self._account_has_active_legacy_import(
-                        session, linked_account_id
-                    ):
+                    if await self._account_has_active_legacy_import(session, linked_account_id):
                         raise PaperRuntimeSnapshotWriteDenied(
                             "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
                         ) from None

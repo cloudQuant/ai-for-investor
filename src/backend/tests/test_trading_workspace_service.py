@@ -3924,9 +3924,7 @@ def test_runtime_sync_writes_fallback_runner_bytes_matching_source_digest(
     tmp_path, monkeypatch, sync_runtime
 ):
     monkeypatch.setattr(workspace_unit_runtime, "_WORKSPACE_UNITS_ROOT", tmp_path)
-    template_dir = _make_strategy_template(
-        tmp_path, "generated/ai-strategy", "strategy_generated"
-    )
+    template_dir = _make_strategy_template(tmp_path, "generated/ai-strategy", "strategy_generated")
     (template_dir / "run.py").unlink()
     monkeypatch.setattr(workspace_unit_runtime, "get_strategy_dir", lambda _sid: template_dir)
     unit = _make_basic_trading_unit("generated/ai-strategy")

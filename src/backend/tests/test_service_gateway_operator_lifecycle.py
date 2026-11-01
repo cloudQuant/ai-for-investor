@@ -132,16 +132,20 @@ def _deployment(*, auto_start_account: bool = False, include_other_owner: bool =
                     "legacy_gateway_keys": [],
                 },
             ]
-            + ([
-                {
-                    "profile_ref": _OTHER_ACCOUNT_PROFILE,
-                    "account_ref": "account-2",
-                    "authorized_subjects": ["other-owner"],
-                    "operations": ["status", "start", "stop"],
-                    "auto_start": False,
-                    "legacy_gateway_keys": ["manual:IB:account-2"],
-                }
-            ] if include_other_owner else []),
+            + (
+                [
+                    {
+                        "profile_ref": _OTHER_ACCOUNT_PROFILE,
+                        "account_ref": "account-2",
+                        "authorized_subjects": ["other-owner"],
+                        "operations": ["status", "start", "stop"],
+                        "auto_start": False,
+                        "legacy_gateway_keys": ["manual:IB:account-2"],
+                    }
+                ]
+                if include_other_owner
+                else []
+            ),
         }
     )
 

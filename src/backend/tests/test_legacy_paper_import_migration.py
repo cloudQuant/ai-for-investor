@@ -116,9 +116,7 @@ def _domain() -> tuple[ExecutionScope, PaperOwnerDomainV1]:
                 Decimal("0.01"),
             ),
         ),
-        opening_positions=(
-            PaperOpeningPositionV1(_INSTRUMENT, Decimal("1"), Decimal("10")),
-        ),
+        opening_positions=(PaperOpeningPositionV1(_INSTRUMENT, Decimal("1"), Decimal("10")),),
     )
     return scope, domain
 
@@ -328,6 +326,7 @@ async def _seed_empty_account() -> None:
 
 async def _capture_afi_boundary_for_import_test():
     async with database.engine.connect() as connection:
+
         def capture(sync_connection):
             with Session(sync_connection) as session:
                 return capture_afi_boundary(
@@ -346,8 +345,7 @@ async def _capture_afi_boundary_for_import_test():
 
 def _receipt_projection(receipt: LegacyPaperImportReceipt) -> tuple[Any, ...]:
     return tuple(
-        getattr(receipt, column.key)
-        for column in LegacyPaperImportReceipt.__table__.columns
+        getattr(receipt, column.key) for column in LegacyPaperImportReceipt.__table__.columns
     )
 
 
@@ -361,7 +359,9 @@ async def _read_receipt_projection(receipt_id: str) -> tuple[Any, ...]:
 class _TargetWorker:
     """Exercise migration through the same typed worker-call contract as HTTP."""
 
-    def __init__(self, store: SqliteExecutionStore, scope: ExecutionScope, domain: PaperOwnerDomainV1):
+    def __init__(
+        self, store: SqliteExecutionStore, scope: ExecutionScope, domain: PaperOwnerDomainV1
+    ):
         wire_scope = WireScope(
             _DOMAIN_REF,
             account_ref=_ACCOUNT_REF,
@@ -406,14 +406,14 @@ class _TargetWorker:
 class _ManagedPaperTargetWorker(_TargetWorker):
     """Keep import status real while stubbing only the order presentation edge."""
 
-    def __init__(self, store: SqliteExecutionStore, scope: ExecutionScope, domain: PaperOwnerDomainV1):
+    def __init__(
+        self, store: SqliteExecutionStore, scope: ExecutionScope, domain: PaperOwnerDomainV1
+    ):
         super().__init__(store, scope, domain)
         self.submitted: list[tuple[str, dict[str, Any]]] = []
         self.read_intents: list[str] = []
 
-    async def submit_paper_order(
-        self, scope_ref: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def submit_paper_order(self, scope_ref: str, arguments: dict[str, Any]) -> dict[str, Any]:
         self.submitted.append((scope_ref, dict(arguments)))
         return {"ok": True, "code": "OK", "result": {}}
 
@@ -451,7 +451,9 @@ async def test_nonempty_import_conserves_source_and_target_without_fabricating_e
     await _install_source_migrations()
     await _seed_account()
     service = PaperTradingService()
-    before = await inspect_stable_legacy_paper_account(service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID)
+    before = await inspect_stable_legacy_paper_account(
+        service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+    )
     assert before.complete and before.digest is not None
 
     target_store, target_worker, scope, domain = _target(tmp_path)
@@ -470,7 +472,9 @@ async def test_nonempty_import_conserves_source_and_target_without_fabricating_e
         assert result.imported_rows_are_exchange_facts is False
         assert result.old_rules_approvals_alerts_activated is False
         assert result.receipt.source_inventory_sha256 == before.digest
-        after = await inspect_stable_legacy_paper_account(service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID)
+        after = await inspect_stable_legacy_paper_account(
+            service, _SOURCE_ACCOUNT_ID, _SOURCE_OWNER_ID
+        )
         assert after.complete and after.digest == before.digest
 
         target_connection = target_store._connection
@@ -734,20 +738,49 @@ def test_import_cutover_preflight_rejects_wrong_owner_domain_scope_and_residual(
         domain=domain,
     )
     invalid_facts = (
-        ({"owner_subject": "different-owner"}, _SOURCE_OWNER_ID, scope, domain,
-         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
-        ({"target_scope_key": "different-scope"}, _SOURCE_OWNER_ID, scope, domain,
-         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
-        ({"target_domain_sha256": "c" * 64}, _SOURCE_OWNER_ID, scope, domain,
-         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
-        ({"state": "PREPARED"}, _SOURCE_OWNER_ID, scope, domain,
-         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
-        ({"unallocated_equity_residual": "0.5"}, _SOURCE_OWNER_ID, scope, domain,
-         "LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE"),
-        ({}, "different-owner", scope, domain,
-         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
-        ({}, _SOURCE_OWNER_ID, SimpleNamespace(key="different-scope", account_key=scope.account_key), domain,
-         "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        (
+            {"owner_subject": "different-owner"},
+            _SOURCE_OWNER_ID,
+            scope,
+            domain,
+            "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH",
+        ),
+        (
+            {"target_scope_key": "different-scope"},
+            _SOURCE_OWNER_ID,
+            scope,
+            domain,
+            "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH",
+        ),
+        (
+            {"target_domain_sha256": "c" * 64},
+            _SOURCE_OWNER_ID,
+            scope,
+            domain,
+            "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH",
+        ),
+        (
+            {"state": "PREPARED"},
+            _SOURCE_OWNER_ID,
+            scope,
+            domain,
+            "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH",
+        ),
+        (
+            {"unallocated_equity_residual": "0.5"},
+            _SOURCE_OWNER_ID,
+            scope,
+            domain,
+            "LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE",
+        ),
+        ({}, "different-owner", scope, domain, "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"),
+        (
+            {},
+            _SOURCE_OWNER_ID,
+            SimpleNamespace(key="different-scope", account_key=scope.account_key),
+            domain,
+            "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH",
+        ),
     )
     for changes, owner, candidate_scope, candidate_domain, expected_code in invalid_facts:
         with pytest.raises(LegacyPaperInventoryError) as caught:
@@ -980,9 +1013,7 @@ async def test_authenticated_http_import_uses_configured_worker_and_keeps_source
         )
         assert unconfirmed.status_code == 422
 
-        inspected = await client.get(
-            f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}"
-        )
+        inspected = await client.get(f"/api/v1/legacy-paper-imports/accounts/{_SOURCE_ACCOUNT_ID}")
         assert inspected.status_code == 200
         assert inspected.json()["source_inventory"]["sha256"] == before.digest
         assert inspected.json()["source_receipt"] is None
@@ -1014,8 +1045,7 @@ async def test_authenticated_http_import_uses_configured_worker_and_keeps_source
         assert target_book.cash == Decimal("89.9")
         assert target_book.cumulative_fees == Decimal("0.1")
         assert [
-            (row.instrument, row.quantity, row.average_cost)
-            for row in target_book.positions
+            (row.instrument, row.quantity, row.average_cost) for row in target_book.positions
         ] == [(_INSTRUMENT, Decimal("1"), Decimal("10"))]
         assert target_book.receipt_count == 0
         assert target_book.execution_cursor == 0

@@ -49,7 +49,9 @@ def test_reduction_curve_keys_remain_z85_encoded_for_transport():
         assert error.value.code == "DEPLOYMENT_INVALID"
 
 
-def _service_config(*, account_ref: str, service_id: str, instance_id: str, scope_ref: str, endpoint: str):
+def _service_config(
+    *, account_ref: str, service_id: str, instance_id: str, scope_ref: str, endpoint: str
+):
     return {
         "service_config_schema_version": 1,
         "process_role": "service",
@@ -389,7 +391,9 @@ def test_persisted_target_scope_and_close_terms_are_authoritative():
 
 
 @pytest.mark.asyncio
-async def test_reduction_http_service_path_uses_only_persisted_target_and_stable_intent(monkeypatch):
+async def test_reduction_http_service_path_uses_only_persisted_target_and_stable_intent(
+    monkeypatch,
+):
     value, scope = _deployment_value(None)
     deployment = StrategyReductionDeployment.from_secret(
         SecretStr(json.dumps(value, sort_keys=True, separators=(",", ":")))
@@ -421,9 +425,7 @@ async def test_reduction_http_service_path_uses_only_persisted_target_and_stable
     async def reserve(_db, **_arguments):
         return SimpleNamespace(intent_id="intent.stable", created=True)
 
-    monkeypatch.setattr(
-        reduction_api, "reserve_approved_target_http_operation", reserve
-    )
+    monkeypatch.setattr(reduction_api, "reserve_approved_target_http_operation", reserve)
     received = []
 
     def submit(_profile, **arguments):
@@ -533,9 +535,7 @@ def test_reduction_rejects_impossible_or_over_target_owner_fill_projection():
             }
         },
     }
-    impossible = _validate_owner_reply(
-        base, "intent.reduction", approved_quantity="2"
-    )
+    impossible = _validate_owner_reply(base, "intent.reduction", approved_quantity="2")
     assert impossible["outcome"] == "unknown_review_required"
 
     overfilled = json.loads(json.dumps(base))
@@ -546,16 +546,12 @@ def test_reduction_rejects_impossible_or_over_target_owner_fill_projection():
             "is_terminal": True,
         }
     )
-    projection = _validate_owner_reply(
-        overfilled, "intent.reduction", approved_quantity="2"
-    )
+    projection = _validate_owner_reply(overfilled, "intent.reduction", approved_quantity="2")
     assert projection["outcome"] == "unknown_review_required"
 
 
 def test_expired_operator_profile_returns_explicit_not_dispatched_projection():
-    projection = _not_dispatched_projection(
-        "intent.reduction", "DEPLOYMENT_INACTIVE_OR_EXPIRED"
-    )
+    projection = _not_dispatched_projection("intent.reduction", "DEPLOYMENT_INACTIVE_OR_EXPIRED")
     assert projection["outcome"] == "not_dispatched"
     assert projection["execution"]["execution_state"] is None
     assert projection["execution"]["filled_quantity"] == "0"
@@ -587,4 +583,3 @@ def test_expiring_deployment_is_rechecked_before_service_client_creation(monkeyp
             intent_id="intent.reduction",
         )
     assert expired.value.code == "DEPLOYMENT_INACTIVE_OR_EXPIRED"
-

@@ -222,9 +222,7 @@ def test_public_account_book_projection_preserves_financial_states_and_hides_int
     assert financial["ledger_cut"]["watermarks"][0]["as_of_ns"] == str(captured_at_ns)
     assert financial["books"][0]["cash"] == [{"currency": "USD", "amount": "0"}]
     assert financial["books"][0]["positions"][0]["cost_basis"] is None
-    assert financial["unallocated"]["positions"] == [
-        {"instrument": "ETH-USD", "quantity": "0.5"}
-    ]
+    assert financial["unallocated"]["positions"] == [{"instrument": "ETH-USD", "quantity": "0.5"}]
     assert "account_key" not in financial["ledger_cut"]
     assert "execution_scope_key" not in financial["books"][0]["owner"]
     assert "private-account-key" not in repr(financial)
@@ -248,9 +246,7 @@ def test_financial_projection_reaches_composition_http_response():
             account_id="synthetic-account-a",
             subaccount_id=None,
         )
-        account_view = _account_view(
-            account_ref, account_key, value="950", cash="200"
-        )
+        account_view = _account_view(account_ref, account_key, value="950", cash="200")
         account_book = AccountBookReadView(
             account_ref=account_ref,
             account_key_id=account_key.account_key_id,
@@ -358,9 +354,7 @@ def test_financial_projection_reaches_composition_http_response():
         try:
             await worker.start()
             transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get(
                     "/api/v1/portfolio/compositions/financial-http/versions/1/projection"
                 )
@@ -575,9 +569,7 @@ def test_provider_observations_reach_live_composition_http_without_fx_or_account
         try:
             await worker.start()
             transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get(
                     "/api/v1/portfolio/compositions/provider-observation-http/versions/1/projection"
                 )
@@ -878,9 +870,7 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
                 assert denied_strategy.status_code == 403
                 assert denied_strategy.json() == denied.json()
                 assert "strategy-outside-grant" not in denied_strategy.text
-                versions_after_strategy_denial = await client.get(
-                    "/api/v1/portfolio/compositions"
-                )
+                versions_after_strategy_denial = await client.get("/api/v1/portfolio/compositions")
                 assert versions_after_strategy_denial.status_code == 200
                 assert versions_after_strategy_denial.json()["total"] == 1
                 assert "unbound-strategy" not in versions_after_strategy_denial.text
@@ -1281,9 +1271,7 @@ def test_live_composition_scope_denial_is_private_and_does_not_write():
                 {
                     "source_type": "live",
                     "base_currency": "USD",
-                    "members": sorted(
-                        members, key=lambda member: (member["kind"], member["ref"])
-                    ),
+                    "members": sorted(members, key=lambda member: (member["kind"], member["ref"])),
                 }
             )
 

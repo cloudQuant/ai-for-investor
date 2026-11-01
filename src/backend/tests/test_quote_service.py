@@ -89,6 +89,7 @@ def test_quote_reads_do_not_start_or_probe_legacy_gateway(monkeypatch):
     assert calls == []
     assert not hasattr(service, "_send_gateway_command")
 
+
 def test_running_workspace_context_skips_stale_gateway_mapping():
     QuoteService._instance = None
     service = QuoteService()
@@ -174,6 +175,7 @@ def test_unconfigured_workspace_source_is_visible_but_quote_fails_closed(monkeyp
     assert tick["workspace_names"] == ["workspace-ctp"]
     assert service._receivers == {}
     assert not hasattr(service, "_subscribe_symbols_on_gateway")
+
 
 def test_unconfigured_custom_symbol_is_saved_without_gateway_subscription(monkeypatch):
     QuoteService._instance = None

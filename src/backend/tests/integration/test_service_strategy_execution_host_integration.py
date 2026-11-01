@@ -58,9 +58,7 @@ _BT_FAKE_CLIENT_SOURCE = (
     "2668398f779b51196c7c4c249fc502a2d2eb7a81c5fe1c8d56b5572c3770f14b",
 )
 _BT_FIXTURE_TRANSFORMED_SIZE = 29_805
-_BT_FIXTURE_TRANSFORMED_SHA256 = (
-    "ea906a96c9735d8d4602daf0d3605c1474a27d5337954bd5fde9c7a167fc5616"
-)
+_BT_FIXTURE_TRANSFORMED_SHA256 = "ea906a96c9735d8d4602daf0d3605c1474a27d5337954bd5fde9c7a167fc5616"
 _BT_FIXTURE_ORIGIN_EXTENSION = (
     b"\n\n# AFI's isolated-wheel acceptance adds an exact Backtrader origin assertion.\n"
     b"_afi_original_loaded_source_origins = _loaded_source_origins\n"
@@ -216,8 +214,7 @@ async def _cleanup_started_service_strategy(
             getattr(stop_receipt, "stop_new_status", None) != "acknowledged"
             or getattr(stop_receipt, "stop_new_owner_final", None) is not True
             or getattr(stop_receipt, "stop_new_reconciliation_required", None) is not False
-            or getattr(stop_receipt, "stop_new_effect", None)
-            not in {"fenced", "already_fenced"}
+            or getattr(stop_receipt, "stop_new_effect", None) not in {"fenced", "already_fenced"}
         ):
             return result
     else:
@@ -258,8 +255,7 @@ async def _cleanup_started_service_strategy(
             getattr(stop_receipt, "stop_new_status", None) != "acknowledged"
             or getattr(stop_receipt, "stop_new_owner_final", None) is not True
             or getattr(stop_receipt, "stop_new_reconciliation_required", None) is not False
-            or getattr(stop_receipt, "stop_new_effect", None)
-            not in {"fenced", "already_fenced"}
+            or getattr(stop_receipt, "stop_new_effect", None) not in {"fenced", "already_fenced"}
         ):
             return result
 
@@ -365,8 +361,7 @@ def test_service_process_failure_cleanup_is_same_loop_and_run_bound(monkeypatch)
         assert len(calls) == 2
         assert all(call[0] is loop for call in calls)
         assert all(
-            call[1:] == (instance_id, subject, profile_ref, run_id, process)
-            for call in calls
+            call[1:] == (instance_id, subject, profile_ref, run_id, process) for call in calls
         )
 
         completed_receipt = SimpleNamespace(
@@ -457,9 +452,7 @@ def test_service_process_failure_cleanup_is_same_loop_and_run_bound(monkeypatch)
         }
         assert len(calls) == 2
 
-        cleanup_process = SimpleNamespace(
-            pid=733022, returncode=None, _bt_service_execution=True
-        )
+        cleanup_process = SimpleNamespace(pid=733022, returncode=None, _bt_service_execution=True)
         cleanup_manager = SimpleNamespace(_processes={instance_id: cleanup_process})
         owner_calls = []
         expected_binding = object()
@@ -623,7 +616,7 @@ def _assert_installed_package_origins():
 
 
 def _strategy_source() -> str:
-    return '''
+    return """
 import datetime as dt
 import importlib
 import json
@@ -742,7 +735,7 @@ _cerebro.setbroker(_broker)
 _cerebro.adddata(bt.feeds.PandasData(dataname=_frame), name=_SYMBOL)
 _cerebro.addstrategy(_AfiServiceStrategy)
 _cerebro.run()
-'''
+"""
 
 
 def _write_test_profile(
@@ -775,10 +768,8 @@ def _write_test_profile(
             for name, value in keys.items()
         },
     }
-    (plugin_root / "fixture.json").write_text(
-        json.dumps(fixture, sort_keys=True), encoding="utf-8"
-    )
-    profile_source = '''
+    (plugin_root / "fixture.json").write_text(json.dumps(fixture, sort_keys=True), encoding="utf-8")
+    profile_source = """
 import json
 from pathlib import Path
 
@@ -905,7 +896,7 @@ def make_profile():
         client_config_factory=_client_config,
         runtime_factory=_runtime,
     )
-'''.replace("@@SCRIPT_SHA256@@", script_sha256).replace(
+""".replace("@@SCRIPT_SHA256@@", script_sha256).replace(
         "@@INTENT_CONTRACT_REF@@", _INTENT_CONTRACT_REF
     )
     (plugin_root / f"{profile_module_name}.py").write_text(profile_source, encoding="utf-8")
@@ -957,8 +948,10 @@ def test_r249_fixture_relocation_uses_installed_packages_only(tmp_path, monkeypa
         assert hashlib.sha256(copied_fixture).hexdigest() == _BT_FIXTURE_TRANSFORMED_SHA256
         copied_fake = (helper_root / "tests" / "fixtures" / "fake_btapi.py").read_bytes()
         assert hashlib.sha256(copied_fake).hexdigest() == _BT_FAKE_CLIENT_SOURCE[2]
-        assert Path(fixture.__file__).resolve().is_relative_to(
-            (helper_root / "tests" / "integration").resolve()
+        assert (
+            Path(fixture.__file__)
+            .resolve()
+            .is_relative_to((helper_root / "tests" / "integration").resolve())
         )
         host_origins = fixture._assert_source_origins(fixture._loaded_source_origins())
         bt_origin = Path(host_origins["backtrader"]["package"]).resolve()
@@ -1030,9 +1023,7 @@ def test_service_strategy_child_import_prefix_uses_installed_packages_without_ho
     assert completed.stderr == ""
     assert "AFI_NOHOST_CHILD_IMPORT_PREFIX:PASS" in completed.stdout
     assert "AFI_NOHOST_FAKE_STORE_CEREBRO_CONSTRUCTION:PASS" in completed.stdout
-    origin_line = next(
-        line for line in completed.stdout.splitlines() if _BT_ORIGIN_MARKER in line
-    )
+    origin_line = next(line for line in completed.stdout.splitlines() if _BT_ORIGIN_MARKER in line)
     child_origins = json.loads(origin_line.split(_BT_ORIGIN_MARKER, 1)[1])
     assert all(Path(origin).resolve().is_relative_to(purelib) for origin in child_origins.values())
 
@@ -1070,9 +1061,7 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
         nonlocal host_cleanup, owner_registered, host_pid_before_cleanup, host_alive_before_cleanup
         if primary_error is None and cleanup_receipt_path.is_file():
             try:
-                previous_facts = json.loads(
-                    cleanup_receipt_path.read_text(encoding="utf-8")
-                )
+                previous_facts = json.loads(cleanup_receipt_path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 previous_facts = None
             if (
@@ -1188,9 +1177,7 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
                 ),
                 "strategy_instance_pid": instance_pid,
                 "host_process_pid": (
-                    host_pid_before_cleanup
-                    if type(host_pid_before_cleanup) is int
-                    else None
+                    host_pid_before_cleanup if type(host_pid_before_cleanup) is int else None
                 ),
                 "host_alive_before_cleanup": host_alive_before_cleanup,
                 "owner_exclusion_still_registered": owner_registered,
@@ -1333,6 +1320,7 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
     manager._release_gateway_for_instance = released_legacy.append
 
     try:
+
         async def exercise_manager_lifecycle():
             nonlocal phase, process, stop_receipt, strategy_cleanup_result
             stop_attempted = False
@@ -1431,9 +1419,7 @@ def test_live_manager_runs_service_strategy_order_query_and_graceful_stop(
                     Path(origin).resolve().is_relative_to(purelib)
                     for origin in child_origins.values()
                 )
-                host_bt_origin = Path(
-                    host["source_origins"]["backtrader"]["package"]
-                ).resolve()
+                host_bt_origin = Path(host["source_origins"]["backtrader"]["package"]).resolve()
                 assert host_bt_origin.is_relative_to(purelib)
                 text = _wait_for_log_marker(log_path, _ORDER_QUERY_MARKER)
                 assert _ORDER_QUERY_MARKER in text

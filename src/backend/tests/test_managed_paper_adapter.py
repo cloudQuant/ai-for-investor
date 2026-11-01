@@ -84,9 +84,7 @@ def _fixture(monkeypatch: pytest.MonkeyPatch) -> tuple[ManagedPaperOrderAdapter,
     adapter = ManagedPaperOrderAdapter(
         legacy_service_factory=object,
         access_resolver=lambda resolved_subject, resolved_account: (
-            access
-            if (resolved_subject, resolved_account) == (subject, account_id)
-            else None,
+            access if (resolved_subject, resolved_account) == (subject, account_id) else None,
             binding,
         ),
     )
@@ -123,7 +121,9 @@ def _fixture(monkeypatch: pytest.MonkeyPatch) -> tuple[ManagedPaperOrderAdapter,
 
 
 @pytest.mark.asyncio
-async def test_manual_market_submission_uses_managed_journal_state(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_manual_market_submission_uses_managed_journal_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter, worker = _fixture(monkeypatch)
 
     result = await adapter.submit_manual(
@@ -154,7 +154,9 @@ async def test_manual_market_submission_uses_managed_journal_state(monkeypatch: 
 
 
 @pytest.mark.asyncio
-async def test_uncertain_submit_queries_once_without_resubmitting(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_uncertain_submit_queries_once_without_resubmitting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter, worker = _fixture(monkeypatch)
     worker.submit_error = TimeoutError()
     worker.view = OrderReadView.not_collected("unused")
@@ -189,7 +191,9 @@ async def test_same_idempotency_key_keeps_same_intent_and_surfaces_payload_confl
         nonlocal calls
         worker.submissions.append((scope_ref, dict(arguments)))
         calls += 1
-        return {"ok": False, "code": "INTENT_CONFLICT"} if calls == 2 else {"ok": True, "code": "OK"}
+        return (
+            {"ok": False, "code": "INTENT_CONFLICT"} if calls == 2 else {"ok": True, "code": "OK"}
+        )
 
     worker.submit_paper_order = _submit  # type: ignore[method-assign]
     key = "manual-same-key"

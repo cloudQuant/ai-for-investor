@@ -306,17 +306,13 @@ def _execution_host_process(
                     record = store.get(intent_id, scope=execution_scope)
                     receipt = store.get_paper_match_receipt(intent_id, scope=execution_scope)
                     book = store.read_paper_book(execution_scope)
-                    events = store.read_outbox(
-                        scope=execution_scope, after_sequence=0, limit=100
-                    )
+                    events = store.read_outbox(scope=execution_scope, after_sequence=0, limit=100)
                     provider_events = tuple(
                         event for event in events if event.event_type == "provider_observation"
                     )
                     result = {
                         "record_state": None if record is None else record.state.value,
-                        "dispatch_attempts": None
-                        if record is None
-                        else record.dispatch_attempts,
+                        "dispatch_attempts": None if record is None else record.dispatch_attempts,
                         "filled_quantity": None
                         if record is None
                         else format(record.filled_quantity, "f"),
@@ -324,18 +320,16 @@ def _execution_host_process(
                         "receipt_price": None
                         if receipt is None
                         else format(receipt.fill_price, "f"),
-                        "receipt_fee": None
-                        if receipt is None
-                        else format(receipt.fee_amount, "f"),
+                        "receipt_fee": None if receipt is None else format(receipt.fee_amount, "f"),
                         "book_cash": format(book.cash, "f"),
                         "book_currency": book.cash_currency,
                         "book_fees": format(book.cumulative_fees, "f"),
                         "book_positions": tuple(
-                (
-                    row.instrument,
-                    format(row.quantity, "f"),
-                    format(row.average_cost, "f"),
-                )
+                            (
+                                row.instrument,
+                                format(row.quantity, "f"),
+                                format(row.average_cost, "f"),
+                            )
                             for row in book.positions
                         ),
                         "book_receipts": book.receipt_count,
@@ -659,8 +653,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
             "app.services.service_read.deployment",
             "ServiceReadDeploymentError",
         ): "service_read_deployment_error",
-        ("app.services.service_read.worker", "ServiceReadWorkerError"):
-            "service_read_worker_error",
+        ("app.services.service_read.worker", "ServiceReadWorkerError"): "service_read_worker_error",
     }
 
     def public_exception_kind(error: BaseException) -> str:
@@ -675,18 +668,14 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                 or len(name) > 80
             ):
                 return "unknown_exception"
-            return public_exception_kinds.get(
-                (module, name), "unknown_exception"
-            )
+            return public_exception_kinds.get((module, name), "unknown_exception")
         except BaseException:
             return "unknown_exception"
 
     original_build_worker = service_read_deployment._build_worker
     original_thread_start = threading.Thread.start
 
-    def diagnostic_thread_start(
-        thread: threading.Thread, *args: Any, **kwargs: Any
-    ) -> Any:
+    def diagnostic_thread_start(thread: threading.Thread, *args: Any, **kwargs: Any) -> Any:
         ordinal = service_thread_ordinals.get(thread.name)
         if ordinal is None:
             return original_thread_start(thread, *args, **kwargs)
@@ -698,9 +687,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
 
     monkeypatch.setattr(threading.Thread, "start", diagnostic_thread_start)
 
-    def record_startup_failure(
-        ordinal: int, phase: str, error: BaseException
-    ) -> None:
+    def record_startup_failure(ordinal: int, phase: str, error: BaseException) -> None:
         nonlocal startup_failure, startup_failure_error
         exception_chain: list[dict[str, Any]] = []
         current: BaseException | None = error
@@ -719,8 +706,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                 or len(code) > 80
                 or not code.isascii()
                 or any(
-                    character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-                    for character in code
+                    character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for character in code
                 )
             ):
                 code = None
@@ -795,9 +781,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
         worker.start = diagnostic_worker_start
         return worker
 
-    monkeypatch.setattr(
-        service_read_deployment, "_build_worker", build_diagnostic_worker
-    )
+    monkeypatch.setattr(service_read_deployment, "_build_worker", build_diagnostic_worker)
     original_start_service_read_deployment = main_module.start_service_read_deployment
 
     async def start_service_read_deployment_with_diagnostic(value: Any) -> Any:
@@ -830,9 +814,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                     if stream is not None:
                         stream.write(
                             "AFI13_PAPER_SERVICE_READ_STARTUP_DIAGNOSTIC "
-                            + json.dumps(
-                                payload, sort_keys=True, separators=(",", ":")
-                            )
+                            + json.dumps(payload, sort_keys=True, separators=(",", ":"))
                             + "\n"
                         )
                         stream.flush()
@@ -927,9 +909,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
         trigger_names = {str(row[0]) for row in trigger_result.all()}
     assert "trg_lpc_receipt_no_update" in trigger_names
     assert "trg_lpc_account_update" in trigger_names
-    assert any(
-        name.startswith("trg_lpc_") and name.endswith("_insert") for name in trigger_names
-    )
+    assert any(name.startswith("trg_lpc_") and name.endswith("_insert") for name in trigger_names)
 
     async with account_sessions() as session:
         session.add_all(
@@ -1156,9 +1136,10 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                     assert persisted_receipt.source_order_count == 0
                     assert persisted_receipt.source_position_count == 0
                     assert persisted_receipt.source_trade_count == 0
-                    assert persisted_receipt.source_inventory_sha256 == cutover_body[
-                        "source_inventory_sha256"
-                    ]
+                    assert (
+                        persisted_receipt.source_inventory_sha256
+                        == cutover_body["source_inventory_sha256"]
+                    )
 
                 # The compatibility endpoints still expose only the old ledger.
                 legacy_orders = await client.get(
@@ -1187,10 +1168,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                     },
                 )
                 assert unsupported_limit.status_code == 422
-                assert (
-                    unsupported_limit.json()["details"]["code"]
-                    == "UNSUPPORTED_PAPER_ORDER_TYPE"
-                )
+                assert unsupported_limit.json()["details"]["code"] == "UNSUPPORTED_PAPER_ORDER_TYPE"
 
                 denied_submit = await client.post(
                     "/api/v1/paper-trading/orders",
@@ -1234,10 +1212,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                     json={**order_body, "size": 0.5},
                 )
                 assert conflicting_replay.status_code == 409
-                assert (
-                    conflicting_replay.json()["details"]["code"]
-                    == "PAPER_IDEMPOTENCY_CONFLICT"
-                )
+                assert conflicting_replay.json()["details"]["code"] == "PAPER_IDEMPOTENCY_CONFLICT"
                 assert conflicting_replay.json()["details"]["intent_id"] == intent_id
 
                 authorized_read = await client.get(
@@ -1281,8 +1256,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                 )
                 assert fenced_delete.status_code == 409
                 assert (
-                    fenced_delete.json()["details"]["code"]
-                    == "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
+                    fenced_delete.json()["details"]["code"] == "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
                 )
 
                 account_connection = sqlite3.connect(str(account_db_path))
@@ -1404,9 +1378,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
             except BaseException as error:
                 cleanup_error = error
                 if pending_error is not None:
-                    failures = getattr(
-                        error, "_afi_managed_paper_cleanup_failures", ()
-                    )
+                    failures = getattr(error, "_afi_managed_paper_cleanup_failures", ())
                     _order._record_cleanup_failures(
                         pending_error,
                         (
@@ -1420,9 +1392,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
             if cleanup_error is None:
                 cleanup_error = error
             else:
-                failures = getattr(
-                    error, "_afi_managed_paper_cleanup_failures", ()
-                )
+                failures = getattr(error, "_afi_managed_paper_cleanup_failures", ())
                 _order._record_cleanup_failures(
                     cleanup_error,
                     (
@@ -1432,9 +1402,7 @@ async def test_real_http_lifespan_managed_paper_cutover_submit_query_and_restart
                 )
         if pending_error is not None:
             if cleanup_error is not None and cleanup_error is not pending_error:
-                failures = getattr(
-                    cleanup_error, "_afi_managed_paper_cleanup_failures", ()
-                )
+                failures = getattr(cleanup_error, "_afi_managed_paper_cleanup_failures", ())
                 _order._record_cleanup_failures(
                     pending_error,
                     (

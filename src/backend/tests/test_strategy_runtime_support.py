@@ -1063,16 +1063,10 @@ class TestWorkspaceUnitRuntime:
             encoding="utf-8",
         )
         strategy_source = (
-            "import backtrader as bt\n"
-            "class GeneratedStrategy(bt.Strategy):\n"
-            "    pass\n"
+            "import backtrader as bt\nclass GeneratedStrategy(bt.Strategy):\n    pass\n"
         )
-        (runtime_dir / "strategy_generated.py").write_text(
-            strategy_source, encoding="utf-8"
-        )
-        (template_dir / "strategy_offline.py").write_text(
-            strategy_source, encoding="utf-8"
-        )
+        (runtime_dir / "strategy_generated.py").write_text(strategy_source, encoding="utf-8")
+        (template_dir / "strategy_offline.py").write_text(strategy_source, encoding="utf-8")
 
         def write_config(strategy_module: str, initial_cash: float) -> None:
             (runtime_dir / "config.yaml").write_text(

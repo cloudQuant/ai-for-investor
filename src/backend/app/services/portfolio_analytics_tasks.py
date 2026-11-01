@@ -99,9 +99,7 @@ class PortfolioAnalyticsTaskService:
             facts,
         )
         input_result = self._require_success(upload)
-        input_sha256 = self._validate_input_result(
-            input_result, input_snapshot_id, row.source_type
-        )
+        input_sha256 = self._validate_input_result(input_result, input_snapshot_id, row.source_type)
 
         submitted = await self._call(
             "submit_portfolio_analytics_task",
@@ -121,18 +119,14 @@ class PortfolioAnalyticsTaskService:
     async def query(self, task_ref: str) -> dict[str, Any]:
         input_snapshot_id = self._input_for_task(task_ref)
         result = self._require_success(
-            await self._call(
-                "query_portfolio_analytics_task", self._scope_ref, task_ref
-            )
+            await self._call("query_portfolio_analytics_task", self._scope_ref, task_ref)
         )
         return self._task_payload(result, task_ref, input_snapshot_id)
 
     async def cancel(self, task_ref: str) -> dict[str, Any]:
         input_snapshot_id = self._input_for_task(task_ref)
         result = self._require_success(
-            await self._call(
-                "cancel_portfolio_analytics_task", self._scope_ref, task_ref
-            )
+            await self._call("cancel_portfolio_analytics_task", self._scope_ref, task_ref)
         )
         return self._task_payload(result, task_ref, input_snapshot_id)
 
@@ -155,12 +149,9 @@ class PortfolioAnalyticsTaskService:
         key_tag = _digest(idempotency_key)[:24]
         version_tag = f"v{row.membership_version}"
         membership_tag = row.membership_sha256[:16]
-        task_ref = (
-            f"afi2:{owner_tag}:{portfolio_tag}:{version_tag}:{membership_tag}:{key_tag}"
-        )
+        task_ref = f"afi2:{owner_tag}:{portfolio_tag}:{version_tag}:{membership_tag}:{key_tag}"
         input_snapshot_id = (
-            f"afi2-input:{owner_tag}:{portfolio_tag}:{version_tag}:"
-            f"{membership_tag}:{key_tag}"
+            f"afi2-input:{owner_tag}:{portfolio_tag}:{version_tag}:{membership_tag}:{key_tag}"
         )
         if len(task_ref) > 128 or len(input_snapshot_id) > 128:
             raise PortfolioAnalyticsTaskError("ANALYTICS_REFERENCE_INVALID", 422)
@@ -258,8 +249,7 @@ class PortfolioAnalyticsTaskService:
             )
             or (value["result"] is not None and type(value["result"]) is not dict)
             or (
-                expected_input_sha256 is not None
-                and value["input_sha256"] != expected_input_sha256
+                expected_input_sha256 is not None and value["input_sha256"] != expected_input_sha256
             )
         ):
             raise PortfolioAnalyticsTaskError("ANALYTICS_REPLY_INVALID", 503)
@@ -336,7 +326,10 @@ class PortfolioAnalyticsTaskService:
             or set(facts_source)
             != {"generation", "mode", "source_ref", "source_version", "snapshot_ref"}
             or facts_source["mode"] != self._membership.source_type
-            or any(type(facts_source[name]) is not str or not facts_source[name] for name in facts_source)
+            or any(
+                type(facts_source[name]) is not str or not facts_source[name]
+                for name in facts_source
+            )
         ):
             raise PortfolioAnalyticsTaskError("ANALYTICS_REPLY_INVALID", 503)
         metrics = report["metrics"]

@@ -412,7 +412,9 @@ async def reserve_approved_target_operation(
             operation_key_hash=key_digest,
         )
         if conflict is None:
-            raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
+            raise StrategyTargetApprovalError(
+                "APPROVAL_STORE_UNAVAILABLE", ambiguous=True
+            ) from None
         if (
             conflict.approval_ref == approval_ref
             and conflict.operation_request_sha256 == request_digest
@@ -575,7 +577,9 @@ async def consume_approved_target_v1(
         try:
             await db.begin()
         except SQLAlchemyError:
-            raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
+            raise StrategyTargetApprovalError(
+                "APPROVAL_STORE_UNAVAILABLE", ambiguous=True
+            ) from None
     try:
         await lock_strategy_approval_authority_epoch(db, owner_subject)
         result = await _consume_approved_target_v1_in_transaction(
@@ -605,7 +609,9 @@ async def consume_approved_target_v1(
         try:
             await db.rollback()
         except SQLAlchemyError:
-            raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
+            raise StrategyTargetApprovalError(
+                "APPROVAL_STORE_UNAVAILABLE", ambiguous=True
+            ) from None
     return result
 
 
@@ -861,8 +867,7 @@ async def _load_bound_approval(
         row.principal_ref != principal_ref
         or row.principal_ref != _identity_field(identity, "principal_ref")
         or row.actor_ref != _identity_field(identity, "actor_ref")
-        or row.delegate_ref
-        != _delegate_storage_value(_identity_field(identity, "delegate_ref"))
+        or row.delegate_ref != _delegate_storage_value(_identity_field(identity, "delegate_ref"))
         or not (
             identity_role == "application_client"
             or (identity_role == "service" and service_close_use)
@@ -914,7 +919,10 @@ def _target_from_row(row: StrategyTargetApproval) -> dict[str, object]:
         )
     except (TypeError, ValueError, InvalidOperation):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID") from None
-    if canonical != row.canonical_target_json or canonical_target_sha256(normalized) != row.target_sha256:
+    if (
+        canonical != row.canonical_target_json
+        or canonical_target_sha256(normalized) != row.target_sha256
+    ):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     wire_scope = normalized["wire_scope"]
     assert isinstance(wire_scope, dict)
@@ -995,7 +1003,9 @@ async def _require_current_approved_target_state(
         _positive_int(current.policy_version, "current.policy_version")
         if not _valid_hash(current.policy_sha256):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
-        _required_identifier(current.strategy_version_source_id, "current.strategy_version_source_id")
+        _required_identifier(
+            current.strategy_version_source_id, "current.strategy_version_source_id"
+        )
         _required_identifier(current.strategy_version_branch, "current.strategy_version_branch")
         if not _valid_hash(current.strategy_version_sha256):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
@@ -1334,9 +1344,13 @@ def _validate_target(value: Mapping[str, object]) -> dict[str, object]:
     if target["order_type"] == "MARKET" and normalized_limits["max_notional"] is not None:
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     if price is not None:
-        if normalized_limits["min_price"] is not None and price < Decimal(normalized_limits["min_price"]):
+        if normalized_limits["min_price"] is not None and price < Decimal(
+            normalized_limits["min_price"]
+        ):
             raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
-        if normalized_limits["max_price"] is not None and price > Decimal(normalized_limits["max_price"]):
+        if normalized_limits["max_price"] is not None and price > Decimal(
+            normalized_limits["max_price"]
+        ):
             raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
         if (
             normalized_limits["min_price"] is not None
@@ -1344,10 +1358,9 @@ def _validate_target(value: Mapping[str, object]) -> dict[str, object]:
             and Decimal(normalized_limits["min_price"]) > Decimal(normalized_limits["max_price"])
         ):
             raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
-        if (
-            normalized_limits["max_notional"] is not None
-            and _exact_product(quantity, price) > Decimal(normalized_limits["max_notional"])
-        ):
+        if normalized_limits["max_notional"] is not None and _exact_product(
+            quantity, price
+        ) > Decimal(normalized_limits["max_notional"]):
             raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     target["limits"] = normalized_limits
     wire_scope = target["wire_scope"]
@@ -1376,11 +1389,7 @@ def _validate_target(value: Mapping[str, object]) -> dict[str, object]:
 
 
 def _positive_decimal_text(value: object, field: str) -> tuple[Decimal, str]:
-    if (
-        type(value) is not str
-        or len(value) > _DECIMAL_TEXT_MAX
-        or not _DECIMAL.fullmatch(value)
-    ):
+    if type(value) is not str or len(value) > _DECIMAL_TEXT_MAX or not _DECIMAL.fullmatch(value):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     try:
         decimal = Decimal(value)

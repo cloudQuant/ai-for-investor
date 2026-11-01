@@ -112,9 +112,7 @@ class PortfolioAnalyticsV1TaskService:
                 facts_payload,
             )
         )
-        input_sha256 = self._validate_input_result(
-            input_result, input_snapshot_id, dataset
-        )
+        input_sha256 = self._validate_input_result(input_result, input_snapshot_id, dataset)
         submitted = self._require_success(
             await self._call(
                 "submit_portfolio_analytics_task",
@@ -142,13 +140,9 @@ class PortfolioAnalyticsV1TaskService:
     ) -> dict[str, Any]:
         input_snapshot_id = self._input_for_task(task_ref, dataset)
         result = self._require_success(
-            await self._call(
-                "query_portfolio_analytics_task", self._scope_ref, task_ref
-            )
+            await self._call("query_portfolio_analytics_task", self._scope_ref, task_ref)
         )
-        return self._task_payload(
-            result, dataset, task_ref, input_snapshot_id, facts=facts
-        )
+        return self._task_payload(result, dataset, task_ref, input_snapshot_id, facts=facts)
 
     async def cancel(
         self,
@@ -158,13 +152,9 @@ class PortfolioAnalyticsV1TaskService:
     ) -> dict[str, Any]:
         input_snapshot_id = self._input_for_task(task_ref, dataset)
         result = self._require_success(
-            await self._call(
-                "cancel_portfolio_analytics_task", self._scope_ref, task_ref
-            )
+            await self._call("cancel_portfolio_analytics_task", self._scope_ref, task_ref)
         )
-        return self._task_payload(
-            result, dataset, task_ref, input_snapshot_id, facts=facts
-        )
+        return self._task_payload(result, dataset, task_ref, input_snapshot_id, facts=facts)
 
     def dataset_ref_for_task(self, task_ref: str) -> str:
         """Extract and verify the owner/version-bound dataset selector in a task ref."""
@@ -224,8 +214,7 @@ class PortfolioAnalyticsV1TaskService:
         membership_tag = row.membership_sha256[:12]
         version_tag = f"v{row.membership_version}"
         identity = (
-            f"{owner_tag}:{portfolio_tag}:{version_tag}:{membership_tag}:"
-            f"{dataset_tag}:{key_tag}"
+            f"{owner_tag}:{portfolio_tag}:{version_tag}:{membership_tag}:{dataset_tag}:{key_tag}"
         )
         task_ref = f"afi1:{identity}"
         input_snapshot_id = f"afi1-input:{identity}"
@@ -233,9 +222,7 @@ class PortfolioAnalyticsV1TaskService:
             raise PortfolioAnalyticsV1TaskError("ANALYTICS_REFERENCE_INVALID", 422)
         return task_ref, input_snapshot_id
 
-    def _input_for_task(
-        self, task_ref: str, dataset: PortfolioAnalyticsDatasetV1
-    ) -> str:
+    def _input_for_task(self, task_ref: str, dataset: PortfolioAnalyticsDatasetV1) -> str:
         row = self._membership
         owner_tag = _digest(self._owner_subject)[:12]
         portfolio_tag = _digest(row.portfolio_ref)[:12]
@@ -333,8 +320,7 @@ class PortfolioAnalyticsV1TaskService:
             )
             or (value["result"] is not None and type(value["result"]) is not dict)
             or (
-                expected_input_sha256 is not None
-                and value["input_sha256"] != expected_input_sha256
+                expected_input_sha256 is not None and value["input_sha256"] != expected_input_sha256
             )
         ):
             raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
@@ -343,7 +329,10 @@ class PortfolioAnalyticsV1TaskService:
         result = value["result"]
         if (
             (state in {"pending", "running", "succeeded", "cancelled"} and detail_code is not None)
-            or (state in {"pending", "running", "failed", "cancelled", "expired"} and result is not None)
+            or (
+                state in {"pending", "running", "failed", "cancelled", "expired"}
+                and result is not None
+            )
             or (state in {"failed", "unavailable", "expired"} and detail_code is None)
             or (state == "expired" and detail_code != "TASK_EXPIRED")
         ):
@@ -445,10 +434,7 @@ class PortfolioAnalyticsV1TaskService:
             or _CURRENCY.fullmatch(report["reporting_currency"]) is None
             or (has_facts and report["facts_snapshot_ref"] != facts.facts_snapshot_ref)
             or (not has_facts and state != "unavailable")
-            or (
-                not has_facts
-                and "PERIOD_TOO_LONG" not in reason_codes
-            )
+            or (not has_facts and "PERIOD_TOO_LONG" not in reason_codes)
             or type(report["model_profile_ref"]) is not str
             or not report["model_profile_ref"]
             or type(report["status"]) is not str

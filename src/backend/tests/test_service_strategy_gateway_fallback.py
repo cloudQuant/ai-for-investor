@@ -72,9 +72,7 @@ def test_configured_legacy_gateway_is_rejected_before_fallback_or_secret_loading
     def retired_path_must_not_run(*_args, **_kwargs):
         pytest.fail("legacy gateway fallback ran before the migration rejection")
 
-    monkeypatch.setattr(
-        gateway_runtime_service, "build_subprocess_env", retired_path_must_not_run
-    )
+    monkeypatch.setattr(gateway_runtime_service, "build_subprocess_env", retired_path_must_not_run)
     monkeypatch.setattr(manager, "_load_strategy_config", retired_path_must_not_run)
     monkeypatch.setattr(manager, "_load_strategy_env", retired_path_must_not_run)
     monkeypatch.setattr(manager, "_import_gateway_runtime_classes", retired_path_must_not_run)

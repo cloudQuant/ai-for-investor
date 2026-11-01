@@ -52,7 +52,9 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "length(source_inventory_sha256) = 64", name="ck_legacy_paper_cutover_inventory_hash"
         ),
-        sa.CheckConstraint("length(binding_sha256) = 64", name="ck_legacy_paper_cutover_binding_hash"),
+        sa.CheckConstraint(
+            "length(binding_sha256) = 64", name="ck_legacy_paper_cutover_binding_hash"
+        ),
         sa.CheckConstraint(
             "length(paper_domain_sha256) = 64", name="ck_legacy_paper_cutover_domain_hash"
         ),
@@ -65,9 +67,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("legacy_account_id", name="uq_legacy_paper_cutover_account"),
     )
-    op.create_index(
-        "ix_legacy_paper_cutover_owner", _RECEIPT, ["owner_subject"], unique=False
-    )
+    op.create_index("ix_legacy_paper_cutover_owner", _RECEIPT, ["owner_subject"], unique=False)
     op.create_table(
         _LEASE,
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -81,9 +81,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_legacy_paper_writer_leases_account", _LEASE, ["account_id"], unique=False
-    )
+    op.create_index("ix_legacy_paper_writer_leases_account", _LEASE, ["account_id"], unique=False)
     _install_writer_fence_triggers()
 
 
@@ -94,7 +92,11 @@ def _install_writer_fence_triggers() -> None:
         "trg_lpc_receipt_no_delete",
         "trg_lpc_account_update",
         "trg_lpc_account_delete",
-        *[f"trg_lpc_{table[-5:]}_{action.lower()}" for table in _TABLES for action in ("INSERT", "UPDATE", "DELETE")],
+        *[
+            f"trg_lpc_{table[-5:]}_{action.lower()}"
+            for table in _TABLES
+            for action in ("INSERT", "UPDATE", "DELETE")
+        ],
     ]
     if dialect == "sqlite":
         for name in names:
@@ -131,8 +133,7 @@ def _install_writer_fence_triggers() -> None:
                 predicate = f"legacy_account_id = {event}"
                 if action == "UPDATE":
                     predicate = (
-                        "legacy_account_id = OLD.account_id OR "
-                        "legacy_account_id = NEW.account_id"
+                        "legacy_account_id = OLD.account_id OR legacy_account_id = NEW.account_id"
                     )
                 name = f"trg_lpc_{table[-5:]}_{action.lower()}"
                 op.execute(
@@ -228,7 +229,10 @@ def _install_writer_fence_triggers() -> None:
                 FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'LEGACY_PAPER_RECEIPT_IMMUTABLE'"""
             )
         )
-        targets = [("paper_trading_accounts", "UPDATE", "OLD.id"), ("paper_trading_accounts", "DELETE", "OLD.id")]
+        targets = [
+            ("paper_trading_accounts", "UPDATE", "OLD.id"),
+            ("paper_trading_accounts", "DELETE", "OLD.id"),
+        ]
         for table in _TABLES:
             targets.extend(
                 [
@@ -276,7 +280,11 @@ def downgrade() -> None:
             "trg_lpc_account_delete",
             "trg_lpc_ounts_update",
             "trg_lpc_ounts_delete",
-            *[f"trg_lpc_{table[-5:]}_{action.lower()}" for table in _TABLES for action in ("INSERT", "UPDATE", "DELETE")],
+            *[
+                f"trg_lpc_{table[-5:]}_{action.lower()}"
+                for table in _TABLES
+                for action in ("INSERT", "UPDATE", "DELETE")
+            ],
         ]
         for name in names:
             op.execute(sa.text(f"DROP TRIGGER IF EXISTS {name}"))
@@ -284,7 +292,9 @@ def downgrade() -> None:
         op.execute(sa.text(f"DROP TRIGGER IF EXISTS trg_lpc_receipt_no_update ON {_RECEIPT}"))
         op.execute(sa.text(f"DROP TRIGGER IF EXISTS trg_lpc_receipt_no_delete ON {_RECEIPT}"))
         for table in ("paper_trading_accounts", *_TABLES):
-            op.execute(sa.text(f"DROP TRIGGER IF EXISTS trg_lpc_{table[-5:]}_write_fence ON {table}"))
+            op.execute(
+                sa.text(f"DROP TRIGGER IF EXISTS trg_lpc_{table[-5:]}_write_fence ON {table}")
+            )
         op.execute(sa.text("DROP FUNCTION IF EXISTS guard_legacy_paper_cutover_write()"))
         op.execute(sa.text("DROP FUNCTION IF EXISTS reject_legacy_paper_receipt_mutation()"))
     elif dialect == "mysql":
@@ -295,7 +305,11 @@ def downgrade() -> None:
             "trg_lpc_account_delete",
             "trg_lpc_ounts_update",
             "trg_lpc_ounts_delete",
-            *[f"trg_lpc_{table[-5:]}_{action.lower()}" for table in _TABLES for action in ("INSERT", "UPDATE", "DELETE")],
+            *[
+                f"trg_lpc_{table[-5:]}_{action.lower()}"
+                for table in _TABLES
+                for action in ("INSERT", "UPDATE", "DELETE")
+            ],
         ]
         for name in names:
             op.execute(sa.text(f"DROP TRIGGER IF EXISTS {name}"))

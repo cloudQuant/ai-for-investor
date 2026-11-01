@@ -501,6 +501,7 @@ async def _run_http_host_import(
         stores.append(store)
         host: ServiceHost | None = None
         try:
+
             def resource_provider(component, instance_id, _options, _service_scope):
                 assert component == "execution"
                 assert instance_id == _SERVICE_INSTANCE
@@ -560,7 +561,9 @@ async def _run_http_host_import(
             legacy_account_id=legacy._SOURCE_ACCOUNT_ID,
             scope_ref=_SCOPE_REF,
             paper_binding=paper_binding,
-            symbol_bindings=(LegacyPaperSymbolBindingV1(legacy._LEGACY_SYMBOL, legacy._INSTRUMENT),),
+            symbol_bindings=(
+                LegacyPaperSymbolBindingV1(legacy._LEGACY_SYMBOL, legacy._INSTRUMENT),
+            ),
         )
 
         def session_factory() -> SdkServiceReadSession:
@@ -633,9 +636,7 @@ async def _run_http_host_import(
                 headers={"X-User-Id": "forged-owner", "X-Principal-Ref": "forged-principal"},
             )
             assert refused.status_code == 409
-            assert refused.json()["details"]["code"] == (
-                "LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE"
-            )
+            assert refused.json()["details"]["code"] == ("LEGACY_EQUITY_RESIDUAL_UNREPRESENTABLE")
 
             frozen = await client.get(
                 f"/api/v1/legacy-paper-imports/accounts/{legacy._SOURCE_ACCOUNT_ID}"
@@ -676,9 +677,7 @@ async def _run_http_host_import(
                 json={"confirmed": True, "source_inventory_sha256": "0" * 64},
             )
             assert wrong_digest.status_code == 403
-            assert wrong_digest.json()["details"]["code"] == (
-                "LEGACY_IMPORT_BINDING_MISMATCH"
-            )
+            assert wrong_digest.json()["details"]["code"] == ("LEGACY_IMPORT_BINDING_MISMATCH")
             after_wrong_digest = await client.get(
                 f"/api/v1/legacy-paper-imports/accounts/{legacy._SOURCE_ACCOUNT_ID}"
             )
@@ -762,9 +761,7 @@ async def _run_http_host_import(
         assert [row["id"] for row in categories["risk_rules"]] == [_RISK_RULE_ID]
         assert [row["id"] for row in categories["alerts"]] == [_ALERT_ID]
         assert [row["id"] for row in categories["alert_rules"]] == [_ALERT_RULE_ID]
-        assert [row["id"] for row in categories["alert_notifications"]] == [
-            _ALERT_NOTIFICATION_ID
-        ]
+        assert [row["id"] for row in categories["alert_notifications"]] == [_ALERT_NOTIFICATION_ID]
         assert [row["approval_ref"] for row in categories["strategy_target_approvals"]] == [
             _APPROVAL_REF
         ]
@@ -776,9 +773,7 @@ async def _run_http_host_import(
         )
         assert categories["strategy_order_approval_policy_heads"][0]["policy_version"] == 2
         assert categories["strategy_approval_authority_epoch"][0]["epoch"] == _AUTHORITY_EPOCH
-        assert {row["id"] for row in categories["paper_equity_snapshots"]} == set(
-            _SNAPSHOT_IDS
-        )
+        assert {row["id"] for row in categories["paper_equity_snapshots"]} == set(_SNAPSHOT_IDS)
         assert categories["paper_equity_snapshots"][0]["total_equity"] == 99.9
         assert categories["paper_equity_snapshots"][0]["metadata"] == {
             "migration_fixture": "source-only"

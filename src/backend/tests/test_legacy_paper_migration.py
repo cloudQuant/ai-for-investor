@@ -81,9 +81,7 @@ def test_empty_account_cutover_is_ready_without_claiming_data_migration() -> Non
         ("trade_count", 1, "legacy_trades_present"),
     ],
 )
-def test_nonempty_legacy_tables_are_explicitly_held(
-    field: str, count: int, reason: str
-) -> None:
+def test_nonempty_legacy_tables_are_explicitly_held(field: str, count: int, reason: str) -> None:
     assessment = assess_empty_account_cutover(_inventory(**{field: count}), _binding())
 
     assert assessment.ready is False
@@ -96,7 +94,11 @@ def test_nonempty_legacy_tables_are_explicitly_held(
         ({"account": {"current_cash": "99999"}}, {}, "legacy_cash_or_equity_not_pristine"),
         ({"account": {"slippage_rate": "0.001"}}, {}, "legacy_slippage_not_representable"),
         ({}, {"fee_rate": Decimal("0.002")}, "managed_fee_rate_mismatch"),
-        ({}, {"opening_positions": ({"instrument": "BTCUSDT", "net_quantity": "1"},)}, "managed_opening_positions_not_empty"),
+        (
+            {},
+            {"opening_positions": ({"instrument": "BTCUSDT", "net_quantity": "1"},)},
+            "managed_opening_positions_not_empty",
+        ),
     ],
 )
 def test_cutover_holds_when_cash_fees_or_positions_would_not_be_conserved(

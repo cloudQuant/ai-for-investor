@@ -278,9 +278,24 @@ def test_service_market_reads_only_configured_key_and_rejects_after_close():
 @pytest.mark.parametrize(
     "mutate,code",
     [
-        (lambda doc: doc["subjects"][0]["client_config"]["clients"]["gateway"]["settings"]["bindings"][0].update(mount="application.orders"), "INVALID_CLIENT_CONFIG"),
-        (lambda doc: doc["subjects"][0]["market_bindings"][0]["key"]["instrument"].update(provider="binance"), "UNSUPPORTED_MARKET_BINDING"),
-        (lambda doc: doc["subjects"][0]["scope_claims"]["public-market-scope"].update(account_ref="account-1"), "INVALID_DEPLOYMENT"),
+        (
+            lambda doc: doc["subjects"][0]["client_config"]["clients"]["gateway"]["settings"][
+                "bindings"
+            ][0].update(mount="application.orders"),
+            "INVALID_CLIENT_CONFIG",
+        ),
+        (
+            lambda doc: doc["subjects"][0]["market_bindings"][0]["key"]["instrument"].update(
+                provider="binance"
+            ),
+            "UNSUPPORTED_MARKET_BINDING",
+        ),
+        (
+            lambda doc: doc["subjects"][0]["scope_claims"]["public-market-scope"].update(
+                account_ref="account-1"
+            ),
+            "INVALID_DEPLOYMENT",
+        ),
     ],
 )
 def test_service_market_directory_rejects_widened_or_mismatched_binding(mutate, code):
@@ -318,7 +333,9 @@ def test_project_market_event_maps_established_okx_projection_to_quote_tick_inpu
             kind=WireMessageKind.EVENT,
             message_id="synthetic-market-event-1",
             correlation_id=None,
-            identity=WireIdentity(WireRole.SERVICE, "okx-market-service-principal", "okx-market-service"),
+            identity=WireIdentity(
+                WireRole.SERVICE, "okx-market-service-principal", "okx-market-service"
+            ),
             scope=WireScope("afi-public-market"),
             operation="market.event",
             schema_id="sdk.market.event",
@@ -362,7 +379,9 @@ def test_project_market_event_rejects_key_and_projection_mismatch():
             kind=WireMessageKind.EVENT,
             message_id="synthetic-market-event-2",
             correlation_id=None,
-            identity=WireIdentity(WireRole.SERVICE, "okx-market-service-principal", "okx-market-service"),
+            identity=WireIdentity(
+                WireRole.SERVICE, "okx-market-service-principal", "okx-market-service"
+            ),
             scope=WireScope("afi-public-market"),
             operation="market.event",
             schema_id="sdk.market.event",
@@ -503,6 +522,7 @@ def test_get_data_sources_uses_profile_without_starting_market_reader(monkeypatc
     assert not hasattr(service, "_ensure_receiver_for_gateway")
     assert not hasattr(service, "_subscribe_symbols_on_gateway_state")
 
+
 def test_workspace_only_service_ticker_preserves_metadata_and_rejects_unbound_symbol(monkeypatch):
     service = _quote_service(monkeypatch)
     key = _market_key()
@@ -553,6 +573,7 @@ def test_workspace_only_service_ticker_preserves_metadata_and_rejects_unbound_sy
     assert unbound["error_message"] == "SERVICE_MARKET_PROFILE_REQUIRED"
     assert unbound["workspace_ids"] == []
     assert service._receivers == {}
+
 
 def test_uncertain_service_market_close_retains_production_owner_and_retries(monkeypatch):
     service = _quote_service(monkeypatch)
@@ -696,18 +717,10 @@ def test_history_bindings_are_exact_subject_timeframe_and_separate_from_tickers(
     assert directory is not None
     key = _history_key()
 
-    assert directory.configured_history_key(
-        "jwt-subject-a", "okx", "BTC-USDT-SWAP", "1m"
-    ) == key
-    assert directory.configured_history_key(
-        "jwt-subject-b", "OKX", "BTC-USDT-SWAP", "1m"
-    ) is None
-    assert directory.configured_history_key(
-        "jwt-subject-a", "OKX", "BTC-USDT-SWAP", "5m"
-    ) is None
-    assert directory.has_configured_history_symbol(
-        "jwt-subject-a", "OKX", "BTC-USDT-SWAP"
-    )
+    assert directory.configured_history_key("jwt-subject-a", "okx", "BTC-USDT-SWAP", "1m") == key
+    assert directory.configured_history_key("jwt-subject-b", "OKX", "BTC-USDT-SWAP", "1m") is None
+    assert directory.configured_history_key("jwt-subject-a", "OKX", "BTC-USDT-SWAP", "5m") is None
+    assert directory.has_configured_history_symbol("jwt-subject-a", "OKX", "BTC-USDT-SWAP")
     profile = directory._profiles["jwt-subject-a"]
     assert profile.routes == {}
     assert profile.requested_operations == frozenset({"market.history"})
@@ -722,11 +735,15 @@ def test_history_bindings_are_exact_subject_timeframe_and_separate_from_tickers(
             "UNSUPPORTED_HISTORY_TIMEFRAME",
         ),
         (
-            lambda doc: doc["subjects"][0]["history_bindings"][0]["key"]["instrument"].update(environment="demo"),
+            lambda doc: doc["subjects"][0]["history_bindings"][0]["key"]["instrument"].update(
+                environment="demo"
+            ),
             "UNSUPPORTED_HISTORY_BINDING",
         ),
         (
-            lambda doc: doc["subjects"][0]["history_bindings"][0]["key"].update(entitlement_ref="public-ticker-r1"),
+            lambda doc: doc["subjects"][0]["history_bindings"][0]["key"].update(
+                entitlement_ref="public-ticker-r1"
+            ),
             "UNSUPPORTED_HISTORY_BINDING",
         ),
     ],
@@ -798,9 +815,7 @@ def test_history_page_uses_owner_thread_client_without_stream_start(monkeypatch)
         "_ensure_history_client",
         lambda _owner, _key: _Client(),
     )
-    page = directory.read_history_page(
-        "jwt-subject-a", "OKX", "BTC-USDT-SWAP", "1m", key, request
-    )
+    page = directory.read_history_page("jwt-subject-a", "OKX", "BTC-USDT-SWAP", "1m", key, request)
     owner = directory._workers["jwt-subject-a"]
 
     assert type(page) is MarketHistoryPage
@@ -878,9 +893,7 @@ def test_configured_chart_history_projects_complete_page_without_legacy_fallback
         lambda: (_ for _ in ()).throw(AssertionError("configured history used legacy manager")),
     )
 
-    result = service.get_chart_data(
-        "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
-    )
+    result = service.get_chart_data("OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a")
 
     assert result["complete"] is True
     assert result["error_code"] is None
@@ -922,9 +935,7 @@ def test_configured_chart_history_failure_does_not_fall_back(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError("configured history used legacy manager")),
     )
 
-    result = service.get_chart_data(
-        "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
-    )
+    result = service.get_chart_data("OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a")
 
     assert result["bars"] == []
     assert result["complete"] is False
@@ -943,9 +954,7 @@ def test_unconfigured_chart_history_returns_profile_required_without_legacy_comm
     service._service_market_error = None
     service._service_market_load_lock = threading.Lock()
 
-    result = service.get_chart_data(
-        "OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a"
-    )
+    result = service.get_chart_data("OKX", "BTC-USDT-SWAP", "M1", 10, "jwt-subject-a")
 
     assert result["bars"] == []
     assert result["error_code"] == "SERVICE_MARKET_PROFILE_REQUIRED"

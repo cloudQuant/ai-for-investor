@@ -931,9 +931,7 @@ def _account_snapshot_consistency(
     elif len(reads) == 1:
         result["status"] = "single_account_cut"
     else:
-        skew_ns = max(item[0] for item in timed_reads) - min(
-            item[0] for item in timed_reads
-        )
+        skew_ns = max(item[0] for item in timed_reads) - min(item[0] for item in timed_reads)
         result["skew_ns"] = str(skew_ns)
         result["status"] = (
             "same_observation_time_independent_cuts"
@@ -1003,9 +1001,7 @@ def _provider_snapshot_consistency(
     elif len(reads) == 1:
         result["status"] = "single_account_observation_cut"
     else:
-        skew_ns = max(item[0] for item in observations) - min(
-            item[0] for item in observations
-        )
+        skew_ns = max(item[0] for item in observations) - min(item[0] for item in observations)
         result["skew_ns"] = str(skew_ns)
         result["status"] = (
             "same_completion_time_independent_cuts"
@@ -1089,8 +1085,7 @@ def _public_provider_observation_projection(view: AccountReadView) -> dict[str, 
         return {"status": "absent", "code": "PROVIDER_OBSERVATION_NOT_PROJECTED"}
 
     row_times = [
-        row["observed_at_utc"]
-        for row in (*observation["balances"], *observation["positions"])
+        row["observed_at_utc"] for row in (*observation["balances"], *observation["positions"])
     ]
     if observation["valuation"] is not None:
         row_times.append(observation["valuation"]["observed_at_utc"])

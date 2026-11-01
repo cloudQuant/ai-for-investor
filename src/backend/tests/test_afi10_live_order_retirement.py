@@ -47,9 +47,7 @@ def test_ai_live_actions_fail_closed_without_service_v2_scope(action, gateway_id
 
 def test_direct_order_service_has_no_legacy_live_transport_or_order_domain():
     backend = Path(__file__).resolve().parents[1]
-    direct_source = (backend / "app/services/direct_order_service.py").read_text(
-        encoding="utf-8"
-    )
+    direct_source = (backend / "app/services/direct_order_service.py").read_text(encoding="utf-8")
     ai_source = (backend / "app/services/ai_trading_service.py").read_text(encoding="utf-8")
 
     assert not hasattr(DirectOrderService, "execute_live_trade")

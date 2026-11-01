@@ -129,7 +129,7 @@ def _write_strategy_fixture(strategy_dir: Path) -> None:
     )
     (strategy_dir / "run.py").write_text(
         textwrap.dedent(
-            r'''
+            r"""
             from __future__ import annotations
 
             import csv
@@ -233,13 +233,13 @@ def _write_strategy_fixture(strategy_dir: Path) -> None:
             destination.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
             if record["network_attempts"] != 0:
                 raise RuntimeError("NETWORK_ATTEMPTED")
-            '''
+            """
         ).lstrip(),
         encoding="utf-8",
     )
     (strategy_dir / "sitecustomize.py").write_text(
         textwrap.dedent(
-            r'''
+            r"""
             from __future__ import annotations
 
             import importlib.abc
@@ -277,7 +277,7 @@ def _write_strategy_fixture(strategy_dir: Path) -> None:
             Path(os.environ["AFI_ORDINARY_CHILD_RESULT_JSON"]).write_text(
                 json.dumps(state, sort_keys=True), encoding="utf-8"
             )
-            '''
+            """
         ).lstrip(),
         encoding="utf-8",
     )
@@ -296,7 +296,9 @@ async def _cancel_and_reap_owned_execution(service: Any, task_id: str) -> list[s
     def _remember(current_task: Any, current_process: Any) -> None:
         if current_task is not None and all(current_task is not item for item in task_refs):
             task_refs.append(current_task)
-        if current_process is not None and all(current_process is not item for item in process_refs):
+        if current_process is not None and all(
+            current_process is not item for item in process_refs
+        ):
             process_refs.append(current_process)
 
     _remember(task, process)
@@ -330,9 +332,8 @@ async def _cancel_and_reap_owned_execution(service: Any, task_id: str) -> list[s
             id(current_task) if current_task is not None else None,
             id(current_process) if current_process is not None else None,
         )
-        is_new_handle = (
-            (current_task is not None and id(current_task) not in known_task_ids)
-            or (current_process is not None and id(current_process) not in known_process_ids)
+        is_new_handle = (current_task is not None and id(current_task) not in known_task_ids) or (
+            current_process is not None and id(current_process) not in known_process_ids
         )
         _remember(current_task, current_process)
         if (
@@ -480,7 +481,9 @@ async def _exercise_installed_afi_backtest_service(
 
     app = FastAPI()
     app.include_router(backtest_api.router, prefix="/api/v1/backtests")
-    app.dependency_overrides[get_current_user] = lambda: type("CurrentUser", (), {"sub": _USER_ID})()
+    app.dependency_overrides[get_current_user] = lambda: type(
+        "CurrentUser", (), {"sub": _USER_ID}
+    )()
     service = BacktestService()
     state["service"] = service
     state["baseline_task_ids"] = set(service.task_runner._tasks)
@@ -488,10 +491,14 @@ async def _exercise_installed_afi_backtest_service(
     app.dependency_overrides[backtest_api.get_backtest_service] = lambda: service
     from app.services.backtest import service as backtest_service_module
 
-    monkeypatch.setattr(backtest_service_module, "get_market_data_precheck_service", lambda: precheck)
+    monkeypatch.setattr(
+        backtest_service_module, "get_market_data_precheck_service", lambda: precheck
+    )
 
-    assert Path(backtest_api.__file__).resolve().is_relative_to(
-        (Path(sys.prefix) / "Lib" / "site-packages").resolve()
+    assert (
+        Path(backtest_api.__file__)
+        .resolve()
+        .is_relative_to((Path(sys.prefix) / "Lib" / "site-packages").resolve())
     )
     assert importlib.metadata.version("backtrader") == "1.4.0"
     assert importlib.metadata.distribution("backtrader").read_text("direct_url.json")
@@ -540,7 +547,11 @@ async def _exercise_installed_afi_backtest_service(
 
         runner_task = service.task_runner.get_task(task_id)
         runner_deadline = time.monotonic() + 10.0
-        while runner_task is not None and not runner_task.done() and time.monotonic() < runner_deadline:
+        while (
+            runner_task is not None
+            and not runner_task.done()
+            and time.monotonic() < runner_deadline
+        ):
             await asyncio.sleep(0.01)
             runner_task = service.task_runner.get_task(task_id)
         assert runner_task is None or runner_task.done(), "backtest runner task did not finish"
@@ -561,8 +572,10 @@ async def _exercise_installed_afi_backtest_service(
     child = json.loads(child_result.read_text(encoding="utf-8"))
     assert child["python"] == sys.executable
     assert child["backtrader_version"] == "1.4.0"
-    assert Path(child["backtrader_origin"]).resolve().is_relative_to(
-        (Path(sys.prefix) / "Lib" / "site-packages").resolve()
+    assert (
+        Path(child["backtrader_origin"])
+        .resolve()
+        .is_relative_to((Path(sys.prefix) / "Lib" / "site-packages").resolve())
     )
     assert child["bars_seen"] == bar_count
     assert child["result_count"] == 1

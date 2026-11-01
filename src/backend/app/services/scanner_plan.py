@@ -261,9 +261,7 @@ class ScannerPlanService:
             "result_table_name": plan.result_table_name,
             "result_table_status": plan.result_table_status,
             "result_table_data_status": (
-                "legacy_unverified"
-                if plan.result_table_status == "ready"
-                else "unavailable"
+                "legacy_unverified" if plan.result_table_status == "ready" else "unavailable"
             ),
             "created_at": plan.created_at.isoformat() if plan.created_at else None,
             "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
@@ -293,9 +291,7 @@ class ScannerPlanService:
         }
 
     @staticmethod
-    def _parse_schedule_enabled(
-        payload: dict[str, Any], *, default: bool | None
-    ) -> bool | None:
+    def _parse_schedule_enabled(payload: dict[str, Any], *, default: bool | None) -> bool | None:
         if "schedule_enabled" not in payload:
             return default
         value = payload["schedule_enabled"]

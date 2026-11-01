@@ -131,7 +131,9 @@ async def reduce_approved_strategy_target(
     try:
         access = _resolve_access(current_user, payload.scope_ref, "approved_target")
     except (ServiceReadContractError, HTTPException):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "SCOPE_NOT_FOUND"}) from None
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail={"code": "SCOPE_NOT_FOUND"}
+        ) from None
     binding = access.approved_target_bindings.get(payload.scope_ref)
     identity = access.application_identity
     if binding is None or identity is None:
@@ -230,9 +232,7 @@ async def reduce_approved_strategy_target(
             ) from None
         if exc.code == "DEPLOYMENT_INACTIVE_OR_EXPIRED":
             response.status_code = status.HTTP_409_CONFLICT
-            return _not_dispatched_projection(
-                claim.intent_id, "DEPLOYMENT_INACTIVE_OR_EXPIRED"
-            )
+            return _not_dispatched_projection(claim.intent_id, "DEPLOYMENT_INACTIVE_OR_EXPIRED")
         if exc.code == "OWNER_SERVICE_UNAVAILABLE":
             raise _unavailable("OWNER_SERVICE_UNAVAILABLE") from None
         projection = _unknown_projection(claim.intent_id, "OWNER_OUTCOME_UNKNOWN")
@@ -333,7 +333,11 @@ def _validate_owner_reply(
     ):
         return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
     result = value.get("result")
-    outcome = result.get("reduction") if isinstance(result, Mapping) and set(result) == {"reduction"} else None
+    outcome = (
+        result.get("reduction")
+        if isinstance(result, Mapping) and set(result) == {"reduction"}
+        else None
+    )
     if (
         not isinstance(outcome, Mapping)
         or set(outcome) != fields
@@ -341,7 +345,8 @@ def _validate_owner_reply(
         or type(outcome.get("schema_version")) is not int
         or outcome.get("schema_version") != 1
         or outcome.get("intent_id") != intent_id
-        or outcome.get("status") not in {"NOT_DISPATCHED", "PENDING", "PARTIAL", "FILLED", "TERMINAL", "UNKNOWN"}
+        or outcome.get("status")
+        not in {"NOT_DISPATCHED", "PENDING", "PARTIAL", "FILLED", "TERMINAL", "UNKNOWN"}
         or outcome.get("stage") not in {"AUTHORITY", "EXECUTION"}
         or type(outcome.get("is_terminal")) is not bool
         or type(outcome.get("review_required")) is not bool
@@ -359,24 +364,25 @@ def _validate_owner_reply(
     status_text = str(outcome["status"])
     expected_terminal = state in _TERMINAL_STATES if state is not None else False
     expected_status = (
-        "FILLED"
-        if state == "FILLED"
-        else "PARTIAL"
-        if state == "PARTIALLY_FILLED"
-        else "UNKNOWN"
-        if state == "UNKNOWN"
-        else "TERMINAL"
-        if state in _TERMINAL_STATES
-        else "PENDING"
-    ) if state is not None else status_text
+        (
+            "FILLED"
+            if state == "FILLED"
+            else "PARTIAL"
+            if state == "PARTIALLY_FILLED"
+            else "UNKNOWN"
+            if state == "UNKNOWN"
+            else "TERMINAL"
+            if state in _TERMINAL_STATES
+            else "PENDING"
+        )
+        if state is not None
+        else status_text
+    )
     if (
         outcome["is_terminal"] is not expected_terminal
         or status_text != expected_status
         or (state is not None and outcome["stage"] != "EXECUTION")
-        or (
-            state is None
-            and status_text not in {"NOT_DISPATCHED", "UNKNOWN"}
-        )
+        or (state is None and status_text not in {"NOT_DISPATCHED", "UNKNOWN"})
         or (status_text == "UNKNOWN" and outcome["review_required"] is not True)
         or (state is None and outcome["filled_quantity"] != "0")
         or (status_text == "NOT_DISPATCHED" and state is not None)
@@ -478,9 +484,13 @@ def _wire_scope_payload(scope: object) -> dict[str, object]:
 
 def _raise_deployment_error(error: StrategyReductionControlError) -> None:
     if error.code == "PROFILE_NOT_AUTHORIZED":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "SCOPE_NOT_FOUND"}) from None
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail={"code": "SCOPE_NOT_FOUND"}
+        ) from None
     if error.code == "PROFILE_SCOPE_MISMATCH":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "SCOPE_DENIED"}) from None
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail={"code": "SCOPE_DENIED"}
+        ) from None
     if error.code == "PROFILE_AMBIGUOUS":
         raise _unavailable("DEPLOYMENT_AMBIGUOUS") from None
     raise _unavailable(error.code) from None
@@ -492,7 +502,9 @@ def _raise_mapping_error(error: ApprovedTargetHttpOperationError) -> None:
     if error.code in {"APPROVAL_NOT_FOUND", "APPROVAL_OWNER_BINDING_MISMATCH"}:
         raise _approval_not_found()
     if error.code in {"APPROVAL_IDENTITY_MISMATCH", "APPROVAL_SCOPE_MISMATCH"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": error.code}) from None
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail={"code": error.code}
+        ) from None
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code}) from None
 
 
@@ -506,5 +518,8 @@ def _approval_not_found() -> HTTPException:
 def _unavailable(code: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"code": code, "message": "The reduction outcome is unavailable; inspect the same operation key."},
+        detail={
+            "code": code,
+            "message": "The reduction outcome is unavailable; inspect the same operation key.",
+        },
     )

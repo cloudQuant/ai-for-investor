@@ -745,7 +745,9 @@ class TestGatewayLifecycle:
         from app.services.live_trading import manager as manager_module
 
         target = tmp_path / "manual-gateways.json"
-        original = b'[{"gateway_key":"secret-account-key","credentials":{"api_key":"stored-secret"}}]'
+        original = (
+            b'[{"gateway_key":"secret-account-key","credentials":{"api_key":"stored-secret"}}]'
+        )
         target.write_bytes(original)
         monkeypatch.setattr(manager_module, "_MANUAL_GATEWAYS_FILE", target)
         manager = object.__new__(LiveTradingManager)

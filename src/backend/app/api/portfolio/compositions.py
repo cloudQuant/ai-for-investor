@@ -84,9 +84,7 @@ async def create_portfolio_composition_version(
                     # to this authenticated subject's deployment-owned scope.
                     # Historical unbound versions remain readable and project
                     # attribution as unavailable.
-                    subject_access = _resolve_access(
-                        current_user, member.ref, "strategy_book"
-                    )
+                    subject_access = _resolve_access(current_user, member.ref, "strategy_book")
                     binding = subject_access.strategy_book_bindings[member.ref]
                 if binding.account_ref not in account_members:
                     raise HTTPException(

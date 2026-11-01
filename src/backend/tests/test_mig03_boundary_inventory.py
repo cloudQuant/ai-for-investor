@@ -266,11 +266,12 @@ def _seed_database(path: Path):
             session.commit()
         return engine
 
-
     except BaseException:
         with suppress(BaseException):
             engine.dispose()
         raise
+
+
 def _capture(session: Session):
     return capture_afi_boundary(
         session,
@@ -368,9 +369,7 @@ def _insert_valid_import_receipt(engine) -> str:
                 owner_subject=account.user_id,
                 state="ACTIVE",
                 receipt_version=1,
-                source_inventory_sha256=hashlib.sha256(
-                    source_json.encode("utf-8")
-                ).hexdigest(),
+                source_inventory_sha256=hashlib.sha256(source_json.encode("utf-8")).hexdigest(),
                 source_snapshot_json=source_json,
                 target_import_sha256=_HASH_1,
                 target_domain_sha256=_HASH_2,
@@ -384,9 +383,7 @@ def _insert_valid_import_receipt(engine) -> str:
                 source_order_count=len(source_document["orders"]),
                 source_position_count=len(source_document["positions"]),
                 source_trade_count=len(source_document["trades"]),
-                preserved_context_sha256=hashlib.sha256(
-                    context_json.encode("utf-8")
-                ).hexdigest(),
+                preserved_context_sha256=hashlib.sha256(context_json.encode("utf-8")).hexdigest(),
                 preserved_context_json=context_json,
                 created_at=now,
                 updated_at=now,
@@ -405,18 +402,20 @@ def test_mig03_afi_amount_projection_roundtrips_typed_numeric_values() -> None:
     assert original_projection == {"float_hex": original_float.hex()}
     assert adjacent_projection == {"float_hex": adjacent_float.hex()}
     assert original_projection != adjacent_projection
-    assert boundary_inventory._decimal_text(
-        boundary_inventory._decimal(original_projection)
-    ) == "100000"
-    assert boundary_inventory._decimal_text(
-        boundary_inventory._decimal(adjacent_projection)
-    ) == "100000.00000000001"
+    assert (
+        boundary_inventory._decimal_text(boundary_inventory._decimal(original_projection))
+        == "100000"
+    )
+    assert (
+        boundary_inventory._decimal_text(boundary_inventory._decimal(adjacent_projection))
+        == "100000.00000000001"
+    )
 
     decimal_projection = boundary_inventory._normal_value(Decimal("99.900"))
     assert decimal_projection == {"decimal": "99.9"}
-    assert boundary_inventory._decimal_text(
-        boundary_inventory._decimal(decimal_projection)
-    ) == "99.9"
+    assert (
+        boundary_inventory._decimal_text(boundary_inventory._decimal(decimal_projection)) == "99.9"
+    )
     nested_projection = boundary_inventory._normal_value(
         {"amounts": (Decimal("2.500"), original_float)}
     )
@@ -537,8 +536,7 @@ def test_mig03_afi_inventory_preserves_operation_approval_fills_fees_and_positio
 
         with engine.begin() as connection:
             connection.exec_driver_sql(
-                "CREATE INDEX mig03_boundary_schema_drift "
-                "ON paper_trading_orders(account_id)"
+                "CREATE INDEX mig03_boundary_schema_drift ON paper_trading_orders(account_id)"
             )
         with Session(engine) as schema_changed:
             changed_schema = _capture(schema_changed)

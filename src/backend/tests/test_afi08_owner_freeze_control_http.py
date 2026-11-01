@@ -277,11 +277,7 @@ def _start_owner_host(
                 "wire_scope": {
                     "execution_domain_ref": wire_scope.execution_domain_ref,
                     "account_ref": wire_scope.account_ref,
-                    **(
-                        {"strategy_ref": strategy_ref, "run_id": run_id}
-                        if stop_new
-                        else {}
-                    ),
+                    **({"strategy_ref": strategy_ref, "run_id": run_id} if stop_new else {}),
                 },
                 "client_identity": {
                     "principal_ref": client_identity.principal_ref,
@@ -432,11 +428,7 @@ def _start_owner_host(
                     curve_public_key=server_public,
                     curve_secret_key=server_secret,
                     principals={client_public: _CLIENT_PRINCIPAL},
-                    grants={
-                        _CLIENT_PRINCIPAL: (
-                            PrincipalGrant(client_identity, (resource,)),
-                        )
-                    },
+                    grants={_CLIENT_PRINCIPAL: (PrincipalGrant(client_identity, (resource,)),)},
                 ),
                 str(tmp_path / "service-registry.sqlite"),
                 resource_provider,
@@ -989,9 +981,7 @@ class _HttpCancelProvider:
 
     def submit(self, intent: Any) -> ProviderObservation:
         self.submitted.append(intent.intent_id)
-        return ProviderObservation.accepted(
-            intent.intent_id, f"provider-order:{intent.intent_id}"
-        )
+        return ProviderObservation.accepted(intent.intent_id, f"provider-order:{intent.intent_id}")
 
     def cancel(self, intent: Any) -> CancelObservation:
         self.cancelled.append(intent.cancel_id)
@@ -1296,9 +1286,7 @@ async def test_cancel_http_projects_partial_unknown_without_redispatch(
     strategy_ref = f"strategy:afi08-cancel-{uuid.uuid4().hex}"
     run_id = f"run:afi08-cancel-{uuid.uuid4().hex}"
     endpoint = _endpoint()
-    subject = await _create_owned_alert(
-        user_data, alert_id=alert_id, afi_account_id=afi_account_id
-    )
+    subject = await _create_owned_alert(user_data, alert_id=alert_id, afi_account_id=afi_account_id)
     foreign_headers = await _register_second_user(client)
     deployment, host_thread, stopped, refs = _start_cancel_execution_host(
         tmp_path,
@@ -1350,8 +1338,12 @@ async def test_cancel_http_projects_partial_unknown_without_redispatch(
                             "reply_type": type(reply).__name__,
                             "reply_fields": sorted(reply) if isinstance(reply, Mapping) else None,
                             "reply_code": reply.get("code") if isinstance(reply, Mapping) else None,
-                            "result_fields": sorted(result) if isinstance(result, Mapping) else None,
-                            "outcome": result.get("outcome") if isinstance(result, Mapping) else None,
+                            "result_fields": sorted(result)
+                            if isinstance(result, Mapping)
+                            else None,
+                            "outcome": result.get("outcome")
+                            if isinstance(result, Mapping)
+                            else None,
                             "item_count": len(result.get("items", ()))
                             if isinstance(result, Mapping)
                             and type(result.get("items")) in (list, tuple)
@@ -1360,7 +1352,9 @@ async def test_cancel_http_projects_partial_unknown_without_redispatch(
                     )
                 return reply
 
-        return type("_TracedSdk", (), sdk.__dict__ | {"ServiceClientRuntime": TracedServiceClientRuntime})
+        return type(
+            "_TracedSdk", (), sdk.__dict__ | {"ServiceClientRuntime": TracedServiceClientRuntime}
+        )
 
     monkeypatch.setattr(monitoring_control_service, "_load_sdk", load_traced_sdk)
     strategy_runtime: ServiceClientRuntime | None = None
@@ -1689,9 +1683,10 @@ async def test_stop_new_http_fences_exact_owner_run_and_returns_persisted_receip
         assert json.loads(receipt["effect_result_json"]) == applied["effect_result"]
         assert denied_reentry == "STRATEGY_STOPPED"
         assert refs["ledger"].get(command_id).status is ControlStatus.ACKNOWLEDGED
-        assert refs["gate"].active_freeze_reasons(
-            AccountScope("synthetic", risk_account_id, _MODE)
-        ) == []
+        assert (
+            refs["gate"].active_freeze_reasons(AccountScope("synthetic", risk_account_id, _MODE))
+            == []
+        )
 
         for action, code in (
             ("DRAIN", "DRAIN_PENDING_IMPLEMENTATION"),

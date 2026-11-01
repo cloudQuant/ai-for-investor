@@ -123,8 +123,7 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
     endpoint = r93._order._endpoint()
     server_public, server_secret = r93.zmq.curve_keypair()
     keypairs = {
-        name: r93.zmq.curve_keypair()
-        for name in ("strategy_a", "strategy_b", "application")
+        name: r93.zmq.curve_keypair() for name in ("strategy_a", "strategy_b", "application")
     }
     keys: dict[str, bytes] = {"server_public": server_public, "server_secret": server_secret}
     for name, (public_key, secret_key) in keypairs.items():
@@ -220,7 +219,15 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
 
         async def exercise_http_body() -> None:
             access_by_subject: dict[str, ReadAccess] = {}
-            for subject, identity, account_ref, query_scope, wire_scope, security_ref in app_identities:
+            for (
+                subject,
+                identity,
+                account_ref,
+                query_scope,
+                wire_scope,
+                security_ref,
+            ) in app_identities:
+
                 def make_session_factory(
                     *,
                     subject: str = subject,
@@ -402,11 +409,14 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
                     r93._assert_access_denied(response)
                 assert cross_portfolio.status_code == 404
                 assert forged_owner_write.status_code == 422
-                assert tuple(
-                    event
-                    for event in session_events
-                    if event[1] in {"read_order", "read_account"}
-                ) == calls_before_denials
+                assert (
+                    tuple(
+                        event
+                        for event in session_events
+                        if event[1] in {"read_order", "read_account"}
+                    )
+                    == calls_before_denials
+                )
                 assert r93._order._command(host, "counts") == counts_before_denials
                 assert counts_before_denials[1] == (r93._INTENT_A, r93._INTENT_B)
 
@@ -450,7 +460,9 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
             pipe.close()
             if not process_still_alive:
                 process.close()
-            assert not process_still_alive, "synthetic AFI01 ServiceHost remained alive after cleanup"
+            assert not process_still_alive, (
+                "synthetic AFI01 ServiceHost remained alive after cleanup"
+            )
             assert close_error is None, close_error
             assert closed is not None and closed[0] == "closed", closed
             assert exitcode == 0
@@ -460,8 +472,7 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
     assert {event[0] for event in identity_events} == {r93._SUBJECT_A, r93._SUBJECT_B}
     assert all(event[1] == r93._APP_PRINCIPAL and event[2] == event[0] for event in identity_events)
     assert all(
-        event[3]
-        == (r93._DELEGATE_A if event[0] == r93._SUBJECT_A else r93._DELEGATE_B)
+        event[3] == (r93._DELEGATE_A if event[0] == r93._SUBJECT_A else r93._DELEGATE_B)
         for event in identity_events
     )
     assert all(event[4] != main_thread_ident for event in identity_events)
@@ -469,4 +480,6 @@ def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
         subject_events = [event for event in session_events if event[0] == subject]
         assert any(event[1] == "read_order" for event in subject_events)
         assert any(event[1] == "close" for event in subject_events)
-        assert {event[2] for event in subject_events} == {identity_events[0 if subject == r93._SUBJECT_A else 1][4]}
+        assert {event[2] for event in subject_events} == {
+            identity_events[0 if subject == r93._SUBJECT_A else 1][4]
+        }

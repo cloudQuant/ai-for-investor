@@ -367,7 +367,9 @@ async def get_paper_order(
 async def get_managed_paper_order(
     intent_id: str,
     response: Response,
-    account_id: str = Query(..., min_length=1, max_length=256, description="Legacy account selector"),
+    account_id: str = Query(
+        ..., min_length=1, max_length=256, description="Legacy account selector"
+    ),
     current_user: typing.Any = Depends(get_current_user),
     adapter: ManagedPaperOrderAdapter = Depends(get_managed_paper_order_adapter),
 ) -> typing.Any:

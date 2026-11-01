@@ -616,7 +616,9 @@ async def _create_alert(auth_user: Any) -> tuple[str, str, str]:
         user = await session.scalar(select(User).where(User.username == user_data["username"]))
         assert user is not None
         subject = str(user.id)
-        session.add(Account(id=afi_account_id, user_id=user.id, name="AFI11 synthetic Monitor control"))
+        session.add(
+            Account(id=afi_account_id, user_id=user.id, name="AFI11 synthetic Monitor control")
+        )
         session.add(
             Alert(
                 id=alert_id,
@@ -945,9 +947,9 @@ async def test_monitor_process_failure_recovers_same_owner_policy_and_strategy_s
             monitor_values["executor_id"],
         )
 
-        main_module.app.dependency_overrides[
-            monitoring_routes.get_owner_control_deployment
-        ] = lambda: deployment
+        main_module.app.dependency_overrides[monitoring_routes.get_owner_control_deployment] = (
+            lambda: deployment
+        )
         pending = await client.post(
             f"/api/v1/monitoring/control/alerts/{alert_id}",
             headers={**headers, "Idempotency-Key": "afi11-monitor-recovery-freeze-v1"},
@@ -1033,9 +1035,7 @@ async def test_monitor_process_failure_recovers_same_owner_policy_and_strategy_s
         # Restart the same service on its fixed endpoint and durable command/Risk stores.
         restarted_values = dict(monitor_values)
         restarted_values["hold_owner"] = False
-        restarted_values["registry_path"] = str(
-            tmp_path / "afi11-monitor-registry-first.sqlite3"
-        )
+        restarted_values["registry_path"] = str(tmp_path / "afi11-monitor-registry-first.sqlite3")
         monitor_owner = _start_monitor(monitor_context, restarted_values)
         second_ready = monitor_owner["ready"]
         assert second_ready[1] != first_ready[1]

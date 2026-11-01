@@ -74,16 +74,13 @@ _ORDER_SERVICE_IDS = {
     _ACCOUNT_B: "afi-ordinary-account-b-risk-owner",
 }
 _ORDER_INSTANCE_IDS = {
-    account_ref: f"{service_id}-instance"
-    for account_ref, service_id in _ORDER_SERVICE_IDS.items()
+    account_ref: f"{service_id}-instance" for account_ref, service_id in _ORDER_SERVICE_IDS.items()
 }
 _ORDER_SERVICE_PRINCIPALS = {
-    account_ref: f"{service_id}-principal"
-    for account_ref, service_id in _ORDER_SERVICE_IDS.items()
+    account_ref: f"{service_id}-principal" for account_ref, service_id in _ORDER_SERVICE_IDS.items()
 }
 _ORDER_SERVICE_SCOPE_REFS = {
-    account_ref: f"{service_id}-scope-v1"
-    for account_ref, service_id in _ORDER_SERVICE_IDS.items()
+    account_ref: f"{service_id}-scope-v1" for account_ref, service_id in _ORDER_SERVICE_IDS.items()
 }
 _ORDER_SERVICE_SECURITY_REFS = {
     account_ref: f"{service_id}-server-curve-v1"
@@ -94,8 +91,7 @@ _ORDER_SERVICE_TRANSPORT_REFS = {
     for account_ref, service_id in _ORDER_SERVICE_IDS.items()
 }
 _ORDER_APP_TRANSPORT_REFS = {
-    account_ref: f"afi-ordinary-app-connect-{account_ref[-1]}-v1"
-    for account_ref in _ACCOUNTS
+    account_ref: f"afi-ordinary-app-connect-{account_ref[-1]}-v1" for account_ref in _ACCOUNTS
 }
 _APP_SECURITY_REF = "afi-ordinary-policy-application-curve-v1"
 _SERVER_SECURITY_REF = policy_control._SERVICE_SECURITY_REF
@@ -193,9 +189,7 @@ def _application_profile(
             "actor_ref": _CATALOG_SERVICE_ID,
         }
     }
-    transports: dict[str, object] = {
-        _CATALOG_APP_TRANSPORT_REF: _transport(catalog_endpoint)
-    }
+    transports: dict[str, object] = {_CATALOG_APP_TRANSPORT_REF: _transport(catalog_endpoint)}
     order_bindings: dict[str, object] = {}
     order_scope_refs: list[str] = []
     if order_endpoints:
@@ -224,9 +218,7 @@ def _application_profile(
                 "mount": "application.orders",
                 "account_ref": account_ref,
                 "manual_book_ref": _MANUAL_BOOKS[account_ref],
-                "instrument_metadata_versions": {
-                    _INSTRUMENT: "afi-synthetic-risk-metadata-v1"
-                },
+                "instrument_metadata_versions": {_INSTRUMENT: "afi-synthetic-risk-metadata-v1"},
             }
         clients["execution"] = {
             "config_schema_version": 1,
@@ -292,10 +284,7 @@ def _application_profile(
 
 
 def _catalog_authority(keys: Mapping[str, bytes]) -> TrustedServiceAuthority:
-    scopes = {
-        _ACCOUNT_SCOPE_REFS[account_ref]: _scope(account_ref)
-        for account_ref in _ACCOUNTS
-    }
+    scopes = {_ACCOUNT_SCOPE_REFS[account_ref]: _scope(account_ref) for account_ref in _ACCOUNTS}
     principals: dict[bytes, str] = {}
     grants: dict[str, tuple[PrincipalGrant, ...]] = {}
     actors = (
@@ -348,9 +337,7 @@ def _catalog_authority(keys: Mapping[str, bytes]) -> TrustedServiceAuthority:
     )
 
 
-def _order_service_config(
-    *, account_ref: str, policy_ref: str, endpoint: str
-) -> Any:
+def _order_service_config(*, account_ref: str, policy_ref: str, endpoint: str) -> Any:
     service_id = _ORDER_SERVICE_IDS[account_ref]
     return parse_service_config(
         {
@@ -571,9 +558,7 @@ def _account_owner(
         instrument_registry = InstrumentRiskRegistry((instrument_metadata,))
         bt_api = BtApi(debug=False)
         bt_api.exchange_feeds[_EXCHANGE] = provider
-        journal = RiskOrderJournal(
-            str(journal_path), writer_id=f"afi-ordinary-{account_ref}"
-        )
+        journal = RiskOrderJournal(str(journal_path), writer_id=f"afi-ordinary-{account_ref}")
         resources["bt_api"] = bt_api
         resources["journal"] = journal
         try:
@@ -720,13 +705,13 @@ async def _publish_via_http(
     max_notional: str,
 ) -> dict[str, object]:
     base = f"/api/v1/risk-policies/accounts/{account_ref}/policies"
-    draft = await client.post(base, json=_policy_body(policy_ref, max_notional), headers=maker_headers)
+    draft = await client.post(
+        base, json=_policy_body(policy_ref, max_notional), headers=maker_headers
+    )
     assert draft.status_code == 201, draft.text
     draft_payload = draft.json()
     assert draft_payload["policy_ref"] == policy_ref and draft_payload["state"] == "draft"
-    maker_approval = await client.post(
-        f"{base}/{policy_ref}/approve", headers=maker_headers
-    )
+    maker_approval = await client.post(f"{base}/{policy_ref}/approve", headers=maker_headers)
     assert maker_approval.status_code == 403, maker_approval.text
     checker_draft = await client.post(
         base,
@@ -734,18 +719,12 @@ async def _publish_via_http(
         headers=checker_headers,
     )
     assert checker_draft.status_code == 403, checker_draft.text
-    approval = await client.post(
-        f"{base}/{policy_ref}/approve", headers=checker_headers
-    )
+    approval = await client.post(f"{base}/{policy_ref}/approve", headers=checker_headers)
     assert approval.status_code == 200, approval.text
     assert approval.json()["state"] == "approved", approval.json()
-    checker_publish = await client.post(
-        f"{base}/{policy_ref}/publish", headers=checker_headers
-    )
+    checker_publish = await client.post(f"{base}/{policy_ref}/publish", headers=checker_headers)
     assert checker_publish.status_code == 403, checker_publish.text
-    published = await client.post(
-        f"{base}/{policy_ref}/publish", headers=maker_headers
-    )
+    published = await client.post(f"{base}/{policy_ref}/publish", headers=maker_headers)
     assert published.status_code == 200, published.text
     receipt = published.json()
     assert receipt["state"] == "published" and receipt["policy_ref"] == policy_ref
@@ -872,6 +851,7 @@ async def test_authenticated_ordinary_account_policy_partially_activates_a_and_r
     )
     confirmations = ConfirmedPolicyStore(str(confirmation_path))
     resolver = PolicyCatalogAccountAdmissionResolver(catalog, confirmations)
+
     def catalog_resources(component: str, _instance_id: str, _options: Any, _scope: WireScope):
         if component != "risk":
             raise AssertionError(f"unexpected component: {component}")
@@ -1097,13 +1077,20 @@ async def test_authenticated_ordinary_account_policy_partially_activates_a_and_r
             keys=keys,
         )
         assert b2_risk_path == risk_paths[_ACCOUNT_B]
-        assert b2_resources["account_scope"].account_id == first_resources[_ACCOUNT_B]["account_scope"].account_id
+        assert (
+            b2_resources["account_scope"].account_id
+            == first_resources[_ACCOUNT_B]["account_scope"].account_id
+        )
         owners.append(b2_owner)
         assert not b2_owner.start(), b2_owner.diagnostics()
         b2_diagnostics = b2_owner.diagnostics()
         assert b2_diagnostics["state"] == "failed", b2_diagnostics
-        assert b2_diagnostics["resource_error_code"] == "ACCOUNT_POLICY_NOT_EFFECTIVE", b2_diagnostics
-        assert b2_diagnostics["host_cleanup"]["start_failure"] == "ACCOUNT_POLICY_NOT_EFFECTIVE", b2_diagnostics
+        assert b2_diagnostics["resource_error_code"] == "ACCOUNT_POLICY_NOT_EFFECTIVE", (
+            b2_diagnostics
+        )
+        assert b2_diagnostics["host_cleanup"]["start_failure"] == "ACCOUNT_POLICY_NOT_EFFECTIVE", (
+            b2_diagnostics
+        )
         assert b2_diagnostics["host_cleanup"]["cleanup_failures"] == (), b2_diagnostics
         assert b2_resources["resolved_policy"].policy_ref == _POLICY_REFS[_ACCOUNT_B]["new"]
         b2_owner.close()

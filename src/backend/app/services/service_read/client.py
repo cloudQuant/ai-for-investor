@@ -48,9 +48,7 @@ __all__ = [
     "PAPER_CONTROL_MODES",
 ]
 
-PAPER_CONTROL_MODES = frozenset(
-    {"execution_only", "execution_risk", "execution_risk_monitor"}
-)
+PAPER_CONTROL_MODES = frozenset({"execution_only", "execution_risk", "execution_risk_monitor"})
 
 RISK_POLICY_BUDGET_MAKER_OPERATIONS = frozenset(
     {
@@ -289,10 +287,7 @@ class PaperSubmitBinding:
     execution_scope: Any = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if (
-            type(self.control_mode) is not str
-            or self.control_mode not in PAPER_CONTROL_MODES
-        ):
+        if type(self.control_mode) is not str or self.control_mode not in PAPER_CONTROL_MODES:
             raise ServiceReadContractError("INVALID_PAPER_CONTROL_MODE")
         for value, code in (
             (self.mount, "INVALID_MOUNT"),
@@ -418,9 +413,8 @@ class PaperLegacyImportBinding:
             raise ServiceReadContractError("INVALID_PAPER_LEGACY_SYMBOL_BINDINGS")
         legacy_symbols = [item.legacy_symbol for item in self.symbol_bindings]
         instruments = {item.instrument for item in binding.paper_owner_domain.instruments}
-        if (
-            len(legacy_symbols) != len(set(legacy_symbols))
-            or any(item.target_instrument not in instruments for item in self.symbol_bindings)
+        if len(legacy_symbols) != len(set(legacy_symbols)) or any(
+            item.target_instrument not in instruments for item in self.symbol_bindings
         ):
             raise ServiceReadContractError("INVALID_PAPER_LEGACY_SYMBOL_BINDINGS")
 
@@ -557,7 +551,9 @@ class RiskPolicyBudgetBinding:
         scope_refs = [self.management_scope_ref, *members.values()]
         if len(set(scope_refs)) != len(scope_refs):
             raise ServiceReadContractError("DUPLICATE_SCOPE_REF")
-        object.__setattr__(self, "member_scope_refs", MappingProxyType(dict(sorted(members.items()))))
+        object.__setattr__(
+            self, "member_scope_refs", MappingProxyType(dict(sorted(members.items())))
+        )
 
     @property
     def operations(self) -> frozenset[str]:
@@ -620,9 +616,7 @@ class RiskAccountPolicyBinding:
     @property
     def expected_principal_ref(self) -> str:
         return (
-            self.checker_principal_ref
-            if self.actor_role == "checker"
-            else self.maker_principal_ref
+            self.checker_principal_ref if self.actor_role == "checker" else self.maker_principal_ref
         )
 
 

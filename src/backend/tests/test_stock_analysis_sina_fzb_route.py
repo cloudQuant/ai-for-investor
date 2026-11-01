@@ -24,9 +24,7 @@ _SELECTION_JSON = {
 }
 
 
-async def _register_and_login(
-    client: AsyncClient, username: str
-) -> tuple[dict[str, str], str]:
+async def _register_and_login(client: AsyncClient, username: str) -> tuple[dict[str, str], str]:
     registration = await client.post(
         "/api/v1/auth/register",
         json={
@@ -116,9 +114,7 @@ async def test_sina_selector_route_auth_ownership_and_sqlite_json_round_trip(
 
     async with database.async_session_maker() as session:
         legacy_row = await session.scalar(
-            select(StockAnalysisTaskModel).where(
-                StockAnalysisTaskModel.id == legacy_task_id
-            )
+            select(StockAnalysisTaskModel).where(StockAnalysisTaskModel.id == legacy_task_id)
         )
         assert legacy_row is not None
         legacy_parameters = dict(legacy_row.parameters_json or {})
@@ -128,9 +124,7 @@ async def test_sina_selector_route_auth_ownership_and_sqlite_json_round_trip(
 
     async with database.async_session_maker() as session:
         reloaded_legacy = await session.scalar(
-            select(StockAnalysisTaskModel).where(
-                StockAnalysisTaskModel.id == legacy_task_id
-            )
+            select(StockAnalysisTaskModel).where(StockAnalysisTaskModel.id == legacy_task_id)
         )
         assert reloaded_legacy is not None
         assert reloaded_legacy.parameters_json is not None

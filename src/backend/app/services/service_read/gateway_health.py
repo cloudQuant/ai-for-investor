@@ -85,10 +85,15 @@ class GatewayHealthView:
             raise GatewayHealthContractError()
         ready = owner_status["ready"]
         fresh_for = owner_status["fresh_for_seconds"]
-        if type(ready) is not bool or isinstance(fresh_for, bool) or type(fresh_for) not in {
-            int,
-            float,
-        }:
+        if (
+            type(ready) is not bool
+            or isinstance(fresh_for, bool)
+            or type(fresh_for)
+            not in {
+                int,
+                float,
+            }
+        ):
             raise GatewayHealthContractError()
         fresh_for = float(fresh_for)
         if not math.isfinite(fresh_for) or fresh_for < 0:

@@ -165,9 +165,7 @@ class ReadAccess:
         if set(normalized_submit) != set(self.allow_order_submit_scope_refs):
             raise ServiceReadAccessError("ORDER_SUBMIT_BINDING_MISMATCH")
         if normalized_submit:
-            if not inspect.iscoroutinefunction(
-                getattr(self.worker, "submit_manual_order", None)
-            ):
+            if not inspect.iscoroutinefunction(getattr(self.worker, "submit_manual_order", None)):
                 raise ServiceReadAccessError("INVALID_WORKER")
             identity = self.application_identity
             role_value = getattr(getattr(identity, "role", None), "value", None)
@@ -208,11 +206,10 @@ class ReadAccess:
                 for binding in normalized_paper.values()
             ):
                 raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
-            if (
-                len({binding.scope_ref for binding in normalized_paper.values()})
-                != len(normalized_paper)
-                or len({binding.account_ref for binding in normalized_paper.values()})
-                != len(normalized_paper)
+            if len({binding.scope_ref for binding in normalized_paper.values()}) != len(
+                normalized_paper
+            ) or len({binding.account_ref for binding in normalized_paper.values()}) != len(
+                normalized_paper
             ):
                 raise ServiceReadAccessError("DUPLICATE_PAPER_OWNER_DOMAIN")
             identity = self.application_identity
@@ -301,9 +298,7 @@ class ReadAccess:
                 )
             ):
                 raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(
-            self, "approved_target_bindings", MappingProxyType(normalized_approved)
-        )
+        object.__setattr__(self, "approved_target_bindings", MappingProxyType(normalized_approved))
         if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
             raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
 
@@ -529,7 +524,9 @@ class ServiceReadAccessDirectory:
         if not _valid_identifier(subject) or not _valid_identifier(legacy_account_id):
             raise ServiceReadAccessError("ACCESS_DENIED")
         access = self._access_by_subject.get(subject)
-        binding = None if access is None else access.paper_legacy_import_bindings.get(legacy_account_id)
+        binding = (
+            None if access is None else access.paper_legacy_import_bindings.get(legacy_account_id)
+        )
         if access is None or binding is None or binding.owner_subject != subject:
             raise ServiceReadAccessError("ACCESS_DENIED")
         return access

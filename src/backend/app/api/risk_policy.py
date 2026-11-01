@@ -79,14 +79,8 @@ def _binding(
         or not identity.principal_ref
         or identity.principal_ref != binding.expected_principal_ref
         or binding.account_ref != account_ref
-        or (
-            binding.actor_role == "maker"
-            and current_user.sub != binding.owner_subject
-        )
-        or (
-            binding.actor_role == "checker"
-            and current_user.sub == binding.owner_subject
-        )
+        or (binding.actor_role == "maker" and current_user.sub != binding.owner_subject)
+        or (binding.actor_role == "checker" and current_user.sub == binding.owner_subject)
     ):
         raise _error(
             "RISK_ACCOUNT_POLICY_ACTOR_NOT_AUTHORIZED",
@@ -112,9 +106,7 @@ async def _catalog_call(
     arguments: dict[str, object],
 ) -> dict[str, Any]:
     try:
-        reply = await access.worker.call_risk_account_policy(
-            account_ref, operation, arguments
-        )
+        reply = await access.worker.call_risk_account_policy(account_ref, operation, arguments)
     except Exception as error:
         raise _worker_unavailable(error) from None
     if (
@@ -212,9 +204,7 @@ async def approve_account_policy(
     _require_operation(binding, "policy.approve")
     _policy_reference(policy_ref)
     result = _catalog_result(
-        await _catalog_call(
-            access, account_ref, "policy.approve", {"policy_ref": policy_ref}
-        ),
+        await _catalog_call(access, account_ref, "policy.approve", {"policy_ref": policy_ref}),
         policy_ref=policy_ref,
         states=frozenset({"approved"}),
     )
@@ -235,9 +225,7 @@ async def publish_account_policy(
     access, binding = _binding(current_user, account_ref)
     _require_operation(binding, "policy.publish")
     _policy_reference(policy_ref)
-    result = await _catalog_call(
-        access, account_ref, "policy.publish", {"policy_ref": policy_ref}
-    )
+    result = await _catalog_call(access, account_ref, "policy.publish", {"policy_ref": policy_ref})
     if (
         result.get("policy_ref") != policy_ref
         or type(result.get("policy_version")) is not str
@@ -270,9 +258,7 @@ async def read_account_policy(
     _require_operation(binding, "policy.confirmation.read")
     _policy_reference(policy_ref)
     result = _catalog_result(
-        await _catalog_call(
-            access, account_ref, "policy.inspect", {"policy_ref": policy_ref}
-        ),
+        await _catalog_call(access, account_ref, "policy.inspect", {"policy_ref": policy_ref}),
         policy_ref=policy_ref,
         states=frozenset({"draft", "approved", "published"}),
     )

@@ -226,9 +226,7 @@ class ServiceMarketDeployment:
             raise ServiceMarketDeploymentError("INVALID_DEPLOYMENT") from None
         return cls(profiles)
 
-    def configured_routes(
-        self, subject: str, source: str, symbols: list[str]
-    ) -> dict[str, Any]:
+    def configured_routes(self, subject: str, source: str, symbols: list[str]) -> dict[str, Any]:
         """Return only exact subject/source/symbol bindings known to deployment."""
 
         if type(subject) is not str or not subject or type(source) is not str:
@@ -264,9 +262,7 @@ class ServiceMarketDeployment:
             return None
         return profile.history_routes.get((source.strip().upper(), symbol, timeframe))
 
-    def has_configured_history_symbol(
-        self, subject: str, source: str, symbol: str
-    ) -> bool:
+    def has_configured_history_symbol(self, subject: str, source: str, symbol: str) -> bool:
         """Whether this exact subject has any history binding for the symbol."""
 
         if (
@@ -311,9 +307,7 @@ class ServiceMarketDeployment:
             profile = self._profiles.get(subject)
             if profile is None:
                 raise ServiceMarketDeploymentError("SUBJECT_NOT_CONFIGURED")
-            configured_key = profile.history_routes.get(
-                (source.strip().upper(), symbol, timeframe)
-            )
+            configured_key = profile.history_routes.get((source.strip().upper(), symbol, timeframe))
             if configured_key is None or configured_key != key:
                 raise ServiceMarketDeploymentError("HISTORY_BINDING_NOT_CONFIGURED")
             worker = self._workers.get(subject)
@@ -346,10 +340,7 @@ class ServiceMarketDeployment:
             keys: list[Any] = []
             seen_streams: set[str] = set()
             for symbol, key in routes.items():
-                if (
-                    type(symbol) is not str
-                    or profile.routes.get(("OKX", symbol)) != key
-                ):
+                if type(symbol) is not str or profile.routes.get(("OKX", symbol)) != key:
                     raise ServiceMarketDeploymentError("MARKET_BINDING_NOT_CONFIGURED")
                 if key.stream_id in seen_streams:
                     raise ServiceMarketDeploymentError("DUPLICATE_MARKET_KEY")
@@ -494,9 +485,7 @@ class _ServiceMarketOwner:
                     request = None
                 if self._stop.is_set():
                     if isinstance(request, _ReadRequest):
-                        request.results = _failed_results(
-                            request.keys, "SERVICE_MARKET_CLOSED"
-                        )
+                        request.results = _failed_results(request.keys, "SERVICE_MARKET_CLOSED")
                         request.done.set()
                     elif isinstance(request, _HistoryReadRequest):
                         request.error_code = "SERVICE_MARKET_CLOSED"
@@ -558,10 +547,13 @@ class _ServiceMarketOwner:
         deadline = time.monotonic() + request.wait_ms / 1000.0
         while True:
             self._poll_clients()
-            if all(
-                key.stream_id in self._latest or key.stream_id in self._client_errors
-                for key in request.keys
-            ) or time.monotonic() >= deadline:
+            if (
+                all(
+                    key.stream_id in self._latest or key.stream_id in self._client_errors
+                    for key in request.keys
+                )
+                or time.monotonic() >= deadline
+            ):
                 break
             time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
         request.results = {
@@ -716,11 +708,11 @@ class _ServiceMarketOwner:
             try:
                 self._runtime.close()
                 runtime_state = getattr(self._runtime, "state", None)
-                unregister_uncertainties = getattr(
-                    self._runtime, "unregister_uncertainties", None
-                )
-                if runtime_state == "closed" and type(unregister_uncertainties) is int and (
-                    unregister_uncertainties == 0
+                unregister_uncertainties = getattr(self._runtime, "unregister_uncertainties", None)
+                if (
+                    runtime_state == "closed"
+                    and type(unregister_uncertainties) is int
+                    and (unregister_uncertainties == 0)
                 ):
                     self._runtime = None
                 else:
@@ -831,9 +823,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
     ):
         raise ServiceMarketDeploymentError("INVALID_PROFILE")
     subject = _identifier(raw["subject"])
-    identity_raw = _exact_mapping(
-        raw["identity"], {"principal_ref", "actor_ref", "delegate_ref"}
-    )
+    identity_raw = _exact_mapping(raw["identity"], {"principal_ref", "actor_ref", "delegate_ref"})
     delegate_ref = identity_raw["delegate_ref"]
     identity = sdk["WireIdentity"](
         sdk["WireRole"].APPLICATION_CLIENT,
@@ -909,7 +899,10 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
         raise ServiceMarketDeploymentError("INVALID_TRANSPORT")
     if type(options.get("request_timeout_ms")) is not int or options["request_timeout_ms"] > 10_000:
         raise ServiceMarketDeploymentError("INVALID_TRANSPORT")
-    if type(options.get("max_message_bytes")) is not int or options["max_message_bytes"] > 1_048_576:
+    if (
+        type(options.get("max_message_bytes")) is not int
+        or options["max_message_bytes"] > 1_048_576
+    ):
         raise ServiceMarketDeploymentError("INVALID_TRANSPORT")
 
     curve_raw = raw["curve_keys"]
@@ -929,10 +922,7 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
     )
 
     market_raw = raw.get("market_bindings", [])
-    if (
-        type(market_raw) is not list
-        or len(market_raw) > _MAX_MARKET_BINDINGS_PER_SUBJECT
-    ):
+    if type(market_raw) is not list or len(market_raw) > _MAX_MARKET_BINDINGS_PER_SUBJECT:
         raise ServiceMarketDeploymentError("INVALID_MARKET_BINDINGS")
     routes: dict[tuple[str, str], Any] = {}
     for item in market_raw:
@@ -965,14 +955,13 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _MarketProfile:
     if (
         type(history_raw) is not list
         or len(history_raw) > _MAX_MARKET_HISTORY_BINDINGS_PER_SUBJECT
-        or not routes and not history_raw
+        or not routes
+        and not history_raw
     ):
         raise ServiceMarketDeploymentError("INVALID_MARKET_HISTORY_BINDINGS")
     history_routes: dict[tuple[str, str, str], Any] = {}
     for item in history_raw:
-        binding_raw = _exact_mapping(
-            item, {"source", "symbol", "timeframe", "key"}
-        )
+        binding_raw = _exact_mapping(item, {"source", "symbol", "timeframe", "key"})
         source = _identifier(binding_raw["source"]).upper()
         symbol = _identifier(binding_raw["symbol"])
         timeframe = _identifier(binding_raw["timeframe"])
@@ -1095,7 +1084,4 @@ def _safe_error_code(error: BaseException) -> str:
 
 
 def _failed_results(keys: tuple[Any, ...], code: str) -> dict[str, MarketQuoteResult]:
-    return {
-        key.stream_id: MarketQuoteResult(None, code, False)
-        for key in keys
-    }
+    return {key.stream_id: MarketQuoteResult(None, code, False) for key in keys}

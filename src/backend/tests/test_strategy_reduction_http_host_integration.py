@@ -480,17 +480,23 @@ def _paper_graph(paths: dict[str, str]):
     risk_resource = ComponentResources.borrowed(
         risk_values,
         ready=lambda: True,
-        risk_policy_bindings=(TrustedRiskPolicyBinding(_RISK_POLICY, _TEMPLATE_SCOPE, gate.policy),),
+        risk_policy_bindings=(
+            TrustedRiskPolicyBinding(_RISK_POLICY, _TEMPLATE_SCOPE, gate.policy),
+        ),
     )
-    return execution_values, risk_resource, {
-        "bt_api": bt_api,
-        "store": store,
-        "journal": journal,
-        "gate": gate,
-        "scope": execution_scope,
-        "risk_scope": risk_scope,
-        "quotes": quotes,
-    }
+    return (
+        execution_values,
+        risk_resource,
+        {
+            "bt_api": bt_api,
+            "store": store,
+            "journal": journal,
+            "gate": gate,
+            "scope": execution_scope,
+            "risk_scope": risk_scope,
+            "quotes": quotes,
+        },
+    )
 
 
 def _close_graph(graph: dict[str, Any]) -> None:
@@ -570,7 +576,10 @@ def _start_owner_thread(
             ),
         ),
     )
-    principal_grants = {_PRINCIPAL: (run_grants[0],), _STRATEGY_IDENTITY.principal_ref: (run_grants[1],)}
+    principal_grants = {
+        _PRINCIPAL: (run_grants[0],),
+        _STRATEGY_IDENTITY.principal_ref: (run_grants[1],),
+    }
     authority = TrustedServiceAuthority(
         identity=_HOST_IDENTITY,
         scope=WireScope(_DOMAIN),
@@ -1098,4 +1107,3 @@ def _unexpected_scope() -> WireScope:
 
 def _unexpected_peer() -> WireIdentity:
     raise AssertionError("unconfigured peer identity")
-

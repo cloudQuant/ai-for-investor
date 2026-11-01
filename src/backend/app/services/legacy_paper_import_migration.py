@@ -56,9 +56,7 @@ _MAX_PRESERVED_CONTEXT_BYTES = 8 * 1024 * 1024
 _MAX_CONTEXT_ROWS_PER_TABLE = 20_000
 
 
-async def _validate_runtime_instance_account_bindings(
-    session: Any, *, owner_subject: str
-) -> None:
+async def _validate_runtime_instance_account_bindings(session: Any, *, owner_subject: str) -> None:
     """Require persisted, unambiguous account links for owned runtimes.
 
     A runtime's JSON configuration is not an identity binding.  The only
@@ -119,9 +117,7 @@ async def _validate_runtime_instance_account_bindings(
     if any(instance_id not in accounts_by_instance for instance_id in runtime_units):
         raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
 
-    account_ids = sorted(
-        {next(iter(account_ids)) for account_ids in accounts_by_instance.values()}
-    )
+    account_ids = sorted({next(iter(account_ids)) for account_ids in accounts_by_instance.values()})
     if account_ids:
         account_result = await session.execute(
             select(Account.id)
@@ -138,13 +134,12 @@ async def _validate_runtime_instance_account_bindings(
         if owned_accounts != set(account_ids):
             raise LegacyPaperImportError("LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN")
 
+
 async def _read_runtime_instance_account_bindings(
     owner_subject: str,
 ) -> None:
     async with database.async_session_maker() as session:
-        await _validate_runtime_instance_account_bindings(
-            session, owner_subject=owner_subject
-        )
+        await _validate_runtime_instance_account_bindings(session, owner_subject=owner_subject)
 
 
 class LegacyPaperImportError(RuntimeError):
@@ -274,8 +269,7 @@ def _require_server_binding(binding: Any, scope: Any, domain: Any) -> dict[str, 
         or domain.max_quote_age_ns != payload["max_quote_age_ns"]
         or payload["instrument_metadata_versions"]
         != {item.instrument: item.metadata_version for item in domain.instruments}
-        or payload["opening_positions"]
-        != [item.to_payload() for item in domain.opening_positions]
+        or payload["opening_positions"] != [item.to_payload() for item in domain.opening_positions]
     ):
         raise LegacyPaperImportError("INVALID_PAPER_BINDING")
     return payload
@@ -402,22 +396,36 @@ async def _preserved_context(
 
     categories: dict[str, list[dict[str, Any]]] = {
         "risk_rules": await _bounded_rows(
-            session, RiskRule, RiskRule.user_id == owner_subject, RiskRule.paper_account_id == account_id
+            session,
+            RiskRule,
+            RiskRule.user_id == owner_subject,
+            RiskRule.paper_account_id == account_id,
         ),
         "alerts": alerts,
         "alert_rules": (
-            await _bounded_rows(session, AlertRule, AlertRule.user_id == owner_subject, AlertRule.id.in_(alert_rule_ids))
+            await _bounded_rows(
+                session,
+                AlertRule,
+                AlertRule.user_id == owner_subject,
+                AlertRule.id.in_(alert_rule_ids),
+            )
             if alert_rule_ids
             else []
         ),
         "alert_notifications": (
-            await _bounded_rows(session, AlertNotification, AlertNotification.alert_id.in_(alert_ids))
+            await _bounded_rows(
+                session, AlertNotification, AlertNotification.alert_id.in_(alert_ids)
+            )
             if alert_ids
             else []
         ),
         "strategy_target_approvals": scoped_approvals,
         "strategy_target_approval_events": (
-            await _bounded_rows(session, StrategyTargetApprovalEvent, StrategyTargetApprovalEvent.approval_ref.in_(approval_refs))
+            await _bounded_rows(
+                session,
+                StrategyTargetApprovalEvent,
+                StrategyTargetApprovalEvent.approval_ref.in_(approval_refs),
+            )
             if approval_refs
             else []
         ),
@@ -433,7 +441,9 @@ async def _preserved_context(
             else []
         ),
         "strategy_approval_authority_epoch": await _bounded_rows(
-            session, StrategyApprovalAuthorityEpoch, StrategyApprovalAuthorityEpoch.owner_subject == owner_subject
+            session,
+            StrategyApprovalAuthorityEpoch,
+            StrategyApprovalAuthorityEpoch.owner_subject == owner_subject,
         ),
         "paper_review_reports": await _bounded_rows(
             session, PaperReviewReport, PaperReviewReport.paper_account_id == account_id
@@ -536,9 +546,7 @@ async def _freeze_source(
     imported: Any,
 ) -> LegacyPaperImportReceipt:
     account_id = str(binding_payload["legacy_account_id"])
-    preflight = await inspect_stable_legacy_paper_account(
-        service, account_id, owner_subject
-    )
+    preflight = await inspect_stable_legacy_paper_account(service, account_id, owner_subject)
     if not preflight.complete or preflight.digest is None:
         raise LegacyPaperImportError("LEGACY_INVENTORY_UNAVAILABLE")
     if preflight.account.get("user_id") != owner_subject:
@@ -601,17 +609,23 @@ async def _freeze_source(
                         raise LegacyPaperImportError("LEGACY_INVENTORY_CHANGED")
                     return existing
 
-                if await session.scalar(
-                    select(LegacyPaperCutoverReceipt.id)
-                    .where(LegacyPaperCutoverReceipt.legacy_account_id == account_id)
-                    .limit(1)
-                ) is not None:
+                if (
+                    await session.scalar(
+                        select(LegacyPaperCutoverReceipt.id)
+                        .where(LegacyPaperCutoverReceipt.legacy_account_id == account_id)
+                        .limit(1)
+                    )
+                    is not None
+                ):
                     raise LegacyPaperImportError("LEGACY_PAPER_ALREADY_CUT_OVER")
-                if await session.scalar(
-                    select(LegacyPaperWriterLease.id)
-                    .where(LegacyPaperWriterLease.account_id == account_id)
-                    .limit(1)
-                ) is not None:
+                if (
+                    await session.scalar(
+                        select(LegacyPaperWriterLease.id)
+                        .where(LegacyPaperWriterLease.account_id == account_id)
+                        .limit(1)
+                    )
+                    is not None
+                ):
                     raise LegacyPaperImportError("LEGACY_WRITES_IN_PROGRESS")
 
                 locked, document, document_json = await _source_snapshot_in_session(
@@ -659,9 +673,7 @@ async def _freeze_source(
                     cash_currency=str(binding_payload["cash_currency"]),
                     opening_cash=format(imported.opening_cash, "f"),
                     cumulative_fees=format(imported.cumulative_fees, "f"),
-                    unallocated_equity_residual=format(
-                        imported.unallocated_equity_residual, "f"
-                    ),
+                    unallocated_equity_residual=format(imported.unallocated_equity_residual, "f"),
                     source_order_count=locked.order_count or 0,
                     source_position_count=locked.position_count or 0,
                     source_trade_count=locked.trade_count or 0,
@@ -809,9 +821,7 @@ async def inspect_legacy_paper_import_target(
             "state": receipt.state,
             "scope_key": receipt.scope_key,
             "account_key": receipt.account_key,
-            "unallocated_equity_residual": format(
-                receipt.unallocated_equity_residual, "f"
-            ),
+            "unallocated_equity_residual": format(receipt.unallocated_equity_residual, "f"),
             "import_sha256": receipt.import_sha256,
             "domain_sha256": receipt.domain_sha256,
         },
@@ -855,11 +865,16 @@ async def _target_call(
         action = operation.rsplit(".", 1)[-1].upper()
         raise LegacyPaperImportError(f"TARGET_IMPORT_{action}_UNCERTAIN")
     if code == "IMPORT_STORE_UNAVAILABLE":
-        suffix = "UNCERTAIN" if operation in {
-            "paper.import.prepare",
-            "paper.import.activate",
-            "paper.import.abort",
-        } else "UNAVAILABLE"
+        suffix = (
+            "UNCERTAIN"
+            if operation
+            in {
+                "paper.import.prepare",
+                "paper.import.activate",
+                "paper.import.abort",
+            }
+            else "UNAVAILABLE"
+        )
         raise LegacyPaperImportError(f"TARGET_IMPORT_{suffix}")
     if code in {"SCOPE_DENIED", "SOURCE_OWNER_MISMATCH"}:
         raise LegacyPaperImportError("TARGET_IMPORT_BINDING_MISMATCH")
@@ -870,12 +885,9 @@ async def _target_call(
     raise LegacyPaperImportError("TARGET_IMPORT_RPC_FAILED")
 
 
-def _execution_status_from_projection(
-    projection: Mapping[str, Any], *, account_key: str
-) -> Any:
+def _execution_status_from_projection(projection: Mapping[str, Any], *, account_key: str) -> Any:
     if (
-        set(projection)
-        != {"source_receipt", "active_account_import_state", "owner_domain_exists"}
+        set(projection) != {"source_receipt", "active_account_import_state", "owner_domain_exists"}
         or type(projection.get("owner_domain_exists")) is not bool
         or type(projection.get("active_account_import_state")) not in {str, type(None)}
         or projection.get("active_account_import_state")
@@ -1005,9 +1017,7 @@ def _require_active_import_row_for_cutover(
         or type(getattr(row, "target_account_key", None)) is not str
         or row.target_account_key != scope.account_key
         or getattr(row, "binding_sha256", None)
-        != hashlib.sha256(
-            _canonical_json(dict(binding_payload)).encode("utf-8")
-        ).hexdigest()
+        != hashlib.sha256(_canonical_json(dict(binding_payload)).encode("utf-8")).hexdigest()
         or row.cash_currency != binding_payload["cash_currency"]
         or any(type(value) is not int or value < 0 for value in counts)
         or sum(counts) <= 0
@@ -1084,8 +1094,7 @@ def _require_imported_cutover_receipt_matches(
         or getattr(import_receipt, "target_domain_sha256", None)
         != binding_payload["paper_domain_sha256"]
         or getattr(cutover_receipt, "source_import_receipt_id", None) != import_receipt.id
-        or getattr(cutover_receipt, "source_import_generation", None)
-        != import_receipt.generation
+        or getattr(cutover_receipt, "source_import_generation", None) != import_receipt.generation
         or getattr(cutover_receipt, "target_import_sha256", None)
         != import_receipt.target_import_sha256
         or getattr(cutover_receipt, "source_order_count", None) != source_counts[0]
@@ -1189,8 +1198,7 @@ async def _load_verified_import_for_cutover(
         amounts_match = (
             row.opening_cash == format(imported.opening_cash, "f")
             and row.cumulative_fees == format(imported.cumulative_fees, "f")
-            and _decimal(row.unallocated_equity_residual)
-            == imported.unallocated_equity_residual
+            and _decimal(row.unallocated_equity_residual) == imported.unallocated_equity_residual
             and imported.unallocated_equity_residual == Decimal(0)
         )
         if not counts_match or not amounts_match:
@@ -1200,9 +1208,7 @@ async def _load_verified_import_for_cutover(
     except Exception:
         raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH") from None
 
-    inventory = await inspect_stable_legacy_paper_account(
-        service, account_id, owner_subject
-    )
+    inventory = await inspect_stable_legacy_paper_account(service, account_id, owner_subject)
     if (
         not inventory.complete
         or inventory.digest != row.source_inventory_sha256
@@ -1220,9 +1226,7 @@ async def _load_verified_import_for_cutover(
         )
     except LegacyPaperImportError as error:
         raise LegacyPaperInventoryError(error.code) from None
-    _require_target_import_active_for_cutover(
-        status, imported=imported, domain=domain, scope=scope
-    )
+    _require_target_import_active_for_cutover(status, imported=imported, domain=domain, scope=scope)
     return _VerifiedImportedPaperCutover(
         import_receipt=row,
         imported=imported,
@@ -1284,18 +1288,18 @@ async def prepare_imported_legacy_paper_cutover(
                     import_row.id != facts.import_receipt.id
                     or import_row.source_inventory_sha256
                     != facts.import_receipt.source_inventory_sha256
-                    or import_row.target_import_sha256
-                    != facts.import_receipt.target_import_sha256
+                    or import_row.target_import_sha256 != facts.import_receipt.target_import_sha256
                     or import_row.generation != facts.import_receipt.generation
                 ):
-                    raise LegacyPaperInventoryError(
-                        "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"
+                    raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH")
+                if (
+                    await session.scalar(
+                        select(LegacyPaperWriterLease.id)
+                        .where(LegacyPaperWriterLease.account_id == account_id)
+                        .limit(1)
                     )
-                if await session.scalar(
-                    select(LegacyPaperWriterLease.id)
-                    .where(LegacyPaperWriterLease.account_id == account_id)
-                    .limit(1)
-                ) is not None:
+                    is not None
+                ):
                     raise LegacyPaperInventoryError("LEGACY_WRITES_IN_PROGRESS")
 
                 locked, _, _ = await _source_snapshot_in_session(
@@ -1504,9 +1508,15 @@ async def migrate_nonempty_legacy_paper_account(
         source_document = {
             "schema": "afi.legacy-paper-inventory.v1",
             "account": dict(preflight.account),
-            "orders": sorted((_model_row(row) for row in service_orders), key=lambda row: row["id"]),
-            "positions": sorted((_model_row(row) for row in service_positions), key=lambda row: row["id"]),
-            "trades": sorted((_model_row(row) for row in service_trades), key=lambda row: row["id"]),
+            "orders": sorted(
+                (_model_row(row) for row in service_orders), key=lambda row: row["id"]
+            ),
+            "positions": sorted(
+                (_model_row(row) for row in service_positions), key=lambda row: row["id"]
+            ),
+            "trades": sorted(
+                (_model_row(row) for row in service_trades), key=lambda row: row["id"]
+            ),
         }
         _validate_source_pnl_projection(source_document["account"])
         preflight_json = json_module.dumps(
@@ -1547,7 +1557,10 @@ async def migrate_nonempty_legacy_paper_account(
     )
     source_row = await _read_source_receipt(imported.source_account_id)
     if source_row is None:
-        if initial_status.owner_domain_exists or initial_status.active_account_import_state is not None:
+        if (
+            initial_status.owner_domain_exists
+            or initial_status.active_account_import_state is not None
+        ):
             raise LegacyPaperImportError("TARGET_ACCOUNT_ALREADY_OWNED")
         if initial_status.source_receipt is not None:
             raise LegacyPaperImportError("TARGET_IMPORT_WITHOUT_SOURCE_RECEIPT")
@@ -1705,7 +1718,10 @@ async def rollback_legacy_paper_import(
         raise LegacyPaperImportError("ACTIVE_LEGACY_IMPORT_CANNOT_ROLL_BACK")
     if source_row.state not in {"PREPARED", "COMMITTED", "ABORTED"}:
         raise LegacyPaperImportError("INVALID_LEGACY_IMPORT_TRANSITION")
-    if source_row.target_scope_key != scope.key or source_row.target_account_key != scope.account_key:
+    if (
+        source_row.target_scope_key != scope.key
+        or source_row.target_account_key != scope.account_key
+    ):
         raise LegacyPaperImportError("TARGET_SCOPE_MISMATCH")
 
     status = await _execution_status(

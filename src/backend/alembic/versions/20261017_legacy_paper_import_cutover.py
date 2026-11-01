@@ -79,7 +79,9 @@ def _restore_sqlite_writer_fence_triggers() -> None:
             event = "OLD.account_id" if action == "DELETE" else "NEW.account_id"
             predicate = f"legacy_account_id = {event}"
             if action == "UPDATE":
-                predicate = "legacy_account_id = OLD.account_id OR legacy_account_id = NEW.account_id"
+                predicate = (
+                    "legacy_account_id = OLD.account_id OR legacy_account_id = NEW.account_id"
+                )
             name = f"trg_lpc_{table[-5:]}_{action.lower()}"
             op.execute(
                 sa.text(
@@ -137,10 +139,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     imported_count = bind.execute(
-        sa.text(
-            f"SELECT count(*) FROM {_RECEIPT} "
-            "WHERE source_kind = 'imported_legacy'"
-        )
+        sa.text(f"SELECT count(*) FROM {_RECEIPT} WHERE source_kind = 'imported_legacy'")
     ).scalar_one()
     if imported_count:
         raise RuntimeError("cannot downgrade while imported cutover receipts exist")
@@ -156,9 +155,13 @@ def downgrade() -> None:
         batch_op.drop_column("source_import_receipt_id")
         batch_op.drop_column("source_kind")
         batch_op.create_check_constraint("ck_legacy_paper_cutover_version", "receipt_version = 1")
-        batch_op.create_check_constraint("ck_legacy_paper_cutover_orders_empty", "source_order_count = 0")
+        batch_op.create_check_constraint(
+            "ck_legacy_paper_cutover_orders_empty", "source_order_count = 0"
+        )
         batch_op.create_check_constraint(
             "ck_legacy_paper_cutover_positions_empty", "source_position_count = 0"
         )
-        batch_op.create_check_constraint("ck_legacy_paper_cutover_trades_empty", "source_trade_count = 0")
+        batch_op.create_check_constraint(
+            "ck_legacy_paper_cutover_trades_empty", "source_trade_count = 0"
+        )
     _restore_sqlite_writer_fence_triggers()

@@ -185,9 +185,7 @@ class VersionBranch(Base):
 
     __tablename__ = "strategy_branches"
     __table_args__ = (
-        UniqueConstraint(
-            "strategy_id", "branch_name", name="uq_strategy_branch_strategy_name"
-        ),
+        UniqueConstraint("strategy_id", "branch_name", name="uq_strategy_branch_strategy_name"),
     )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

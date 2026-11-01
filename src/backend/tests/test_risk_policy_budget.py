@@ -50,12 +50,8 @@ def _plan(
         unallocated_amount=unallocated,
         allocations=allocations
         or (
-            AccountBudgetAllocation(
-                "account-a", Decimal("60.00"), "USD", max_increase_count=3
-            ),
-            AccountBudgetAllocation(
-                "account-b", Decimal("30.00"), "USD", max_increase_count=2
-            ),
+            AccountBudgetAllocation("account-a", Decimal("60.00"), "USD", max_increase_count=3),
+            AccountBudgetAllocation("account-b", Decimal("30.00"), "USD", max_increase_count=2),
         ),
         metric=metric,
     )
@@ -73,9 +69,7 @@ def _cross_currency_plan() -> StaticPortfolioBudgetPlan:
         total=Decimal("10"),
         unallocated=Decimal("0"),
         allocations=(
-            AccountBudgetAllocation(
-                "account-a", Decimal("3"), "EUR", max_increase_count=3
-            ),
+            AccountBudgetAllocation("account-a", Decimal("3"), "EUR", max_increase_count=3),
             AccountBudgetAllocation(
                 "account-b", Decimal("6.296296329629629633"), "USD", max_increase_count=2
             ),
@@ -100,9 +94,7 @@ def _fx_observation(
         rate_unit="QUOTE_PER_BASE",
         rate=rate,
         as_of_ns=now_ns - 1_000_000_000 if as_of_ns is None else as_of_ns,
-        valid_until_ns=now_ns + 3_600_000_000_000
-        if valid_until_ns is None
-        else valid_until_ns,
+        valid_until_ns=now_ns + 3_600_000_000_000 if valid_until_ns is None else valid_until_ns,
         source_ref="trusted-market-fx-reference",
         source_version="fx-reference-v1",
         source_generation="fx-reference-generation-7",
@@ -121,12 +113,14 @@ def test_compiled_drafts_are_accepted_by_risk_policy_and_real_catalog(tmp_path) 
     ]
     assert compiled.total_amount == "100"
     assert compiled.unallocated_amount == "10"
-    assert compiled.allocation_set_sha256 == compiled.drafts[0].catalog_content()[
-        "afi_budget"
-    ]["allocation_set_sha256"]
-    assert compiled.allocation_set_sha256 == compiled.drafts[1].catalog_content()[
-        "afi_budget"
-    ]["allocation_set_sha256"]
+    assert (
+        compiled.allocation_set_sha256
+        == compiled.drafts[0].catalog_content()["afi_budget"]["allocation_set_sha256"]
+    )
+    assert (
+        compiled.allocation_set_sha256
+        == compiled.drafts[1].catalog_content()["afi_budget"]["allocation_set_sha256"]
+    )
 
     catalog = PolicyCatalogStore(str(tmp_path / "policy-catalog.sqlite"))
     confirmations = ConfirmedPolicyStore(str(tmp_path / "confirmed-policies.sqlite"))
@@ -236,8 +230,7 @@ def test_fresh_fx_converts_exactly_and_catalog_persists_source_facts(
     with sqlite3.connect(str(catalog_path)) as reopened:
         reopened.row_factory = sqlite3.Row
         saved = reopened.execute(
-            "SELECT state, digest, content_json FROM policy_catalog_versions "
-            "WHERE reference = ?",
+            "SELECT state, digest, content_json FROM policy_catalog_versions WHERE reference = ?",
             ("afi.portfolio-demo.account-a-v3",),
         ).fetchone()
     assert saved is not None
@@ -247,6 +240,7 @@ def test_fresh_fx_converts_exactly_and_catalog_persists_source_facts(
     assert json.loads(saved["content_json"])["afi_budget"]["fx_observation"]["source_cursor"] == (
         "fx-reference-cursor-42"
     )
+
 
 def test_cross_currency_budget_fails_closed_without_current_bound_fx(
     monkeypatch: pytest.MonkeyPatch,
@@ -320,9 +314,7 @@ def test_budget_conservation_does_not_round_large_decimal_allocations() -> None:
         total=Decimal("10000000000000000000000000000.02"),
         unallocated=Decimal("0"),
         allocations=(
-            AccountBudgetAllocation(
-                "account-a", Decimal("9999999999999999999999999999.99"), "USD"
-            ),
+            AccountBudgetAllocation("account-a", Decimal("9999999999999999999999999999.99"), "USD"),
             AccountBudgetAllocation("account-b", Decimal("0.03"), "USD"),
         ),
     )
@@ -362,8 +354,16 @@ def test_budget_conservation_does_not_round_large_decimal_allocations() -> None:
             _policy_refs(),
             "MIXED_BUDGET_METRIC",
         ),
-        (_plan(), {"account-a": "afi.latest", "account-b": "afi.account-b-v1"}, "VERSIONED_POLICY_REF_REQUIRED"),
-        (_plan(), {"account-a": "afi.shared-v1", "account-b": "afi.shared-v1"}, "DUPLICATE_POLICY_REF"),
+        (
+            _plan(),
+            {"account-a": "afi.latest", "account-b": "afi.account-b-v1"},
+            "VERSIONED_POLICY_REF_REQUIRED",
+        ),
+        (
+            _plan(),
+            {"account-a": "afi.shared-v1", "account-b": "afi.shared-v1"},
+            "DUPLICATE_POLICY_REF",
+        ),
     ],
 )
 def test_invalid_static_budget_is_rejected_before_catalog_access(
@@ -412,8 +412,7 @@ def test_duplicate_account_and_unsupported_metric_are_rejected() -> None:
 
 def test_allocation_count_matches_portfolio_membership_bound() -> None:
     allocations = tuple(
-        AccountBudgetAllocation(f"account-{index}", Decimal("1"), "USD")
-        for index in range(257)
+        AccountBudgetAllocation(f"account-{index}", Decimal("1"), "USD") for index in range(257)
     )
     plan = _plan(allocations=allocations, total=Decimal("257"), unallocated=Decimal("0"))
     policy_refs = {item.account_ref: f"afi.{item.account_ref}-v1" for item in allocations}

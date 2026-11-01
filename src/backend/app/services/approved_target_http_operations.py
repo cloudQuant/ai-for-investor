@@ -182,9 +182,7 @@ async def reserve_approved_target_http_operation(
 
 async def _load_mapping(db: AsyncSession, filters: tuple[object, ...]):
     try:
-        return await db.scalar(
-            select(ApprovedTargetHttpOperation).where(*filters).limit(1)
-        )
+        return await db.scalar(select(ApprovedTargetHttpOperation).where(*filters).limit(1))
     except SQLAlchemyError:
         raise ApprovedTargetHttpOperationError(
             "APPROVAL_STORE_UNAVAILABLE", ambiguous=True

@@ -84,19 +84,23 @@ def test_legacy_metric_snapshots_are_neither_exposed_as_current_nor_reused(tmp_p
     hs300 = next(item for item in pools["items"] if item["id"] == "hs300")
 
     assert hs300["metric_snapshot"] == {"data_status": "legacy_unverified"}
-    assert service._get_metric_snapshot(
-        user_id="alice",
-        pool_id="hs300",
-        lookback_days=20,
-        timeframe="1d",
-    ) is None
+    assert (
+        service._get_metric_snapshot(
+            user_id="alice",
+            pool_id="hs300",
+            lookback_days=20,
+            timeframe="1d",
+        )
+        is None
+    )
     assert storage_path.read_bytes() == original
 
     service.refresh_pool("hs300", "alice")
     persisted = json.loads(storage_path.read_text("utf-8"))
-    assert persisted["metric_snapshots"]["alice:hs300:20:1d"] == payload["metric_snapshots"][
-        "alice:hs300:20:1d"
-    ]
+    assert (
+        persisted["metric_snapshots"]["alice:hs300:20:1d"]
+        == payload["metric_snapshots"]["alice:hs300:20:1d"]
+    )
 
 
 class FakeScannerMarketClient:

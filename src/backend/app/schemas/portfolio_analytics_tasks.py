@@ -97,10 +97,9 @@ class PortfolioAnalyticsTaskCreate(BaseModel):
             raise ValueError("facts and request portfolio references must match")
         if request.get("loss_horizon_ref") != losses.get("horizon_ref"):
             raise ValueError("request horizon must identify the supplied loss dataset")
-        if (
-            request.get("scenario_ref") != scenario.get("scenario_ref")
-            or request.get("scenario_version") != scenario.get("scenario_version")
-        ):
+        if request.get("scenario_ref") != scenario.get("scenario_ref") or request.get(
+            "scenario_version"
+        ) != scenario.get("scenario_version"):
             raise ValueError("request scenario must identify the supplied scenario dataset")
         if type(request.get("confidence")) is not str:
             raise ValueError("confidence must be a decimal string")

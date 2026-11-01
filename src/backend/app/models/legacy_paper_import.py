@@ -65,9 +65,7 @@ class LegacyPaperImportReceipt(Base):
         Index("ix_legacy_paper_import_target_scope", "target_scope_key"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     legacy_account_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("paper_trading_accounts.id", ondelete="RESTRICT"), nullable=False
     )

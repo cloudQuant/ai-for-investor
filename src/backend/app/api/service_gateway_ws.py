@@ -35,10 +35,7 @@ async def stream_service_gateway_health(
     """
 
     current_user, accepted_subprotocol = get_websocket_current_user(websocket)
-    if (
-        type(current_user) is not TokenPayload
-        or accepted_subprotocol != "access-token"
-    ):
+    if type(current_user) is not TokenPayload or accepted_subprotocol != "access-token":
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 

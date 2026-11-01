@@ -85,6 +85,7 @@ def _legacy_paper_writer_fence(
 
     return decorate
 
+
 _MIN_SIZE_KEYS = (
     "min_order_size",
     "min_order_qty",

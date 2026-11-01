@@ -925,7 +925,9 @@ class LiveTradingManager:
             try:
                 if instance.get("_server_service_execution_managed") is True:
                     continue
-                execution_mode = str(instance.get("_server_execution_mode") or "live").strip().lower()
+                execution_mode = (
+                    str(instance.get("_server_execution_mode") or "live").strip().lower()
+                )
                 if execution_mode == "simulation":
                     continue
                 if execution_mode != "live":
@@ -1721,9 +1723,7 @@ class LiveTradingManager:
         if server_attested_ai_research_paper:
             from app.services.workspace_unit_runtime import _UNIT_RUN_PY
 
-            expected_runner_digest = hashlib.sha256(
-                _UNIT_RUN_PY.encode("utf-8")
-            ).hexdigest()
+            expected_runner_digest = hashlib.sha256(_UNIT_RUN_PY.encode("utf-8")).hexdigest()
             if (
                 not profile.server_attested_ai_research_strategy_ids
                 or profile.strategy_id != SERVER_ATTESTED_AI_RESEARCH_STRATEGY_ID
@@ -1742,9 +1742,7 @@ class LiveTradingManager:
                 "strategy_id": strategy_id,
             },
             run_id=uuid.uuid4().hex,
-            allow_server_attested_ai_research_strategy_ids=(
-                server_attested_ai_research_paper
-            ),
+            allow_server_attested_ai_research_strategy_ids=(server_attested_ai_research_paper),
         )
         if resolved is None or resolved[0] is not profile:
             raise ServiceStrategyProfileError("STRATEGY_PROFILE_MAPPING_MISMATCH")

@@ -223,7 +223,10 @@ async def create_approved_target(
     if policy_head is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "APPROVAL_POLICY_STALE", "message": "No AFI approval policy is published."},
+            detail={
+                "code": "APPROVAL_POLICY_STALE",
+                "message": "No AFI approval policy is published.",
+            },
         )
     policy_row = await db.scalar(
         select(StrategyOrderApprovalPolicyVersion).where(
@@ -240,7 +243,10 @@ async def create_approved_target(
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "APPROVAL_POLICY_STALE", "message": "The AFI approval policy is unavailable."},
+            detail={
+                "code": "APPROVAL_POLICY_STALE",
+                "message": "The AFI approval policy is unavailable.",
+            },
         )
 
     membership_version: int | None = None
@@ -256,7 +262,10 @@ async def create_approved_target(
         if membership_version is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "APPROVAL_POLICY_STALE", "message": "The configured membership is unavailable."},
+                detail={
+                    "code": "APPROVAL_POLICY_STALE",
+                    "message": "The configured membership is unavailable.",
+                },
             )
         membership = await db.scalar(
             select(PortfolioCompositionVersion).where(
@@ -268,7 +277,10 @@ async def create_approved_target(
         if membership is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "APPROVAL_POLICY_STALE", "message": "The configured membership is unavailable."},
+                detail={
+                    "code": "APPROVAL_POLICY_STALE",
+                    "message": "The configured membership is unavailable.",
+                },
             )
         members = membership.members
         if not isinstance(members, list) or not any(
@@ -279,7 +291,10 @@ async def create_approved_target(
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail={"code": "APPROVAL_SCOPE_MISMATCH", "message": "The strategy is outside the configured membership."},
+                detail={
+                    "code": "APPROVAL_SCOPE_MISMATCH",
+                    "message": "The strategy is outside the configured membership.",
+                },
             )
         membership_hash = portfolio_membership_sha256(membership)
 
@@ -480,7 +495,11 @@ async def submit_approved_target(
     if record is None:
         raise _unavailable("APPROVAL_OUTCOME_UNKNOWN")
     state = record.get("state")
-    outcome = "unknown_review_required" if state == "UNKNOWN" or record.get("review_required") else "durable_record"
+    outcome = (
+        "unknown_review_required"
+        if state == "UNKNOWN" or record.get("review_required")
+        else "durable_record"
+    )
     return {
         "operation_kind": "approved_strategy_target",
         "intent_id": claim.intent_id,
@@ -517,7 +536,10 @@ def _require_idempotency_key(value: str | None) -> str:
     if type(value) is not str or not _KEY_RE.fullmatch(value):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "IDEMPOTENCY_KEY_REQUIRED", "message": "A valid Idempotency-Key is required."},
+            detail={
+                "code": "IDEMPOTENCY_KEY_REQUIRED",
+                "message": "A valid Idempotency-Key is required.",
+            },
         )
     return value
 
@@ -538,13 +560,21 @@ def _map_code(code: str, *, ambiguous: bool = False) -> HTTPException:
     if code in {"APPROVAL_IDENTITY_MISMATCH", "APPROVAL_SCOPE_MISMATCH"}:
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": code, "message": "The approved target is outside this authorized scope."},
+            detail={
+                "code": code,
+                "message": "The approved target is outside this authorized scope.",
+            },
         )
     if code == "APPROVAL_TARGET_INVALID":
-        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": code})
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": code}
+        )
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
-        detail={"code": code, "message": "The approved target is no longer eligible for this operation."},
+        detail={
+            "code": code,
+            "message": "The approved target is no longer eligible for this operation.",
+        },
     )
 
 
@@ -554,10 +584,17 @@ def _execution_error(code: str) -> HTTPException:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": code, "message": "Execution denied this approved-target scope."},
         )
-    if code in {"NOT_REGISTERED", "CAPABILITY_UNAVAILABLE", "POLICY_REQUIREMENT_UNMET", "STALE_EPOCH"}:
+    if code in {
+        "NOT_REGISTERED",
+        "CAPABILITY_UNAVAILABLE",
+        "POLICY_REQUIREMENT_UNMET",
+        "STALE_EPOCH",
+    }:
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": code})
     if code in {"INVALID_REQUEST", "APPROVAL_TARGET_INVALID"}:
-        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": code})
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"code": code}
+        )
     if code in {
         "APPROVAL_NOT_FOUND",
         "APPROVAL_OWNER_BINDING_MISMATCH",
@@ -602,5 +639,8 @@ def _not_configured() -> HTTPException:
 def _unavailable(code: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"code": code, "message": "The approved-target outcome is unavailable; inspect the same operation key."},
+        detail={
+            "code": code,
+            "message": "The approved-target outcome is unavailable; inspect the same operation key.",
+        },
     )

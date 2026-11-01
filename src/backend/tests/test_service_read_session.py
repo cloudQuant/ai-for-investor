@@ -39,9 +39,7 @@ def _account_scope(account_ref: str = "account-a") -> WireScope:
     return WireScope("paper:venue-a", account_ref=account_ref)
 
 
-def _registered(
-    mount: str, scope_ref: str, operation: str | frozenset[str], scope: WireScope
-):
+def _registered(mount: str, scope_ref: str, operation: str | frozenset[str], scope: WireScope):
     operations = frozenset({operation}) if type(operation) is str else operation
     return SimpleNamespace(
         mount=mount,

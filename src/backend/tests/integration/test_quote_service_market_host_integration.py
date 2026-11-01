@@ -247,9 +247,7 @@ def _market_deployment(
                             },
                         },
                     },
-                    "scope_claims": {
-                        _SCOPE_REF: {"execution_domain_ref": _DOMAIN_REF}
-                    },
+                    "scope_claims": {_SCOPE_REF: {"execution_domain_ref": _DOMAIN_REF}},
                     "peer_identities": {
                         _SERVICE_ID: {
                             "principal_ref": _SERVICE_PRINCIPAL,
@@ -363,9 +361,7 @@ def test_quote_http_route_reads_real_service_market_client_and_host(
                 provider.publish_if_due()
             host.close()
             host_facts["state"] = host.state
-            host_facts["active_registrations"] = host.summary["market"][
-                "active_registrations"
-            ]
+            host_facts["active_registrations"] = host.summary["market"]["active_registrations"]
         except BaseException as error:
             host_errors.append(str(getattr(error, "code", type(error).__name__)))
             host_ready.set()
@@ -420,9 +416,7 @@ def test_quote_http_route_reads_real_service_market_client_and_host(
 
         app = FastAPI()
         app.include_router(quote_api.router, prefix="/api/v1/quote")
-        app.dependency_overrides[quote_api.get_current_user] = lambda: SimpleNamespace(
-            sub=_SUBJECT
-        )
+        app.dependency_overrides[quote_api.get_current_user] = lambda: SimpleNamespace(sub=_SUBJECT)
         app.dependency_overrides[quote_api.get_db] = get_db_override
         app.dependency_overrides[quote_api.get_quote_service] = lambda: service
 

@@ -48,9 +48,7 @@ _DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _INSTRUMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,191}$")
 _ENUMS = {
     "allowed_sides": frozenset({"BUY", "SELL"}),
-    "allowed_position_effects": frozenset(
-        {"OPEN", "CLOSE", "CLOSE_TODAY", "CLOSE_YESTERDAY"}
-    ),
+    "allowed_position_effects": frozenset({"OPEN", "CLOSE", "CLOSE_TODAY", "CLOSE_YESTERDAY"}),
     "allowed_order_types": frozenset({"MARKET", "LIMIT"}),
     "allowed_time_in_force": frozenset({"GTC", "IOC", "FOK", "DAY"}),
 }
@@ -166,14 +164,10 @@ async def lock_strategy_approval_authority_epoch(
             )
         elif dialect == "mysql":
             await db.execute(
-                mysql_insert(StrategyApprovalAuthorityEpoch)
-                .values(**values)
-                .prefix_with("IGNORE")
+                mysql_insert(StrategyApprovalAuthorityEpoch).values(**values).prefix_with("IGNORE")
             )
         else:
-            raise StrategyTargetApprovalError(
-                "APPROVAL_STORE_UNAVAILABLE", ambiguous=True
-            )
+            raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True)
         result = await db.execute(
             select(StrategyApprovalAuthorityEpoch)
             .where(StrategyApprovalAuthorityEpoch.owner_subject == owner_subject)
@@ -189,9 +183,7 @@ async def lock_strategy_approval_authority_epoch(
         raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
 
 
-async def advance_strategy_approval_authority_epoch(
-    db: AsyncSession, owner_subject: str
-) -> int:
+async def advance_strategy_approval_authority_epoch(db: AsyncSession, owner_subject: str) -> int:
     """Increment the epoch after its source rows changed in this transaction."""
 
     epoch = await lock_strategy_approval_authority_epoch(db, owner_subject)
@@ -429,7 +421,9 @@ class StrategyOrderTargetCurrentStateProvider:
         except StrategyTargetApprovalError:
             raise
         except SQLAlchemyError:
-            raise StrategyTargetApprovalError("APPROVAL_STORE_UNAVAILABLE", ambiguous=True) from None
+            raise StrategyTargetApprovalError(
+                "APPROVAL_STORE_UNAVAILABLE", ambiguous=True
+            ) from None
 
 
 def validate_target_against_policy(
@@ -491,9 +485,13 @@ def validate_target_against_policy(
         target_max_notional = target_limits.get("max_notional")
         if target_max_notional is not None and quantity * price > _as_decimal(target_max_notional):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
-        if policy_limits["min_price"] is not None and price < _as_decimal(policy_limits["min_price"]):
+        if policy_limits["min_price"] is not None and price < _as_decimal(
+            policy_limits["min_price"]
+        ):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
-        if policy_limits["max_price"] is not None and price > _as_decimal(policy_limits["max_price"]):
+        if policy_limits["max_price"] is not None and price > _as_decimal(
+            policy_limits["max_price"]
+        ):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
         if policy_max_notional is not None and quantity * price > _as_decimal(policy_max_notional):
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
@@ -560,10 +558,7 @@ async def approve_strategy_order_target(
         if len(versions) != 1:
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
         version = versions[0]
-        if (
-            version.status != VersionStatus.STABLE.value
-            or version.is_active is not True
-        ):
+        if version.status != VersionStatus.STABLE.value or version.is_active is not True:
             raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
         branch_result = await db.execute(
             select(VersionBranch).where(
@@ -679,15 +674,19 @@ def _policy_row_digest(row: StrategyOrderApprovalPolicyVersion) -> str:
 def _validate_policy(policy: Mapping[str, object]) -> dict[str, object]:
     if not isinstance(policy, Mapping) or set(policy) != _POLICY_KEYS:
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
-    if policy.get("schema_id") != "afi.strategy_order_approval_policy" or type(
-        policy.get("schema_version")
-    ) is not int or policy.get("schema_version") != 1:
+    if (
+        policy.get("schema_id") != "afi.strategy_order_approval_policy"
+        or type(policy.get("schema_version")) is not int
+        or policy.get("schema_version") != 1
+    ):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     instruments = policy.get("allowed_instruments")
     if (
         not isinstance(instruments, list)
         or not instruments
-        or any(type(value) is not str or not _INSTRUMENT_RE.fullmatch(value) for value in instruments)
+        or any(
+            type(value) is not str or not _INSTRUMENT_RE.fullmatch(value) for value in instruments
+        )
         or len(set(instruments)) != len(instruments)
     ):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")

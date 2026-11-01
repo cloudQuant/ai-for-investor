@@ -53,9 +53,7 @@ def _service_read_profile(
                                 "account_ref": account_ref,
                             }
                         ],
-                        "options": {
-                            "request_timeout_ms": integration._REQUEST_TIMEOUT_MS
-                        },
+                        "options": {"request_timeout_ms": integration._REQUEST_TIMEOUT_MS},
                     },
                 }
             },
@@ -105,9 +103,7 @@ def _service_read_profile(
                 "scope_ref": client_scope_ref,
                 "currency": "USDT",
                 "account_key": account_key.to_dict(),
-                "coverage": [
-                    AccountResourceKey("spot", "cash").to_dict()
-                ],
+                "coverage": [AccountResourceKey("spot", "cash").to_dict()],
                 "require_open_orders": False,
             }
         },
@@ -195,6 +191,7 @@ def _afi09_session_owner_gateway_process(
         strategy_scopes=frozenset({state_scope}),
         allowed_kinds=frozenset({GatewayCommandKind.READ}),
     )
+
     def resource_provider(component: str, _instance_id: str, _options: Any, _scope: Any):
         raise AssertionError(f"unexpected non-Gateway AFI09 resource request: {component}")
 
@@ -241,14 +238,8 @@ def _afi09_session_owner_gateway_process(
             service_requirements_version=f"{account_ref}-afi09-requirements-v1",
             curve_public_key=service_keys["server_public"],
             curve_secret_key=service_keys["server_secret"],
-            principals={
-                service_keys["application_public"]: integration._DUAL_LIVE_PRINCIPAL
-            },
-            grants={
-                integration._DUAL_LIVE_PRINCIPAL: (
-                    PrincipalGrant(identity, (app_grant,)),
-                )
-            },
+            principals={service_keys["application_public"]: integration._DUAL_LIVE_PRINCIPAL},
+            grants={integration._DUAL_LIVE_PRINCIPAL: (PrincipalGrant(identity, (app_grant,)),)},
         )
         deployment = GatewayOperatorDeployment(
             config,
@@ -502,9 +493,7 @@ def _afi09_service_read_client_process(
                 async def get(self, model: type[Any], requested_subject: str) -> Any:
                     if model is not User or requested_subject != subject:
                         return None
-                    return SimpleNamespace(
-                        id=subject, is_active=True, principal_kind="HUMAN"
-                    )
+                    return SimpleNamespace(id=subject, is_active=True, principal_kind="HUMAN")
 
             database = Database()
 
@@ -584,9 +573,7 @@ def test_afi09_two_service_read_workers_share_one_gateway_owner(tmp_path: Path) 
     from tests import test_service_read_authorized_http_integration as integration
 
     account_ref = integration._ACCOUNT_A
-    account_key = AccountKey(
-        "PAPER", "synthetic-venue", "simulation", "afi-multiworker-owner"
-    )
+    account_key = AccountKey("PAPER", "synthetic-venue", "simulation", "afi-multiworker-owner")
     app_public, app_secret = integration.zmq.curve_keypair()
     server_public, server_secret = integration.zmq.curve_keypair()
     endpoint = integration._order._endpoint()
@@ -759,8 +746,7 @@ def test_afi09_two_service_read_workers_share_one_gateway_owner(tmp_path: Path) 
                 )
             )
         initial = [
-            integration._order._receive(client["pipe"], timeout=30.0)
-            for client in client_processes
+            integration._order._receive(client["pipe"], timeout=30.0) for client in client_processes
         ]
         assert all(reply[0] == "ready" for reply in initial), initial
         assert initial[0][1] != initial[1][1]
@@ -788,8 +774,7 @@ def test_afi09_two_service_read_workers_share_one_gateway_owner(tmp_path: Path) 
         for client in client_processes:
             client["pipe"].send(("read",))
         after_recovery = [
-            integration._order._receive(client["pipe"], timeout=15.0)
-            for client in client_processes
+            integration._order._receive(client["pipe"], timeout=15.0) for client in client_processes
         ]
         assert all(reply[0] == "health" for reply in after_recovery), after_recovery
         assert all(reply[2] == "ready" for reply in after_recovery)
@@ -836,8 +821,7 @@ def test_afi09_two_service_read_workers_share_one_gateway_owner(tmp_path: Path) 
         for client in client_processes:
             client["pipe"].send(("close",))
         client_closes = [
-            integration._order._receive(client["pipe"], timeout=20.0)
-            for client in client_processes
+            integration._order._receive(client["pipe"], timeout=20.0) for client in client_processes
         ]
         assert all(reply[0] == "closed" for reply in client_closes), client_closes
         for client in client_processes:
@@ -866,4 +850,3 @@ def test_afi09_two_service_read_workers_share_one_gateway_owner(tmp_path: Path) 
         expected_lifecycle = (2, 2, 2, 1, 1, 1) if recovery_succeeded else (1, 1, 1, 1, 1, 1)
         assert close_reply[2:8] == expected_lifecycle, close_reply
         assert host["process"].exitcode == 0
-

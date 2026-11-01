@@ -123,9 +123,7 @@ def _client_config(
         "client_config_schema_version": 1,
         "process_role": role,
         "registration": (
-            {"strategy_ref": strategy}
-            if strategy is not None
-            else {"application_ref": application}
+            {"strategy_ref": strategy} if strategy is not None else {"application_ref": application}
         ),
         "clients": {
             "execution": {

@@ -69,7 +69,9 @@ class StrategyOrderApprovalPolicyHead(Base):
             name="fk_strategy_order_policy_head_version",
         ),
         CheckConstraint("head_version > 0", name="ck_strategy_order_policy_head_version_positive"),
-        CheckConstraint("length(policy_sha256) = 64", name="ck_strategy_order_policy_head_hash_length"),
+        CheckConstraint(
+            "length(policy_sha256) = 64", name="ck_strategy_order_policy_head_hash_length"
+        ),
     )
 
     owner_subject = Column(String(256), primary_key=True)

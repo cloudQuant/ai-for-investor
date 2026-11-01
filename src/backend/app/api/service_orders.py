@@ -203,7 +203,10 @@ async def submit_manual_order(
     if service_code in _CONFLICT_CODES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": service_code, "message": "The execution service did not accept the intent."},
+            detail={
+                "code": service_code,
+                "message": "The execution service did not accept the intent.",
+            },
         )
     if record is None:
         raise HTTPException(
@@ -241,20 +244,29 @@ def _parse_submit_reply(
     if not isinstance(payload, Mapping) or set(payload) != {"ok", "code", "result"}:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INVALID_EXECUTION_REPLY", "message": "The execution service reply was invalid."},
+            detail={
+                "code": "INVALID_EXECUTION_REPLY",
+                "message": "The execution service reply was invalid.",
+            },
         )
     ok = payload.get("ok")
     code = _safe_code(payload.get("code"))
     if type(ok) is not bool or (ok and code != "OK") or (not ok and code == "OK"):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INVALID_EXECUTION_REPLY", "message": "The execution service reply was invalid."},
+            detail={
+                "code": "INVALID_EXECUTION_REPLY",
+                "message": "The execution service reply was invalid.",
+            },
         )
     result = payload.get("result")
     if not isinstance(result, Mapping) or set(result) != {"found", "record"}:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INVALID_EXECUTION_REPLY", "message": "The execution service reply was invalid."},
+            detail={
+                "code": "INVALID_EXECUTION_REPLY",
+                "message": "The execution service reply was invalid.",
+            },
         )
     found = result.get("found")
     record = result.get("record")
@@ -263,7 +275,10 @@ def _parse_submit_reply(
     if found is not True:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INVALID_EXECUTION_REPLY", "message": "The execution service reply was invalid."},
+            detail={
+                "code": "INVALID_EXECUTION_REPLY",
+                "message": "The execution service reply was invalid.",
+            },
         )
     if (
         not isinstance(record, Mapping)
@@ -272,7 +287,10 @@ def _parse_submit_reply(
     ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INVALID_EXECUTION_REPLY", "message": "The execution service reply was invalid."},
+            detail={
+                "code": "INVALID_EXECUTION_REPLY",
+                "message": "The execution service reply was invalid.",
+            },
         )
     try:
         # Reuse the existing order DTO allowlist so this write response cannot
@@ -281,7 +299,10 @@ def _parse_submit_reply(
     except (ServiceReadContractError, ServiceReadUnavailableError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INVALID_EXECUTION_REPLY", "message": "The execution service reply was invalid."},
+            detail={
+                "code": "INVALID_EXECUTION_REPLY",
+                "message": "The execution service reply was invalid.",
+            },
         ) from None
     return code, _order_payload(view)
 
@@ -290,7 +311,10 @@ def _require_idempotency_key(value: str | None) -> str:
     if type(value) is not str or not _KEY_RE.fullmatch(value):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "IDEMPOTENCY_KEY_REQUIRED", "message": "A valid Idempotency-Key is required."},
+            detail={
+                "code": "IDEMPOTENCY_KEY_REQUIRED",
+                "message": "A valid Idempotency-Key is required.",
+            },
         )
     return value
 
@@ -313,14 +337,20 @@ async def _record_failed_attempt(db: AsyncSession, operation: Any, code: str) ->
 def _not_configured() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"code": "ORDER_SUBMIT_NOT_CONFIGURED", "message": "No manual-order service is configured."},
+        detail={
+            "code": "ORDER_SUBMIT_NOT_CONFIGURED",
+            "message": "No manual-order service is configured.",
+        },
     )
 
 
 def _operation_store_unavailable() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"code": "OPERATION_STORE_UNAVAILABLE", "message": "The operation identity was not persisted."},
+        detail={
+            "code": "OPERATION_STORE_UNAVAILABLE",
+            "message": "The operation identity was not persisted.",
+        },
     )
 
 

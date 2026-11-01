@@ -180,9 +180,7 @@ def _market_client_deployment(
                             },
                         },
                     },
-                    "scope_claims": {
-                        _SCOPE_REF: {"execution_domain_ref": _DOMAIN_REF}
-                    },
+                    "scope_claims": {_SCOPE_REF: {"execution_domain_ref": _DOMAIN_REF}},
                     "peer_identities": {
                         _SERVICE_ID: {
                             "principal_ref": _SERVICE_PRINCIPAL,
@@ -208,7 +206,7 @@ def _market_client_deployment(
                         }
                     ],
                 }
-            ]
+            ],
         },
         separators=(",", ":"),
     )
@@ -252,9 +250,7 @@ class _SyntheticHistoryProvider:
         self.fetch_calls: list[tuple[int, MarketHistoryRequest, float]] = []
         self.close_calls = 0
 
-    def fetch(
-        self, request: MarketHistoryRequest, timeout_seconds: float
-    ) -> MarketHistoryPage:
+    def fetch(self, request: MarketHistoryRequest, timeout_seconds: float) -> MarketHistoryPage:
         self.fetch_calls.append((threading.get_ident(), request, timeout_seconds))
         assert request.key == _BAR_KEY
         start = datetime.fromisoformat(request.start_time_utc.replace("Z", "+00:00"))
@@ -276,9 +272,9 @@ class _SyntheticHistoryProvider:
             bars=bars,
             complete=True,
             next_start_time_utc=None,
-            observed_at_utc=max(datetime.now(UTC), end).isoformat(
-                timespec="microseconds"
-            ).replace("+00:00", "Z"),
+            observed_at_utc=max(datetime.now(UTC), end)
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z"),
         )
 
     def close(self) -> None:
@@ -365,9 +361,7 @@ def test_quote_chart_uses_explicit_operator_history_only_service_path(
                 principal_allowed_keys={_PRINCIPAL: frozenset({_TICKER_KEY})},
                 provider_factory=stream_provider_factory,
                 history_key_universe=(_BAR_KEY,),
-                principal_allowed_history_keys={
-                    _PRINCIPAL: frozenset({_BAR_KEY})
-                },
+                principal_allowed_history_keys={_PRINCIPAL: frozenset({_BAR_KEY})},
                 history_provider_factory=history_provider_factory,
                 history_timeout_seconds=2.0,
             ),
@@ -422,9 +416,7 @@ def test_quote_chart_uses_explicit_operator_history_only_service_path(
         app.state.service_gateway_operator_control = control
         app.include_router(operator_api.router, prefix="/api/v1")
         app.include_router(quote_api.router, prefix="/api/v1/quote")
-        app.dependency_overrides[quote_api.get_current_user] = lambda: SimpleNamespace(
-            sub=_SUBJECT
-        )
+        app.dependency_overrides[quote_api.get_current_user] = lambda: SimpleNamespace(sub=_SUBJECT)
         app.dependency_overrides[require_persisted_owner_scope] = lambda: PersistedOwnerScope(
             _SUBJECT,
             "HUMAN",
@@ -437,9 +429,7 @@ def test_quote_chart_uses_explicit_operator_history_only_service_path(
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver"
             ) as client:
-                status_before = await client.get(
-                    f"/api/v1/service-gateway/operators/{profile_ref}"
-                )
+                status_before = await client.get(f"/api/v1/service-gateway/operators/{profile_ref}")
                 assert status_before.status_code == 200, status_before.text
                 assert status_before.json()["state"] == "new"
                 assert deployments == [], "status must not create or start the operator"
@@ -505,9 +495,7 @@ def test_quote_chart_uses_explicit_operator_history_only_service_path(
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver"
             ) as client:
-                return await client.post(
-                    f"/api/v1/service-gateway/operators/{profile_ref}/stop"
-                )
+                return await client.post(f"/api/v1/service-gateway/operators/{profile_ref}/stop")
 
         stop_response = asyncio.run(stop_operator())
         assert stop_response.status_code == 200, stop_response.text

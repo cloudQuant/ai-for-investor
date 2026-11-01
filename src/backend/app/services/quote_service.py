@@ -87,9 +87,7 @@ _SERVICE_MARKET_HISTORY_TIMEFRAMES = {
 }
 
 
-def _chart_error(
-    source: str, symbol: str, timeframe: str, error_code: str
-) -> dict[str, Any]:
+def _chart_error(source: str, symbol: str, timeframe: str, error_code: str) -> dict[str, Any]:
     return {
         "source": source,
         "symbol": symbol,
@@ -102,9 +100,7 @@ def _chart_error(
 
 
 def _history_time_text(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace(
-        "+00:00", "Z"
-    )
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _parse_history_time(value: str) -> datetime:
@@ -129,6 +125,7 @@ def _chart_bar_from_history(bar: Any) -> dict[str, Any]:
     opened = getattr(bar, "open_time_utc", None)
     _parse_history_time(opened)
     return {"date": opened, **values}
+
 
 # ---------------------------------------------------------------------------
 # Persistent storage for custom symbols
@@ -217,8 +214,8 @@ class QuoteService:
                 for metadata in gateway.get("symbols", {}).values()
             )
             profile_symbols = list(dict.fromkeys(profile_symbols))
-            routes, market_config_error, _deployment = (
-                self._configured_service_market_routes(source, user_id, profile_symbols)
+            routes, market_config_error, _deployment = self._configured_service_market_routes(
+                source, user_id, profile_symbols
             )
 
             if not caps:
@@ -472,9 +469,7 @@ class QuoteService:
             service_market_config_error is None
         )
         missing_route_error = (
-            "UNSUPPORTED_CAPABILITY"
-            if source != "OKX"
-            else "SERVICE_MARKET_PROFILE_REQUIRED"
+            "UNSUPPORTED_CAPABILITY" if source != "OKX" else "SERVICE_MARKET_PROFILE_REQUIRED"
         )
         if service_market_config_error is not None:
             missing_route_error = service_market_config_error
@@ -564,18 +559,14 @@ class QuoteService:
         )
         if config_error is not None:
             return {
-                symbol: _MarketQuoteResult(None, config_error, False)
-                for symbol in symbols
+                symbol: _MarketQuoteResult(None, config_error, False) for symbol in symbols
             }, config_error
         if deployment is None or not routes:
             return {}, None
         try:
             observations = deployment.read_quotes(subject, routes, wait_ms=250)
         except _ServiceMarketDeploymentError as error:
-            return {
-                symbol: _MarketQuoteResult(None, error.code, False)
-                for symbol in routes
-            }, None
+            return {symbol: _MarketQuoteResult(None, error.code, False) for symbol in routes}, None
         except Exception:
             return {
                 symbol: _MarketQuoteResult(None, "SERVICE_MARKET_UNAVAILABLE", False)
@@ -603,9 +594,7 @@ class QuoteService:
         with self._service_market_load_lock:
             if not self._service_market_loaded:
                 try:
-                    self._service_market_deployment = (
-                        _ServiceMarketDeployment.from_environment()
-                    )
+                    self._service_market_deployment = _ServiceMarketDeployment.from_environment()
                 except _ServiceMarketDeploymentError as error:
                     self._service_market_error = error.code
                 finally:
@@ -633,9 +622,7 @@ class QuoteService:
         with self._service_market_load_lock:
             if not self._service_market_loaded:
                 try:
-                    self._service_market_deployment = (
-                        _ServiceMarketDeployment.from_environment()
-                    )
+                    self._service_market_deployment = _ServiceMarketDeployment.from_environment()
                 except _ServiceMarketDeploymentError as error:
                     self._service_market_error = error.code
                 finally:
@@ -644,14 +631,10 @@ class QuoteService:
             deployment = self._service_market_deployment
         if config_error is not None or deployment is None:
             return None, False, config_error, deployment
-        configured_symbol = deployment.has_configured_history_symbol(
-            subject, source, symbol
-        )
+        configured_symbol = deployment.has_configured_history_symbol(subject, source, symbol)
         if not configured_symbol:
             return None, False, None, deployment
-        key = deployment.configured_history_key(
-            subject, source, symbol, timeframe
-        )
+        key = deployment.configured_history_key(subject, source, symbol, timeframe)
         return key, True, None, deployment
 
     # ------------------------------------------------------------------

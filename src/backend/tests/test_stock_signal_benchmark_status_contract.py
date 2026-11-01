@@ -59,9 +59,7 @@ def _record(*, benchmark_20d_return: float | None) -> SimpleNamespace:
         horizon_5d_return=0.02,
         horizon_20d_return=0.03,
         benchmark_20d_return=benchmark_20d_return,
-        excess_20d_return=(
-            0.01 if benchmark_20d_return is not None else None
-        ),
+        excess_20d_return=(0.01 if benchmark_20d_return is not None else None),
         buy_is_correct_20d=True,
         sell_is_correct_20d=None,
     )

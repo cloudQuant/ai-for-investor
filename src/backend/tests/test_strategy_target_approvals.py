@@ -279,7 +279,9 @@ def test_migration_is_idempotent_and_checks_primary_keys_and_foreign_key():
         / "versions"
         / "20261016_strategy_target_approvals.py"
     )
-    spec = importlib.util.spec_from_file_location("strategy_target_approval_revision", migration_path)
+    spec = importlib.util.spec_from_file_location(
+        "strategy_target_approval_revision", migration_path
+    )
     assert spec is not None and spec.loader is not None
     revision = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(revision)
@@ -326,7 +328,9 @@ def test_migration_rejects_nullable_text_or_cascading_and_accepts_no_action(
         / "versions"
         / "20261016_strategy_target_approvals.py"
     )
-    spec = importlib.util.spec_from_file_location("strategy_target_approval_revision", migration_path)
+    spec = importlib.util.spec_from_file_location(
+        "strategy_target_approval_revision", migration_path
+    )
     assert spec is not None and spec.loader is not None
     revision = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(revision)
@@ -370,11 +374,15 @@ def test_migration_rejects_nullable_text_or_cascading_and_accepts_no_action(
                     flags=re.IGNORECASE,
                 )
                 assert replacements == 1
-            index_sql = connection.exec_driver_sql(
-                "SELECT sql FROM sqlite_master "
-                "WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL ORDER BY name",
-                (table_name,),
-            ).scalars().all()
+            index_sql = (
+                connection.exec_driver_sql(
+                    "SELECT sql FROM sqlite_master "
+                    "WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL ORDER BY name",
+                    (table_name,),
+                )
+                .scalars()
+                .all()
+            )
 
             # Rebuild only the candidate existing table with one incompatible
             # property; all its other columns, constraints and indexes stay as
@@ -454,13 +462,17 @@ async def test_competing_file_sqlite_sessions_reserve_one_intent_and_refresh_los
         async with race_sessions() as db:
             stored = await db.get(StrategyTargetApproval, approval_identity.approval_ref)
             events = (
-                await db.execute(
-                    select(StrategyTargetApprovalEvent).where(
-                        StrategyTargetApprovalEvent.approval_ref
-                        == approval_identity.approval_ref
+                (
+                    await db.execute(
+                        select(StrategyTargetApprovalEvent).where(
+                            StrategyTargetApprovalEvent.approval_ref
+                            == approval_identity.approval_ref
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         assert stored is not None
         assert stored.intent_id == winners[0][1]
         assert stored.record_version == 2
@@ -583,12 +595,16 @@ async def test_operation_reservation_reuses_intent_and_rejects_conflicting_key()
         assert persisted is not None
         assert persisted.intent_id == first.intent_id
         events = (
-            await db.execute(
-                select(StrategyTargetApprovalEvent)
-                .where(StrategyTargetApprovalEvent.approval_ref == row.approval_ref)
-                .order_by(StrategyTargetApprovalEvent.record_version)
+            (
+                await db.execute(
+                    select(StrategyTargetApprovalEvent)
+                    .where(StrategyTargetApprovalEvent.approval_ref == row.approval_ref)
+                    .order_by(StrategyTargetApprovalEvent.record_version)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert [(event.event_type, event.record_version) for event in events] == [
             ("APPROVED", 1),
             ("OPERATION_RESERVED", 2),
@@ -721,12 +737,16 @@ async def test_consume_is_separate_receipt_and_exact_replay_never_changes_receip
         assert revoke_conflict.value.code == "APPROVAL_CONSUMED_CONFLICT"
 
         events = (
-            await db.execute(
-                select(StrategyTargetApprovalEvent)
-                .where(StrategyTargetApprovalEvent.approval_ref == approval_ref)
-                .order_by(StrategyTargetApprovalEvent.record_version)
+            (
+                await db.execute(
+                    select(StrategyTargetApprovalEvent)
+                    .where(StrategyTargetApprovalEvent.approval_ref == approval_ref)
+                    .order_by(StrategyTargetApprovalEvent.record_version)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert [(event.event_type, event.record_version) for event in events] == [
             ("APPROVED", 1),
             ("OPERATION_RESERVED", 2),
@@ -920,12 +940,16 @@ async def test_revocation_after_operation_reservation_wins_before_consume():
         assert error.value.ambiguous is False
 
         events = (
-            await db.execute(
-                select(StrategyTargetApprovalEvent)
-                .where(StrategyTargetApprovalEvent.approval_ref == approval_ref)
-                .order_by(StrategyTargetApprovalEvent.record_version)
+            (
+                await db.execute(
+                    select(StrategyTargetApprovalEvent)
+                    .where(StrategyTargetApprovalEvent.approval_ref == approval_ref)
+                    .order_by(StrategyTargetApprovalEvent.record_version)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert [(event.event_type, event.record_version) for event in events] == [
             ("APPROVED", 1),
             ("OPERATION_RESERVED", 2),

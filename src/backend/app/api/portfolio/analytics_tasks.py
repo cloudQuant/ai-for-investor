@@ -54,9 +54,7 @@ async def create_portfolio_analytics_task(
         raise _task_error(error) from None
 
 
-@router.get(
-    "/{portfolio_ref}/versions/{membership_version}/analytics-tasks/{task_ref}"
-)
+@router.get("/{portfolio_ref}/versions/{membership_version}/analytics-tasks/{task_ref}")
 async def query_portfolio_analytics_task(
     portfolio_ref: str,
     membership_version: int,
@@ -74,9 +72,7 @@ async def query_portfolio_analytics_task(
         raise _task_error(error) from None
 
 
-@router.post(
-    "/{portfolio_ref}/versions/{membership_version}/analytics-tasks/{task_ref}/cancel"
-)
+@router.post("/{portfolio_ref}/versions/{membership_version}/analytics-tasks/{task_ref}/cancel")
 async def cancel_portfolio_analytics_task(
     portfolio_ref: str,
     membership_version: int,
@@ -198,9 +194,7 @@ async def create_portfolio_analytics_v1_dataset(
         raise _analytics_v1_error(error) from None
 
 
-@router.get(
-    "/{portfolio_ref}/versions/{membership_version}/analytics-v1-datasets/{dataset_ref}"
-)
+@router.get("/{portfolio_ref}/versions/{membership_version}/analytics-v1-datasets/{dataset_ref}")
 async def get_portfolio_analytics_v1_dataset(
     portfolio_ref: str,
     membership_version: int,
@@ -246,9 +240,7 @@ async def create_portfolio_analytics_v1_task(
         raise _analytics_v1_error(error) from None
 
 
-@router.get(
-    "/{portfolio_ref}/versions/{membership_version}/analytics-v1-tasks/{task_ref}"
-)
+@router.get("/{portfolio_ref}/versions/{membership_version}/analytics-v1-tasks/{task_ref}")
 async def query_portfolio_analytics_v1_task(
     portfolio_ref: str,
     membership_version: int,
@@ -272,9 +264,7 @@ async def query_portfolio_analytics_v1_task(
         raise _analytics_v1_error(error) from None
 
 
-@router.post(
-    "/{portfolio_ref}/versions/{membership_version}/analytics-v1-tasks/{task_ref}/cancel"
-)
+@router.post("/{portfolio_ref}/versions/{membership_version}/analytics-v1-tasks/{task_ref}/cancel")
 async def cancel_portfolio_analytics_v1_task(
     portfolio_ref: str,
     membership_version: int,
@@ -350,8 +340,13 @@ def _bound_v1_task_service(
         raise _analytics_v1_error(error) from None
 
 
-def _analytics_v1_error(error: PortfolioAnalyticsDatasetV1Error | PortfolioAnalyticsV1TaskError) -> HTTPException:
+def _analytics_v1_error(
+    error: PortfolioAnalyticsDatasetV1Error | PortfolioAnalyticsV1TaskError,
+) -> HTTPException:
     return HTTPException(
         status_code=error.http_status,
-        detail={"code": error.code, "message": "The analytics dataset or task could not be completed."},
+        detail={
+            "code": error.code,
+            "message": "The analytics dataset or task could not be completed.",
+        },
     )

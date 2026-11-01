@@ -452,8 +452,10 @@ class OpenDataFinancialArchiveReader:
         ):
             raise OpenDataFinancialArchiveError("base_url_invalid")
         normalized_hostname = hostname.lower().rstrip(".")
-        port = configured_port if configured_port is not None else (
-            443 if parsed.scheme == "https" else 80
+        port = (
+            configured_port
+            if configured_port is not None
+            else (443 if parsed.scheme == "https" else 80)
         )
         is_loopback = _is_loopback_host(normalized_hostname)
         if parsed.scheme == "http" and not is_loopback:
@@ -503,9 +505,11 @@ class OpenDataFinancialArchiveReader:
         decimal_text = row.get("value_decimal_text")
         if not _is_iso_date(report_period) or not _is_iso_date(disclosure_date):
             raise OpenDataFinancialArchiveError("response_date_invalid")
-        if not expected_scope["start_report_period"] <= report_period <= expected_scope[
-            "end_report_period"
-        ]:
+        if (
+            not expected_scope["start_report_period"]
+            <= report_period
+            <= expected_scope["end_report_period"]
+        ):
             raise OpenDataFinancialArchiveError("response_record_period_out_of_scope")
         if (
             not isinstance(observed_at, str)
@@ -519,9 +523,10 @@ class OpenDataFinancialArchiveReader:
             raise OpenDataFinancialArchiveError("response_observed_at_invalid") from None
         if parsed_observed_at.utcoffset() != timedelta(0):
             raise OpenDataFinancialArchiveError("response_observed_at_invalid")
-        if parsed_observed_at.isoformat(timespec="microseconds").replace(
-            "+00:00", "Z"
-        ) != observed_at:
+        if (
+            parsed_observed_at.isoformat(timespec="microseconds").replace("+00:00", "Z")
+            != observed_at
+        ):
             raise OpenDataFinancialArchiveError("response_observed_at_invalid")
         if not isinstance(item_code, str) or not item_code.strip() or len(item_code) > 256:
             raise OpenDataFinancialArchiveError("response_item_code_invalid")

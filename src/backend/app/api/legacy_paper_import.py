@@ -76,9 +76,7 @@ _CONFLICT_CODES = frozenset(
         "TARGET_WRITER_UNAVAILABLE",
     }
 )
-_NOT_FOUND_CODES = frozenset(
-    {"LEGACY_ACCOUNT_NOT_FOUND", "LEGACY_IMPORT_RECEIPT_NOT_FOUND"}
-)
+_NOT_FOUND_CODES = frozenset({"LEGACY_ACCOUNT_NOT_FOUND", "LEGACY_IMPORT_RECEIPT_NOT_FOUND"})
 _BAD_REQUEST_CODES = frozenset(
     {
         "INVALID_PAPER_BINDING",
@@ -166,7 +164,10 @@ def _access(current_user: TokenPayload, legacy_account_id: str) -> tuple[Any, An
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "LEGACY_PAPER_IMPORT_ACCESS_DENIED", "message": "The requested import is not authorized."},
+            detail={
+                "code": "LEGACY_PAPER_IMPORT_ACCESS_DENIED",
+                "message": "The requested import is not authorized.",
+            },
         ) from None
 
 
@@ -184,9 +185,7 @@ async def inspect_legacy_paper_import(
         inventory = await inspect_stable_legacy_paper_account(
             service, legacy_account_id, current_user.sub
         )
-        source_receipt = await get_legacy_paper_import_receipt(
-            legacy_account_id, current_user.sub
-        )
+        source_receipt = await get_legacy_paper_import_receipt(legacy_account_id, current_user.sub)
         target = await inspect_legacy_paper_import_target(
             legacy_account_id, access.worker, scope=paper.execution_scope
         )

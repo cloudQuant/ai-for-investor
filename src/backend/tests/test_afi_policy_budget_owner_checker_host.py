@@ -299,14 +299,18 @@ def _application_profile(
 class _CatalogHostOwner:
     """Serve and close the local Risk Host on its dedicated owner thread."""
 
-    def __init__(self, config: Any, authority: TrustedServiceAuthority, registry_path: Path, provider: Any):
+    def __init__(
+        self, config: Any, authority: TrustedServiceAuthority, registry_path: Path, provider: Any
+    ):
         self.config = config
         self.authority = authority
         self.registry_path = registry_path
         self.provider = provider
         self.ready = threading.Event()
         self.stop = threading.Event()
-        self.thread = threading.Thread(target=self._run, name="afi-policy-budget-risk-host", daemon=False)
+        self.thread = threading.Thread(
+            target=self._run, name="afi-policy-budget-risk-host", daemon=False
+        )
         self.host: ServiceHost | None = None
         self.error: str | None = None
         self.state: str | None = None
@@ -387,9 +391,7 @@ async def _register_policy_actor(
         await db.execute(insert(user_roles).values(user_id=subject, role=Role.USER.value))
         if policy_admin:
             await db.execute(
-                insert(user_roles).values(
-                    user_id=subject, role=Role.TRADE_POLICY_ADMIN.value
-                )
+                insert(user_roles).values(user_id=subject, role=Role.TRADE_POLICY_ADMIN.value)
             )
         if service_principal:
             await db.execute(
@@ -573,7 +575,9 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
             assert proposed.json()["state"] == "proposed", proposed.json()
             assert proposed.json()["consumer_effective"] is False
 
-            maker_self_approval = await client.post(url + "/approve", json={}, headers=maker_headers)
+            maker_self_approval = await client.post(
+                url + "/approve", json={}, headers=maker_headers
+            )
             assert maker_self_approval.status_code == 403, maker_self_approval.text
             assert maker_self_approval.json()["details"]["code"] == (
                 "RISK_POLICY_BUDGET_ACTOR_NOT_AUTHORIZED"
@@ -692,8 +696,7 @@ async def test_authenticated_budget_maker_checker_permissions_over_http_and_risk
             assert {row.account_ref for row in resolved_rows} == set(_ACCOUNTS)
             assert {row.generation_ref for row in resolved_rows} == {_GENERATION}
             assert {
-                row.account_ref: str(row.risk_policy.max_increase_notional)
-                for row in resolved_rows
+                row.account_ref: str(row.risk_policy.max_increase_notional) for row in resolved_rows
             } == {_ACCOUNTS[0]: "25", _ACCOUNTS[1]: "15"}
             assert {row.risk_policy.notional_unit for row in resolved_rows} == {"USD"}
             for account_ref, unit_price in zip(_ACCOUNTS, ("20", "10"), strict=True):
@@ -840,11 +843,7 @@ async def _exercise_http_account_gate_consumer(
             error = host_owner.error
             exception_chain: list[dict[str, object]] = []
             seen_errors: set[int] = set()
-            while (
-                error is not None
-                and id(error) not in seen_errors
-                and len(exception_chain) < 8
-            ):
+            while error is not None and id(error) not in seen_errors and len(exception_chain) < 8:
                 seen_errors.add(id(error))
                 exception_chain.append(
                     {
@@ -871,9 +870,7 @@ async def _exercise_http_account_gate_consumer(
                 )
                 error = error.__cause__ or error.__context__
             diagnostics["exception_chain"] = exception_chain
-            assert host_started, json.dumps(
-                diagnostics, ensure_ascii=False, sort_keys=True
-            )
+            assert host_started, json.dumps(diagnostics, ensure_ascii=False, sort_keys=True)
         assert host_owner.state == "started", host_owner.diagnostics()
         assert resources["resolved_budget"].generation_ref == _GENERATION
         assert resources["resolved_budget"].policy_ref == resolved.policy_ref
@@ -959,4 +956,3 @@ async def _exercise_http_account_gate_consumer(
             assert host_owner.error is None, host_owner.diagnostics()
         else:
             assert not host_owner.diagnostics()["thread_alive"], host_owner.diagnostics()
-
