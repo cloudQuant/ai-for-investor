@@ -40,6 +40,38 @@ class StockAnalysisSinaLrbSnapshotSelection(BaseModel):
     capture_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class StockAnalysisStockDailySnapshotSelection(BaseModel):
+    """One explicit pinned OpenData stock-daily publication selector."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument_id: str = Field(pattern=r"^[0-9]{6}\.(?:SH|SZ)$")
+    publication_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    publication_sequence: int = Field(ge=1)
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+def _selected_instrument_id(symbol: str, *, label: str) -> str:
+    """Resolve one SH/SZ A-share symbol to the selection's instrument form."""
+    normalized = symbol.strip().upper()
+    if "." in normalized:
+        if normalized.count(".") != 1:
+            raise ValueError(f"{label} symbol must identify one SH/SZ instrument")
+        code, exchange = normalized.split(".", 1)
+    elif normalized.startswith(("SH", "SZ")):
+        exchange, code = normalized[:2], normalized[2:]
+    else:
+        code = normalized
+        if code.startswith("6"):
+            exchange = "SH"
+        elif code.startswith(("0", "3")):
+            exchange = "SZ"
+        else:
+            raise ValueError(f"{label} requires an explicit SH/SZ A-share symbol")
+    return f"{code}.{exchange}"
+
+
 class StockAnalysisParams(BaseModel):
     """User-facing stock analysis parameters."""
 
@@ -56,6 +88,7 @@ class StockAnalysisParams(BaseModel):
     model_id: str | None = Field(None, max_length=200)
     opendata_sina_fzb_snapshot: StockAnalysisSinaFzbSnapshotSelection | None = None
     opendata_sina_lrb_snapshot: StockAnalysisSinaLrbSnapshotSelection | None = None
+    opendata_stock_daily_snapshot: StockAnalysisStockDailySnapshotSelection | None = None
 
     @field_validator("symbol")
     @classmethod
@@ -78,24 +111,21 @@ class StockAnalysisParams(BaseModel):
         if self.market_type != "A股":
             raise ValueError("Sina financial snapshot selection requires market_type='A股'")
 
-        symbol = self.symbol.strip().upper()
-        if "." in symbol:
-            if symbol.count(".") != 1:
-                raise ValueError("Sina snapshot symbol must identify one SH/SZ instrument")
-            code, exchange = symbol.split(".", 1)
-        elif symbol.startswith(("SH", "SZ")):
-            exchange, code = symbol[:2], symbol[2:]
-        else:
-            code = symbol
-            if code.startswith("6"):
-                exchange = "SH"
-            elif code.startswith(("0", "3")):
-                exchange = "SZ"
-            else:
-                raise ValueError("Sina snapshot requires an explicit SH/SZ A-share symbol")
-
-        if selection.instrument_id != f"{code}.{exchange}":
+        if selection.instrument_id != _selected_instrument_id(self.symbol, label="Sina snapshot"):
             raise ValueError("Sina snapshot instrument_id must match the analysis symbol")
+        return self
+
+    @model_validator(mode="after")
+    def validate_stock_daily_snapshot_instrument_scope(self) -> StockAnalysisParams:
+        selection = self.opendata_stock_daily_snapshot
+        if selection is None:
+            return self
+        if self.market_type != "A股":
+            raise ValueError("Stock daily snapshot selection requires market_type='A股'")
+        if selection.instrument_id != _selected_instrument_id(
+            self.symbol, label="Stock daily snapshot"
+        ):
+            raise ValueError("Stock daily snapshot instrument_id must match the analysis symbol")
         return self
 
 

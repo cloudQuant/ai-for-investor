@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Callable, Mapping
+from contextlib import AbstractAsyncContextManager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, TypeGuard
@@ -29,8 +31,16 @@ from app.services.stock_analysis.data_collector import StockAnalysisDataCollecto
 from app.services.stock_analysis.exporter import StockAnalysisExporter
 from app.services.stock_analysis.pipeline import StockAnalysisPipeline
 from app.services.stock_analysis.report_builder import StockAnalysisReportBuilder
+from app.services.stock_analysis.stock_daily_report_evidence import (
+    StockDailyReportEvidenceError,
+    StockDailyReportEvidenceGate,
+    StockDailyReportEvidenceVector,
+    stock_daily_report_evidence_expectation,
+)
 from app.services.stock_signal.service import StockSignalService
 from app.services.stock_signal.types import ACTION_LABELS
+
+ReportEvidenceSessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 
 class StockAnalysisCancelled(RuntimeError):
@@ -75,13 +85,23 @@ class StockAnalysisTaskService:
     ACTIVE_STATUSES = {"pending", "running"}
     MAX_EXPORT_RECORDS_PER_REPORT_FORMAT = 5
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        report_evidence_gate: StockDailyReportEvidenceGate | None = None,
+        report_evidence_session_factory: ReportEvidenceSessionFactory | None = None,
+    ) -> None:
         self.db = db
         self.collector = StockAnalysisDataCollector(db)
         self.pipeline = StockAnalysisPipeline()
         self.analysis_engine = StockAnalysisEngine(db)
         self.report_builder = StockAnalysisReportBuilder()
         self.exporter = StockAnalysisExporter()
+        self.report_evidence_gate = report_evidence_gate or StockDailyReportEvidenceGate()
+        self.report_evidence_session_factory: ReportEvidenceSessionFactory = (
+            report_evidence_session_factory or async_session_maker
+        )
 
     async def create_and_run(
         self,
@@ -91,6 +111,7 @@ class StockAnalysisTaskService:
         request_text: str = "",
         conversation_id: str | None = None,
         assistant_message_id: str | None = None,
+        stock_daily_evidence: StockDailyReportEvidenceVector | None = None,
     ) -> tuple[StockAnalysisTaskModel, StockAnalysisReportModel | None]:
         analysis_date = params.analysis_date or date.today()
         started = time.perf_counter()
@@ -100,6 +121,7 @@ class StockAnalysisTaskService:
             request_text=request_text,
             conversation_id=conversation_id,
             assistant_message_id=assistant_message_id,
+            stock_daily_evidence=stock_daily_evidence,
         )
         try:
             report = await self._run_task(task, params, analysis_date)
@@ -133,6 +155,7 @@ class StockAnalysisTaskService:
         request_text: str = "",
         conversation_id: str | None = None,
         assistant_message_id: str | None = None,
+        stock_daily_evidence: StockDailyReportEvidenceVector | None = None,
     ) -> StockAnalysisTaskModel:
         active_count = await self.count_active_tasks(user_id=user_id)
         if active_count >= self.MAX_ACTIVE_TASKS_PER_USER:
@@ -141,6 +164,25 @@ class StockAnalysisTaskService:
                 limit=self.MAX_ACTIVE_TASKS_PER_USER,
             )
         analysis_date = params.analysis_date or date.today()
+        parameters_json = params.model_dump(mode="json")
+        if stock_daily_evidence is not None:
+            selector = params.opendata_stock_daily_snapshot
+            if selector is None:
+                raise StockDailyReportEvidenceError("stock_daily_report_evidence_scope_missing")
+            if not isinstance(stock_daily_evidence, StockDailyReportEvidenceVector):
+                raise StockDailyReportEvidenceError("stock_daily_report_evidence_invalid")
+            stock_daily_evidence.ensure_matches(
+                (
+                    stock_daily_report_evidence_expectation(
+                        instrument_id=selector.instrument_id,
+                        publication_id=selector.publication_id,
+                        publication_sequence=selector.publication_sequence,
+                        content_sha256=selector.content_sha256,
+                        contract_sha256=selector.contract_sha256,
+                    ),
+                )
+            )
+            parameters_json["opendata_stock_daily_evidence"] = stock_daily_evidence.to_json()
         task = StockAnalysisTaskModel(
             user_id=user_id,
             conversation_id=conversation_id,
@@ -151,7 +193,7 @@ class StockAnalysisTaskService:
             research_depth=params.research_depth,
             selected_modules=list(params.selected_modules),
             request_text=request_text,
-            parameters_json=params.model_dump(mode="json"),
+            parameters_json=parameters_json,
             step_events_json=[],
             data_quality_json={},
             status="pending",
@@ -413,33 +455,13 @@ class StockAnalysisTaskService:
             snapshot=snapshot,
             pipeline_output=pipeline_output,
         )
-        markdown_content = self.exporter.render_markdown(payload)
-        html_content = self.exporter.render_html(payload)
-        decision = payload.get("decision") or {}
-        scores = pipeline_output.get("scores") or {}
-        report = StockAnalysisReportModel(
-            task_id=task.id,
-            user_id=task.user_id,
-            symbol=task.symbol,
-            market_type=task.market_type,
-            analysis_date=task.analysis_date,
-            title=f"{task.symbol} 股票分析报告",
-            summary=payload.get("executive_summary") or "",
-            recommendation_label=decision.get("label", "观望"),
-            confidence_score=decision.get("confidence_score"),
-            risk_level=decision.get("risk_level", "中等"),
-            technical_score=scores.get("technical_score"),
-            fundamental_score=scores.get("fundamental_score"),
-            news_score=scores.get("news_score"),
-            risk_score=scores.get("risk_score"),
-            source_snapshot_json=snapshot,
-            data_quality_json=snapshot.get("data_quality") or {},
-            report_json=payload,
-            markdown_content=markdown_content,
-            html_content=html_content,
+        report = await self._build_and_save_report(
+            task=task,
+            params=params,
+            snapshot=snapshot,
+            pipeline_output=pipeline_output,
+            payload=payload,
         )
-        self.db.add(report)
-        await self.db.flush()
         await StockSignalService(self.db).attach_report(
             prediction_id=signal_prediction.id,
             report_id=report.id,
@@ -467,6 +489,94 @@ class StockAnalysisTaskService:
         task.report_id = report.id
         task.completed_at = self._now()
         return report
+
+    async def _build_and_save_report(
+        self,
+        *,
+        task: StockAnalysisTaskModel,
+        params: StockAnalysisParams,
+        snapshot: dict[str, Any],
+        pipeline_output: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> StockAnalysisReportModel:
+        """Write one report after revalidating any declared OpenData evidence.
+
+        Legacy tasks carry no stock-daily selector or vector, so the gate is
+        never opened and the report fields are unchanged. A declared vector is
+        revalidated in a current-read session immediately before ``add``.
+        """
+        markdown_content = self.exporter.render_markdown(payload)
+        html_content = self.exporter.render_html(payload)
+        decision = payload.get("decision") or {}
+        scores = pipeline_output.get("scores") or {}
+        evidence_vector = await self._revalidate_report_evidence(task=task, params=params)
+        report = StockAnalysisReportModel(
+            task_id=task.id,
+            user_id=task.user_id,
+            symbol=task.symbol,
+            market_type=task.market_type,
+            analysis_date=task.analysis_date,
+            title=f"{task.symbol} 股票分析报告",
+            summary=payload.get("executive_summary") or "",
+            recommendation_label=decision.get("label", "观望"),
+            confidence_score=decision.get("confidence_score"),
+            risk_level=decision.get("risk_level", "中等"),
+            technical_score=scores.get("technical_score"),
+            fundamental_score=scores.get("fundamental_score"),
+            news_score=scores.get("news_score"),
+            risk_score=scores.get("risk_score"),
+            source_snapshot_json=snapshot,
+            data_quality_json=snapshot.get("data_quality") or {},
+            evidence_vector_json=(
+                evidence_vector.to_json() if evidence_vector is not None else None
+            ),
+            report_json=payload,
+            markdown_content=markdown_content,
+            html_content=html_content,
+        )
+        self.db.add(report)
+        await self.db.flush()
+        return report
+
+    async def _revalidate_report_evidence(
+        self,
+        *,
+        task: StockAnalysisTaskModel,
+        params: StockAnalysisParams,
+    ) -> StockDailyReportEvidenceVector | None:
+        """Fail closed unless declared stock-daily provenance is still valid."""
+        selector = params.opendata_stock_daily_snapshot
+        parameters: object = getattr(task, "parameters_json", None)
+        raw_vector = (
+            parameters.get("opendata_stock_daily_evidence")
+            if isinstance(parameters, Mapping)
+            else None
+        )
+        vector = (
+            StockDailyReportEvidenceVector.from_json(raw_vector) if raw_vector is not None else None
+        )
+        if selector is None and vector is None:
+            return None
+        if selector is None:
+            raise StockDailyReportEvidenceError("stock_daily_report_evidence_scope_missing")
+        if vector is None:
+            raise StockDailyReportEvidenceError("stock_daily_report_evidence_missing")
+        expected = (
+            stock_daily_report_evidence_expectation(
+                instrument_id=selector.instrument_id,
+                publication_id=selector.publication_id,
+                publication_sequence=selector.publication_sequence,
+                content_sha256=selector.content_sha256,
+                contract_sha256=selector.contract_sha256,
+            ),
+        )
+        async with self.report_evidence_session_factory() as evidence_session:
+            return await self.report_evidence_gate.revalidate_for_report(
+                session=evidence_session,
+                user_id=task.user_id,
+                vector=vector,
+                expected=expected,
+            )
 
     async def _record_ai_observability(
         self,
