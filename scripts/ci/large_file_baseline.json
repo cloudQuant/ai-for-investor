@@ -2,7 +2,7 @@
   "_comment": "Iteration 183 large-file ratchet. Existing files listed here may not grow; new production source files may not exceed new_file_line_limit. Update only after a reviewed intentional decomposition.",
   "new_file_line_limit": 1000,
   "files": {
-    "src/backend/app/api/portfolio/api.py": 1939,
+    "src/backend/app/api/portfolio/api.py": 1948,
     "src/backend/app/api/strategy/base.py": 1558,
     "src/backend/app/api/strategy/research.py": 1358,
     "src/backend/app/config.py": 1488,
@@ -227,6 +227,15 @@
           "src/frontend/src/views/PortfolioPage.vue": {
             "was": 3572,
             "now": 3591
+          }
+        }
+      },
+      "2026-11-01_portfolio_api_defect_fix": {
+        "reason": "The backend test triage (#233) fixed a real defect in get_simulation_portfolio_overview: it called the live get_portfolio_overview with only two arguments, leaving FastAPI's Query/Depends sentinels in place for portfolio_ref and membership_version. Passing them explicitly adds 9 lines (1939 -> 1948), which the ratchet reported as growth and took Backend - Lint down with it. Behaviour-neutral formatting does not apply here: this is a functional fix, recorded rather than trimmed. Frozen again at 1948.",
+        "files": {
+          "src/backend/app/api/portfolio/api.py": {
+            "was": 1939,
+            "now": 1948
           }
         }
       }
