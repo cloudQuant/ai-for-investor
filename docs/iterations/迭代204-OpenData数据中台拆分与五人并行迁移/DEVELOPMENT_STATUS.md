@@ -1489,3 +1489,50 @@ clean worktree 全量 `make test-cov`：**35307 passed / 247 skipped / 73 failed
 #### 6. 共同非声明
 
 本轮全部结论属 **code/offline 与 CI 平面**：#253/#254/#165/#166 是依赖声明、矩阵与测试刻度的收口；#163/#164 让门禁**可判**，其中 #164 的 20 条入账是 owner 裁定的"已知红"登记，**不是 proven**，也不构成真实源、部署或自然周期验收。真实源取数与权利/保留、生产 MySQL 与备份恢复、影子对账、单写者切换、全 A 股权威域与逐标的完整历史、授权签发/吊销审计、报告门禁的生产适配器仍按前几轮的口径保持未闭合。
+
+---
+
+### Wave 20：OpenData 门禁从「不可判」变成「可判」，test-cov 首次真实分诊
+
+本轮把上一轮留下的两个结构性障碍真正解决，并把 `test-cov` 的可归因失败分批改掉。合入记录（OpenData `dev`）：
+
+| PR | 合入 SHA | 内容 |
+| --- | --- | --- |
+| [#167](https://github.com/cloudQuant/opendata/pull/167) | `4068b45b` | PR 跑改测 head 分支树；`make acceptance-probe-check` 前补全历史；gate 前后各打印一次形状 |
+| [#168](https://github.com/cloudQuant/opendata/pull/168) | `cc14b327` | AC-1\|03 的 5 个未登记路径按 path+sha256 入账，格子读出 **proven** |
+| [#169](https://github.com/cloudQuant/opendata/pull/169) | `e3564508` | 两个 alembic head 断言改为测图形状（单头/无分支/边保留），pandas 3 Arrow str dtype 造成的假通过修回 |
+| [#170](https://github.com/cloudQuant/opendata/pull/170) | `02df8948` | FastAPI 0.162 的 `_IncludedRouter` 嵌套：跨 include 走查路由；先证明端点集合在 0.115/0.162 下逐项相同，再改判据读取方式 |
+| [#171](https://github.com/cloudQuant/opendata/pull/171) | `70eeacbd` | 离线 `--sql` 渲染只跳过「服务器版本断言」这一条、且只在 `upgrade()` 且 bind 真是 `MockConnection` 时；离线边界改为**声明+被测**（`OFFLINE_HEAD=0013`，越界即红），0012 双处摘要随改动重钉 |
+| [#172](https://github.com/cloudQuant/opendata/pull/172) | `26a6eb5e` | 用 18 个共驻 CPU 负载实测子进程完成预算（p95 6.4–12.3s、max 18.1s）后统一为文档化的 60s；patrol 日期炸弹改为相对式；csi500 的 inode 复用假设修正 |
+| [#173](https://github.com/cloudQuant/opendata/pull/173) | `cc17835b` | **探针自修历史**：九个读历史的面在读取前一刻补全链条（清单不止两个），补不了就 `refused` 并照旧判 gap，绝不造事实 |
+
+#### 1. 「形状不确定」这件事被解决，并有对照数据
+
+#173 之前：PR 作业 `124981684123` 里 AC-16\|09 读到 `HEAD/all=2/1002, shallow=true` 判 gap，而 dev push 作业 `124957785974` 两侧形状一致（975 commits）判 proven。#173 之后，同一个 PR 形态的作业 `125006024661` 读出：
+
+```
+台账↔读数：agrees=113, unflipped=0, open=0, deferred=0, stale-proof=17
+VERDICT AC-16|09: proven      VERDICT AC-19|02: proven
+```
+
+与 dev push 作业的 `agrees=113 / stale-proof=17` **完全一致**。也就是说 PR 跑与 push 跑现在量的是同一批格子，#164 那种「冻结一次就永远对不上」的困境来自的那个变量被消掉了。判据完整性有证明：排除 `readings` 赋值后九个 judge 的 AST 逐字节相同，`breaks` 与 moment 面集合未变，因此没有一条既有钉被这次修复作废。
+
+留下的手段也留在门禁里：`history_repair = already-complete|unshallowed|refused|unread` 会打印在每次读数里，谁在 gate 期间截断仓库仍然没查到，但判定不再依赖它。
+
+#### 2. 新暴露的同类问题：AC-17|07 的红来自「跑与跑之间比较的基线不同」
+
+#173 之后 PR 跑仍有 10 条新增，其中 **AC-17|07（新增公开 callable 的 docstring/注解 100%）在 push/本地是 proven，在 PR 跑是 gap**，原因是这个格子经 `a2_check` 取「新增面」：PR 跑带 `A2_BASE_REF=dev`，于是 population = 本 PR 自己改的文件（本例里没有新的公开 API）→ 判据明确写着「空群体上的 100% 不算测量」→ gap；push/dispatch 跑没有 `A2_BASE_REF`，population = 自基线以来的全部 A2 文件（本地实测 179 文件 / 599 callable）→ proven。
+
+这是**判据语义**问题而不是环境问题：同一条 AC 在两种运行里量了不同总体。把它钉进棘轮会重演「一侧新增、一侧收口未重钉」，所以本轮不冻结它，需要属主先定「新增面」的定义应当是"本差分母"还是"全仓 A2 分母"（若选后者，改法是这一格忽略 `A2_BASE_REF`，不改任何阈值）。
+
+#### 3. 流程教训（同一坑踩了三次）
+
+OpenData 的引用策略按 **path + sha256** 登记了 `pyproject.toml`、`Makefile`、`scripts/quality/acceptance_item_probe.py` 等文件的字节；改这些文件而不同 PR 重钉摘要，`zero-dep-check`（gate 第 2 个成员）会直接中止整条门禁，前面所有信号都拿不到。#165、#167、#173 各中一次。规则固化为：**推之前先跑 `python scripts/codemod/verify_no_akshare.py`**，重钉理由要写明 pin 所属 revision、此后 revision 数、带品牌行数与出现次数前后相等。
+
+#### 4. `test-cov` 的真实进度（不再是「从没跑过」）
+
+基线 73 failed / 18 errors / 35307 passed（8:55，覆盖率 87.52%，阈值 84 不是阻塞）。#165/#166/#169/#171/#172 之后，可归因项已清；**仍红且理由明确**：deadline-window 一族在 >2× 超订下仍敏感（要重推 deadline/child-sleep/观测窗口三元组，不是加大数字）、`test_sina_fzb_recorded_transport_e2e`（25s 子进程 vs `lease_ttl=3s`，慢而活的 worker 会被判死——属主决定）、`tests/test_reviewed_app.py` 两个计时用例、`test_ths_csi500_one_shot_sqlite_gate` 的 marker 格式用例（`-n 0` 也红，是真失败）、以及 `tests/test_frontend_endpoint_contract.py`：`reviewedRuns.ts` 调的 4 个 `/reviewed/*` 路径只有 `create_reviewed_app` 注册，`main.py` 只挂 `api_router`（/api/v1、/api）与 `api_v2_router`，是否线上 404 属 DEPLOYMENT 面，需真实部署核对。
+
+#### 5. 共同非声明
+
+本轮所有绿都在 **code/offline 与 CI 平面**：#168 让一个格子从 gap 变 proven 是登记完整性的修复，不是验收；#170/#171/#172 改的是测试如何测量，不是产品是否可用；#173 让验收仪器变得可复现，但它本身不关闭任何验收面。AC-1\|08（§1 权利登记 35 个引用源 0 行）、AC-5\|03 / AC-16\|05 / AC-16\|06（9 处上游来源身份字面量）、AC-4\|01（判据按字面拼写把关节，见 #164 讨论）以及真实源、生产 MySQL/部署、影子对账、单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。棘轮重测由 dispatch 作业 `41362343738` 产出，只有那次测量落在真实 gate 形态上才允许入账。
