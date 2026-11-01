@@ -78,6 +78,7 @@ def test_operator_import_helper_reads_only_factory_controlled_real_file(tmp_path
     object_root, receipt_store = _roots(tmp_path)
     source = object_root / "dataset.parquet"
     source.write_bytes(b"operator-ingested controlled bytes")
+    source.chmod(0o600)
     settings = _settings(
         resolver_type="filesystem",
         object_root=str(object_root),
@@ -157,6 +158,6 @@ def _settings(
 def _roots(tmp_path: Path) -> tuple[Path, Path]:
     object_root = tmp_path / "objects"
     receipt_store = tmp_path / "receipts"
-    object_root.mkdir()
-    receipt_store.mkdir()
+    object_root.mkdir(mode=0o700)
+    receipt_store.mkdir(mode=0o700)
     return object_root, receipt_store

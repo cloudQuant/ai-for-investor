@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import suppress
 from types import SimpleNamespace
 from typing import Any
@@ -47,6 +48,10 @@ _SYNTHETIC_ENV = {
 }
 
 _COMMAND_GUARD_STATE = {"active": True}
+# ``sys.addaudithook`` cannot be removed.  Keep the dotenv guard inactive
+# outside this module's own tests so importing (or skipping) this module cannot
+# poison unrelated settings/dotenv tests in the same pytest worker.
+_ENV_FILE_GUARD_STATE = {"active": True}
 
 
 def _deny_cmd_autorun(event: str, audit_args: tuple[Any, ...]) -> None:
@@ -86,6 +91,8 @@ sys.addaudithook(_deny_cmd_autorun)
 def _deny_environment_file_read(event: str, audit_args: tuple[Any, ...]) -> None:
     """Keep deployment and spawned ServiceHost imports away from dotenv files."""
 
+    if not _ENV_FILE_GUARD_STATE["active"]:
+        return
     if event != "open" or not audit_args:
         return
     path = audit_args[0]
@@ -135,9 +142,23 @@ try:
 finally:
     _BaseSettings.__init__ = _ORIGINAL_BASE_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore the original environment mapping
+    # The audit hook stays installed for this process, but must be inert for
+    # every later test module.  Own tests re-enable it below.
+    _ENV_FILE_GUARD_STATE["active"] = False
 
 if multiprocessing.current_process().name == "MainProcess":
     _COMMAND_GUARD_STATE["active"] = False
+
+
+@pytest.fixture(autouse=True)
+def _enable_environment_file_guard() -> Iterator[None]:
+    """Scope the dotenv denial to this module's tests and their spawned children."""
+
+    _ENV_FILE_GUARD_STATE["active"] = True
+    try:
+        yield
+    finally:
+        _ENV_FILE_GUARD_STATE["active"] = False
 
 
 _DOMAIN = "paper:afi-authorized-http"

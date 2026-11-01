@@ -1,8 +1,28 @@
-import os
-
 import pytest
 
+from app.config import get_settings
+from app.db.database import create_default_admin
 from tests.conftest import register_and_login
+
+_settings = get_settings()
+
+
+async def _admin_headers(client):
+    """Bootstrap the configured administrator and log it in.
+
+    Registering ``admin`` through the public endpoint is intentionally denied:
+    the configured administrator spelling is reserved for explicit bootstrap.
+    """
+    await create_default_admin()
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": _settings.ADMIN_USERNAME,
+            "password": _settings.ADMIN_PASSWORD,
+        },
+    )
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 @pytest.mark.asyncio
@@ -11,11 +31,7 @@ async def test_admin_can_save_ai_provider_config_without_exposing_secret(
 ):
     monkeypatch.setenv("AI_PROVIDER_CONFIG_PATH", str(tmp_path / "ai_provider_config.json"))
 
-    _, admin_headers = await register_and_login(
-        client,
-        username="admin",
-        password=os.environ.get("ADMIN_PASSWORD", "TestAdmin@12345"),
-    )
+    admin_headers = await _admin_headers(client)
 
     response = await client.put(
         "/api/v1/admin/ai/provider-configs/local_openai",
@@ -76,11 +92,7 @@ async def test_disabled_ai_provider_is_hidden_from_available_models(
 ):
     monkeypatch.setenv("AI_PROVIDER_CONFIG_PATH", str(tmp_path / "ai_provider_config.json"))
 
-    _, admin_headers = await register_and_login(
-        client,
-        username="admin",
-        password=os.environ.get("ADMIN_PASSWORD", "TestAdmin@12345"),
-    )
+    admin_headers = await _admin_headers(client)
 
     response = await client.put(
         "/api/v1/admin/ai/provider-configs/local_openai",
@@ -111,11 +123,7 @@ async def test_deleted_default_ai_provider_is_hidden_from_admin_and_available_mo
 ):
     monkeypatch.setenv("AI_PROVIDER_CONFIG_PATH", str(tmp_path / "ai_provider_config.json"))
 
-    _, admin_headers = await register_and_login(
-        client,
-        username="admin",
-        password=os.environ.get("ADMIN_PASSWORD", "TestAdmin@12345"),
-    )
+    admin_headers = await _admin_headers(client)
 
     response = await client.delete(
         "/api/v1/admin/ai/provider-configs/ollama",

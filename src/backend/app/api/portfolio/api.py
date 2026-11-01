@@ -1854,6 +1854,7 @@ async def get_portfolio_allocation(
 async def get_simulation_portfolio_overview(
     current_user: typing.Any = Depends(get_current_user),
     mgr: LiveTradingManager = Depends(_get_manager),
+    db: AsyncSession = Depends(get_db),
 ) -> typing.Any:
     """Simulation portfolio overview.
 
@@ -1861,8 +1862,16 @@ async def get_simulation_portfolio_overview(
     API stable for the frontend while allowing the underlying data source to be
     customized later if simulation instances are stored separately.
     """
-    # Reuse the same logic as get_portfolio_overview for now
-    return await get_portfolio_overview(current_user=current_user, mgr=mgr)
+    # Reuse the same logic as get_portfolio_overview for now.  Pass the FastAPI
+    # defaults explicitly: calling the live route directly otherwise leaves its
+    # Query/Depends sentinels in place and enters the composition branch.
+    return await get_portfolio_overview(
+        current_user=current_user,
+        mgr=mgr,
+        db=db,
+        portfolio_ref=None,
+        membership_version=None,
+    )
 
 
 @router.get(

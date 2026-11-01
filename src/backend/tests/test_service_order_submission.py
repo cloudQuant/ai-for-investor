@@ -76,6 +76,13 @@ async def _isolated_schema():
     await engine.dispose()
 
 
+def _require_optional_sdk() -> None:
+    """Skip contracts that parse a deployment only when the SDK packages exist."""
+
+    pytest.importorskip("bt_api_base", reason="optional SDK protocol package is required")
+    pytest.importorskip("bt_api_py", reason="optional Python SDK package is required")
+
+
 def _manual_order_profile() -> dict:
     scope_ref = "manual-current"
     service_id = "manual-order-service"
@@ -180,6 +187,7 @@ def _manual_order_profile() -> dict:
 
 
 def test_manual_order_profile_requests_only_normal_submit_operation():
+    _require_optional_sdk()
     profile = _manual_order_profile()
     parsed = _parse_deployment(_document([profile]))
     assert len(parsed) == 1
@@ -235,6 +243,7 @@ def test_manual_order_profile_requests_only_normal_submit_operation():
     ),
 )
 def test_manual_order_profile_rejects_nonmanual_or_expanded_grants(mutate, expected_code):
+    _require_optional_sdk()
     profile = _manual_order_profile()
     mutate(profile)
     with pytest.raises(ServiceReadDeploymentError) as error:
@@ -243,6 +252,7 @@ def test_manual_order_profile_rejects_nonmanual_or_expanded_grants(mutate, expec
 
 
 def test_manual_order_profile_keeps_empty_metadata_map_startup_compatible():
+    _require_optional_sdk()
     profile = _manual_order_profile()
     profile["order_submit_bindings"]["manual-current"].pop("instrument_metadata_versions")
     parsed = _parse_deployment(_document([profile]))
@@ -320,6 +330,7 @@ def test_manual_order_request_rejects_client_authority_and_requires_valid_terms(
 
 def test_manual_order_parser_accepts_actual_sdk_call_result(tmp_path):
     """SDK ``call`` returns the Execution business envelope, not its wire wrapper."""
+    _require_optional_sdk()
 
     from dataclasses import replace
 

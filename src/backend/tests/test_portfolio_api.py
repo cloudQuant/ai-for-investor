@@ -822,6 +822,8 @@ async def test_portfolio_overview_defaults_to_active_only(monkeypatch):
     await portfolio_api.get_portfolio_overview(
         current_user=_USER,
         mgr=_MockManager(),
+        portfolio_ref=None,
+        membership_version=None,
     )
 
     assert calls["include_inactive"] is False
@@ -1403,7 +1405,9 @@ async def test_portfolio_overview_empty():
     from app.api.portfolio_api import get_portfolio_overview
 
     mgr = _MockManager([])
-    result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+    result = await get_portfolio_overview(
+        current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+    )
 
     assert result["total_assets"] == 0
     assert result["strategy_count"] == 0
@@ -1492,7 +1496,9 @@ async def test_portfolio_overview_no_log_dir():
     with (
         patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")),
     ):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["strategy_count"] == 1
     assert result["strategies"][0]["total_assets"] == 0
@@ -1522,7 +1528,9 @@ async def test_portfolio_overview_with_data():
         patch("app.api.portfolio_api.parse_value_log", return_value=mock_value_data),
         patch("app.api.portfolio_api.parse_trade_log", return_value=mock_trades),
     ):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 110000.0
     assert result["total_cash"] == 40000.0
@@ -1564,7 +1572,9 @@ async def test_portfolio_overview_position_value_uses_gross_market_value_for_sho
         patch("app.api.portfolio_api.parse_trade_log", return_value=[]),
         patch("app.api.portfolio_api.parse_current_position", return_value=mock_positions),
     ):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 99000.0
     assert result["total_cash"] == 120000.0
@@ -1608,7 +1618,9 @@ async def test_portfolio_overview_does_not_fallback_position_value_when_gateway_
     )
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 10000.0
     assert result["total_cash"] == 9500.0
@@ -1649,6 +1661,8 @@ async def test_portfolio_overview_multiple_strategies():
             current_user=_USER,
             mgr=mgr,
             include_inactive=True,
+            portfolio_ref=None,
+            membership_version=None,
         )
 
     # 110000 + 190000 = 300000
@@ -1695,6 +1709,8 @@ async def test_portfolio_overview_filters_running_source_history_by_started_day(
                     current_user=_USER,
                     mgr=object(),
                     include_inactive=False,
+                    portfolio_ref=None,
+                    membership_version=None,
                 )
 
     assert result["strategies"][0]["total_trades"] == 1
@@ -2204,7 +2220,9 @@ async def test_portfolio_overview_uses_live_gateway_account_without_log_dir():
     mgr = GatewayManager([instance])
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 100250.0
     assert result["total_cash"] == 99050.0
@@ -2254,7 +2272,9 @@ async def test_portfolio_overview_reads_crypto_account_balance_aliases():
     )
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 10250.5
     assert result["total_cash"] == 9125.25
@@ -2299,7 +2319,9 @@ async def test_portfolio_overview_reads_okx_account_balance_aliases():
     )
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 2500.0
     assert result["total_cash"] == 2100.0
@@ -2344,7 +2366,9 @@ async def test_portfolio_overview_derives_cash_from_equity_minus_margin_before_b
     )
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 100250.0
     assert result["total_cash"] == 99050.0
@@ -2392,7 +2416,9 @@ async def test_portfolio_overview_counts_shared_gateway_account_once_without_log
     )
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 100250.0
     assert result["total_cash"] == 99050.0
@@ -2444,7 +2470,9 @@ async def test_portfolio_overview_does_not_merge_distinct_accounts_by_currency_o
     )
 
     with patch("app.api.portfolio_api.get_strategy_dir", side_effect=ValueError("not found")):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_assets"] == 150550.0
     assert result["total_cash"] == 148550.0
@@ -3191,7 +3219,9 @@ async def test_portfolio_overview_zero_initial_capital():
         patch("app.api.portfolio_api.parse_value_log", return_value=mock_value_data),
         patch("app.api.portfolio_api.parse_trade_log", return_value=[]),
     ):
-        result = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+        result = await get_portfolio_overview(
+            current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+        )
 
     assert result["total_pnl_pct"] == 0
     assert result["strategies"][0]["pnl_pct"] == 0
@@ -5784,7 +5814,9 @@ async def test_portfolio_prefers_active_workspace_units_when_manager_is_empty(
 
     mgr = _MockManager([])
 
-    overview = await get_portfolio_overview(current_user=_USER, mgr=mgr)
+    overview = await get_portfolio_overview(
+        current_user=_USER, mgr=mgr, portfolio_ref=None, membership_version=None
+    )
     assert overview["strategy_count"] == 1
     assert overview["running_count"] == 1
     assert overview["total_assets"] == 100200.0

@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
 
+from app.api.afi_owner_scope import PersistedOwnerScope, require_persisted_owner_scope
 from app.api.deps import get_current_user
 from app.api.service_read import configure_service_read, router
 from app.schemas.auth import TokenPayload
@@ -199,6 +200,12 @@ def lifecycle_app(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, FastAPI]:
     app.dependency_overrides[get_current_user] = lambda: TokenPayload(
         sub="user-a", username="synthetic-user"
     )
+    # The bare test app has no persisted user; replace the separate owner-scope
+    # boundary so these tests exercise read composition, not database identity.
+    app.dependency_overrides[require_persisted_owner_scope] = lambda: PersistedOwnerScope(
+        owner_subject="user-a",
+        principal_kind="UNKNOWN",
+    )
     try:
         yield main_module, app
     finally:
@@ -241,6 +248,8 @@ def test_unconfigured_lifespan_keeps_reads_503_without_building_workers(
 def test_lifespan_installs_subject_directory_and_closes_owner_thread(
     lifecycle_app: tuple[Any, FastAPI], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    pytest.importorskip("bt_api_base", reason="optional SDK protocol package is required")
+    pytest.importorskip("bt_api_py", reason="optional Python SDK package is required")
     main_module, app = lifecycle_app
     monkeypatch.setattr(
         main_module.settings,
@@ -326,6 +335,8 @@ def test_lifespan_retains_uncertain_partial_without_retrying_close(
 def test_partial_startup_closes_every_created_worker_before_failing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pytest.importorskip("bt_api_base", reason="optional SDK protocol package is required")
+    pytest.importorskip("bt_api_py", reason="optional Python SDK package is required")
     import app.services.service_read.deployment as deployment_module
 
     events: dict[str, list[tuple[str, int]]] = {"user-a": [], "user-b": []}

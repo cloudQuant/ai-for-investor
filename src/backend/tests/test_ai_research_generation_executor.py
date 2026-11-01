@@ -435,10 +435,11 @@ async def _generation_context(
 
     object_root = tmp_path / "objects"
     receipt_store = tmp_path / "receipts"
-    object_root.mkdir()
-    receipt_store.mkdir()
+    object_root.mkdir(mode=0o700)
+    receipt_store.mkdir(mode=0o700)
     source = object_root / "discovery.parquet"
     source.write_bytes(b"controlled research dataset bytes\n")
+    source.chmod(0o600)
     resolver = FilesystemDatasetObjectResolver(
         object_root=object_root,
         receipt_store=receipt_store,
