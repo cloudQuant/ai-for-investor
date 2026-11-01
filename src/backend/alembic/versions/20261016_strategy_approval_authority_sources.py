@@ -16,6 +16,91 @@ down_revision = "20261016_strategy_target_approvals"
 branch_labels = None
 depends_on = None
 
+_APPROVAL_TABLE = "strategy_target_approvals"
+_SOURCE_VERSION_COLUMNS = frozenset(
+    {
+        "strategy_version_source_id",
+        "strategy_version_branch",
+        "strategy_version_sha256",
+    }
+)
+_SOURCE_VERSION_FK = "fk_strategy_target_source_version"
+_SOURCE_VERSION_CHECK = "ck_strategy_target_source_version_binding"
+_POLICY_VERSION_TABLE = "strategy_order_approval_policy_versions"
+_POLICY_VERSION_COLUMNS = frozenset(
+    {
+        "id",
+        "owner_subject",
+        "policy_ref",
+        "policy_version",
+        "policy_sha256",
+        "canonical_policy_json",
+        "published_by_subject",
+        "published_by_principal_ref",
+        "published_by_actor_ref",
+        "published_by_delegate_ref",
+        "published_at_ns",
+        "created_at",
+    }
+)
+_POLICY_HEAD_TABLE = "strategy_order_approval_policy_heads"
+_POLICY_HEAD_COLUMNS = frozenset(
+    {
+        "owner_subject",
+        "policy_ref",
+        "policy_version",
+        "policy_sha256",
+        "head_version",
+        "updated_at",
+    }
+)
+_AUTHORITY_EPOCH_TABLE = "strategy_approval_authority_epochs"
+_AUTHORITY_EPOCH_COLUMNS = frozenset({"owner_subject", "epoch", "updated_at"})
+
+
+def _existing_columns(inspector: sa.Inspector, table_name: str) -> set[str]:
+    """Return the reflected column names for an existing table."""
+    return {column["name"] for column in inspector.get_columns(table_name)}
+
+
+def _has_source_version_binding(inspector: sa.Inspector) -> bool:
+    """Return whether a complete startup-created source-version binding exists."""
+    if not _SOURCE_VERSION_COLUMNS.issubset(_existing_columns(inspector, _APPROVAL_TABLE)):
+        return False
+    checks = {check["name"] for check in inspector.get_check_constraints(_APPROVAL_TABLE)}
+    if _SOURCE_VERSION_CHECK not in checks:
+        return False
+    return any(
+        foreign_key.get("constrained_columns") == ["strategy_version_source_id"]
+        and foreign_key.get("referred_table") == "strategy_versions"
+        for foreign_key in inspector.get_foreign_keys(_APPROVAL_TABLE)
+    )
+
+
+def _source_version_foreign_key_name(inspector: sa.Inspector) -> str | None:
+    """Return the reflected FK name for the source-version binding when there is one.
+
+    MySQL refuses to drop a column a foreign key still uses (error 1828), while
+    SQLite keeps no constraint names and its batch rebuild drops the FK together
+    with the column.  A startup-created ORM schema may name the FK differently
+    from this migration, so the downgrade uses whatever name it reflects.
+    """
+    for foreign_key in inspector.get_foreign_keys(_APPROVAL_TABLE):
+        if (
+            foreign_key.get("constrained_columns") == ["strategy_version_source_id"]
+            and foreign_key.get("referred_table") == "strategy_versions"
+        ):
+            return foreign_key.get("name")
+    return None
+
+
+def _validate_startup_table(
+    inspector: sa.Inspector, table_name: str, required_columns: frozenset[str]
+) -> None:
+    """Accept only a complete startup-created table, never a partial same-named one."""
+    if not required_columns.issubset(_existing_columns(inspector, table_name)):
+        raise RuntimeError("STRATEGY_APPROVAL_AUTHORITY_SCHEMA_CONFLICT")
+
 
 def _validate_existing_branch_heads(bind) -> None:
     duplicate = bind.execute(
@@ -53,33 +138,84 @@ def upgrade() -> None:
     bind = op.get_bind()
     _validate_existing_branch_heads(bind)
 
-    with op.batch_alter_table("strategy_branches") as batch:
-        batch.create_unique_constraint(
-            "uq_strategy_branch_strategy_name", ["strategy_id", "branch_name"]
-        )
+    inspector = sa.inspect(bind)
+    branch_uniques = {
+        constraint["name"] for constraint in inspector.get_unique_constraints("strategy_branches")
+    }
+    if "uq_strategy_branch_strategy_name" not in branch_uniques:
+        with op.batch_alter_table("strategy_branches") as batch:
+            batch.create_unique_constraint(
+                "uq_strategy_branch_strategy_name", ["strategy_id", "branch_name"]
+            )
 
-    with op.batch_alter_table("strategy_target_approvals") as batch:
-        batch.add_column(sa.Column("strategy_version_source_id", sa.String(36), nullable=True))
-        batch.add_column(sa.Column("strategy_version_branch", sa.String(50), nullable=True))
-        batch.add_column(sa.Column("strategy_version_sha256", sa.String(64), nullable=True))
-        batch.create_foreign_key(
-            "fk_strategy_target_source_version",
-            "strategy_versions",
-            ["strategy_version_source_id"],
-            ["id"],
-            ondelete="RESTRICT",
-        )
-        batch.create_check_constraint(
-            "ck_strategy_target_source_version_binding",
-            "(strategy_version_source_id IS NULL AND strategy_version_branch IS NULL "
-            "AND strategy_version_sha256 IS NULL) OR "
-            "(strategy_version_source_id IS NOT NULL AND strategy_version_branch IS NOT NULL "
-            "AND strategy_version_sha256 IS NOT NULL "
-            "AND length(strategy_version_sha256) = 64)",
-        )
+    inspector = sa.inspect(bind)
+    present_columns = _existing_columns(inspector, _APPROVAL_TABLE)
+    if present_columns & _SOURCE_VERSION_COLUMNS:
+        # A startup-created current schema already carries the Iteration 202
+        # binding.  Accept it only when the columns, check, and foreign key are
+        # all present; re-adding an existing column makes Alembic's SQLite
+        # batch copy build a cyclic column ordering.
+        if not _has_source_version_binding(inspector):
+            raise RuntimeError("STRATEGY_TARGET_APPROVAL_SOURCE_VERSION_SCHEMA_CONFLICT")
+    else:
+        with op.batch_alter_table(_APPROVAL_TABLE) as batch:
+            batch.add_column(sa.Column("strategy_version_source_id", sa.String(36), nullable=True))
+            batch.add_column(sa.Column("strategy_version_branch", sa.String(50), nullable=True))
+            batch.add_column(sa.Column("strategy_version_sha256", sa.String(64), nullable=True))
+            batch.create_foreign_key(
+                _SOURCE_VERSION_FK,
+                "strategy_versions",
+                ["strategy_version_source_id"],
+                ["id"],
+                ondelete="RESTRICT",
+            )
+            batch.create_check_constraint(
+                _SOURCE_VERSION_CHECK,
+                "(strategy_version_source_id IS NULL AND strategy_version_branch IS NULL "
+                "AND strategy_version_sha256 IS NULL) OR "
+                "(strategy_version_source_id IS NOT NULL AND strategy_version_branch IS NOT NULL "
+                "AND strategy_version_sha256 IS NOT NULL "
+                "AND length(strategy_version_sha256) = 64)",
+            )
 
+    inspector = sa.inspect(bind)
+    if inspector.has_table(_POLICY_VERSION_TABLE):
+        _validate_startup_table(inspector, _POLICY_VERSION_TABLE, _POLICY_VERSION_COLUMNS)
+    else:
+        _create_policy_version_table()
+
+    inspector = sa.inspect(bind)
+    if inspector.has_table(_POLICY_HEAD_TABLE):
+        _validate_startup_table(inspector, _POLICY_HEAD_TABLE, _POLICY_HEAD_COLUMNS)
+    else:
+        _create_policy_head_table()
+
+    inspector = sa.inspect(bind)
+    if inspector.has_table(_AUTHORITY_EPOCH_TABLE):
+        _validate_startup_table(inspector, _AUTHORITY_EPOCH_TABLE, _AUTHORITY_EPOCH_COLUMNS)
+    else:
+        op.create_table(
+            _AUTHORITY_EPOCH_TABLE,
+            sa.Column("owner_subject", sa.String(256), primary_key=True),
+            sa.Column("epoch", sa.BigInteger(), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.CheckConstraint(
+                "epoch >= 0", name="ck_strategy_approval_authority_epoch_nonnegative"
+            ),
+        )
+    bind.execute(
+        sa.text(
+            "INSERT INTO strategy_approval_authority_epochs (owner_subject, epoch, updated_at) "
+            "SELECT id, 0, CURRENT_TIMESTAMP FROM users AS u WHERE NOT EXISTS ("
+            "SELECT 1 FROM strategy_approval_authority_epochs AS e "
+            "WHERE e.owner_subject = u.id)"
+        )
+    )
+
+
+def _create_policy_version_table() -> None:
     op.create_table(
-        "strategy_order_approval_policy_versions",
+        _POLICY_VERSION_TABLE,
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("owner_subject", sa.String(256), nullable=False),
         sa.Column("policy_ref", sa.String(128), nullable=False),
@@ -105,12 +241,14 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_strategy_order_approval_policy_owner",
-        "strategy_order_approval_policy_versions",
+        _POLICY_VERSION_TABLE,
         ["owner_subject"],
     )
 
+
+def _create_policy_head_table() -> None:
     op.create_table(
-        "strategy_order_approval_policy_heads",
+        _POLICY_HEAD_TABLE,
         sa.Column("owner_subject", sa.String(256), primary_key=True),
         sa.Column("policy_ref", sa.String(128), nullable=False),
         sa.Column("policy_version", sa.Integer(), nullable=False),
@@ -135,20 +273,6 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_table(
-        "strategy_approval_authority_epochs",
-        sa.Column("owner_subject", sa.String(256), primary_key=True),
-        sa.Column("epoch", sa.BigInteger(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("epoch >= 0", name="ck_strategy_approval_authority_epoch_nonnegative"),
-    )
-    bind.execute(
-        sa.text(
-            "INSERT INTO strategy_approval_authority_epochs (owner_subject, epoch, updated_at) "
-            "SELECT id, 0, CURRENT_TIMESTAMP FROM users"
-        )
-    )
-
 
 def downgrade() -> None:
     op.drop_table("strategy_approval_authority_epochs")
@@ -159,9 +283,11 @@ def downgrade() -> None:
     )
     op.drop_table("strategy_order_approval_policy_versions")
 
+    source_version_foreign_key = _source_version_foreign_key_name(sa.inspect(op.get_bind()))
     with op.batch_alter_table("strategy_target_approvals") as batch:
         batch.drop_constraint("ck_strategy_target_source_version_binding", type_="check")
-        batch.drop_constraint("fk_strategy_target_source_version", type_="foreignkey")
+        if source_version_foreign_key is not None:
+            batch.drop_constraint(source_version_foreign_key, type_="foreignkey")
         batch.drop_column("strategy_version_sha256")
         batch.drop_column("strategy_version_branch")
         batch.drop_column("strategy_version_source_id")

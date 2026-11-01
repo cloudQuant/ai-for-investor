@@ -69,9 +69,146 @@ def _assert_tables_absent() -> None:
         raise RuntimeError("STOCK_SNAPSHOT_GRANT_SCHEMA_CONFLICT")
 
 
+_STARTUP_TABLE_COLUMNS = {
+    _USER_GRANT: frozenset(
+        {
+            "id",
+            "user_id",
+            "permission",
+            "dataset_id",
+            "instrument_id",
+            "market",
+            "publication_id",
+            "capture_id",
+            "purpose",
+            "revision",
+            "valid_from",
+            "expires_at",
+            "created_at",
+        }
+    ),
+    _SOURCE_GRANT: frozenset(
+        {
+            "id",
+            "user_id",
+            "source_id",
+            "dataset_id",
+            "instrument_id",
+            "market",
+            "publication_id",
+            "capture_id",
+            "purpose",
+            "source_registry_revision",
+            "revision",
+            "valid_from",
+            "expires_at",
+            "created_at",
+        }
+    ),
+    _AUDIT: frozenset(
+        {
+            "id",
+            "user_grant_id",
+            "source_grant_id",
+            "subject_user_id",
+            "actor_user_id",
+            "event_type",
+            "grant_revision",
+            "revocation_revision",
+            "policy_version",
+            "occurred_at",
+            "reason_code",
+            "idempotency_key_sha256",
+        }
+    ),
+}
+_STARTUP_TABLE_CONSTRAINTS = {
+    _USER_GRANT: frozenset(
+        {
+            "ck_stock_snapshot_user_permission",
+            "ck_stock_snapshot_user_dataset",
+            "ck_stock_snapshot_user_market",
+            "ck_stock_snapshot_user_snapshot_ids",
+            "ck_stock_snapshot_user_purpose",
+            "ck_stock_snapshot_user_revision",
+            "ck_stock_snapshot_user_validity",
+            "uq_stock_snapshot_user_scope_revision",
+            "uq_stock_snapshot_user_audit_revision",
+            "fk_stock_snapshot_user_grant_user",
+        }
+    ),
+    _SOURCE_GRANT: frozenset(
+        {
+            "ck_stock_snapshot_source_dataset",
+            "ck_stock_snapshot_source_market",
+            "ck_stock_snapshot_source_snapshot_ids",
+            "ck_stock_snapshot_source_purpose",
+            "ck_stock_snapshot_source_revision",
+            "ck_stock_snapshot_source_registry_revision",
+            "ck_stock_snapshot_source_validity",
+            "uq_stock_snapshot_source_scope_revision",
+            "uq_stock_snapshot_source_audit_revision",
+            "fk_stock_snapshot_source_grant_user",
+        }
+    ),
+    _AUDIT: frozenset(
+        {
+            "ck_stock_snapshot_audit_one_grant",
+            "ck_stock_snapshot_audit_event",
+            "ck_stock_snapshot_audit_revision",
+            "ck_stock_snapshot_audit_policy",
+            "ck_stock_snapshot_audit_reason",
+            "ck_stock_snapshot_audit_idempotency_hash",
+            "uq_stock_snapshot_audit_user_event",
+            "uq_stock_snapshot_audit_source_event",
+            "uq_stock_snapshot_audit_idempotency",
+            "fk_stock_snapshot_audit_user_scope",
+            "fk_stock_snapshot_audit_source_scope",
+            "fk_stock_snapshot_audit_subject",
+            "fk_stock_snapshot_audit_actor",
+        }
+    ),
+}
+_STARTUP_TABLE_INDEXES = {
+    _USER_GRANT: "ix_stock_snapshot_user_lookup",
+    _SOURCE_GRANT: "ix_stock_snapshot_source_lookup",
+    _AUDIT: "ix_stock_snapshot_audit_subject_time",
+}
+
+
+def _accept_complete_startup_schema() -> bool:
+    """Accept a complete current ORM schema, never a partial or drifted one."""
+    inspector = sa.inspect(op.get_bind())
+    existing = {table_name for table_name in _TABLES if inspector.has_table(table_name)}
+    if not existing:
+        return False
+    if existing != set(_TABLES):
+        raise RuntimeError("STOCK_SNAPSHOT_GRANT_SCHEMA_CONFLICT")
+    for table_name in _TABLES:
+        columns = {column["name"] for column in inspector.get_columns(table_name)}
+        if not _STARTUP_TABLE_COLUMNS[table_name].issubset(columns):
+            raise RuntimeError("STOCK_SNAPSHOT_GRANT_SCHEMA_CONFLICT")
+        named_constraints = {
+            item["name"]
+            for item in (
+                inspector.get_check_constraints(table_name)
+                + inspector.get_unique_constraints(table_name)
+                + inspector.get_foreign_keys(table_name)
+            )
+        }
+        if not _STARTUP_TABLE_CONSTRAINTS[table_name].issubset(named_constraints):
+            raise RuntimeError("STOCK_SNAPSHOT_GRANT_SCHEMA_CONFLICT")
+        indexes = {index["name"] for index in inspector.get_indexes(table_name)}
+        if _STARTUP_TABLE_INDEXES[table_name] not in indexes:
+            raise RuntimeError("STOCK_SNAPSHOT_GRANT_SCHEMA_CONFLICT")
+    return True
+
+
 def upgrade() -> None:
     """Create empty grant and audit tables with exact, narrow scope columns."""
     if not op.get_context().as_sql:
+        if _accept_complete_startup_schema():
+            return
         _assert_tables_absent()
 
     op.create_table(
