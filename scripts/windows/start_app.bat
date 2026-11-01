@@ -50,7 +50,7 @@ if errorlevel 1 exit /b 1
 
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] 未找到 Node.js，请先安装 Node.js 20+
+    echo [ERROR] 未找到 Node.js，请先安装 Node.js 22+
     exit /b 1
 )
 for /f "delims=" %%i in ('node --version') do set "NODE_VERSION=%%i"

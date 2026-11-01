@@ -112,7 +112,7 @@ additionally require a release checklist.
 ### Prerequisites
 
 - Python 3.10+
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL 14+ (optional, for integration tests)
 - Redis 7+ (optional)
 

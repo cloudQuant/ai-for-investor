@@ -5,7 +5,7 @@ import { inspectNodeEngineCompatibility } from '../../../src/frontend/scripts/ch
 
 const packageJson = JSON.parse(readFileSync(new URL('../../../src/frontend/package.json', import.meta.url), 'utf8'))
 const packageLock = JSON.parse(readFileSync(new URL('../../../src/frontend/package-lock.json', import.meta.url), 'utf8'))
-const SUPPORTED_RUNTIME = '20.20.2'
+const SUPPORTED_RUNTIME = '22.22.3'
 
 describe('frontend Node engine compatibility', () => {
   it('covers the current runtime and every required locked dependency engine range', () => {
@@ -28,9 +28,9 @@ describe('frontend Node engine compatibility', () => {
   })
 
   it('rejects a runtime below the declared minimum', () => {
-    const report = inspectNodeEngineCompatibility(packageJson, packageLock, '20.18.0')
+    const report = inspectNodeEngineCompatibility(packageJson, packageLock, '22.12.0')
 
-    assert.ok(report.issues.some((issue) => issue.message.includes('running Node 20.18.0')))
+    assert.ok(report.issues.some((issue) => issue.message.includes('running Node 22.12.0')))
   })
 
   it('rejects Node 25 because production does not support it', () => {

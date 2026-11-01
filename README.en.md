@@ -70,7 +70,7 @@ ai-for-investor is an AI + quantitative trading MVP for developers, traders, and
 ### Prerequisites
 
 - Python 3.10+
-- Node.js 20+
+- Node.js 22+
 - Git
 
 ### Setup

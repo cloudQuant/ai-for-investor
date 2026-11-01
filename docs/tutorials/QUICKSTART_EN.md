@@ -2,7 +2,7 @@
 
 This guide takes you from zero to running your first strategy backtest.
 
-> **Prerequisites**: Python 3.10+, Node.js 20+, Git
+> **Prerequisites**: Python 3.10+, Node.js 22+, Git
 
 ---
 

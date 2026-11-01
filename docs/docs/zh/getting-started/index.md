@@ -4,7 +4,7 @@
 
 ## 前提
 
-- Python 3.10+、Node.js 20+、Git。
+- Python 3.10+、Node.js 22+、Git。
 - 需要回测时安装 `backtrader` 额外依赖；需要在线行情时安装 `akshare`；需要语义检索时安装 `rag` 额外依赖。
 - 生产或团队协作环境建议使用 PostgreSQL/MySQL；默认应用数据库可以使用 SQLite。
 

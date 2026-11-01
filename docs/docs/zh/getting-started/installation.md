@@ -3,7 +3,7 @@
 ## 环境要求
 
 - Python 3.10+
-- Node.js 20+
+- Node.js 22+
 - Git
 - Docker Compose v2（可选；用于容器化环境）
 
