@@ -18,70 +18,115 @@ depends_on = None
 _RECEIPT = "legacy_paper_cutover_receipts"
 _LEASE = "legacy_paper_writer_leases"
 _TABLES = ("paper_trading_orders", "paper_trading_positions", "paper_trades")
+_RECEIPT_COLUMNS = frozenset(
+    {
+        "id",
+        "legacy_account_id",
+        "owner_subject",
+        "state",
+        "receipt_version",
+        "source_inventory_sha256",
+        "binding_sha256",
+        "paper_domain_sha256",
+        "scope_ref",
+        "account_ref",
+        "execution_domain_ref",
+        "strategy_ref",
+        "initial_cash",
+        "initial_fees",
+        "fee_rate",
+        "source_order_count",
+        "source_position_count",
+        "source_trade_count",
+        "created_at",
+    }
+)
+_LEASE_COLUMNS = frozenset({"id", "account_id", "created_at"})
+
+
+def _accept_existing_table(table_name: str, required_columns: frozenset[str]) -> bool:
+    """Accept a complete startup-created table, never a partial same-named one."""
+    inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table(table_name):
+        return False
+    columns = {column["name"] for column in inspector.get_columns(table_name)}
+    if not required_columns.issubset(columns):
+        raise RuntimeError("LEGACY_PAPER_CUTOVER_SCHEMA_CONFLICT")
+    return True
 
 
 def upgrade() -> None:
-    op.create_table(
-        _RECEIPT,
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("legacy_account_id", sa.String(length=36), nullable=False),
-        sa.Column("owner_subject", sa.String(length=256), nullable=False),
-        sa.Column("state", sa.String(length=16), nullable=False),
-        sa.Column("receipt_version", sa.Integer(), nullable=False),
-        sa.Column("source_inventory_sha256", sa.String(length=64), nullable=False),
-        sa.Column("binding_sha256", sa.String(length=64), nullable=False),
-        sa.Column("paper_domain_sha256", sa.String(length=64), nullable=False),
-        sa.Column("scope_ref", sa.String(length=128), nullable=False),
-        sa.Column("account_ref", sa.String(length=128), nullable=False),
-        sa.Column("execution_domain_ref", sa.String(length=128), nullable=False),
-        sa.Column("strategy_ref", sa.String(length=128), nullable=False),
-        sa.Column("initial_cash", sa.String(length=64), nullable=False),
-        sa.Column("initial_fees", sa.String(length=64), nullable=False),
-        sa.Column("fee_rate", sa.String(length=64), nullable=False),
-        sa.Column("source_order_count", sa.Integer(), nullable=False),
-        sa.Column("source_position_count", sa.Integer(), nullable=False),
-        sa.Column("source_trade_count", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("state = 'ACTIVE'", name="ck_legacy_paper_cutover_active"),
-        sa.CheckConstraint("receipt_version = 1", name="ck_legacy_paper_cutover_version"),
-        sa.CheckConstraint("source_order_count = 0", name="ck_legacy_paper_cutover_orders_empty"),
-        sa.CheckConstraint(
-            "source_position_count = 0", name="ck_legacy_paper_cutover_positions_empty"
-        ),
-        sa.CheckConstraint("source_trade_count = 0", name="ck_legacy_paper_cutover_trades_empty"),
-        sa.CheckConstraint(
-            "length(source_inventory_sha256) = 64", name="ck_legacy_paper_cutover_inventory_hash"
-        ),
-        sa.CheckConstraint(
-            "length(binding_sha256) = 64", name="ck_legacy_paper_cutover_binding_hash"
-        ),
-        sa.CheckConstraint(
-            "length(paper_domain_sha256) = 64", name="ck_legacy_paper_cutover_domain_hash"
-        ),
-        sa.ForeignKeyConstraint(
-            ["legacy_account_id"],
-            ["paper_trading_accounts.id"],
-            ondelete="RESTRICT",
-            name="fk_legacy_paper_cutover_account",
-        ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("legacy_account_id", name="uq_legacy_paper_cutover_account"),
-    )
-    op.create_index("ix_legacy_paper_cutover_owner", _RECEIPT, ["owner_subject"], unique=False)
-    op.create_table(
-        _LEASE,
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("account_id", sa.String(length=36), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["account_id"],
-            ["paper_trading_accounts.id"],
-            ondelete="CASCADE",
-            name="fk_legacy_paper_writer_lease_account",
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_legacy_paper_writer_leases_account", _LEASE, ["account_id"], unique=False)
+    receipt_exists = _accept_existing_table(_RECEIPT, _RECEIPT_COLUMNS)
+    if not receipt_exists:
+        op.create_table(
+            _RECEIPT,
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("legacy_account_id", sa.String(length=36), nullable=False),
+            sa.Column("owner_subject", sa.String(length=256), nullable=False),
+            sa.Column("state", sa.String(length=16), nullable=False),
+            sa.Column("receipt_version", sa.Integer(), nullable=False),
+            sa.Column("source_inventory_sha256", sa.String(length=64), nullable=False),
+            sa.Column("binding_sha256", sa.String(length=64), nullable=False),
+            sa.Column("paper_domain_sha256", sa.String(length=64), nullable=False),
+            sa.Column("scope_ref", sa.String(length=128), nullable=False),
+            sa.Column("account_ref", sa.String(length=128), nullable=False),
+            sa.Column("execution_domain_ref", sa.String(length=128), nullable=False),
+            sa.Column("strategy_ref", sa.String(length=128), nullable=False),
+            sa.Column("initial_cash", sa.String(length=64), nullable=False),
+            sa.Column("initial_fees", sa.String(length=64), nullable=False),
+            sa.Column("fee_rate", sa.String(length=64), nullable=False),
+            sa.Column("source_order_count", sa.Integer(), nullable=False),
+            sa.Column("source_position_count", sa.Integer(), nullable=False),
+            sa.Column("source_trade_count", sa.Integer(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.CheckConstraint("state = 'ACTIVE'", name="ck_legacy_paper_cutover_active"),
+            sa.CheckConstraint("receipt_version = 1", name="ck_legacy_paper_cutover_version"),
+            sa.CheckConstraint(
+                "source_order_count = 0", name="ck_legacy_paper_cutover_orders_empty"
+            ),
+            sa.CheckConstraint(
+                "source_position_count = 0", name="ck_legacy_paper_cutover_positions_empty"
+            ),
+            sa.CheckConstraint(
+                "source_trade_count = 0", name="ck_legacy_paper_cutover_trades_empty"
+            ),
+            sa.CheckConstraint(
+                "length(source_inventory_sha256) = 64",
+                name="ck_legacy_paper_cutover_inventory_hash",
+            ),
+            sa.CheckConstraint(
+                "length(binding_sha256) = 64", name="ck_legacy_paper_cutover_binding_hash"
+            ),
+            sa.CheckConstraint(
+                "length(paper_domain_sha256) = 64", name="ck_legacy_paper_cutover_domain_hash"
+            ),
+            sa.ForeignKeyConstraint(
+                ["legacy_account_id"],
+                ["paper_trading_accounts.id"],
+                ondelete="RESTRICT",
+                name="fk_legacy_paper_cutover_account",
+            ),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("legacy_account_id", name="uq_legacy_paper_cutover_account"),
+        )
+        op.create_index("ix_legacy_paper_cutover_owner", _RECEIPT, ["owner_subject"], unique=False)
+    if not _accept_existing_table(_LEASE, _LEASE_COLUMNS):
+        op.create_table(
+            _LEASE,
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("account_id", sa.String(length=36), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.ForeignKeyConstraint(
+                ["account_id"],
+                ["paper_trading_accounts.id"],
+                ondelete="CASCADE",
+                name="fk_legacy_paper_writer_lease_account",
+            ),
+            sa.PrimaryKeyConstraint("id"),
+        )
+        op.create_index(
+            "ix_legacy_paper_writer_leases_account", _LEASE, ["account_id"], unique=False
+        )
     _install_writer_fence_triggers()
 
 
