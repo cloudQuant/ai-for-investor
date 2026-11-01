@@ -21,9 +21,9 @@ import threading
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard, cast
 
 from pydantic import (
     BaseModel,
@@ -256,7 +256,7 @@ class OwnerControlDeployment:
             type(action) is not str or action not in {"FREEZE", "STOP_NEW", "CANCEL"}
         ):
             raise OwnerControlError("CONTROL_ACTION_INVALID")
-        now = datetime.now(UTC).timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         if require_active and not self._config.not_before_utc <= now < self._config.expires_at_utc:
             raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
         matches = [
@@ -344,7 +344,7 @@ class OwnerControlDeployment:
                     issued.command_id,
                     action=action,
                     submit_arguments=arguments
-                    if datetime.now(UTC).timestamp() < issued.expires_at
+                    if datetime.now(timezone.utc).timestamp() < issued.expires_at
                     else None,
                 )
             self._record_final(issued.command_id, projection)
@@ -558,7 +558,7 @@ class OwnerControlDeployment:
         idempotency_key: str,
     ) -> _IssuedCommand:
         config = binding.config
-        now = datetime.now(UTC).timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         if not (
             self._config.not_before_utc <= now < self._config.expires_at_utc
             and config.not_before_utc <= now < config.expires_at_utc
@@ -1012,6 +1012,12 @@ def _parse_identity(value: Mapping[str, str], sdk: Any, *, role: Any) -> Any:
         raise OwnerControlError("DEPLOYMENT_INVALID") from None
 
 
+def _is_json_sequence(value: object) -> TypeGuard[list[Any] | tuple[Any, ...]]:
+    """Recognize the list/tuple arrays exposed after SDK JSON freezing."""
+
+    return type(value) in (list, tuple)
+
+
 def _validate_owner_projection(
     value: Mapping[str, Any],
     command_id: str,
@@ -1081,36 +1087,40 @@ def _validate_owner_projection(
                 "has_other_active_freezes",
                 "risk_state",
             }
+            # ``common_applied`` already verified that the effect is a Mapping.
+            effect_view = cast(Mapping[str, Any], effect)
             if (
                 not common_applied
-                or set(effect) != effect_fields
-                or effect.get("action") != "freeze"
-                or type(effect.get("cause_id")) is not str
-                or not effect.get("cause_id")
-                or value.get("effect_ref") != effect.get("cause_id")
-                or type(effect.get("activation_status")) is not str
-                or type(effect.get("cause_active")) is not bool
-                or type(effect.get("has_other_active_freezes")) is not bool
+                or set(effect_view) != effect_fields
+                or effect_view.get("action") != "freeze"
+                or type(effect_view.get("cause_id")) is not str
+                or not effect_view.get("cause_id")
+                or value.get("effect_ref") != effect_view.get("cause_id")
+                or type(effect_view.get("activation_status")) is not str
+                or type(effect_view.get("cause_active")) is not bool
+                or type(effect_view.get("has_other_active_freezes")) is not bool
             ):
                 raise OwnerControlError("OWNER_RECEIPT_INVALID")
             expected_state = {
                 "CREATED": (True, "active"),
                 "ALREADY_ACTIVE": (True, "active"),
                 "ALREADY_RESOLVED": (False, "resolved"),
-            }.get(effect["activation_status"])
+            }.get(effect_view["activation_status"])
             if (
                 expected_state is None
-                or (effect["cause_active"], effect["risk_state"]) != expected_state
+                or (effect_view["cause_active"], effect_view["risk_state"]) != expected_state
             ):
                 raise OwnerControlError("OWNER_RECEIPT_INVALID")
         else:
             effect_ref = value.get("effect_ref")
+            # ``common_applied`` already verified that the effect is a Mapping.
+            effect_view = cast(Mapping[str, Any], effect)
             if (
                 not common_applied
-                or set(effect) != {"action", "result"}
-                or effect.get("action") != "stop_new"
-                or type(effect.get("result")) is not str
-                or effect.get("result") not in {"fenced", "already_fenced"}
+                or set(effect_view) != {"action", "result"}
+                or effect_view.get("action") != "stop_new"
+                or type(effect_view.get("result")) is not str
+                or effect_view.get("result") not in {"fenced", "already_fenced"}
                 or type(effect_ref) is not str
                 or _STOP_NEW_EFFECT_REF_RE.fullmatch(effect_ref) is None
             ):
@@ -1256,7 +1266,7 @@ def _validate_owner_cancel_reply(
         # ServiceClientRuntime exposes the reply. Direct component calls may
         # still provide lists, so accept both supported representations while
         # projecting a fresh mutable list below.
-        or type(items) not in (list, tuple)
+        or not _is_json_sequence(items)
         or len(items) != selected
         or not isinstance(counts, Mapping)
         or any(type(key) is not str or key not in _CANCEL_STATES for key in counts)
