@@ -18,6 +18,34 @@ depends_on = None
 
 
 def upgrade() -> None:
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("approved_target_http_operations"):
+        # A startup-created current ORM schema already carries this table.
+        required = {
+            "id",
+            "owner_subject",
+            "principal_ref",
+            "actor_ref",
+            "delegate_ref",
+            "operation_key_sha256",
+            "request_sha256",
+            "approval_ref",
+            "approval_version",
+            "target_sha256",
+            "intent_id",
+            "selector_ref",
+            "scope_ref",
+            "account_ref",
+            "strategy_ref",
+            "created_at",
+        }
+        columns = {
+            column["name"] for column in inspector.get_columns("approved_target_http_operations")
+        }
+        if not required.issubset(columns):
+            raise RuntimeError("APPROVED_TARGET_HTTP_OPERATION_SCHEMA_CONFLICT")
+        return
+
     op.create_table(
         "approved_target_http_operations",
         sa.Column("id", sa.String(length=36), nullable=False),

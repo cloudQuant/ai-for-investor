@@ -26,52 +26,55 @@ async def test_portfolio_ledger_create_import_holdings_and_snapshots(client: Asy
     assert created.status_code == 201
     portfolio_id = created.json()["id"]
 
+    import_payload = {
+        "format": "json",
+        "idempotency_key": "sha256-demo",
+        "transactions": [
+            {
+                "symbol": "RB2510",
+                "trade_type": "buy",
+                "quantity": 2,
+                "price": 3500,
+                "trade_date": "2026-05-26",
+                "tags": ["entry"],
+            },
+            {
+                "symbol": "RB2510",
+                "trade_type": "sell",
+                "quantity": 1,
+                "price": 3600,
+                "trade_date": "2026-05-27",
+                "notes": "trim",
+            },
+            {
+                "symbol": "RB2510",
+                "trade_type": "dividend",
+                "quantity": 0,
+                "price": 0,
+                "amount": 120,
+                "trade_date": "2026-05-28",
+            },
+            {
+                "symbol": "RB2510",
+                "trade_type": "fee",
+                "quantity": 0,
+                "price": 0,
+                "amount": 20,
+                "trade_date": "2026-05-29",
+            },
+        ],
+    }
     imported = await client.post(
         f"/api/v1/portfolio-ledger/{portfolio_id}/import",
         headers=headers,
-        json={
-            "format": "json",
-            "idempotency_key": "sha256-demo",
-            "transactions": [
-                {
-                    "symbol": "RB2510",
-                    "trade_type": "buy",
-                    "quantity": 2,
-                    "price": 3500,
-                    "trade_date": "2026-05-26",
-                    "tags": ["entry"],
-                },
-                {
-                    "symbol": "RB2510",
-                    "trade_type": "sell",
-                    "quantity": 1,
-                    "price": 3600,
-                    "trade_date": "2026-05-27",
-                    "notes": "trim",
-                },
-                {
-                    "symbol": "RB2510",
-                    "trade_type": "dividend",
-                    "quantity": 0,
-                    "price": 0,
-                    "amount": 120,
-                    "trade_date": "2026-05-28",
-                },
-                {
-                    "symbol": "RB2510",
-                    "trade_type": "fee",
-                    "quantity": 0,
-                    "price": 0,
-                    "amount": 20,
-                    "trade_date": "2026-05-29",
-                },
-            ],
-        },
+        json=import_payload,
     )
+    # Idempotency compares the client key *and* the canonical source hash, so a
+    # replay must resend the identical document; a different body is a conflict.
     duplicated = await client.post(
         f"/api/v1/portfolio-ledger/{portfolio_id}/import",
         headers=headers,
-        json={"format": "json", "idempotency_key": "sha256-demo", "transactions": []},
+        json=import_payload,
     )
     detail = await client.get(f"/api/v1/portfolio-ledger/{portfolio_id}", headers=headers)
     listed = await client.get("/api/v1/portfolio-ledger", headers=headers)
@@ -95,6 +98,7 @@ async def test_portfolio_ledger_create_import_holdings_and_snapshots(client: Asy
 
     assert imported.status_code == 200
     assert imported.json()["imported_count"] == 4
+    assert duplicated.status_code == 200
     assert duplicated.json()["duplicate"] is True
     assert detail.status_code == 200
     assert detail.json()["id"] == portfolio_id

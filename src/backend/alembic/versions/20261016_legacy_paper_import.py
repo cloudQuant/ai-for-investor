@@ -19,6 +19,35 @@ depends_on = None
 
 _RECEIPT = "legacy_paper_import_receipts"
 _SOURCE_TABLES = ("paper_trading_orders", "paper_trading_positions", "paper_trades")
+_RECEIPT_COLUMNS = frozenset(
+    {
+        "id",
+        "legacy_account_id",
+        "generation",
+        "active_fence_key",
+        "owner_subject",
+        "state",
+        "receipt_version",
+        "source_inventory_sha256",
+        "source_snapshot_json",
+        "target_import_sha256",
+        "target_domain_sha256",
+        "binding_sha256",
+        "target_scope_key",
+        "target_account_key",
+        "cash_currency",
+        "opening_cash",
+        "cumulative_fees",
+        "unallocated_equity_residual",
+        "source_order_count",
+        "source_position_count",
+        "source_trade_count",
+        "preserved_context_sha256",
+        "preserved_context_json",
+        "created_at",
+        "updated_at",
+    }
+)
 
 
 def _large_text_type():
@@ -26,73 +55,86 @@ def _large_text_type():
 
 
 def upgrade() -> None:
-    op.create_table(
-        _RECEIPT,
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("legacy_account_id", sa.String(length=36), nullable=False),
-        sa.Column("generation", sa.Integer(), nullable=False),
-        sa.Column("active_fence_key", sa.String(length=36), nullable=True),
-        sa.Column("owner_subject", sa.String(length=256), nullable=False),
-        sa.Column("state", sa.String(length=16), nullable=False),
-        sa.Column("receipt_version", sa.Integer(), nullable=False),
-        sa.Column("source_inventory_sha256", sa.String(length=64), nullable=False),
-        sa.Column("source_snapshot_json", _large_text_type(), nullable=False),
-        sa.Column("target_import_sha256", sa.String(length=64), nullable=False),
-        sa.Column("target_domain_sha256", sa.String(length=64), nullable=False),
-        sa.Column("binding_sha256", sa.String(length=64), nullable=False),
-        sa.Column("target_scope_key", sa.String(length=128), nullable=False),
-        sa.Column("target_account_key", sa.String(length=128), nullable=False),
-        sa.Column("cash_currency", sa.String(length=16), nullable=False),
-        sa.Column("opening_cash", sa.String(length=64), nullable=False),
-        sa.Column("cumulative_fees", sa.String(length=64), nullable=False),
-        sa.Column("unallocated_equity_residual", sa.String(length=64), nullable=False),
-        sa.Column("source_order_count", sa.Integer(), nullable=False),
-        sa.Column("source_position_count", sa.Integer(), nullable=False),
-        sa.Column("source_trade_count", sa.Integer(), nullable=False),
-        sa.Column("preserved_context_sha256", sa.String(length=64), nullable=False),
-        sa.Column("preserved_context_json", _large_text_type(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("generation > 0", name="ck_legacy_paper_import_generation_positive"),
-        sa.CheckConstraint("receipt_version = 1", name="ck_legacy_paper_import_version"),
-        sa.CheckConstraint(
-            "state IN ('PREPARED', 'COMMITTED', 'ACTIVE', 'ABORTED')",
-            name="ck_legacy_paper_import_state",
-        ),
-        sa.CheckConstraint(
-            "length(source_inventory_sha256) = 64", name="ck_legacy_paper_import_source_hash"
-        ),
-        sa.CheckConstraint(
-            "length(target_import_sha256) = 64", name="ck_legacy_paper_import_target_hash"
-        ),
-        sa.CheckConstraint(
-            "length(target_domain_sha256) = 64", name="ck_legacy_paper_import_domain_hash"
-        ),
-        sa.CheckConstraint(
-            "length(binding_sha256) = 64", name="ck_legacy_paper_import_binding_hash"
-        ),
-        sa.CheckConstraint(
-            "length(preserved_context_sha256) = 64", name="ck_legacy_paper_import_context_hash"
-        ),
-        sa.CheckConstraint("source_order_count >= 0", name="ck_legacy_paper_import_order_count"),
-        sa.CheckConstraint(
-            "source_position_count >= 0", name="ck_legacy_paper_import_position_count"
-        ),
-        sa.CheckConstraint("source_trade_count >= 0", name="ck_legacy_paper_import_trade_count"),
-        sa.ForeignKeyConstraint(
-            ["legacy_account_id"],
-            ["paper_trading_accounts.id"],
-            ondelete="RESTRICT",
-            name="fk_legacy_paper_import_account",
-        ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "legacy_account_id", "generation", name="uq_legacy_paper_import_generation"
-        ),
-        sa.UniqueConstraint("active_fence_key", name="uq_legacy_paper_import_active_fence"),
-    )
-    op.create_index("ix_legacy_paper_import_owner", _RECEIPT, ["owner_subject"])
-    op.create_index("ix_legacy_paper_import_target_scope", _RECEIPT, ["target_scope_key"])
+    inspector = sa.inspect(op.get_bind())
+    receipt_exists = inspector.has_table(_RECEIPT)
+    if receipt_exists:
+        # A startup-created current ORM schema already carries this table.
+        columns = {column["name"] for column in inspector.get_columns(_RECEIPT)}
+        if not _RECEIPT_COLUMNS.issubset(columns):
+            raise RuntimeError("LEGACY_PAPER_IMPORT_SCHEMA_CONFLICT")
+
+    if not receipt_exists:
+        op.create_table(
+            _RECEIPT,
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("legacy_account_id", sa.String(length=36), nullable=False),
+            sa.Column("generation", sa.Integer(), nullable=False),
+            sa.Column("active_fence_key", sa.String(length=36), nullable=True),
+            sa.Column("owner_subject", sa.String(length=256), nullable=False),
+            sa.Column("state", sa.String(length=16), nullable=False),
+            sa.Column("receipt_version", sa.Integer(), nullable=False),
+            sa.Column("source_inventory_sha256", sa.String(length=64), nullable=False),
+            sa.Column("source_snapshot_json", _large_text_type(), nullable=False),
+            sa.Column("target_import_sha256", sa.String(length=64), nullable=False),
+            sa.Column("target_domain_sha256", sa.String(length=64), nullable=False),
+            sa.Column("binding_sha256", sa.String(length=64), nullable=False),
+            sa.Column("target_scope_key", sa.String(length=128), nullable=False),
+            sa.Column("target_account_key", sa.String(length=128), nullable=False),
+            sa.Column("cash_currency", sa.String(length=16), nullable=False),
+            sa.Column("opening_cash", sa.String(length=64), nullable=False),
+            sa.Column("cumulative_fees", sa.String(length=64), nullable=False),
+            sa.Column("unallocated_equity_residual", sa.String(length=64), nullable=False),
+            sa.Column("source_order_count", sa.Integer(), nullable=False),
+            sa.Column("source_position_count", sa.Integer(), nullable=False),
+            sa.Column("source_trade_count", sa.Integer(), nullable=False),
+            sa.Column("preserved_context_sha256", sa.String(length=64), nullable=False),
+            sa.Column("preserved_context_json", _large_text_type(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.CheckConstraint("generation > 0", name="ck_legacy_paper_import_generation_positive"),
+            sa.CheckConstraint("receipt_version = 1", name="ck_legacy_paper_import_version"),
+            sa.CheckConstraint(
+                "state IN ('PREPARED', 'COMMITTED', 'ACTIVE', 'ABORTED')",
+                name="ck_legacy_paper_import_state",
+            ),
+            sa.CheckConstraint(
+                "length(source_inventory_sha256) = 64", name="ck_legacy_paper_import_source_hash"
+            ),
+            sa.CheckConstraint(
+                "length(target_import_sha256) = 64", name="ck_legacy_paper_import_target_hash"
+            ),
+            sa.CheckConstraint(
+                "length(target_domain_sha256) = 64", name="ck_legacy_paper_import_domain_hash"
+            ),
+            sa.CheckConstraint(
+                "length(binding_sha256) = 64", name="ck_legacy_paper_import_binding_hash"
+            ),
+            sa.CheckConstraint(
+                "length(preserved_context_sha256) = 64", name="ck_legacy_paper_import_context_hash"
+            ),
+            sa.CheckConstraint(
+                "source_order_count >= 0", name="ck_legacy_paper_import_order_count"
+            ),
+            sa.CheckConstraint(
+                "source_position_count >= 0", name="ck_legacy_paper_import_position_count"
+            ),
+            sa.CheckConstraint(
+                "source_trade_count >= 0", name="ck_legacy_paper_import_trade_count"
+            ),
+            sa.ForeignKeyConstraint(
+                ["legacy_account_id"],
+                ["paper_trading_accounts.id"],
+                ondelete="RESTRICT",
+                name="fk_legacy_paper_import_account",
+            ),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint(
+                "legacy_account_id", "generation", name="uq_legacy_paper_import_generation"
+            ),
+            sa.UniqueConstraint("active_fence_key", name="uq_legacy_paper_import_active_fence"),
+        )
+        op.create_index("ix_legacy_paper_import_owner", _RECEIPT, ["owner_subject"])
+        op.create_index("ix_legacy_paper_import_target_scope", _RECEIPT, ["target_scope_key"])
     _install_receipt_guards()
     _install_source_write_fence()
 

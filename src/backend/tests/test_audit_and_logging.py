@@ -185,8 +185,19 @@ class TestAuditRecordQuery:
         resp = await client.get("/api/v1/audit/records")
         assert resp.status_code == 401
 
-    async def test_query_invalid_page_size(self, client: AsyncClient, auth_headers: dict):
-        """page_size > 100 returns 422."""
+    async def test_query_invalid_page_size(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """page_size > 100 returns 422 for an authorized admin caller.
+
+        The admin dependency runs before query validation, so the ordinary
+        non-admin caller is rejected with 403 (covered by
+        ``test_query_requires_admin``) and never reaches the 422 branch.
+        """
+        from app.api.data.deps import require_data_admin_user
+        from app.main import app
+
+        monkeypatch.setitem(app.dependency_overrides, require_data_admin_user, lambda: None)
         resp = await client.get(
             "/api/v1/audit/records",
             params={"page_size": 200},
