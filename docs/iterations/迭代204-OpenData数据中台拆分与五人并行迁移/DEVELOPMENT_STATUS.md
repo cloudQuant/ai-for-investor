@@ -1324,6 +1324,19 @@ after : 9143 collected, 0 errors (24 deselected)
 - **E2E [#222](https://github.com/cloudQuant/ai-for-investor/pull/222) → [#234](https://github.com/cloudQuant/ai-for-investor/pull/234)**（`409e3d398`）：剩余那个 503 不是"测试太严"，而是**真实的集成缺陷**——面板只读 `data.detail.code`，而 API 错误中间件把 FastAPI 的 `detail` 重新包成了 **`details`**，所以"未配置 operator"的状态从未渲染，页面一直落到通用的"不可用"文案。修好读取（两个信封都接受）后，spec 的豁免被收得很窄：只有 **503 + 精确的两个 API 路径 + 报文里 `OPERATOR_NOT_CONFIGURED`** 才被排除，且随后必须断言 `[data-test="operator-list-error"]` 的"未配置"文案；其他 5xx/401/403 仍然失败。本地 Chromium：**89 run → 89 passed / 0 failed / 0 did not run**（此前 63/1/25）。**未验证**：Firefox/WebKit/Mobile 未本地运行、已配置(200)分支需要真实 deployment JSON、`CI=true` 重试未演练——所以证据是"成因已修"，不是"四个作业已绿"。
 - **Backend 单测第一轮（[#233](https://github.com/cloudQuant/ai-for-investor/pull/233)，`97adc8017`）**：这批工作来自一个跑满回合上限的子代理，我把它的未提交工作树抢救到新分支、补跑 lint/format 并**逐项复验**后才合并（属于"审阅后抢救"，不是"代理自述"）。核心内容：陈旧 direct-order 测试重写到 managed-paper 合同（两条旧测试换成三条更强的新测试，含 operation-id 要求）、`get_simulation_portfolio_overview` 的真实缺陷修复、paper/portfolio API 测试改用依赖覆盖、AI research 部署 fixture、SDK 导入守卫。全量实测：**183 failed → 47 failed**（8934 passed / 215 skipped）。**作业仍红**，剩余 47 项已按文件聚类交给下一波。
 
+### Wave 16 追加三：前端与 E2E 全绿、后端单测收敛到个位数、py3.10 收集修复
+
+**AFI `dev` @ `1499efbf5` 实测**（GitHub check-runs）：除后端单测外全部转绿——`Backend - Lint & Type Check`、`Frontend - Lint / Unit / A11y / i18n`、**E2E 五个作业（Chromium/Firefox/WebKit/Mobile/Summary）**、Secret Scan、四个 Mypy Ratchet、迁移/OpenAPI/文档/依赖检查均 success。
+
+- **前端 A11y（[#237](https://github.com/cloudQuant/ai-for-investor/pull/237)）**：并非无障碍缺陷——所有 axe 扫描通过；失败是**陈旧 fixture**：页面在 `6f6e0644f` 后要求 `capability_states` 普查，而 spec 只喂了 feature flags。补上普查后 15 passed / 0 axe violations。
+- **前端 i18n（[#238](https://github.com/cloudQuant/ai-for-investor/pull/238)）**：CJK 违规 **59 → 0**，双语键各 +63（4846/侧，parity 0），zh-CN 文案逐字节不变；其中 10 处在 `PortfolioAnalyticsTaskPanel.vue`（原任务描述有误）。
+- **后端单测**：[#233](https://github.com/cloudQuant/ai-for-investor/pull/233) 183 → 47，[#239](https://github.com/cloudQuant/ai-for-investor/pull/239) 把含这 47 项的 9 个文件降到 **6**（672 passed / 13 skipped）；#239 还修了一个真实缺陷：`build_subprocess_env` 补全的是 `launch_instance`，而发布后合并读的是启动前快照，导致解析出的运行时合约元数据从未落盘。
+- **py3.10 收集（[#240](https://github.com/cloudQuant/ai-for-investor/pull/240)）**：`Backend - Unit Tests (py3.10)` 的 exit 2 是两个原因——7 个测试模块 `from datetime import UTC`（**3.10 不存在**，而项目声明 `requires-python >= 3.10`，属真实不兼容，已改 `timezone.utc`），以及 14 个模块经 `app`/`scripts` 间接依赖 `akshare`（它在 `requirements-dev.lock` 里但不在 `[dev,backtrader]` extra 里，已按 #228 约定加 `importorskip`）。py3.10 实测收集 **8992/20 errors → 9015/0**。
+
+**仍未闭合**：三个单测矩阵腿在 `1499efbf5` 均为 failure（`--maxfail=5`），剩余为上述 6 项个例（catalog 迁移的 `CircularDependencyError`、`Depends` 当 session 用、路由 deprecated 断言、403/422 期望、缺 `users` 表 fixture、`KeyError: 'duplicate'`），正在逐项修复；因此**不能说作业已绿**。
+
+**OpenData 剩余**：`zero-dep-check` 仍红。原因是本迭代新增运行时模块引入了 9 处上游名字符串引用（`api/stock_daily_capacity.py`、`pipeline/stock_daily_backfill_executor.py` 各一处 `"akshare.daily"`；akshare provider 层 6 处 `"akshare"`），且引用登记册有 13 个文件哈希因正常改动过期。我先尝试重签，发现 `--force-update` 会把 9 条新 finding **冻结进基线**，于是回滚：这是一个"哪些文件允许引用上游"的范围管控，重签需要逐条 `ast_exceptions` 复核，不能以放行换取绿灯。
+
 **流程教训**：`dev` 只接受 `feature|fix|docs|refactor|test` 前缀，`feat/*` 会被治理门禁拒绝（我因此重开过一次 PR）；治理门禁若在作者自审提交前跑完会"假失败"，需要重新触发一次。
 
 
