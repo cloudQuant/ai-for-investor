@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 AssetType = Literal["stock", "futures", "bond", "fund", "option", "fx", "crypto", "commodity"]
 QualityStatus = Literal["pass", "warning", "failed", "unknown"]
 GateSeverity = Literal["error", "warning", "info"]
+FreshnessStatus = Literal["fresh", "stale", "missing"]
 
 
 class QualityGateEvaluation(BaseModel):
@@ -99,6 +100,27 @@ class MarketDataCoverageMatrixResponse(BaseModel):
     total: int
     items: list[MarketDataCoverageResponse]
     refreshed: bool = False
+
+
+class OpenDataStockDailyFreshnessResponse(BaseModel):
+    """Current OpenData DWD freshness for the fixed ``stock_daily`` domain.
+
+    ``latest`` and ``expected_data_date`` are ISO calendar dates. ``checked_at``
+    records when AFI completed this proxy read; it is not an upstream observation
+    or publication timestamp. Upstream ``missing`` means freshness could not be
+    measured; it is not proof that stock-daily data is absent because the current
+    OpenData endpoint also maps some measurement failures to that status.
+    """
+
+    provider: Literal["opendata"] = "opendata"
+    domain: Literal["stock_daily"] = "stock_daily"
+    source: None = None
+    field: str | None = None
+    latest: date | None = None
+    lag_days: int | None = None
+    status: FreshnessStatus
+    expected_data_date: date
+    checked_at: datetime
 
 
 class DataPrecheckRequest(BaseModel):

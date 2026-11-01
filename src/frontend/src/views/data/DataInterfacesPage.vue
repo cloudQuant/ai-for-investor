@@ -197,6 +197,7 @@
             :label="t('dataPages.ifColReturnType')"
             width="120"
           />
+          <!-- @vue-generic {DataInterface} -->
           <el-table-column
             :label="t('dataPages.ifColParamCount')"
             width="90"
@@ -224,6 +225,7 @@
               {{ formatDateTime(row.updated_at) }}
             </template>
           </el-table-column>
+          <!-- @vue-generic {DataInterface} -->
           <el-table-column
             :label="t('dataPages.ifColActions')"
             fixed="right"

@@ -330,18 +330,10 @@ class TestLiveTradingList:
         assert response.status_code == 404
         assert "has no runtime" in response.json()["message"]
 
-    async def test_connect_gateway_error_returns_400_not_500(
+    async def test_retired_gateway_writes_reject_before_manager_or_credentials(
         self, client: AsyncClient, auth_headers
     ):
         with patch("app.api.live_trading_api.get_live_trading_manager") as mock_get_mgr:
-            mock_mgr = MagicMock()
-            mock_mgr.connect_gateway.return_value = {
-                "gateway_key": "manual:CTP:089763",
-                "status": "error",
-                "message": "CTP连接失败: RuntimeError: ctp market not ready",
-            }
-            mock_get_mgr.return_value = mock_mgr
-
             response = await client.post(
                 "/api/v1/live-trading/gateways/connect",
                 headers=auth_headers,
@@ -356,10 +348,17 @@ class TestLiveTradingList:
                     },
                 },
             )
+            disconnect_response = await client.post(
+                "/api/v1/live-trading/gateways/disconnect",
+                headers=auth_headers,
+                params={"gateway_key": "manual:CTP:089763"},
+            )
 
-        assert response.status_code == 400
-        payload = response.json()
-        assert "CTP连接失败" in str(payload)
+        for rejected in (response, disconnect_response):
+            assert rejected.status_code == 409
+            assert rejected.json()["details"]["code"] == "LEGACY_GATEWAY_MIGRATION_REQUIRED"
+            assert "secret" not in rejected.text
+        mock_get_mgr.assert_not_called()
 
     async def test_gateway_credentials_prefers_ib_web_env_values(
         self, client: AsyncClient, admin_headers

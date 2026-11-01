@@ -7,7 +7,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.services.scanner_plan import ScannerPlanService
 from app.services.scanner_service import get_scanner_service
-from app.services.scanner_universe import parse_symbol_text
+from app.services.scanner_universe import SCANNER_DATA_UNAVAILABLE, parse_symbol_text
 
 router = APIRouter(prefix="/scanners", tags=["Scanners"])
 
@@ -28,7 +28,13 @@ async def refresh_universe_pool(
     try:
         return get_scanner_service().universe_service.refresh_pool(pool_id, _user_id(current_user))
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        code = str(exc)
+        http_status = (
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if code == SCANNER_DATA_UNAVAILABLE
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=http_status, detail=code) from exc
 
 
 @router.post("/universe-pools/{pool_id}/precompute", response_model=None)
@@ -46,7 +52,13 @@ async def precompute_universe_pool_metrics(
             timeframe=str(payload.get("timeframe") or "1d"),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        code = str(exc)
+        http_status = (
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if code == SCANNER_DATA_UNAVAILABLE
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=http_status, detail=code) from exc
 
 
 @router.post("/universe-pools/custom", response_model=None)
@@ -220,7 +232,13 @@ async def run_scanner(
             user_id=_user_id(current_user),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        code = str(exc)
+        http_status = (
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if code == SCANNER_DATA_UNAVAILABLE
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=http_status, detail=code) from exc
 
 
 @router.get("/tasks/{task_id}", response_model=None)

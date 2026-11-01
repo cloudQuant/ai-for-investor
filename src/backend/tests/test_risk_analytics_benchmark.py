@@ -28,6 +28,12 @@ async def test_benchmark_service_fetches_prices_and_calculates_returns():
     assert result.observation_count == 3
     assert result.dates == ["2024-01-01", "2024-01-02", "2024-01-03"]
     assert result.returns == [pytest.approx(0.02), pytest.approx(-0.009804)]
+    assert [
+        (item.start_date, item.end_date, item.return_value) for item in result.return_observations
+    ] == [
+        ("2024-01-01", "2024-01-02", pytest.approx(0.02)),
+        ("2024-01-02", "2024-01-03", pytest.approx(-0.009804)),
+    ]
     fetcher.assert_awaited_once_with("000300.SH", "2024-01-01", "2024-01-03")
 
 
@@ -42,6 +48,76 @@ async def test_benchmark_service_returns_degraded_for_unknown_benchmark():
     assert result.status == "degraded"
     assert result.reason == "unknown_benchmark"
     assert result.returns == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("records", "reason"),
+    [
+        (
+            [
+                {"date": "2024-01-01", "close": 100.0},
+                {"date": "2024-01-02", "close": float("nan")},
+            ],
+            "invalid_benchmark_prices",
+        ),
+        (
+            [
+                {"date": "2024-01-01", "close": 100.0},
+                {"date": "2024-01-02", "close": float("inf")},
+            ],
+            "invalid_benchmark_prices",
+        ),
+        (
+            [
+                {"date": "2024-01-01", "close": 100.0},
+                {"date": "2024-01-02", "close": 0.0},
+            ],
+            "invalid_benchmark_prices",
+        ),
+        (
+            [
+                {"date": "2024-01-01", "close": 100.0},
+                {"date": "2024-01-02", "close": -1.0},
+            ],
+            "invalid_benchmark_prices",
+        ),
+        (
+            [
+                {"date": "2024-01-01", "close": 100.0},
+                {"date": "2024-01-02", "close": 101.0},
+                {"date": "2024-01-02", "close": 102.0},
+            ],
+            "invalid_benchmark_dates",
+        ),
+        (
+            [
+                {"date": "2024-01-02", "close": 101.0},
+                {"date": "2024-01-01", "close": 100.0},
+            ],
+            "invalid_benchmark_dates",
+        ),
+    ],
+)
+async def test_benchmark_service_rejects_invalid_or_unordered_observations(
+    records: list[dict[str, object]],
+    reason: str,
+):
+    from app.services.risk_analytics.benchmark import BenchmarkService
+
+    result = await BenchmarkService(
+        data_fetcher=AsyncMock(return_value=records)
+    ).get_benchmark_returns(
+        "hs300",
+        "2024-01-01",
+        "2024-01-03",
+    )
+
+    assert result.status == "degraded"
+    assert result.reason == reason
+    assert result.dates == []
+    assert result.returns == []
+    assert result.return_observations == []
 
 
 @pytest.mark.asyncio
@@ -70,6 +146,18 @@ async def test_benchmark_api_returns_benchmark_returns(client: AsyncClient):
                 observation_count=3,
                 dates=["2024-01-01", "2024-01-02", "2024-01-03"],
                 returns=[0.02, -0.009804],
+                return_observations=[
+                    {
+                        "start_date": "2024-01-01",
+                        "end_date": "2024-01-02",
+                        "return_value": 0.02,
+                    },
+                    {
+                        "start_date": "2024-01-02",
+                        "end_date": "2024-01-03",
+                        "return_value": -0.009804,
+                    },
+                ],
             )
 
     app.dependency_overrides[get_benchmark_service] = lambda: FakeBenchmarkService()
@@ -87,3 +175,15 @@ async def test_benchmark_api_returns_benchmark_returns(client: AsyncClient):
     assert payload["benchmark_id"] == "hs300"
     assert payload["symbol"] == "000300.SH"
     assert payload["returns"] == [0.02, -0.009804]
+    assert payload["return_observations"] == [
+        {
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-02",
+            "return_value": 0.02,
+        },
+        {
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+            "return_value": -0.009804,
+        },
+    ]

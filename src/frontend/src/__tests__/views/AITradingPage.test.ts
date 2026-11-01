@@ -83,14 +83,7 @@ describe('AITradingPage', () => {
       max_position_ratio: 0.2,
       require_confirmation_above: 0.7,
       blocked_symbols: [],
-      available_gateways: [
-        {
-          gateway_id: 'gw-1',
-          exchange_type: 'binance',
-          account_id: 'live-1',
-          connected: true,
-        },
-      ],
+      available_gateways: [],
       available_accounts: [
         {
           account_id: 'paper-1',
@@ -102,14 +95,12 @@ describe('AITradingPage', () => {
         },
         {
           account_id: 'live-1',
-          name: 'binance · live-1',
+          name: 'Service v2 · live-1',
           total_equity: null,
           current_cash: null,
           is_active: true,
-          source: 'gateway',
-          gateway_id: 'gw-1',
-          exchange_type: 'binance',
-          connected: true,
+          source: 'service_v2',
+          gateway_id: 'live-1',
         },
       ],
     })
@@ -177,7 +168,7 @@ describe('AITradingPage', () => {
     expect(vm.responses).toHaveLength(1)
   })
 
-  it('uses connected account selections for live trading', async () => {
+  it('selects authorized service reads without implying live order availability', async () => {
     const wrapper = mountWithPlugins(AITradingPage, {
       customStubs: {
         Promotion: true,
@@ -193,7 +184,12 @@ describe('AITradingPage', () => {
     await flushPromises()
 
     expect(vm.selectedAccountId).toBe('live-1')
-    expect(wrapper.text()).toContain('binance · live-1')
+    expect(wrapper.text()).toContain('Service v2 · live-1')
+    expect(wrapper.text()).toContain('AI 实盘下单')
+    expect(wrapper.text()).toContain('不可用')
+    expect(wrapper.text()).not.toContain('已连接网关')
+    expect(wrapper.text()).not.toContain('可用于实盘执行')
+    expect(wrapper.text()).not.toContain('总资产 --')
 
     vm.message = '帮我在币安买入0.1个BTC'
     await vm.handleSend()
@@ -201,7 +197,7 @@ describe('AITradingPage', () => {
 
     expect(apiMocks.executeTrade).toHaveBeenCalledWith({
       message: '帮我在币安买入0.1个BTC',
-      gateway_id: 'gw-1',
+      gateway_id: 'live-1',
       account_id: undefined,
       dry_run: false,
       auto_confirm: false,

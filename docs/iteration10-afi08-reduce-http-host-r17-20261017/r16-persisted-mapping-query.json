@@ -1,0 +1,46 @@
+{
+  "schema": "afi08.reduce.r16-http-mapping-oracle-readonly.v1",
+  "status": "R16_ORACLE_ERROR_CONFIRMED_MAPPING_PERSISTED",
+  "evidence_level": "LOCAL_SYNTHETIC_SQLITE_READONLY_ORM_QUERY",
+  "r16": {
+    "output": "D:\\temp\\afi08-reduce-http-host-20261017-r16",
+    "stdout_sha256": "ed814ba5d162a3315d0f4a828cfe1fc9b89ab2ddf3c69b957950b928d76adcc0",
+    "cleanup_status": "CLEANUP_OBSERVED",
+    "host_closed": true,
+    "owner_thread_alive_after_join": false,
+    "cleanup_errors": []
+  },
+  "database": {
+    "original_path": "D:\\temp\\afi08-reduce-http-host-20261017-r16\\pytest-tmp\\test_http_reduce_reaches_real_0\\afi-reduction-approval.sqlite3",
+    "original_sha256": "7cf17e2a049fd095e16803a9243b90e6ab2eb04b606fd2c5f52371bca09b5ada",
+    "readonly_copy_path": "D:\\bt_api_py\\.codex-tmp\\afi08_reduce_http_host_r17_20261017\\afi-reduction-approval-copy.sqlite3",
+    "readonly_copy_bytes": 3813376,
+    "readonly_copy_sha256_before": "7cf17e2a049fd095e16803a9243b90e6ab2eb04b606fd2c5f52371bca09b5ada",
+    "readonly_copy_sha256_after": "7cf17e2a049fd095e16803a9243b90e6ab2eb04b606fd2c5f52371bca09b5ada",
+    "copy_matches_original": true,
+    "read_mode": "SQLite URI mode=ro"
+  },
+  "mapping_verification": {
+    "filled_execution_rows": 1,
+    "http_mapping_rows": 1,
+    "filled_execution_intent_matches_mapping_intent": true,
+    "orm_get_by_intent_as_primary_key_returns_none": true,
+    "orm_select_by_unique_intent_id_returns_one": true,
+    "mapping_primary_key": [
+      "id"
+    ],
+    "intent_id_is_separately_unique": true,
+    "approval_scope_account_strategy_match": true,
+    "model_source_path": "D:\\bt_api_py\\.codex-tmp\\afi08_reduce_http_host_r13_20261017\\afi_backend\\app\\models\\approved_target_http_operation.py",
+    "original_assertion_is_wrong_lookup_not_missing_persistence": true
+  },
+  "remaining_assertions_reviewed": [
+    "mapping is not None",
+    "mapping.intent_id equals HTTP response intent_id",
+    "mapping.approval_ref equals the persisted approval reference",
+    "mapping.scope_ref equals the approved scope",
+    "mapping.account_ref equals the approved account",
+    "mapping.strategy_ref equals the approved strategy"
+  ],
+  "execution": "No test, collection, or Host run; R16 preserved unchanged."
+}

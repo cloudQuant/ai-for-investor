@@ -18,15 +18,41 @@ release environment, or security disclosure channel is active.
   `@cloudQuant`; it preserves the Iteration 193 ratchet entries and adds the
   governance coverage used by this iteration.
 
-## Current gate limits
+## Author self-review contract
 
-D2 has one verified owner but no second independent approval pool. The
-manifests therefore record code-owner review as desired but disabled; they do
-not claim it is remotely enabled. D3 permits only a desired-state draft and a
-read-only verifier until Ruleset capability is tested. D4 remains blocked, so
-both branch manifests deliberately use an empty `required_checks.contexts`
-list with a source pointing to future real Check Run evidence. D6 also keeps
+The `dev` and `master` manifests set `required_approvals` to `0` and
+`require_last_push_approval` to `false`. The PR Governance Gate separately
+requires every PR author to submit a GitHub `COMMENTED` review tied to the exact
+current 40-character HEAD SHA. That review body must contain one visible
+`## Author self-review` H2, `- Decision: APPROVED`, `- Head SHA: <40hex>`, and
+each of these checked lines exactly once:
+
+```markdown
+- [x] Code and scope reviewed
+- [x] Acceptance evidence verified
+- [x] Risks and limitations recorded
+```
+
+This is an author attestation, not a native GitHub approval: GitHub does not
+allow authors to approve their own PR. The checker reports it separately from
+`effective_approvals`; it does not fabricate or count an `APPROVED` review.
+Third-party approvals remain optional and are reported separately. An
+authorized third-party `CHANGES_REQUESTED` remains blocking until resolved.
+R2/R3 concrete test evidence, release and hotfix evidence, branch routing,
+required checks, conversation resolution, stale-review dismissal, and force
+push/deletion protections remain in force. Required code-owner review is
+optional by policy (`desired_when_d2_ready: false`); adding a second authorized
+maintainer will not turn it into a required non-author approval.
+
+The D2 reviewer-authorization file remains active for optional third-party
+review approvals and `CHANGES_REQUESTED`; it does not gate an author's own
+self-review. D3 permits only a desired-state draft and a read-only verifier
+until Ruleset capability is tested. D4 remains blocked, so both branch
+manifests deliberately use an empty `required_checks.contexts` list with a
+source pointing to future real Check Run evidence. D6 also keeps
 tag-authorized actors empty until release-environment capability is verified.
+These manifest changes do not claim that any GitHub Ruleset has been applied
+or read back.
 
 Each target records both its `include` and `exclude` ref arrays. The current
 arrays intentionally have no exclusions; the verifier treats an unexpected
@@ -35,7 +61,7 @@ API exclusion as drift rather than silently broadening or narrowing a Rule.
 The validator recognizes the future transition only when it is evidenced:
 `required_checks.status: "verified"` needs non-empty, non-blank, unique Check
 Run contexts plus a source; an applied Ruleset needs a readback reference;
-enabled code-owner review needs D2 owner evidence; and verified tag actors need
+required code-owner review remains disallowed by policy; and verified tag actors need
 GitHub-valid actor identity, `bypass_mode`, D3/D6 evidence, and an exact match
 to the tag Ruleset's `bypass.actors` API-readback field. `Integration`,
 `RepositoryRole`, `Team`, and `User` need positive integer IDs;

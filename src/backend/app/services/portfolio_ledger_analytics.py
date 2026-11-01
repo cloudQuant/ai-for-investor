@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.schemas.portfolio_ledger import (
     PortfolioLedgerBenchmarkMetricsResult,
     PortfolioLedgerBrinsonRequest,
@@ -13,6 +15,7 @@ from app.schemas.portfolio_ledger import (
     PortfolioLedgerPositionSizingResult,
     PortfolioLedgerVarCvarResult,
 )
+from app.services.market_data.opendata_contracts import OPENDATA_INDEX_BENCHMARK_DATASETS
 from app.services.perf_attribution import BrinsonAttributionService, FamaFrenchAttributionService
 from app.services.portfolio_ledger import PortfolioLedgerService, get_portfolio_ledger_service
 from app.services.risk_analytics import (
@@ -111,56 +114,29 @@ class PortfolioLedgerAnalyticsService:
         context = await self.ledger_service.analytics_context(user_id, portfolio_id)
         if context is None:
             return None
-        equity_dates = [str(item) for item in context["equity_dates"]]
-        if len(equity_dates) < 2:
-            return PortfolioLedgerBenchmarkMetricsResult(
-                portfolio_id=portfolio_id,
-                status="degraded",
-                benchmark_id=self._resolve_benchmark_id(
-                    benchmark_id,
-                    context["portfolio"].get("benchmark_symbol"),
-                ),
-                observation_count=max(len(equity_dates) - 1, 0),
-                risk_free_rate=risk_free_rate,
-                reason="insufficient_history",
-            )
         resolved_benchmark_id = self._resolve_benchmark_id(
             benchmark_id,
             context["portfolio"].get("benchmark_symbol"),
         )
-        benchmark = await self.benchmark_service.get_benchmark_returns(
-            resolved_benchmark_id,
-            equity_dates[0],
-            equity_dates[-1],
-        )
-        if benchmark.status != "ok":
-            return PortfolioLedgerBenchmarkMetricsResult(
-                portfolio_id=portfolio_id,
-                status="degraded",
-                benchmark_id=resolved_benchmark_id,
-                observation_count=max(len(equity_dates) - 1, 0),
-                risk_free_rate=risk_free_rate,
-                reason=benchmark.reason,
-            )
-        result = self.benchmark_metrics_service.calculate(
-            strategy_returns=self.benchmark_metrics_service.returns_from_equity_curve(
-                list(context["equity_curve"])
-            ),
-            benchmark_returns=list(benchmark.returns),
-            benchmark_id=resolved_benchmark_id,
-            risk_free_rate=risk_free_rate,
-        )
+        try:
+            validated_risk_free_rate = float(risk_free_rate)
+        except (TypeError, ValueError, OverflowError):
+            validated_risk_free_rate = float("nan")
+        if (
+            not math.isfinite(validated_risk_free_rate)
+            or not -1.0 <= validated_risk_free_rate <= 1.0
+        ):
+            reason = "invalid_risk_free_rate"
+            validated_risk_free_rate = 0.0
+        else:
+            reason = "portfolio_nav_not_time_weighted_or_close_marked"
         return PortfolioLedgerBenchmarkMetricsResult(
             portfolio_id=portfolio_id,
-            status=result.status,
-            benchmark_id=result.benchmark_id,
-            observation_count=result.observation_count,
-            alpha=result.alpha,
-            beta=result.beta,
-            tracking_error=result.tracking_error,
-            information_ratio=result.information_ratio,
-            risk_free_rate=result.risk_free_rate,
-            reason=result.reason,
+            status="degraded",
+            benchmark_id=resolved_benchmark_id,
+            observation_count=0,
+            risk_free_rate=validated_risk_free_rate,
+            reason=reason,
         )
 
     async def calculate_brinson(
@@ -199,12 +175,26 @@ class PortfolioLedgerAnalyticsService:
         context = await self.ledger_service.analytics_context(user_id, portfolio_id)
         if context is None:
             return None
-        strategy_returns = self.benchmark_metrics_service.returns_from_equity_curve(
-            list(context["equity_curve"])
-        )
         benchmark_id = self._resolve_benchmark_id(
             request.benchmark_id,
             context["portfolio"].get("benchmark_symbol"),
+        )
+        if bool(getattr(get_settings(), "MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED", False)):
+            reason = (
+                "fama_french_dated_alignment_required"
+                if benchmark_id in OPENDATA_INDEX_BENCHMARK_DATASETS
+                else "benchmark_unsupported_by_opendata"
+            )
+            return PortfolioLedgerFamaFrenchResult(
+                portfolio_id=portfolio_id,
+                benchmark_id=benchmark_id,
+                status="degraded",
+                observation_count=0,
+                reason=reason,
+            )
+
+        strategy_returns = self.benchmark_metrics_service.returns_from_equity_curve(
+            list(context["equity_curve"])
         )
         market_returns = list(request.market_returns or [])
         if not market_returns:

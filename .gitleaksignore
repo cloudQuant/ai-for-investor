@@ -257,3 +257,52 @@ f575cce66256d111666ea6601103377f0adcf6d4:src/backend/data/manual_gateways.json:g
 f575cce66256d111666ea6601103377f0adcf6d4:src/backend/data/manual_gateways.json:generic-api-key:66
 f575cce66256d111666ea6601103377f0adcf6d4:src/backend/tests/test_iteration129_kb_chat_api.py:generic-api-key:10
 f575cce66256d111666ea6601103377f0adcf6d4:src/backend/tests/test_iteration129_knowledge_base_api.py:generic-api-key:15
+# 2026-11-01 (iteration 204 CI debt): 42 generic-api-key findings from the audited
+# full-history scan, reviewed one line at a time. Every match is a synthetic test
+# identifier (UUID user/grant IDs, a legacy test password literal, a test JWT secret
+# alias) or a content digest that the entropy heuristic reads as a key (SHA-1/SHA-256
+# file digests in iteration-10 evidence JSON and in the account-book contract digests),
+# plus code fragments matched across a multi-line expression. None is a credential and
+# none is a runtime secret; the same-file/new-line behaviour stays blocking.
+0c8e78a4cd32c707d51b46d24f57aee377f20e68:src/backend/tests/test_admin_identity.py:generic-api-key:27
+4d11cffaee710e18ea48ee64430c80861aa7d3c2:src/backend/tests/test_portfolio_valuation_projection_api.py:generic-api-key:888
+4d11cffaee710e18ea48ee64430c80861aa7d3c2:src/backend/tests/test_portfolio_valuation_projection_api.py:generic-api-key:894
+4f88c2913597025ac41dd2a74d6038e9a4528bb4:src/backend/tests/test_opendata_stock_daily_real_sample_replay_wire.py:generic-api-key:765
+4f88c2913597025ac41dd2a74d6038e9a4528bb4:src/backend/tests/test_opendata_stock_daily_real_sample_replay_wire.py:generic-api-key:766
+4f88c2913597025ac41dd2a74d6038e9a4528bb4:src/backend/tests/test_opendata_stock_daily_real_sample_replay_wire.py:generic-api-key:767
+6e4e07263f50fbe2db4a88362be656bea2cfb309:src/backend/tests/test_mig03_boundary_inventory.py:generic-api-key:378
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:10
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:11
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:12
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:13
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:14
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:19
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:20
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:21
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:22
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:23
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:24
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:25
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:8
+7290547f3c3ea96c1cb664074956237019e9fc3c:docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json:generic-api-key:9
+794eab0c26589ccad7ebb49899ac04e75a46d0cb:src/backend/tests/test_service_read_authorized_http_integration.py:generic-api-key:7067
+7f50c51ca55096bf8a90c98aa3cf362dfb75afd2:src/backend/tests/test_afi_policy_budget_owner_checker_host.py:generic-api-key:375
+80d9b8ad5eb48df9e2f01d944d57cee428950a12:src/backend/tests/test_afi_budget_manual_admission_host.py:generic-api-key:111
+86ed9dbbe6293b71d7279aafb0f93b1e0c36aa3e:src/backend/tests/test_afi08_owner_freeze_control_http.py:generic-api-key:417
+86ed9dbbe6293b71d7279aafb0f93b1e0c36aa3e:src/backend/tests/test_afi08_owner_freeze_control_http.py:generic-api-key:421
+91cb89b882f9c4a2751abb05dce3d1824d4cdf9e:src/backend/tests/test_afi08_alert_ack_is_not_risk_resume.py:generic-api-key:178
+ad2171b5a97f522cfb55c983a8e5039dc823f92a:src/backend/tests/test_afi_policy_ordinary_account_partial_effect_host.py:generic-api-key:1237
+b825f921476b6e698881e1be68993c8a4ac610e1:src/backend/tests/test_opendata_stock_daily_real_sample_replay_wire.py:generic-api-key:765
+b825f921476b6e698881e1be68993c8a4ac610e1:src/backend/tests/test_opendata_stock_daily_real_sample_replay_wire.py:generic-api-key:766
+b825f921476b6e698881e1be68993c8a4ac610e1:src/backend/tests/test_opendata_stock_daily_real_sample_replay_wire.py:generic-api-key:767
+d7b67f920980822fd1fd8275866b511ac6fb052e:src/backend/tests/test_afi_policy_budget_owner_checker_host_r10.py:generic-api-key:381
+dd1e14a287cebc1137999045d1332d86bdab3806:src/backend/tests/test_service_read_account_book_contract.py:generic-api-key:61
+dd1e14a287cebc1137999045d1332d86bdab3806:src/backend/tests/test_service_read_account_book_contract.py:generic-api-key:62
+dd1e14a287cebc1137999045d1332d86bdab3806:src/backend/tests/test_service_read_account_book_contract.py:generic-api-key:70
+dd1e14a287cebc1137999045d1332d86bdab3806:src/backend/tests/test_service_read_account_book_contract.py:generic-api-key:71
+e9c7ca1d6149ddae176f090f98dba4cee52dfe58:src/backend/tests/test_service_read_reg04_workers.py:generic-api-key:53
+fefdcac075d09c7e4a68d3623925fee17a20cd5c:src/backend/tests/test_strategy_process_stop.py:generic-api-key:146
+fefdcac075d09c7e4a68d3623925fee17a20cd5c:src/backend/tests/test_strategy_process_stop.py:generic-api-key:200
+fefdcac075d09c7e4a68d3623925fee17a20cd5c:src/backend/tests/test_strategy_process_stop.py:generic-api-key:233
+ff592288ce48bd1bef05a23db1e161fd8589ebba:src/backend/tests/integration/test_strategy_process_stop_http_integration.py:generic-api-key:141
+ff592288ce48bd1bef05a23db1e161fd8589ebba:src/backend/tests/integration/test_strategy_process_stop_http_integration.py:generic-api-key:147

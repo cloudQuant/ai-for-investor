@@ -118,7 +118,7 @@ const inputNumberStub = defineComponent({
 const buttonStub = defineComponent({
   name: 'ElButtonStub',
   inheritAttrs: false,
-  props: ['type', 'size', 'loading', 'nativeType', 'circle'],
+  props: ['type', 'size', 'loading', 'nativeType', 'circle', 'disabled'],
   emits: ['click'],
   setup(props, { slots, emit }) {
     return () =>
@@ -126,7 +126,7 @@ const buttonStub = defineComponent({
         'button',
         {
           class: 'el-button',
-          disabled: props.loading,
+          disabled: props.loading || props.disabled,
           type: props.nativeType || 'button',
           onClick: () => emit('click'),
         },

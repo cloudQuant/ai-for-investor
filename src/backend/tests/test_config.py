@@ -31,6 +31,7 @@ class TestConfig:
         monkeypatch.delenv("AI_RESEARCH_PROTOCOL_V2_WORKER_POLL_SECONDS", raising=False)
         monkeypatch.delenv("MARKET_DATA_RESEARCH_CACHE_FILL_ENABLED", raising=False)
         monkeypatch.delenv("MARKET_DATA_RESEARCH_BACKTEST_BRIDGE_ENABLED", raising=False)
+        monkeypatch.delenv("MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED", raising=False)
         monkeypatch.delenv("MARKET_DATA_RESEARCH_ARTIFACT_SIGNING_KEY", raising=False)
         settings = Settings(_env_file=None, DEBUG=True)
         assert settings.APP_NAME == "ai-for-investor"
@@ -46,6 +47,7 @@ class TestConfig:
         assert settings.AI_RESEARCH_PROTOCOL_V2_WORKER_POLL_SECONDS == 10.0
         assert settings.MARKET_DATA_RESEARCH_CACHE_FILL_ENABLED is False
         assert settings.MARKET_DATA_RESEARCH_BACKTEST_BRIDGE_ENABLED is False
+        assert settings.MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED is False
         assert "openai" in settings.AI_PROVIDERS
         assert "ollama" in settings.AI_PROVIDERS
         assert "volcengine_ark" in settings.AI_PROVIDERS

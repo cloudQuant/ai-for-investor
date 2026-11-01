@@ -76,6 +76,11 @@ class PortfolioLedgerImportModel(Base):
     import_format = Column(String(20), nullable=False, default="json")
     idempotency_key = Column(String(128), nullable=False, index=True)
     imported_count = Column(Integer, nullable=False, default=0)
+    source_schema_version = Column(Integer, nullable=True)
+    source_document = Column(JSON, nullable=True)
+    source_sha256 = Column(String(64), nullable=True)
+    source_as_of = Column(String(20), nullable=True)
+    source_currency = Column(String(16), nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     portfolio = relationship("PortfolioLedgerModel", back_populates="imports")

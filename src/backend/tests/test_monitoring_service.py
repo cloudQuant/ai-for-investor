@@ -63,7 +63,7 @@ class TestMonitoringServiceInitialization:
 
         assert service.alert_repo is not None
         assert service.alert_rule_repo is not None
-        assert service.live_trading_service is not None
+        assert not hasattr(service, "live_trading_service")
         assert service.backtest_service is not None
         assert service._monitoring_tasks == {}
         assert service._running is False

@@ -15,7 +15,9 @@ SCRIPTS_CI = REPO_ROOT / "scripts" / "ci"
 CHECKER_PATH = SCRIPTS_CI / "check_pr_governance.py"
 RISK_MAP_PATH = REPO_ROOT / ".github" / "governance" / "risk-paths.json"
 MANIFEST_DIR = REPO_ROOT / ".github" / "governance" / "rulesets"
-REVIEWER_AUTHORIZATION_PATH = REPO_ROOT / ".github" / "governance" / "reviewer-authorization.json"
+REVIEWER_AUTHORIZATION_PATH = (
+    REPO_ROOT / ".github" / "governance" / "reviewer-authorization.json"
+)
 _DEFAULT_CHANGED_FILE_COUNT = object()
 _CURRENT_HEAD_SHA = "c" * 40
 
@@ -125,6 +127,7 @@ def _review(
     submitted_at: str,
     author_association: str | None = "OWNER",
     commit_id: object = _CURRENT_HEAD_SHA,
+    body: str | None = None,
 ) -> dict[str, object]:
     review: dict[str, object] = {
         "user": {"login": login},
@@ -135,7 +138,20 @@ def _review(
         review["author_association"] = author_association
     if commit_id is not None:
         review["commit_id"] = commit_id
+    if body is not None:
+        review["body"] = body
     return review
+
+
+def _author_self_review_body(head_sha: str = _CURRENT_HEAD_SHA) -> str:
+    return (
+        "## Author self-review\n\n"
+        "- Decision: APPROVED\n"
+        f"- Head SHA: {head_sha}\n"
+        "- [x] Code and scope reviewed\n"
+        "- [x] Acceptance evidence verified\n"
+        "- [x] Risks and limitations recorded\n"
+    )
 
 
 def _evaluate(
@@ -148,6 +164,7 @@ def _evaluate(
     raw_file_entry_count: int | None = None,
     manifests: dict[str, dict[str, object]] | None = None,
     reviewer_authorization: dict[str, object] | None = None,
+    add_author_self_review: bool = True,
 ) -> dict[str, object]:
     pr_with_count = dict(pr)
     pr_with_count["changed_files"] = (
@@ -155,9 +172,26 @@ def _evaluate(
         if metadata_changed_file_count is _DEFAULT_CHANGED_FILE_COUNT
         else metadata_changed_file_count
     )
+    review_events = list(reviews)
+    if add_author_self_review:
+        user = pr_with_count.get("user")
+        head = pr_with_count.get("head")
+        author = user.get("login") if isinstance(user, dict) else None
+        head_sha = head.get("sha") if isinstance(head, dict) else None
+        if isinstance(author, str) and isinstance(head_sha, str):
+            review_events.append(
+                _review(
+                    author,
+                    "COMMENTED",
+                    "2026-08-24T00:03:00Z",
+                    author_association=None,
+                    commit_id=head_sha,
+                    body=_author_self_review_body(head_sha),
+                )
+            )
     return checker.evaluate_pr_governance(
         pr_with_count,
-        reviews,
+        review_events,
         changed_files,
         risk_map=_risk_map(),
         manifests=_manifests(checker) if manifests is None else manifests,
@@ -165,12 +199,16 @@ def _evaluate(
             len(changed_files) if raw_file_entry_count is None else raw_file_entry_count
         ),
         reviewer_authorization=(
-            _authorization() if reviewer_authorization is None else reviewer_authorization
+            _authorization()
+            if reviewer_authorization is None
+            else reviewer_authorization
         ),
     )
 
 
-def test_feature_to_dev_r1_with_complete_evidence_and_approval_passes() -> None:
+def test_feature_to_dev_r1_with_author_self_review_passes_without_native_approval() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -181,17 +219,318 @@ def test_feature_to_dev_r1_with_complete_evidence_and_approval_passes() -> None:
     result = _evaluate(
         checker,
         pr,
-        [_review("maintainer", "APPROVED", "2026-08-24T00:01:00Z")],
+        [],
         ["src/backend/app/services/market_data.py"],
     )
 
     assert result["ok"] is True
     assert result["pr_kind"] == "normal"
     assert result["risk"] == "R1"
-    assert result["approval_floor"] == 1
-    assert result["effective_approvals"] == ["maintainer"]
-    assert result["code_owner_review"]["status"] == "disabled_pending_D2"
+    assert result["approval_floor"] == 0
+    assert result["author_self_review"]["status"] == "verified"
+    assert result["effective_approvals"] == []
+    assert result["code_owner_review"]["status"] == "optional_by_policy"
     assert result["issues"] == []
+
+
+def test_author_self_review_is_separate_from_native_approvals_and_not_allowlisted() -> (
+    None
+):
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1"),
+        author="new-contributor",
+    )
+
+    result = _evaluate(checker, pr, [], ["src/backend/app/services/market_data.py"])
+
+    assert result["ok"] is True
+    assert result["author_self_review"]["status"] == "verified"
+    assert result["author_self_review"]["author"] == "new-contributor"
+    assert result["author_self_review"]["review_state"] == "COMMENTED"
+    assert result["effective_approvals"] == []
+
+
+def test_author_approved_review_cannot_replace_a_commented_self_review() -> None:
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1"),
+    )
+
+    result = _evaluate(
+        checker,
+        pr,
+        [_review("contributor", "APPROVED", "2026-08-24T00:01:00Z")],
+        ["src/backend/app/services/market_data.py"],
+        add_author_self_review=False,
+    )
+
+    assert result["ok"] is False
+    assert result["author_self_review"]["status"] == "missing"
+    assert result["effective_approvals"] == []
+    assert any("author self-review is missing" in issue for issue in result["issues"])
+
+
+def test_pr_description_self_review_block_does_not_replace_review_api_event() -> None:
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1") + "\n" + _author_self_review_body(),
+    )
+
+    result = _evaluate(
+        checker,
+        pr,
+        [],
+        ["src/backend/app/services/market_data.py"],
+        add_author_self_review=False,
+    )
+
+    assert result["ok"] is False
+    assert result["author_self_review"]["status"] == "missing"
+
+
+def test_author_self_review_requires_matching_author_and_current_head() -> None:
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1"),
+    )
+    head_sha = pr["head"]["sha"]
+    assert isinstance(head_sha, str)
+
+    for review in (
+        _review(
+            "other-user",
+            "COMMENTED",
+            "2026-08-24T00:01:00Z",
+            author_association="NONE",
+            commit_id=head_sha,
+            body=_author_self_review_body(head_sha),
+        ),
+        _review(
+            "contributor",
+            "COMMENTED",
+            "2026-08-24T00:01:00Z",
+            author_association="NONE",
+            commit_id="d" * 40,
+            body=_author_self_review_body(head_sha),
+        ),
+        _review(
+            "contributor",
+            "COMMENTED",
+            "2026-08-24T00:01:00Z",
+            author_association="NONE",
+            commit_id=head_sha,
+            body=_author_self_review_body("d" * 40),
+        ),
+    ):
+        result = _evaluate(
+            checker,
+            pr,
+            [review],
+            ["src/backend/app/services/market_data.py"],
+            add_author_self_review=False,
+        )
+
+        assert result["ok"] is False
+        assert result["author_self_review"]["status"] in {"missing", "invalid"}
+
+
+def test_author_self_review_rejects_unchecked_hidden_fenced_and_duplicate_content() -> (
+    None
+):
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1"),
+    )
+    valid_body = _author_self_review_body()
+    invalid_bodies = (
+        (
+            valid_body.replace(
+                "- [x] Risks and limitations recorded",
+                "- [ ] Risks and limitations recorded",
+            ),
+            "invalid",
+        ),
+        (valid_body.replace("- [x] Acceptance evidence verified\n", ""), "invalid"),
+        (valid_body + "- [x] Code and scope reviewed\n", "invalid"),
+        (
+            valid_body.replace(
+                f"- Head SHA: {_CURRENT_HEAD_SHA}",
+                f"- Head SHA: {_CURRENT_HEAD_SHA}\n- Head SHA: {_CURRENT_HEAD_SHA}",
+            ),
+            "invalid",
+        ),
+        ("<!--\n" + valid_body + "-->\n", "missing"),
+        ("```markdown\n" + valid_body + "```\n", "missing"),
+        (
+            valid_body + "\n## Author self-review\n\n- Decision: APPROVED\n",
+            "invalid",
+        ),
+        (
+            valid_body.replace(
+                "- Decision: APPROVED", "- Decision: APPROVED\n- Decision: APPROVED"
+            ),
+            "invalid",
+        ),
+    )
+
+    for body, expected_status in invalid_bodies:
+        result = _evaluate(
+            checker,
+            pr,
+            [
+                _review(
+                    "contributor",
+                    "COMMENTED",
+                    "2026-08-24T00:01:00Z",
+                    author_association="NONE",
+                    body=body,
+                )
+            ],
+            ["src/backend/app/services/market_data.py"],
+            add_author_self_review=False,
+        )
+
+        assert result["ok"] is False
+        assert result["author_self_review"]["status"] == expected_status
+
+
+def test_author_self_review_does_not_clear_an_authorized_changes_requested_review() -> (
+    None
+):
+    checker = _load_checker()
+    pr = _pr(
+        base="master",
+        head="release/v1.2.3",
+        body=_body(
+            target="master",
+            risk="R3",
+            release_checklist="v1.2.3 changelog, regression results, and rollback point",
+        ),
+    )
+
+    result = _evaluate(
+        checker,
+        pr,
+        [_review("repository-owner", "CHANGES_REQUESTED", "2026-08-24T00:01:00Z")],
+        ["scripts/ops/release.sh"],
+    )
+
+    assert result["author_self_review"]["status"] == "verified"
+    assert result["changes_requested_by"] == ["repository-owner"]
+    assert any("CHANGES_REQUESTED" in issue for issue in result["issues"])
+
+
+def test_latest_visible_author_self_review_attempt_controls_the_attestation() -> None:
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1"),
+    )
+
+    invalid_latest_reviews = (
+        _review(
+            "contributor",
+            "COMMENTED",
+            "2026-08-24T00:02:00Z",
+            author_association=None,
+            body=_author_self_review_body().replace(
+                "- Decision: APPROVED", "- Decision: CHANGES_REQUESTED"
+            ),
+        ),
+        _review(
+            "contributor",
+            "COMMENTED",
+            "2026-08-24T00:02:00Z",
+            author_association=None,
+            commit_id="d" * 40,
+            body=_author_self_review_body(),
+        ),
+        _review(
+            "contributor",
+            "COMMENTED",
+            "2026-08-24T00:02:00Z",
+            author_association=None,
+            body=_author_self_review_body().replace(
+                "- [x] Acceptance evidence verified",
+                "- [ ] Acceptance evidence verified",
+            ),
+        ),
+    )
+    for latest_attempt in invalid_latest_reviews:
+        result = _evaluate(
+            checker,
+            pr,
+            [
+                _review(
+                    "contributor",
+                    "COMMENTED",
+                    "2026-08-24T00:01:00Z",
+                    author_association=None,
+                    body=_author_self_review_body(),
+                ),
+                latest_attempt,
+                _review(
+                    "contributor",
+                    "COMMENTED",
+                    "2026-08-24T00:03:00Z",
+                    author_association=None,
+                    body="Ordinary follow-up comment without a self-review section.",
+                ),
+            ],
+            ["src/backend/app/services/market_data.py"],
+            add_author_self_review=False,
+        )
+
+        assert result["ok"] is False
+        assert result["author_self_review"]["status"] == "invalid"
+        assert result["author_self_review"]["review_id"] is None
+
+
+def test_later_ordinary_author_comment_does_not_revoke_valid_self_review() -> None:
+    checker = _load_checker()
+    pr = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R1"),
+    )
+
+    result = _evaluate(
+        checker,
+        pr,
+        [
+            _review(
+                "contributor",
+                "COMMENTED",
+                "2026-08-24T00:01:00Z",
+                author_association=None,
+                body=_author_self_review_body(),
+            ),
+            _review(
+                "contributor",
+                "COMMENTED",
+                "2026-08-24T00:02:00Z",
+                author_association=None,
+                body="Ordinary follow-up comment without a self-review section.",
+            ),
+        ],
+        ["src/backend/app/services/market_data.py"],
+        add_author_self_review=False,
+    )
+
+    assert result["ok"] is True
+    assert result["author_self_review"]["status"] == "verified"
 
 
 def test_matching_changed_file_metadata_and_files_inventory_is_accepted() -> None:
@@ -213,11 +552,14 @@ def test_matching_changed_file_metadata_and_files_inventory_is_accepted() -> Non
 
     assert result["ok"] is True
     assert not any(
-        "complete changed-file inventory unavailable" in issue for issue in result["issues"]
+        "complete changed-file inventory unavailable" in issue
+        for issue in result["issues"]
     )
 
 
-def test_truncated_files_api_inventory_is_rejected_before_path_risk_can_be_trusted() -> None:
+def test_truncated_files_api_inventory_is_rejected_before_path_risk_can_be_trusted() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -236,10 +578,15 @@ def test_truncated_files_api_inventory_is_rejected_before_path_risk_can_be_trust
 
     assert result["risk"] == "R3"
     assert result["ok"] is False
-    assert any("complete changed-file inventory unavailable" in issue for issue in result["issues"])
+    assert any(
+        "complete changed-file inventory unavailable" in issue
+        for issue in result["issues"]
+    )
 
 
-def test_malformed_changed_file_metadata_is_rejected_before_path_risk_can_be_trusted() -> None:
+def test_malformed_changed_file_metadata_is_rejected_before_path_risk_can_be_trusted() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -257,7 +604,10 @@ def test_malformed_changed_file_metadata_is_rejected_before_path_risk_can_be_tru
     )
 
     assert result["ok"] is False
-    assert any("complete changed-file inventory unavailable" in issue for issue in result["issues"])
+    assert any(
+        "complete changed-file inventory unavailable" in issue
+        for issue in result["issues"]
+    )
 
 
 def test_empty_ruleset_manifest_set_blocks_supported_branch_governance() -> None:
@@ -307,8 +657,12 @@ def test_missing_dev_or_master_ruleset_manifest_blocks_the_gate() -> None:
         manifests=missing_master,
     )
 
-    assert any("missing Ruleset manifest: dev" in issue for issue in dev_result["issues"])
-    assert any("missing Ruleset manifest: master" in issue for issue in master_result["issues"])
+    assert any(
+        "missing Ruleset manifest: dev" in issue for issue in dev_result["issues"]
+    )
+    assert any(
+        "missing Ruleset manifest: master" in issue for issue in master_result["issues"]
+    )
 
 
 def test_non_mapping_ruleset_manifest_blocks_the_gate_without_an_exception() -> None:
@@ -371,7 +725,9 @@ def test_declared_target_must_match_actual_pr_base() -> None:
     )
 
     assert result["ok"] is False
-    assert any("does not match actual PR base 'dev'" in issue for issue in result["issues"])
+    assert any(
+        "does not match actual PR base 'dev'" in issue for issue in result["issues"]
+    )
 
 
 def test_governance_target_and_risk_values_must_be_unambiguous() -> None:
@@ -397,7 +753,9 @@ def test_governance_target_and_risk_values_must_be_unambiguous() -> None:
     assert any("must name R0-R3" in issue for issue in result["issues"])
 
 
-def test_governance_target_allows_a_single_template_compatible_branch_explanation() -> None:
+def test_governance_target_allows_a_single_template_compatible_branch_explanation() -> (
+    None
+):
     checker = _load_checker()
     cases = (
         (
@@ -504,8 +862,14 @@ def test_html_comment_decoys_cannot_supply_risk_or_test_evidence() -> None:
     )
 
     assert result["risk"] == "R3"
-    assert any("declares R1 but changed paths require R3" in issue for issue in result["issues"])
-    assert any("R3 change requires concrete test evidence" in issue for issue in result["issues"])
+    assert any(
+        "declares R1 but changed paths require R3" in issue
+        for issue in result["issues"]
+    )
+    assert any(
+        "R3 change requires concrete test evidence" in issue
+        for issue in result["issues"]
+    )
 
 
 def test_hidden_html_comment_declaration_does_not_satisfy_the_gate() -> None:
@@ -530,7 +894,8 @@ def test_hidden_html_comment_declaration_does_not_satisfy_the_gate() -> None:
 
     assert result["ok"] is False
     assert any(
-        "missing required section: ## Governance declaration" in issue for issue in result["issues"]
+        "missing required section: ## Governance declaration" in issue
+        for issue in result["issues"]
     )
 
 
@@ -556,7 +921,8 @@ def test_fenced_code_declaration_does_not_satisfy_the_gate() -> None:
 
     assert result["ok"] is False
     assert any(
-        "missing required section: ## Governance declaration" in issue for issue in result["issues"]
+        "missing required section: ## Governance declaration" in issue
+        for issue in result["issues"]
     )
 
 
@@ -655,10 +1021,12 @@ def test_unsupported_target_branch_returns_a_retargeting_diagnostic() -> None:
     )
 
     assert result["ok"] is False
-    assert any("unsupported target branch: staging" in issue for issue in result["issues"])
+    assert any(
+        "unsupported target branch: staging" in issue for issue in result["issues"]
+    )
 
 
-def test_r2_auth_change_requires_matching_declaration_and_protective_record() -> None:
+def test_r2_auth_change_requires_matching_declaration_not_external_approval() -> None:
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -675,8 +1043,14 @@ def test_r2_auth_change_requires_matching_declaration_and_protective_record() ->
 
     assert result["risk"] == "R2"
     assert result["labels_can_lower_risk"] is False
-    assert any("declares R1 but changed paths require R2" in issue for issue in result["issues"])
-    assert any("verified authorized protective approval" in issue for issue in result["issues"])
+    assert any(
+        "declares R1 but changed paths require R2" in issue
+        for issue in result["issues"]
+    )
+    assert not any(
+        "verified authorized protective approval" in issue for issue in result["issues"]
+    )
+    assert result["author_self_review"]["status"] == "verified"
     assert result["code_owner_review"]["verified"] is False
 
 
@@ -699,10 +1073,15 @@ def test_r3_changes_cannot_be_downgraded_by_a_label() -> None:
     assert result["risk"] == "R3"
     assert result["labels_can_lower_risk"] is False
     assert result["ignored_labels"] == ["risk:R0"]
-    assert any("declares R1 but changed paths require R3" in issue for issue in result["issues"])
+    assert any(
+        "declares R1 but changed paths require R3" in issue
+        for issue in result["issues"]
+    )
 
 
-def test_hotfix_missing_incident_and_forward_port_fields_is_actionably_rejected() -> None:
+def test_hotfix_missing_incident_and_forward_port_fields_is_actionably_rejected() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="master",
@@ -722,7 +1101,9 @@ def test_hotfix_missing_incident_and_forward_port_fields_is_actionably_rejected(
 
     assert result["pr_kind"] == "hotfix"
     assert result["ok"] is False
-    assert any("incident or private disclosure record" in issue for issue in result["issues"])
+    assert any(
+        "incident or private disclosure record" in issue for issue in result["issues"]
+    )
     assert any("forward-port plan for dev" in issue for issue in result["issues"])
 
 
@@ -751,7 +1132,9 @@ def test_hotfix_fields_outside_hotfix_section_cannot_satisfy_branch_contract() -
         ["src/backend/app/api/auth.py"],
     )
 
-    assert any("incident or private disclosure record" in issue for issue in result["issues"])
+    assert any(
+        "incident or private disclosure record" in issue for issue in result["issues"]
+    )
     assert any("forward-port plan for dev" in issue for issue in result["issues"])
 
 
@@ -828,7 +1211,9 @@ def test_structured_hotfix_incident_and_dev_forward_port_evidence_passes() -> No
     assert result["ok"] is True
 
 
-def test_hotfix_negative_or_placeholder_plan_cannot_satisfy_incident_or_forward_port() -> None:
+def test_hotfix_negative_or_placeholder_plan_cannot_satisfy_incident_or_forward_port() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="master",
@@ -851,7 +1236,9 @@ def test_hotfix_negative_or_placeholder_plan_cannot_satisfy_incident_or_forward_
     )
 
     assert result["ok"] is False
-    assert any("incident or private disclosure record" in issue for issue in result["issues"])
+    assert any(
+        "incident or private disclosure record" in issue for issue in result["issues"]
+    )
     assert any("forward-port plan for dev" in issue for issue in result["issues"])
 
 
@@ -878,7 +1265,9 @@ def test_release_missing_checklist_is_rejected() -> None:
     assert any("Release 清单" in issue for issue in result["issues"])
 
 
-def test_release_checklist_outside_release_section_cannot_satisfy_branch_contract() -> None:
+def test_release_checklist_outside_release_section_cannot_satisfy_branch_contract() -> (
+    None
+):
     checker = _load_checker()
     body = """\
 - **Release 清单**: v1.2.3 changelog, regression results, and rollback point
@@ -922,7 +1311,10 @@ def test_placeholder_high_risk_test_evidence_is_rejected() -> None:
     )
 
     assert result["ok"] is False
-    assert any("R3 change requires concrete test evidence" in issue for issue in result["issues"])
+    assert any(
+        "R3 change requires concrete test evidence" in issue
+        for issue in result["issues"]
+    )
 
 
 def test_placeholder_release_checklist_and_validation_are_rejected() -> None:
@@ -930,7 +1322,9 @@ def test_placeholder_release_checklist_and_validation_are_rejected() -> None:
     pr = _pr(
         base="master",
         head="release/v1.2.3",
-        body=_body(target="master", risk="R3", test_evidence="none", release_checklist="TBD"),
+        body=_body(
+            target="master", risk="R3", test_evidence="none", release_checklist="TBD"
+        ),
     )
 
     result = _evaluate(
@@ -948,7 +1342,7 @@ def test_placeholder_release_checklist_and_validation_are_rejected() -> None:
     assert any("release validation evidence" in issue for issue in result["issues"])
 
 
-def test_latest_non_author_review_state_controls_approval_floor_and_blocks_changes_requested() -> (
+def test_latest_non_author_review_state_is_optional_but_blocks_changes_requested() -> (
     None
 ):
     checker = _load_checker()
@@ -974,13 +1368,16 @@ def test_latest_non_author_review_state_controls_approval_floor_and_blocks_chang
         ["scripts/ops/release.sh"],
     )
 
+    assert result["ok"] is False
     assert result["effective_approvals"] == ["maintainer-b"]
     assert result["changes_requested_by"] == ["maintainer-a"]
     assert any(
         "latest review from maintainer-a is CHANGES_REQUESTED" in issue
         for issue in result["issues"]
     )
-    assert any("requires 2 non-author approvals but has 1" in issue for issue in result["issues"])
+    assert not any(
+        "requires a non-author approval" in issue for issue in result["issues"]
+    )
 
 
 def test_nonterminal_review_after_changes_requested_does_not_clear_the_block() -> None:
@@ -1016,7 +1413,9 @@ def test_nonterminal_review_after_changes_requested_does_not_clear_the_block() -
         )
 
 
-def test_approved_review_after_changes_requested_clears_the_block_by_time_and_input_order() -> None:
+def test_approved_review_after_changes_requested_clears_the_block_by_time_and_input_order() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="master",
@@ -1097,7 +1496,7 @@ def test_comment_after_approval_does_not_remove_the_approval() -> None:
     assert result["effective_approvals"] == ["maintainer"]
 
 
-def test_owner_approval_counts_toward_the_dev_floor() -> None:
+def test_native_owner_approval_is_reported_without_becoming_a_required_floor() -> None:
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1116,7 +1515,7 @@ def test_owner_approval_counts_toward_the_dev_floor() -> None:
     assert result["effective_approvals"] == ["maintainer"]
 
 
-def test_stale_approval_does_not_survive_a_pull_request_head_change() -> None:
+def test_stale_approval_is_metadata_and_does_not_replace_author_self_review() -> None:
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1132,13 +1531,15 @@ def test_stale_approval_does_not_survive_a_pull_request_head_change() -> None:
         ["src/backend/app/services/market_data.py"],
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
     assert result["effective_approvals"] == []
     assert result["stale_approvals"] == ["maintainer"]
-    assert any("not tied to the current PR head" in issue for issue in result["issues"])
+    assert result["author_self_review"]["status"] == "verified"
 
 
-def test_current_head_approval_replaces_an_older_approval_from_the_same_reviewer() -> None:
+def test_current_head_approval_replaces_an_older_approval_from_the_same_reviewer() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1151,8 +1552,12 @@ def test_current_head_approval_replaces_an_older_approval_from_the_same_reviewer
         checker,
         pr,
         [
-            _review("maintainer", "APPROVED", "2026-08-24T00:01:00Z", commit_id="c" * 40),
-            _review("maintainer", "APPROVED", "2026-08-24T00:02:00Z", commit_id="d" * 40),
+            _review(
+                "maintainer", "APPROVED", "2026-08-24T00:01:00Z", commit_id="c" * 40
+            ),
+            _review(
+                "maintainer", "APPROVED", "2026-08-24T00:02:00Z", commit_id="d" * 40
+            ),
         ],
         ["src/backend/app/services/market_data.py"],
     )
@@ -1162,7 +1567,9 @@ def test_current_head_approval_replaces_an_older_approval_from_the_same_reviewer
     assert result["stale_approvals"] == []
 
 
-def test_missing_or_malformed_approval_commit_id_fails_closed() -> None:
+def test_missing_or_malformed_optional_approval_commit_id_never_counts_as_approval() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1185,13 +1592,15 @@ def test_missing_or_malformed_approval_commit_id_fails_closed() -> None:
             ["src/backend/app/services/market_data.py"],
         )
 
-        assert result["ok"] is False
+        assert result["ok"] is True
         assert result["effective_approvals"] == []
         assert result["stale_approvals"] == ["maintainer"]
-        assert any("not tied to the current PR head" in issue for issue in result["issues"])
+        assert result["author_self_review"]["status"] == "verified"
 
 
-def test_repository_authorization_is_owner_only_while_d2_has_no_second_maintainer() -> None:
+def test_repository_authorization_is_owner_only_while_d2_has_no_second_maintainer() -> (
+    None
+):
     checker = _load_checker()
 
     authorization = checker.load_reviewer_authorization(REVIEWER_AUTHORIZATION_PATH)
@@ -1199,7 +1608,9 @@ def test_repository_authorization_is_owner_only_while_d2_has_no_second_maintaine
     assert authorization == {"cloudquant": frozenset({"OWNER"})}
 
 
-def test_malformed_reviewer_authorization_fails_closed_before_any_review_counts() -> None:
+def test_malformed_reviewer_authorization_fails_closed_before_any_review_counts() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1222,11 +1633,12 @@ def test_malformed_reviewer_authorization_fails_closed_before_any_review_counts(
     assert result["ok"] is False
     assert result["effective_approvals"] == []
     assert any(
-        "reviewer authorization configuration is invalid" in issue for issue in result["issues"]
+        "reviewer authorization configuration is invalid" in issue
+        for issue in result["issues"]
     )
 
 
-def test_unauthorized_collaborator_approval_does_not_count() -> None:
+def test_unauthorized_collaborator_approval_is_metadata_only() -> None:
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1248,7 +1660,7 @@ def test_unauthorized_collaborator_approval_does_not_count() -> None:
         ["src/backend/app/services/market_data.py"],
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
     assert result["effective_approvals"] == []
     assert result["unverified_reviews"] == ["unapproved-collaborator"]
 
@@ -1299,7 +1711,7 @@ def test_d2_approved_collaborator_can_complete_the_master_two_review_floor() -> 
     assert result["effective_approvals"] == ["approved-collaborator", "maintainer-a"]
 
 
-def test_unverified_none_approval_does_not_count_toward_the_floor() -> None:
+def test_unverified_none_approval_is_metadata_only() -> None:
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1314,13 +1726,14 @@ def test_unverified_none_approval_does_not_count_toward_the_floor() -> None:
         ["src/backend/app/services/market_data.py"],
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
     assert result["effective_approvals"] == []
-    assert any("authorization not verified" in issue for issue in result["issues"])
-    assert any("request verified maintainer review" in issue for issue in result["issues"])
+    assert result["unverified_reviews"] == ["random-reviewer"]
 
 
-def test_unverified_review_is_metadata_only_when_verified_owner_floor_is_already_met() -> None:
+def test_unverified_review_is_metadata_only_when_verified_owner_floor_is_already_met() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1344,7 +1757,7 @@ def test_unverified_review_is_metadata_only_when_verified_owner_floor_is_already
     assert not any("authorization not verified" in issue for issue in result["issues"])
 
 
-def test_author_owner_approval_does_not_count_toward_the_floor() -> None:
+def test_author_approved_review_alone_does_not_satisfy_author_self_review() -> None:
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1361,13 +1774,16 @@ def test_author_owner_approval_does_not_count_toward_the_floor() -> None:
             _review("random-reviewer", "APPROVED", "2026-08-24T00:02:00Z", "MEMBER"),
         ],
         ["src/backend/app/services/market_data.py"],
+        add_author_self_review=False,
     )
 
     assert result["ok"] is False
     assert result["effective_approvals"] == []
 
 
-def test_missing_review_authorization_fails_closed() -> None:
+def test_missing_optional_review_authorization_does_not_block_valid_author_self_review() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1382,12 +1798,12 @@ def test_missing_review_authorization_fails_closed() -> None:
         ["src/backend/app/services/market_data.py"],
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
     assert result["effective_approvals"] == []
-    assert any("authorization not verified" in issue for issue in result["issues"])
+    assert result["author_self_review"]["status"] == "verified"
 
 
-def test_master_floor_stays_red_without_two_verified_owner_approvals() -> None:
+def test_master_author_self_review_passes_without_two_non_author_approvals() -> None:
     checker = _load_checker()
     pr = _pr(
         base="master",
@@ -1409,12 +1825,15 @@ def test_master_floor_stays_red_without_two_verified_owner_approvals() -> None:
         ["scripts/ops/release.sh"],
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
+    assert result["approval_floor"] == 0
     assert result["effective_approvals"] == ["repository-owner"]
-    assert any("requires 2 non-author approvals but has 1" in issue for issue in result["issues"])
+    assert result["author_self_review"]["status"] == "verified"
 
 
-def test_requested_reviewer_does_not_satisfy_r2_protective_review_requirement() -> None:
+def test_requested_reviewer_is_not_a_native_approval_but_author_self_review_is_sufficient() -> (
+    None
+):
     checker = _load_checker()
     pr = _pr(
         base="dev",
@@ -1430,9 +1849,9 @@ def test_requested_reviewer_does_not_satisfy_r2_protective_review_requirement() 
         ["src/backend/app/api/auth.py"],
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
     assert result["protective_reviewers"] == []
-    assert any("verified authorized protective approval" in issue for issue in result["issues"])
+    assert result["author_self_review"]["status"] == "verified"
 
 
 def test_cli_uses_local_json_inputs_and_returns_a_machine_readable_result(
@@ -1452,7 +1871,18 @@ def test_cli_uses_local_json_inputs_and_returns_a_machine_readable_result(
         encoding="utf-8",
     )
     reviews_path.write_text(
-        json.dumps([_review("cloudQuant", "APPROVED", "2026-08-24T00:01:00Z")]),
+        json.dumps(
+            [
+                _review("cloudQuant", "APPROVED", "2026-08-24T00:01:00Z"),
+                _review(
+                    "contributor",
+                    "COMMENTED",
+                    "2026-08-24T00:02:00Z",
+                    author_association=None,
+                    body=_author_self_review_body(),
+                ),
+            ]
+        ),
         encoding="utf-8",
     )
     files_path.write_text(
@@ -1487,3 +1917,5 @@ def test_cli_uses_local_json_inputs_and_returns_a_machine_readable_result(
     result = json.loads(completed.stdout)
     assert result["ok"] is True
     assert result["risk"] == "R1"
+    assert result["author_self_review"]["status"] == "verified"
+    assert result["effective_approvals"] == ["cloudquant"]

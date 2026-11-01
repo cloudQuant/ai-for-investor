@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import app.services.market_instrument as _market_instrument
@@ -145,6 +145,35 @@ async def _lookup_futures_warehouse(
     )
 
 
+_BOND_HISTORY_FALLBACK_DAYS = 90
+
+
+async def _latest_bond_history_date(
+    service: _market_instrument.MarketInstrumentService,
+    *,
+    exchange_symbol: str,
+) -> tuple[date | None, str]:
+    """Return the newest local daily bar this bond has, and where it came from."""
+    for source_table in ("BOND_ZH_HS_COV_DAILY", "BOND_ZH_HS_DAILY"):
+        try:
+            row = await service._fetch_one(
+                f"""
+                SELECT MAX(data_date) AS latest
+                FROM {source_table}
+                WHERE LOWER(symbol) = :symbol
+                """,
+                {"symbol": exchange_symbol.lower()},
+            )
+        except Exception:
+            row = None
+        latest = _market_instrument._coerce_date(
+            _market_instrument._first_value(row or {}, "latest")
+        )
+        if latest is not None:
+            return latest, source_table
+    return None, ""
+
+
 async def _lookup_bond_warehouse(
     service: _market_instrument.MarketInstrumentService,
     *,
@@ -167,30 +196,59 @@ async def _lookup_bond_warehouse(
         """,
         {"symbol": exchange_symbol.lower(), "code": plain_code},
     )
-    rows = await service._fetch_rows(
-        """
-        SELECT *
-        FROM BOND_ZH_HS_COV_MIN
-        WHERE LOWER(symbol) = :symbol
-          AND data_date BETWEEN :start AND :end
-        ORDER BY `时间` ASC
-        LIMIT 260
-        """,
-        {
-            "symbol": exchange_symbol.lower(),
-            "start": _market_instrument._sql_date_text(start_date, date.today()),
-            "end": _market_instrument._sql_date_text(end_date, date.today()),
-        },
-    )
+
+    async def _read_daily(source_table: str, window_start: Any, window_end: Any) -> list[dict]:
+        try:
+            return await service._fetch_rows(
+                f"""
+                SELECT *
+                FROM {source_table}
+                WHERE LOWER(symbol) = :symbol
+                  AND data_date BETWEEN :start AND :end
+                ORDER BY data_date ASC
+                LIMIT 260
+                """,
+                {
+                    "symbol": exchange_symbol.lower(),
+                    "start": _market_instrument._sql_date_text(window_start, date.today()),
+                    "end": _market_instrument._sql_date_text(window_end, date.today()),
+                },
+            )
+        except Exception:
+            # A deployment may only carry part of the bond warehouse.
+            return []
+
+    rows: list[dict[str, Any]] = []
+    history_source = ""
+    for source_table in ("BOND_ZH_HS_COV_DAILY", "BOND_ZH_HS_DAILY"):
+        rows = await _read_daily(source_table, start_date, end_date)
+        if rows:
+            history_source = source_table
+            break
+    if not rows:
+        latest_bar, source_table = await _latest_bond_history_date(
+            service, exchange_symbol=exchange_symbol
+        )
+        if latest_bar is not None:
+            rows = await _read_daily(
+                source_table,
+                latest_bar - timedelta(days=_BOND_HISTORY_FALLBACK_DAYS),
+                latest_bar,
+            )
+            if rows:
+                history_source = source_table
+                warnings.append(
+                    f"本地债券日线最新只到 {latest_bar.isoformat()}，请求窗口内没有数据；"
+                    f"已回退展示该日期前的 {len(rows)} 条日线。"
+                )
     history_rows = service._normalize_warehouse_history(
         rows,
-        date_key="时间",
-        open_key="开盘",
-        high_key="最高",
-        low_key="最低",
-        close_key="收盘",
-        volume_key="成交量",
-        turnover_key="成交额",
+        date_key="data_date",
+        open_key="open",
+        high_key="high",
+        low_key="low",
+        close_key="close",
+        volume_key="volume",
     )
     if spot:
         snapshot = {
@@ -225,7 +283,10 @@ async def _lookup_bond_warehouse(
         }
     else:
         snapshot = service._snapshot_from_latest_history(exchange_symbol, history_rows)
-        snapshot["data_source_table"] = "BOND_ZH_HS_COV_MIN"
+        if history_rows:
+            snapshot["data_source_table"] = history_source
+        else:
+            snapshot.pop("data_source_table", None)
     return service._payload(
         asset_type="bond",
         symbol=exchange_symbol,
@@ -260,47 +321,32 @@ async def _lookup_fund_warehouse(
         {"code": code},
     )
     rows: list[dict[str, Any]] = []
-    if code == "510300":
-        rows = await service._fetch_rows(
-            """
-            SELECT *
-            FROM FUND_ETF_HIST_SINA
-            WHERE STR_TO_DATE(`date`, '%Y-%m-%d') BETWEEN :start AND :end
-            ORDER BY STR_TO_DATE(`date`, '%Y-%m-%d') ASC
-            LIMIT 260
-            """,
-            {
-                "start": _market_instrument._sql_date_text(start_date, date.today()),
-                "end": _market_instrument._sql_date_text(end_date, date.today()),
-            },
-        )
-    else:
-        nav_rows = await service._fetch_rows(
-            """
-            SELECT *
-            FROM ETF_FUND_HIST_EM
-            WHERE FUND_CODE = :code
-              AND VALUE_DATE BETWEEN :start AND :end
-            ORDER BY VALUE_DATE ASC
-            LIMIT 260
-            """,
-            {
-                "code": code,
-                "start": _market_instrument._sql_date_text(start_date, date.today()),
-                "end": _market_instrument._sql_date_text(end_date, date.today()),
-            },
-        )
-        rows = [
-            {
-                "date": row.get("VALUE_DATE"),
-                "open": row.get("UNIT_NET_VALUE"),
-                "high": row.get("UNIT_NET_VALUE"),
-                "low": row.get("UNIT_NET_VALUE"),
-                "close": row.get("UNIT_NET_VALUE"),
-                "change_pct": row.get("DAILY_GROWTH_RATE"),
-            }
-            for row in nav_rows
-        ]
+    nav_rows = await service._fetch_rows(
+        """
+        SELECT *
+        FROM ETF_FUND_HIST_EM
+        WHERE FUND_CODE = :code
+          AND VALUE_DATE BETWEEN :start AND :end
+        ORDER BY VALUE_DATE ASC
+        LIMIT 260
+        """,
+        {
+            "code": code,
+            "start": _market_instrument._sql_date_text(start_date, date.today()),
+            "end": _market_instrument._sql_date_text(end_date, date.today()),
+        },
+    )
+    rows = [
+        {
+            "date": row.get("VALUE_DATE"),
+            "open": row.get("UNIT_NET_VALUE"),
+            "high": row.get("UNIT_NET_VALUE"),
+            "low": row.get("UNIT_NET_VALUE"),
+            "close": row.get("UNIT_NET_VALUE"),
+            "change_pct": row.get("DAILY_GROWTH_RATE"),
+        }
+        for row in nav_rows
+    ]
 
     history_rows = service._normalize_warehouse_history(
         rows,
@@ -376,6 +422,51 @@ async def _lookup_fund_warehouse(
     )
 
 
+_OPTION_HISTORY_FALLBACK_DAYS = 90
+
+
+async def _fallback_option_history(
+    service: _market_instrument.MarketInstrumentService,
+    *,
+    symbol: str,
+    current: dict[str, Any],
+    warnings: list[str],
+) -> list[dict[str, Any]]:
+    """Re-anchor an option history read on the newest snapshot the warehouse has.
+
+    OPTION_CURRENT_EM is a per-day snapshot table, so a paused ETL job leaves
+    its newest row far behind a today-anchored window and every read returns
+    zero rows.  Falling back without a warning would present that stale tail
+    as current market data, so the warning is part of the contract.
+    """
+    latest_available = _market_instrument._coerce_date(
+        _market_instrument._first_value(current, "data_date")
+    )
+    if latest_available is None:
+        return []
+    rows = await service._fetch_rows(
+        """
+        SELECT *
+        FROM OPTION_CURRENT_EM
+        WHERE (UPPER(symbol) = :symbol OR UPPER(`代码`) = :symbol)
+          AND data_date BETWEEN :start AND :end
+        ORDER BY data_date ASC
+        LIMIT 260
+        """,
+        {
+            "symbol": symbol,
+            "start": (latest_available - timedelta(days=_OPTION_HISTORY_FALLBACK_DAYS)).isoformat(),
+            "end": latest_available.isoformat(),
+        },
+    )
+    if rows:
+        warnings.append(
+            f"本地期权行情最新只到 {latest_available.isoformat()}，请求窗口内没有数据；"
+            f"已回退展示该日期前的 {len(rows)} 条快照。"
+        )
+    return rows
+
+
 async def _lookup_option_warehouse(
     service: _market_instrument.MarketInstrumentService,
     *,
@@ -412,6 +503,13 @@ async def _lookup_option_warehouse(
             "end": _market_instrument._sql_date_text(end_date, date.today()),
         },
     )
+    if not rows and current:
+        rows = await _fallback_option_history(
+            service,
+            symbol=normalized,
+            current=current,
+            warnings=warnings,
+        )
     history_rows = [
         {
             "date": _market_instrument._iso_date(_market_instrument._first_value(row, "data_date")),
@@ -494,6 +592,107 @@ async def _lookup_option_warehouse(
     )
 
 
+_FX_OFFSHORE_LEG_MAP = {"CNH": "CNY"}
+
+
+def _fx_pair_legs(symbol: str) -> tuple[str, str] | None:
+    """Split an FX pair code into its ``(base, quote)`` currency codes.
+
+    Eastmoney stamps its onshore mid-price codes with a trailing ``C`` (``AUDCNYC`` is
+    澳元人民币中间价 and ``CNYAEDC`` is 人民币阿联酋迪拉姆中间价), so both the 6-character and
+    the 7-character forms reduce to two 3-character legs.
+    """
+    code = symbol.upper()
+    if len(code) == 7 and code.endswith("C"):
+        code = code[:-1]
+    if len(code) != 6 or not code.isalpha():
+        return None
+    return code[:3], code[3:]
+
+
+async def _fx_history_from_boc_safe(
+    service: _market_instrument.MarketInstrumentService,
+    *,
+    symbol: str,
+    start_date: date | str,
+    end_date: date | str,
+    warnings: list[str],
+) -> list[dict[str, Any]]:
+    """Derive a pair's daily mid-rate series from the CNY reference table.
+
+    Every ``CURRENCY_BOC_SAFE`` row is 人民币 per 100 units of one currency for one date, so
+    the pair rate is the quotient of its two legs' CNY-per-unit values. That is a genuine
+    history of *this* pair, which is what the old comment refused to accept: the mistake it
+    was guarding against was collapsing a pair to a single currency column, not the table.
+
+    The table carries no intraday range, so the series is one close per day.
+    """
+    import pandas as pd
+
+    from app.data_fetch.scripts.common.currency_fallback import (
+        CODE_TO_NAME,
+        _boc_rates_for_row,
+    )
+
+    legs = _fx_pair_legs(symbol)
+    if legs is None:
+        warnings.append(f"外汇代码 {symbol} 无法拆分为两个币种，无本地中间价历史")
+        return []
+
+    resolved: list[str] = []
+    for leg in legs:
+        substitute = _FX_OFFSHORE_LEG_MAP.get(leg)
+        if substitute is not None:
+            warnings.append(f"{leg} 无独立中间价，{symbol} 历史按人民币中间价（{substitute}）计算")
+            resolved.append(substitute)
+            continue
+        resolved.append(leg)
+
+    base, quote = resolved
+    needed = [leg for leg in (base, quote) if leg != "CNY"]
+    missing = [leg for leg in needed if leg not in CODE_TO_NAME]
+    if missing:
+        warnings.append(f"外汇中间价表未覆盖 {', '.join(missing)}，{symbol} 无本地历史可推导")
+        return []
+
+    select_columns = ", ".join(
+        f"MAX(`{CODE_TO_NAME[leg]}`) AS `{CODE_TO_NAME[leg]}`" for leg in needed
+    )
+    prefix = "`日期`" + (f", {select_columns}" if select_columns else "")
+    rows = await service._fetch_rows(
+        f"""
+        SELECT {prefix}
+        FROM CURRENCY_BOC_SAFE
+        WHERE `日期` BETWEEN :start AND :end
+        GROUP BY `日期`
+        ORDER BY `日期` ASC
+        LIMIT 520
+        """,
+        {
+            "start": _market_instrument._sql_date_text(start_date, date.today()),
+            "end": _market_instrument._sql_date_text(end_date, date.today()),
+        },
+    )
+
+    series: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        date_text = str(_market_instrument._first_value(row, "日期"))
+        rates = _boc_rates_for_row(pd.Series(row))
+        base_rate = rates.get(base)
+        quote_rate = rates.get(quote)
+        if not base_rate or not quote_rate:
+            continue
+        series[date_text] = {
+            "date": date_text,
+            "close": base_rate / quote_rate,
+        }
+
+    if not series:
+        warnings.append(f"人民币中间价表在所选区间内没有 {symbol} 的数据")
+        return []
+    return service._normalize_fx_history(sorted(series.values(), key=lambda item: item["date"]))
+
+
 async def _lookup_fx_warehouse(
     service: _market_instrument.MarketInstrumentService,
     *,
@@ -515,9 +714,13 @@ async def _lookup_fx_warehouse(
         """,
         {"symbol": normalized},
     )
-    # CURRENCY_BOC_SAFE is a currency reference series, not a history of an
-    # exact FX pair. It must not be presented as a requested pair's bars.
-    history_rows: list[dict[str, Any]] = []
+    history_rows = await _fx_history_from_boc_safe(
+        service,
+        symbol=normalized,
+        start_date=start_date,
+        end_date=end_date,
+        warnings=warnings,
+    )
     snapshot = {
         "symbol": normalized,
         "name": _market_instrument._safe_str(
@@ -544,6 +747,14 @@ async def _lookup_fx_warehouse(
         ),
         "data_source_table": "FOREX_SPOT_EM",
     }
+    if spot and history_rows:
+        # The Eastmoney spot feed is unreachable from this deployment, so the quote card can
+        # sit months behind the mid-rate series; say so instead of showing a stale "current"
+        # price next to a current chart.
+        spot_date = str(snapshot.get("update_time") or "")[:10]
+        newest_history_date = str(history_rows[-1].get("date") or "")
+        if spot_date and newest_history_date > spot_date:
+            warnings.append(f"报价快照停留在 {spot_date}，其后历史由人民币中间价逐日推导")
     snapshot = snapshot or service._snapshot_from_latest_history(normalized, history_rows)
     return service._payload(
         asset_type="fx",
@@ -557,6 +768,14 @@ async def _lookup_fx_warehouse(
     )
 
 
+_CRYPTO_INTRADAY_PERIODS = frozenset({"1m", "5m", "15m", "30m", "1h", "2h", "4h", "hourly"})
+
+
+def _crypto_pair_code(symbol: str) -> str:
+    """Normalise BTC-USDT / BTC/USDT / btcusdt to the Binance code BTCUSDT."""
+    return "".join(character for character in symbol.upper() if character.isalnum())
+
+
 async def _lookup_crypto_warehouse(
     service: _market_instrument.MarketInstrumentService,
     *,
@@ -567,55 +786,82 @@ async def _lookup_crypto_warehouse(
     market: str | None,
     warnings: list[str],
 ) -> dict[str, Any]:
-    normalized = symbol.upper()
-    spot = await service._fetch_one(
-        """
+    normalized = _crypto_pair_code(symbol)
+    intraday = (period or "").strip().lower() in _CRYPTO_INTRADAY_PERIODS
+    table = "CRYPTO_HOURLY_MARKET" if intraday else "CRYPTO_DAILY_MARKET"
+    time_column = "TRADE_DATETIME" if intraday else "TRADE_DATE"
+    start_text = _market_instrument._sql_date_text(start_date, date.today())
+    end_text = _market_instrument._sql_date_text(end_date, date.today())
+    # DATETIME comparisons against a bare date string drop the whole end day.
+    if intraday:
+        start_text = f"{start_text} 00:00:00"
+        end_text = f"{end_text} 23:59:59"
+    rows = await service._fetch_rows(
+        f"""
         SELECT *
-        FROM CRYPTO_JS_SPOT
-        WHERE UPPER(`交易品种`) = :symbol
-        ORDER BY data_date DESC
-        LIMIT 1
+        FROM {table}
+        WHERE MARKET = 'BINANCE'
+          AND SYMBOL = :symbol
+          AND {time_column} BETWEEN :start AND :end
+        ORDER BY {time_column} DESC
+        LIMIT 1000
         """,
-        {"symbol": normalized},
+        {"symbol": normalized, "start": start_text, "end": end_text},
     )
-    # CRYPTO_BITCOIN_CME is a Bitcoin positioning report, not price bars
-    # for a requested crypto pair such as BTCJPY.
-    history_rows: list[dict[str, Any]] = []
-    snapshot = {
-        "symbol": normalized,
-        "name": _market_instrument._safe_str(
-            _market_instrument._first_value(spot or {}, "交易品种")
-        )
-        or normalized,
-        "price": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "最近报价")
-        ),
-        "change": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "涨跌额")
-        ),
-        "change_pct": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "涨跌幅")
-        ),
-        "high": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "24小时最高")
-        ),
-        "low": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "24小时最低")
-        ),
-        "volume": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "24小时成交量")
-        ),
-        "market": _market_instrument._safe_str(_market_instrument._first_value(spot or {}, "市场")),
-        "update_time": _market_instrument._safe_str(
-            _market_instrument._first_value(spot or {}, "更新时间", "data_date")
-        ),
-        "data_source_table": "CRYPTO_JS_SPOT",
-    }
+    # Most recent window first, then back to chronological order so
+    # change_pct can be derived from the previous close.
+    rows = list(reversed(rows))
+    if intraday:
+        # ``_iso_date`` truncates a datetime to its date, which would collapse
+        # every bar of a day onto one category label.  Hand it a pre-formatted
+        # string instead so the hourly labels stay distinct.
+        for row in rows:
+            stamp = _market_instrument._first_value(row, time_column)
+            if isinstance(stamp, datetime):
+                row[time_column] = stamp.strftime("%Y-%m-%d %H:%M")
+    history_rows = service._normalize_warehouse_history(
+        rows,
+        date_key=time_column,
+        open_key="OPEN_PRICE",
+        high_key="HIGH_PRICE",
+        low_key="LOW_PRICE",
+        close_key="CLOSE_PRICE",
+        volume_key="VOLUME",
+        turnover_key="TURNOVER",
+    )
+    snapshot = service._snapshot_from_latest_history(normalized, history_rows)
+    latest_raw = rows[-1] if rows else {}
+    previous_close = (
+        _market_instrument._safe_float(_market_instrument._first_value(rows[-2], "CLOSE_PRICE"))
+        if len(rows) > 1
+        else None
+    )
+    latest_close = snapshot.get("price")
+    snapshot.update(
+        {
+            "symbol": symbol.strip().upper(),
+            "name": symbol.strip().upper(),
+            "data_source_symbol": normalized,
+            "market": "BINANCE",
+            "change": (
+                latest_close - previous_close
+                if latest_close is not None and previous_close is not None
+                else None
+            ),
+            "trade_count": _market_instrument._safe_int(
+                _market_instrument._first_value(latest_raw, "TRADE_COUNT")
+            ),
+            "data_source_table": table,
+        }
+    )
     return service._payload(
         asset_type="crypto",
-        symbol=normalized,
+        # Echo the requested code so ``_payload_matches_request`` (which keys
+        # crypto on a plain upper()) accepts BTC-USDT / btcusdt variants; the
+        # canonical Binance pair stays in data_source_symbol.
+        symbol=symbol.strip().upper(),
         name=_market_instrument._name_or_fallback(snapshot.get("name"), normalized),
-        market=market or _market_instrument._safe_str(snapshot.get("market")) or "CRYPTO",
+        market=market or "BINANCE",
         snapshot=snapshot,
         rows=history_rows,
         period=period,

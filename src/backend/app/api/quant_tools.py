@@ -25,7 +25,6 @@ async def call_tool(
     status_code, body = await get_quant_tools_service().call_tool(
         db,
         user_id=current_user.sub,
-        username=current_user.username,
         tool_name=str(payload.get("tool_name") or ""),
         payload=dict(payload.get("input") or {}),
     )
@@ -42,7 +41,6 @@ async def chat_simulate(
     status_code, body = await get_quant_tools_service().simulate_chat(
         db,
         user_id=current_user.sub,
-        username=current_user.username,
         tool_calls=list(payload.get("tool_calls") or []),
     )
 

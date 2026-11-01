@@ -167,19 +167,18 @@ async def get_current_metric_value(
     rule: AlertRule,
     config: dict[str, Any],
     paper_trading_service,
-    live_trading_service,
     backtest_service,
 ) -> float | None:
     """Resolve the current numeric metric value for a rule.
 
-    Fetches real-time data from paper trading, live trading, or backtest
-    services depending on the alert type and configuration.
+    Fetches data from paper trading or backtest services depending on the
+    alert type and configuration. Historical ``live_task_id`` rules remain
+    stored, but the retired CCXT runtime cannot provide their metrics.
 
     Args:
         rule: The alert rule requiring a metric value.
         config: Configuration specifying which metric to retrieve.
         paper_trading_service: Service for paper trading data.
-        live_trading_service: Service for live trading data.
         backtest_service: Service for backtest data.
 
     Returns:
@@ -202,10 +201,10 @@ async def get_current_metric_value(
             return None
 
     if alert_type_enum == AlertType.ACCOUNT:
-        return await _get_account_metric(rule, config, paper_trading_service, live_trading_service)
+        return await _get_account_metric(config, paper_trading_service)
 
     if alert_type_enum == AlertType.POSITION:
-        return await _get_position_metric(rule, config, paper_trading_service, live_trading_service)
+        return await _get_position_metric(config, paper_trading_service)
 
     if alert_type_enum == AlertType.STRATEGY:
         return await _get_strategy_metric(rule, config, backtest_service)
@@ -214,10 +213,8 @@ async def get_current_metric_value(
 
 
 async def _get_account_metric(
-    rule: AlertRule,
     config: dict[str, Any],
     paper_trading_service,
-    live_trading_service,
 ) -> float | None:
     """Resolve account-level metric value."""
     metric = str(config.get("metric", "cash"))
@@ -232,25 +229,17 @@ async def _get_account_metric(
             return float(account.total_equity)
         return None
 
-    live_task_id = config.get("live_task_id")
-    if live_task_id:
-        status = await live_trading_service.get_task_status(rule.user_id, live_task_id)
-        if not status:
-            return None
-        if metric == "cash":
-            return float(status.get("cash", 0.0))
-        if metric in ("value", "equity"):
-            return float(status.get("value", 0.0))
+    if config.get("live_task_id"):
+        # Keep persisted legacy rules intact, but never project missing live
+        # runtime data as a real zero balance or equity value.
         return None
 
     return None
 
 
 async def _get_position_metric(
-    rule: AlertRule,
     config: dict[str, Any],
     paper_trading_service,
-    live_trading_service,
 ) -> float | None:
     """Resolve position-level metric value."""
     metric = str(config.get("metric", "unrealized_pnl"))
@@ -276,19 +265,9 @@ async def _get_position_metric(
             return float(pos.unrealized_pnl_pct)
         return None
 
-    live_task_id = config.get("live_task_id")
-    if live_task_id:
-        status = await live_trading_service.get_task_status(rule.user_id, live_task_id)
-        if not status:
-            return None
-        positions = status.get("positions") or []
-        for p in positions:
-            if p.get("symbol") == symbol:
-                size = float(p.get("size", 0.0))
-                price = float(p.get("price", 0.0))
-                if metric == "market_value":
-                    return size * price
-                return size * price
+    if config.get("live_task_id"):
+        # The old process-local task map is gone; this row is unavailable
+        # until a supported live monitoring source is configured.
         return None
 
     return None

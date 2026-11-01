@@ -3,8 +3,6 @@
  */
 import request from './index'
 
-const GATEWAY_CONNECT_TIMEOUT_MS = 120000
-
 export interface LiveInstanceInfo {
   id: string
   strategy_id: string
@@ -91,17 +89,6 @@ export interface GatewayHealthListResponse {
   gateways: GatewayHealthInfo[]
 }
 
-export interface GatewayConnectRequest {
-  exchange_type: string
-  credentials: Record<string, unknown>
-}
-
-export interface GatewayConnectResponse {
-  gateway_key: string
-  status: string
-  message: string
-}
-
 export const liveTradingApi = {
   list(): Promise<LiveInstanceListResponse> {
     return request.get('/live-trading/')
@@ -139,22 +126,8 @@ export const liveTradingApi = {
     return request.post('/live-trading/stop-all')
   },
 
-  getGatewayCredentials(): Promise<Record<string, Record<string, unknown>>> {
-    return request.get('/live-trading/gateways/credentials')
-  },
-
   listGatewayHealth(): Promise<GatewayHealthListResponse> {
     return request.get('/live-trading/gateways/health')
-  },
-
-  connectGateway(data: GatewayConnectRequest): Promise<GatewayConnectResponse> {
-    return request.post('/live-trading/gateways/connect', data, {
-      timeout: GATEWAY_CONNECT_TIMEOUT_MS,
-    })
-  },
-
-  disconnectGateway(gatewayKey: string): Promise<GatewayConnectResponse> {
-    return request.post('/live-trading/gateways/disconnect', null, { params: { gateway_key: gatewayKey } })
   },
 
   listConnectedGateways(): Promise<{ total: number; gateways: { gateway_key: string; exchange_type: string; account_id: string; has_runtime: boolean }[] }> {

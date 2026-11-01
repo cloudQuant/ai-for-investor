@@ -18,6 +18,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PREVIOUS_HEAD_REVISION = "20260911_market_data_semantic_record_keys"
 B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION = "20261012_optimization_objective_direction"
+CURRENT_HEAD_REVISION = "20261031_stock_daily_snapshot_grants"
 RECEIPTS_TABLE = "md_b2_completeness_receipts"
 ENTRIES_TABLE = "md_b2_completeness_manifest_entries"
 
@@ -214,7 +215,7 @@ def test_b2_completeness_evidence_revision_precedes_the_current_integrated_head(
     assert revision.down_revision == PREVIOUS_HEAD_REVISION
     assert objective_revision is not None
     assert objective_revision.down_revision == B2_COMPLETENESS_EVIDENCE_REVISION
-    assert script.get_heads() == [OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION]
+    assert script.get_heads() == [CURRENT_HEAD_REVISION]
 
 
 def test_b2_evidence_normalizer_accepts_mysql_clause_parentheses() -> None:

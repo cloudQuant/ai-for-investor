@@ -49,9 +49,23 @@ class BondZhHsDaily(AkshareToMySql):
                 return pd.DataFrame()
 
             # Process data if needed
-            # Add data_date if not exists
-            if "data_date" not in df.columns:
+            # AkShare returns the bar columns only; the requested symbol is the
+            # instrument identity and `date` is the trading session, so the
+            # unique key (symbol, data_date) would otherwise dedup on run date.
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"], errors="coerce")
+                df = df.dropna(subset=["date"]).drop_duplicates(subset=["date"])
+                df["data_date"] = df["date"].dt.date
+            elif "data_date" not in df.columns:
                 df["data_date"] = pd.Timestamp.now().date()
+            requested_symbol = str(kwargs.get("symbol") or "").strip()
+            if not requested_symbol:
+                self.logger.warning("No symbol supplied; daily bars would have no instrument key")
+                return pd.DataFrame()
+            if "symbol" not in df.columns:
+                df["symbol"] = requested_symbol
+            if "name" not in df.columns:
+                df["name"] = requested_symbol
 
             # Save to database
             self.create_table_if_not_exists(self.table_name, self.create_table_sql)

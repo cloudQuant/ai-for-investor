@@ -1,0 +1,8 @@
+# Iteration10 AFI13 deterministic runner materialization
+
+- Repository/branch: `D:/source_code/ai-for-investor`, existing `dev`; parent `94386432b862fa0bfdf858033d95724ef5399169`.
+- Problem: the actual strategy-start R2 case stopped with `AI_RESEARCH_PAPER_RUNTIME_MATERIALIZATION_MISMATCH`. On Windows, the generated `run.py` was exactly the expected LF source after LF-to-CRLF expansion (33,241 bytes instead of 32,390). Strategy source and normalized configuration matched; the runtime byte digest correctly rejected the altered runner.
+- Change: both `sync_unit_runtime` and the fallback runner path in `sync_trading_unit_runtime` write `_UNIT_RUN_PY.encode("utf-8")` with `write_bytes`. The existing provenance and exact-byte digest checks are unchanged.
+- Regression: `tests/test_trading_workspace_service.py::test_runtime_sync_writes_fallback_runner_bytes_matching_source_digest` exercises both materializers and checks exact disk bytes and SHA-256. Author ran it on Windows Python 3.12.10 using the backend virtual environment: 2 passed in 2.07s, exit 0. Root reviewed the complete two-file diff; `git diff --check` passed. This accepted focused regression was not repeated for delivery.
+- Evidence boundary: local materialization regression only. The full strategy HTTP start through Execution/Risk/Monitor still requires a fresh run with this repair. The consumed R1/R2 strategy results and fixed sources remain unchanged; no formal AFI13 pass is added.
+- Scope: `src/backend/app/services/workspace_unit_runtime.py`, `src/backend/tests/test_trading_workspace_service.py`, and this record. Unrelated work remains unstaged. The resulting commit is recorded in Git and the Root postcommit receipt.

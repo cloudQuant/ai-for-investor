@@ -17,12 +17,26 @@ from app.services.live_trading.metadata import (
     normalize_instance_metadata,
     server_runtime_launch_timestamp,
 )
+from app.services.live_trading.service_execution_launch import (
+    SERVICE_EXECUTION_READY_ENV,
+    ServiceStrategyProfileError,
+)
 
 # Callback dependencies injected by ``LiveTradingManager``; typed loosely
 # since the concrete signatures vary per callback.
 _Cb = Callable[..., Any]
 _SUBPROCESS_STDOUT_LOG = "subprocess.stdout.log"
 _SUBPROCESS_STDERR_LOG = "subprocess.stderr.log"
+_SERVICE_EXECUTION_MANAGED_FIELD = "_server_service_execution_managed"
+_SERVICE_EXECUTION_PROFILE_FIELD = "_server_service_execution_profile_ref"
+_SERVICE_EXECUTION_RUN_FIELD = "_server_service_execution_run_id"
+_SERVICE_EXECUTION_START_TIMEOUT_SECONDS = 30.0
+
+
+def _clear_service_execution_metadata(instance: dict[str, Any]) -> None:
+    instance.pop(_SERVICE_EXECUTION_MANAGED_FIELD, None)
+    instance.pop(_SERVICE_EXECUTION_PROFILE_FIELD, None)
+    instance.pop(_SERVICE_EXECUTION_RUN_FIELD, None)
 
 
 def _optional_lock(lock: Any | None) -> contextlib.AbstractAsyncContextManager[Any]:
@@ -61,6 +75,40 @@ def _close_subprocess_log_handles(proc: asyncio.subprocess.Process) -> None:
             handle.close()
         except OSError:
             pass
+
+
+async def _wait_for_service_execution_ready(
+    proc: asyncio.subprocess.Process,
+    stdout_path: Path,
+    *,
+    start_offset: int,
+    marker: str,
+    timeout_seconds: float = _SERVICE_EXECUTION_START_TIMEOUT_SECONDS,
+) -> None:
+    expected = marker.encode("utf-8")
+    position = start_offset
+    partial = bytearray()
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while True:
+        try:
+            with stdout_path.open("rb") as handle:
+                handle.seek(position)
+                chunk = handle.read(4096)
+        except OSError:
+            chunk = b""
+        if chunk:
+            position += len(chunk)
+            partial.extend(chunk)
+            while b"\n" in partial:
+                line, _, remainder = partial.partition(b"\n")
+                partial[:] = remainder
+                if line.rstrip(b"\r") == expected:
+                    return
+        if proc.returncode is not None:
+            raise RuntimeError("SERVICE_EXECUTION_EXITED_BEFORE_READY")
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError("SERVICE_EXECUTION_START_TIMEOUT")
+        await asyncio.sleep(0.05)
 
 
 def _merge_runtime_contract_metadata(
@@ -103,6 +151,9 @@ async def start_instance(
     stopping_instances: set[str],
     instance_lock: Any | None = None,
     user_id: str | None = None,
+    build_subprocess_command: _Cb | None = None,
+    execution_mode: str = "live",
+    allow_service_strategy_execution: bool = True,
 ) -> dict[str, Any]:
     instances = load_instances()
     if instance_id not in instances:
@@ -111,9 +162,27 @@ async def start_instance(
     if user_id is not None and inst.get("user_id") != user_id:
         raise live_instance_service.InstanceAccessError("Instance not found")
 
+    if inst.get(_SERVICE_EXECUTION_MANAGED_FIELD) is True:
+        raise RuntimeError("SERVICE_EXECUTION_OWNER_UNCERTAIN")
+    current_proc = processes.get(instance_id)
+    if current_proc is not None:
+        raise ValueError("Strategy process is still owned")
+
     if inst["status"] == "running" and inst.get("pid") and is_pid_alive(inst["pid"]):
         raise ValueError("Strategy is already running")
 
+    if execution_mode not in {"live", "simulation"}:
+        raise ValueError("INVALID_EXECUTION_MODE")
+    launch_instance = dict(inst)
+    # InstanceStore is keyed by instance id and does not duplicate that key
+    # inside each persisted row.  Trusted service profiles bind the launch
+    # context to both subject and instance, so pass the key explicitly to the
+    # server-side profile resolver without persisting it as a new field.
+    launch_instance["id"] = instance_id
+    launch_instance["_server_execution_mode"] = execution_mode
+    launch_instance["_server_allow_service_strategy_execution"] = bool(
+        allow_service_strategy_execution
+    )
     try:
         runtime_dir = str(inst.get("runtime_dir") or "").strip()
         strategy_dir = (
@@ -166,9 +235,12 @@ async def start_instance(
         # Keep that synchronous adapter work off the ASGI event loop so a bad
         # broker credential cannot stall health checks, status polling, or the
         # portfolio/risk APIs while this instance is being started.
-        env = await asyncio.to_thread(build_subprocess_env, instance_id, inst, strategy_dir)
+        env = await asyncio.to_thread(
+            build_subprocess_env, instance_id, launch_instance, strategy_dir
+        )
     except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
-        release_gateway_for_instance(instance_id)
+        if not isinstance(exc, ServiceStrategyProfileError):
+            release_gateway_for_instance(instance_id)
         now = instance_timestamp()
         async with _optional_lock(instance_lock):
             latest = load_instances()
@@ -184,22 +256,40 @@ async def start_instance(
         raise ValueError(str(exc)) from exc
 
     sub_kwargs: dict[str, Any] = {}
-    if sys.platform == "win32":
-        import subprocess as _sp
-
-        sub_kwargs["creationflags"] = _sp.CREATE_NEW_PROCESS_GROUP | _sp.CREATE_NO_WINDOW
+    service_execution = bool(env.get("AFI_SERVICE_EXECUTION_PROFILE_REF"))
     stdout_handle = None
     stderr_handle = None
+    stdout_path = strategy_dir / "logs" / _SUBPROCESS_STDOUT_LOG
+    start_offset = 0
     try:
+        if service_execution:
+            if not env.get(SERVICE_EXECUTION_READY_ENV):
+                raise ServiceStrategyProfileError("SERVICE_EXECUTION_READY_MARKER_UNAVAILABLE")
+            if build_subprocess_command is None:
+                raise ServiceStrategyProfileError("SERVICE_EXECUTION_COMMAND_UNAVAILABLE")
+            command = build_subprocess_command(instance_id, inst, strategy_dir, env)
+            if (
+                type(command) not in (tuple, list)
+                or not command
+                or any(type(item) is not str or not item for item in command)
+            ):
+                raise ServiceStrategyProfileError("SERVICE_EXECUTION_COMMAND_INVALID")
+            sub_kwargs["stdin"] = asyncio.subprocess.PIPE
+        else:
+            command = (sys.executable, str(run_py))
+        if sys.platform == "win32":
+            import subprocess as _sp
+
+            sub_kwargs["creationflags"] = _sp.CREATE_NEW_PROCESS_GROUP | _sp.CREATE_NO_WINDOW
         logs_dir = strategy_dir / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
-        stdout_path = logs_dir / _SUBPROCESS_STDOUT_LOG
         stderr_path = logs_dir / _SUBPROCESS_STDERR_LOG
+        if stdout_path.exists():
+            start_offset = stdout_path.stat().st_size
         stdout_handle = stdout_path.open("ab", buffering=0)
         stderr_handle = stderr_path.open("ab", buffering=0)
         proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(run_py),
+            *command,
             cwd=str(strategy_dir),
             stdout=stdout_handle,
             stderr=stderr_handle,
@@ -210,14 +300,16 @@ async def start_instance(
         proc.__dict__["_bt_stdout_handle"] = stdout_handle
         proc.__dict__["_bt_stderr_handle"] = stderr_handle
         proc.__dict__["_bt_stderr_path"] = str(stderr_path)
-    except (OSError, subprocess.SubprocessError) as exc:
+        proc.__dict__["_bt_service_execution"] = service_execution
+    except (OSError, subprocess.SubprocessError, ServiceStrategyProfileError) as exc:
         for handle in (stdout_handle, stderr_handle):
             if handle is not None:
                 try:
                     handle.close()
                 except OSError:
                     pass
-        release_gateway_for_instance(instance_id)
+        if not service_execution:
+            release_gateway_for_instance(instance_id)
         failed_now = instance_timestamp()
         async with _optional_lock(instance_lock):
             latest = load_instances()
@@ -236,6 +328,77 @@ async def start_instance(
         raise
     stopping_instances.discard(instance_id)
     processes[instance_id] = proc
+
+    if service_execution:
+        inst[_SERVICE_EXECUTION_MANAGED_FIELD] = True
+        inst[_SERVICE_EXECUTION_PROFILE_FIELD] = env.get("AFI_SERVICE_EXECUTION_PROFILE_REF")
+        inst[_SERVICE_EXECUTION_RUN_FIELD] = env.get("AFI_SERVICE_EXECUTION_RUN_ID")
+        started_now = instance_timestamp()
+        async with _optional_lock(instance_lock):
+            latest = load_instances()
+            current = latest.get(instance_id, inst)
+            if isinstance(current, dict):
+                current["pid"] = proc.pid
+                current[_SERVICE_EXECUTION_MANAGED_FIELD] = True
+                current[_SERVICE_EXECUTION_PROFILE_FIELD] = env.get(
+                    "AFI_SERVICE_EXECUTION_PROFILE_REF"
+                )
+                current[_SERVICE_EXECUTION_RUN_FIELD] = env.get("AFI_SERVICE_EXECUTION_RUN_ID")
+                normalize_instance_metadata(
+                    current, instance_id=instance_id, now=started_now, touch=True
+                )
+                latest[instance_id] = current
+                save_instances(latest)
+                inst = current
+        try:
+            await _wait_for_service_execution_ready(
+                proc,
+                stdout_path,
+                start_offset=start_offset,
+                marker=env.get(SERVICE_EXECUTION_READY_ENV, ""),
+            )
+        except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
+            ready_now = instance_timestamp()
+            alive = proc.returncode is None
+            async with _optional_lock(instance_lock):
+                latest = load_instances()
+                failed = latest.get(instance_id, inst)
+                if isinstance(failed, dict):
+                    failed["status"] = "error"
+                    failed["pid"] = proc.pid if alive else None
+                    failed["error"] = str(exc)
+                    failed["stopped_at"] = None if alive else ready_now
+                    if alive:
+                        failed[_SERVICE_EXECUTION_MANAGED_FIELD] = True
+                        failed[_SERVICE_EXECUTION_PROFILE_FIELD] = env.get(
+                            "AFI_SERVICE_EXECUTION_PROFILE_REF"
+                        )
+                        failed[_SERVICE_EXECUTION_RUN_FIELD] = env.get(
+                            "AFI_SERVICE_EXECUTION_RUN_ID"
+                        )
+                    else:
+                        if proc.returncode == 0:
+                            _clear_service_execution_metadata(failed)
+                        else:
+                            failed[_SERVICE_EXECUTION_MANAGED_FIELD] = True
+                            failed[_SERVICE_EXECUTION_PROFILE_FIELD] = env.get(
+                                "AFI_SERVICE_EXECUTION_PROFILE_REF"
+                            )
+                            failed[_SERVICE_EXECUTION_RUN_FIELD] = env.get(
+                                "AFI_SERVICE_EXECUTION_RUN_ID"
+                            )
+                    normalize_instance_metadata(
+                        failed, instance_id=instance_id, now=ready_now, touch=True
+                    )
+                    latest[instance_id] = failed
+                    save_instances(latest)
+            if alive:
+                asyncio.create_task(wait_process_callback(instance_id, proc))
+            else:
+                await proc.wait()
+                _close_subprocess_log_handles(proc)
+                processes.pop(instance_id, None)
+            raise RuntimeError("SERVICE_EXECUTION_START_FAILED") from None
 
     refreshed_inst = inst
     now = instance_timestamp()
@@ -258,6 +421,14 @@ async def start_instance(
         # inherit an earlier observation window.
         inst[SERVER_RUNTIME_LAUNCH_ID_FIELD] = uuid.uuid4().hex
         inst[SERVER_RUNTIME_LAUNCH_STARTED_AT_FIELD] = server_runtime_launch_timestamp()
+        if service_execution:
+            inst[_SERVICE_EXECUTION_MANAGED_FIELD] = True
+            inst[_SERVICE_EXECUTION_PROFILE_FIELD] = env.get("AFI_SERVICE_EXECUTION_PROFILE_REF")
+            inst[_SERVICE_EXECUTION_RUN_FIELD] = env.get("AFI_SERVICE_EXECUTION_RUN_ID")
+        else:
+            inst.pop(_SERVICE_EXECUTION_MANAGED_FIELD, None)
+            inst.pop(_SERVICE_EXECUTION_PROFILE_FIELD, None)
+            inst.pop(_SERVICE_EXECUTION_RUN_FIELD, None)
         inst["stopped_at"] = None
         normalize_instance_metadata(inst, instance_id=instance_id, now=now, touch=True)
         latest[instance_id] = inst
@@ -278,6 +449,7 @@ async def stop_instance(
     stopping_instances: set[str],
     instance_lock: Any | None = None,
     user_id: str | None = None,
+    graceful_stop_callback: _Cb | None = None,
 ) -> dict[str, Any]:
     instances = load_instances()
     if instance_id not in instances:
@@ -287,17 +459,36 @@ async def stop_instance(
         raise live_instance_service.InstanceAccessError("Instance not found")
     stopping_instances.add(instance_id)
 
-    pid = inst.get("pid")
-    if pid and is_pid_alive(pid):
-        kill_pid(pid)
-
-    proc = processes.pop(instance_id, None)
-    if proc and proc.returncode is None:
+    proc = processes.get(instance_id)
+    service_execution = bool(
+        inst.get(_SERVICE_EXECUTION_MANAGED_FIELD) is True
+        or (proc is not None and getattr(proc, "_bt_service_execution", False))
+    )
+    if service_execution:
+        if proc is None or graceful_stop_callback is None:
+            stopping_instances.discard(instance_id)
+            raise RuntimeError("SERVICE_EXECUTION_STOP_CONTROL_UNAVAILABLE")
         try:
-            proc.terminate()
-            await asyncio.wait_for(proc.wait(), timeout=5)
-        except (ProcessLookupError, asyncio.TimeoutError, OSError, RuntimeError):
-            proc.kill()
+            await graceful_stop_callback(instance_id, proc)
+        except BaseException:
+            stopping_instances.discard(instance_id)
+            raise
+        if proc.returncode != 0:
+            stopping_instances.discard(instance_id)
+            raise RuntimeError("SERVICE_EXECUTION_CLOSE_UNCERTAIN")
+        processes.pop(instance_id, None)
+    else:
+        pid = inst.get("pid")
+        if pid and is_pid_alive(pid):
+            kill_pid(pid)
+
+        proc = processes.pop(instance_id, None)
+        if proc and proc.returncode is None:
+            try:
+                proc.terminate()
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except (ProcessLookupError, asyncio.TimeoutError, OSError, RuntimeError):
+                proc.kill()
 
     now = instance_timestamp()
     async with _optional_lock(instance_lock):
@@ -306,11 +497,14 @@ async def stop_instance(
         inst["status"] = "stopped"
         inst["pid"] = None
         inst["stopped_at"] = now
+        if service_execution:
+            _clear_service_execution_metadata(inst)
         clear_server_runtime_launch_observation(inst)
         normalize_instance_metadata(inst, instance_id=instance_id, now=now, touch=True)
         latest[instance_id] = inst
         save_instances(latest)
-    release_gateway_for_instance(instance_id)
+    if not service_execution:
+        release_gateway_for_instance(instance_id)
     inst["id"] = instance_id
     return inst
 
@@ -401,6 +595,7 @@ async def wait_process(
         logging.getLogger(__name__).debug("proc.wait() raised (ignored): %s", e)
     finally:
         _close_subprocess_log_handles(proc)
+        service_execution = bool(getattr(proc, "_bt_service_execution", False))
         stale_callback = False
         async with _optional_lock(instance_lock):
             instances = load_instances()
@@ -444,6 +639,8 @@ async def wait_process(
                             inst["status"] = "stopped"
                             inst["error"] = None
                         inst["pid"] = None
+                        if service_execution and proc.returncode == 0:
+                            _clear_service_execution_metadata(inst)
                         now = instance_timestamp()
                         inst["stopped_at"] = now
                         clear_server_runtime_launch_observation(inst)
@@ -465,5 +662,5 @@ async def wait_process(
             if not stale_callback:
                 processes.pop(instance_id, None)
                 stopping_instances.discard(instance_id)
-        if not stale_callback:
+        if not stale_callback and not service_execution:
             release_gateway_for_instance(instance_id)

@@ -119,6 +119,8 @@ export interface ChartDataResponse {
   timeframe: string
   bars: KlineBar[]
   total: number
+  complete?: boolean | null
+  error_code?: string | null
 }
 
 // ---------------------------------------------------------------------------

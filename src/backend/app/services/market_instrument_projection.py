@@ -122,26 +122,6 @@ def _normalize_fx_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return normalized_rows
 
 
-def _fx_history_column(symbol: str) -> str:
-    upper_symbol = symbol.upper()
-    column_by_currency = {
-        "USD": "美元",
-        "EUR": "欧元",
-        "JPY": "日元",
-        "HKD": "港元",
-        "GBP": "英镑",
-        "AUD": "澳元",
-        "NZD": "新西兰元",
-        "SGD": "新加坡元",
-        "CHF": "瑞士法郎",
-        "CAD": "加元",
-    }
-    for currency, column in column_by_currency.items():
-        if upper_symbol.startswith(currency) or upper_symbol.endswith(currency):
-            return column
-    return "美元"
-
-
 def _snapshot_from_cn_quote(
     service: _market_instrument.MarketInstrumentService, row: dict[str, Any], *, symbol: str
 ) -> dict[str, Any]:

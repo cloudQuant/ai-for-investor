@@ -271,6 +271,9 @@ async def _list_option_instruments(
 async def _list_fx_instruments(
     service: _market_instrument.MarketInstrumentService, *, search: str, limit: int
 ) -> list[dict[str, Any]]:
+    # FOREX_SPOT_EM holds one snapshot row per pair per import date, and the merged option
+    # sums history_rows across sources, so counting its rows as history both inflated the
+    # depth of every pair and promised history to the pairs no series can be derived for.
     rows = await service._fetch_rows(
         """
         SELECT
@@ -280,8 +283,8 @@ async def _list_fx_instruments(
             'FOREX_SPOT_EM' AS source_table,
             MAX(latest_date) AS latest_date,
             1 AS has_snapshot,
-            1 AS has_history,
-            COUNT(*) AS history_rows
+            0 AS has_history,
+            0 AS history_rows
         FROM (
             SELECT
                 COALESCE(NULLIF(symbol, ''), `代码`) AS symbol,
@@ -310,19 +313,18 @@ async def _list_crypto_instruments(
     rows = await service._fetch_rows(
         """
         SELECT
-            `交易品种` AS symbol,
-            CONCAT(`交易品种`, ' / ', COALESCE(`市场`, 'CRYPTO')) AS name,
-            COALESCE(`市场`, 'CRYPTO') AS market,
-            'CRYPTO_JS_SPOT' AS source_table,
-            MAX(data_date) AS latest_date,
+            SYMBOL AS symbol,
+            CONCAT(SYMBOL, ' / BINANCE') AS name,
+            'BINANCE' AS market,
+            'CRYPTO_DAILY_MARKET' AS source_table,
+            MAX(TRADE_DATE) AS latest_date,
             1 AS has_snapshot,
-            1 AS has_history,
+            COUNT(*) > 0 AS has_history,
             COUNT(*) AS history_rows
-        FROM CRYPTO_JS_SPOT
-        WHERE (:search = ''
-            OR `交易品种` LIKE :pattern
-            OR COALESCE(`市场`, '') LIKE :pattern)
-        GROUP BY `交易品种`, `市场`
+        FROM CRYPTO_DAILY_MARKET
+        WHERE MARKET = 'BINANCE'
+          AND (:search = '' OR SYMBOL LIKE :pattern)
+        GROUP BY SYMBOL
         ORDER BY latest_date DESC, symbol ASC
         LIMIT :limit
         """,

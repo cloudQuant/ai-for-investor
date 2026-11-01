@@ -198,6 +198,18 @@
                 <div>Alpha：{{ formatMetric(benchmarkMetrics.alpha) }}</div>
                 <div>Beta：{{ formatMetric(benchmarkMetrics.beta) }}</div>
                 <div>信息比率：{{ formatMetric(benchmarkMetrics.information_ratio) }}</div>
+                <div
+                  v-if="benchmarkMetrics.reason === 'portfolio_nav_not_time_weighted_or_close_marked'"
+                  class="text-xs text-amber-600"
+                >
+                  账本快照尚未按收盘价盯市并调整外部现金流，暂不提供基准绩效指标。
+                </div>
+                <div
+                  v-else-if="benchmarkMetrics.reason"
+                  class="text-xs text-amber-600"
+                >
+                  原因：{{ benchmarkMetrics.reason }}
+                </div>
               </div>
               <div
                 v-else

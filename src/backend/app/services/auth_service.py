@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol, cast
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -33,6 +34,7 @@ from app.utils.security import (
     hash_token,
     verify_password,
 )
+from app.utils.username_identity import normalize_reserved_username
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -80,9 +82,6 @@ class AuthService:
         session: AsyncSession | None = None,
     ) -> bool:
         """Return whether the user has admin privileges."""
-        if user.username == settings.ADMIN_USERNAME:
-            return True
-
         if session is not None:
             result = await session.execute(
                 select(user_roles.c.role).where(
@@ -185,6 +184,13 @@ class AuthService:
             UserResponse: Registration successful, returns user information.
             None: Username or email already exists.
         """
+        # Reserve the configured administrator spelling (including common
+        # case and trailing-space equivalents) for explicit bootstrap.
+        reserved_name = normalize_reserved_username(settings.ADMIN_USERNAME)
+        requested_name = normalize_reserved_username(user_create.username)
+        if requested_name == reserved_name:
+            return None
+
         # Check if username already exists
         existing = await self.user_repo.get_by_field("username", user_create.username)
         if existing:
@@ -202,7 +208,13 @@ class AuthService:
             hashed_password=get_password_hash(user_create.password),
         )
 
-        user = await self.user_repo.create(user)
+        try:
+            user = await self.user_repo.create(user)
+        except IntegrityError:
+            # A concurrent request may win a unique username/email constraint
+            # after the preflight reads above. Treat that race as a normal
+            # registration conflict; do not retry or mutate the winner.
+            return None
 
         return UserResponse(
             id=user.id,

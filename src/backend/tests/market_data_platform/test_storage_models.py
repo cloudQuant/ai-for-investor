@@ -44,6 +44,7 @@ SEMANTIC_RECORD_KEYS_REVISION = "20260911_market_data_semantic_record_keys"
 B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION = "20261012_optimization_objective_direction"
 INTEGRATED_HEAD_REVISION = OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION
+CURRENT_HEAD_REVISION = "20261031_stock_daily_snapshot_grants"
 OBSERVATION_STORAGE_TABLES = {
     "md_instrument_lookup_keys",
     "md_data_series",
@@ -1613,7 +1614,7 @@ def test_deferred_publications_revision_extends_the_integrated_storage_graph() -
     assert b2_evidence_revision.down_revision == SEMANTIC_RECORD_KEYS_REVISION
     assert integrated_head_revision is not None
     assert integrated_head_revision.down_revision == B2_COMPLETENESS_EVIDENCE_REVISION
-    assert script.get_heads() == [INTEGRATED_HEAD_REVISION]
+    assert script.get_heads() == [CURRENT_HEAD_REVISION]
 
 
 def test_shared_source_payload_migration_adds_child_evidence_without_parent_rewrite(

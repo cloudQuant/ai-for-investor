@@ -47,7 +47,7 @@ export interface AITradingAccountOption {
   total_equity?: number | null
   current_cash?: number | null
   is_active: boolean
-  source?: 'paper' | 'gateway' | string
+  source?: 'paper' | 'gateway' | 'service_v2' | string
   gateway_id?: string | null
   exchange_type?: string | null
   connected?: boolean

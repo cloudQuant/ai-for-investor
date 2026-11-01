@@ -1,0 +1,163 @@
+{
+  "acceptance_boundaries": {
+    "frontend_e2e": "NOT_RUN",
+    "production_deployment_or_acceptance": "NOT_RUN",
+    "remote_ci": "NOT_RUN",
+    "whole_ci": "NOT_RUN",
+    "whole_make_gate": "NOT_RUN"
+  },
+  "historical_backend_context": {
+    "coverage_percent": {
+      "instrument_reference_route": 94.68085106382979,
+      "instrument_reference_service": 92.55319148936171
+    },
+    "not_a_combined_current_head_run": true,
+    "receipt": "wave8-afi-backend-lock-root-command.json",
+    "receipt_sha256": "3dbd01400c56ee87c38a96f5dde357b52b1916ad6fdc572ef95d75f6ba820109",
+    "scope": "AFI backend instrument-reference adapter and route, separate from this W12 frontend run",
+    "source_commit": "6b8f13c6d6c7d8cec360ebed63ae7098288a5a2c",
+    "status": "PASS",
+    "test_files": 3,
+    "tests_passed": 203,
+    "wave": "W8"
+  },
+  "phases": [
+    {
+      "commands": [
+        {
+          "command": "node --version",
+          "exit_code": 0,
+          "log_sha256": "5c9160ca0ca43d0c49f5e254d49027c297167ac86be2287128b53ca3d9cd7296"
+        },
+        {
+          "command": "npm --version",
+          "exit_code": 0,
+          "log_sha256": "3dbc807e13de125e909bea5877613d5d67989a43fb8e982fd79ba0efa46ac952"
+        }
+      ],
+      "phase": "setup",
+      "receipt": "wave12-afi-frontend-343ee7707ce7-od204-w12-frontend-seventh-root/setup.json",
+      "receipt_sha256": "07bf42f8975492c9f92973754a1f9ac794633ac1f528d82653a3926e5fe7a0c4",
+      "runner_sha256": "2e9b33f5c832bd46a48d89d5e4ac8d68e9e491b64828142320ef24af4d618c92",
+      "status": "PASS"
+    },
+    {
+      "commands": [
+        {
+          "command": "npm run verify:node-engines",
+          "exit_code": 0,
+          "log_sha256": "8e8714397149499c65a05fb8600cdc9e10b25c4c56cb7ea17daa1c09c9d684d8"
+        },
+        {
+          "command": "node_modules/.bin/eslint --max-warnings 0 src/api/marketData.ts src/views/DataPage.vue src/views/data/useDataPage.ts src/i18n/locales/en-US.ts src/i18n/locales/zh-CN.ts src/__tests__/api/marketData.opendata-kline.test.ts src/__tests__/views/DataPage.opendata-kline.test.ts src/__tests__/api/marketData.test.ts src/__tests__/views/DataPage.test.ts src/__tests__/views/DataPage.instrument-reference.test.ts",
+          "exit_code": 0,
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "eslint_file_count": 10,
+      "phase": "static",
+      "receipt": "wave12-afi-frontend-343ee7707ce7-od204-w12-frontend-seventh-root/static.json",
+      "receipt_sha256": "3d66afbda2d005ac166c9893db237f5d904637eee3580abb4da9c9de18f5397c",
+      "runner_sha256": "2e9b33f5c832bd46a48d89d5e4ac8d68e9e491b64828142320ef24af4d618c92",
+      "status": "PASS"
+    },
+    {
+      "commands": [
+        {
+          "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts src/__tests__/api/marketData.opendata-kline.test.ts src/__tests__/views/DataPage.opendata-kline.test.ts src/__tests__/api/marketData.test.ts src/__tests__/views/DataPage.test.ts src/__tests__/views/DataPage.instrument-reference.test.ts src/i18n/__tests__/locale-completeness.test.ts --maxWorkers=1 --no-file-parallelism",
+          "exit_code": 0,
+          "log_sha256": "fd02be8d773e96bfd1da21dc3328bcdcb8487432ae2bd23178c78ae5a2b25067"
+        }
+      ],
+      "phase": "tests",
+      "receipt": "wave12-afi-frontend-343ee7707ce7-od204-w12-frontend-seventh-root/tests.json",
+      "receipt_sha256": "3de56e8bcfc92a04cf0b79688d59d0d86b4f20580c04b6ba5656044e9e0370a9",
+      "runner_sha256": "2e9b33f5c832bd46a48d89d5e4ac8d68e9e491b64828142320ef24af4d618c92",
+      "status": "PASS",
+      "test_file_count": 6,
+      "test_files": [
+        "src/__tests__/api/marketData.opendata-kline.test.ts",
+        "src/__tests__/views/DataPage.opendata-kline.test.ts",
+        "src/__tests__/api/marketData.test.ts",
+        "src/__tests__/views/DataPage.test.ts",
+        "src/__tests__/views/DataPage.instrument-reference.test.ts",
+        "src/i18n/__tests__/locale-completeness.test.ts"
+      ],
+      "tests_passed": 186
+    },
+    {
+      "build_warnings_present": true,
+      "chunk_size_warning_threshold_kb": 500,
+      "commands": [
+        {
+          "command": "npm run build -- --outDir <isolated-output> --emptyOutDir",
+          "exit_code": 0,
+          "log_sha256": "9f7bdea7bdf2710d2a22249d90ceff99cc9670e3b9fb85d82d289156fcaed746"
+        }
+      ],
+      "oversized_chunk_warnings": [
+        {
+          "chunk": "echarts",
+          "size_kb": 1134.26
+        },
+        {
+          "chunk": "application-vendor",
+          "size_kb": 1330.65
+        },
+        {
+          "chunk": "monaco-editor",
+          "size_kb": 4487.91
+        }
+      ],
+      "phase": "build",
+      "receipt": "wave12-afi-frontend-343ee7707ce7-od204-w12-frontend-seventh-root/build.json",
+      "receipt_sha256": "ca1743ce9ab437b807a3a91a96156db9837e308f36dc18f6a3873eddbe7f9f50",
+      "runner_sha256": "2e9b33f5c832bd46a48d89d5e4ac8d68e9e491b64828142320ef24af4d618c92",
+      "status": "PASS"
+    },
+    {
+      "commands": [
+        {
+          "command": "npm run typecheck",
+          "exit_code": 0,
+          "log_sha256": "d80faa434b9b4945bfeb6eee26948bf5394595eb192745c84d475f965dab3fd6"
+        }
+      ],
+      "phase": "typecheck",
+      "receipt": "wave12-afi-frontend-343ee7707ce7-od204-w12-frontend-seventh-root/typecheck.json",
+      "receipt_sha256": "058ab10cbd8ee840d842e0717c9ed4936871b0d26873bb25f89f910385b96ced",
+      "runner_sha256": "2e9b33f5c832bd46a48d89d5e4ac8d68e9e491b64828142320ef24af4d618c92",
+      "status": "PASS"
+    }
+  ],
+  "production_acceptance": "NOT_CLAIMED",
+  "runner": {
+    "node": "24.17.0",
+    "npm": "11.13.0",
+    "package_metadata_reuse": {
+      "ci_node_20": false,
+      "lock_records": 430,
+      "method": "Existing installed package metadata was compared with the committed lock; this was not a clean install.",
+      "npm_ci": false,
+      "physical_package_roots": 429
+    },
+    "sha256": "2e9b33f5c832bd46a48d89d5e4ac8d68e9e491b64828142320ef24af4d618c92"
+  },
+  "schema": "afi-w12-frontend-validation/v1",
+  "source": {
+    "docs_only_dev_merge_commit": "433137efd114d743e475c1d7d3dc9fa75bbdc9d4",
+    "frontend_source_commit": "343ee7707ce79e816714cd0a20f9acd41f8ebee4",
+    "frontend_tree_oid": "d6011c5c878922965a87213f0839646af8e7097b",
+    "frontend_tree_oid_at_docs_only_dev_merge": "d6011c5c878922965a87213f0839646af8e7097b",
+    "frontend_tree_unchanged_across_docs_only_merge": true
+  },
+  "status": "SCOPED_FRONTEND_VALIDATION_PASS",
+  "w12_context": {
+    "cohort_decision": "All A-share stocks selected; this records the requested cohort only.",
+    "full_history_source_rights_quota_activation": "OPEN",
+    "opendata_core_pytest": "NOT_RUN",
+    "opendata_scoped_static": "PASS",
+    "opendata_source_static_anchor": "3554f36c6bd1a0ac236302405dbee48af0507e43",
+    "verified_universe_coverage": "OPEN, including current and delisted listings and BSE coverage."
+  }
+}

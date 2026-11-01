@@ -401,7 +401,9 @@ _UNIT_RUN_PY = textwrap.dedent(
     """
     from __future__ import annotations
 
-    import importlib.util
+    AFI_SERVICE_INTENT_CONTRACT_REF = "bt-cerebro-fill-metadata-r1"
+
+    import hashlib, importlib.util
     import logging, os, sys, time
     from pathlib import Path
 
@@ -430,6 +432,61 @@ _UNIT_RUN_PY = textwrap.dedent(
             ('volume', -1),
             ('openinterest', -1),
         )
+
+
+    class _ServiceExecutionLocalClient:
+        '''Inert local Store leaf for a trusted managed-execution profile.
+
+        ServiceExecutionAdapter owns order writes.  This object only lets the
+        ordinary BtApiStore/BtApiBroker lifecycle run without creating a
+        direct provider client or inventing an account balance.
+        '''
+
+        def __init__(self):
+            self.connected = False
+
+        def connect(self):
+            self.connected = True
+
+        def disconnect(self):
+            self.connected = False
+
+        def get_positions(self):
+            return []
+
+        def fetch_open_orders(self):
+            return []
+
+
+    def _configure_service_execution_broker(cerebro):
+        '''Attach the managed Backtrader broker only for a server profile run.'''
+
+        if not os.environ.get('AFI_SERVICE_EXECUTION_PROFILE_REF', '').strip():
+            return None
+        from backtrader.stores.btapistore import BtApiStore
+
+        # The server-selected profile supplies the SDK runtime later, through
+        # run_configured_cerebro.  Keep this Store local and unstarted until
+        # ServiceExecutionSession attaches its validated adapter.
+        store = BtApiStore(
+            provider='okx',
+            api=_ServiceExecutionLocalClient(),
+            cash=0.0,
+            value=0.0,
+            autostart=False,
+        )
+        broker = store.getbroker(
+            cash=0.0,
+            value=0.0,
+            validation_enabled=False,
+            cash_check_enabled=False,
+            flatten_on_stop=False,
+            account_refresh_interval=3600.0,
+            positions_refresh_interval=3600.0,
+            open_orders_refresh_interval=3600.0,
+        )
+        cerebro.setbroker(broker)
+        return broker
 
 
     def load_config() -> dict:
@@ -1166,7 +1223,16 @@ _UNIT_RUN_PY = textwrap.dedent(
             raise ImportError(f'Cannot import strategy module: {module_path}')
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+        if os.environ.get('AFI_SERVICE_EXECUTION_PAPER_RUNTIME_SHA256'):
+            expected_source_digest = os.environ.get(
+                'AFI_SERVICE_EXECUTION_PAPER_STRATEGY_SOURCE_SHA256', ''
+            )
+            source = module_path.read_bytes()
+            if hashlib.sha256(source).hexdigest() != expected_source_digest:
+                raise RuntimeError('PAPER_STRATEGY_SOURCE_NOT_AUTHORIZED')
+            exec(compile(source, str(module_path), 'exec'), vars(module), vars(module))
+        else:
+            spec.loader.exec_module(module)
         return module
 
 
@@ -1190,7 +1256,12 @@ _UNIT_RUN_PY = textwrap.dedent(
         template_dir = Path(str(workspace_unit.get('template_dir') or '')).expanduser()
         if not template_dir.is_dir():
             raise FileNotFoundError(f'Template dir not found: {template_dir}')
-        module = _import_strategy_module(template_dir, workspace_unit.get('strategy_module'))
+        strategy_source_dir = (
+            BASE_DIR
+            if os.environ.get('AFI_SERVICE_EXECUTION_PROFILE_REF')
+            else template_dir
+        )
+        module = _import_strategy_module(strategy_source_dir, workspace_unit.get('strategy_module'))
         strategy_class = _pick_strategy_class(module)
         feed_class = _pick_feed_class(module)
         df, csv_path = load_dataframe(config)
@@ -1201,11 +1272,13 @@ _UNIT_RUN_PY = textwrap.dedent(
         cerebro = bt.Cerebro(
             stdstats=_safe_bool(live_cfg.get('stdstats', simulate_cfg.get('stdstats')), False)
         )
+        service_execution_broker = _configure_service_execution_broker(cerebro)
         name = str(data_cfg.get('symbol') or 'DATA')
         cerebro.adddata(feed_class(dataname=df), name=name)
         _apply_commission_info(cerebro, config, name)
         backtest_cfg = config.get('backtest') or {}
-        cerebro.broker.setcash(_safe_float(backtest_cfg.get('initial_cash'), 100000.0))
+        if service_execution_broker is None:
+            cerebro.broker.setcash(_safe_float(backtest_cfg.get('initial_cash'), 100000.0))
         cerebro.addstrategy(strategy_class, **params)
         forced_log_dir = os.environ.get('BACKTRADER_LOG_DIR', '').strip()
         log_dir = Path(forced_log_dir) if forced_log_dir else (BASE_DIR / 'logs')
@@ -1684,7 +1757,7 @@ def sync_unit_runtime(
     )
     with (target_dir / "config.yaml").open("w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, allow_unicode=True, sort_keys=False)
-    (target_dir / "run.py").write_text(_UNIT_RUN_PY, encoding="utf-8")
+    (target_dir / "run.py").write_bytes(_UNIT_RUN_PY.encode("utf-8"))
     return target_dir
 
 
@@ -1952,7 +2025,7 @@ def sync_trading_unit_runtime(unit: StrategyUnit, workspace_settings: dict[str, 
     template_has_run_py = (template_dir / "run.py").is_file()
     _sync_trading_runtime_sources(template_dir, target_dir)
     if not template_has_run_py:
-        (target_dir / "run.py").write_text(_UNIT_RUN_PY, encoding="utf-8")
+        (target_dir / "run.py").write_bytes(_UNIT_RUN_PY.encode("utf-8"))
     config = _build_trading_unit_config(unit, workspace_settings)
     with (target_dir / "config.yaml").open("w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, allow_unicode=True, sort_keys=False)

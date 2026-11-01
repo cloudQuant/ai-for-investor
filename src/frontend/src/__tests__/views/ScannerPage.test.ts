@@ -153,7 +153,7 @@ describe('ScannerPage', () => {
       condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
       lookback_days: 20,
       timeframe: '1d',
-      schedule_enabled: true,
+      schedule_enabled: false,
       schedule_frequency: 'daily',
       status: 'active',
       result_table_name: 'scanner_plan_result_plan_1',
@@ -170,7 +170,7 @@ describe('ScannerPage', () => {
       condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
       lookback_days: 20,
       timeframe: '1d',
-      schedule_enabled: true,
+      schedule_enabled: false,
       schedule_frequency: 'daily',
       status: 'active',
       result_table_status: 'dropped',
@@ -179,7 +179,8 @@ describe('ScannerPage', () => {
       id: 'run-1',
       plan_id: 'plan-2',
       run_date: '2026-06-19',
-      status: 'completed',
+      status: 'unavailable',
+      data_status: 'unavailable',
       match_count: 1,
       matches: [{ symbol: '000001.SZ', name: '平安银行', price: 12.36, volume: 4200, indicator: 0.77, factor: 0.71, news_sentiment: 0.65, portfolio_exposure: 0.18, provider: 'akshare' }],
       metrics: { factor_cache_status: 'hit' },
@@ -192,7 +193,8 @@ describe('ScannerPage', () => {
           id: 'run-daily-1',
           plan_id: 'plan-2',
           run_date: '2026-06-19',
-          status: 'completed',
+          status: 'legacy_unverified',
+          data_status: 'legacy_unverified',
           match_count: 1,
           matches: [{ symbol: '000001.SZ', name: '平安银行', indicator: 0.77 }],
           metrics: { factor_cache_status: 'hit' },
@@ -205,7 +207,8 @@ describe('ScannerPage', () => {
           id: 'run-1',
           plan_id: 'plan-2',
           run_date: '2026-06-19',
-          status: 'completed',
+          status: 'legacy_unverified',
+          data_status: 'legacy_unverified',
           match_count: 1,
           matches: [{ symbol: '000001.SZ', name: '平安银行', indicator: 0.77 }],
           metrics: { factor_cache_status: 'hit' },
@@ -248,7 +251,7 @@ describe('ScannerPage', () => {
     })
   })
 
-  it('runs scanner and loads task status result', async () => {
+  it('keeps scanner execution disabled and hides legacy matches from the current board', async () => {
     const wrapper = mountWithPlugins(ScannerPage)
     await flushPromises()
     expect(wrapper.text()).toContain('条件扫描')
@@ -258,21 +261,14 @@ describe('ScannerPage', () => {
     await (wrapper.vm as any).run()
     await flushPromises()
 
-    expect(apiMocks.runScanner).toHaveBeenCalledWith({
-      universe_pool_id: 'hs300',
-      condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
-      lookback_days: 20,
-      timeframe: '1d',
-    })
-    expect(apiMocks.getScannerTask).toHaveBeenCalledWith('task-1')
-    expect((wrapper.vm as any).taskId).toBe('task-1')
-    expect((wrapper.vm as any).taskStatus).toBe('completed')
-    expect((wrapper.vm as any).matches[0].indicator).toBe(0.77)
-    expect(wrapper.text()).toContain('task-1')
-    expect(wrapper.text()).toContain('completed')
+    expect(apiMocks.runScanner).not.toHaveBeenCalled()
+    expect(apiMocks.getScannerTask).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect(wrapper.text()).toContain('扫描执行暂不可用')
     expect(wrapper.find('.scanner-workbench').exists()).toBe(true)
     expect(wrapper.find('.scanner-query-panel').exists()).toBe(true)
-    expect(wrapper.find('.scanner-metric-grid').exists()).toBe(true)
+    expect(wrapper.find('.scanner-metric-grid').exists()).toBe(false)
     expect(wrapper.find('.scanner-results-panel').exists()).toBe(false)
     expect(wrapper.find('.scanner-pool-selector').exists()).toBe(false)
     expect(wrapper.find('.scanner-plan-summary').exists()).toBe(false)
@@ -280,9 +276,9 @@ describe('ScannerPage', () => {
     expect(wrapper.text()).toContain('沪深300')
     expect(wrapper.text()).toContain('新建方案')
     expect(wrapper.text()).toContain('编辑方案')
-    expect(wrapper.text()).toContain('扫描概览')
-    expect(wrapper.text()).toContain('77.00%')
-    expect(wrapper.text()).toContain('18.00%')
+    expect(wrapper.text()).toContain('未验证的历史记录')
+    expect(wrapper.text()).not.toContain('77.00%')
+    expect(wrapper.text()).not.toContain('18.00%')
     expect(wrapper.text()).not.toContain('命中数')
     expect(wrapper.text()).not.toContain('条命中')
   })
@@ -332,7 +328,7 @@ describe('ScannerPage', () => {
     expect((wrapper.vm as any).selectedPoolId).toBe('custom-watch')
   })
 
-  it('configures indicator rules and precomputes pool metrics from the manager dialog', async () => {
+  it('retains rule configuration while keeping metric precomputation and execution closed', async () => {
     const wrapper = mountWithPlugins(ScannerPage)
     await flushPromises()
 
@@ -352,24 +348,18 @@ describe('ScannerPage', () => {
     await (wrapper.vm as any).precomputePoolMetrics('hs300')
     await flushPromises()
 
-    expect(apiMocks.precomputeScannerUniversePool).toHaveBeenCalledWith('hs300', {
-      lookback_days: 20,
-      timeframe: '1d',
-    })
-    expect((wrapper.vm as any).metricSnapshotInfo?.total).toBe(2)
+    expect(apiMocks.precomputeScannerUniversePool).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).metricSnapshotInfo).toBeNull()
 
     await (wrapper.vm as any).run()
     await flushPromises()
 
-    expect(apiMocks.runScanner).toHaveBeenLastCalledWith({
-      universe_pool_id: 'hs300',
-      condition: 'change_pct >= 0.01 and factor >= 0.65',
-      lookback_days: 20,
-      timeframe: '1d',
-    })
+    expect(apiMocks.runScanner).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
   })
 
-  it('saves a scanner plan and loads persisted batch results from the result table', async () => {
+  it('saves a scanner plan with scheduling disabled and keeps batch runs unavailable', async () => {
     const wrapper = mountWithPlugins(ScannerPage)
     await flushPromises()
 
@@ -393,7 +383,7 @@ describe('ScannerPage', () => {
       condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
       lookback_days: 20,
       timeframe: '1d',
-      schedule_enabled: true,
+      schedule_enabled: false,
       schedule_frequency: 'daily',
     })
     expect((wrapper.vm as any).selectedPlanId).toBe('plan-2')
@@ -401,19 +391,185 @@ describe('ScannerPage', () => {
     await (wrapper.vm as any).runSelectedPlan()
     await flushPromises()
 
-    expect(apiMocks.runScannerPlan).toHaveBeenCalledWith('plan-2', {})
+    expect(apiMocks.runScannerPlan).not.toHaveBeenCalled()
     expect(apiMocks.listScannerPlanRuns).toHaveBeenCalledWith('plan-2')
-    expect((wrapper.vm as any).matches[0].symbol).toBe('000001.SZ')
+    expect((wrapper.vm as any).matches).toEqual([])
     expect((wrapper.vm as any).planRuns[0].run_date).toBe('2026-06-19')
 
     await (wrapper.vm as any).runDailyPlans()
     await flushPromises()
 
-    expect(apiMocks.runDailyScannerPlans).toHaveBeenCalledWith({})
-    expect(apiMocks.listScannerPlanRuns).toHaveBeenLastCalledWith('plan-2')
+    expect(apiMocks.runDailyScannerPlans).not.toHaveBeenCalled()
   })
 
-  it('uses the executed plan id returned by batch execution when loading plan runs', async () => {
+  it('does not present unverified legacy metadata as completed or current', async () => {
+    apiMocks.listScannerUniversePools.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'hs300',
+          name: '沪深300',
+          instrument_count: 1,
+          metric_snapshot: {
+            data_status: 'unavailable',
+            computed_at: '2026-06-19T04:00:00+00:00',
+            total: 1,
+          },
+          instruments: [{ symbol: '000001.SZ', name: '平安银行' }],
+        },
+      ],
+      total: 1,
+    })
+    apiMocks.listScannerPlanRuns.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'old-unlabeled-run',
+          plan_id: 'plan-1',
+          run_date: '2026-06-19',
+          status: 'completed',
+          matches: [{ symbol: '000001.SZ', indicator: 0.91 }],
+          match_count: 1,
+        },
+      ],
+      total: 1,
+    })
+
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    expect((wrapper.vm as any).metricSnapshotLabel).toBe('不可用；预计算已暂停')
+    expect((wrapper.vm as any).latestPlanRunLabel).toContain('暂不可用')
+
+    ;(wrapper.vm as any).scannerPlans[0].result_table_name = 'scanner_plan_result_plan_1'
+    ;(wrapper.vm as any).scannerPlans[0].result_table_status = 'ready'
+    ;(wrapper.vm as any).scannerPlans[0].result_table_data_status = 'unavailable'
+    expect((wrapper.vm as any).selectedPlanResultTableLabel).toContain('历史内容未验证')
+
+    ;(wrapper.vm as any).matches = [{ symbol: '000001.SZ' }]
+    ;(wrapper.vm as any).taskStatus = 'completed'
+    ;(wrapper.vm as any).selectedPlanId = 'plan-2'
+    ;(wrapper.vm as any).scannerPlans.push({
+      id: 'plan-2',
+      name: '第二个方案',
+      universe_pool_id: 'hs300',
+      indicator_rules: [],
+      condition: 'price > 0',
+      lookback_days: 20,
+      timeframe: '1d',
+      schedule_enabled: false,
+      schedule_frequency: 'daily',
+      status: 'active',
+    })
+    ;(wrapper.vm as any).applySelectedPlan()
+    await flushPromises()
+
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    wrapper.unmount()
+  })
+
+  it('does not auto-load historical matches even if a legacy response claims verified', async () => {
+    apiMocks.listScannerPlanRuns.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'old-claimed-verified-run',
+          plan_id: 'plan-1',
+          run_date: '2026-06-19',
+          status: 'completed',
+          data_status: 'verified',
+          matches: [{ symbol: '000001.SZ', indicator: 0.91 }],
+          match_count: 1,
+        },
+      ],
+      total: 1,
+    })
+
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    expect((wrapper.vm as any).latestPlanRunLabel).toContain('暂不可用')
+    expect(wrapper.get('.scanner-match-board .scanner-row-count').text()).toContain('0 项结果')
+    wrapper.unmount()
+  })
+
+  it('accepts plan matches only from a completed verified run', async () => {
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+    ;(wrapper.vm as any).scannerExecutionUnavailable = false
+
+    ;(wrapper.vm as any).loadRunResult({
+      id: 'running-verified-run',
+      plan_id: 'plan-1',
+      run_date: '2026-06-19',
+      status: 'running',
+      data_status: 'verified',
+      match_count: 1,
+      matches: [{ symbol: '000001.SZ', indicator: 0.91 }],
+    })
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+
+    ;(wrapper.vm as any).loadRunResult({
+      id: 'completed-verified-run',
+      plan_id: 'plan-1',
+      run_date: '2026-06-19',
+      status: 'completed',
+      data_status: 'verified',
+      match_count: 1,
+      matches: [{ symbol: '000001.SZ', indicator: 0.91 }],
+    })
+    expect((wrapper.vm as any).matches).toHaveLength(1)
+    expect((wrapper.vm as any).taskStatus).toBe('completed')
+    wrapper.unmount()
+  })
+
+  it('rejects immediate scan results without an explicit verified data status', async () => {
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+    ;(wrapper.vm as any).scannerExecutionUnavailable = false
+    apiMocks.runScanner.mockResolvedValueOnce({
+      task_id: 'task-unverified',
+      status: 'completed',
+      matches: [{ symbol: '000001.SZ', indicator: 0.91 }],
+    })
+
+    await (wrapper.vm as any).run()
+    await flushPromises()
+
+    expect(apiMocks.getScannerTask).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    wrapper.unmount()
+  })
+
+  it('rejects task matches when the polled task lacks a verified data status', async () => {
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+    ;(wrapper.vm as any).scannerExecutionUnavailable = false
+    apiMocks.runScanner.mockResolvedValueOnce({
+      task_id: 'task-with-unverified-poll',
+      status: 'submitted',
+      data_status: 'verified',
+    })
+    apiMocks.getScannerTask.mockResolvedValueOnce({
+      task_id: 'task-with-unverified-poll',
+      status: 'completed',
+      matches: [{ symbol: '000001.SZ', indicator: 0.91 }],
+    })
+
+    await (wrapper.vm as any).run()
+    await flushPromises()
+
+    expect(apiMocks.getScannerTask).toHaveBeenCalledWith('task-with-unverified-poll')
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    wrapper.unmount()
+  })
+
+  it('does not use batch responses to populate current results while execution is unavailable', async () => {
     const wrapper = mountWithPlugins(ScannerPage)
     await flushPromises()
 
@@ -430,9 +586,9 @@ describe('ScannerPage', () => {
     await (wrapper.vm as any).runSelectedPlan()
     await flushPromises()
 
-    expect(apiMocks.runScannerPlan).toHaveBeenCalledWith('plan-1', {})
-    expect((wrapper.vm as any).selectedPlanId).toBe('plan-2')
-    expect(apiMocks.listScannerPlanRuns).toHaveBeenLastCalledWith('plan-2')
+    expect(apiMocks.runScannerPlan).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).selectedPlanId).toBe('plan-1')
+    expect((wrapper.vm as any).matches).toEqual([])
   })
 
   it('creates and edits scanner plans from the plan editor dialog', async () => {
@@ -469,14 +625,11 @@ describe('ScannerPage', () => {
     expect(apiMocks.createScannerPlan).toHaveBeenCalledWith({
       name: '沪深300精选方案',
       universe_pool_id: 'hs300',
-      indicator_rules: [
-        { id: 'indicator-default', metric: 'indicator', operator: '>=', value: 0.5, enabled: true },
-        { id: 'sentiment-default', metric: 'news_sentiment', operator: '>=', value: 0.4, enabled: true },
-      ],
-      condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
+      indicator_rules: [],
+      condition: 'price > 0',
       lookback_days: 20,
       timeframe: '1d',
-      schedule_enabled: true,
+      schedule_enabled: false,
       schedule_frequency: 'daily',
     })
 
@@ -524,6 +677,49 @@ describe('ScannerPage', () => {
     expect(apiMocks.deleteScannerPlan).toHaveBeenCalledWith('plan-1')
   })
 
+  it.each([
+    ['missing schedule_enabled', 'schedule_enabled', undefined],
+    ['invalid schedule_enabled', 'schedule_enabled', 'true'],
+    ['missing schedule_frequency', 'schedule_frequency', undefined],
+    ['invalid schedule_frequency', 'schedule_frequency', 'weekly'],
+    ['missing status', 'status', undefined],
+    ['invalid status', 'status', 'unknown'],
+  ] as const)('blocks plan edits with %s', async (_label, field, value) => {
+    apiMocks.listScannerPlans.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'plan-1',
+          name: '沪深300动量日报',
+          universe_pool_id: 'hs300',
+          indicator_rules: [],
+          condition: 'price > 0',
+          lookback_days: 20,
+          timeframe: '1d',
+          schedule_enabled: true,
+          schedule_frequency: 'daily',
+          status: 'active',
+          [field]: value,
+        },
+      ],
+      total: 1,
+    })
+    const wrapper = mountWithPlugins(ScannerPage)
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEditPlanDialog('plan-1')
+    await flushPromises()
+
+    const saveButton = wrapper.findAll('.scanner-plan-editor-toolbar button')
+      .find((button) => button.text().includes('保存方案'))
+    expect(saveButton).toBeDefined()
+    expect((saveButton!.element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.text()).toContain('方案调度字段缺失或不受支持')
+
+    await (wrapper.vm as any).savePlanFromDialog()
+    expect(apiMocks.updateScannerPlan).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('builds a live condition from enabled rules and displays an empty scan result', async () => {
     const wrapper = mountWithPlugins(ScannerPage)
     await flushPromises()
@@ -550,43 +746,36 @@ describe('ScannerPage', () => {
     expect(wrapper.get('.scanner-active-condition strong').text()).toBe('price > 0')
 
     const emptyResult: Record<string, unknown> = {
-      task_id: '',
-      status: 'completed',
+      status: 'unavailable',
+      data_status: 'unavailable',
       matches: [],
     }
     apiMocks.runScanner.mockResolvedValueOnce(emptyResult)
-    await wrapper.get('.scanner-live-actions button').trigger('click')
+    await (wrapper.vm as any).run()
     await flushPromises()
 
-    expect(apiMocks.runScanner).toHaveBeenCalledWith({
-      universe_pool_id: 'hs300',
-      condition: 'price > 0',
-      lookback_days: 20,
-      timeframe: '1d',
-    })
+    expect(apiMocks.runScanner).not.toHaveBeenCalled()
     expect(apiMocks.getScannerTask).not.toHaveBeenCalled()
-    expect(wrapper.get('.scanner-status-tag').text()).toBe('completed')
-    expect(wrapper.get('.scanner-empty-state').text()).toContain('暂无结果')
+    expect(wrapper.get('.scanner-status-tag').text()).toBe('暂不可用')
+    expect(wrapper.get('.scanner-empty-state').text()).toContain('扫描执行恢复')
     wrapper.unmount()
   })
 
-  it('clears the scan loading state when the request fails', async () => {
+  it('clears legacy matches when a scan is requested while unavailable', async () => {
     const wrapper = mountWithPlugins(ScannerPage)
     await flushPromises()
-    apiMocks.runScanner.mockRejectedValueOnce(new Error('scanner request failed'))
+    ;(wrapper.vm as any).matches = [{ symbol: '000001.SZ' }]
+    ;(wrapper.vm as any).taskStatus = 'completed'
 
-    await expect((wrapper.vm as any).run()).rejects.toThrow('scanner request failed')
+    await (wrapper.vm as any).run()
     await flushPromises()
 
-    expect(apiMocks.runScanner).toHaveBeenCalledWith({
-      universe_pool_id: 'hs300',
-      condition: 'indicator >= 0.5 and news_sentiment >= 0.4',
-      lookback_days: 20,
-      timeframe: '1d',
-    })
+    expect(apiMocks.runScanner).not.toHaveBeenCalled()
     expect((wrapper.vm as any).loading).toBe(false)
-    expect(wrapper.get('.scanner-match-board .scanner-row-count').text()).toContain('1 项结果')
-    expect(wrapper.find('.scanner-empty-state').exists()).toBe(false)
+    expect((wrapper.vm as any).matches).toEqual([])
+    expect((wrapper.vm as any).taskStatus).toBe('unavailable')
+    expect(wrapper.get('.scanner-match-board .scanner-row-count').text()).toContain('0 项结果')
+    expect(wrapper.find('.scanner-empty-state').exists()).toBe(true)
     wrapper.unmount()
   })
 

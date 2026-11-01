@@ -190,6 +190,7 @@
               {{ formatDateTime(row.last_execution_at) }}
             </template>
           </el-table-column>
+          <!-- @vue-generic {ScheduledTask} -->
           <el-table-column
             :label="t('dataPages.tasksColActions')"
             fixed="right"

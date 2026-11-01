@@ -311,7 +311,7 @@ class TestGetCurrentMetricValue:
         rule.alert_type = "account"
         config = {"current_value": 42.5}
 
-        result = await get_current_metric_value(rule, config, None, None, None)
+        result = await get_current_metric_value(rule, config, None, None)
         assert result == 42.5
 
     @pytest.mark.asyncio
@@ -321,7 +321,7 @@ class TestGetCurrentMetricValue:
         rule.alert_type = "account"
         config = {"current_value": "not_a_number"}
 
-        result = await get_current_metric_value(rule, config, None, None, None)
+        result = await get_current_metric_value(rule, config, None, None)
         assert result is None
 
     @pytest.mark.asyncio
@@ -337,7 +337,7 @@ class TestGetCurrentMetricValue:
         mock_paper.get_account = AsyncMock(return_value=mock_account)
 
         config = {"metric": "cash", "account_id": "acc1"}
-        result = await get_current_metric_value(rule, config, mock_paper, None, None)
+        result = await get_current_metric_value(rule, config, mock_paper, None)
         assert result == 50000.0
 
     @pytest.mark.asyncio
@@ -353,7 +353,7 @@ class TestGetCurrentMetricValue:
         mock_paper.get_account = AsyncMock(return_value=mock_account)
 
         config = {"metric": "equity", "account_id": "acc1"}
-        result = await get_current_metric_value(rule, config, mock_paper, None, None)
+        result = await get_current_metric_value(rule, config, mock_paper, None)
         assert result == 120000.0
 
     @pytest.mark.asyncio
@@ -366,7 +366,7 @@ class TestGetCurrentMetricValue:
         mock_paper.get_account = AsyncMock(return_value=None)
 
         config = {"metric": "cash", "account_id": "nonexistent"}
-        result = await get_current_metric_value(rule, config, mock_paper, None, None)
+        result = await get_current_metric_value(rule, config, mock_paper, None)
         assert result is None
 
     @pytest.mark.asyncio
@@ -382,7 +382,7 @@ class TestGetCurrentMetricValue:
         mock_paper.list_positions = AsyncMock(return_value=([mock_pos], 1))
 
         config = {"metric": "unrealized_pnl", "symbol": "rb2501", "account_id": "acc1"}
-        result = await get_current_metric_value(rule, config, mock_paper, None, None)
+        result = await get_current_metric_value(rule, config, mock_paper, None)
         assert result == 1500.0
 
     @pytest.mark.asyncio
@@ -392,7 +392,7 @@ class TestGetCurrentMetricValue:
         rule.alert_type = "position"
 
         config = {"metric": "unrealized_pnl"}
-        result = await get_current_metric_value(rule, config, None, None, None)
+        result = await get_current_metric_value(rule, config, None, None)
         assert result is None
 
     @pytest.mark.asyncio
@@ -408,7 +408,7 @@ class TestGetCurrentMetricValue:
         mock_backtest.get_result = AsyncMock(return_value=mock_result)
 
         config = {"metric": "sharpe_ratio", "backtest_task_id": "task1"}
-        result = await get_current_metric_value(rule, config, None, None, mock_backtest)
+        result = await get_current_metric_value(rule, config, None, mock_backtest)
         assert result == 1.85
 
     @pytest.mark.asyncio
@@ -418,19 +418,24 @@ class TestGetCurrentMetricValue:
         rule.alert_type = "strategy"
 
         config = {"metric": "sharpe_ratio"}
-        result = await get_current_metric_value(rule, config, None, None, None)
+        result = await get_current_metric_value(rule, config, None, None)
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_live_account_metric(self):
-        """Resolve live trading account metric."""
+    async def test_legacy_live_account_metric_is_unavailable(self):
+        """Retained live alert rules do not report fake zero or stale values."""
         rule = MagicMock()
         rule.alert_type = "account"
         rule.user_id = "user1"
 
-        mock_live = AsyncMock()
-        mock_live.get_task_status = AsyncMock(return_value={"cash": 80000.0, "value": 95000.0})
-
         config = {"metric": "cash", "live_task_id": "live1"}
-        result = await get_current_metric_value(rule, config, None, mock_live, None)
-        assert result == 80000.0
+        rule.trigger_config = config
+        mock_paper = AsyncMock()
+        mock_paper.get_account = AsyncMock()
+        mock_backtest = AsyncMock()
+
+        result = await get_current_metric_value(rule, config, mock_paper, mock_backtest)
+        assert result is None
+        assert rule.trigger_config is config
+        mock_paper.get_account.assert_not_awaited()
+        mock_backtest.assert_not_awaited()

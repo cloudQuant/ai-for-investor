@@ -39,6 +39,7 @@ from app.services.optimization.trial_runner import run_single_trial
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _OLD_HEAD = "20260911_market_data_b2_completeness_evidence"
 _OBJECTIVE_REVISION = "20261012_optimization_objective_direction"
+_CURRENT_HEAD = "20261031_stock_daily_snapshot_grants"
 
 
 class _SingleWorkerProcessPool(ProcessPoolExecutor):
@@ -83,7 +84,7 @@ def _upgrade_objective_revision(engine: Engine, database_url: str) -> None:
 
 def test_objective_migration_upgrades_existing_sqlite_task_rows(tmp_path: Path) -> None:
     script = ScriptDirectory.from_config(_alembic_config("sqlite://"))
-    assert script.get_heads() == [_OBJECTIVE_REVISION]
+    assert script.get_heads() == [_CURRENT_HEAD]
     revision = script.get_revision(_OBJECTIVE_REVISION)
     assert revision is not None and revision.down_revision == _OLD_HEAD
 

@@ -34,6 +34,7 @@ EXCLUDED_PARTS = {
     "__pycache__",
     ".kiro",
     "clientportal.gw",  # vendored IB gateway product docs (Task F: tracked separately)
+    "var",  # local evidence/report artifacts, not repository documentation
 }
 
 
@@ -48,6 +49,11 @@ def extract_links(content: str, base_path: Path) -> list[tuple[int, str, str]]:
     for i, line in enumerate(content.splitlines(), 1):
         for m in pattern.finditer(line):
             path_part = m.group(2).strip()
+            # Markdown permits angle-bracket destinations, including absolute
+            # local evidence paths such as </home/...>. Strip them before
+            # resolving so they are treated as absolute, not as repo-relative.
+            if path_part.startswith("<") and path_part.endswith(">"):
+                path_part = path_part[1:-1].strip()
             if path_part.startswith(("http://", "https://", "mailto:")):
                 continue
             if path_part.startswith("#"):

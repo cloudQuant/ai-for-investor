@@ -16,6 +16,7 @@ import {
 import * as echarts from 'echarts'
 import { akshareTablesApi } from '@/api/akshare'
 import {
+  classifyMarketDataRouteSelection,
   createMarketDataQueryFromContract,
   hasMarketDataCapabilities,
   hasMarketDataQueryBundle,
@@ -26,6 +27,7 @@ import {
   marketDataApi,
   type MarketAssetType,
   type MarketDataCapabilitiesResponse,
+  type MarketDataRouteSelection,
   type MarketDataFamilyObservationShape,
   type MarketHistoryRow,
   type MarketInstrumentOption,
@@ -40,10 +42,90 @@ import {
   type MarketDataQueryMode,
   type MarketDataQueryObservation,
   type MarketDataQueryResponse,
+  type OpenDataDirectKlineRecord,
+  type OpenDataDirectKlineRequest,
+  type OpenDataDirectKlineResponse,
+  type OpenDataStockDailyFreshnessResponse,
 } from '@/api/marketData'
 import { CANDLE_DOWN_COLOR, CANDLE_ITEM_STYLE, CANDLE_UP_COLOR } from '@/constants/chartColors'
 import type { DataTable } from '@/types'
 import type { MarketDataCoverageResponse } from '@/types/trust'
+
+export type DataPageDisplayMode = 'legacy' | 'opendata_direct'
+
+export type OpenDataDirectKlineDisplayStatus = 'idle' | 'loading' | 'ready' | 'unavailable'
+
+export type OpenDataDirectKlineDisplayReason =
+  | 'CAPABILITIES_UNAVAILABLE'
+  | 'CAPABILITY_CENSUS_INVALID'
+  | 'QUERY_V2_DISABLED'
+  | 'ONLINE_FETCH_DISABLED'
+  | 'OPENDATA_ROUTE_INEFFECTIVE'
+  | 'UNSUPPORTED_ASSET'
+  | 'UNSUPPORTED_PERIOD'
+  | 'INVALID_DATE_RANGE'
+  | 'DIRECT_REQUEST_FAILED'
+  | 'DIRECT_RESPONSE_INVALID'
+
+export interface OpenDataDirectKlineDisplayState {
+  status: OpenDataDirectKlineDisplayStatus
+  request: OpenDataDirectKlineRequest | null
+  symbolLabel: string | null
+  rangeLabel: string | null
+  rows: readonly OpenDataDirectKlineRecord[]
+  returnedBarCount: number | null
+  retrievedAt: string | null
+  coverageStatus: 'unknown' | null
+  sourceAvailableAt: 'unknown' | null
+  durableReceipt: 'not_created' | null
+  reason: OpenDataDirectKlineDisplayReason | null
+}
+
+export type OpenDataStockDailyFreshnessDisplayStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'unavailable'
+
+export interface OpenDataStockDailyFreshnessDisplayState {
+  status: OpenDataStockDailyFreshnessDisplayStatus
+  response: OpenDataStockDailyFreshnessResponse | null
+}
+
+function emptyOpenDataDirectKlineDisplay(): OpenDataDirectKlineDisplayState {
+  return {
+    status: 'idle',
+    request: null,
+    symbolLabel: null,
+    rangeLabel: null,
+    rows: [],
+    returnedBarCount: null,
+    retrievedAt: null,
+    coverageStatus: null,
+    sourceAvailableAt: null,
+    durableReceipt: null,
+    reason: null,
+  }
+}
+
+function emptyOpenDataStockDailyFreshnessDisplay(): OpenDataStockDailyFreshnessDisplayState {
+  return { status: 'idle', response: null }
+}
+
+function isValidDirectBusinessDateRange(start: string, end: string): boolean {
+  const parseDate = (value: string): number | null => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+    const timestamp = Date.parse(`${value}T00:00:00.000Z`)
+    if (!Number.isFinite(timestamp)) return null
+    return new Date(timestamp).toISOString().slice(0, 10) === value ? timestamp : null
+  }
+
+  const startTimestamp = parseDate(start)
+  const endTimestamp = parseDate(end)
+  if (startTimestamp === null || endTimestamp === null || endTimestamp < startTimestamp) return false
+  const inclusiveCalendarDays = Math.floor((endTimestamp - startTimestamp) / 86_400_000) + 1
+  return inclusiveCalendarDays <= 366
+}
 
 const MARKET_ASSET_SELECTIONS_STORAGE_KEY = 'ai_for_investor:market:asset_selections'
 
@@ -343,7 +425,10 @@ export function useDataPage() {
       key: 'option',
       labelKey: 'dataMgmt.tabOptions',
       placeholderKey: 'dataMgmt.optionSymbolPlaceholder',
-      defaultSymbol: 'MO',
+      // Options have no continuous-contract alias; the backend refuses IO/HO/MO
+      // and requires an exact contract, so the tab adopts one from the
+      // warehouse list instead of starting from a symbol that cannot resolve.
+      defaultSymbol: '',
       icon: DataAnalysis,
     },
     {
@@ -357,7 +442,7 @@ export function useDataPage() {
       key: 'crypto',
       labelKey: 'dataMgmt.tabCrypto',
       placeholderKey: 'dataMgmt.cryptoSymbolPlaceholder',
-      defaultSymbol: 'BTCJPY',
+      defaultSymbol: 'BTCUSDT',
       icon: Coin,
     },
   ]
@@ -779,10 +864,21 @@ export function useDataPage() {
   const dateRange = ref<[string, string]>([toDateInput(ninetyDaysAgo), toDateInput(today)])
   const loading = ref(false)
   const result = ref<MarketInstrumentLookupResponse | null>(null)
+  const dataPageDisplayMode = ref<DataPageDisplayMode>('legacy')
+  const openDataDirectKlineDisplay = ref<OpenDataDirectKlineDisplayState>(
+    emptyOpenDataDirectKlineDisplay(),
+  )
+  const openDataStockDailyFreshnessDisplay = ref<OpenDataStockDailyFreshnessDisplayState>(
+    emptyOpenDataStockDailyFreshnessDisplay(),
+  )
   const chartMode = ref<ChartMode>('price')
   const marketChartRef = ref<HTMLDivElement>()
   const instrumentOptions = ref<MarketInstrumentOption[]>([])
   const instrumentOptionsLoading = ref(false)
+  const instrumentOptionsCatalogMode = ref<'legacy' | 'opendata' | null>(null)
+  const instrumentOptionsError = ref('')
+  const instrumentAliasEffectiveOn = ref<string | null>(null)
+  const instrumentOptionsSearchTerm = ref('')
   const relatedTablesLoading = ref(false)
   const relatedTables = ref<DataTable[]>([])
   const relatedTablesError = ref('')
@@ -816,17 +912,54 @@ export function useDataPage() {
   const genericObservationResult = ref<GenericObservationResult | null>(null)
   const viewportWidth = ref(window.innerWidth)
   let marketChart: echarts.ECharts | null = null
+  let marketChartElement: HTMLDivElement | null = null
   let instrumentOptionsRequestId = 0
   let relatedTableRequestId = 0
   let coverageRequestId = 0
   let lookupRequestId = 0
   let activeMarketDataQueryAbortController: AbortController | null = null
   let activeMarketDataQuerySelectionKey: string | null = null
-  let marketDataCapabilitiesResolved = false
+  const marketDataCapabilitiesResolved = ref(false)
   let marketDataCapabilitiesRequest: Promise<MarketDataCapabilitiesResponse | null> | null = null
+  const marketDataRouteSelection = ref<MarketDataRouteSelection>({
+    mode: 'unknown',
+    can_query: false,
+    reason: 'CAPABILITIES_UNAVAILABLE',
+  })
+  let openDataDirectRequestEpoch = 0
+  let activeOpenDataDirectAbortController: AbortController | null = null
+  let openDataStockDailyFreshnessRequestEpoch = 0
+  let activeOpenDataStockDailyFreshnessAbortController: AbortController | null = null
+  let marketPageBootstrapEpoch = 0
 
   const snapshot = computed<Record<string, unknown>>(() => result.value?.snapshot || {})
   const historyRows = computed(() => result.value?.history.rows || [])
+  const isOpenDataOnlyStockRoute = computed(() => (
+    form.asset_type === 'stock'
+    && marketDataCapabilitiesResolved.value
+    && marketDataRouteSelection.value.mode === 'opendata_only'
+  ))
+  const canReadOpenDataStockDailyFreshness = computed(() => (
+    isOpenDataOnlyStockRoute.value
+    && marketDataRouteSelection.value.can_query
+  ))
+  const showLocalCoverageMatrix = computed(() => (
+    form.asset_type !== 'stock'
+    || (
+      marketDataCapabilitiesResolved.value
+      && marketDataRouteSelection.value.mode === 'legacy'
+    )
+  ))
+  const stockDataRouteNotice = computed(() => {
+    if (form.asset_type !== 'stock') return null
+    if (!marketDataCapabilitiesResolved.value) return 'resolving'
+    if (marketDataRouteSelection.value.mode === 'unknown') return 'unknown'
+    if (
+      marketDataRouteSelection.value.mode === 'opendata_only'
+      && !marketDataRouteSelection.value.can_query
+    ) return 'opendata_unavailable'
+    return null
+  })
   const selectedMarketPageFamily = computed(() => {
     const bundle = marketDataQueryBundle.value
     if (!bundle || bundle.requested_asset_type !== form.asset_type) return null
@@ -1307,13 +1440,14 @@ export function useDataPage() {
     } else {
       restoreAssetSelection(form.asset_type)
     }
-    void loadInstrumentOptions(formSymbolText())
-    void loadCoverageMatrix()
-    void lookupInstrument('local_only')
+    loadInstrumentsThenLookup()
     window.addEventListener('resize', handleViewportResize)
   })
 
   onUnmounted(() => {
+    marketPageBootstrapEpoch += 1
+    invalidateOpenDataDirectRequest()
+    invalidateOpenDataStockDailyFreshnessRequest()
     abortActiveMarketDataQueryLifecycle()
     window.removeEventListener('resize', handleViewportResize)
     disposeMarketChart()
@@ -1332,12 +1466,31 @@ export function useDataPage() {
   )
 
   watch(
+    () => [
+      form.asset_type,
+      formSymbolText(),
+      form.period,
+      selectedFamilyId.value,
+      dateRange.value?.[0] || '',
+      dateRange.value?.[1] || '',
+      instrumentAliasEffectiveOn.value || '',
+      instrumentOptionsCatalogMode.value || '',
+      instrumentOptionsLoading.value,
+      instrumentOptions.value,
+    ],
+    () => {
+      if (dataPageDisplayMode.value === 'opendata_direct') {
+        invalidateOpenDataDirectRequest()
+      }
+    },
+    { flush: 'sync' },
+  )
+
+  watch(
     () => route.query.tab,
     (tab) => {
       if (applyRouteTab(tab, true)) {
-        void loadInstrumentOptions(formSymbolText())
-        void loadCoverageMatrix()
-        void lookupInstrument('local_only')
+        loadInstrumentsThenLookup()
       }
     },
   )
@@ -1358,6 +1511,19 @@ export function useDataPage() {
       const firstDate = rows[0]?.date || ''
       const lastDate = rows[rows.length - 1]?.date || ''
       return `${form.asset_type}:${result.value?.symbol || ''}:${chartMode.value}:${rows.length}:${firstDate}:${lastDate}`
+    },
+    () => {
+      void nextTick(renderMarketChart)
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    () => {
+      const display = openDataDirectKlineDisplay.value
+      const firstDate = display.rows[0]?.date || ''
+      const lastDate = display.rows[display.rows.length - 1]?.date || ''
+      return `${dataPageDisplayMode.value}:${display.status}:${display.rows.length}:${firstDate}:${lastDate}`
     },
     () => {
       void nextTick(renderMarketChart)
@@ -1425,25 +1591,91 @@ export function useDataPage() {
   }
 
   async function resolveMarketDataCapabilities(): Promise<MarketDataCapabilitiesResponse | null> {
-    if (marketDataCapabilitiesResolved) return marketDataCapabilities.value
+    if (marketDataCapabilitiesResolved.value) return marketDataCapabilities.value
     if (marketDataCapabilitiesRequest) return marketDataCapabilitiesRequest
 
     marketDataCapabilitiesRequest = marketDataApi.getCapabilities()
       .then((response) => {
+        marketDataRouteSelection.value = classifyMarketDataRouteSelection(response)
         marketDataCapabilities.value = hasMarketDataCapabilities(response) ? response : null
         return marketDataCapabilities.value
       })
       .catch(() => {
-        // A pre-197 or temporarily unavailable server cannot grant v2 access.
-        // The existing legacy local read remains the only compatibility path.
+        // A pre-197 or temporarily unavailable server cannot grant v2 or
+        // identify a complete legacy source policy for an online intent.
         marketDataCapabilities.value = null
+        marketDataRouteSelection.value = classifyMarketDataRouteSelection(null)
         return null
       })
       .finally(() => {
-        marketDataCapabilitiesResolved = true
+        marketDataCapabilitiesResolved.value = true
         marketDataCapabilitiesRequest = null
       })
     return marketDataCapabilitiesRequest
+  }
+
+  function invalidateOpenDataStockDailyFreshnessRequest(): void {
+    openDataStockDailyFreshnessRequestEpoch += 1
+    const controller = activeOpenDataStockDailyFreshnessAbortController
+    activeOpenDataStockDailyFreshnessAbortController = null
+    if (controller && !controller.signal.aborted) controller.abort()
+    openDataStockDailyFreshnessDisplay.value = emptyOpenDataStockDailyFreshnessDisplay()
+  }
+
+  function refreshOpenDataStockDailyFreshness(): void {
+    if (!canReadOpenDataStockDailyFreshness.value) return
+
+    const previousController = activeOpenDataStockDailyFreshnessAbortController
+    activeOpenDataStockDailyFreshnessAbortController = null
+    if (previousController && !previousController.signal.aborted) previousController.abort()
+
+    const controller = new AbortController()
+    const requestId = ++openDataStockDailyFreshnessRequestEpoch
+    activeOpenDataStockDailyFreshnessAbortController = controller
+    openDataStockDailyFreshnessDisplay.value = { status: 'loading', response: null }
+
+    void marketDataApi.getOpenDataStockDailyFreshness({ signal: controller.signal })
+      .then((response) => {
+        if (
+          requestId !== openDataStockDailyFreshnessRequestEpoch
+          || activeOpenDataStockDailyFreshnessAbortController !== controller
+          || controller.signal.aborted
+          || !canReadOpenDataStockDailyFreshness.value
+        ) return
+        openDataStockDailyFreshnessDisplay.value = { status: 'ready', response }
+      })
+      .catch(() => {
+        if (
+          requestId !== openDataStockDailyFreshnessRequestEpoch
+          || activeOpenDataStockDailyFreshnessAbortController !== controller
+          || controller.signal.aborted
+          || !canReadOpenDataStockDailyFreshness.value
+        ) return
+        // Transport and protocol errors are not represented as `missing` and
+        // never fall back to the local coverage matrix.
+        openDataStockDailyFreshnessDisplay.value = { status: 'unavailable', response: null }
+      })
+      .finally(() => {
+        if (activeOpenDataStockDailyFreshnessAbortController === controller) {
+          activeOpenDataStockDailyFreshnessAbortController = null
+        }
+      })
+  }
+
+  function isLocalCoverageMatrixAllowed(): boolean {
+    return form.asset_type !== 'stock'
+      || (
+        marketDataCapabilitiesResolved.value
+        && marketDataRouteSelection.value.mode === 'legacy'
+      )
+  }
+
+  function clearLocalCoverageMatrix(): void {
+    coverageRequestId += 1
+    coverageRows.value = []
+    coverageLoading.value = false
+    coverageRefreshing.value = false
+    coverageError.value = ''
   }
 
   function assetLabel(assetType: MarketAssetType) {
@@ -1451,11 +1683,7 @@ export function useDataPage() {
   }
 
   function setAssetType(assetType: MarketAssetType) {
-    if (applyAssetType(assetType)) {
-      void loadInstrumentOptions(formSymbolText())
-      void loadCoverageMatrix()
-      void lookupInstrument('local_only')
-    }
+    if (applyAssetType(assetType)) loadInstrumentsThenLookup()
   }
 
   function applyRouteTab(tabValue: unknown, resetResult: boolean) {
@@ -1466,10 +1694,21 @@ export function useDataPage() {
 
   function applyAssetType(assetType: MarketAssetType, resetResult = true) {
     const changed = form.asset_type !== assetType
-    if (changed) invalidateMarketDataQueryLifecycle()
+    if (changed) {
+      invalidateMarketDataQueryLifecycle()
+      invalidateOpenDataStockDailyFreshnessRequest()
+    }
     form.asset_type = assetType
     restoreAssetSelection(assetType)
     if (changed) {
+      // An OpenData-only alias date or catalog error must not affect a legacy
+      // selector on another asset tab. Invalidate pending option reads too.
+      instrumentOptionsRequestId += 1
+      instrumentOptionsCatalogMode.value = null
+      instrumentOptionsError.value = ''
+      instrumentAliasEffectiveOn.value = null
+      instrumentOptionsSearchTerm.value = ''
+      instrumentOptions.value = []
       // Product selection never crosses asset tabs. Keeping it explicit avoids
       // a ready family on the next tab silently inheriting a prior tab's mode.
       selectedFamilyId.value = defaultFamilyId(assetType)
@@ -2420,6 +2659,213 @@ export function useDataPage() {
     if (signal?.aborted) throw new Error('MARKET_DATA_QUERY_ABORTED')
   }
 
+  function clearMarketDataQueryResults() {
+    invalidateMarketDataQueryLifecycle()
+    result.value = null
+    referenceSeriesResult.value = null
+    genericObservationResult.value = null
+    relatedTableRequestId += 1
+    relatedTables.value = []
+    relatedTablesLoading.value = false
+    relatedTablesError.value = ''
+  }
+
+  function invalidateOpenDataDirectRequest(): void {
+    openDataDirectRequestEpoch += 1
+    const controller = activeOpenDataDirectAbortController
+    activeOpenDataDirectAbortController = null
+    if (controller && !controller.signal.aborted) controller.abort()
+    if (dataPageDisplayMode.value === 'opendata_direct') {
+      openDataDirectKlineDisplay.value = emptyOpenDataDirectKlineDisplay()
+    }
+  }
+
+  function finishOpenDataDirectRequest(controller: AbortController): void {
+    if (activeOpenDataDirectAbortController === controller) {
+      activeOpenDataDirectAbortController = null
+    }
+  }
+
+  function isCurrentOpenDataDirectIntent(
+    requestId: number,
+    controller: AbortController,
+    snapshot: {
+      assetType: MarketAssetType
+      symbol: string
+      period: string
+      familyId: string
+      startDate: string
+      endDate: string
+      aliasEffectiveOn: string | null
+    },
+  ): boolean {
+    return requestId === openDataDirectRequestEpoch
+      && activeOpenDataDirectAbortController === controller
+      && !controller.signal.aborted
+      && form.asset_type === snapshot.assetType
+      && formSymbolText() === snapshot.symbol
+      && form.period === snapshot.period
+      && selectedFamilyId.value === snapshot.familyId
+      && dateRange.value?.[0] === snapshot.startDate
+      && dateRange.value?.[1] === snapshot.endDate
+      && instrumentAliasEffectiveOn.value === snapshot.aliasEffectiveOn
+  }
+
+  function openDataDirectUnavailable(reason: OpenDataDirectKlineDisplayReason): void {
+    openDataDirectKlineDisplay.value = {
+      ...openDataDirectKlineDisplay.value,
+      status: 'unavailable',
+      rows: [],
+      returnedBarCount: null,
+      retrievedAt: null,
+      coverageStatus: null,
+      sourceAvailableAt: null,
+      durableReceipt: null,
+      reason,
+    }
+  }
+
+  function routeSelectionFailureReason(
+    selection: MarketDataRouteSelection,
+  ): OpenDataDirectKlineDisplayReason {
+    switch (selection.reason) {
+      case 'CAPABILITIES_UNAVAILABLE':
+      case 'CAPABILITY_CENSUS_INVALID':
+      case 'QUERY_V2_DISABLED':
+      case 'ONLINE_FETCH_DISABLED':
+      case 'OPENDATA_ROUTE_INEFFECTIVE':
+        return selection.reason
+      default:
+        return 'CAPABILITY_CENSUS_INVALID'
+    }
+  }
+
+  async function routeOpenDataDirectQuery(): Promise<boolean> {
+    invalidateMarketDataQueryLifecycle()
+    if (marketDataCapabilitiesResolved.value && marketDataRouteSelection.value.mode === 'legacy') {
+      invalidateOpenDataDirectRequest()
+      dataPageDisplayMode.value = 'legacy'
+      return false
+    }
+    const controller = new AbortController()
+    activeOpenDataDirectAbortController?.abort()
+    activeOpenDataDirectAbortController = controller
+    const requestId = ++openDataDirectRequestEpoch
+    const rawDates = Array.isArray(dateRange.value) ? dateRange.value : []
+    const snapshot = {
+      assetType: form.asset_type,
+      symbol: formSymbolText(),
+      period: form.period,
+      familyId: selectedFamilyId.value,
+      startDate: rawDates[0] || '',
+      endDate: rawDates[1] || '',
+      aliasEffectiveOn: instrumentAliasEffectiveOn.value,
+    }
+    const rangeLabel = snapshot.startDate && snapshot.endDate
+      ? `${snapshot.startDate} – ${snapshot.endDate}`
+      : null
+    const candidateRequest: OpenDataDirectKlineRequest | null = (
+      snapshot.period === 'daily' && snapshot.startDate && snapshot.endDate
+    ) ? {
+        symbol: snapshot.symbol,
+        start_date: snapshot.startDate,
+        end_date: snapshot.endDate,
+        period: 'daily',
+      } : null
+    dataPageDisplayMode.value = 'opendata_direct'
+    openDataDirectKlineDisplay.value = {
+      ...emptyOpenDataDirectKlineDisplay(),
+      status: 'loading',
+      request: candidateRequest,
+      symbolLabel: snapshot.symbol || null,
+      rangeLabel,
+    }
+
+    const isCurrent = () => isCurrentOpenDataDirectIntent(requestId, controller, snapshot)
+    const release = () => finishOpenDataDirectRequest(controller)
+    try {
+      await resolveMarketDataCapabilities()
+      if (!isCurrent()) return true
+
+      const selection = marketDataRouteSelection.value
+      if (selection.mode === 'legacy') {
+        dataPageDisplayMode.value = 'legacy'
+        openDataDirectKlineDisplay.value = emptyOpenDataDirectKlineDisplay()
+        return false
+      }
+      if (selection.mode === 'unknown') {
+        openDataDirectUnavailable(routeSelectionFailureReason(selection))
+        return true
+      }
+      if (!selection.can_query) {
+        openDataDirectUnavailable(routeSelectionFailureReason(selection))
+        return true
+      }
+      if (snapshot.assetType !== 'stock') {
+        openDataDirectUnavailable('UNSUPPORTED_ASSET')
+        return true
+      }
+      if (snapshot.period !== 'daily') {
+        openDataDirectUnavailable('UNSUPPORTED_PERIOD')
+        return true
+      }
+      if (snapshot.familyId !== defaultFamilyId('stock')) {
+        openDataDirectUnavailable('UNSUPPORTED_ASSET')
+        return true
+      }
+      if (!isValidDirectBusinessDateRange(snapshot.startDate, snapshot.endDate)) {
+        openDataDirectUnavailable('INVALID_DATE_RANGE')
+        return true
+      }
+      if (
+        instrumentOptionsLoading.value
+        || instrumentOptionsCatalogMode.value !== 'opendata'
+        || !instrumentOptions.value.some((option) => (
+          option.asset_type === 'stock'
+          && option.catalog_verified === true
+          && option.symbol === snapshot.symbol
+        ))
+      ) {
+        openDataDirectUnavailable('UNSUPPORTED_ASSET')
+        return true
+      }
+      if (!candidateRequest) {
+        openDataDirectUnavailable('INVALID_DATE_RANGE')
+        return true
+      }
+
+      const response: OpenDataDirectKlineResponse = await marketDataApi.getOpenDataDirectKline(
+        candidateRequest,
+        { signal: controller.signal },
+      )
+      if (!isCurrent()) return true
+      openDataDirectKlineDisplay.value = {
+        status: 'ready',
+        request: candidateRequest,
+        symbolLabel: snapshot.symbol,
+        rangeLabel,
+        rows: response.records,
+        returnedBarCount: response.count,
+        retrievedAt: response.provenance.retrieved_at,
+        coverageStatus: response.provenance.coverage_status,
+        sourceAvailableAt: response.provenance.source_available_at,
+        durableReceipt: response.provenance.durable_receipt,
+        reason: null,
+      }
+      return true
+    } catch (error) {
+      if (!isCurrent()) return true
+      const reason = error instanceof Error
+        && error.message === 'OPENDATA_DIRECT_RESPONSE_INVALID'
+        ? 'DIRECT_RESPONSE_INVALID'
+        : 'DIRECT_REQUEST_FAILED'
+      openDataDirectUnavailable(reason)
+      return true
+    } finally {
+      release()
+    }
+  }
+
   async function lookupInstrument(intent: MarketLookupIntent = 'local_first') {
     // ``true``/``false`` were the pre-197 exposed refresh argument. Preserve
     // that boundary for existing callers while making lifecycle/UI calls name
@@ -2428,10 +2874,57 @@ export function useDataPage() {
       ? 'refresh'
       : intent === false ? 'local_first' : intent
     const refreshOnline = queryMode === 'refresh'
+    const requestedAssetType = form.asset_type
     const requestedSymbol = formSymbolText()
     if (!requestedSymbol) {
       ElMessage.error(t('dataMgmt.msgSymbolRequired'))
       return
+    }
+    if (queryMode === 'local_only' && requestedAssetType === 'stock') {
+      if (!marketDataCapabilitiesResolved.value) await resolveMarketDataCapabilities()
+      if (
+        form.asset_type !== requestedAssetType
+        || formSymbolText() !== requestedSymbol
+        || marketDataRouteSelection.value.mode !== 'legacy'
+      ) return
+    }
+    if (queryMode === 'local_first') {
+      if (await routeOpenDataDirectQuery()) return
+    } else {
+      invalidateOpenDataDirectRequest()
+      dataPageDisplayMode.value = 'legacy'
+    }
+    if (form.asset_type === 'stock' && instrumentOptionsCatalogMode.value === null) {
+      if (!instrumentOptionsError.value) {
+        await loadInstrumentOptions(requestedSymbol)
+        // The selector could change while the directory request was in flight.
+        if (form.asset_type !== requestedAssetType || formSymbolText() !== requestedSymbol) return
+      }
+      if (instrumentOptionsCatalogMode.value === null) {
+        clearMarketDataQueryResults()
+        if (!instrumentOptionsError.value) {
+          instrumentOptionsError.value = t('dataMgmt.marketDataSourceError')
+        }
+        setMarketDataPlatformErrorStatus()
+        return
+      }
+    }
+    if (
+      form.asset_type === 'stock'
+      && instrumentOptionsCatalogMode.value === 'opendata'
+      && !instrumentOptions.value.some(
+        (option) => option.catalog_verified === true && option.symbol === requestedSymbol,
+      )
+    ) {
+      clearMarketDataQueryResults()
+      if (!instrumentOptionsError.value) {
+        instrumentOptionsError.value = '请先从已验证的 OpenData 标的目录中选择标的。'
+      }
+      setMarketDataPlatformErrorStatus()
+      return
+    }
+    if (form.asset_type === 'stock' && instrumentOptionsCatalogMode.value === 'opendata') {
+      instrumentOptionsError.value = ''
     }
     // The current bundle is only a presentation control plane, but it is
     // sufficient to prevent a user-edited 90-day picker range from reaching
@@ -2730,7 +3223,12 @@ export function useDataPage() {
   }
 
   async function loadCoverageMatrix() {
+    if (!isLocalCoverageMatrixAllowed()) {
+      clearLocalCoverageMatrix()
+      return
+    }
     const requestId = ++coverageRequestId
+    const requestAssetType = form.asset_type
     coverageLoading.value = true
     coverageError.value = ''
     try {
@@ -2740,10 +3238,18 @@ export function useDataPage() {
         provider: coverageProvider.value.trim() || undefined,
         limit: 200,
       })
-      if (requestId !== coverageRequestId) return
+      if (
+        requestId !== coverageRequestId
+        || requestAssetType !== form.asset_type
+        || !isLocalCoverageMatrixAllowed()
+      ) return
       coverageRows.value = response.items
     } catch {
-      if (requestId === coverageRequestId) {
+      if (
+        requestId === coverageRequestId
+        && requestAssetType === form.asset_type
+        && isLocalCoverageMatrixAllowed()
+      ) {
         coverageRows.value = []
         coverageError.value = t('dataMgmt.coverageLoadFailed')
       }
@@ -2755,6 +3261,12 @@ export function useDataPage() {
   }
 
   async function refreshCoverageMatrix() {
+    if (!isLocalCoverageMatrixAllowed()) {
+      clearLocalCoverageMatrix()
+      return
+    }
+    const requestId = ++coverageRequestId
+    const requestAssetType = form.asset_type
     coverageRefreshing.value = true
     coverageError.value = ''
     try {
@@ -2763,17 +3275,28 @@ export function useDataPage() {
         timeframe: coverageTimeframe.value || undefined,
         limit: 500,
       })
+      if (
+        requestId !== coverageRequestId
+        || requestAssetType !== form.asset_type
+        || !isLocalCoverageMatrixAllowed()
+      ) return
       coverageRows.value = response.items
       ElMessage.success(t('dataMgmt.coverageRefreshed'))
     } catch {
+      if (
+        requestId !== coverageRequestId
+        || requestAssetType !== form.asset_type
+        || !isLocalCoverageMatrixAllowed()
+      ) return
       coverageError.value = t('dataMgmt.coverageRefreshFailed')
       ElMessage.error(coverageError.value)
     } finally {
-      coverageRefreshing.value = false
+      if (requestId === coverageRequestId) coverageRefreshing.value = false
     }
   }
 
   function searchInstrumentOptions(query: string) {
+    instrumentOptionsSearchTerm.value = String(query || '')
     void loadInstrumentOptions(query)
   }
 
@@ -2783,27 +3306,92 @@ export function useDataPage() {
     }
   }
 
-  async function loadInstrumentOptions(search = '') {
+  async function loadInstrumentOptions(search = '', adoptFirstOnMiss = false) {
     const requestId = ++instrumentOptionsRequestId
     const normalizedSearch = String(search || '').trim()
+    instrumentOptionsSearchTerm.value = normalizedSearch
     instrumentOptionsLoading.value = true
+    instrumentOptionsError.value = ''
     try {
-      const response = await marketDataApi.listInstrumentOptions({
+      const params = {
         asset_type: form.asset_type,
         search: normalizedSearch,
         limit: 80,
+        ...(form.asset_type === 'stock'
+          && instrumentOptionsCatalogMode.value === 'opendata'
+          && instrumentAliasEffectiveOn.value
+          ? { effective_on: instrumentAliasEffectiveOn.value }
+          : {}),
+      }
+      const response = await marketDataApi.listInstrumentOptions({
+        ...params,
       })
       if (requestId !== instrumentOptionsRequestId) return
-      instrumentOptions.value = ensureCurrentInstrumentOption(response.items)
-    } catch {
+      const isOpenDataCatalog = response.catalog_mode === 'opendata'
+      instrumentOptionsCatalogMode.value = isOpenDataCatalog ? 'opendata' : 'legacy'
+      const responseItems = Array.isArray(response.items) ? response.items : []
+      if (isOpenDataCatalog) {
+        const verifiedItems = responseItems.filter((item) => item.catalog_verified === true)
+        instrumentOptions.value = verifiedItems
+        const currentSymbol = form.asset_type === 'stock' ? formSymbolText() : ''
+        if (
+          currentSymbol
+          && !verifiedItems.some((item) => item.symbol === currentSymbol)
+        ) {
+          clearMarketDataQueryResults()
+          setMarketDataPlatformErrorStatus()
+          instrumentOptionsError.value = '当前目录结果不包含所选标的，请从已验证的 OpenData 目录中重新选择。'
+        }
+      } else {
+        instrumentOptions.value = ensureCurrentInstrumentOption(responseItems)
+      }
+      if (adoptFirstOnMiss && !isOpenDataCatalog) adoptFirstInstrumentOption(responseItems)
+    } catch (error) {
       if (requestId === instrumentOptionsRequestId) {
-        instrumentOptions.value = ensureCurrentInstrumentOption([])
+        const openDataError = openDataInstrumentReferenceError(error)
+        if (openDataError || instrumentOptionsCatalogMode.value === 'opendata') {
+          instrumentOptionsCatalogMode.value = 'opendata'
+          instrumentOptions.value = []
+          clearMarketDataQueryResults()
+          setMarketDataPlatformErrorStatus()
+          instrumentOptionsError.value = openDataError === 'effective_date_required'
+            ? '历史简称查询需要先选择生效日期后重试。'
+            : t('dataMgmt.marketDataSourceError')
+        } else if (form.asset_type === 'stock') {
+          // Until the server has returned a legacy response, a failed stock
+          // catalog request cannot authorize a synthetic selector entry.
+          instrumentOptionsCatalogMode.value = null
+          instrumentOptionsError.value = t('dataMgmt.marketDataSourceError')
+          instrumentOptions.value = []
+        } else {
+          instrumentOptionsCatalogMode.value = 'legacy'
+          instrumentOptionsError.value = ''
+          instrumentOptions.value = ensureCurrentInstrumentOption([])
+        }
       }
     } finally {
       if (requestId === instrumentOptionsRequestId) {
         instrumentOptionsLoading.value = false
       }
     }
+  }
+
+  function openDataInstrumentReferenceError(error: unknown) {
+    if (!error || typeof error !== 'object') return null
+    const response = (error as { response?: { data?: unknown } }).response
+    const data = response?.data
+    if (!data || typeof data !== 'object') return null
+    const detail = (data as { detail?: unknown }).detail
+    if (!detail || typeof detail !== 'object') return null
+    const payload = detail as { catalog_mode?: unknown; code?: unknown }
+    if (payload.catalog_mode !== 'opendata') return null
+    return payload.code === 'OPENDATA_REFERENCE_EFFECTIVE_DATE_REQUIRED'
+      ? 'effective_date_required'
+      : 'unavailable'
+  }
+
+  function handleInstrumentAliasEffectiveDateChange() {
+    void loadInstrumentOptions(instrumentOptionsSearchTerm.value)
   }
 
   function ensureCurrentInstrumentOption(options: MarketInstrumentOption[]) {
@@ -2826,6 +3414,77 @@ export function useDataPage() {
     ]
   }
 
+  /**
+   * Point the option tab at a contract the warehouse can actually return.
+   * ``ensureCurrentInstrumentOption`` synthesizes an entry for whatever symbol
+   * is already selected, so membership in the rendered list is not evidence
+   * the instrument exists -- only the server-returned items are.
+   */
+  function adoptFirstInstrumentOption(items: MarketInstrumentOption[]) {
+    if (form.asset_type !== 'option') return
+    const currentSymbol = formSymbolText()
+    if (items.some((item) => item.symbol === currentSymbol)) return
+    const first = items.find((item) => Boolean(item.symbol))
+    if (!first) return
+    form.symbol = first.symbol
+  }
+
+  function loadInstrumentsThenLookup(): void {
+    const bootstrapId = ++marketPageBootstrapEpoch
+    if (form.asset_type !== 'option') {
+      if (form.asset_type === 'stock') {
+        const requestedSymbol = formSymbolText()
+        void (async () => {
+          await resolveMarketDataCapabilities()
+          if (
+            bootstrapId !== marketPageBootstrapEpoch
+            || form.asset_type !== 'stock'
+            || formSymbolText() !== requestedSymbol
+          ) return
+
+          if (marketDataRouteSelection.value.mode === 'legacy') {
+            void loadCoverageMatrix()
+            invalidateOpenDataStockDailyFreshnessRequest()
+          } else {
+            clearLocalCoverageMatrix()
+            if (canReadOpenDataStockDailyFreshness.value) {
+              refreshOpenDataStockDailyFreshness()
+            } else {
+              invalidateOpenDataStockDailyFreshnessRequest()
+            }
+          }
+
+          await loadInstrumentOptions(requestedSymbol)
+          if (
+            bootstrapId !== marketPageBootstrapEpoch
+            || form.asset_type !== 'stock'
+            || formSymbolText() !== requestedSymbol
+          ) return
+          // The compatibility lookup reads AFI's local market warehouse. It
+          // remains the legacy bootstrap path only when the capability census
+          // explicitly selects that route; OpenData and unknown states wait
+          // for an explicit, bounded direct query instead.
+          if (marketDataRouteSelection.value.mode === 'legacy') {
+            await lookupInstrument('local_only')
+          }
+        })()
+        return
+      }
+      void loadInstrumentOptions(formSymbolText())
+      void loadCoverageMatrix()
+      void lookupInstrument('local_only')
+      return
+    }
+    // A missing or stale option symbol can only be repaired from the contract
+    // list, so that list must resolve before the first lookup is issued.
+    void (async () => {
+      await loadInstrumentOptions(formSymbolText(), true)
+      if (bootstrapId !== marketPageBootstrapEpoch || form.asset_type !== 'option') return
+      void loadCoverageMatrix()
+      if (formSymbolText()) await lookupInstrument('local_only')
+    })()
+  }
+
   function formSymbolText() {
     return String(form.symbol || '').trim()
   }
@@ -2841,7 +3500,25 @@ export function useDataPage() {
   }
 
   function formatInstrumentHistoryStatus(option: MarketInstrumentOption) {
+    if (
+      option.data_availability === 'unknown'
+      || option.has_history == null
+      || option.history_rows == null
+    ) {
+      return t('dataMgmt.coverageUnknown')
+    }
     return option.has_history ? formatNumber(option.history_rows) : '0'
+  }
+
+  function instrumentOptionStatusTagType(option: MarketInstrumentOption) {
+    if (
+      option.data_availability === 'unknown'
+      || option.has_history == null
+      || option.history_rows == null
+    ) {
+      return 'info'
+    }
+    return option.has_history ? 'success' : 'warning'
   }
 
   function historyRowTimestamp(row: MarketHistoryRow): number {
@@ -3309,14 +3986,26 @@ export function useDataPage() {
   }
 
   function renderMarketChart() {
-    if (!chartCanRender.value || !marketChartRef.value) {
+    const isDirectDisplay = dataPageDisplayMode.value === 'opendata_direct'
+    const canRender = isDirectDisplay
+      ? openDataDirectKlineDisplay.value.status === 'ready'
+        && openDataDirectKlineDisplay.value.rows.length > 0
+      : chartCanRender.value
+    if (!canRender || !marketChartRef.value) {
       disposeMarketChart()
       return
     }
+    if (marketChart && marketChartElement !== marketChartRef.value) {
+      disposeMarketChart()
+    }
     if (!marketChart) {
       marketChart = echarts.init(marketChartRef.value)
+      marketChartElement = marketChartRef.value
     }
-    marketChart.setOption(buildMarketChartOption(), true)
+    marketChart.setOption(
+      isDirectDisplay ? buildOpenDataDirectKlineChartOption() : buildMarketChartOption(),
+      true,
+    )
     marketChart.resize()
   }
 
@@ -3332,6 +4021,50 @@ export function useDataPage() {
   function disposeMarketChart() {
     marketChart?.dispose()
     marketChart = null
+    marketChartElement = null
+  }
+
+  function buildOpenDataDirectKlineChartOption(): echarts.EChartsOption {
+    const rows = openDataDirectKlineDisplay.value.rows
+    const dates = rows.map((row) => row.date)
+    const ohlc = rows.map((row) => [row.open, row.close, row.low, row.high])
+    const volumeBars = rows.map((row) => ({
+      value: row.volume,
+      itemStyle: { color: row.close >= row.open ? CANDLE_UP_COLOR : CANDLE_DOWN_COLOR },
+    }))
+
+    return baseChartOption({
+      legend: [t('charts.klineSeries'), t('charts.klineVolume')],
+      grid: [
+        { left: 64, right: 28, top: 42, height: '55%' },
+        { left: 64, right: 28, top: '73%', height: '16%' },
+      ],
+      xAxis: [
+        categoryAxis(dates),
+        { ...categoryAxis(dates), gridIndex: 1, axisLabel: { show: false } },
+      ],
+      yAxis: [
+        valueAxis(),
+        valueAxis({ gridIndex: 1, splitNumber: 2, axisLabel: { show: false } }),
+      ],
+      dataZoom: dataZoom([0, 1]),
+      series: [
+        {
+          name: t('charts.klineSeries'),
+          type: 'candlestick',
+          data: ohlc,
+          itemStyle: CANDLE_ITEM_STYLE,
+        },
+        {
+          name: t('charts.klineVolume'),
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumeBars,
+          barMaxWidth: 12,
+        },
+      ],
+    })
   }
 
   function buildMarketChartOption(): echarts.EChartsOption {
@@ -3981,11 +4714,20 @@ export function useDataPage() {
     form,
     dateRange,
     loading,
+    dataPageDisplayMode,
+    openDataDirectKlineDisplay,
+    openDataStockDailyFreshnessDisplay,
+    canReadOpenDataStockDailyFreshness,
+    stockDataRouteNotice,
+    showLocalCoverageMatrix,
     result,
     chartMode,
     marketChartRef,
     instrumentOptions,
     instrumentOptionsLoading,
+    instrumentOptionsCatalogMode,
+    instrumentOptionsError,
+    instrumentAliasEffectiveOn,
     relatedTablesLoading,
     relatedTables,
     relatedTablesError,
@@ -4069,10 +4811,12 @@ export function useDataPage() {
     restoreAssetSelection,
     selectDataFamily,
     lookupInstrument,
+    refreshOpenDataStockDailyFreshness,
     loadCoverageMatrix,
     refreshCoverageMatrix,
     searchInstrumentOptions,
     handleInstrumentDropdownVisible,
+    handleInstrumentAliasEffectiveDateChange,
     loadInstrumentOptions,
     ensureCurrentInstrumentOption,
     formSymbolText,
@@ -4095,6 +4839,7 @@ export function useDataPage() {
     queryV2FromLookupContract,
     instrumentOptionLabel,
     formatInstrumentHistoryStatus,
+    instrumentOptionStatusTagType,
     toDateInput,
     loadRelatedTables,
     buildRelatedTableKeywords,

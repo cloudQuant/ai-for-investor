@@ -1,0 +1,32 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-17T06:33:34.941890+00:00",
+  "source_count": 4902,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "f066141f4b022c68610202a98afc808123ba5a48",
+    "D:\\bt_api_py": "35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "bc37370074fd42e713b73250d88fd07fc6b4e978",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+    "D:\\bt_api_py\\bt_api\\bt_api_monitor": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "ee4cacaee04182fda2d1b9124c2f3a1675aed07b",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "29b09555ae6429c2b40d6bfb69dc923a8a71993d",
+    "D:\\source_code\\backtrader": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "f066141f4b022c68610202a98afc808123ba5a48",
+    "D:\\bt_api_py": "35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "bc37370074fd42e713b73250d88fd07fc6b4e978",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+    "D:\\bt_api_py\\bt_api\\bt_api_monitor": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "ee4cacaee04182fda2d1b9124c2f3a1675aed07b",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "29b09555ae6429c2b40d6bfb69dc923a8a71993d",
+    "D:\\source_code\\backtrader": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "67b68db9428cba23b06921d2cc8d1c7f66118efbcf2ddc734c4828f9781f5f21",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_SYNTHETIC_HTTP_OWNER_REDUCTION_ONLY"
+}

@@ -1,4 +1,5 @@
 from collections import UserDict
+from datetime import date
 from types import ModuleType
 
 import pandas as pd
@@ -107,3 +108,74 @@ def test_indicators_ignore_missing_values_and_keep_volume_average_without_close(
     assert without_closes["latest_close"] is None
     assert without_closes["avg_volume"] == 15.0
     assert without_closes["observation_count"] == 2
+
+
+OPTION_STALE_SNAPSHOT = {
+    "symbol": "151.AU2608P720",
+    "代码": "au2608P720",
+    "名称": "沪金26年08月沽720",
+    "data_date": date(2026, 7, 4),
+    "最新价": 0.4,
+    "成交量": 21,
+    "成交额": 8720.0,
+    "持仓量": 128,
+}
+
+
+@pytest.mark.asyncio
+async def test_option_warehouse_reanchors_history_on_the_newest_snapshot():
+    """A today-anchored window over a paused snapshot ETL must not read as empty."""
+    windows: list[tuple[str, str]] = []
+
+    class StaleSnapshotService(MarketInstrumentService):
+        async def _fetch_one(self, _sql, params=None):
+            return OPTION_STALE_SNAPSHOT
+
+        async def _fetch_rows(self, _sql, params=None):
+            window = (params["start"], params["end"])
+            windows.append(window)
+            if window[0] <= "2026-07-04" <= window[1]:
+                return [OPTION_STALE_SNAPSHOT]
+            return []
+
+    warnings: list[str] = []
+    payload = await StaleSnapshotService()._lookup_option_warehouse(
+        symbol="151.au2608P720",
+        start_date="2026-07-21",
+        end_date="2026-10-19",
+        period="daily",
+        market="CN",
+        warnings=warnings,
+    )
+
+    assert [row["date"] for row in payload["history"]["rows"]] == ["2026-07-04"]
+    assert windows == [("2026-07-21", "2026-10-19"), ("2026-04-05", "2026-07-04")]
+    assert warnings and "2026-07-04" in warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_option_warehouse_does_not_invent_a_fallback_window_without_a_snapshot():
+    """The fallback is anchored on a real row; an unknown contract stays unknown."""
+    windows: list[tuple[str, str]] = []
+
+    class EmptySnapshotService(MarketInstrumentService):
+        async def _fetch_one(self, _sql, params=None):
+            return None
+
+        async def _fetch_rows(self, _sql, params=None):
+            windows.append((params["start"], params["end"]))
+            return []
+
+    warnings: list[str] = []
+    payload = await EmptySnapshotService()._lookup_option_warehouse(
+        symbol="221.HO9912-P-1000",
+        start_date="2026-07-21",
+        end_date="2026-10-19",
+        period="daily",
+        market="CN",
+        warnings=warnings,
+    )
+
+    assert payload["history"]["rows"] == []
+    assert windows == [("2026-07-21", "2026-10-19")]
+    assert warnings == []

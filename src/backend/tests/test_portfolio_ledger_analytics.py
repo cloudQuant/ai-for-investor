@@ -175,9 +175,11 @@ async def test_portfolio_ledger_analytics_endpoints(
 
     assert benchmark_metrics.status_code == 200
     assert benchmark_metrics.json()["portfolio_id"] == portfolio_id
-    assert benchmark_metrics.json()["status"] == "ok"
+    assert benchmark_metrics.json()["status"] == "degraded"
     assert benchmark_metrics.json()["benchmark_id"] == "hs300"
-    assert benchmark_metrics.json()["observation_count"] == 31
+    assert benchmark_metrics.json()["observation_count"] == 0
+    assert benchmark_metrics.json()["beta"] is None
+    assert benchmark_metrics.json()["reason"] == "portfolio_nav_not_time_weighted_or_close_marked"
 
     assert brinson.status_code == 200
     assert brinson.json()["portfolio_id"] == portfolio_id
@@ -185,6 +187,8 @@ async def test_portfolio_ledger_analytics_endpoints(
     assert brinson.json()["asset_count"] == 2
     assert brinson.json()["total_excess_return"] is not None
 
+    # This slice does not validate Fama-French date alignment: factor inputs are
+    # still undated, so the legacy positional calculation remains an open issue.
     assert fama_french.status_code == 200
     assert fama_french.json()["portfolio_id"] == portfolio_id
     assert fama_french.json()["benchmark_id"] == "hs300"

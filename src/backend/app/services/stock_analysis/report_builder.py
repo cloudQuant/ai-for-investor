@@ -56,6 +56,27 @@ class StockAnalysisReportBuilder:
         if isinstance(ai_stage_generation, dict) and ai_stage_generation.get("enabled"):
             assumptions.append("AI 可用时，兼容阶段文本由当前项目 AI provider 逐阶段增强生成。")
 
+        data_sources = ["market_data", "news_intelligence"]
+        financials = snapshot.get("financials") or {}
+        if (
+            isinstance(financials, dict)
+            and financials.get("provider") == "opendata"
+            and isinstance(financials.get("raw_archive"), dict)
+        ):
+            data_sources.append("opendata:financial_archive")
+        sina_fzb_snapshot = financials.get("opendata_sina_fzb_snapshot")
+        if isinstance(sina_fzb_snapshot, dict) and sina_fzb_snapshot.get("status") in {
+            "ok",
+            "empty",
+        }:
+            data_sources.append("opendata:sina_fzb_snapshot")
+        sina_lrb_snapshot = snapshot.get("opendata_sina_lrb_snapshot")
+        if isinstance(sina_lrb_snapshot, dict) and sina_lrb_snapshot.get("status") in {
+            "ok",
+            "empty",
+        }:
+            data_sources.append("opendata:sina_lrb_snapshot")
+
         return {
             "meta": {
                 "symbol": symbol,
@@ -94,7 +115,7 @@ class StockAnalysisReportBuilder:
                 self._section("risk", "风险评估与终审", compat["final_trade_decision"], scores),
             ],
             COMPAT_REPORT_KEY: compat,
-            "data_sources": ["market_data", "news_intelligence"],
+            "data_sources": data_sources,
             "source_snapshot": snapshot,
             "data_quality": snapshot.get("data_quality") or {"status": "ok"},
             "ai_stage_generation": ai_stage_generation or {"enabled": False},

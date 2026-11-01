@@ -181,6 +181,75 @@ class Settings(BaseSettings):
             "authorization grant; this flag only removes the route from the assembled policy."
         ),
     )
+    MARKET_DATA_RISK_BENCHMARK_OPENDATA_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Default-off OpenData selector for HS300, CSI500, and CSI800 in the risk benchmark "
+            "and benchmark-metrics APIs only. It also requires MARKET_DATA_OPENDATA_ENABLED, "
+            "current read and source-governance authorization, and durable attestation for the "
+            "exact index route. Other consumers using the default BenchmarkService fail closed "
+            "for these indices until migrated; this flag does not switch them to OpenData. "
+            "Missing grants, coverage, credentials, or data never fall back to AkShare."
+        ),
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_CATALOG_ENABLED: bool = Field(
+        default=False,
+        description="Use the reviewed OpenData published stock reference catalog for selector options",
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_DATASET_ID: str = Field(
+        default="", description="Exact server-owned published instrument reference dataset ID"
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_SOURCE_ID: str = Field(
+        default="", description="Exact approved source ID for the instrument reference catalog"
+    )
+    MARKET_DATA_OPENDATA_INSTRUMENT_CONTRACT_SHA256: str = Field(
+        default="", description="Pinned canonical contract SHA-256 for the reference catalog"
+    )
+    STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Read source-native ths_fuyao financial archive evidence for A-share stock analysis. "
+            "This is default-off, never falls back to AkShare when selected, and does not make "
+            "the evidence eligible for normalized analysis or point-in-time decisions."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ALLOWED_HOSTS: str = Field(
+        default="",
+        description=(
+            "Comma-separated exact hosts allowed for remote HTTPS OpenData API requests. "
+            "A hostname permits port 443; use host:port to permit another exact port. "
+            "Loopback hosts remain available for local development; non-loopback HTTP is rejected."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_SINA_FZB_SNAPSHOT_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Enable explicit per-request OpenData reads of a pinned Sina FZB publication/capture. "
+            "Requires the request selector and never discovers or falls back to another provider."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_SINA_FZB_ALLOWED_HOSTS: str = Field(
+        default="",
+        description=(
+            "Comma-separated exact hosts allowed for explicit Sina FZB OpenData API reads. "
+            "Remote endpoints require HTTPS and an exact host allowlist."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_SINA_LRB_SNAPSHOT_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Enable explicit per-request OpenData reads of a pinned Sina LRB source-native "
+            "snapshot. The atemporal node-table evidence is provenance only and never enters "
+            "financial metrics, scoring, or AI prompts."
+        ),
+    )
+    STOCK_ANALYSIS_OPENDATA_SINA_LRB_ALLOWED_HOSTS: str = Field(
+        default="",
+        description=(
+            "Comma-separated exact hosts allowed for explicit Sina LRB OpenData API reads. "
+            "Remote endpoints require HTTPS and an exact host allowlist."
+        ),
+    )
     MARKET_DATA_THS_SCHEDULER_ENABLED: bool = Field(
         default=False,
         description=(
@@ -220,6 +289,13 @@ class Settings(BaseSettings):
     STOCK_SIGNAL_SCHEDULE_ENABLED: bool = Field(
         default=False,
         description="Enable the after-close auditable SSE50 signal scheduler",
+    )
+    STOCK_SIGNAL_BENCHMARK_OPENDATA_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Read SSE50 from OpenData; keep disabled until 000016 coverage, daily source "
+            "comparison, and monitoring are verified"
+        ),
     )
     STOCK_SIGNAL_SCHEDULE_TIMEZONE: str = Field(
         default="Asia/Shanghai", description="Timezone for the stock signal scheduler"
@@ -888,6 +964,67 @@ class Settings(BaseSettings):
         description="Graceful shutdown timeout in seconds (range 1-300)",
     )
 
+    # Optional, deployment-owned read-only service-client composition. This
+    # value contains client authentication material and is never exposed by
+    # settings reprs or ordinary model dumps. Empty keeps the integration off.
+    SERVICE_READ_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret deployment JSON for explicitly authorized read-only service clients; "
+            "leave blank to keep service reads unconfigured"
+        ),
+    )
+
+    # Trusted, server-owned SDK Gateway profiles. The document selects only
+    # code-registered profiles and exact owner grants; it contains no factory,
+    # endpoint or credential material.
+    SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret exact-scope deployment for trusted service-v2 Gateway operator profiles; "
+            "leave blank to keep operator lifecycle control disabled"
+        ),
+    )
+
+    # Separate operator-owned issuer and authenticated client grant for
+    # owner-side monitoring controls. This never inherits read-service grants.
+    SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret exact-scope deployment for signed monitor owner controls; "
+            "leave blank to keep owner controls disabled"
+        ),
+    )
+
+    # Separate, operator-owned grants for exact strategy-run reductions.
+    # Requests can name an approved target but cannot choose account/run/order
+    # terms or client credentials.
+    SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description=(
+            "Secret exact-run deployment for approved strategy reductions; "
+            "leave blank to keep owner.reduce disabled"
+        ),
+    )
+
+    # Server-owned exact instrument/FX joins for the portfolio's display-only
+    # market inputs. This configuration cannot grant market-data access; every
+    # query still passes through the authenticated v2 authorization path.
+    PORTFOLIO_VALUATION_BINDINGS_JSON: SecretStr = Field(
+        default=SecretStr(""),
+        repr=False,
+        exclude=True,
+        description="Bounded deployment-owned exact valuation input bindings",
+    )
+
     # Backtest subprocess timeout (seconds)
     BACKTEST_TIMEOUT: int = Field(default=300, description="Backtest subprocess timeout in seconds")
     AI_STRATEGY_SANDBOX_USE_DOCKER: bool = Field(
@@ -1245,6 +1382,46 @@ class Settings(BaseSettings):
         if normalized and len(normalized.encode("utf-8")) < 32:
             raise ValueError("MARKET_DATA_CURSOR_SIGNING_KEY must be at least 32 bytes")
         return normalized
+
+    @field_validator("SERVICE_READ_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_read_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Keep the secret deployment document bounded before JSON parsing."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("SERVICE_READ_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_gateway_operator_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the trusted operator profile grant document before parsing."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_monitor_control_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the separate operator-owned monitor control deployment."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("SERVICE_MONITOR_CONTROL_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON")
+    @classmethod
+    def validate_service_strategy_reduction_deployment_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the operator-owned exact-run reduction deployment."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("SERVICE_STRATEGY_REDUCTION_DEPLOYMENT_JSON exceeds the 256 KiB limit")
+        return value
+
+    @field_validator("PORTFOLIO_VALUATION_BINDINGS_JSON")
+    @classmethod
+    def validate_portfolio_valuation_bindings_size(cls, value: SecretStr) -> SecretStr:
+        """Bound the startup-owned exact instrument and FX crosswalk document."""
+        if len(value.get_secret_value().encode("utf-8")) > 262_144:
+            raise ValueError("PORTFOLIO_VALUATION_BINDINGS_JSON exceeds the 256 KiB limit")
+        return value
 
     @field_validator("AI_BUDGET_MODE")
     @classmethod

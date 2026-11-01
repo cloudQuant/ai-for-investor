@@ -5,17 +5,9 @@ import { useGatewayStatusPage } from '@/views/gateway/useGatewayStatusPage'
 
 const mocks = vi.hoisted(() => ({
   listGatewayHealth: vi.fn(),
-  getGatewayCredentials: vi.fn(),
-  connectGateway: vi.fn(),
-  disconnectGateway: vi.fn(),
-  success: vi.fn(),
   getErrorMessage: vi.fn((error: unknown, fallback: string) =>
     error instanceof Error ? error.message : fallback,
   ),
-}))
-
-vi.mock('element-plus', () => ({
-  ElMessage: { success: mocks.success, error: vi.fn(), warning: vi.fn() },
 }))
 
 vi.mock('@/api', () => ({
@@ -25,9 +17,6 @@ vi.mock('@/api', () => ({
 vi.mock('@/api/liveTrading', () => ({
   liveTradingApi: {
     listGatewayHealth: mocks.listGatewayHealth,
-    getGatewayCredentials: mocks.getGatewayCredentials,
-    connectGateway: mocks.connectGateway,
-    disconnectGateway: mocks.disconnectGateway,
   },
 }))
 
@@ -78,9 +67,6 @@ describe('useGatewayStatusPage', () => {
     vi.setSystemTime(new Date('2026-10-13T00:00:10.000Z'))
     vi.clearAllMocks()
     mocks.listGatewayHealth.mockResolvedValue({ total: 0, gateways: [] })
-    mocks.getGatewayCredentials.mockResolvedValue({})
-    mocks.connectGateway.mockResolvedValue({ message: 'Gateway connected' })
-    mocks.disconnectGateway.mockResolvedValue({ message: 'Gateway disconnected' })
   })
 
   afterEach(() => {
@@ -160,115 +146,14 @@ describe('useGatewayStatusPage', () => {
     wrapper.unmount()
   })
 
-  it('loads saved presets, connects with the chosen environment, and clears the form', async () => {
+  it('keeps manual credential and runtime controls out of the health controller', async () => {
     const wrapper = mountPage()
     await flushUi()
     const page = wrapper.vm as any
-    mocks.getGatewayCredentials.mockResolvedValueOnce({
-      CTP: {
-        broker_id: 'saved-broker',
-        app_id: 'saved-app',
-        auth_code: 'saved-auth',
-        user_id: 'saved-user',
-        password: 'saved-pass',
-      },
-      MT5: {
-        demo: { login: 1001, password: 'demo-pass', server: 'demo-server' },
-        live: { login: 1002, password: 'live-pass', server: 'live-server' },
-      },
-      IB_WEB: {
-        paper: { account_id: 'paper-account', asset_type: 'STK' },
-        live: { account_id: 'live-account', asset_type: 'FUT' },
-      },
-      BINANCE: { account_id: 'binance-account', api_key: 'k', secret_key: 's' },
-      OKX: { account_id: 'okx-account', api_key: 'o', secret_key: 's', passphrase: 'p' },
-      CUSTOM: { endpoint: 'custom-endpoint' },
-    })
-
-    await page.openConnectDialog()
-    expect(page.showConnectDialog).toBe(true)
-    expect(page.connectForm).toEqual({ exchange_type: '', credentials: {} })
-
-    page.connectForm.exchange_type = 'CTP'
-    page.onExchangeChange()
-    expect(page.connectForm.credentials).toMatchObject({
-      broker_id: 'saved-broker',
-      user_id: 'saved-user',
-      password: 'saved-pass',
-    })
-    page.ctpEnv = 'simnow_7x24'
-    page.onCtpEnvChange()
-    expect(page.connectForm.credentials.td_front).toBe('tcp://182.254.243.31:40001')
-    page.ctpEnv = 'simnow'
-    page.ctpGroup = 3
-    page.onCtpGroupChange()
-    expect(page.connectForm.credentials.md_front).toBe('tcp://182.254.243.31:30013')
-
-    page.connectForm.exchange_type = 'MT5'
-    page.onExchangeChange()
-    expect(page.connectForm.credentials).toMatchObject({ login: 1001, server: 'demo-server' })
-    page.mt5Env = 'live'
-    page.onMt5EnvChange()
-    expect(page.connectForm.credentials).toMatchObject({ login: 1002, server: 'live-server' })
-
-    page.connectForm.exchange_type = 'IB_WEB'
-    page.onExchangeChange()
-    page.ibEnv = 'live'
-    page.onIbEnvChange()
-    expect(page.connectForm.credentials).toMatchObject({ account_id: 'live-account', login_mode: 'live' })
-    await page.handleConnect()
-    await flushUi()
-
-    expect(mocks.connectGateway).toHaveBeenCalledWith({
-      exchange_type: 'IB_WEB',
-      credentials: expect.objectContaining({ account_id: 'live-account', login_mode: 'live' }),
-    })
-    expect(mocks.success).toHaveBeenCalledWith('Gateway connected')
-    expect(page.showConnectDialog).toBe(false)
-    expect(page.connectForm).toEqual({ exchange_type: '', credentials: {} })
-
-    page.connectForm.exchange_type = 'BINANCE'
-    page.onExchangeChange()
-    expect(page.connectForm.credentials).toMatchObject({ account_id: 'binance-account', asset_type: 'SWAP' })
-    page.connectForm.exchange_type = 'OKX'
-    page.onExchangeChange()
-    expect(page.connectForm.credentials).toMatchObject({ account_id: 'okx-account', passphrase: 'p' })
-    page.connectForm.exchange_type = 'CUSTOM'
-    page.onExchangeChange()
-    expect(page.connectForm.credentials).toMatchObject({ endpoint: 'custom-endpoint' })
-    wrapper.unmount()
-  })
-
-  it('ignores credential lookup failure and always clears the connect and disconnect states', async () => {
-    const wrapper = mountPage()
-    await flushUi()
-    const page = wrapper.vm as any
-    mocks.getGatewayCredentials.mockRejectedValueOnce(new Error('credentials unavailable'))
-    await expect(page.openConnectDialog()).resolves.toBeUndefined()
-    expect(page.showConnectDialog).toBe(true)
-
-    page.connectForm.exchange_type = 'BINANCE'
-    mocks.connectGateway.mockRejectedValueOnce(new Error('connection refused'))
-    await page.handleConnect()
-    expect(mocks.connectGateway).toHaveBeenCalledWith({ exchange_type: 'BINANCE', credentials: {} })
-    expect(page.connecting).toBe(false)
-    expect(page.showConnectDialog).toBe(true)
-
-    const gateway = makeGateway()
-    page.gateways = [gateway]
-    mocks.disconnectGateway.mockRejectedValueOnce(new Error('gateway is busy'))
-    await page.handleDisconnect(gateway.gateway_key)
-    expect(mocks.disconnectGateway).toHaveBeenCalledWith(gateway.gateway_key)
-    expect(page.gateways).toEqual([gateway])
-    expect(page.disconnecting).toBe(null)
-
-    mocks.disconnectGateway.mockResolvedValueOnce({ message: 'Disconnected' })
-    mocks.listGatewayHealth.mockResolvedValueOnce({ total: 0, gateways: [] })
-    await page.handleDisconnect(gateway.gateway_key)
-    await flushUi()
-    expect(page.gateways).toEqual([])
-    expect(mocks.success).toHaveBeenCalledWith('Disconnected')
-    expect(page.disconnecting).toBe(null)
+    expect(page.openConnectDialog).toBeUndefined()
+    expect(page.handleConnect).toBeUndefined()
+    expect(page.handleDisconnect).toBeUndefined()
+    expect(mocks.listGatewayHealth).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 

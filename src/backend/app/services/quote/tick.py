@@ -1,7 +1,7 @@
 """QuoteTick payload assembly and tick value/time normalisation.
 
 Iteration 174 (C4) extracted these out of QuoteService so the assembly
-logic that maps a raw GatewayTick (from ZMQ or a snapshot fetcher) onto
+logic that maps a normalized market projection onto
 the front-end-visible QuoteTick schema lives next to the rest of the
 quote stack.
 """
@@ -76,9 +76,9 @@ def build_tick(
     raw: dict[str, Any] | None,
     now: str,
 ) -> dict[str, Any]:
-    """Map a raw GatewayTick payload onto the front-end QuoteTick schema.
+    """Map a normalized market projection onto the front-end QuoteTick schema.
 
-    ``raw`` is a cached GatewayTick payload (dict) from the ZMQ receiver,
+    ``raw`` is the data object returned by an exact configured market source,
     or ``None`` if no data has been received yet (the resulting tick will
     have ``status='missing'``).
     """

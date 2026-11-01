@@ -523,30 +523,6 @@ class ResearchApprovalDecisionCreate(BaseModel):
         return value
 
 
-class ResearchApprovalContextResponse(BaseModel):
-    """Safe server-derived approval capabilities without grant or actor internals."""
-
-    model_config = ConfigDict(extra="forbid", from_attributes=True)
-
-    run_id: str
-    candidate_id: str
-    candidate_hash: str
-    policy_version: str
-    policy_material_hash: str
-    approval_mode: Literal["single_actor", "multi_actor"]
-    can_request: bool
-    can_decide: bool
-    can_approve: bool
-    request_blocked_reason: str | None = None
-    decision_blocked_reason: str | None = None
-    cooldown_seconds: int = Field(ge=0)
-    required_challenge_keys: list[str] = Field(default_factory=list)
-    risk_acknowledgement_required: bool
-    current_request: ResearchApprovalRequestResponse | None = None
-    latest_decision: ResearchApprovalDecisionResponse | None = None
-    machine_evidence_summary: ResearchApprovalMachineEvidenceSummary | None = None
-
-
 class ResearchApprovalRequestResponse(BaseModel):
     """Safe request receipt with no requester identity or authority internals."""
 
@@ -641,6 +617,30 @@ class ResearchApprovalMachineEvidenceSummary(BaseModel):
 
     package: ResearchApprovalEvidencePackageSummary
     gates: list[ResearchApprovalGateSummary] = Field(min_length=13, max_length=13)
+
+
+class ResearchApprovalContextResponse(BaseModel):
+    """Safe server-derived approval capabilities without grant or actor internals."""
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    run_id: str
+    candidate_id: str
+    candidate_hash: str
+    policy_version: str
+    policy_material_hash: str
+    approval_mode: Literal["single_actor", "multi_actor"]
+    can_request: bool
+    can_decide: bool
+    can_approve: bool
+    request_blocked_reason: str | None = None
+    decision_blocked_reason: str | None = None
+    cooldown_seconds: int = Field(ge=0)
+    required_challenge_keys: list[str] = Field(default_factory=list)
+    risk_acknowledgement_required: bool
+    current_request: ResearchApprovalRequestResponse | None = None
+    latest_decision: ResearchApprovalDecisionResponse | None = None
+    machine_evidence_summary: ResearchApprovalMachineEvidenceSummary | None = None
 
 
 class ResearchHumanDecisionSummary(BaseModel):

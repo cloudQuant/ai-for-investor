@@ -107,6 +107,27 @@ the risk level (auto-classified from changed paths; labels cannot lower it), and
 evidence. `master` hotfix PRs additionally require a backport plan; `master` release PRs
 additionally require a release checklist.
 
+Every pull request also requires a separate, head-bound author self-review. In GitHub, open
+**Review changes → Comment** and submit the following review body after replacing `<40hex>`
+with the exact current 40-character PR HEAD SHA:
+
+```markdown
+## Author self-review
+
+- Decision: APPROVED
+- Head SHA: <40hex>
+- [x] Code and scope reviewed
+- [x] Acceptance evidence verified
+- [x] Risks and limitations recorded
+```
+
+Submit this as a **Comment** review, not **Approve**. GitHub does not allow an author to submit
+an approving review on their own PR; the gate reads this explicit `COMMENTED` review event and
+keeps it separate from native third-party approvals. The author self-review is required for all
+risk levels. R2/R3 test evidence, release/hotfix evidence, branch routing, CI/security gates,
+conversation resolution, force-push protection, and authorized third-party `CHANGES_REQUESTED`
+handling continue to apply. Optional authorized third-party reviews remain supported.
+
 ## Setting Up Development Environment
 
 ### Prerequisites

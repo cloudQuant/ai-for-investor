@@ -8,6 +8,22 @@ Iteration 195 — the static "Governance declaration" contract is verified by
 `scripts/ci/check_pr_template.py`. Regular changes must target `dev`;
 `master` only accepts `release/vX.Y.Z` promotions and `hotfix/master-*`
 emergency fixes (see CONTRIBUTING.md, "Branch Model").
+
+Every PR also needs a separate author self-review submitted from GitHub's
+**Review changes → Comment** flow, tied to the current 40-character HEAD SHA.
+Do not submit it as an Approve review: GitHub does not allow authors to approve
+their own PR. Copy this body into the review comment and replace `<40hex>` with
+the exact current HEAD SHA. The governance gate reads this from the review API;
+putting the block in the PR description does not count. Copy only the H2 and its
+fields/checklist below; do not include the surrounding HTML comment delimiters.
+
+## Author self-review
+
+- Decision: APPROVED
+- Head SHA: <40hex>
+- [x] Code and scope reviewed
+- [x] Acceptance evidence verified
+- [x] Risks and limitations recorded
 -->
 
 ## What & Why

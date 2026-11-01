@@ -190,6 +190,7 @@
               </div>
             </template>
           </el-table-column>
+          <!-- @vue-generic {AirflowDAG} -->
           <el-table-column
             :label="t('dataPages.airflowColStatus')"
             width="150"
@@ -214,6 +215,7 @@
               />
             </template>
           </el-table-column>
+          <!-- @vue-generic {AirflowDAG} -->
           <el-table-column
             :label="t('dataPages.airflowColActions')"
             fixed="right"

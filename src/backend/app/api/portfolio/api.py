@@ -16,8 +16,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.api.portfolio.asset_spec_adapter import (
@@ -122,7 +123,7 @@ from app.api.portfolio.position_aggregation import (
 from app.api.portfolio.position_aggregation import (
     _snapshot_positions_for_portfolio as _snapshot_positions_for_portfolio,
 )
-from app.db.database import async_session_maker
+from app.db.database import async_session_maker, get_db
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.workspace import StrategyUnit, Workspace
 from app.services import workspace_unit_runtime
@@ -135,6 +136,7 @@ from app.services.log_parser_service import (
     parse_trade_log,
     parse_value_log,
 )
+from app.services.portfolio_composition import PortfolioCompositionService
 from app.services.position_valuation import EPSILON, contract_spec_for, value_position
 from app.services.strategy_service import get_strategy_dir
 from app.services.trading_asset_info_service import (
@@ -220,6 +222,13 @@ def _get_manager() -> LiveTradingManager:
         LiveTradingManager: The live trading manager singleton instance.
     """
     return get_live_trading_manager()
+
+
+def _get_manager_for_overview(request: Request) -> LiveTradingManager | None:
+    """Avoid restoring live trading state for a versioned composition read."""
+    if "portfolio_ref" in request.query_params or "membership_version" in request.query_params:
+        return None
+    return _get_manager()
 
 
 def _leverage_from_margin_rate(value: Any) -> float | None:
@@ -1037,8 +1046,11 @@ async def get_portfolio_overview_summary(
 async def get_portfolio_overview(
     summary_only: bool = False,
     include_inactive: bool = False,
+    portfolio_ref: str | None = Query(default=None, min_length=1, max_length=128),
+    membership_version: int | None = Query(default=None, ge=1),
     current_user: typing.Any = Depends(get_current_user),
-    mgr: LiveTradingManager = Depends(_get_manager),
+    mgr: LiveTradingManager | None = Depends(_get_manager_for_overview),
+    db: AsyncSession = Depends(get_db),
 ) -> typing.Any:
     """Return portfolio-level aggregated metrics.
 
@@ -1061,6 +1073,21 @@ async def get_portfolio_overview(
             - running_count: Number of running strategies
             - strategies: List of per-strategy summaries
     """
+    if (portfolio_ref is None) != (membership_version is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "COMPOSITION_VERSION_REQUIRED"},
+        )
+    if portfolio_ref is not None and membership_version is not None:
+        composition_service = PortfolioCompositionService(db)
+        composition = await composition_service.get_version(
+            current_user.sub, portfolio_ref, membership_version
+        )
+        return await composition_service.project(current_user, composition)
+
+    if mgr is None:
+        mgr = _get_manager()
+
     if summary_only:
         compact_overview = await _compact_portfolio_overview(current_user, mgr)
         if compact_overview is not None:

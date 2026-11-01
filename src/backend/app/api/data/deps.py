@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import security
-from app.config import get_settings
 from app.db.database import get_db
 from app.models.permission import Role, user_roles
 from app.models.user import User
@@ -19,8 +18,6 @@ from app.services.market_data.access import (
     MarketDataQueryAccess,
 )
 from app.utils.security import decode_access_token
-
-settings = get_settings()
 
 
 async def get_current_db_user(
@@ -105,9 +102,6 @@ async def get_authorized_market_data_access(
 
 async def user_has_admin_access(db: AsyncSession, user: User) -> bool:
     """Return whether the user has admin access for data management."""
-    if user.username == settings.ADMIN_USERNAME:
-        return True
-
     result = await db.execute(
         select(user_roles.c.role).where(
             user_roles.c.user_id == user.id,

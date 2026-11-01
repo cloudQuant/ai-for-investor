@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from sqlalchemy import delete, select
+from fastapi import HTTPException, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.portfolio_ledger import (
@@ -11,6 +12,12 @@ from app.models.portfolio_ledger import (
     PortfolioLedgerModel,
     PortfolioLedgerSnapshotModel,
     PortfolioLedgerTransactionModel,
+)
+from app.services.portfolio_import_source import (
+    PortfolioImportSourceError,
+    build_portfolio_import_source_document,
+    portfolio_import_source_sha256,
+    verify_portfolio_import_source,
 )
 
 _BASE_NAV = 1_000_000.0
@@ -73,6 +80,109 @@ class PortfolioLedgerService:
         ]
         return {"items": items, "total": len(items)}
 
+    async def list_import_sources(
+        self, user_id: str, *, page: int = 1, page_size: int = 50
+    ) -> dict[str, Any]:
+        """List this owner's immutable import versions without returning row contents."""
+
+        query = (
+            select(PortfolioLedgerImportModel, PortfolioLedgerModel)
+            .join(
+                PortfolioLedgerModel,
+                PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
+            )
+            .where(PortfolioLedgerModel.owner_id == user_id)
+            .order_by(
+                PortfolioLedgerImportModel.created_at.desc(),
+                PortfolioLedgerImportModel.id.asc(),
+            )
+        )
+        total = int(
+            await self.db.scalar(
+                select(func.count())
+                .select_from(PortfolioLedgerImportModel)
+                .join(
+                    PortfolioLedgerModel,
+                    PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
+                )
+                .where(PortfolioLedgerModel.owner_id == user_id)
+            )
+            or 0
+        )
+        result = await self.db.execute(query.offset((page - 1) * page_size).limit(page_size))
+        items: list[dict[str, Any]] = []
+        for imported, portfolio in result.all():
+            material_status = _import_material_status(imported)
+            items.append(
+                {
+                    "import_version_id": imported.id,
+                    "portfolio_id": portfolio.id,
+                    "portfolio_name": portfolio.name,
+                    "base_currency": portfolio.base_currency,
+                    "import_format": imported.import_format,
+                    "imported_count": imported.imported_count,
+                    "source_material_status": material_status,
+                    "source_as_of": imported.source_as_of
+                    if material_status == "verified"
+                    else None,
+                    "source_currency": (
+                        imported.source_currency if material_status == "verified" else None
+                    ),
+                    "source_sha256": imported.source_sha256
+                    if material_status == "verified"
+                    else None,
+                    "created_at": imported.created_at.isoformat(),
+                }
+            )
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": page * page_size < total,
+        }
+
+    async def get_import_source(
+        self, user_id: str, import_version_id: str
+    ) -> dict[str, Any] | None:
+        """Return one owner's verified raw import document, never a normalized ledger."""
+
+        result = await self.db.execute(
+            select(PortfolioLedgerImportModel, PortfolioLedgerModel)
+            .join(
+                PortfolioLedgerModel,
+                PortfolioLedgerModel.id == PortfolioLedgerImportModel.portfolio_id,
+            )
+            .where(
+                PortfolioLedgerImportModel.id == import_version_id,
+                PortfolioLedgerModel.owner_id == user_id,
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        imported, portfolio = row
+        material_status = _import_material_status(imported)
+        return {
+            "import_version_id": imported.id,
+            "portfolio_id": portfolio.id,
+            "portfolio_name": portfolio.name,
+            "base_currency": portfolio.base_currency,
+            "import_format": imported.import_format,
+            "imported_count": imported.imported_count,
+            "source_material_status": material_status,
+            "source_schema_version": (
+                imported.source_schema_version if material_status == "verified" else None
+            ),
+            "source_sha256": imported.source_sha256 if material_status == "verified" else None,
+            "source_as_of": imported.source_as_of if material_status == "verified" else None,
+            "source_currency": imported.source_currency if material_status == "verified" else None,
+            "source_document": (
+                imported.source_document if material_status == "verified" else None
+            ),
+            "created_at": imported.created_at.isoformat(),
+        }
+
     async def list_transactions(self, user_id: str, portfolio_id: str) -> dict[str, Any] | None:
         portfolio = await self._get_portfolio(user_id, portfolio_id)
         if portfolio is None:
@@ -91,18 +201,63 @@ class PortfolioLedgerService:
         idempotency_key: str,
         transactions: list[dict[str, Any]],
         import_format: str = "json",
+        source_as_of: str | None = None,
+        source_currency: str | None = None,
     ) -> dict[str, Any] | None:
         portfolio = await self._get_portfolio(user_id, portfolio_id)
         if portfolio is None:
             return None
+        try:
+            source_document = build_portfolio_import_source_document(
+                import_format=import_format,
+                transactions=transactions,
+                source_as_of=source_as_of,
+                source_currency=source_currency,
+            )
+            source_sha256 = portfolio_import_source_sha256(source_document)
+        except PortfolioImportSourceError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "PORTFOLIO_IMPORT_SOURCE_INVALID"},
+            ) from error
         existing_import = await self.db.execute(
             select(PortfolioLedgerImportModel).where(
                 PortfolioLedgerImportModel.portfolio_id == portfolio_id,
                 PortfolioLedgerImportModel.idempotency_key == idempotency_key,
             )
         )
-        if existing_import.scalar_one_or_none() is not None:
-            return {"duplicate": True, "imported_count": 0}
+        existing = existing_import.scalar_one_or_none()
+        if existing is not None:
+            existing_is_verified = verify_portfolio_import_source(
+                document=existing.source_document,
+                expected_sha256=existing.source_sha256,
+                expected_schema_version=existing.source_schema_version,
+                import_format=existing.import_format,
+                imported_count=existing.imported_count,
+                source_as_of=existing.source_as_of,
+                source_currency=existing.source_currency,
+            )
+            if existing_is_verified and existing.source_sha256 != source_sha256:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "PORTFOLIO_IMPORT_IDEMPOTENCY_CONFLICT"},
+                )
+            material_status = (
+                "verified"
+                if existing_is_verified
+                else (
+                    "integrity_invalid"
+                    if existing.source_document is not None or existing.source_sha256 is not None
+                    else "unavailable_legacy"
+                )
+            )
+            return {
+                "duplicate": True,
+                "imported_count": 0,
+                "import_version_id": existing.id,
+                "source_sha256": existing.source_sha256 if existing_is_verified else None,
+                "source_material_status": material_status,
+            }
         imported_count = 0
         for item in transactions:
             quantity = float(item.get("quantity") or 0.0)
@@ -135,10 +290,32 @@ class PortfolioLedgerService:
                 import_format=import_format,
                 idempotency_key=idempotency_key,
                 imported_count=imported_count,
+                source_schema_version=source_document["schema_version"],
+                source_document=source_document,
+                source_sha256=source_sha256,
+                source_as_of=source_as_of,
+                source_currency=source_currency,
             )
         )
         await self.db.commit()
-        return {"duplicate": False, "imported_count": imported_count}
+        imported = await self.db.scalar(
+            select(PortfolioLedgerImportModel).where(
+                PortfolioLedgerImportModel.portfolio_id == portfolio_id,
+                PortfolioLedgerImportModel.idempotency_key == idempotency_key,
+            )
+        )
+        if imported is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "PORTFOLIO_IMPORT_SOURCE_PERSISTENCE_FAILED"},
+            )
+        return {
+            "duplicate": False,
+            "imported_count": imported_count,
+            "import_version_id": imported.id,
+            "source_sha256": source_sha256,
+            "source_material_status": "verified",
+        }
 
     async def holdings(self, user_id: str, portfolio_id: str) -> dict[str, Any] | None:
         portfolio = await self._get_portfolio(user_id, portfolio_id)
@@ -466,3 +643,19 @@ class PortfolioLedgerService:
 
 def get_portfolio_ledger_service(db: AsyncSession) -> PortfolioLedgerService:
     return PortfolioLedgerService(db)
+
+
+def _import_material_status(imported: PortfolioLedgerImportModel) -> str:
+    if imported.source_document is None or imported.source_sha256 is None:
+        return "unavailable_legacy"
+    if verify_portfolio_import_source(
+        document=imported.source_document,
+        expected_sha256=imported.source_sha256,
+        expected_schema_version=imported.source_schema_version,
+        import_format=imported.import_format,
+        imported_count=imported.imported_count,
+        source_as_of=imported.source_as_of,
+        source_currency=imported.source_currency,
+    ):
+        return "verified"
+    return "integrity_invalid"

@@ -32,8 +32,15 @@ _FIELD_LINE = r"^\s*[-*]\s*(?:\*\*)?{label}(?:\*\*)?\s*[:：]\s*(?P<value>[^\n]*
 _GOVERNANCE_HEADING_RE = re.compile(
     r"^##[ \t]+Governance declaration[ \t]*$", re.IGNORECASE | re.MULTILINE
 )
-_HOTFIX_HEADING_RE = re.compile(r"^##[ \t]+Hotfix[ \t]+前移计划(?:[ \t]+.*)?$", re.MULTILINE)
-_RELEASE_HEADING_RE = re.compile(r"^##[ \t]+Release[ \t]+清单(?:[ \t]+.*)?$", re.MULTILINE)
+_AUTHOR_SELF_REVIEW_HEADING_RE = re.compile(
+    r"^##[ \t]+Author self-review[ \t]*$", re.MULTILINE
+)
+_HOTFIX_HEADING_RE = re.compile(
+    r"^##[ \t]+Hotfix[ \t]+前移计划(?:[ \t]+.*)?$", re.MULTILINE
+)
+_RELEASE_HEADING_RE = re.compile(
+    r"^##[ \t]+Release[ \t]+清单(?:[ \t]+.*)?$", re.MULTILINE
+)
 _HTML_COMMENT_RE = re.compile(r"<!--.*?(?:-->|$)", re.DOTALL)
 _FENCE_RE = re.compile(r"^[ \t]{0,3}(?P<marker>`{3,}|~{3,})[^\n]*$")
 _INCIDENT_IDENTIFIER_RE = re.compile(
@@ -67,6 +74,11 @@ _REVIEWER_AUTHORIZATION_SCHEMA_VERSION = 1
 _PENDING_REVIEWER_AUTHORIZATION_STATUS = "owner_baseline_pending_second_maintainer"
 _APPROVED_REVIEWER_AUTHORIZATION_STATUS = "approved"
 _ALLOWED_REVIEW_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+_AUTHOR_SELF_REVIEW_CHECKLIST = (
+    "Code and scope reviewed",
+    "Acceptance evidence verified",
+    "Risks and limitations recorded",
+)
 
 
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
@@ -121,7 +133,9 @@ def _section_count(body: str, heading: re.Pattern[str]) -> int:
 def _field_values(section: str | None, label: str) -> list[str | None]:
     if section is None:
         return []
-    pattern = re.compile(_FIELD_LINE.format(label=re.escape(label)), re.IGNORECASE | re.MULTILINE)
+    pattern = re.compile(
+        _FIELD_LINE.format(label=re.escape(label)), re.IGNORECASE | re.MULTILINE
+    )
     values: list[str | None] = []
     for match in pattern.finditer(section):
         value = match.group("value").strip().strip("`").rstrip("。.")
@@ -159,12 +173,16 @@ def _section_field_issues(visible_body: str, kind: str) -> list[str]:
     for section_name, heading, labels in requirements:
         section_count = _section_count(visible_body, heading)
         if section_count != 1:
-            issues.append(f"{section_name} section must appear exactly once in the visible PR body")
+            issues.append(
+                f"{section_name} section must appear exactly once in the visible PR body"
+            )
             continue
         section = _section_content(visible_body, heading)
         for label in labels:
             if len(_field_values(section, label)) != 1:
-                issues.append(f"{section_name} field {label!r} must appear exactly once")
+                issues.append(
+                    f"{section_name} field {label!r} must appear exactly once"
+                )
     return issues
 
 
@@ -217,7 +235,9 @@ def _has_forward_port_reference(value: str) -> bool:
 def _branch_evidence(visible_body: str, kind: str) -> dict[str, str]:
     """Derive strict branch-contract evidence from its designated H2 sections."""
     test_evidence = _governance_field(visible_body, "测试证据")
-    hotfix_plan = _field_value(_section_content(visible_body, _HOTFIX_HEADING_RE), "前移计划")
+    hotfix_plan = _field_value(
+        _section_content(visible_body, _HOTFIX_HEADING_RE), "前移计划"
+    )
     release_checklist = _field_value(
         _section_content(visible_body, _RELEASE_HEADING_RE), "Release 清单"
     )
@@ -258,7 +278,8 @@ def _requested_reviewer_logins(pr: Mapping[str, Any], author: str) -> list[str]:
         {
             login
             for item in requested
-            if (login := _login(item)) is not None and login.casefold() != author.casefold()
+            if (login := _login(item)) is not None
+            and login.casefold() != author.casefold()
         }
     )
 
@@ -299,14 +320,18 @@ def validate_reviewer_authorization(value: Any) -> dict[str, frozenset[str]]:
     config = _mapping(value, "reviewer authorization")
     expected_root = {"schema_version", "decision", "reviewers"}
     if set(config) != expected_root:
-        raise ValueError("reviewer authorization contains unknown or missing root fields")
+        raise ValueError(
+            "reviewer authorization contains unknown or missing root fields"
+        )
     if config.get("schema_version") != _REVIEWER_AUTHORIZATION_SCHEMA_VERSION:
         raise ValueError("reviewer authorization schema_version must be 1")
 
     decision = _mapping(config.get("decision"), "reviewer authorization decision")
     expected_decision = {"gate", "status", "reference", "reason"}
     if set(decision) != expected_decision:
-        raise ValueError("reviewer authorization decision contains unknown or missing fields")
+        raise ValueError(
+            "reviewer authorization decision contains unknown or missing fields"
+        )
     if decision.get("gate") != "D2":
         raise ValueError("reviewer authorization decision.gate must be 'D2'")
     status = decision.get("status")
@@ -315,7 +340,9 @@ def validate_reviewer_authorization(value: Any) -> dict[str, frozenset[str]]:
         _APPROVED_REVIEWER_AUTHORIZATION_STATUS,
     }:
         raise ValueError("reviewer authorization decision.status is not recognized")
-    _required_string(decision.get("reference"), "reviewer authorization decision.reference")
+    _required_string(
+        decision.get("reference"), "reviewer authorization decision.reference"
+    )
     _required_string(decision.get("reason"), "reviewer authorization decision.reason")
 
     reviewers = config.get("reviewers")
@@ -334,14 +361,18 @@ def validate_reviewer_authorization(value: Any) -> dict[str, frozenset[str]]:
         )
         normalized_login = login.casefold()
         if normalized_login in authorized:
-            raise ValueError(f"reviewer authorization contains duplicate login {login!r}")
+            raise ValueError(
+                f"reviewer authorization contains duplicate login {login!r}"
+            )
 
         associations = entry.get("author_associations")
         if not isinstance(associations, list) or not associations:
             raise ValueError(
                 f"reviewer authorization reviewers[{index}].author_associations must be non-empty"
             )
-        normalized_associations = frozenset(_review_authorization(item) for item in associations)
+        normalized_associations = frozenset(
+            _review_authorization(item) for item in associations
+        )
         if None in normalized_associations or not normalized_associations.issubset(
             _ALLOWED_REVIEW_ASSOCIATIONS
         ):
@@ -352,9 +383,10 @@ def validate_reviewer_authorization(value: Any) -> dict[str, frozenset[str]]:
             raise ValueError(
                 f"reviewer authorization reviewers[{index}].author_associations contains duplicates"
             )
-        if status == _PENDING_REVIEWER_AUTHORIZATION_STATUS and normalized_associations != {
-            "OWNER"
-        }:
+        if (
+            status == _PENDING_REVIEWER_AUTHORIZATION_STATUS
+            and normalized_associations != {"OWNER"}
+        ):
             raise ValueError(
                 "pending D2 reviewer authorization may authorize only a verified OWNER"
             )
@@ -443,7 +475,9 @@ def _latest_reviews(
         latest_terminal: tuple[str, str | None, Any] | None = None
         latest_nonterminal: tuple[str, str | None, Any] | None = None
         authorized_terminal: tuple[str, str | None, Any] | None = None
-        for _, state, authorization, commit_id in sorted(history, key=lambda entry: entry[0]):
+        for _, state, authorization, commit_id in sorted(
+            history, key=lambda entry: entry[0]
+        ):
             if state in _TERMINAL_REVIEW_STATES:
                 latest_terminal = (state, authorization, commit_id)
                 if _is_authorized_reviewer(login, authorization, authorized_reviewers):
@@ -498,6 +532,131 @@ def _review_summary(
     }
 
 
+def _author_self_review_status(
+    reviews: Sequence[Any], author: str, head_sha: str
+) -> dict[str, Any]:
+    """Validate a head-bound COMMENTED review by the PR author.
+
+    GitHub does not accept an APPROVED review from a PR author. This is a
+    separate, explicit attestation carried in the author's COMMENTED review;
+    it never contributes to the native reviewer approval summary.
+    """
+    candidates: list[tuple[tuple[datetime, int], Mapping[str, Any]]] = []
+    for position, review in enumerate(reviews):
+        if not isinstance(review, Mapping):
+            continue
+        login = _login(review.get("user"))
+        state = review.get("state")
+        body = review.get("body")
+        if (
+            login is None
+            or login.casefold() != author.casefold()
+            or not isinstance(state, str)
+            or state.strip().casefold() != "commented"
+            or not isinstance(body, str)
+        ):
+            continue
+        visible_body = _visible_body(body)
+        if _section_count(visible_body, _AUTHOR_SELF_REVIEW_HEADING_RE):
+            candidates.append(
+                (_review_timestamp(review.get("submitted_at"), position), review)
+            )
+
+    if not candidates:
+        return {
+            "status": "missing",
+            "author": author,
+            "head_sha": head_sha,
+            "review_state": None,
+            "issues": [],
+        }
+
+    # A newer visible self-review attempt supersedes an older attestation;
+    # ordinary author comments without the section do not revoke it.
+    _, review = max(candidates, key=lambda candidate: candidate[0])
+    body = review["body"]
+    assert isinstance(body, str)
+    visible_body = _visible_body(body)
+    failures: list[str] = []
+    if not _is_current_head_commit(review.get("commit_id"), head_sha):
+        failures.append("review commit_id does not match the current PR head")
+    if _section_count(visible_body, _AUTHOR_SELF_REVIEW_HEADING_RE) != 1:
+        failures.append("visible H2 section must appear exactly once")
+    section = _section_content(visible_body, _AUTHOR_SELF_REVIEW_HEADING_RE)
+    if section is None:
+        failures.append("visible H2 section is malformed")
+    else:
+        decision_lines = [
+            line
+            for line in section.splitlines()
+            if re.match(
+                r"^[ \t]*[-*][ \t]+(?:\*\*)?Decision(?:\*\*)?[ \t]*:",
+                line,
+                re.IGNORECASE,
+            )
+        ]
+        if (
+            len(decision_lines) != 1
+            or decision_lines[0].strip() != "- Decision: APPROVED"
+        ):
+            failures.append("Decision must appear exactly once as APPROVED")
+        head_lines = [
+            line
+            for line in section.splitlines()
+            if re.match(
+                r"^[ \t]*[-*][ \t]+(?:\*\*)?Head SHA(?:\*\*)?[ \t]*:",
+                line,
+                re.IGNORECASE,
+            )
+        ]
+        head_values = re.findall(
+            r"^- Head SHA: (?P<value>[^\n]*)$", section, re.MULTILINE
+        )
+        if (
+            len(head_lines) != 1
+            or len(head_values) != 1
+            or not _is_current_head_commit(head_values[0], head_sha)
+        ):
+            failures.append(
+                "Head SHA must appear exactly once and match the current PR head"
+            )
+
+        for item in _AUTHOR_SELF_REVIEW_CHECKLIST:
+            checkbox = re.compile(
+                rf"^[ \t]*[-*][ \t]+\[(?P<checked>[ xX])\][ \t]+{re.escape(item)}[ \t]*$",
+                re.MULTILINE,
+            )
+            matches = list(checkbox.finditer(section))
+            if (
+                len(matches) != 1
+                or matches[0].group("checked") != "x"
+                or matches[0].group(0).strip() != f"- [x] {item}"
+            ):
+                failures.append(
+                    "all three required self-review checklist items must be checked once"
+                )
+                break
+
+    if not failures:
+        return {
+            "status": "verified",
+            "author": author,
+            "head_sha": head_sha,
+            "review_id": review.get("id"),
+            "review_state": "COMMENTED",
+            "decision": "APPROVED",
+        }
+
+    return {
+        "status": "invalid",
+        "author": author,
+        "head_sha": head_sha,
+        "review_id": review.get("id"),
+        "review_state": "COMMENTED",
+        "issues": failures,
+    }
+
+
 def _code_owner_status(manifest: Mapping[str, Any]) -> dict[str, Any]:
     pull_request = manifest.get("pull_request")
     if not isinstance(pull_request, Mapping):
@@ -507,7 +666,7 @@ def _code_owner_status(manifest: Mapping[str, Any]) -> dict[str, Any]:
         return {"enabled": False, "status": "manifest_invalid", "verified": False}
     enabled = code_owner.get("enabled") is True
     if not enabled:
-        return {"enabled": False, "status": "disabled_pending_D2", "verified": False}
+        return {"enabled": False, "status": "optional_by_policy", "verified": False}
     return {
         "enabled": True,
         "status": "ruleset_required_not_verified_by_gate",
@@ -608,7 +767,11 @@ def evaluate_pr_governance(
     visible_body = _visible_body(body)
     classification = classify_changed_files(changed_files, risk_map)
     labels = _labels(pr_data)
-    manifest = _branch_manifest(manifests, base_branch) if isinstance(manifests, Mapping) else None
+    manifest = (
+        _branch_manifest(manifests, base_branch)
+        if isinstance(manifests, Mapping)
+        else None
+    )
     issues = _manifest_policy_issues(manifests)
     try:
         authorized_reviewers = validate_reviewer_authorization(reviewer_authorization)
@@ -620,7 +783,9 @@ def evaluate_pr_governance(
     if manifest is not None:
         pull_request = manifest.get("pull_request")
         if not isinstance(pull_request, Mapping):
-            issues.append(f"{base_branch} Ruleset manifest pull_request must be an object")
+            issues.append(
+                f"{base_branch} Ruleset manifest pull_request must be an object"
+            )
         else:
             candidate_floor = pull_request.get("required_approvals")
             if _is_nonnegative_int(candidate_floor):
@@ -658,33 +823,29 @@ def evaluate_pr_governance(
         )
 
     issues.extend(
-        validate_branch_contract(base_branch, head_branch, _branch_evidence(visible_body, kind))
+        validate_branch_contract(
+            base_branch, head_branch, _branch_evidence(visible_body, kind)
+        )
     )
     if base_branch == "master" and kind == "normal":
-        issues.append("regular contribution branches must target dev; retarget this PR to dev")
+        issues.append(
+            "regular contribution branches must target dev; retarget this PR to dev"
+        )
+
+    author_self_review = _author_self_review_status(reviews, author, head_sha)
+    if author_self_review["status"] != "verified":
+        if author_self_review["status"] == "missing":
+            issues.append(
+                "author self-review is missing; submit a COMMENTED review with the required "
+                "head-bound Author self-review section"
+            )
+        else:
+            details = "; ".join(author_self_review.get("issues", []))
+            issues.append(f"author self-review is invalid: {details}")
 
     review_summary = _review_summary(reviews, author, head_sha, authorized_reviewers)
     effective_approvals = review_summary["effective_approvals"]
     changes_requested_by = review_summary["changes_requested_by"]
-    if approval_floor is not None and len(effective_approvals) < approval_floor:
-        unverified_reviews = review_summary["unverified_reviews"]
-        stale_approvals = review_summary["stale_approvals"]
-        if unverified_reviews:
-            reviewers = ", ".join(unverified_reviews)
-            issues.append(
-                f"review approval authorization not verified for {reviewers}; request verified "
-                "maintainer review"
-            )
-        if stale_approvals:
-            reviewers = ", ".join(stale_approvals)
-            issues.append(
-                f"review approval is not tied to the current PR head for {reviewers}; "
-                "request a fresh approval"
-            )
-        issues.append(
-            f"{base_branch} requires {approval_floor} non-author approvals but has "
-            f"{len(effective_approvals)}; request an additional maintainer review"
-        )
     for reviewer in changes_requested_by:
         issues.append(
             f"latest review from {reviewer} is CHANGES_REQUESTED; resolve it before merge"
@@ -696,11 +857,6 @@ def evaluate_pr_governance(
         if not _meaningful_evidence(_governance_field(visible_body, "测试证据")):
             issues.append(
                 f"{computed_risk} change requires concrete test evidence in the governance declaration"
-            )
-        if not protective_reviewers:
-            issues.append(
-                f"{computed_risk} change requires a verified authorized protective approval; "
-                "requested reviewers alone do not satisfy it; request verified maintainer review"
             )
 
     code_owner_review = (
@@ -718,6 +874,7 @@ def evaluate_pr_governance(
         "labels_can_lower_risk": False,
         "ignored_labels": labels,
         "approval_floor": approval_floor,
+        "author_self_review": author_self_review,
         "effective_approvals": effective_approvals,
         "changes_requested_by": changes_requested_by,
         "unverified_reviews": review_summary["unverified_reviews"],

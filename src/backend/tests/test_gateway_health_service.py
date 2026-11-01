@@ -459,7 +459,7 @@ class TestGetGatewayHealth:
             }
         ]
 
-    def test_ib_web_health_uses_cached_quote_metrics_when_runtime_tick_count_is_zero(self):
+    def test_ib_web_health_does_not_backfill_stale_quote_cache_metrics(self):
         health_mock = MagicMock()
         health_mock.snapshot.return_value = _make_health_snap(
             exchange="IB_WEB",
@@ -485,13 +485,7 @@ class TestGetGatewayHealth:
             }
         }
 
-        quote_service = MagicMock()
-        quote_service.get_cached_tick_metrics.return_value = {
-            "tick_count": 3,
-            "last_tick_time": 1712840400,
-        }
-
-        with patch("app.services.quote_service.QuoteService", return_value=quote_service):
+        with patch("app.services.quote_service.QuoteService") as quote_service_cls:
             results = get_gateway_health(
                 gateways=gateways,
                 load_instances=lambda: {},
@@ -503,9 +497,10 @@ class TestGetGatewayHealth:
 
         assert len(results) == 1
         snap = results[0]
-        assert snap["tick_count"] == 3
-        assert snap["symbol_count"] == 3
-        assert snap["last_tick_time"] == 1712840400
+        assert snap["tick_count"] == 0
+        assert snap["symbol_count"] == 0
+        assert snap["last_tick_time"] is None
+        quote_service_cls.assert_not_called()
 
     def test_non_ib_web_health_does_not_use_cached_quote_metrics(self):
         health_mock = MagicMock()

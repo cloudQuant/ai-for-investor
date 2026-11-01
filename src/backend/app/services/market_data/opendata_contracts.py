@@ -10,7 +10,9 @@
   ``volume`` / ``amount``），故别名表只需把 ``amount`` 映射为 ``turnover``；
 - 时间戳：``trade_date``（``YYYY-MM-DD``，date-only）→ 交易日 UTC midnight；
 - 窗口：中台 REST 为闭区间日期；平台内部为半开 UTC 窗口，故 end 需 -1 天；
-- 分页：``page`` / ``page_size`` 逐页拉取，直到短页。
+- 股票分页：``page`` / ``page_size`` 逐页拉取，直到短页。
+- 风险指数只使用 OpenData v2 固定 publication snapshot 与 opaque cursor；
+  三个 benchmark 分别绑定独立 dataset，覆盖状态未知时不生成指标。
 
 本模块是控制面，不含网络客户端、数据库句柄或运行时开关。
 """
@@ -18,7 +20,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import timedelta
+from datetime import date, timedelta
 from types import MappingProxyType
 from typing import Any
 
@@ -39,6 +41,81 @@ from app.services.market_data.providers import MarketDataProviderRequest
 
 #: 中台 dwd 日线端点（唯一已审查端点）。
 OPENDATA_STOCK_DAILY_ENDPOINT = "/api/v1/data/equity/stock_daily"
+OPENDATA_INDEX_BENCHMARK_FAMILY_ID = "risk.index_benchmark"
+OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION = "risk-index-benchmark-published-v2"
+OPENDATA_INDEX_BENCHMARK_ROUTE_ID = "opendata-index-benchmark-published-v2"
+OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT = (
+    "GET /api/v2/datasets/{dataset_id}/coverage; "
+    "POST /api/v2/snapshots; GET /api/v2/datasets/{dataset_id}/records"
+)
+OPENDATA_INDEX_BENCHMARK_DATASETS: Mapping[str, tuple[str, str]] = MappingProxyType(
+    {
+        "hs300": ("000300.SH", "cn.csi300.index.daily"),
+        "csi500": ("000905.SH", "cn.csi500.index.daily"),
+        "csi800": ("000906.SH", "cn.csi800.index.daily"),
+    }
+)
+OPENDATA_INDEX_BENCHMARK_DATASET_IDS = frozenset(
+    dataset_id for _symbol, dataset_id in OPENDATA_INDEX_BENCHMARK_DATASETS.values()
+)
+
+
+def has_complete_business_history_coverage(
+    coverage: Mapping[str, Any],
+    *,
+    requested_start: str,
+    requested_end: str,
+) -> bool:
+    """Validate exact requested bounds and an evidence-backed observed subrange.
+
+    OpenData reports observed business dates as a half-open range from its first
+    through last observation. Non-trading days at the requested window edges may
+    therefore make this range narrower than the request without reducing
+    completeness. The observed range must still be nonempty and fully bounded by
+    the exact requested window.
+    """
+    try:
+        request_start = date.fromisoformat(requested_start)
+        request_end = date.fromisoformat(requested_end)
+    except (TypeError, ValueError):
+        return False
+    if (
+        request_start.isoformat() != requested_start
+        or request_end.isoformat() != requested_end
+        or request_start >= request_end
+        or coverage.get("status") != "complete"
+        or coverage.get("scope") != "business_history"
+        or coverage.get("requested") != {"start": requested_start, "end": requested_end}
+        or coverage.get("missing_ranges") != []
+        or coverage.get("limitation") is not None
+    ):
+        return False
+
+    observed = coverage.get("observed")
+    evidence_refs = coverage.get("evidence_refs")
+    if (
+        not isinstance(observed, Mapping)
+        or set(observed) != {"start", "end"}
+        or not isinstance(evidence_refs, list)
+        or not evidence_refs
+        or any(not isinstance(item, str) or not item.strip() for item in evidence_refs)
+    ):
+        return False
+    observed_start_text = observed.get("start")
+    observed_end_text = observed.get("end")
+    if not isinstance(observed_start_text, str) or not isinstance(observed_end_text, str):
+        return False
+    try:
+        observed_start = date.fromisoformat(observed_start_text)
+        observed_end = date.fromisoformat(observed_end_text)
+    except ValueError:
+        return False
+    return (
+        observed_start.isoformat() == observed_start_text
+        and observed_end.isoformat() == observed_end_text
+        and request_start <= observed_start < observed_end <= request_end
+    )
+
 
 #: opendata provider 支持的频率：当前仅日线（分钟线走 Parquet 归档，未开放 REST）。
 OPENDATA_SUPPORTED_FREQUENCIES = frozenset({"1d"})
@@ -178,6 +255,8 @@ def prepare_opendata_historical_request(
         raise ProviderContractError("PROVIDER_CONTRACT_FREQUENCY_UNSUPPORTED")
     if request.start_at >= request.end_at:
         raise ProviderContractError("PROVIDER_CONTRACT_WINDOW_INVALID")
+    if contract.contract_id != "opendata.stock.daily.contract-v1":
+        raise ProviderContractError("PROVIDER_CONTRACT_UNREGISTERED")
     return {
         "symbols": request.provider_symbol,
         "start": request.start_at.date().isoformat(),
@@ -190,6 +269,12 @@ def prepare_opendata_historical_request(
 
 
 __all__ = [
+    "OPENDATA_INDEX_BENCHMARK_DATASETS",
+    "OPENDATA_INDEX_BENCHMARK_DATASET_IDS",
+    "OPENDATA_INDEX_BENCHMARK_FAMILY_ID",
+    "OPENDATA_INDEX_BENCHMARK_FAMILY_VERSION",
+    "OPENDATA_INDEX_BENCHMARK_PROVIDER_ENDPOINT",
+    "OPENDATA_INDEX_BENCHMARK_ROUTE_ID",
     "OPENDATA_MAX_PAGE_SIZE",
     "OPENDATA_MAX_ROWS",
     "OPENDATA_PROVIDER_CONTRACT_REGISTRY",

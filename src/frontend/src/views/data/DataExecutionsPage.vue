@@ -189,6 +189,7 @@
               {{ formatDuration(row.duration) }}
             </template>
           </el-table-column>
+          <!-- @vue-generic {TaskExecution} -->
           <el-table-column
             :label="t('dataPages.execColRowsDelta')"
             width="140"

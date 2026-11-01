@@ -31,6 +31,13 @@ class Permission(str, enum.Enum):
     # role.  It is granted through a run-scoped ResearchApprovalGrant.
     APPROVE_RESEARCH = "research:approve"
     MANAGE_APPROVAL_GRANTS = "research:manage-approval-grants"
+    # Manual submission is separate from approval authority and strategy/group writers.
+    SUBMIT_MANUAL_ORDER = "orders:submit-manual"
+    # Strategy target approvals are explicit trading authority and are not
+    # inherited from research approval, manual order, USER, PREMIUM, or ADMIN.
+    APPROVE_STRATEGY_ORDER_TARGET = "orders:approve-strategy-target"
+    MANAGE_STRATEGY_ORDER_APPROVAL_POLICY = "orders:manage-strategy-approval-policy"
+    SUBMIT_APPROVED_STRATEGY_TARGET = "orders:submit-approved-target"
 
     # Data permissions
     UPLOAD_DATA = "data:upload"
@@ -50,6 +57,9 @@ class Role(str, enum.Enum):
     PREMIUM = "premium"
     ADMIN = "admin"
     RESEARCH_APPROVAL_ADMIN = "approval_admin"
+    TRADE_OPERATOR = "trade_operator"
+    TRADE_APPROVER = "trade_approver"
+    TRADE_POLICY_ADMIN = "trade_policy_admin"
 
 
 # Permission mapping
@@ -67,6 +77,7 @@ ROLE_PERMISSIONS = {
         Permission.READ_BACKTEST,
         Permission.DELETE_BACKTEST,
         Permission.READ_DATA,
+        Permission.SUBMIT_MANUAL_ORDER,
     ],
     Role.PREMIUM: [
         Permission.CREATE_STRATEGY,
@@ -80,6 +91,7 @@ ROLE_PERMISSIONS = {
         Permission.EXPORT_BACKTEST,
         Permission.UPLOAD_DATA,
         Permission.READ_DATA,
+        Permission.SUBMIT_MANUAL_ORDER,
     ],
     Role.ADMIN: [
         Permission.CREATE_STRATEGY,
@@ -96,8 +108,13 @@ ROLE_PERMISSIONS = {
         Permission.DELETE_DATA,
         Permission.MANAGE_USERS,
         Permission.MANAGE_ROLES,
+        Permission.SUBMIT_MANUAL_ORDER,
     ],
     Role.RESEARCH_APPROVAL_ADMIN: [Permission.MANAGE_APPROVAL_GRANTS],
+    # These roles are opt-in only and are not inherited by USER/PREMIUM/ADMIN.
+    Role.TRADE_OPERATOR: [Permission.SUBMIT_APPROVED_STRATEGY_TARGET],
+    Role.TRADE_APPROVER: [Permission.APPROVE_STRATEGY_ORDER_TARGET],
+    Role.TRADE_POLICY_ADMIN: [Permission.MANAGE_STRATEGY_ORDER_APPROVAL_POLICY],
 }
 
 

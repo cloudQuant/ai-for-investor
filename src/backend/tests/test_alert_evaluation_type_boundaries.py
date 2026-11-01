@@ -39,7 +39,6 @@ async def test_current_value_none_fails_closed() -> None:
         {"current_value": None},
         AsyncMock(),
         AsyncMock(),
-        AsyncMock(),
     )
 
     assert result is None
@@ -49,18 +48,15 @@ async def test_current_value_none_fails_closed() -> None:
 async def test_invalid_alert_type_fails_closed_before_fallback_or_service_calls() -> None:
     rule = SimpleNamespace(alert_type="not-an-alert-type")
     paper_service = AsyncMock()
-    live_service = AsyncMock()
     backtest_service = AsyncMock()
 
     result = await get_current_metric_value(
         rule,
         {"current_value": 42.0},
         paper_service,
-        live_service,
         backtest_service,
     )
 
     assert result is None
     paper_service.assert_not_awaited()
-    live_service.assert_not_awaited()
     backtest_service.assert_not_awaited()

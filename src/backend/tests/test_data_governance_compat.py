@@ -2,6 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
 
+from app.api.data import governance as data_governance_api
 from app.config import get_settings
 from app.db.database import async_session_maker, create_default_admin
 from app.models.akshare_mgmt import DataInterface, InterfaceCategory
@@ -11,7 +12,19 @@ from app.models.data_governance import (
     DgProvider,
     DgQualityRule,
 )
-from tests.conftest import register_and_login
+from tests.conftest import app, register_and_login
+
+
+async def _admin_headers(client: AsyncClient) -> dict[str, str]:
+    """Create the configured administrator and return an authenticated header."""
+    await create_default_admin()
+    settings = get_settings()
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def test_data_governance_datetime_defaults_match_naive_schema() -> None:
@@ -33,7 +46,7 @@ def test_data_governance_datetime_defaults_match_naive_schema() -> None:
 
 @pytest.mark.asyncio
 async def test_dg_bootstrap_keeps_akshare_interfaces_compatible(client: AsyncClient):
-    _, headers = await register_and_login(client, username="dg_admin")
+    headers = await _admin_headers(client)
     settings = get_settings()
     async with async_session_maker() as session:
         category = InterfaceCategory(name="stock", description="stock")
@@ -88,7 +101,7 @@ async def test_dg_bootstrap_keeps_akshare_interfaces_compatible(client: AsyncCli
 
 @pytest.mark.asyncio
 async def test_data_connector_preview_and_async_job(client: AsyncClient):
-    _, headers = await register_and_login(client, username="dg_preview")
+    headers = await _admin_headers(client)
     await client.post("/api/v1/data-governance/bootstrap", headers=headers)
 
     providers = await client.get("/api/v1/data-governance/providers", headers=headers)
@@ -126,3 +139,44 @@ async def test_data_connector_preview_and_async_job(client: AsyncClient):
     assert job_detail.json()["id"] == job.json()["id"]
     assert jobs.status_code == 200
     assert jobs.json()["items"]
+
+
+@pytest.mark.asyncio
+async def test_data_governance_rejects_non_admin_and_anonymous_before_service_resolution(
+    client: AsyncClient,
+):
+    _, user_headers = await register_and_login(client, username="dg_non_admin")
+
+    def unexpected_service_resolution() -> None:
+        raise AssertionError("data governance service must not resolve for unauthorized requests")
+
+    app.dependency_overrides[data_governance_api.get_data_governance_service] = (
+        unexpected_service_resolution
+    )
+    requests = [
+        ("POST", "/api/v1/data-governance/bootstrap", {}),
+        ("GET", "/api/v1/data-governance/providers", None),
+        ("GET", "/api/v1/data-governance/endpoints", None),
+        (
+            "POST",
+            "/api/v1/data-governance/endpoints/endpoint-id/preview",
+            {"params": {"symbol": "RB2510"}},
+        ),
+        ("GET", "/api/v1/data-governance/jobs", None),
+        ("GET", "/api/v1/data-governance/jobs/job-id", None),
+        (
+            "POST",
+            "/api/v1/data-governance/endpoints/endpoint-id/jobs",
+            {"params": {"symbol": "RB2510"}},
+        ),
+    ]
+
+    for headers, expected_status in ((user_headers, 403), ({}, 401)):
+        for method, path, payload in requests:
+            response = await client.request(
+                method,
+                path,
+                headers=headers,
+                json=payload,
+            )
+            assert response.status_code == expected_status

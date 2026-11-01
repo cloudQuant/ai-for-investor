@@ -4,7 +4,15 @@ import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
 import { ElMessage } from 'element-plus'
 import PortfolioPage from '@/views/PortfolioPage.vue'
-import { portfolioApi } from '@/api/portfolio'
+import {
+  portfolioApi,
+  type PortfolioCompositionProjection,
+  type PortfolioMarketCut,
+  type PortfolioProviderAccountObservation,
+  type PortfolioProviderAccountPosition,
+  type PortfolioValuationInput,
+} from '@/api/portfolio'
+import { portfolioLedgerApi } from '@/api/portfolioLedger'
 import { workspaceApi } from '@/api/workspace'
 import { elStubs } from '@/test/stubs'
 
@@ -99,6 +107,33 @@ vi.mock('@/api/portfolio', () => ({
         { strategy_id: 's1', strategy_name: 'SMA', status: 'running', assets: 60000, pnl: 10000, pnl_pct: 20 },
       ],
     }),
+    listCompositionVersions: vi.fn().mockResolvedValue({
+      items: [], total: 0, page: 1, page_size: 50, has_more: false,
+    }),
+    createCompositionVersion: vi.fn().mockResolvedValue({
+      portfolio_ref: 'imported-display', membership_version: 1,
+    }),
+    getCompositionProjection: vi.fn().mockResolvedValue({
+      portfolio_ref: 'empty',
+      membership_version: 1,
+      source_type: 'live',
+      source_status: 'no_account_members',
+      base_currency: 'USD',
+      projection_kind: 'display_only',
+      creditable: false,
+      overlap_policy: 'non_additive_display_only',
+      account_total: { status: 'not_collected', currency: 'USD', value: null },
+      accounts: [],
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED' },
+    }),
     getPositions: vi.fn().mockResolvedValue({
       total: 0,
       positions: [],
@@ -166,6 +201,43 @@ vi.mock('@/api/portfolio', () => ({
         net_value: 7200,
         position_count: 1,
       }],
+    }),
+  },
+}))
+
+vi.mock('@/api/portfolioLedger', () => ({
+  portfolioLedgerApi: {
+    listImportSources: vi.fn().mockResolvedValue({
+      items: [], total: 0, page: 1, page_size: 100, has_more: false,
+    }),
+    create: vi.fn().mockResolvedValue({ id: 'ledger-import-1' }),
+    importTransactions: vi.fn().mockResolvedValue({
+      duplicate: false,
+      imported_count: 2,
+      import_version_id: 'import-version-1',
+      source_sha256: 'a'.repeat(64),
+      source_material_status: 'verified',
+    }),
+    getImportSource: vi.fn().mockResolvedValue({
+      import_version_id: 'import-version-1',
+      portfolio_id: 'ledger-import-1',
+      portfolio_name: 'Imported transactions',
+      base_currency: 'USD',
+      import_format: 'json',
+      imported_count: 2,
+      source_material_status: 'verified',
+      source_schema_version: 1,
+      source_as_of: '2026-10-13',
+      source_currency: 'USD',
+      source_sha256: 'a'.repeat(64),
+      source_document: {
+        schema_version: 1,
+        format: 'json',
+        source_as_of: '2026-10-13',
+        source_currency: 'USD',
+        transactions: [{ symbol: 'SYNTH-A' }, { symbol: 'SYNTH-B', trade_date: '2026-10-12' }],
+      },
+      created_at: '2026-10-15T00:00:00Z',
     }),
   },
 }))
@@ -277,6 +349,964 @@ describe('PortfolioPage', () => {
         ...(renderTableRows ? { 'el-table': rowAwareElTable } : {}),
       },
     },
+  })
+
+  it('selects owner-listed membership versions and renders source-aware values without legacy fallback', async () => {
+    const liveProjection = {
+      portfolio_ref: 'primary',
+      membership_version: 2,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USD', value: '1500' },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USD', quality: 'fresh', cash: '200', value: '1000',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+        {
+          member_ref: 'account-a-alias', currency: 'USD', quality: 'fresh', cash: '200',
+          value: '1000', included_in_total: false, duplicate_of_ref: 'account-a', detail_code: null,
+        },
+        {
+          member_ref: 'account-b', currency: 'USD', quality: 'fresh', cash: '250', value: '500',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+      ],
+      strategies: [{
+        strategy_ref: 'strategy-x',
+        attribution_status: 'execution_attribution_not_collected',
+        attributed_value: null,
+      }],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 1,
+        attributed_value: null,
+        unattributed_account_value: '1500',
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: true,
+        strategy_attribution_complete: false,
+        code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED',
+      },
+    }
+    const researchProjection = {
+      ...liveProjection,
+      portfolio_ref: 'research-set',
+      membership_version: 1,
+      source_type: 'research' as const,
+      source_status: 'research_reports_projected',
+      source_facts: {
+        kind: 'asset_research_reports' as const,
+        research_facts_available: true,
+        freshness_status: 'not_defined',
+        currency_status: 'not_declared',
+        artifacts: [{
+          status: 'available',
+          report_integrity_status: 'verified',
+          task_status: 'SUCCEEDED',
+          asset_type: 'stock',
+          canonical_id: 'SYNTH:AAA',
+          report_version: 'v1',
+          report_content_hash: 'a'.repeat(64),
+          report_created_at: '2026-10-14T12:00:00+00:00',
+          decision_status: 'available',
+          published_decision: {
+            asset_type: 'stock',
+            market_view: 'BULLISH',
+            normalized_direction: 'LONG',
+            recommendation: 'BUY',
+            actionability: 'RESEARCH_ONLY',
+            quality_status: 'ELIGIBLE',
+            horizon_code: '1d',
+            execution_disabled: true as const,
+          },
+          freshness_status: 'not_defined',
+          currency: null,
+          currency_status: 'not_declared',
+          account_value_status: 'not_applicable_research',
+        }],
+      },
+      account_total: { status: 'not_applicable_research', currency: null, value: null },
+      strategies: [],
+      strategy_attribution: {
+        ...liveProjection.strategy_attribution,
+        status: 'not_applicable_research',
+        strategy_count: 0,
+        unattributed_account_value: null,
+        residual_basis: 'research reports do not establish account or strategy holdings',
+      },
+      coverage: {
+        complete: false,
+        research_facts_available: true,
+        account_facts_complete: false,
+        strategy_attribution_complete: false,
+        code: 'RESEARCH_REPORTS_NOT_FINANCIAL_ACCOUNTS',
+      },
+    }
+    const conflictingProjection = {
+      ...liveProjection,
+      portfolio_ref: 'conflict-live',
+      source_status: 'projected',
+      account_total: { status: 'incomplete', currency: 'USD', value: null },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USD', quality: 'fresh', cash: '200', value: '1000',
+          included_in_total: false, duplicate_of_ref: null,
+          detail_code: 'DUPLICATE_ACCOUNT_FACT_CONFLICT',
+        },
+        {
+          member_ref: 'account-a-alias', currency: 'USD', quality: 'fresh', cash: '300',
+          value: '1100', included_in_total: false, duplicate_of_ref: 'account-a',
+          detail_code: 'DUPLICATE_ACCOUNT_FACT_CONFLICT',
+        },
+      ],
+      strategies: [],
+      strategy_attribution: {
+        ...liveProjection.strategy_attribution,
+        strategy_count: 0,
+        unattributed_account_value: null,
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: false,
+        strategy_attribution_complete: true,
+        code: 'ACCOUNT_FACT_COVERAGE_INCOMPLETE',
+      },
+    }
+    const firstPageItems = [
+      {
+        portfolio_ref: 'primary', membership_version: 2, source_type: 'live' as const,
+        base_currency: 'USD', created_at: '2026-10-15T00:00:00Z',
+      },
+      {
+        portfolio_ref: 'research-set', membership_version: 1, source_type: 'research' as const,
+        base_currency: 'USD', created_at: '2026-10-14T00:00:00Z',
+      },
+      ...Array.from({ length: 48 }, (_, index) => ({
+        portfolio_ref: `paper-set-${index + 1}`,
+        membership_version: 1,
+        source_type: 'paper' as const,
+        base_currency: 'USD',
+        created_at: '2026-10-13T00:00:00Z',
+      })),
+    ]
+    vi.mocked(portfolioApi.listCompositionVersions)
+      .mockResolvedValueOnce({
+        items: firstPageItems,
+        total: 52,
+        page: 1,
+        page_size: 50,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            portfolio_ref: 'primary', membership_version: 2, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-15T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'conflict-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-13T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'error-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-12T00:00:00Z',
+          },
+        ],
+        total: 53,
+        page: 2,
+        page_size: 50,
+        has_more: false,
+      })
+      .mockResolvedValueOnce({
+        items: firstPageItems,
+        total: 53,
+        page: 1,
+        page_size: 50,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            portfolio_ref: 'conflict-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-13T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'error-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-12T00:00:00Z',
+          },
+          {
+            portfolio_ref: 'final-live', membership_version: 1, source_type: 'live',
+            base_currency: 'USD', created_at: '2026-10-11T00:00:00Z',
+          },
+        ],
+        total: 53,
+        page: 2,
+        page_size: 50,
+        has_more: false,
+      })
+    vi.mocked(portfolioApi.getCompositionProjection)
+      .mockResolvedValueOnce(liveProjection)
+      .mockResolvedValueOnce(liveProjection)
+      .mockResolvedValueOnce(researchProjection)
+      .mockResolvedValueOnce(conflictingProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(true)
+    const legacyOverviewCalls = vi.mocked(portfolioApi.getOverview).mock.calls.length
+
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+    expect(portfolioApi.listCompositionVersions).toHaveBeenCalledWith(1, 50)
+    expect(portfolioApi.getCompositionProjection).toHaveBeenNthCalledWith(1, 'primary', 2)
+    expect(wrapper.find('[data-test="portfolio-composition-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('1500 USD')
+    expect(wrapper.get('[data-test="portfolio-composition-attributed-value"]').text()).toBe('不可用')
+    expect(wrapper.get('[data-test="portfolio-composition-residual"]').text()).toBe('1500 USD')
+    expect(wrapper.get('[data-test="portfolio-composition-attribution-status"]').text())
+      .toContain('尚未采集执行归属')
+    expect(wrapper.text()).toContain('未计入账户总额')
+    expect(wrapper.text()).toContain('不会推算策略份额')
+    expect(wrapper.text()).toContain('不能重复授信')
+
+    await wrapper.get('[data-test="portfolio-composition-load-more"]').trigger('click')
+    await flushPromises()
+    expect(portfolioApi.listCompositionVersions).toHaveBeenNthCalledWith(2, 2, 50)
+    expect(portfolioApi.listCompositionVersions).toHaveBeenNthCalledWith(3, 1, 50)
+    expect(wrapper.get('[data-test="portfolio-composition-list-changed"]')
+      .text()).toContain('列表发生变化')
+    const selector = wrapper.get<HTMLSelectElement>(
+      '[data-test="portfolio-composition-version-select"]',
+    )
+    await wrapper.get('[data-test="portfolio-composition-load-more"]').trigger('click')
+    await flushPromises()
+    expect(portfolioApi.listCompositionVersions).toHaveBeenNthCalledWith(4, 2, 50)
+    expect(selector.findAll('option').filter(option => (
+      option.attributes('value')?.startsWith('[')
+    ))).toHaveLength(53)
+    expect(selector.findAll('option').filter(option => (
+      option.attributes('value') === JSON.stringify(['primary', 2])
+    ))).toHaveLength(1)
+    await selector.setValue(JSON.stringify(['research-set', 1]))
+    await flushPromises()
+    expect(portfolioApi.getCompositionProjection).toHaveBeenNthCalledWith(
+      3,
+      'research-set',
+      1,
+    )
+    expect(wrapper.get('[data-test="portfolio-composition-source-status"]').text())
+      .toContain('已读取公开研究报告')
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.get('[data-test="portfolio-research-disclaimer"]')
+      .text()).toContain('不代表持仓、账户余额或执行归属')
+    expect(wrapper.get('[data-test="portfolio-research-artifact"]').text()).toContain('SYNTH:AAA')
+    expect(wrapper.get('[data-test="portfolio-research-artifact"]').text()).toContain('BUY')
+    expect(wrapper.get('[data-test="portfolio-research-artifact"]').text()).toContain('未声明')
+    expect(wrapper.get('[data-test="portfolio-composition-attribution-status"]')
+      .text()).toContain('不适用持仓归属')
+    expect(wrapper.find('[data-test="portfolio-overview"]').exists()).toBe(false)
+    expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
+
+    await selector.setValue(JSON.stringify(['conflict-live', 1]))
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.text()).toContain('DUPLICATE_ACCOUNT_FACT_CONFLICT')
+    expect(wrapper.text()).toContain('与 account-a 是同一账户')
+    expect(wrapper.findAll('[data-test="portfolio-composition-account-detail-code"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-test="portfolio-composition-account-detail-code"]')
+      .every(node => node.text().includes('DUPLICATE_ACCOUNT_FACT_CONFLICT'))).toBe(true)
+
+    vi.mocked(portfolioApi.getCompositionProjection)
+      .mockRejectedValueOnce(new Error('selected projection unavailable'))
+    await selector.setValue(JSON.stringify(['error-live', 1]))
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-error"]').text())
+      .toContain('selected projection unavailable')
+    expect(wrapper.find('[data-test="portfolio-hero"]').exists()).toBe(false)
+    expect(vi.mocked(portfolioApi.getOverview).mock.calls).toHaveLength(legacyOverviewCalls)
+  })
+
+  it('shows live unallocated books separately from provider changes and incremental residuals', async () => {
+    const makeCoverage = (complete: boolean, reasons: string[] = []) => ({
+      scope_directory_revision: 'directory-r1',
+      journal_generation: complete ? 'a'.repeat(32) : 'b'.repeat(32),
+      baseline_execution_cursor: 10,
+      current_execution_cursor: 12,
+      complete,
+      reasons,
+      scanned_outbox_events: 2,
+      outbox_history_contiguous: complete,
+      outbox_scan_complete: true,
+      continuations: [],
+      input_continuations: [],
+      quarantined_intents: [],
+    })
+    const liveProjection = {
+      portfolio_ref: 'dual-live',
+      membership_version: 4,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USDT',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USDT', value: '950' },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USDT', quality: 'fresh', cash: null, value: '160',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+        {
+          member_ref: 'account-b', currency: 'USDT', quality: 'fresh', cash: null, value: '790',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+        },
+      ],
+      account_book_sources: [
+        {
+          account_ref: 'account-a',
+          state: 'RESIDUAL',
+          coverage: makeCoverage(true),
+          provider_position_change: [{ instrument: 'SYNTH-A', net_quantity: '1' }],
+          unallocated_book: {
+            owner_kind: 'UNALLOCATED' as const,
+            owner_ref: 'UNALLOCATED',
+            current_positions: [{ instrument: 'SYNTH-A', net_quantity: '3.5' }],
+            fees_since_baseline: [{ currency: 'USDT', amount: '0.04' }],
+          },
+          position_residual: [{ instrument: 'SYNTH-A', net_quantity: '0.5' }],
+          fee_residual: [{ currency: 'USDT', amount: '0.04' }],
+          financial: {
+            status: 'available' as const,
+            source: 'PERSISTED_EXECUTION_FINANCIAL_PROJECTION' as const,
+            freshness: 'PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED' as const,
+            cut_relationship: 'INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT' as const,
+            complete: true,
+            state: 'RESIDUAL' as const,
+            ledger_cut: {
+              owner_directory_revision: 'financial-directory-a-r1',
+              captured_at_ns: '1797000000123456789',
+              watermarks: [
+                {
+                  source_kind: 'execution_outbox' as const,
+                  source_ref: 'synthetic-outbox-a',
+                  generation: 'synthetic-generation-a',
+                  cursor: 0,
+                  as_of_ns: '1797000000123456789',
+                },
+                {
+                  source_kind: 'account_facts' as const,
+                  source_ref: 'synthetic-facts-a',
+                  generation: 'synthetic-facts-generation-a',
+                  cursor: 3,
+                  as_of_ns: '1797000000123456788',
+                },
+                {
+                  source_kind: 'account_activity' as const,
+                  source_ref: 'synthetic-activity-a',
+                  generation: 'synthetic-activity-generation-a',
+                  cursor: 4,
+                  as_of_ns: '1797000000123456787',
+                },
+              ],
+            },
+            books: [
+              {
+                owner: { kind: 'STRATEGY' as const, owner_ref: 'strategy-a' },
+                cash: [{ currency: 'USDT', amount: '123.45' }],
+                positions: [{
+                  instrument: 'SYNTH-A',
+                  quantity: '2.5',
+                  cost_basis: null,
+                  cost_currency: null,
+                  cost_method: 'AVERAGE_COST' as const,
+                  product_model: 'SPOT' as const,
+                  metadata_version: 'synthetic-spot-v1',
+                }],
+                cumulative_fees: [{ currency: 'USDT', amount: '0' }],
+                realized_pnl: [],
+                cost_basis_complete: false,
+              },
+            ],
+            unallocated: {
+              cash: [],
+              positions: [{ instrument: 'SYNTH-A', quantity: '0.5' }],
+              fees: [],
+            },
+          },
+        },
+        {
+          account_ref: 'account-b',
+          state: 'PARTIAL',
+          coverage: makeCoverage(false, ['OUTBOX_HISTORY_GAP']),
+          provider_position_change: [{ instrument: 'SYNTH-B', net_quantity: '2' }],
+          unallocated_book: {
+            owner_kind: 'UNALLOCATED' as const,
+            owner_ref: 'UNALLOCATED',
+            current_positions: [{ instrument: 'SYNTH-B', net_quantity: '5' }],
+            fees_since_baseline: [{ currency: 'USDT', amount: '0.07' }],
+          },
+          position_residual: [{ instrument: 'SYNTH-B', net_quantity: '1' }],
+          fee_residual: [{ currency: 'USDT', amount: '0.07' }],
+          financial: {
+            status: 'unavailable' as const,
+            code: 'PERSISTED_PROJECTION_UNAVAILABLE' as const,
+            freshness: 'NOT_ESTABLISHED' as const,
+            cut_relationship: 'INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT' as const,
+          },
+        },
+      ],
+      strategies: [
+        { strategy_ref: 'strategy-a', attribution_status: 'available', attributed_value: null },
+        { strategy_ref: 'strategy-b', attribution_status: 'available', attributed_value: null },
+      ],
+      strategy_attribution: {
+        status: 'execution_attribution_incomplete',
+        strategy_count: 2,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: true,
+        strategy_attribution_complete: false,
+        code: 'EXECUTION_ATTRIBUTION_INCOMPLETE',
+      },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [{
+        portfolio_ref: 'dual-live', membership_version: 4, source_type: 'live',
+        base_currency: 'USDT', created_at: '2026-10-16T00:00:00Z',
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(liveProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('950 USDT')
+    expect(wrapper.get('[data-test="portfolio-composition-coverage"]').text()).toContain('不完整')
+    expect(wrapper.get('[data-test="portfolio-composition-creditability"]').text()).toContain('仅供展示，不可计入')
+    expect(wrapper.get('[data-test="portfolio-composition-overlap"]').text()).toContain('不可相加')
+    expect(wrapper.get('[data-test="portfolio-composition-attributed-value"]').text()).toBe('不可用')
+
+    const accountSources = wrapper.findAll('[data-test="portfolio-account-book-source"]')
+    expect(accountSources).toHaveLength(2)
+    expect(accountSources[0].get('[data-test="portfolio-account-book-coverage"]').text()).toContain('完整')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-coverage"]').text()).toContain('不完整')
+    expect(accountSources[1].text()).toContain('OUTBOX_HISTORY_GAP')
+
+    expect(accountSources[0].get('[data-test="portfolio-account-book-unallocated"]')
+      .get('[data-test="portfolio-account-book-unallocated-position"]').text()).toBe('SYNTH-A · 3.5')
+    expect(accountSources[0].get('[data-test="portfolio-account-book-provider-change"]')
+      .text()).toContain('SYNTH-A · 1')
+    expect(accountSources[0].get('[data-test="portfolio-account-book-position-residual"]')
+      .text()).toContain('SYNTH-A · 0.5')
+    expect(accountSources[0].get('[data-test="portfolio-account-book-fee-residual"]')
+      .text()).toContain('0.04 USDT')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-unallocated"]')
+      .get('[data-test="portfolio-account-book-unallocated-position"]').text()).toBe('SYNTH-B · 5')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-provider-change"]')
+      .text()).toContain('SYNTH-B · 2')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-position-residual"]')
+      .text()).toContain('SYNTH-B · 1')
+    const availableFinancial = accountSources[0].get('[data-test="portfolio-account-book-financial"]')
+    expect(availableFinancial.get('[data-test="portfolio-account-book-financial-cut"]')
+      .text()).toContain('1797000000123456789')
+    expect(availableFinancial.get('[data-test="portfolio-account-book-financial-cut"]')
+      .text()).toContain('PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED')
+    expect(availableFinancial.get('[data-test="portfolio-account-book-financial-watermarks"]')
+      .text()).toContain('cursor 3')
+    const availableOwner = availableFinancial.get('[data-test="portfolio-account-book-financial-owner"]')
+    expect(availableOwner.get('[data-test="portfolio-account-book-financial-cash"]').text())
+      .toBe('123.45 USDT')
+    expect(availableOwner.get('[data-test="portfolio-account-book-financial-fees"]').text())
+      .toBe('0 USDT')
+    expect(availableOwner
+      .get('[data-test="portfolio-account-book-financial-position"]').text())
+      .toContain('cost basis 缺失 / Missing')
+    expect(availableFinancial.text()).toContain('不会加入账户总额')
+    expect(accountSources[1].get('[data-test="portfolio-account-book-financial-unavailable"]')
+      .text()).toContain('PERSISTED_PROJECTION_UNAVAILABLE')
+
+    // These execution quantities remain separate source facts; none are folded into account equity.
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('950 USDT')
+    expect(wrapper.text()).toContain('不会加到账户总额')
+    expect(wrapper.text()).not.toContain('strategy-a · 3.5')
+    expect(wrapper.text()).not.toContain('strategy-b · 5')
+  })
+
+  it('shows provider observations, missing inputs, stale cuts, and currencies without revaluing totals', async () => {
+    const availableObservation: Extract<
+      PortfolioProviderAccountObservation,
+      { status: 'available' }
+    > = {
+      status: 'available',
+      quality: 'fresh',
+      source: 'AUTHORIZED_PROVIDER_ACCOUNT_OBSERVATION',
+      observation_id: 'observation-ui-a',
+      session_generation: 'session-ui-a',
+      cursor: 9,
+      consistency: 'multi_query',
+      cut: {
+        started_at_utc: '2026-10-15T00:00:00Z',
+        completed_at_utc: '2026-10-15T00:00:01Z',
+        earliest_row_observed_at_utc: '2026-10-15T00:00:00Z',
+        latest_row_observed_at_utc: '2026-10-15T00:00:00.5Z',
+        row_skew_ns: '1000000000',
+        row_observed_at_count: 5,
+        row_count: 5,
+      },
+      coverage: {
+        resources: [
+          { product_type: 'SPOT', margin_pool: 'cash' },
+          { product_type: 'SPOT', margin_pool: 'funding' },
+        ],
+        balances_complete: false,
+        positions_complete: true,
+        state: 'incomplete',
+      },
+      valuation: null,
+      balances: [
+        {
+          resource: { product_type: 'SPOT', margin_pool: 'cash' },
+          currency: 'USD',
+          total: '100',
+          available: '20',
+          locked: '80',
+          observed_at_utc: '2026-10-15T00:00:00Z',
+        },
+        {
+          resource: { product_type: 'SPOT', margin_pool: 'cash' },
+          currency: 'EUR',
+          total: '12.5',
+          available: null,
+          locked: '0',
+          observed_at_utc: '2026-10-15T00:00:00.5Z',
+        },
+        {
+          resource: { product_type: 'SPOT', margin_pool: 'funding' },
+          currency: 'USDT',
+          total: '0',
+          available: '0',
+          locked: '0',
+          observed_at_utc: '2026-10-15T00:00:00Z',
+        },
+      ],
+      positions: [
+        {
+          resource: { product_type: 'SPOT', margin_pool: 'cash' },
+          instrument: {
+            provider: 'synthetic-provider',
+            venue: 'synthetic-venue',
+            environment: 'live',
+            product_type: 'SPOT',
+            instrument_id: 'instrument-zero',
+            native_symbol: 'ZERO/EUR',
+          },
+          side: 'net',
+          quantity: '0',
+          qty_unit: 'base_asset',
+          average_price: '0',
+          price_currency: 'EUR',
+          observed_at_utc: '2026-10-15T00:00:01Z',
+          valuation_inputs: {
+            mark_price: { status: 'missing', value: null },
+            contract_multiplier: { status: 'unsupported', value: null },
+            fx_rate: { status: 'unsupported', value: null },
+            market_value: { status: 'not_calculated', value: null },
+          },
+        },
+        {
+          resource: { product_type: 'SPOT', margin_pool: 'cash' },
+          instrument: {
+            provider: 'synthetic-provider',
+            venue: 'synthetic-venue',
+            environment: 'live',
+            product_type: 'SPOT',
+            instrument_id: 'instrument-missing-price',
+            native_symbol: 'NO-MARK/EUR',
+          },
+          side: 'long',
+          quantity: '2',
+          qty_unit: 'contracts',
+          average_price: null,
+          price_currency: null,
+          observed_at_utc: '2026-10-15T00:00:01Z',
+          valuation_inputs: {
+            mark_price: { status: 'missing', value: null },
+            contract_multiplier: { status: 'unsupported', value: null },
+            fx_rate: { status: 'unsupported', value: null },
+            market_value: { status: 'not_calculated', value: null },
+          },
+        },
+      ],
+    }
+    const staleObservation: Extract<
+      PortfolioProviderAccountObservation,
+      { status: 'stale' }
+    > = {
+      ...availableObservation,
+      status: 'stale',
+      quality: 'stale',
+      observation_id: 'observation-ui-stale',
+      cut: {
+        ...availableObservation.cut,
+        completed_at_utc: '2026-10-15T00:00:03Z',
+      },
+    }
+    const liveProjection = {
+      portfolio_ref: 'provider-facts-ui',
+      membership_version: 1,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USD', value: '100' },
+      accounts: [
+        {
+          member_ref: 'account-a', currency: 'USD', quality: 'fresh', cash: '0', value: '100',
+          included_in_total: true, duplicate_of_ref: null, detail_code: null,
+          provider_observation: availableObservation,
+        },
+        {
+          member_ref: 'account-stale', currency: 'USD', quality: 'stale', cash: null, value: null,
+          included_in_total: false, duplicate_of_ref: null, detail_code: 'ACCOUNT_FACTS_STALE',
+          provider_observation: staleObservation,
+        },
+        {
+          member_ref: 'account-error', currency: 'USD', quality: 'unavailable', cash: null, value: null,
+          included_in_total: false, duplicate_of_ref: null, detail_code: 'SYNTHETIC_READ_FAILED',
+          provider_observation: { status: 'unavailable' as const, code: 'SYNTHETIC_READ_FAILED' },
+        },
+        {
+          member_ref: 'account-legacy', currency: 'USD', quality: 'fresh', cash: null, value: null,
+          included_in_total: false, duplicate_of_ref: null, detail_code: null,
+          provider_observation: {
+            status: 'absent' as const,
+            code: 'PROVIDER_OBSERVATION_NOT_PROJECTED',
+          },
+        },
+      ],
+      provider_snapshot_consistency: {
+        cut_model: 'independent_provider_observation_per_account' as const,
+        atomic: false as const,
+        member_read_count: 4,
+        observation_count: 2,
+        consistency_modes: ['multi_query'],
+        coverage_status: 'not_established',
+        coverage_complete: null,
+        earliest_completed_at_utc: '2026-10-15T00:00:01Z',
+        latest_completed_at_utc: '2026-10-15T00:00:03Z',
+        skew_ns: null,
+        skew_policy: 'reported_without_threshold' as const,
+        status: 'observation_absent_or_unavailable',
+      },
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, account_facts_complete: true, code: null },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [{
+        portfolio_ref: 'provider-facts-ui', membership_version: 1, source_type: 'live',
+        base_currency: 'USD', created_at: '2026-10-16T00:00:00Z',
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(liveProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text())
+      .toBe('100 USD')
+    expect(wrapper.get('[data-test="portfolio-provider-snapshot-consistency"]')
+      .text()).toContain('observation_absent_or_unavailable')
+    const observations = wrapper.findAll('[data-test="portfolio-provider-account-observation"]')
+    expect(observations).toHaveLength(4)
+    const available = observations[0].text()
+    expect(available).toContain('100 USD')
+    expect(available).toContain('12.5 EUR')
+    expect(available).toContain('0 USDT')
+    expect(available).toContain('不可用')
+    expect(available).toContain('ZERO/EUR')
+    expect(available).toContain('NO-MARK/EUR')
+    expect(available).toContain('2 contracts')
+    expect(available).toContain('average 0 EUR')
+    expect(available).toContain('atomicity not established')
+    expect(available).toContain('reconciliation is not established')
+    expect(available).toContain('mark missing')
+    expect(available).toContain('multiplier unsupported')
+    expect(available).toContain('FX unsupported')
+    expect(available).toContain('覆盖完整性 / Coverage')
+    expect(available).toContain('balances 不完整 / incomplete')
+    expect(available).toContain('不计算市值')
+    expect(observations[1].text()).toContain('observation-ui-stale')
+    expect(observations[1].text()).toContain('stale')
+    expect(observations[2].text()).toContain('SYNTHETIC_READ_FAILED')
+    expect(observations[3].text()).toContain('PROVIDER_OBSERVATION_NOT_PROJECTED')
+    const accountQualities = wrapper.findAll('[data-test="portfolio-composition-account-quality"]')
+    expect(accountQualities.map(node => node.text())).toEqual([
+      '(fresh)',
+      '(stale)',
+      '(unavailable)',
+      '(fresh)',
+    ])
+    expect(wrapper.text()).not.toContain('private-synthetic-account')
+  })
+
+  it('keeps older live projections usable when the unallocated-book field is absent', async () => {
+    const legacyProjection = {
+      portfolio_ref: 'legacy-live',
+      membership_version: 1,
+      source_type: 'live' as const,
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      account_total: { status: 'current', currency: 'USD', value: '42' },
+      accounts: [],
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED' },
+    }
+    const partialProjection = {
+      ...legacyProjection,
+      portfolio_ref: 'partial-live',
+      account_book_sources: [{
+        account_ref: 'account-old',
+        state: 'PARTIAL',
+        coverage: {
+          scope_directory_revision: 'directory-r0',
+          journal_generation: 'c'.repeat(32),
+          baseline_execution_cursor: 0,
+          current_execution_cursor: 0,
+          complete: false,
+          reasons: ['ACCOUNT_BOOK_NOT_CONFIGURED'],
+          scanned_outbox_events: 0,
+          outbox_history_contiguous: false,
+          outbox_scan_complete: false,
+          continuations: [],
+          input_continuations: [],
+          quarantined_intents: [],
+        },
+        provider_position_change: [],
+        position_residual: [],
+        fee_residual: [],
+        // Older backend response has no unallocated_book field.
+      }],
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [
+        {
+          portfolio_ref: 'legacy-live', membership_version: 1, source_type: 'live',
+          base_currency: 'USD', created_at: '2026-10-16T00:00:00Z',
+        },
+        {
+          portfolio_ref: 'partial-live', membership_version: 1, source_type: 'live',
+          base_currency: 'USD', created_at: '2026-10-15T00:00:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection)
+      .mockResolvedValueOnce(legacyProjection)
+      .mockResolvedValueOnce(partialProjection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('42 USD')
+    expect(wrapper.find('[data-test="portfolio-account-book-sources"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="portfolio-composition-version-select"]')
+      .setValue(JSON.stringify(['partial-live', 1]))
+    await flushPromises()
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('42 USD')
+    expect(wrapper.get('[data-test="portfolio-account-book-unallocated-unavailable"]')
+      .text()).toContain('未提供未分配账簿详情')
+    expect(wrapper.get('[data-test="portfolio-account-book-financial-absent"]')
+      .text()).toContain('Financial projection not provided')
+    expect(wrapper.findAll('[data-test="portfolio-account-book-unallocated-position"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-test="portfolio-account-book-position-residual"] li')).toHaveLength(0)
+  })
+
+  it('imports versioned raw transactions and selects the imported display projection', async () => {
+    const importedProjection = {
+      portfolio_ref: 'imported-portfolio',
+      membership_version: 1,
+      source_type: 'imported' as const,
+      source_status: 'imported_materials_projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only' as const,
+      creditable: false as const,
+      overlap_policy: 'non_additive_display_only' as const,
+      source_facts: {
+        kind: 'portfolio_ledger_import_versions' as const,
+        source_materials_verified: true,
+        freshness_status: 'not_defined',
+        account_value_status: 'not_applicable_imported',
+        artifacts: [{
+          status: 'available',
+          import_version_id: 'import-version-1',
+          portfolio_name: 'Imported transactions',
+          import_format: 'json',
+          source_integrity_status: 'verified',
+          source_schema_version: 1,
+          source_sha256: 'a'.repeat(64),
+          source_as_of: '2026-10-13',
+          source_as_of_status: 'declared',
+          source_currency: 'USD',
+          currency_status: 'declared',
+          freshness_status: 'not_defined',
+          source_row_count: 2,
+          trade_date_rows_present: 1,
+          trade_date_coverage: 'partial',
+          source_metadata_status: 'complete',
+          source_rows_available: true,
+        }],
+      },
+      account_total: { status: 'not_applicable_imported', currency: null, value: null },
+      accounts: [],
+      strategies: [],
+      strategy_attribution: {
+        status: 'not_applicable_imported',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'imported transaction materials do not establish account holdings',
+      },
+      coverage: {
+        complete: false,
+        account_facts_complete: false,
+        source_materials_verified: true,
+        code: 'IMPORTED_SOURCE_TRADE_DATES_INCOMPLETE',
+      },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions)
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 50, has_more: false })
+      .mockResolvedValueOnce({
+        items: [{
+          portfolio_ref: 'imported-portfolio',
+          membership_version: 1,
+          source_type: 'imported',
+          base_currency: 'USD',
+          created_at: '2026-10-15T00:00:00Z',
+        }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+        has_more: false,
+      })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(importedProjection)
+    vi.mocked(portfolioApi.createCompositionVersion).mockResolvedValueOnce({
+      portfolio_ref: 'imported-portfolio',
+      membership_version: 1,
+      source_type: 'imported',
+      base_currency: 'USD',
+      created_at: '2026-10-15T00:00:00Z',
+      membership_sha256: 'b'.repeat(64),
+      members: [{ kind: 'imported_ledger', ref: 'import-version-1' }],
+      creditable: false,
+    })
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-import-source-open"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-test="portfolio-import-source-name"]').setValue('Imported transactions')
+    await wrapper.get('[data-test="portfolio-import-source-ref"]').setValue('imported-portfolio')
+    await wrapper.get('[data-test="portfolio-import-source-base-currency"]').setValue('USD')
+    await wrapper.get('[data-test="portfolio-import-source-as-of"]').setValue('2026-10-13')
+    await wrapper.get('[data-test="portfolio-import-source-currency"]').setValue('USD')
+    const rawRows = [
+      { symbol: 'SYNTH-A', trade_type: 'buy', quantity: 2, price: 10 },
+      { symbol: 'SYNTH-B', trade_type: 'sell', quantity: 1, price: 12, trade_date: '2026-10-12' },
+    ]
+    await wrapper.get('[data-test="portfolio-import-source-rows"]').setValue(JSON.stringify(rawRows))
+    await wrapper.get('[data-test="portfolio-import-source-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(portfolioLedgerApi.create).toHaveBeenCalledWith({
+      name: 'Imported transactions',
+      base_currency: 'USD',
+      source_type: 'imported',
+    })
+    expect(portfolioLedgerApi.importTransactions).toHaveBeenCalledWith(
+      'ledger-import-1',
+      expect.objectContaining({
+        format: 'json',
+        transactions: rawRows,
+        source_as_of: '2026-10-13',
+        source_currency: 'USD',
+      }),
+    )
+    expect(portfolioApi.createCompositionVersion).toHaveBeenCalledWith({
+      portfolio_ref: 'imported-portfolio',
+      source_type: 'imported',
+      base_currency: 'USD',
+      members: [{ kind: 'imported_ledger', ref: 'import-version-1' }],
+    })
+    expect(portfolioApi.getCompositionProjection).toHaveBeenCalledWith('imported-portfolio', 1)
+    expect(wrapper.find('[data-test="portfolio-import-source-dialog"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="portfolio-composition-source-status"]').text())
+      .toContain('导入来源材料已验证')
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text()).toBe('不可用')
+    expect(wrapper.get('[data-test="portfolio-import-source-disclaimer"]').text())
+      .toContain('不证明当前持仓或账户价值')
+    expect(wrapper.get('[data-test="portfolio-import-source-artifact"]').text())
+      .toContain('2026-10-13')
+    expect(wrapper.get('[data-test="portfolio-import-source-artifact"]').text())
+      .toContain('部分缺失')
+    expect(wrapper.find('[data-test="portfolio-overview"]').exists()).toBe(false)
+    expect(portfolioApi.getOverview).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('[data-test="portfolio-import-source-detail-import-version-1"]').trigger('click')
+    await flushPromises()
+    expect(portfolioLedgerApi.getImportSource).toHaveBeenCalledWith('import-version-1')
+    expect(wrapper.get('[data-test="portfolio-import-source-raw-import-version-1"]').text())
+      .toContain('SYNTH-A')
   })
 
   it('mounts without error', () => {
@@ -927,5 +1957,398 @@ describe('PortfolioPage', () => {
 
     expect(portfolioApi.getAllocation).toHaveBeenCalledTimes(2)
     expect(vm.allocationItems).toHaveLength(1)
+  })
+
+  it('shows market inputs and independent cuts without adding them to account totals', async () => {
+    const now = '2026-10-16T12:00:00Z'
+    const source = (
+      canonicalId: string,
+      bindingRef: string,
+      provenanceRef: string,
+      queryId: string,
+    ) => ({
+      binding_ref: bindingRef,
+      binding_version: 'v1',
+      provenance_ref: provenanceRef,
+      canonical_id: canonicalId,
+      metadata_version: canonicalId.startsWith('instrument:fx:')
+        ? 'fx-market-v1'
+        : 'futures-market-v1',
+      family_id: canonicalId.includes('EURUSD') ? 'fx.realtime' : 'futures.realtime',
+      family_contract_version: 'market-data-family-v1',
+      source_policy_id: 'market-default-v1',
+      query_id: queryId,
+    })
+    const coverage = (status: string, hasEvent = true) => ({
+      status,
+      expected_event_count: status === 'incomplete' ? 2 : hasEvent ? 1 : 0,
+      accepted_event_count: hasEvent ? 1 : 0,
+      missing_event_count: status === 'incomplete' ? 1 : 0,
+      coverage_ratio: status === 'incomplete' ? 0.5 : 1,
+      rejection_counts: {},
+      next_page_available: false,
+    })
+    const marketCut = (
+      eventAt: string | null,
+      status = 'complete',
+      identityMetadataVersion = 'futures-market-v1',
+      queryId: string | null = null,
+    ): PortfolioMarketCut => ({
+      cut_model: 'independent_account_and_market_data_cuts',
+      atomic: false,
+      account_position_observed_at_utc: '2026-10-16T11:59:00Z',
+      market_event_at_utc: eventAt,
+      market_available_at_utc: eventAt ? '2026-10-16T11:59:55Z' : null,
+      market_committed_at_utc: eventAt ? '2026-10-16T11:59:56Z' : null,
+      account_to_market_skew_ns: eventAt
+        ? String((Date.parse(eventAt) - Date.parse('2026-10-16T11:59:00Z')) * 1_000_000)
+        : null,
+      query_id: queryId,
+      knowledge_cutoff_utc: now,
+      identity_metadata_version: identityMetadataVersion,
+      cursor_available: false,
+      coverage: coverage(status, eventAt !== null),
+    })
+    const markInput = (
+      instrumentKey: string,
+      currency: string,
+      status: PortfolioValuationInput['status'],
+      value: string | null,
+      code: string | null,
+      provenance: string,
+      eventAt: string | undefined,
+      coverageStatus = 'complete',
+    ): PortfolioValuationInput => ({
+      status,
+      code,
+      value,
+      currency,
+      unit: 'contract',
+      price_basis: 'close',
+      source: source(
+        `instrument:futures:SYN-EX:${instrumentKey.toUpperCase()}`,
+        `mark:${instrumentKey}`,
+        provenance,
+        `query-market-${instrumentKey}`,
+      ),
+      observed_at_utc: eventAt,
+      available_at_utc: eventAt ? '2026-10-16T11:59:55Z' : undefined,
+      committed_at_utc: eventAt ? '2026-10-16T11:59:56Z' : undefined,
+      quality: eventAt ? 'pass' : undefined,
+      revision_id: eventAt
+        ? `revision:instrument:futures:SYN-EX:${instrumentKey.toUpperCase()}`
+        : undefined,
+      source_snapshot_id: eventAt
+        ? `snapshot:instrument:futures:SYN-EX:${instrumentKey.toUpperCase()}`
+        : undefined,
+      revision_number: eventAt ? 1 : undefined,
+      age_seconds: eventAt ? (Date.parse(now) - Date.parse(eventAt)) / 1000 : undefined,
+      freshness_max_age_seconds: 60,
+      coverage: coverage(coverageStatus, eventAt !== undefined),
+    })
+    const multiplier = (suffix: string): PortfolioValuationInput => ({
+      status: 'available',
+      code: null,
+      value: '10',
+      quantity_unit: 'contracts',
+      provenance_ref: `contract-spec:${suffix}:2026-v1`,
+      metadata_version: 'contract-spec-2026-v1',
+      valid_from_utc: '2020-01-01T00:00:00Z',
+      valid_to_utc: null,
+    })
+    const fxRate: PortfolioValuationInput = {
+      status: 'available',
+      code: null,
+      value: '1.08',
+      currency: 'USD',
+      unit: 'EUR',
+      source: source(
+        'instrument:fx:SYNTHETIC:EURUSD',
+        'mark:EUR-USD',
+        'reviewed-source:mark:EUR-USD',
+        'query-market-fx-eur-usd',
+      ),
+      from_currency: 'EUR',
+      to_currency: 'USD',
+      rate_convention: 'to_per_from',
+      binding_ref: 'fx:EUR-USD',
+      binding_version: 'v1',
+      provenance_ref: 'reviewed-source:mark:EUR-USD',
+      observed_at_utc: '2026-10-16T11:59:40Z',
+      available_at_utc: '2026-10-16T11:59:55Z',
+      committed_at_utc: '2026-10-16T11:59:56Z',
+      quality: 'pass',
+      revision_id: 'revision:instrument:fx:SYNTHETIC:EURUSD',
+      source_snapshot_id: 'snapshot:instrument:fx:SYNTHETIC:EURUSD',
+      revision_number: 1,
+      age_seconds: 20,
+      freshness_max_age_seconds: 60,
+      coverage: coverage('complete'),
+    }
+    const position = (
+      suffix: string,
+      currency: string,
+      mark: PortfolioValuationInput,
+      fx: PortfolioValuationInput = {
+        status: 'not_required',
+        code: null,
+        value: null,
+        from_currency: currency,
+        to_currency: currency,
+        rate_convention: 'to_per_from',
+      },
+      cut: PortfolioMarketCut = marketCut(
+        mark.observed_at_utc || null,
+        mark.coverage?.status,
+        mark.source?.metadata_version,
+        mark.source?.query_id,
+      ),
+    ): PortfolioProviderAccountPosition => ({
+      resource: { product_type: 'futures', margin_pool: 'cross' },
+      instrument: {
+        provider: 'PAPER',
+        venue: 'synthetic-venue',
+        environment: 'simulation',
+        product_type: 'futures',
+        instrument_id: `contract:${suffix}`,
+        native_symbol: `SYN-${suffix.toUpperCase()}-202612`,
+      },
+      side: 'long',
+      quantity: '2',
+      qty_unit: 'contracts',
+      average_price: '40',
+      price_currency: currency,
+      observed_at_utc: '2026-10-16T11:59:00Z',
+      valuation_binding: {
+        status: 'configured',
+        binding_ref: `account-market:${suffix}`,
+        binding_version: 'v1',
+        valid_from_utc: '2020-01-01T00:00:00Z',
+        valid_to_utc: null,
+      },
+      valuation_inputs: {
+        status: mark.status,
+        mark_price: mark,
+        contract_multiplier: multiplier(suffix),
+        fx_rate: fx,
+        market_value: {
+          status: 'not_calculated',
+          code: 'AFI04_VALUATION_NOT_CALCULATED',
+          value: null,
+        },
+        market_cut: cut,
+        ...(fx.status === 'available'
+          ? {
+              fx_market_cut: marketCut(
+                fx.observed_at_utc || null,
+                fx.coverage?.status,
+                fx.source?.metadata_version,
+                fx.source?.query_id,
+              ),
+            }
+          : {}),
+      },
+    })
+    const observedPositions = [
+      position(
+        'eur',
+        'EUR',
+        markInput(
+          'eur',
+          'EUR',
+          'available',
+          '42.5',
+          null,
+          'reviewed-source:mark:eur',
+          '2026-10-16T11:59:30Z',
+        ),
+        fxRate,
+      ),
+      position(
+        'zero',
+        'USD',
+        markInput(
+          'zero', 'USD', 'available', '0', null, 'reviewed-source:mark:zero', '2026-10-16T11:59:40Z',
+        ),
+      ),
+      position(
+        'missing',
+        'USD',
+        markInput(
+          'missing', 'USD', 'missing', null, 'MARKET_DATA_VALUE_MISSING', 'reviewed-source:mark:missing', undefined,
+        ),
+      ),
+      position(
+        'error',
+        'USD',
+        markInput(
+          'error', 'USD', 'error', null, 'MARKET_DATA_VALUE_INVALID', 'reviewed-source:mark:error', '2026-10-16T11:59:30Z',
+        ),
+      ),
+      position(
+        'stale',
+        'USD',
+        markInput(
+          'stale', 'USD', 'stale', '19.75', 'MARKET_DATA_OBSERVATION_STALE', 'reviewed-source:mark:stale', '2026-10-16T10:00:00Z',
+        ),
+      ),
+      position(
+        'coverage',
+        'USD',
+        markInput(
+          'coverage',
+          'USD',
+          'coverage_incomplete',
+          '17.25',
+          'MARKET_DATA_COVERAGE_INCOMPLETE',
+          'reviewed-source:mark:coverage',
+          '2026-10-16T11:59:50Z',
+          'incomplete',
+        ),
+      ),
+    ]
+    const availableObservation = {
+      status: 'available',
+      quality: 'fresh',
+      source: 'AUTHORIZED_PROVIDER_ACCOUNT_OBSERVATION',
+      observation_id: 'synthetic-observation-market-inputs',
+      session_generation: 'synthetic-generation-v1',
+      cursor: 7,
+      consistency: 'multi_query',
+      cut: {
+        started_at_utc: '2026-10-16T11:58:59Z',
+        completed_at_utc: '2026-10-16T11:59:00Z',
+        earliest_row_observed_at_utc: '2026-10-16T11:59:00Z',
+        latest_row_observed_at_utc: '2026-10-16T11:59:00Z',
+        row_skew_ns: '0',
+        row_observed_at_count: 8,
+        row_count: 8,
+      },
+      coverage: {
+        resources: [{ product_type: 'futures', margin_pool: 'cross' }],
+        balances_complete: true,
+        positions_complete: true,
+        state: 'complete',
+      },
+      valuation: null,
+      balances: [
+        {
+          resource: { product_type: 'futures', margin_pool: 'cross' },
+          currency: 'EUR',
+          total: '12.50',
+          available: '12.50',
+          locked: '0',
+          observed_at_utc: '2026-10-16T11:59:00Z',
+        },
+        {
+          resource: { product_type: 'futures', margin_pool: 'cross' },
+          currency: 'USD',
+          total: '0',
+          available: '0',
+          locked: '0',
+          observed_at_utc: '2026-10-16T11:59:00Z',
+        },
+      ],
+      positions: observedPositions,
+    } satisfies Extract<PortfolioProviderAccountObservation, { status: 'available' }>
+    const projection: PortfolioCompositionProjection = {
+      portfolio_ref: 'market-inputs-ui',
+      membership_version: 1,
+      source_type: 'live',
+      source_status: 'projected',
+      base_currency: 'USD',
+      projection_kind: 'display_only',
+      creditable: false,
+      overlap_policy: 'non_additive_display_only',
+      account_total: { status: 'current', currency: 'USD', value: '950' },
+      accounts: [{
+        member_ref: 'account-ui',
+        currency: 'USD',
+        quality: 'fresh',
+        cash: '120',
+        value: '950',
+        included_in_total: true,
+        duplicate_of_ref: null,
+        detail_code: null,
+        provider_observation: availableObservation,
+      }],
+      market_valuation: {
+        status: 'incomplete',
+        code: null,
+        position_count: observedPositions.length,
+        position_status_counts: { available: 2, missing: 1, error: 1, stale: 1, coverage_incomplete: 1 },
+        cut_model: 'independent_market_query_per_identity',
+        atomic: false,
+        market_event_skew_ns: '7190000000000',
+        reconciliation_status: 'not_established',
+        account_total_included: false,
+        creditable: false,
+      },
+      strategies: [],
+      strategy_attribution: {
+        status: 'execution_attribution_not_collected',
+        strategy_count: 0,
+        attributed_value: null,
+        unattributed_account_value: null,
+        residual_basis: 'account total only; no strategy shares inferred',
+      },
+      coverage: { complete: false, code: 'EXECUTION_ATTRIBUTION_NOT_COLLECTED' },
+    }
+    vi.mocked(portfolioApi.listCompositionVersions).mockResolvedValueOnce({
+      items: [{
+        portfolio_ref: 'market-inputs-ui',
+        membership_version: 1,
+        source_type: 'live',
+        base_currency: 'USD',
+        created_at: now,
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    })
+    vi.mocked(portfolioApi.getCompositionProjection).mockResolvedValueOnce(projection)
+
+    const wrapper = doMount()
+    await flushPromises()
+    await wrapper.get('[data-test="portfolio-mode-composition"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="portfolio-composition-account-total"]').text())
+      .toBe('950 USD')
+    expect(wrapper.get('[data-test="portfolio-market-valuation-summary"]').text())
+      .toContain('not_established')
+    const positions = wrapper.get('[data-test="portfolio-provider-account-positions"]').text()
+    expect(positions).toContain('42.5 EUR/contract')
+    expect(positions).toContain('crosswalk account-market:eur@v1')
+    expect(positions).toContain('value 10 · source contract-spec:eur:2026-v1 · metadata contract-spec-2026-v1 · quantity contracts')
+    expect(positions).toContain('1.08 USD/EUR · EUR→USD to_per_from · event 2026-10-16T11:59:40Z · age 20s')
+    expect(positions).toContain('binding fx:EUR-USD@v1 · market binding mark:EUR-USD@v1')
+    expect(positions).toContain('identity instrument:fx:SYNTHETIC:EURUSD')
+    expect(positions).toContain('source reviewed-source:mark:EUR-USD · metadata fx-market-v1')
+    expect(positions).toContain('identity instrument:futures:SYN-EX:EUR · query query-market-eur')
+    expect(positions).toContain('identity instrument:futures:SYN-EX:ZERO · query query-market-zero')
+    expect(positions).toContain('source reviewed-source:mark:eur · metadata futures-market-v1')
+    expect(positions).toContain('value 0 USD/contract')
+    expect(positions).toContain('mark missing · MARKET_DATA_VALUE_MISSING · value missing')
+    expect(positions).toContain('mark error · MARKET_DATA_VALUE_INVALID')
+    expect(positions).toContain('mark stale · MARKET_DATA_OBSERVATION_STALE')
+    expect(positions).toContain('mark coverage_incomplete · MARKET_DATA_COVERAGE_INCOMPLETE')
+    expect(wrapper.get('[data-test="portfolio-market-input-cut"]').text())
+      .toContain('revision revision:instrument:futures:SYN-EX:EUR')
+    expect(wrapper.get('[data-test="portfolio-market-input-cut"]').text())
+      .toContain('query query-market-eur · identity metadata futures-market-v1')
+    const coveragePosition = wrapper
+      .findAll('[data-test="portfolio-provider-account-positions"] > li')
+      .find((row) => row.text().includes('instrument:futures:SYN-EX:COVERAGE'))
+    expect(coveragePosition).toBeDefined()
+    expect(coveragePosition!.get('[data-test="portfolio-market-input-cut"]').text())
+      .toContain('coverage incomplete (1/2 accepted, 1 missing)')
+    expect(wrapper.get('[data-test="portfolio-fx-input-cut"]').text())
+      .toContain('FX event 2026-10-16T11:59:40Z')
+    expect(wrapper.get('[data-test="portfolio-fx-input-cut"]').text())
+      .toContain('query query-market-fx-eur-usd · identity metadata fx-market-v1')
+    expect(wrapper.text()).not.toContain('market value 85')
+    expect(wrapper.text()).toContain('account totals, cash, credit, or admission')
   })
 })

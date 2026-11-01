@@ -23,7 +23,10 @@ from app.schemas.paper_runtime import (
     RiskRuleResponse,
     RiskRuleUpdate,
 )
-from app.services.paper_runtime_service import PaperRuntimeService
+from app.services.paper_runtime_service import (
+    PaperRuntimeService,
+    PaperRuntimeSnapshotWriteDenied,
+)
 from app.services.workspace.units import AIStrategyResearchPaperRuntimeStopError
 
 router = APIRouter()
@@ -200,11 +203,17 @@ async def record_paper_equity_snapshot(
     service: PaperRuntimeService = Depends(get_paper_runtime_service),
 ) -> PaperEquitySnapshotResponse:
     """Record a retry-safe snapshot for the current user's canonical runtime."""
-    snapshot = await service.record_snapshot(
-        current_user.sub,
-        instance_id,
-        request.model_dump(),
-    )
+    try:
+        snapshot = await service.record_snapshot(
+            current_user.sub,
+            instance_id,
+            request.model_dump(),
+        )
+    except PaperRuntimeSnapshotWriteDenied as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": error.code, "message": "The paper runtime snapshot is fenced."},
+        ) from None
     if snapshot is None:
         raise _not_found()
     return _snapshot_response(snapshot)

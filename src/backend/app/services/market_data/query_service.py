@@ -17,6 +17,7 @@ from typing import Protocol
 
 from app.schemas.market_data_platform import MarketDataQueryRequest, ResolvedMarketDataQuery
 from app.services.market_data.access import (
+    MarketDataAuthorizationError,
     MarketDataQueryAccess,
     MarketDataSourceAuthorization,
 )
@@ -37,6 +38,7 @@ from app.services.market_data.fetch_lease import (
 )
 from app.services.market_data.field_quality import is_usable_field_value
 from app.services.market_data.identity import MarketDataIdentityResolutionError
+from app.services.market_data.opendata_provider import OpendataProvider
 from app.services.market_data.providers import MarketDataProviderRequest, ProviderFetchResult
 from app.services.market_data.publication import MarketDataVisibilityAnchor
 from app.services.market_data.query_cursor import (
@@ -193,6 +195,15 @@ class MarketDataQueryExecution:
 
 
 @dataclass(frozen=True, slots=True)
+class OpendataDirectRead:
+    """An authorized direct REST result with no AFI fact-store receipt."""
+
+    context: ResolvedMarketDataQueryContext
+    fetch_result: ProviderFetchResult
+    source_authorization: MarketDataSourceAuthorization
+
+
+@dataclass(frozen=True, slots=True)
 class _LocalState:
     """Response-safe rows, coverage diagnostics, and frozen local evidence."""
 
@@ -315,6 +326,170 @@ class MarketDataQueryService:
         if not _uses_snapshot_freshness(context):
             return None
         return self._snapshot_freshness_policies.resolve(context).max_age
+
+    async def read_opendata_direct(
+        self,
+        request: MarketDataQueryRequest,
+        *,
+        access: MarketDataQueryAccess,
+    ) -> OpendataDirectRead:
+        """Read one bounded, authorized OpenData stock-daily window without local facts.
+
+        This path is intentionally separate from :meth:`execute`: it does not
+        resolve a local visibility anchor, read an AFI observation/calendar,
+        persist a provider receipt, or manufacture revision identifiers.
+        Identity, capability, provider lifecycle, and source authorization
+        remain mandatory gates around the single REST adapter call.
+        """
+        if not isinstance(request, MarketDataQueryRequest):
+            raise TypeError("request must be a MarketDataQueryRequest")
+        if not isinstance(access, MarketDataQueryAccess):
+            raise TypeError("access must be a MarketDataQueryAccess")
+        access.authorizer.require_read_data(principal=access.principal)
+        if not self._allow_online_fetch:
+            raise MarketDataQueryServiceError("ONLINE_FETCH_DISABLED")
+        if (
+            self._online_route_ids is None
+            or "opendata-stock-daily-v1" not in self._online_route_ids
+        ):
+            raise MarketDataQueryServiceError("OPENDATA_ROUTE_NOT_EFFECTIVE")
+        if (
+            request.identity.canonical_id is None
+            or request.dataset_code != "market.bars"
+            or request.data_kind != "bars"
+            or request.frequency != "1d"
+            or request.required_fields != ("close",)
+            or request.adjustment != "qfq"
+            or request.price_basis != "close"
+            or request.currency != "CNY"
+            or request.unit != "share"
+            or request.source_policy_id != "market-default-v1"
+            or request.family_id != "stock.realtime"
+            or request.family_contract_version != "market-data-family-v1"
+            or request.consistency != "display"
+            or request.purpose != "display"
+            or request.knowledge_cutoff is not None
+            or request.mode != "local_first"
+            or request.cursor is not None
+            or request.page_size != 2000
+            or request.end - request.start > timedelta(days=366)
+        ):
+            raise MarketDataQueryServiceError("OPENDATA_QUERY_UNSUPPORTED")
+
+        try:
+            policy = self._source_policies.resolve(request.source_policy_id)
+        except MarketDataSourcePolicyError:
+            raise
+        if not policy.allows_purpose(request.purpose):
+            raise MarketDataSourcePolicyError("SOURCE_POLICY_PURPOSE_DENIED")
+
+        request_started_at = _trusted_receipt_time(self._clock)
+        try:
+            context = await self._resolver.resolve(
+                request,
+                identity_knowledge_cutoff=request.knowledge_cutoff or request_started_at,
+                identity_visibility_anchor=None,
+            )
+        except (MarketDataIdentityResolutionError, MarketDataQueryResolutionError):
+            raise
+        except ValueError as exc:
+            raise MarketDataQueryServiceError("QUERY_RESOLUTION_FAILED") from exc
+        if not isinstance(context, ResolvedMarketDataQueryContext):
+            raise MarketDataQueryServiceError("QUERY_CONTEXT_INVALID")
+        if (
+            context.query
+            != ResolvedMarketDataQuery.from_request(
+                request,
+                canonical_id=request.identity.canonical_id,
+                dataset_code=request.dataset_code,
+                instrument_metadata_version=context.query.instrument_metadata_version,
+            )
+            or context.identity.canonical_id != context.query.canonical_id
+            or context.identity.asset_type != "stock"
+            or context.identity.venue not in {"CN-SSE", "CN-SZSE"}
+        ):
+            raise MarketDataQueryServiceError("QUERY_CONTEXT_INVALID")
+
+        candidate_routes = policy.routes_for(context)
+        if (
+            len(candidate_routes) != 1
+            or candidate_routes[0].route_id != "opendata-stock-daily-v1"
+            or candidate_routes[0].request_provider != "opendata"
+            or candidate_routes[0].expected_result_provider_ids != frozenset({"opendata"})
+            or not isinstance(candidate_routes[0].adapter, OpendataProvider)
+        ):
+            raise MarketDataQueryServiceError("OPENDATA_ROUTE_UNAVAILABLE")
+        route = candidate_routes[0]
+        try:
+            grant = await access.authorizer.authorize_policy(
+                principal=access.principal,
+                policy=policy,
+                routes=candidate_routes,
+                local_sources=(),
+                asset_type=context.identity.asset_type,
+                market=context.identity.venue or "",
+                purpose=context.query.purpose,
+            )
+        except MarketDataAuthorizationError:
+            raise
+        if route.route_id not in grant.authorized_route_ids:
+            raise MarketDataAuthorizationError("SOURCE_ROUTE_AUTHORIZATION_DENIED")
+
+        try:
+            await self._store.ensure_provider_active("opendata")
+        except MarketDataStoreError as exc:
+            raise MarketDataQueryServiceError(exc.code) from exc
+        except ValueError as exc:
+            raise MarketDataQueryServiceError("PROVIDER_AUTHORIZATION_UNAVAILABLE") from exc
+
+        authorization = grant.authorization_for_route(route.route_id)
+        provider_request = _provider_request_for(
+            context,
+            route,
+            policy_descriptor_hash=_policy_descriptor_hash(policy),
+            access_grant_descriptor_hash=grant.policy_descriptor_hash,
+        )
+        await self._close_transaction_before_provider_io()
+        try:
+            result = await route.adapter.fetch(provider_request)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # Provider boundary: return only its stable code.
+            raise MarketDataQueryServiceError(_provider_error_code(exc)) from exc
+        if (
+            not isinstance(result, ProviderFetchResult)
+            or result.provider_id not in route.expected_result_provider_ids
+            or result.request != provider_request
+        ):
+            raise MarketDataQueryServiceError("PROVIDER_RECEIPT_INVALID")
+        if len(result.observations) > 366:
+            raise MarketDataQueryServiceError("OPENDATA_RESULT_TOO_LARGE")
+        if any(
+            not request.start <= observation.event_at < request.end
+            for observation in result.observations
+        ):
+            raise MarketDataQueryServiceError("OPENDATA_RESPONSE_OUT_OF_WINDOW")
+        if len({observation.event_at for observation in result.observations}) != len(
+            result.observations
+        ):
+            raise MarketDataQueryServiceError("OPENDATA_RESPONSE_DUPLICATE_EVENT")
+
+        try:
+            await access.authorizer.reauthorize_route_for_write(
+                principal=access.principal,
+                route=route,
+                asset_type=context.identity.asset_type,
+                market=context.identity.venue or "",
+                purpose=context.query.purpose,
+                expected_authorization=authorization,
+            )
+        except MarketDataAuthorizationError:
+            raise
+        return OpendataDirectRead(
+            context=context,
+            fetch_result=result,
+            source_authorization=authorization,
+        )
 
     async def execute(
         self,

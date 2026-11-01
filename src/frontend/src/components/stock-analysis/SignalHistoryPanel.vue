@@ -53,7 +53,17 @@
             </td>
             <td>{{ percent(item.confidence_score) }}</td>
             <td>{{ outcomeLabel(item) }}</td>
-            <td>{{ percent(item.horizon_20d_return) }}</td>
+            <td>
+              <div class="return-values">
+                <span>{{ t('stockAnalysis.signalStockReturn', { value: percent(item.horizon_20d_return) }) }}</span>
+                <small
+                  class="benchmark-return"
+                  :data-benchmark-status="benchmarkStatus(item)"
+                >
+                  {{ benchmarkReturnLabel(item) }}
+                </small>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -74,7 +84,32 @@ defineProps<{
 const { t } = useI18n()
 
 function percent(value: number | null | undefined): string {
-  return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : '—'
+  return typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—'
+}
+
+function benchmarkReturnLabel(item: StockSignalRecord): string {
+  const value = item.benchmark_20d_return
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return t('stockAnalysis.signalBenchmarkReturn', {
+      value: percent(value),
+    })
+  }
+
+  // Older API payloads omit benchmark_status. A missing value does not prove
+  // that the source lacked benchmark data, so preserve the uncertainty.
+  return t('stockAnalysis.signalBenchmarkUnknown')
+}
+
+function benchmarkStatus(item: StockSignalRecord): 'available' | 'unknown' {
+  const hasReturn =
+    typeof item.benchmark_20d_return === 'number' && Number.isFinite(item.benchmark_20d_return)
+  if (hasReturn) {
+    return 'available'
+  }
+  // A status without the corresponding 20-day value cannot support a displayed
+  // benchmark result; keep the UI conservative if a payload is inconsistent.
+  if (item.benchmark_status === 'available') return 'unknown'
+  return item.benchmark_status ?? 'unknown'
 }
 
 function qualityLabel(status: StockSignalEligibility): string {
@@ -114,6 +149,8 @@ h3 { margin: 4px 0 0; font-size: 18px; }
 .signal-table { width: 100%; border-collapse: collapse; min-width: 680px; font-size: 13px; }
 th, td { padding: 10px 8px; border-bottom: 1px solid var(--border-color-lighter); text-align: left; }
 th { color: var(--text-color-secondary); font-weight: 600; }
+.return-values { display: flex; flex-direction: column; gap: 3px; }
+.benchmark-return { margin-top: 0; }
 .action-badge { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .buy { color: var(--el-color-success); background: var(--el-color-success-light-9); }
 .sell { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }

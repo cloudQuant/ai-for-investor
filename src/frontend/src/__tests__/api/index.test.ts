@@ -212,6 +212,27 @@ describe('API module', () => {
       expect(ElMessage.error).toHaveBeenCalledWith('验证错误')
     })
 
+    it('should use the standardized backend error message envelope', async () => {
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
+      const api = (await import('@/api/index')).default
+      const handler = (api.interceptors.response as any).handlers[0]
+      const error = {
+        response: {
+          status: 503,
+          data: {
+            error: 'HTTP_503',
+            message: 'scanner_data_contract_unavailable',
+            request_id: 'req-scanner-503',
+            path: '/api/v1/scanners/run',
+          },
+        },
+      }
+      await expect(handler.rejected(error)).rejects.toBe(error)
+      expect(ElMessage.error).toHaveBeenCalledWith(
+        'scanner_data_contract_unavailable (request_id: req-scanner-503)',
+      )
+    })
+
     it('should handle generic error without detail', async () => {
       const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
       const api = (await import('@/api/index')).default

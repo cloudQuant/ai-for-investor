@@ -327,17 +327,6 @@ class MarketDataQueryBundleResponse(_StrictMarketDataModel):
         return self
 
 
-class MarketDataCapabilitiesResponse(_StrictMarketDataModel):
-    """Safe effective rollout capabilities for authenticated market-data clients."""
-
-    version: Literal["market-data-capabilities-v1"] = "market-data-capabilities-v1"
-    query_v2_enabled: bool
-    online_fetch_enabled: bool
-    research_cache_fill_enabled: bool
-    research_backtest_bridge_enabled: bool
-    capability_states: tuple[MarketDataCapabilityStateResponse, ...] = Field(default_factory=tuple)
-
-
 class MarketDataCapabilityStateResponse(_StrictMarketDataModel):
     """One safe lifecycle read for a server-owned rollout control or route.
 
@@ -371,6 +360,17 @@ class MarketDataCapabilityStateResponse(_StrictMarketDataModel):
         if not self.effective and self.reason_code is None:
             raise ValueError("disabled capability state requires reason_code")
         return self
+
+
+class MarketDataCapabilitiesResponse(_StrictMarketDataModel):
+    """Safe effective rollout capabilities for authenticated market-data clients."""
+
+    version: Literal["market-data-capabilities-v1"] = "market-data-capabilities-v1"
+    query_v2_enabled: bool
+    online_fetch_enabled: bool
+    research_cache_fill_enabled: bool
+    research_backtest_bridge_enabled: bool
+    capability_states: tuple[MarketDataCapabilityStateResponse, ...] = Field(default_factory=tuple)
 
 
 class MarketDataQueryRequest(_StrictMarketDataModel):

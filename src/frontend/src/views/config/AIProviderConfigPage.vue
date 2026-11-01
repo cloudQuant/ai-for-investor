@@ -191,6 +191,7 @@
               </el-tag>
             </template>
           </el-table-column>
+          <!-- @vue-generic {ProviderDraft} -->
           <el-table-column
             :label="t('configPages.aiModels')"
             min-width="220"
@@ -237,6 +238,7 @@
               </div>
             </template>
           </el-table-column>
+          <!-- @vue-generic {ProviderDraft} -->
           <el-table-column
             :label="t('common.action')"
             fixed="right"

@@ -28,6 +28,18 @@ async def get_admin_headers(client: AsyncClient) -> dict[str, str]:
 class TestRegister:
     """Registration endpoint tests."""
 
+    async def test_register_cannot_claim_configured_admin_username(self, client: AsyncClient):
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": settings.ADMIN_USERNAME.swapcase(),
+                "email": "reserved-admin-name@example.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 400
+
     async def test_register_success(self, client: AsyncClient):
         resp = await client.post(
             "/api/v1/auth/register",

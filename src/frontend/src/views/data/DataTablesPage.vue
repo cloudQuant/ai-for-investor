@@ -85,6 +85,7 @@
         :data="tables"
         :empty-text="t('dataPages.tablesEmptyTitle')"
       >
+        <!-- @vue-generic {DataTable} -->
         <el-table-column
           :label="t('dataPages.tablesColName')"
           min-width="250"

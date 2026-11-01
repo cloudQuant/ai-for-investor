@@ -800,29 +800,6 @@ class AIStrategyPaperTradingRuleEvaluation(BaseModel):
     action: str
 
 
-class AIStrategyPaperTradingReview(BaseModel):
-    """Current paper trading validation state for an AI research run."""
-
-    run_id: str
-    research_workspace_id: str
-    paper_workspace_id: str | None = None
-    paper_unit_id: str | None = None
-    paper_trading_started: bool = False
-    workspace: WorkspaceResponse | None = None
-    unit: StrategyUnitResponse | None = None
-    unit_status: UnitStatusResponse | None = None
-    monitoring_plan: list[dict[str, Any]] = Field(default_factory=list)
-    evaluations: list[AIStrategyPaperTradingRuleEvaluation] = Field(default_factory=list)
-    ready_for_live: bool = False
-    status: str
-    reviewed_at: str | None = None
-    live_readiness_checklist: list[dict[str, Any]] = Field(default_factory=list)
-    live_readiness_expires_at: str | None = None
-    pipeline: dict[str, Any] = Field(default_factory=dict)
-    next_actions: list[str] = Field(default_factory=list)
-    live_handoff: AIStrategyLiveHandoffPackage | None = None
-
-
 class AIStrategyLiveHandoffApprovalRequest(BaseModel):
     """Manual approval or rejection for a live handoff package."""
 
@@ -891,6 +868,29 @@ class AIStrategyLiveHandoffPackage(BaseModel):
     handoff: dict[str, Any] = Field(default_factory=dict)
     pipeline: dict[str, Any] = Field(default_factory=dict)
     next_actions: list[str] = Field(default_factory=list)
+
+
+class AIStrategyPaperTradingReview(BaseModel):
+    """Current paper trading validation state for an AI research run."""
+
+    run_id: str
+    research_workspace_id: str
+    paper_workspace_id: str | None = None
+    paper_unit_id: str | None = None
+    paper_trading_started: bool = False
+    workspace: WorkspaceResponse | None = None
+    unit: StrategyUnitResponse | None = None
+    unit_status: UnitStatusResponse | None = None
+    monitoring_plan: list[dict[str, Any]] = Field(default_factory=list)
+    evaluations: list[AIStrategyPaperTradingRuleEvaluation] = Field(default_factory=list)
+    ready_for_live: bool = False
+    status: str
+    reviewed_at: str | None = None
+    live_readiness_checklist: list[dict[str, Any]] = Field(default_factory=list)
+    live_readiness_expires_at: str | None = None
+    pipeline: dict[str, Any] = Field(default_factory=dict)
+    next_actions: list[str] = Field(default_factory=list)
+    live_handoff: AIStrategyLiveHandoffPackage | None = None
 
 
 class AIStrategyLiveTradingPrepareRequest(BaseModel):

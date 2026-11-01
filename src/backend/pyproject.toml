@@ -69,12 +69,12 @@ dev = [
 postgres = ["asyncpg>=0.29.0"]
 mysql = ["aiomysql>=0.2.0"]
 redis = ["redis>=5.0.0"]
-# cloudQuant fork: pin the peeled commit of annotated tag v1.3.0 so the
-# pyproject declaration and reproducible lock use the same immutable source.
+# cloudQuant fork: pin the accepted immutable commit that includes the
+# ServiceExecutionSession API used by managed strategy execution.
 # The fork constrains numpy<2.0 on Python <3.13 (its regression suite is
 # calibrated on numpy 1.x), so the locks pin numpy==1.26.4.
 backtrader = [
-    "backtrader @ git+https://github.com/cloudQuant/backtrader.git@04adc08c2deb02cbf240efbd495e5eee68b375d8",
+    "backtrader @ git+https://github.com/cloudQuant/backtrader.git@4f3e6a1ca3c41c1e5a726d11cce162faec25b140",
     "pandas>=2.1.0",
     "numpy>=1.26.0",
 ]

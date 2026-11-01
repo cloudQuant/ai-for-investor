@@ -10,6 +10,7 @@ from app.data_fetch.scripts.common.daily.migration_area_baidu import MigrationAr
 from app.data_fetch.scripts.common.weekly.get_cffex_rank_table import GetCffexRankTable
 from app.data_fetch.scripts.common.weekly.get_rank_table_czce import GetRankTableCzce
 from app.data_fetch.scripts.common.weekly.get_shfe_rank_table import GetShfeRankTable
+from app.data_fetch.scripts.funds.daily import option_current_em as option_current_em_module
 from app.data_fetch.scripts.funds.daily.option_current_em import OptionCurrentEm
 from app.data_fetch.scripts.funds.hourly.option_minute_em import OptionMinuteEm
 from app.data_fetch.scripts.funds.hourly.option_sse_minute_sina import OptionSseMinuteSina
@@ -1814,6 +1815,37 @@ def test_futures_daily_market_falls_back_to_sina_dce_main_contracts(monkeypatch)
     assert saved["df"]["DATA_SOURCE"].tolist() == ["新浪期货兜底", "新浪期货兜底"]
 
 
+def test_futures_daily_market_formats_compact_integer_trade_dates():
+    """CZCE reports dates as YYYYMMDD integers; they must not land as 1970-01-01."""
+    script = FuturesDailyMarket()
+    df = pd.DataFrame(
+        {
+            "symbol": ["SM703", "CJ612"],
+            "date": [20260706, 20260707],
+            "open": [5888.0, 6445.0],
+            "high": [5900.0, 6445.0],
+            "low": [5858.0, 6200.0],
+            "close": [5862.0, 6210.0],
+            "volume": [15821, 55667],
+            "open_interest": [55180, 26461],
+        }
+    )
+
+    processed = script._prepare_daily_market_frame(df, market="CZCE", data_source="交易所")
+
+    assert processed["TRADE_DATE"].tolist() == ["2026-07-06", "2026-07-07"]
+
+    string_dates = script._prepare_daily_market_frame(
+        df.assign(date=["2026-07-06", "2026-07-07"]), market="DCE", data_source="交易所"
+    )
+    assert string_dates["TRADE_DATE"].tolist() == ["2026-07-06", "2026-07-07"]
+
+    garbage = script._prepare_daily_market_frame(
+        df.assign(date=["", "20260707"]), market="CZCE", data_source="交易所"
+    )
+    assert garbage["TRADE_DATE"].tolist() == ["2026-07-07"]
+
+
 def test_intraday_history_scripts_have_recent_datetime_defaults():
     for script_id in (
         "stock_hk_hist_min_em",
@@ -2841,6 +2873,46 @@ def test_option_current_em_populates_unique_standard_symbol():
     assert mapped["name"].tolist() == ["沪镍26年09月购184000"]
     assert mapped["最新价"].tolist() == [276]
     assert "data_date" in mapped.columns
+
+
+def _stub_cffex_snapshot() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "代码": ["HO2611-P-2475", "IO2701-C-4600"],
+            "名称": ["上证50沽26年11月2475", "沪深300购27年01月4600"],
+            "最新价": ["2.0", "22.6"],
+            "行权价": ["2475.0", "4600.0"],
+            "剩余日": ["32", "88"],
+            "市场标识": [221, 221],
+        }
+    )
+
+
+def test_option_current_em_keeps_cffex_rows_when_eastmoney_is_blocked(monkeypatch):
+    """Eastmoney answers 403 behind some egress filters; that must not void CFFEX."""
+
+    def blocked(*args, **kwargs):
+        raise RuntimeError("403 Client Error: Forbidden")
+
+    monkeypatch.setattr(option_current_em_module, "request_eastmoney", blocked)
+    monkeypatch.setattr(option_current_em_module, "option_current_cffex_em", _stub_cffex_snapshot)
+
+    df = OptionCurrentEm.fetch_limited_pages(max_pages=1, include_cffex=True)
+
+    assert df["symbol"].tolist() == ["221.HO2611-P-2475", "221.IO2701-C-4600"]
+    assert df["剩余日"].tolist() == [32, 88]
+
+
+def test_option_current_em_returns_empty_when_both_sources_are_down(monkeypatch):
+    """The two try/except guards must not turn a total outage into a fake frame."""
+
+    def blocked(*args, **kwargs):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(option_current_em_module, "request_eastmoney", blocked)
+    monkeypatch.setattr(option_current_em_module, "option_current_cffex_em", blocked)
+
+    assert OptionCurrentEm.fetch_limited_pages(max_pages=1, include_cffex=True).empty
 
 
 def test_option_minute_em_preserves_intraday_rows():

@@ -1,0 +1,10 @@
+# Iteration 10 AFI12 non-empty Paper import — focused source/Host round
+
+- Repository: `D:/source_code/ai-for-investor`, branch `dev`.
+- Parent: `8e20e764045dc09002f3cc972e7e55973f78cdb2`.
+- Scope: typed legacy Paper import into the existing Execution paper owner, source freeze and digest-bound rollback, explicit residual/unresolved-order refusal, authenticated AFI endpoints, and the configured ServiceRead worker/session/ServiceHost path. Imported history remains identified as legacy/imported; it does not synthesize exchange/provider execution facts. The source remains frozen when target activation cannot conserve the supported opening state.
+- Paths: `src/backend/app/services/legacy_paper_migration.py`, `src/backend/app/services/legacy_paper_import_migration.py`, `src/backend/app/api/legacy_paper_import.py`, `src/backend/app/api/router.py`, `src/backend/app/api/service_read.py`, `src/backend/app/services/service_read/{access,client,deployment,session,worker}.py`, and the three focused import tests under `src/backend/tests/`.
+- Focused author-side evidence: the existing P&L/residual unit selectors were reported passing after the zero-cash/P&L compatibility correction; the two Host selectors `test_nonempty_http_import_uses_trusted_host_and_archives_old_controls` and `test_http_residual_refusal_rolls_back_exact_host_bound_import_idempotently` each passed once. The latter run emitted a known Windows ZMQ Proactor warning. No durable JUnit/stdout artifact was retained, and Root did not rerun these selectors in this round.
+- Boundary: the HTTP integration fixture injects an authenticated `TokenPayload`; this is not a new JWT/login acceptance. Existing AFI authentication evidence remains separate. This focused synthetic Host round is not live-user migration evidence and does not itself assign formal AFI12 case PASS.
+- Static review: `resume_bt_acceptance` returned final GO on the P&L compatibility, zero-cash guard, residual refusal, trusted Host path, and 804 requirement mapping. AST parsing of the exact staged 13 source/test blobs passed; no test or Host was run during final staging.
+- Commit: pending.

@@ -60,6 +60,7 @@ from app.models.akshare_mgmt import (
     TaskExecution,
 )
 from app.models.alerts import Alert, AlertNotification, AlertRule
+from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
 from app.models.asset_research import (
     AssetAnalysisExport,
     AssetAnalysisReport,
@@ -100,6 +101,8 @@ from app.models.knowledge_base import (
     ModelConfig,
     ModelUsageLog,
 )
+from app.models.legacy_paper_cutover import LegacyPaperCutoverReceipt, LegacyPaperWriterLease
+from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.market_data_platform import (
     ImmutableMarketDataRecordError,
     MdB2CompletenessManifestEntry,
@@ -135,6 +138,8 @@ from app.models.paper_runtime import (
 )
 from app.models.paper_trading import Account, Order, PaperTrade, Position
 from app.models.permission import Permission, Role, user_roles
+from app.models.portfolio_analytics_dataset import PortfolioAnalyticsDatasetV1
+from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.models.portfolio_ledger import (
     PortfolioLedgerImportModel,
     PortfolioLedgerModel,
@@ -143,15 +148,32 @@ from app.models.portfolio_ledger import (
 )
 from app.models.prompt_template import PromptTemplate
 from app.models.scanner_plan import ScannerPlanModel, ScannerPlanRunModel
+from app.models.service_order_operation import ServiceOrderOperation
 from app.models.stock_analysis import (
     StockAnalysisExportModel,
     StockAnalysisReportModel,
     StockAnalysisTaskModel,
 )
+from app.models.stock_analysis_snapshot_grant import (
+    ImmutableStockSnapshotGrantError,
+    InvalidStockSnapshotGrantRecord,
+    StockSnapshotGrantAudit,
+    StockSnapshotSourceResearchGrant,
+    StockSnapshotUserReadGrant,
+)
 from app.models.stock_signal import StockSignalPrediction, StockSignalRun
 from app.models.strategy import Strategy
+from app.models.strategy_approval_authority import (
+    StrategyApprovalAuthorityEpoch,
+    StrategyOrderApprovalPolicyHead,
+    StrategyOrderApprovalPolicyVersion,
+)
 from app.models.strategy_explanation import StrategyExplanationModel
 from app.models.strategy_score import StrategyScoreModel
+from app.models.strategy_target_approval import (
+    StrategyTargetApproval,
+    StrategyTargetApprovalEvent,
+)
 from app.models.strategy_version import (
     StrategyVersion,
     VersionBranch,
@@ -242,6 +264,9 @@ __all__ = [
     "InterfaceCategory",
     "InterfaceParameter",
     "InvestmentMandate",
+    "LegacyPaperCutoverReceipt",
+    "LegacyPaperImportReceipt",
+    "LegacyPaperWriterLease",
     "MarketDataCoverageModel",
     "MarketDataQualityReportModel",
     "ImmutableMarketDataRecordError",
@@ -279,6 +304,15 @@ __all__ = [
     "PaperTrade",
     "Permission",
     "Position",
+    "PortfolioCompositionVersion",
+    "PortfolioAnalyticsDatasetV1",
+    "ApprovedTargetHttpOperation",
+    "ServiceOrderOperation",
+    "StrategyTargetApproval",
+    "StrategyTargetApprovalEvent",
+    "StrategyApprovalAuthorityEpoch",
+    "StrategyOrderApprovalPolicyHead",
+    "StrategyOrderApprovalPolicyVersion",
     "PortfolioLedgerImportModel",
     "PortfolioLedgerModel",
     "PortfolioLedgerSnapshotModel",
@@ -298,6 +332,11 @@ __all__ = [
     "StockAnalysisExportModel",
     "StockAnalysisReportModel",
     "StockAnalysisTaskModel",
+    "ImmutableStockSnapshotGrantError",
+    "InvalidStockSnapshotGrantRecord",
+    "StockSnapshotGrantAudit",
+    "StockSnapshotSourceResearchGrant",
+    "StockSnapshotUserReadGrant",
     "StockSignalPrediction",
     "StockSignalRun",
     "StrategyVersion",
