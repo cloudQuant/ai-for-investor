@@ -600,7 +600,18 @@ jobs:
           # legs were reporting the resolver, not the code: 8851 passed while the
           # job failed.  Free resolution stays covered by the nightly workflow,
           # which installs the extras without the lock.
-          .venv/bin/pip install --requirement ../../config/requirements-dev.lock
+          if [ "${{ matrix.python-version }}" = "3.10" ]; then
+            # akshare >= 1.18.90 declares Requires-Python >=3.11, so the locked
+            # 1.18.97 cannot install on 3.10 at all.  This leg therefore installs the
+            # whole lock minus that one optional upstream provider: every other
+            # dependency stays pinned, and the akshare-backed test modules skip
+            # through their existing ``importorskip("akshare")`` guard instead of the
+            # leg resolving a different, untested akshare.
+            grep -v '^akshare==' ../../config/requirements-dev.lock > "${RUNNER_TEMP}/lock-without-akshare.txt"
+            .venv/bin/pip install --requirement "${RUNNER_TEMP}/lock-without-akshare.txt"
+          else
+            .venv/bin/pip install --requirement ../../config/requirements-dev.lock
+          fi
           .venv/bin/pip install --no-deps -e .
           .venv/bin/pip install pytest-cov pytest-xdist
 
