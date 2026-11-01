@@ -14,17 +14,33 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import zmq
-from bt_api_base.account_protocol import AccountKey
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_py.bt_api import BtApi
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
-from bt_api_risk import (
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("bt_api_risk", reason="optional bt_api_risk SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.account_protocol import AccountKey  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_py.bt_api import BtApi  # noqa: E402
+from bt_api_py.service_components import ComponentResources  # noqa: E402
+from bt_api_py.service_config import parse_service_config  # noqa: E402
+from bt_api_py.service_host import (  # noqa: E402
+    ServiceHost,
+    ServiceHostError,
+    TrustedServiceAuthority,
+)
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
+from bt_api_py.service_risk_order_entry import (  # noqa: E402
+    RiskBtApiProviderContract,
+    RiskOrderTarget,
+)
+from bt_api_py.service_risk_order_journal import RiskOrderJournal  # noqa: E402
+from bt_api_risk import (  # noqa: E402
     AccountScope,
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
@@ -35,23 +51,23 @@ from bt_api_risk import (
     RiskIntent,
     RiskPolicy,
 )
-from bt_api_risk.budget_admission import (
+from bt_api_risk.budget_admission import (  # noqa: E402
     BudgetAdmissionResolutionError,
     PolicyCatalogBudgetAdmissionResolver,
 )
-from bt_api_risk.service_component import (
+from bt_api_risk.service_component import (  # noqa: E402
     ConfirmedPolicyStore,
     PolicyCatalogService,
     PolicyCatalogStore,
 )
-from pydantic import SecretStr
-from sqlalchemy import insert
+from pydantic import SecretStr  # noqa: E402
+from sqlalchemy import insert  # noqa: E402
 
-import app.main as main_module
-from app.api.service_read import configure_service_read
-from app.db.database import async_session_maker
-from app.models.permission import Role, user_roles
-from app.utils.security import decode_access_token
+import app.main as main_module  # noqa: E402
+from app.api.service_read import configure_service_read  # noqa: E402
+from app.db.database import async_session_maker  # noqa: E402
+from app.models.permission import Role, user_roles  # noqa: E402
+from app.utils.security import decode_access_token  # noqa: E402
 
 _DOMAIN = "paper:afi-budget-manual"
 _ACCOUNT = "afi-account-a"

@@ -12,10 +12,15 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from bt_api_base.service_protocol import WireScope
-from bt_api_risk.core.admission import RiskPolicy
-from bt_api_risk.portfolio_analytics import FxObservationV1
-from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_risk", reason="optional bt_api_risk SDK package is required")
+
+from bt_api_base.service_protocol import WireScope  # noqa: E402
+from bt_api_risk.core.admission import RiskPolicy  # noqa: E402
+from bt_api_risk.portfolio_analytics import FxObservationV1  # noqa: E402
+from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore  # noqa: E402
 
 _POLICY_BUDGET_SOURCE = Path(os.environ["AFI_POLICY_BUDGET_SOURCE"]).resolve(strict=True)
 _POLICY_BUDGET_SPEC = importlib.util.spec_from_file_location(

@@ -10,47 +10,62 @@ from types import MappingProxyType
 from typing import Any
 
 import pytest
-from bt_api_base.account_protocol import AccountKey
-from pydantic import SecretStr
-from sqlalchemy import delete, insert
 
-import app.main as main_module
-import app.services.portfolio_valuation_bindings as valuation_bindings_module
-from app.api.data import queries as market_queries
-from app.api.service_read import configure_service_read
-from app.db.database import async_session_maker
-from app.models.asset_research import AssetDataSourceRegistry
-from app.models.market_data_platform import MdCapabilityLedgerEntry
-from app.models.permission import Role, user_roles
-from app.models.portfolio_composition import PortfolioCompositionVersion
-from app.schemas.asset_research import FuturesIdentityDetails, FxIdentityDetails, InstrumentIdentity
-from app.schemas.market_data_platform import MarketDataQueryRequest, ResolvedMarketDataQuery
-from app.services.market_data.access import MarketDataQueryAccess
-from app.services.market_data.capability_ledger import (
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+from bt_api_base.account_protocol import AccountKey  # noqa: E402
+from pydantic import SecretStr  # noqa: E402
+from sqlalchemy import delete, insert  # noqa: E402
+
+import app.main as main_module  # noqa: E402
+import app.services.portfolio_valuation_bindings as valuation_bindings_module  # noqa: E402
+from app.api.data import queries as market_queries  # noqa: E402
+from app.api.service_read import configure_service_read  # noqa: E402
+from app.db.database import async_session_maker  # noqa: E402
+from app.models.asset_research import AssetDataSourceRegistry  # noqa: E402
+from app.models.market_data_platform import MdCapabilityLedgerEntry  # noqa: E402
+from app.models.permission import Role, user_roles  # noqa: E402
+from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
+from app.schemas.asset_research import (  # noqa: E402
+    FuturesIdentityDetails,
+    FxIdentityDetails,
+    InstrumentIdentity,
+)
+from app.schemas.market_data_platform import (  # noqa: E402
+    MarketDataQueryRequest,
+    ResolvedMarketDataQuery,
+)
+from app.services.market_data.access import MarketDataQueryAccess  # noqa: E402
+from app.services.market_data.capability_ledger import (  # noqa: E402
     MARKET_DATA_QUERY_V2_CAPABILITY,
     rollout_capability_descriptor_sha256,
 )
-from app.services.market_data.catalog import DatasetStorageResolution
-from app.services.market_data.coverage import (
+from app.services.market_data.catalog import DatasetStorageResolution  # noqa: E402
+from app.services.market_data.coverage import (  # noqa: E402
     CoveragePlan,
     CoverageStatus,
     EventKey,
     ObservationQuality,
     QueryIdentity,
 )
-from app.services.market_data.identity import ResolvedMarketDataIdentity
-from app.services.market_data.publication import MarketDataVisibilityAnchor
-from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
-from app.services.market_data.query_service import MarketDataQueryExecution, MarketDataQueryService
-from app.services.market_data.source_policy import (
+from app.services.market_data.identity import ResolvedMarketDataIdentity  # noqa: E402
+from app.services.market_data.publication import MarketDataVisibilityAnchor  # noqa: E402
+from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext  # noqa: E402
+from app.services.market_data.query_service import (  # noqa: E402
+    MarketDataQueryExecution,
+    MarketDataQueryService,
+)
+from app.services.market_data.source_policy import (  # noqa: E402
     MarketDataLocalReadSource,
     MarketDataSourcePolicy,
 )
-from app.services.market_data.store import LocalObservationRevision
-from app.services.portfolio_valuation_bindings import PortfolioValuationBindingRegistry
-from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
-from app.services.service_read.contracts import AccountReadView, ReadQuality
-from app.utils.security import decode_access_token
+from app.services.market_data.store import LocalObservationRevision  # noqa: E402
+from app.services.portfolio_valuation_bindings import (
+    PortfolioValuationBindingRegistry,  # noqa: E402
+)
+from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory  # noqa: E402
+from app.services.service_read.contracts import AccountReadView, ReadQuality  # noqa: E402
+from app.utils.security import decode_access_token  # noqa: E402
 
 app = main_module.app
 

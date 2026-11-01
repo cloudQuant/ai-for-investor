@@ -5,27 +5,39 @@ import time
 from types import SimpleNamespace
 
 import pytest
-import zmq
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_transport_zmq.server import CurveClientCredentials
-from fastapi import HTTPException, Response
-from pydantic import SecretStr, ValidationError
 
-import app.api.strategy_reduction as reduction_api
-import app.services.strategy_reduction_control as reduction_control
-from app.api.afi_owner_scope import PersistedOwnerScope
-from app.api.strategy_reduction import (
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip(
+    "bt_api_transport_zmq", reason="optional bt_api_transport_zmq SDK package is required"
+)
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_transport_zmq.server import CurveClientCredentials  # noqa: E402
+from fastapi import HTTPException, Response  # noqa: E402
+from pydantic import SecretStr, ValidationError  # noqa: E402
+
+import app.api.strategy_reduction as reduction_api  # noqa: E402
+import app.services.strategy_reduction_control as reduction_control  # noqa: E402
+from app.api.afi_owner_scope import PersistedOwnerScope  # noqa: E402
+from app.api.strategy_reduction import (  # noqa: E402
     StrategyReductionRequest,
     _not_dispatched_projection,
     _validate_owner_reply,
     _validate_persisted_close_target,
 )
-from app.schemas.auth import TokenPayload
-from app.services.strategy_reduction_control import (
+from app.schemas.auth import TokenPayload  # noqa: E402
+from app.services.strategy_reduction_control import (  # noqa: E402
     StrategyReductionControlError,
     StrategyReductionDeployment,
 )
-from app.services.strategy_target_approvals import canonical_target_json, canonical_target_sha256
+from app.services.strategy_target_approvals import (  # noqa: E402
+    canonical_target_json,
+    canonical_target_sha256,
+)
 
 
 def test_reduction_curve_keys_remain_z85_encoded_for_transport():

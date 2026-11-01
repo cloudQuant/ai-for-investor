@@ -5,17 +5,20 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
-from app.services.service_read import client as read_client_module
-from app.services.service_read.client import (
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+
+from app.services.service_read import client as read_client_module  # noqa: E402
+from app.services.service_read.client import (  # noqa: E402
     AccountBinding,
     AuthorizedServiceReadClient,
     OrderBinding,
     ServiceReadClientCloseError,
     ServiceReadUnavailableError,
 )
-from app.services.service_read.session import (
+from app.services.service_read.session import (  # noqa: E402
     SdkServiceReadSession,
     ServiceReadSessionError,
 )

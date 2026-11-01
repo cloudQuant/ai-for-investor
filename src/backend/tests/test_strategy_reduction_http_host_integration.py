@@ -20,9 +20,20 @@ from typing import Any
 import httpx
 import jwt
 import pytest
-import zmq
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_execution import (
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_execution", reason="optional bt_api_execution SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("bt_api_risk", reason="optional bt_api_risk SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_execution import (  # noqa: E402
     ExecutionAdmissionValidatorRegistry,
     ExecutionBasicAdmissionGate,
     ExecutionProviderValidatorV1,
@@ -33,28 +44,28 @@ from bt_api_execution import (
     SqliteExecutionStore,
     TimeInForce,
 )
-from bt_api_execution.approved_target import (
+from bt_api_execution.approved_target import (  # noqa: E402
     ApprovedTargetOwnerBindingV1,
 )
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_client_config, parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_runtime import (
+from bt_api_py.service_components import ComponentResources  # noqa: E402
+from bt_api_py.service_config import parse_client_config, parse_service_config  # noqa: E402
+from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
+from bt_api_py.service_runtime import (  # noqa: E402
     ClientCurveKeys,
     ServiceClientRuntime,
     ZmqTransportFactory,
 )
-from bt_api_risk import (
+from bt_api_risk import (  # noqa: E402
     AccountScope,
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
     RiskPolicy,
 )
-from pydantic import SecretStr
-from sqlalchemy import insert
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
+from pydantic import SecretStr  # noqa: E402
+from sqlalchemy import insert  # noqa: E402
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
+from sqlalchemy.pool import NullPool  # noqa: E402
 
 import app.models  # noqa: F401 - register the complete ORM model set
 
