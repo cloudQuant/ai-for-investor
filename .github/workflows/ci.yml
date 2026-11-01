@@ -558,7 +558,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # 3.10 is not in the matrix: the dev lock cannot resolve on it.  Both
+        # `akshare==1.18.97` and `contourpy==1.3.3` declare Requires-Python >=3.11
+        # (`No matching distribution found` at install), so a 3.10 leg could only
+        # ever run on unpinned dependencies and would measure the resolver, not
+        # the code.  `requires-python` still says >=3.10 for the runtime; that
+        # claim is about installing the app, not this lock.
+        python-version: ["3.11", "3.12"]
     defaults:
       run:
         working-directory: src/backend
@@ -583,21 +589,27 @@ jobs:
         id: cache-backend-venv-test
         with:
           path: src/backend/.venv
-          key: venv-test-v2-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
+          # v3: the install recipe changed (every leg now installs the lock), so a
+          # v2 cache would be restored and skip the install step entirely.
+          key: venv-test-v3-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
           restore-keys: |
-            venv-test-v2-${{ runner.os }}-py${{ matrix.python-version }}-
+            venv-test-v3-${{ runner.os }}-py${{ matrix.python-version }}-
 
       - name: Install dependencies
         if: steps.cache-backend-venv-test.outputs.cache-hit != 'true'
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
-          if [ "${{ matrix.python-version }}" = "${{ env.PYTHON_VERSION }}" ]; then
-            .venv/bin/pip install --requirement ../../config/requirements-dev.lock
-            .venv/bin/pip install --no-deps -e .
-          else
-            .venv/bin/pip install -e ".[dev,backtrader,data,redis]"
-          fi
+          # Every interpreter installs the same lock.  The non-canonical legs used
+          # to run `pip install -e ".[dev,backtrader,data,redis]"` freely instead,
+          # which resolved akshare to 1.20 (it removed `akshare.forex` and
+          # `akshare.stock_feature`) and an unpinned scientific stack that hard
+          # crashed an xdist worker ("node down: Not properly terminated").  Those
+          # legs were reporting the resolver, not the code: 8851 passed while the
+          # job failed.  Free resolution stays covered by the nightly workflow,
+          # which installs the extras without the lock.
+          .venv/bin/pip install --requirement ../../config/requirements-dev.lock
+          .venv/bin/pip install --no-deps -e .
           .venv/bin/pip install pytest-cov pytest-xdist
 
       - name: Activate virtualenv
