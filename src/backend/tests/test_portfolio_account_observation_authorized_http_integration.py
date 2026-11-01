@@ -13,7 +13,7 @@ import traceback
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1178,7 +1178,9 @@ def _make_observation(account_key: Any) -> Any:
     )
     from bt_api_base.market_protocol import MarketInstrumentKey
 
-    observed_at = datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    observed_at = (
+        datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
     spot = AccountResourceKey("spot", "cash")
     linear = AccountResourceKey("linear", "cross")
     balances = (

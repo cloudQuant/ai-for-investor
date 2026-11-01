@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
@@ -69,7 +69,7 @@ from app.utils.security import decode_access_token  # noqa: E402
 
 app = main_module.app
 
-UTC_NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
+UTC_NOW = datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc)
 ACCOUNT_OBSERVED_AT = "2026-10-16T11:59:00Z"
 ACCOUNT_REF = "afi-valuation-http-account"
 PORTFOLIO_REF = "afi-valuation-http-view"
@@ -388,7 +388,7 @@ def _execution(
         name="Synthetic authorized market identity",
         venue=venue,
         currency=currency,
-        timezone="UTC",
+        timezone="timezone.utc",
         identifier_type="FX_PAIR" if asset_type == "fx" else "EXCHANGE_SYMBOL",
         identifier_value="EUR/USD" if asset_type == "fx" else canonical_id.rsplit(":", 1)[-1],
         product_type=product_type,
@@ -551,7 +551,7 @@ async def _grant_market_data_read_role(subject: str) -> None:
 
 
 async def _seed_query_capability() -> None:
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     async with async_session_maker() as session:
         session.add(
             MdCapabilityLedgerEntry(

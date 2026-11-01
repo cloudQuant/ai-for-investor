@@ -1,6 +1,9 @@
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.funds.daily.fund_em_hk_rank import FundEmHkRank
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.funds.daily.fund_em_hk_rank import FundEmHkRank  # noqa: E402
 
 
 def test_normalize_rank_data_maps_hong_kong_fund_columns():

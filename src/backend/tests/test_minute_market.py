@@ -1,6 +1,10 @@
 from datetime import datetime
 
-from app.data_fetch.scripts.futures.daily.minute_market import FuturesMinuteMarket
+import pytest
+
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.futures.daily.minute_market import FuturesMinuteMarket  # noqa: E402
 
 
 def test_format_latest_datetime_accepts_string_and_datetime():

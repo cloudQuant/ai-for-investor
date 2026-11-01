@@ -1,6 +1,9 @@
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.futures.weekly.rank_sum_daily import FuturesRankSumDaily
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.futures.weekly.rank_sum_daily import FuturesRankSumDaily  # noqa: E402
 
 
 class _Logger:

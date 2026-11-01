@@ -1,8 +1,12 @@
 from datetime import date
 
-from app.data_fetch.scripts.common.daily.nlp_answer import NlpAnswer
-from app.data_fetch.scripts.common.daily.nlp_ownthink import NlpOwnthink
-from app.data_fetch.scripts.common.weekly.match_main_contract import MatchMainContract
+import pytest
+
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.common.daily.nlp_answer import NlpAnswer  # noqa: E402
+from app.data_fetch.scripts.common.daily.nlp_ownthink import NlpOwnthink  # noqa: E402
+from app.data_fetch.scripts.common.weekly.match_main_contract import MatchMainContract  # noqa: E402
 
 
 def test_nlp_ownthink_normalizes_string_result():

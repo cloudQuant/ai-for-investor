@@ -2388,7 +2388,7 @@ class _DualLiveSyntheticAccountProvider:
         self.generation = generation
 
     def read_account(self, *, generation: str, timeout: float) -> Any:
-        from datetime import UTC, datetime
+        from datetime import datetime, timezone
         from decimal import Decimal
 
         from bt_api_base.account_protocol import (
@@ -2404,7 +2404,9 @@ class _DualLiveSyntheticAccountProvider:
             raise AssertionError("synthetic account read used a stale session")
         self.read_calls += 1
         values = _DUAL_LIVE_VALUES[self.account_ref]
-        observed_at = datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        observed_at = (
+            datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        )
         resource = AccountResourceKey("spot", "cash")
         suffix = self.account_ref[-1].upper()
         instrument_id = f"PAPER:SIM:AFI-DUAL-{suffix}"

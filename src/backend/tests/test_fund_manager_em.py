@@ -1,8 +1,11 @@
 from datetime import date
 
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.funds.weekly.fund_manager_em import FundManagerEm
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.funds.weekly.fund_manager_em import FundManagerEm  # noqa: E402
 
 
 def test_normalize_manager_data_maps_and_cleans_eastmoney_columns():

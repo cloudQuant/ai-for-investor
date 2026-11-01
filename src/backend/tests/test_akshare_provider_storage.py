@@ -2,8 +2,10 @@ from collections.abc import Sequence
 
 import pytest
 
-from app.data_fetch.providers import akshare_provider
-from app.data_fetch.providers.akshare_provider import AkshareProvider
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.providers import akshare_provider  # noqa: E402
+from app.data_fetch.providers.akshare_provider import AkshareProvider  # noqa: E402
 
 
 class FakeCursor:

@@ -3,9 +3,11 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from app.data_fetch.core.mysql_base import MysqlBase
-from app.data_fetch.providers.akshare_to_mysql import AkshareToMySql, FuncThread
-from app.data_fetch.utils.common_utils import retry_on_exception
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.core.mysql_base import MysqlBase  # noqa: E402
+from app.data_fetch.providers.akshare_to_mysql import AkshareToMySql, FuncThread  # noqa: E402
+from app.data_fetch.utils.common_utils import retry_on_exception  # noqa: E402
 
 
 def test_func_thread_preserves_exception_type():

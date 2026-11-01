@@ -1,6 +1,9 @@
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.futures.weekly.warehouse_receipt_czce import (
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.futures.weekly.warehouse_receipt_czce import (  # noqa: E402
     FuturesCzceWarehouseReceipt,
 )
 
