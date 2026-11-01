@@ -11,7 +11,7 @@ import asyncio
 import json
 import socket
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -279,7 +279,7 @@ class _SyntheticHistoryProvider:
             bars=bars,
             complete=True,
             next_start_time_utc=None,
-            observed_at_utc=max(datetime.now(UTC), end)
+            observed_at_utc=max(datetime.now(timezone.utc), end)
             .isoformat(timespec="microseconds")
             .replace("+00:00", "Z"),
         )

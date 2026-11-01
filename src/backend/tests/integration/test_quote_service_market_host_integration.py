@@ -7,7 +7,7 @@ import json
 import socket
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -188,7 +188,9 @@ class _SyntheticTickerProvider:
         if now - self._last_publish < 0.05:
             return
         self._last_publish = now
-        sent_at = datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        sent_at = (
+            datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        )
         self.hub.publish(
             _KEY,
             _market_projection(),

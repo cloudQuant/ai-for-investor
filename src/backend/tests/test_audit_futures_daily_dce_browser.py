@@ -10,9 +10,13 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS_DIR = REPO_ROOT / "src" / "backend" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
+
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
 
 import audit_futures_daily_dce_browser as bridge  # noqa: E402
 

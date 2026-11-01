@@ -6,7 +6,7 @@ import asyncio
 import json
 import socket
 import threading
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -138,7 +138,9 @@ class _SyntheticAccountProvider:
         assert generation == self._generation
         assert timeout > 0
         self.calls.append(("read_account", threading.get_ident()))
-        observed_at = datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        observed_at = (
+            datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        )
         cash = AccountResourceKey("spot", "cash")
         return AccountObservation(
             account_key=self._account_key,

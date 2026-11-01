@@ -1,4 +1,8 @@
-from app.data_fetch.scripts.common.daily.get_roll_yield import GetRollYield
+import pytest
+
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.common.daily.get_roll_yield import GetRollYield  # noqa: E402
 
 
 class _Logger:

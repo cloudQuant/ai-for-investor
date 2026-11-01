@@ -1,6 +1,9 @@
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.funds.weekly.fund_fee_em import FundFeeEm
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.funds.weekly.fund_fee_em import FundFeeEm  # noqa: E402
 
 
 def test_normalize_fee_frame_preserves_multi_column_status_rows():

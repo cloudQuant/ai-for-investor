@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -326,7 +326,7 @@ def test_project_market_event_maps_established_okx_projection_to_quote_tick_inpu
     )
 
     key = _market_key()
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     event = WireEnvelope(
         WireHeader(
             protocol_version=2,
@@ -372,7 +372,7 @@ def test_project_market_event_rejects_key_and_projection_mismatch():
     )
 
     key = _market_key()
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     event = WireEnvelope(
         WireHeader(
             protocol_version=2,

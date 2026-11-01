@@ -1,6 +1,10 @@
 from datetime import date
 
-from app.data_fetch.scripts.stocks.weekly.stock_a_code_to_symbol import (
+import pytest
+
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.stocks.weekly.stock_a_code_to_symbol import (  # noqa: E402
     PREFER_LOCAL_SCRIPT,
     StockACodeToSymbol,
 )

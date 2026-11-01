@@ -1,6 +1,9 @@
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.stocks.weekly.stock_industry_pe_ratio_cninfo import (
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.stocks.weekly.stock_industry_pe_ratio_cninfo import (  # noqa: E402
     StockIndustryPeRatioCninfo,
 )
 

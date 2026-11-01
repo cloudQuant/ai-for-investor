@@ -2,119 +2,140 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
-from app.data_fetch.scripts.common.daily.article_rlab_rv import ArticleRlabRv
-from app.data_fetch.scripts.common.daily.get_receipt import GetReceipt
-from app.data_fetch.scripts.common.daily.get_roll_yield import GetRollYield
-from app.data_fetch.scripts.common.daily.migration_area_baidu import MigrationAreaBaidu
-from app.data_fetch.scripts.common.weekly.get_cffex_rank_table import GetCffexRankTable
-from app.data_fetch.scripts.common.weekly.get_rank_table_czce import GetRankTableCzce
-from app.data_fetch.scripts.common.weekly.get_shfe_rank_table import GetShfeRankTable
-from app.data_fetch.scripts.funds.daily import option_current_em as option_current_em_module
-from app.data_fetch.scripts.funds.daily.option_current_em import OptionCurrentEm
-from app.data_fetch.scripts.funds.hourly.option_minute_em import OptionMinuteEm
-from app.data_fetch.scripts.funds.hourly.option_sse_minute_sina import OptionSseMinuteSina
-from app.data_fetch.scripts.funds.weekly.fund_individual_analysis_xq import FundAnalysisXq
-from app.data_fetch.scripts.funds.weekly.fund_scale_open_sina import FundScaleOpenSina
-from app.data_fetch.scripts.funds.weekly.fund_value_estimation_em import FundValueEstimationEm
-from app.data_fetch.scripts.funds.weekly.option_hist_czce import OptionHistCzce
-from app.data_fetch.scripts.funds.weekly.option_hist_shfe import OptionHistShfe
-from app.data_fetch.scripts.futures.daily.futures_hold_pos_sina import FuturesHoldPosSina
-from app.data_fetch.scripts.futures.hourly.futures_foreign_commodity_realtime import (
+pytest.importorskip("akshare", reason="optional akshare provider package is required")
+
+from app.data_fetch.scripts.common.daily.article_rlab_rv import ArticleRlabRv  # noqa: E402
+from app.data_fetch.scripts.common.daily.get_receipt import GetReceipt  # noqa: E402
+from app.data_fetch.scripts.common.daily.get_roll_yield import GetRollYield  # noqa: E402
+from app.data_fetch.scripts.common.daily.migration_area_baidu import (
+    MigrationAreaBaidu,  # noqa: E402
+)
+from app.data_fetch.scripts.common.weekly.get_cffex_rank_table import (
+    GetCffexRankTable,  # noqa: E402
+)
+from app.data_fetch.scripts.common.weekly.get_rank_table_czce import GetRankTableCzce  # noqa: E402
+from app.data_fetch.scripts.common.weekly.get_shfe_rank_table import GetShfeRankTable  # noqa: E402
+from app.data_fetch.scripts.funds.daily import (
+    option_current_em as option_current_em_module,  # noqa: E402
+)
+from app.data_fetch.scripts.funds.daily.option_current_em import OptionCurrentEm  # noqa: E402
+from app.data_fetch.scripts.funds.hourly.option_minute_em import OptionMinuteEm  # noqa: E402
+from app.data_fetch.scripts.funds.hourly.option_sse_minute_sina import (
+    OptionSseMinuteSina,  # noqa: E402
+)
+from app.data_fetch.scripts.funds.weekly.fund_individual_analysis_xq import (
+    FundAnalysisXq,  # noqa: E402
+)
+from app.data_fetch.scripts.funds.weekly.fund_scale_open_sina import FundScaleOpenSina  # noqa: E402
+from app.data_fetch.scripts.funds.weekly.fund_value_estimation_em import (
+    FundValueEstimationEm,  # noqa: E402
+)
+from app.data_fetch.scripts.funds.weekly.option_hist_czce import OptionHistCzce  # noqa: E402
+from app.data_fetch.scripts.funds.weekly.option_hist_shfe import OptionHistShfe  # noqa: E402
+from app.data_fetch.scripts.futures.daily.futures_hold_pos_sina import (
+    FuturesHoldPosSina,  # noqa: E402
+)
+from app.data_fetch.scripts.futures.hourly.futures_foreign_commodity_realtime import (  # noqa: E402
     FuturesForeignCommodityRealtime,
 )
-from app.data_fetch.scripts.futures.weekly._dict_result import flatten_dict_result
-from app.data_fetch.scripts.futures.weekly.daily_market_data import FuturesDailyMarket
-from app.data_fetch.scripts.futures.weekly.futures_gfex_position_rank import (
+from app.data_fetch.scripts.futures.weekly._dict_result import flatten_dict_result  # noqa: E402
+from app.data_fetch.scripts.futures.weekly.daily_market_data import FuturesDailyMarket  # noqa: E402
+from app.data_fetch.scripts.futures.weekly.futures_gfex_position_rank import (  # noqa: E402
     FuturesGfexPositionRank,
 )
-from app.data_fetch.scripts.futures.weekly.futures_gfex_warehouse_receipt import (
+from app.data_fetch.scripts.futures.weekly.futures_gfex_warehouse_receipt import (  # noqa: E402
     FuturesGfexWarehouseReceipt,
 )
-from app.data_fetch.scripts.futures.weekly.futures_shfe_warehouse_receipt import (
+from app.data_fetch.scripts.futures.weekly.futures_shfe_warehouse_receipt import (  # noqa: E402
     FuturesShfeWarehouseReceipt,
 )
-from app.data_fetch.scripts.futures.weekly.futures_warehouse_receipt_czce import (
+from app.data_fetch.scripts.futures.weekly.futures_warehouse_receipt_czce import (  # noqa: E402
     FuturesWarehouseReceiptCzce,
 )
-from app.data_fetch.scripts.futures.weekly.member_position_rank import (
+from app.data_fetch.scripts.futures.weekly.member_position_rank import (  # noqa: E402
     FuturesMemberPositionRank,
 )
-from app.data_fetch.scripts.indexs.daily.index_zh_a_hist import IndexZhAHist
-from app.data_fetch.scripts.stocks.daily.stock_bid_ask_em import StockBidAskEm
-from app.data_fetch.scripts.stocks.daily.stock_dzjy_mrtj import StockDzjyMrtj
-from app.data_fetch.scripts.stocks.daily.stock_esg_hz_sina import StockEsgHzSina
-from app.data_fetch.scripts.stocks.daily.stock_esg_rate_sina import StockEsgRateSina
-from app.data_fetch.scripts.stocks.daily.stock_esg_zd_sina import StockEsgZdSina
-from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_analyse_em import (
+from app.data_fetch.scripts.indexs.daily.index_zh_a_hist import IndexZhAHist  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_bid_ask_em import StockBidAskEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_dzjy_mrtj import StockDzjyMrtj  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_esg_hz_sina import StockEsgHzSina  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_esg_rate_sina import StockEsgRateSina  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_esg_zd_sina import StockEsgZdSina  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_analyse_em import (  # noqa: E402
     StockGdfxFreeHoldingAnalyseEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_change_em import (
+from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_change_em import (  # noqa: E402
     StockGdfxFreeHoldingChangeEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_statistics_em import (
+from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_statistics_em import (  # noqa: E402
     StockGdfxFreeHoldingStatisticsEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_teamwork_em import (
+from app.data_fetch.scripts.stocks.daily.stock_gdfx_free_holding_teamwork_em import (  # noqa: E402
     StockGdfxFreeHoldingTeamworkEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_gdfx_holding_statistics_em import (
+from app.data_fetch.scripts.stocks.daily.stock_gdfx_holding_statistics_em import (  # noqa: E402
     StockGdfxHoldingStatisticsEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_hk_hot_rank_em import StockHkHotRankEm
-from app.data_fetch.scripts.stocks.daily.stock_hot_follow_xq import StockHotFollowXq
-from app.data_fetch.scripts.stocks.daily.stock_hot_rank_em import StockHotRankEm
-from app.data_fetch.scripts.stocks.daily.stock_hot_up_em import StockHotUpEm
-from app.data_fetch.scripts.stocks.daily.stock_hsgt_board_rank_em import (
+from app.data_fetch.scripts.stocks.daily.stock_hk_hot_rank_em import StockHkHotRankEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_hot_follow_xq import StockHotFollowXq  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_hot_rank_em import StockHotRankEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_hot_up_em import StockHotUpEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_hsgt_board_rank_em import (  # noqa: E402
     StockHsgtBoardRankEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_hsgt_individual_detail_em import (
+from app.data_fetch.scripts.stocks.daily.stock_hsgt_individual_detail_em import (  # noqa: E402
     StockHsgtIndividualDetailEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_hsgt_institution_statistics_em import (
+from app.data_fetch.scripts.stocks.daily.stock_hsgt_institution_statistics_em import (  # noqa: E402
     StockHsgtInstitutionStatisticsEm,
 )
-from app.data_fetch.scripts.stocks.daily.stock_individual_fund_flow import (
+from app.data_fetch.scripts.stocks.daily.stock_individual_fund_flow import (  # noqa: E402
     StockIndividualFundFlow,
 )
-from app.data_fetch.scripts.stocks.daily.stock_individual_info_em import StockIndividualInfoEm
-from app.data_fetch.scripts.stocks.daily.stock_intraday_sina import StockIntradaySina
-from app.data_fetch.scripts.stocks.daily.stock_jgdy_detail_em import StockJgdyDetailEm
-from app.data_fetch.scripts.stocks.daily.stock_jgdy_tj_em import StockJgdyTjEm
-from app.data_fetch.scripts.stocks.daily.stock_lh_yyb_capital import StockLhYybCapital
-from app.data_fetch.scripts.stocks.daily.stock_lh_yyb_most import StockLhYybMost
-from app.data_fetch.scripts.stocks.daily.stock_main_fund_flow import StockMainFundFlow
-from app.data_fetch.scripts.stocks.daily.stock_market_fund_flow import StockMarketFundFlow
-from app.data_fetch.scripts.stocks.daily.stock_repurchase_em import StockRepurchaseEm
-from app.data_fetch.scripts.stocks.daily.stock_sse_deal_daily import StockSseDealDaily
-from app.data_fetch.scripts.stocks.daily.stock_sy_yq_em import StockSyYqEm
-from app.data_fetch.scripts.stocks.daily.stock_xgsr_ths import StockXgsrThs
-from app.data_fetch.scripts.stocks.daily.stock_yysj_em import StockYysjEm
-from app.data_fetch.scripts.stocks.daily.stock_zh_a_hist import StockZhAHist
-from app.data_fetch.scripts.stocks.daily.stock_zh_vote_baidu import StockZhVoteBaidu
-from app.data_fetch.scripts.stocks.hourly.stock_board_industry_hist_min_em import (
+from app.data_fetch.scripts.stocks.daily.stock_individual_info_em import (
+    StockIndividualInfoEm,  # noqa: E402
+)
+from app.data_fetch.scripts.stocks.daily.stock_intraday_sina import StockIntradaySina  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_jgdy_detail_em import StockJgdyDetailEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_jgdy_tj_em import StockJgdyTjEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_lh_yyb_capital import StockLhYybCapital  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_lh_yyb_most import StockLhYybMost  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_main_fund_flow import StockMainFundFlow  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_market_fund_flow import (
+    StockMarketFundFlow,  # noqa: E402
+)
+from app.data_fetch.scripts.stocks.daily.stock_repurchase_em import StockRepurchaseEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_sse_deal_daily import StockSseDealDaily  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_sy_yq_em import StockSyYqEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_xgsr_ths import StockXgsrThs  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_yysj_em import StockYysjEm  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_zh_a_hist import StockZhAHist  # noqa: E402
+from app.data_fetch.scripts.stocks.daily.stock_zh_vote_baidu import StockZhVoteBaidu  # noqa: E402
+from app.data_fetch.scripts.stocks.hourly.stock_board_industry_hist_min_em import (  # noqa: E402
     StockBoardIndustryHistMinEm,
 )
-from app.data_fetch.scripts.stocks.hourly.stock_us_hist_min_em import StockUsHistMinEm
-from app.data_fetch.scripts.stocks.hourly.stock_us_spot_em import StockUsSpotEm
-from app.data_fetch.scripts.stocks.weekly.stock_concept_fund_flow_hist import (
+from app.data_fetch.scripts.stocks.hourly.stock_us_hist_min_em import StockUsHistMinEm  # noqa: E402
+from app.data_fetch.scripts.stocks.hourly.stock_us_spot_em import StockUsSpotEm  # noqa: E402
+from app.data_fetch.scripts.stocks.weekly.stock_concept_fund_flow_hist import (  # noqa: E402
     StockConceptFundFlowHist,
 )
-from app.data_fetch.scripts.stocks.weekly.stock_individual_fund_flow_rank import (
+from app.data_fetch.scripts.stocks.weekly.stock_individual_fund_flow_rank import (  # noqa: E402
     StockIndividualFundFlowRank,
 )
-from app.data_fetch.scripts.stocks.weekly.stock_industry_clf_hist_sw import (
+from app.data_fetch.scripts.stocks.weekly.stock_industry_clf_hist_sw import (  # noqa: E402
     StockIndustryClfHistSw,
 )
-from app.data_fetch.scripts.stocks.weekly.stock_rank_cxd_ths import StockRankCxdThs
-from app.data_fetch.scripts.stocks.weekly.stock_sector_fund_flow_hist import (
+from app.data_fetch.scripts.stocks.weekly.stock_rank_cxd_ths import StockRankCxdThs  # noqa: E402
+from app.data_fetch.scripts.stocks.weekly.stock_sector_fund_flow_hist import (  # noqa: E402
     StockSectorFundFlowHist,
 )
-from app.data_fetch.scripts.stocks.weekly.stock_sns_sseinfo import StockSnsSseinfo
-from app.services.akshare import script as script_module
-from app.services.akshare.data import AkshareDataService
-from app.services.akshare.script import AkshareScriptService
-from scripts.backfill_market_history import (
+from app.data_fetch.scripts.stocks.weekly.stock_sns_sseinfo import StockSnsSseinfo  # noqa: E402
+from app.services.akshare import script as script_module  # noqa: E402
+from app.services.akshare.data import AkshareDataService  # noqa: E402
+from app.services.akshare.script import AkshareScriptService  # noqa: E402
+from scripts.backfill_market_history import (  # noqa: E402
     CacheCandidate,
     _fund_sina_symbol,
     _history_cache_payloads,
