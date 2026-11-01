@@ -12,34 +12,46 @@ from typing import Any
 
 import httpx
 import pytest
-import zmq
-from bt_api_base.account_protocol import (
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_gateway", reason="optional bt_api_gateway SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.account_protocol import (  # noqa: E402
     AccountBalance,
     AccountKey,
     AccountObservation,
     AccountResourceKey,
     AccountValuation,
 )
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_gateway.event_journal import GatewayEventJournal
-from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
-from bt_api_gateway.service_component import GatewayServiceAccountScope
-from bt_api_gateway.session_guard import LocalAccountSessionGuard
-from bt_api_gateway.session_owner import GatewaySessionOwner
-from bt_api_py.gateway_operator import GatewayAccountSessionBinding, GatewayOperatorDeployment
-from bt_api_py.gateway_operator_application import (
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_gateway.event_journal import GatewayEventJournal  # noqa: E402
+from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal  # noqa: E402
+from bt_api_gateway.service_component import GatewayServiceAccountScope  # noqa: E402
+from bt_api_gateway.session_guard import LocalAccountSessionGuard  # noqa: E402
+from bt_api_gateway.session_owner import GatewaySessionOwner  # noqa: E402
+from bt_api_py.gateway_operator import (  # noqa: E402
+    GatewayAccountSessionBinding,
+    GatewayOperatorDeployment,
+)
+from bt_api_py.gateway_operator_application import (  # noqa: E402
     GatewayOperatorProfile,
     GatewayOperatorProfileRegistry,
 )
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from fastapi import FastAPI
+from bt_api_py.service_config import parse_service_config  # noqa: E402
+from bt_api_py.service_host import TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
 
-from app.api.afi_owner_scope import PersistedOwnerScope, require_persisted_owner_scope
-from app.api.service_gateway_operator import router as operator_router
-from app.services.live_trading import manager as live_manager_module
-from app.services.service_gateway_operator import ServiceGatewayOperatorControl
+from app.api.afi_owner_scope import PersistedOwnerScope, require_persisted_owner_scope  # noqa: E402
+from app.api.service_gateway_operator import router as operator_router  # noqa: E402
+from app.services.live_trading import manager as live_manager_module  # noqa: E402
+from app.services.service_gateway_operator import ServiceGatewayOperatorControl  # noqa: E402
 
 _OWNER = "afi08-account-owner"
 _FOREIGN_OWNER = "afi08-foreign-owner"

@@ -13,30 +13,39 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import zmq
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_risk.budget_admission import (
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("bt_api_risk", reason="optional bt_api_risk SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_py.service_components import ComponentResources  # noqa: E402
+from bt_api_py.service_config import parse_service_config  # noqa: E402
+from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
+from bt_api_risk.budget_admission import (  # noqa: E402
     BudgetAdmissionResolutionError,
     PolicyCatalogBudgetAdmissionResolver,
 )
-from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore
-from pydantic import SecretStr
-from sqlalchemy import insert, update
+from bt_api_risk.service_component import ConfirmedPolicyStore, PolicyCatalogStore  # noqa: E402
+from pydantic import SecretStr  # noqa: E402
+from sqlalchemy import insert, update  # noqa: E402
 
-import app.main as main_module
-from app.db.database import async_session_maker
-from app.models.permission import Role, user_roles
-from app.models.user import User
-from app.schemas.portfolio_composition import (
+import app.main as main_module  # noqa: E402
+from app.db.database import async_session_maker  # noqa: E402
+from app.models.permission import Role, user_roles  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.schemas.portfolio_composition import (  # noqa: E402
     PortfolioCompositionCreate,
     PortfolioCompositionMember,
 )
-from app.services.portfolio_composition import PortfolioCompositionService
-from app.services.service_read.client import (
+from app.services.portfolio_composition import PortfolioCompositionService  # noqa: E402
+from app.services.service_read.client import (  # noqa: E402
     RISK_POLICY_BUDGET_CHECKER_OPERATIONS,
     RISK_POLICY_BUDGET_MAKER_OPERATIONS,
 )

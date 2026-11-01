@@ -26,7 +26,10 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
-import zmq
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
 
 _AFI_BACKEND_ROOT_ENV = "AFI11_BACKEND_ROOT"
 _SDK_SOURCE_ROOT_ENV = "AFI11_SDK_EXPORT_ROOT"

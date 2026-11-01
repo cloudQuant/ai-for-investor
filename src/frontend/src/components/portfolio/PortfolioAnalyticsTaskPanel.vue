@@ -1,5 +1,8 @@
 <template>
-  <section class="analytics-panel" data-test="portfolio-analytics-task-panel">
+  <section
+    class="analytics-panel"
+    data-test="portfolio-analytics-task-panel"
+  >
     <header>
       <h3>离线组合分析 / Offline portfolio analytics</h3>
       <p>
@@ -8,7 +11,11 @@
       </p>
     </header>
 
-    <p v-if="sourceType === 'live'" class="analytics-panel__unavailable" role="status">
+    <p
+      v-if="sourceType === 'live'"
+      class="analytics-panel__unavailable"
+      role="status"
+    >
       Live 组合不接受离线分析输入。请切换到 research、imported 或 paper 的固定版本。
     </p>
 
@@ -65,15 +72,29 @@
       </div>
     </template>
 
-    <p v-if="errorMessage" class="analytics-panel__error" role="alert" data-test="portfolio-analytics-error">
+    <p
+      v-if="errorMessage"
+      class="analytics-panel__error"
+      role="alert"
+      data-test="portfolio-analytics-error"
+    >
       {{ errorMessage }}
     </p>
-    <div v-if="task" class="analytics-panel__task" data-test="portfolio-analytics-task">
+    <div
+      v-if="task"
+      class="analytics-panel__task"
+      data-test="portfolio-analytics-task"
+    >
       <p>任务状态：<strong>{{ task.state }}</strong></p>
-      <p v-if="task.detail_code">诊断码：<code>{{ task.detail_code }}</code></p>
+      <p v-if="task.detail_code">
+        诊断码：<code>{{ task.detail_code }}</code>
+      </p>
       <p>输入摘要：<code>{{ task.input_sha256 }}</code></p>
       <p>任务摘要：<code>{{ task.task_ref }}</code></p>
-      <pre v-if="task.result" data-test="portfolio-analytics-result">{{ JSON.stringify(task.result, null, 2) }}</pre>
+      <pre
+        v-if="task.result"
+        data-test="portfolio-analytics-result"
+      >{{ JSON.stringify(task.result, null, 2) }}</pre>
     </div>
   </section>
 </template>
