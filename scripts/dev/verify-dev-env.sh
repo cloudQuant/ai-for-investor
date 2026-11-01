@@ -92,17 +92,16 @@ run_preinstall_checks() {
       node_major="${BASH_REMATCH[1]}"
       node_minor="${BASH_REMATCH[2]}"
       node_minor_num=$((10#$node_minor))
-      if { [ "$node_major" = "20" ] && [ "$node_minor_num" -ge 19 ]; } || \
-        { [ "$node_major" = "22" ] && [ "$node_minor_num" -ge 13 ]; } || \
+      if { [ "$node_major" = "22" ] && [ "$node_minor_num" -ge 13 ]; } || \
         [ "$node_major" = "24" ]; then
-        print_ok "Node.js $node_version matches the supported frontend engine range (^20.19.0 || ^22.13.0 || ^24.0.0)"
+        print_ok "Node.js $node_version matches the supported frontend engine range (^22.13.0 || ^24.0.0)"
       else
-        print_error "Node.js $node_version detected. Use Node.js ^20.19.0, ^22.13.0, or ^24.0.0."
-        echo "   Suggested fix: nvm install 20 && nvm use 20"
+        print_error "Node.js $node_version detected. Use Node.js ^22.13.0 or ^24.0.0."
+        echo "   Suggested fix: nvm install 22 && nvm use 22"
       fi
     else
-      print_error "Node.js $node_version detected. Use a stable Node.js release covered by ^20.19.0, ^22.13.0, or ^24.0.0."
-      echo "   Suggested fix: nvm install 20 && nvm use 20"
+      print_error "Node.js $node_version detected. Use a stable Node.js release covered by ^22.13.0 || ^24.0.0."
+      echo "   Suggested fix: nvm install 22 && nvm use 22"
     fi
   fi
 

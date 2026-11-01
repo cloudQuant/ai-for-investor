@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python 3.10+
-- Node.js 20+
+- Node.js 22+
 - Git
 - Docker Compose v2 (optional, for containerized environments)
 

@@ -9,7 +9,7 @@
 #   3. chmod +x deploy_server.sh && sudo ./deploy_server.sh
 #
 # 脚本会完成以下工作:
-#   - 安装系统依赖 (Python 3.11, Node.js 20, MySQL 8, Nginx)
+#   - 安装系统依赖 (Python 3.11, Node.js 22, MySQL 8, Nginx)
 #   - 创建项目用户和目录
 #   - 克隆项目代码
 #   - 创建 MySQL 数据库和用户
@@ -124,9 +124,9 @@ fi
 "python${PYTHON_VERSION}" -m ensurepip --upgrade 2>/dev/null || true
 "python${PYTHON_VERSION}" -m pip install --upgrade pip setuptools wheel
 
-# Node.js 20 LTS
-if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 18 ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+# Node.js 22 LTS
+if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
     apt-get install -y -qq nodejs
 fi
 
