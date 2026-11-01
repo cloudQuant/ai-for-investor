@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select
@@ -228,14 +228,22 @@ class PortfolioLedgerService:
         )
         existing = existing_import.scalar_one_or_none()
         if existing is not None:
+            (
+                stored_sha256,
+                stored_schema_version,
+                stored_format,
+                stored_count,
+                stored_as_of,
+                stored_currency,
+            ) = _import_source_metadata(existing)
             existing_is_verified = verify_portfolio_import_source(
                 document=existing.source_document,
-                expected_sha256=existing.source_sha256,
-                expected_schema_version=existing.source_schema_version,
-                import_format=existing.import_format,
-                imported_count=existing.imported_count,
-                source_as_of=existing.source_as_of,
-                source_currency=existing.source_currency,
+                expected_sha256=stored_sha256,
+                expected_schema_version=stored_schema_version,
+                import_format=stored_format,
+                imported_count=stored_count,
+                source_as_of=stored_as_of,
+                source_currency=stored_currency,
             )
             if existing_is_verified and existing.source_sha256 != source_sha256:
                 raise HTTPException(
@@ -648,14 +656,36 @@ def get_portfolio_ledger_service(db: AsyncSession) -> PortfolioLedgerService:
 def _import_material_status(imported: PortfolioLedgerImportModel) -> str:
     if imported.source_document is None or imported.source_sha256 is None:
         return "unavailable_legacy"
+    (
+        stored_sha256,
+        stored_schema_version,
+        stored_format,
+        stored_count,
+        stored_as_of,
+        stored_currency,
+    ) = _import_source_metadata(imported)
     if verify_portfolio_import_source(
         document=imported.source_document,
-        expected_sha256=imported.source_sha256,
-        expected_schema_version=imported.source_schema_version,
-        import_format=imported.import_format,
-        imported_count=imported.imported_count,
-        source_as_of=imported.source_as_of,
-        source_currency=imported.source_currency,
+        expected_sha256=stored_sha256,
+        expected_schema_version=stored_schema_version,
+        import_format=stored_format,
+        imported_count=stored_count,
+        source_as_of=stored_as_of,
+        source_currency=stored_currency,
     ):
         return "verified"
     return "integrity_invalid"
+
+
+def _import_source_metadata(
+    imported: PortfolioLedgerImportModel,
+) -> tuple[str | None, int | None, str, int, str | None, str | None]:
+    """Read legacy Column attributes as the scalar values SQLAlchemy returns."""
+    return (
+        cast("str | None", imported.source_sha256),
+        cast("int | None", imported.source_schema_version),
+        cast("str", imported.import_format),
+        cast("int", imported.imported_count),
+        cast("str | None", imported.source_as_of),
+        cast("str | None", imported.source_currency),
+    )
