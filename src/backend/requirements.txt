@@ -42,7 +42,7 @@ redis>=5.0.0
 backtrader @ git+https://github.com/cloudQuant/backtrader.git@4f3e6a1ca3c41c1e5a726d11cce162faec25b140
 pandas>=2.1.0
 numpy>=1.26.0
-akshare>=1.18.96; python_version >= '3.11'
+akshare>=1.18.96,<1.19; python_version >= '3.11'
 akshare>=1.18.88,<1.18.89; python_version < '3.11'
 pyarrow>=14.0.0,<26.0.0
 soupsieve>=2.9.0
