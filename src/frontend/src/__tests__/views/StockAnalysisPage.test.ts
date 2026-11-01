@@ -252,18 +252,24 @@ describe('StockAnalysisPage', () => {
       .findAll('button')
       .find((button) => button.text().includes('开始智能分析'))
 
+    // The form now prevents submission instead of warning: the start button is disabled while the
+    // symbol is blank or no module is selected, so no task can be created either way.
     vm.form.symbol = '   '
     await nextTick()
+    expect(startButton!.attributes('disabled')).toBeDefined()
     await startButton!.trigger('click')
-    expect(mocks.messageWarning).toHaveBeenCalledWith('请输入股票代码')
     expect(mocks.createTask).not.toHaveBeenCalled()
 
     vm.form.symbol = '000001.SZ'
     vm.form.selectedModules = []
     await nextTick()
+    expect(startButton!.attributes('disabled')).toBeDefined()
     await startButton!.trigger('click')
-    expect(mocks.messageWarning).toHaveBeenLastCalledWith('请至少选择一个研究模块')
     expect(mocks.createTask).not.toHaveBeenCalled()
+
+    vm.form.selectedModules = ['market']
+    await nextTick()
+    expect(startButton!.attributes('disabled')).toBeUndefined()
   })
 
   it('reports task submission failure and clears the submitting state', async () => {

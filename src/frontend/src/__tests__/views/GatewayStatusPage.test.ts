@@ -224,7 +224,7 @@ describe('GatewayStatusPage', () => {
     expect(buttonLabels).not.toContain('手动连接（兼容）')
     expect(buttonLabels).not.toContain('断开')
     expect(wrapper.get('[data-test="operator-empty"]').text()).toContain('没有已授权的 Service Gateway operator')
-    expect(wrapper.get('[data-test="legacy-gateway-history"]').text()).toContain('旧 Gateway 历史记录')
+    expect(wrapper.get('[data-test="legacy-gateway-history"]').text()).toContain('旧 Gateway 授权映射')
     wrapper.unmount()
   })
 })
