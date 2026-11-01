@@ -583,9 +583,11 @@ jobs:
         id: cache-backend-venv-test
         with:
           path: src/backend/.venv
-          key: venv-test-v2-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
+          # v3: the install recipe changed (every leg now installs the lock), so a
+          # v2 cache would be restored and skip the install step entirely.
+          key: venv-test-v3-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
           restore-keys: |
-            venv-test-v2-${{ runner.os }}-py${{ matrix.python-version }}-
+            venv-test-v3-${{ runner.os }}-py${{ matrix.python-version }}-
 
       - name: Install dependencies
         if: steps.cache-backend-venv-test.outputs.cache-hit != 'true'
