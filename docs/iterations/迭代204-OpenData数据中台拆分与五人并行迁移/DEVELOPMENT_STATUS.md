@@ -1248,3 +1248,23 @@ OpenData [PR #133](https://github.com/cloudQuant/opendata/pull/133) 已合入 `d
 最新 `dev` 上 MySQL 9.4 Contract、Backend Security Scan、Deps Sync、Doc Links、No Generated Artifacts、Alembic、OpenAPI 等检查已不再出现在失败列表。仍失败的均为既有全仓债务或与本批无关：OpenData `quality gate`（A2 30 项均在既有测试/脚本，新 stock-daily/universe/Fuyao 文件不在其中）与 full-history secret scan；AFI Backend Lint（205 项 Ruff，均既有文件；新 adapter 模块 mypy 0 错误、新文件 Ruff 通过）、Mypy Ratchet（quote、utils+schemas）、Frontend Lint、Secret Scan 与 E2E Chromium。**CI 尚未全绿，不能写成通过**；上述修复收据与剩余失败分类保留在本节，供后续清理。
 
 **共同非声明**：四个合入均没有实时来源请求、生产 MySQL/部署、自然周期、全历史/覆盖完整性或来源权利/PIT 证明；合成 grant/principal/API key 不代表生产授权；Fuyao/universe 原始样本仍保存在私有归档，未进入 Git。v2 日线路由在默认配置下仍返回 404，容量门禁不是数据授权，回补执行器不是调度器，universe 候选不是权威全 A 分母。**父任务保持开放**，逐子任务影响见 [SUBAGENT_TASKS.md](SUBAGENT_TASKS.md) 的 Wave 13/14/15 合入证据节。
+
+## 2026-11-01 Wave 16：CI 债务清理（AFI #212–#216、OpenData #154）
+
+本节记录 CI 债务清理，不属于迭代204的功能交付。它不改变上方任何证据边界，也不构成数据、来源或部署验收。
+
+**关键事实（此前被误报）**：`Backend - Unit Tests` 自 2026-10-19 起是 `skipped` 而不是 `passed`——`backend-test` 依赖 `backend-lint`，而 lint 门禁自那次 snapshot 合入起一直为红，整仓后端测试因此从未在 CI 中运行。#212 合入后该作业恢复执行并通过。
+
+| 仓库/PR | 合入提交 | 范围与验证 |
+| --- | --- | --- |
+| AFI [#212](https://github.com/cloudQuant/ai-for-investor/pull/212) | `34756425441c34ed93e7612df33c7131245599d1` | 清掉整仓 Ruff lint（206 项 → 0，ruff 0.16.2）：F401/F811/I001/UP035/C413/F541、3 处 `raise ... from None`、8 处未读取的局部绑定、`app.models.__all__` 补 3 个 LegacyPaper 模型、AFI08 optional-SDK 测试的 `# noqa: E402`。验证：30 个受影响测试文件在 `dev` 工作树与分支上给出**逐字节相同**的 17 项既有失败；OpenAPI `paths` 无差异。 |
+| AFI [#213](https://github.com/cloudQuant/ai-for-investor/pull/213) | `afb94a8a6f80497c6178017dcf9e00b4b91f98e2` | 清零 `mypy app/utils app/schemas`（1 项）与 `mypy app/services/quote`（3 项）：`service_market.py` 的 `route` 变量复用导致二/三元组类型冲突、`curve_keys` 显式三元组、`portfolio_analytics_v1.py` 对 `Decimal.as_tuple().exponent` 的 `cast`（`is_finite()` 已排除哨兵值）。 |
+| AFI [#214](https://github.com/cloudQuant/ai-for-investor/pull/214) | `7ba51f411177b93b9f48af04ca9c3402ec2fe757` | full-history 密钥扫描：逐行审阅 42 项 `generic-api-key` 命中（UUID 测试标识、测试口令、JWT 别名、SHA-1/SHA-256 内容摘要、跨行表达式片段），按 `commit:path:rule:line` 指纹登记；`unresolved_findings` 保持 0、`blocking_ready` 保持 true。gitleaks 8.30.1 全历史 **42 项 → no leaks found**。 |
+| AFI [#215](https://github.com/cloudQuant/ai-for-investor/pull/215) | `72c35355a07c8d24928d2c02769e6c473f063d84` | 纯 `ruff format`（121 文件）。语义不变的证明是机械的：121/121 文件格式化前后 `ast.dump(ast.parse(...))` 完全一致；整仓 mypy 计数不变。 |
+| AFI [#216](https://github.com/cloudQuant/ai-for-investor/pull/216) | `4d35da65b695e417b408da9577ae590b7d9b710d` | large-file 棘轮刷新：**16 个已登记文件超限增长**（最大 PortfolioPage.vue 1885→3572、useDataPage.ts 4167→4912、query_service.py 1603→1778）**+ 21 个 ≥1000 行但从未登记**（最大 service_read/deployment.py 1793）；登记为“只可缩小”，并写入 `decomposition_plan`（5 个波次、逐文件拆分目标与前置条件）。PR 正文列出每一处上限变更。 |
+| OpenData [#154](https://github.com/cloudQuant/opendata/pull/154) | `e940fd7d68302e8da73b66577dae926978823063` | `make secret-check` 的 10 项命中（8 个 fixture 运行/配额字面量）以字面量枚举加入 `generic-api-key` allowlist，并按仓库既有标准补 `docs/evidence/C150/` 三臂反事实测量（去掉该正则 → 10 项全部回归；任一字符变体 → 仍报告；同槽位植入凭据 → 仍报告）。全历史 **10 项 → no leaks found**。 |
+
+**CI 结果（合入后实测，非推断）**：AFI `dev` 上 `Security - Secret Scan`、`Backend - Unit Tests`、四个 Mypy Ratchet 分域作业（utils+schemas、quote、api subset、services subset）均为 success；OpenData `dev` 上 `secret scan (full history)` 为 success。**仍未全绿**：AFI `Backend - Lint & Type Check`（仅剩整仓 mypy 棘轮 0→329）、`Frontend - Lint & Type Check`（npm audit 生产依赖 high 0→5/critical 0→2）、E2E 四个浏览器作业；OpenData `quality gate`（A2 平面，本次未动）。以上均不得写成通过。
+
+**边界**：本轮只改静态检查、测试门禁与依赖/基线声明，没有触碰任何数据事实、授权判定或发布语义；格式化与基线刷新都不构成对既有数据或来源证据的重新验收。
+

@@ -214,3 +214,25 @@ OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查d
 | 204-D02-02 | dev_ledger（独立分支 opendata-od204-ledger） | Alembic/运行接线/warehouse write fence；该ledger必须由root与dev_runs契约集成后再并入主线。 |
 
 下一波可按接口和文件owner把PLANNED任务重分配给现有子代理或新代理。若任务依赖的合同尚未合入，可先用本清单的fixture/冻结接口推进离线代码；涉及共享文件、真实凭据、生产写操作、部署或自然周期的工作按对应owner和验收面排队，不能因代理空闲而并发改同一文件或提前标记通过。
+
+## CI 门禁债务（2026-11-01 起，独立于本迭代验收面）
+
+本迭代开发期间发现的两仓 CI 状态与迭代204交付无关，但它决定后续 PR 能否被判定，因此单列跟踪。**这些条目全部不是迭代204的验收证据，也不改变任何 CODE/OFFLINE、REAL_SOURCE、DEPLOYMENT、NATURAL_CYCLE 结论。**
+
+关键更正：AFI `Backend - Unit Tests` 自 2026-10-19 起是 `skipped` 而非 `passed`（`needs: backend-lint`，而 lint 自那次 snapshot 合入起一直为红），即整仓后端测试在 CI 中未运行；#212 合入后恢复并通过。
+
+| 条目 | 状态 | 证据/剩余工作 |
+|---|---|---|
+| AFI 整仓 Ruff lint | DONE (#212) | 206→0；30 个受影响测试文件在 `dev` 与分支上给出逐字节相同的 17 项既有失败 |
+| AFI 纯 `ruff format` | DONE (#215) | 121 文件；121/121 `ast.dump` 前后一致 |
+| AFI mypy 分域棘轮（utils+schemas、quote） | DONE (#213) | 两域 `Success`；CI 已转 success |
+| AFI full-history 密钥扫描 | DONE (#214) | 42 项逐行审阅后按指纹登记；gitleaks 8.30.1 `no leaks found`；CI 已转 success |
+| AFI large-file 棘轮 | DONE (#216) | 16 处超限增长 + 21 处未登记，全部列入可见 diff；写入 5 波 `decomposition_plan` |
+| OpenData full-history 密钥扫描 | DONE (#154) | 10 项 → 0；`docs/evidence/C150/` 三臂反事实 |
+| AFI 整仓 mypy 棘轮 0→329 | IN_PROGRESS | 用户决定**真实修复**而非重设基线；按 5 个波次并行（service_read 113 / risk-budget 65 / portfolio 60 / services 64+ / api-adapters 19），要求真实类型修复、ruff/format 干净、跑所属测试并报告任何 `# type: ignore` |
+| AFI Frontend 依赖审计 | IN_PROGRESS | 用户批准升级 `vue-i18n` 9→11 与 `monaco-editor` 0.56→0.55.1；须 audit 归零并全量验证 lint/typecheck/单测/构建 |
+| AFI E2E 四浏览器作业 | INVESTIGATING | 本地复现判定环境/过期断言/产品缺陷，结论出来前不写成"已修复" |
+| OpenData `quality gate`（A2 平面） | OPEN | 1,538 个 A2 文件；ruff 30 项、mypy 目标与 bandit 同时为红，且本地复现缺少 CI 的 stub 依赖，未在本轮处理 |
+
+收口条件：上表全部转为 DONE 且对应 CI 作业在 `dev` 上实测为 success，才可称"CI 全绿"。任何单项通过、PR 合并或本地定向测试都不构成该结论。
+
