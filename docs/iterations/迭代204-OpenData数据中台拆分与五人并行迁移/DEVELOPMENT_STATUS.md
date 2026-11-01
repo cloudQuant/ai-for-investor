@@ -1319,6 +1319,11 @@ after : 9143 collected, 0 errors (24 deselected)
 
 **报告证据 vector 首个增量（[#229](https://github.com/cloudQuant/ai-for-investor/pull/229)，`cbd4ca930`）。** 迭代计划的 E03-04/05、E06-03 要求"报告只可引用有持久证据的 vector"并在保存前重验。此前 `_build_and_save_report` 完全没有来源记录。本次加入：冻结的 `StockDailyReportEvidence`/`Vector`（严格校验 dataset/source/instrument/market/publication/sequence/content+contract hash/UTC 时间/principal/grant 版本/有效期/purpose，并拒绝重复与 receipt 不一致）、保存前逐条 `revalidate` 的闸门、`evidence_vector_json` 列与迁移 `20261101_stock_analysis_report_evidence_vector`（单一 head），22 项测试通过、仓库级 mypy 保持 0。**重要边界**：**尚无生产者接线**——没有任何真实任务会构造并提交该 vector，因此这道闸门在真实运行中不会被触发；它让要求"可实现且已测试"，**不是"已满足"**。
 
+### Wave 16 追加二：E2E 第二个成因修复与单测债务的首轮收敛
+
+- **E2E [#222](https://github.com/cloudQuant/ai-for-investor/pull/222) → [#234](https://github.com/cloudQuant/ai-for-investor/pull/234)**（`409e3d398`）：剩余那个 503 不是"测试太严"，而是**真实的集成缺陷**——面板只读 `data.detail.code`，而 API 错误中间件把 FastAPI 的 `detail` 重新包成了 **`details`**，所以"未配置 operator"的状态从未渲染，页面一直落到通用的"不可用"文案。修好读取（两个信封都接受）后，spec 的豁免被收得很窄：只有 **503 + 精确的两个 API 路径 + 报文里 `OPERATOR_NOT_CONFIGURED`** 才被排除，且随后必须断言 `[data-test="operator-list-error"]` 的"未配置"文案；其他 5xx/401/403 仍然失败。本地 Chromium：**89 run → 89 passed / 0 failed / 0 did not run**（此前 63/1/25）。**未验证**：Firefox/WebKit/Mobile 未本地运行、已配置(200)分支需要真实 deployment JSON、`CI=true` 重试未演练——所以证据是"成因已修"，不是"四个作业已绿"。
+- **Backend 单测第一轮（[#233](https://github.com/cloudQuant/ai-for-investor/pull/233)，`97adc8017`）**：这批工作来自一个跑满回合上限的子代理，我把它的未提交工作树抢救到新分支、补跑 lint/format 并**逐项复验**后才合并（属于"审阅后抢救"，不是"代理自述"）。核心内容：陈旧 direct-order 测试重写到 managed-paper 合同（两条旧测试换成三条更强的新测试，含 operation-id 要求）、`get_simulation_portfolio_overview` 的真实缺陷修复、paper/portfolio API 测试改用依赖覆盖、AI research 部署 fixture、SDK 导入守卫。全量实测：**183 failed → 47 failed**（8934 passed / 215 skipped）。**作业仍红**，剩余 47 项已按文件聚类交给下一波。
+
 **流程教训**：`dev` 只接受 `feature|fix|docs|refactor|test` 前缀，`feat/*` 会被治理门禁拒绝（我因此重开过一次 PR）；治理门禁若在作者自审提交前跑完会"假失败"，需要重新触发一次。
 
 
