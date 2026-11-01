@@ -10,7 +10,6 @@ Tests:
     - Log directory lookup
 """
 
-import asyncio
 import json
 import os
 import stat
@@ -259,13 +258,23 @@ class TestLiveTradingManagerInitialization:
         assert _should_restore_manual_gateways() is False
         mock_start_restore.assert_not_called()
 
-    def test_recovery_reacquires_gateway_without_spawning_strategy_process(
+    def test_recovery_skips_retired_manager_owned_gateway_for_surviving_instance(
         self, monkeypatch, tmp_path
     ):
+        """Boot recovery must not recreate the retired manager-owned Gateway.
+
+        A surviving live instance whose execution mode defaults to ``live``
+        has no service-v2 owner grant, so recovery leaves the record alone:
+        no Gateway runtime is acquired and no replacement strategy process is
+        spawned.  Service-v2 executions own their own Gateway lifecycle.
+        """
+        from app.services.live_trading import manager as manager_module
+
         manager = LiveTradingManager.__new__(LiveTradingManager)
         manager._gateway_lock = threading.RLock()
         manager._gateways = {}
         manager._instance_gateways = {}
+        manager._processes = {}
 
         strategy_dir = tmp_path / "strategy"
         strategy_dir.mkdir()
@@ -279,6 +288,7 @@ class TestLiveTradingManagerInitialization:
         }
         acquired: list[tuple[str, Path]] = []
 
+        monkeypatch.delenv(manager_module.SERVICE_EXECUTION_PROFILE_MAP_ENV, raising=False)
         monkeypatch.setattr(manager, "list_instances", lambda: [instance])
         monkeypatch.setattr(
             manager,
@@ -290,7 +300,9 @@ class TestLiveTradingManagerInitialization:
 
         manager._restore_running_instance_gateways()
 
-        assert acquired == [("surviving-instance", strategy_dir)]
+        assert acquired == []
+        assert manager._gateways == {}
+        assert manager._processes == {}
 
 
 def test_query_instance_asset_specs_merges_gateway_last_price():
@@ -1852,7 +1864,8 @@ class TestStartInstance:
     async def test_start_instance_success(self):
         """Test successful instance start.
 
-        Verifies that an instance can be started and
+        Verifies that a simulation instance (the direct-start mode that does
+        not need a trusted service-v2 execution profile) can be started and
         its status is updated.
         """
         with patch("app.services.live_trading_manager._load_instances") as mock_load:
@@ -1891,7 +1904,9 @@ class TestStartInstance:
                                     return Mock()
 
                                 mock_create_task.side_effect = _create_task
-                                result = await manager.start_instance("inst1")
+                                result = await manager.start_instance(
+                                    "inst1", execution_mode="simulation"
+                                )
 
                                 assert result["status"] == "running"
                                 assert result["pid"] == 12345
@@ -2022,7 +2037,18 @@ class TestStartInstance:
                         assert mock_exec.call_args.kwargs["env"] == gateway_env
 
     @pytest.mark.asyncio
-    async def test_start_stop_instance_real_subprocess_gateway_smoke(self, tmp_path):
+    async def test_start_instance_live_without_service_profile_fails_before_spawning(
+        self, tmp_path, monkeypatch
+    ):
+        """A live start without a trusted service profile must fail closed.
+
+        The manager-owned legacy Gateway runtime is retired: a plain instance
+        record may not spawn a strategy subprocess, acquire a Gateway runtime,
+        or leave the instance marked running.  The launch is rejected at the
+        service-profile boundary instead.
+        """
+        from app.services.live_trading import manager as manager_module
+
         instances = {
             "inst1": {
                 "strategy_id": "test_strategy",
@@ -2032,108 +2058,27 @@ class TestStartInstance:
         }
         strategy_dir = tmp_path / "test_strategy"
         strategy_dir.mkdir()
-        env_file = strategy_dir / "env.json"
-        run_py = strategy_dir / "run.py"
-        run_py.write_text(
-            "\n".join(
-                [
-                    "import json",
-                    "import os",
-                    "import time",
-                    "from pathlib import Path",
-                    "",
-                    "Path('env.json').write_text(",
-                    "    json.dumps(",
-                    "        {",
-                    "            'BT_STORE_PROVIDER': os.environ.get('BT_STORE_PROVIDER'),",
-                    "            'BT_GATEWAY_COMMAND_ENDPOINT': os.environ.get('BT_GATEWAY_COMMAND_ENDPOINT'),",
-                    "            'BT_GATEWAY_EVENT_ENDPOINT': os.environ.get('BT_GATEWAY_EVENT_ENDPOINT'),",
-                    "            'BT_GATEWAY_MARKET_ENDPOINT': os.environ.get('BT_GATEWAY_MARKET_ENDPOINT'),",
-                    "            'BT_GATEWAY_ACCOUNT_ID': os.environ.get('BT_GATEWAY_ACCOUNT_ID'),",
-                    "            'BT_GATEWAY_EXCHANGE_TYPE': os.environ.get('BT_GATEWAY_EXCHANGE_TYPE'),",
-                    "            'BT_GATEWAY_ASSET_TYPE': os.environ.get('BT_GATEWAY_ASSET_TYPE'),",
-                    "            'BT_GATEWAY_START_LOCAL_RUNTIME': os.environ.get('BT_GATEWAY_START_LOCAL_RUNTIME'),",
-                    "        }",
-                    "    ),",
-                    "    encoding='utf-8',",
-                    ")",
-                    "time.sleep(30)",
-                ]
-            ),
-            encoding="utf-8",
-        )
+        (strategy_dir / "run.py").write_text("print('ok')\n", encoding="utf-8")
 
-        config = MagicMock(
-            runtime_name="ctp-future-acc-1",
-            command_endpoint="ipc://command",
-            event_endpoint="ipc://event",
-            market_endpoint="ipc://market",
-            account_id="acc-1",
-            exchange_type="CTP",
-            asset_type="FUTURE",
-        )
-        runtime = Mock()
-        runtime.running = True
-        runtime.health = SimpleNamespace(
-            state="running",
-            market_connection="connected",
-            trade_connection="connected",
-            recent_errors=[],
-        )
-        runtime_cls = Mock(return_value=runtime)
-        launch = {
-            "config": config,
-            "runtime_cls": runtime_cls,
-            "runtime_kwargs": {"account_id": "acc-1"},
-        }
+        monkeypatch.delenv(manager_module.SERVICE_EXECUTION_PROFILE_MAP_ENV, raising=False)
+        with (
+            patch("app.services.live_trading_manager._load_instances", return_value=instances),
+            patch("app.services.live_trading_manager._save_instances"),
+            patch("app.services.live_trading_manager._find_latest_log_dir", return_value=None),
+        ):
+            manager = LiveTradingManager()
+            with (
+                patch.object(manager, "_resolve_strategy_dir", return_value=strategy_dir),
+                patch("asyncio.create_subprocess_exec") as create_subprocess,
+            ):
+                with pytest.raises(ValueError, match="SERVICE_EXECUTION_PROFILE_REQUIRED"):
+                    await manager.start_instance("inst1")
 
-        created_tasks = []
-        original_create_task = asyncio.create_task
-
-        def _create_task(coro):
-            task = original_create_task(coro)
-            created_tasks.append(task)
-            return task
-
-        with patch("app.services.live_trading_manager._load_instances", return_value=instances):
-            with patch("app.services.live_trading_manager._save_instances"):
-                with patch(
-                    "app.services.live_trading_manager._find_latest_log_dir", return_value=None
-                ):
-                    manager = LiveTradingManager()
-                    with patch.object(manager, "_resolve_strategy_dir", return_value=strategy_dir):
-                        with patch.object(manager, "_build_gateway_launch", return_value=launch):
-                            with patch("asyncio.create_task", side_effect=_create_task):
-                                started = await manager.start_instance("inst1")
-                                assert started["status"] == "running"
-                                assert manager._gateways["ctp-future-acc-1"]["ref_count"] == 1
-
-                                for _ in range(40):
-                                    if env_file.exists():
-                                        break
-                                    await asyncio.sleep(0.05)
-
-                                assert env_file.is_file()
-                                env_data = json.loads(env_file.read_text("utf-8"))
-                                assert env_data["BT_STORE_PROVIDER"] == "ctp_gateway"
-                                assert env_data["BT_GATEWAY_COMMAND_ENDPOINT"] == "ipc://command"
-                                assert env_data["BT_GATEWAY_EVENT_ENDPOINT"] == "ipc://event"
-                                assert env_data["BT_GATEWAY_MARKET_ENDPOINT"] == "ipc://market"
-                                assert env_data["BT_GATEWAY_ACCOUNT_ID"] == "acc-1"
-                                assert env_data["BT_GATEWAY_EXCHANGE_TYPE"] == "CTP"
-                                assert env_data["BT_GATEWAY_ASSET_TYPE"] == "FUTURE"
-                                assert env_data["BT_GATEWAY_START_LOCAL_RUNTIME"] == "0"
-
-                                stopped = await manager.stop_instance("inst1")
-                                assert stopped["status"] == "stopped"
-                                assert "ctp-future-acc-1" not in manager._gateways
-
-        runtime_cls.assert_called_once_with(config, account_id="acc-1")
-        runtime.start_in_thread.assert_called_once()
-        runtime.stop.assert_called_once()
-
-        for task in created_tasks:
-            await asyncio.wait_for(task, timeout=5)
+        create_subprocess.assert_not_called()
+        assert manager._gateways == {}
+        assert manager._processes == {}
+        assert instances["inst1"]["status"] == "error"
+        assert "SERVICE_EXECUTION_PROFILE_REQUIRED" in instances["inst1"]["error"]
 
     @pytest.mark.asyncio
     async def test_start_instance_already_running(self):
@@ -2257,6 +2202,9 @@ class TestStopInstance:
                         # proc.terminate()/kill() are sync; proc.wait() is async.
                         mock_proc = MagicMock()
                         mock_proc.returncode = None
+                        # A MagicMock attribute would be truthy and route the
+                        # stop through the service-execution graceful path.
+                        mock_proc._bt_service_execution = False
                         mock_proc.wait = AsyncMock()
                         mock_proc.terminate = Mock()
                         mock_proc.kill = Mock()
@@ -2322,8 +2270,9 @@ class TestStartAllStopAll:
                     ):
                         manager = LiveTradingManager()
 
-                        # Mock start_instance - one succeeds, one fails
-                        async def mock_start(iid):
+                        # Mock start_instance - one succeeds, one fails.  The
+                        # manager's batch callback forwards launch keywords.
+                        async def mock_start(iid, **_kwargs):
                             if iid == "inst1":
                                 return {"status": "running"}
                             else:
