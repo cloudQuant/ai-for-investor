@@ -161,7 +161,10 @@
       </article>
     </div>
 
-    <section class="legacy-gateway-history" data-test="legacy-gateway-history">
+    <section
+      class="legacy-gateway-history"
+      data-test="legacy-gateway-history"
+    >
       <h3>{{ t('gatewayStatus.legacyHistoryTitle') }}</h3>
       <p>{{ t('gatewayStatus.legacyHistoryDesc') }}</p>
       <p
@@ -179,7 +182,10 @@
       >
         {{ t('gatewayStatus.legacyHistoryEmpty') }}
       </div>
-      <div v-else class="legacy-gateway-list">
+      <div
+        v-else
+        class="legacy-gateway-list"
+      >
         <article
           v-for="record in legacyGateways"
           :key="record.gateway_key"
