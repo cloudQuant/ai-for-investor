@@ -1416,3 +1416,76 @@ clean worktree 全量 `make test-cov`：**35307 passed / 247 skipped / 73 failed
 #### 6. OpenData gate 仍未整链通过
 
 11 个成员在 CI 通过；`acceptance-probe-check` 仍红：**20 个 stale-proof 格 + 14 条新棘轮条目**。已定位的根因之一是 AC-16|05 要求零依赖冻结基线 `recorded_findings == 0`，而迭代新增的股票日线模块合法携带 **9 处上游来源身份字符串**（`Literal["akshare.daily"]`、`ADAPTER_ID` 等，已逐条复核登记）。抹平它只有改产品身份/判据或由 owner 裁定 `--sync-ratchet` 两条路，本轮不自行处理。
+
+---
+
+### Wave 19：AFI 矩阵与依赖面收口、OpenData gate 的「PR 形状 ≠ push 形状」根因、test-cov 首轮
+
+#### 1. AFI：矩阵腿与 akshare 声明边界
+
+- **[#253](https://github.com/cloudQuant/ai-for-investor/pull/253)（合入 `2ddcd9f92`）**：unit-test 三条腿此前只在 canonical Python 上装 lock，3.10/3.12 用自由解析跑 62 分钟后红。改为**每条腿都装 `config/requirements-dev.lock`**，并把矩阵收成 `3.11 / 3.12`——3.10 不是被"跳过"，而是 lock 在它上面无法解析（`akshare==1.18.97` 与 `contourpy==1.3.3` 都声明 `Requires-Python >=3.11`），一条只测解析器的腿没有判据价值。合入前 py3.11 腿实测 **8940 passed / 234 skipped**，41 项检查全绿。
+- **[#254](https://github.com/cloudQuant/ai-for-investor/pull/254)**：把 `akshare` 的声明范围收成 `>=1.18.96,<1.19`。理由是三个 data_fetch 模块在 import 期引用上游内部路径（`akshare.forex.forex_em`、`akshare.stock_feature.stock_sns_sseinfo`、`...stock_technology_ths`），而 1.20.21 的 wheel 里 `akshare/forex/` 与 `akshare/stock_feature/` 已不存在——这正是 nightly（`41290727588`，job `124801241435`：`1 failed / 7916 passed / 1 error`，`ModuleNotFoundError: No module named 'akshare.stock_feature'`）的成因。**同一 PR 还要跟着改 `scripts/ci/tests/test_check_deps_sync.py`**：那份契约测试钉住了未封顶的 `>=1.18.96` 字面量，漂移样本也按同一字面量做字符串替换，范围一收它俩同时失效（`Check - Deps Sync` = `2 failed, 7 passed`）。本地 `pytest scripts/ci/tests/test_check_deps_sync.py -q` **10 passed**。
+- **治理门禁的一课**：#254 声明 R2 被判红——`matched_rules` 指出 `**/pyproject.toml` 与 `**/requirements*.txt` 命中 `r3-dependency-and-security-inputs`，**路径推导的风险等级不能被作者的较低声明降级**。改成 R3 后同头 SHA 的 Governance Gate 转绿。
+
+#### 2. OpenData gate：探针的红格子集合随运行变化——三个假设依次被自己的数据证伪
+
+`acceptance-probe-check` 在不同的 CI 运行里量出**不同的红格子集合**，于是任何一次冻结都可能对下一次运行不成立。本轮为了搞清它，连着证伪了自己三个假设：
+
+| 观测 | 当时的形状读数 | 结果 |
+| --- | --- | --- |
+| run `41323810828`（PR，默认 merge ref） | `git rev-list --count HEAD` = **3**，`is-shallow-repository` = **true** | AC-16\|09 gap（`scanner=972, fragment_population=972` 明明相等，只被 shallow 旗标判死）；AC-19\|02 把浅边界提交当成"档案今日首次入库"；AC-17\|03/05 额外产生 `judge` 命中 |
+| run `41321297008`（同一分支的 workflow_dispatch，**跳过 `make gate`**） | 完整历史 | 同一棵树量出 **2 judge + 18 stale-proof**，AC-16\|09、AC-19\|02 无命中 |
+| 本地 clean worktree（detached 分支头，安静树） | 完整历史 | AC-16\|09 **proven**、AC-19\|02 **proven**、AC-17\|03/05 gap（与已钉文本一致） |
+| run `41328176599`（假设一：改成 `ref: <PR head sha>`） | checkout 后仍 `HEAD=3, shallow=true` | **假设一被证伪**：SHA checkout 与 merge ref 一样 |
+| run `41332032552` / `41335236551`（假设二：改成 `ref: github.head_ref`，并在 `make gate` 前 `--unshallow`） | `after-checkout shallow=false head_commits=976`、`before-gate shallow=false head_commits=976`、`after-gate shallow=true head_commits=5` | **假设二被证伪**：分支 checkout 是完整的，gate **开始之前**历史也是完整的；截断发生在 `make gate` **运行期间**，所以 gate 前的补全什么也没保住（该步骤已删除） |
+| run `41335493770`（假设三：形状决定读数——#166 的 PR 跑，用的是 dev 的原 ci.yml 与默认 merge ref） | 默认 merge ref | **假设三被证伪**：AC-16\|09 **proven**、AC-19\|02 **proven**。同一个 merge-ref 形状，一次读出完整、一次读出截断 |
+
+排除过程留下的两条硬事实：
+
+1. **不是 checkout 形状**。#163 的跑与 #166 的跑用的是同一类 checkout（merge ref/branch 都出现过 proven 与 gap 两种结果），而 `before-gate` 与 `after-gate` 之间仓库自己变了形。
+2. **不是那 11 个前置成员**。在独立克隆里按 gate 顺序逐个跑 `brand-check zero-dep-check secret-check ledger-check evidence-traceability js-points-check loguru-check a2-check published-openapi-check quality-ratchet public-api-quality`，**全部 rc=0 且 `shallow=false head=972` 自始至终不变**。所以变形发生在 `acceptance-probe-check` 自己的运行里，且只在 CI 环境（本地没有 Docker，AC-21 那片 owned-MySQL 叶子跑不起来）——嫌疑集中在探针为若干格子起的 pytest/docker 侧效应，尚未定位到具体一行。
+
+因此本轮对「入账」给出**修正后的结论**（比前几轮更保守）：
+
+- 棘轮的 finding 文本本身是稳定的（`stale_cell_finding()` 只拼 item 与被读的**时刻面名单**，不拼实时数字），所以 10 个稳定格子的入账是有意义、可复现的登记。
+- 但 **AC-16|09、AC-19|02（以及只在部分运行出现的 AC-17|03/05 `judge`）不能靠冻结解决**：它们取决于"探针运行期间仓库是否被截断"这一运行期事实。把它们钉进基线，下一次它们读出 proven 时又会撞上「收口未重钉」而红；不钉则随时可能冒出新增。**先修仪器（让历史面量一个受控快照，或找到探针内部的截断源），再谈冻结。**
+- 另注：`#164` 的 20 条来自**跳过 `make gate` 的派生运行**，而真实 gate 运行量出的是「10 钉中 + 4～14 新增」——这正是「量一个不跑 gate 的形状，然后期望跑 gate 的运行匹配」的失败，不是某次 PR 的偶发。
+
+在同一棵树上第四次量：本地独立克隆按 `--gate-check` 完整跑完（130 格全部走到判定，945 条 break 各施加一次，反事实面 129/130），结果又是**另一组读数**——`agrees=109 / stale-proof=21 / 命中 10 / 新增 12`（AC-13|06、AC-16|05、AC-16|06、AC-18|01、AC-18|03、AC-1|08 judge+stale-proof、AC-1|09、AC-4|01、AC-5|03、AC-8|02、§6|03），而 AC-16|09、AC-19|02 仍读 **proven**，全程 `shallow=false head=972` 未变形。
+
+于是同一棵树共有**四种读数剖面**：跳过 gate 的派生跑（20）、本地完整 `--gate-check`（21 + 12 新增）、CI gate 跑（20 stale-proof + 14 新增）、以及 #166 那次 CI gate 跑（17，且 AC-16|09/AC-19|02 为 proven）。这把结论从「形状没统一」收紧为「**仪器对环境不确定**」：AC-13|06/AC-18|03/§6|03 只在缺 MySQL/Docker 的机器上红，AC-16|09/AC-19|02 只在 CI 的 gate 运行里红，而红格子的集合还取决于同一轮里前面跑过什么。任何一次 `--sync-ratchet` 冻结的都是这四种剖面之一，因此它不可能让后面的任何一种运行变绿。#163 的 sync 入口仍然保留——它是记录当前剖面的工具，但**入账之前必须先让读数确定**（把历史面与外部依赖面改为在受控快照/显式能力位下判定），否则冻结只是把不确定性挪到下一次运行。
+
+- **[#163](https://github.com/cloudQuant/opendata/pull/163)**：`sync_acceptance_ratchet` 手动派生入口（只打印 diff 并上传 artifact，CI 永不提交基线）；PR 跑改测 head 分支（这是**树**的忠实性，与历史无关）；并在 checkout 后与 gate 后各打印一次形状——这两行打印就是上面全部结论的来源。
+- **[#164](https://github.com/cloudQuant/opendata/pull/164)**：owner 裁定的棘轮入账（items 10→18、pins 10→20，无删除）。按上面的修正，它**尚不能作为可让 gate 转绿的成品合入**：需要在真实 gate 形状下重测，或先修历史面。已在本 PR 上留下完整测量记录，等属主决定是"修仪器后重钉"还是"把 probe 成员降级为 advisory"。
+
+#### 3. OpenData `test-cov`：首轮可归因失败与一次自查
+
+在只读 clean worktree 里用 CI 的安装 argv 复现 `make test-cov`：**73 failed / 18 errors / 35307 passed / 247 skipped，8:55，覆盖率 87.52%**——阈值 `--cov-fail-under=84` 不是阻塞项。[#165](https://github.com/cloudQuant/opendata/pull/165) 只修可归因的五类：
+
+- `curl_cffi>=0.7.0` 会解析到 0.17.0，而 yfinance provider 用 `_GOVERNED_CURL_CFFI_VERSIONS = {0.13.0, 0.16.3}` 精确 fail-closed → 27 项红。钉到已评审的 0.16.3 后 `-k yfinance` **434 passed**。
+- `dev` extra 少了 `pytest-timeout`，`--strict-markers` 下 `@pytest.mark.timeout` 在每个 xdist worker 收集期报错 → 那 18 个 error。
+- 两处把 `os.fstat` 换成缺 `st_size` 的假对象，pytest 自己的 capture teardown 读它。
+- 三个 sina worker 用例要求 cwd 在仓库之外，`make` 从根目录跑时永远不满足 → 改为 `monkeypatch.chdir(tmp_path)`。
+- 「启动不建表」守卫解析的是 `main.lifespan`，而 `create_all` 已移进 `_existing_lifespan`，于是它量到 0 个调用点却断言 1 个——**这一条是判据自己失效**（与 AC-8\|02 的读数直接相关）。
+- 一个参数化行在收集期冻结 `datetime.now()`，比该行的 `observed_at_utc` 还早，先撞了顺序检查。
+
+**这一轮也暴露了我自己的验证盲区**：#165 首跑在**第二个成员**就红——`FAIL: reference policy is unusable: stale sha256: pyproject.toml`。`pyproject.toml` 在引用策略里按 path+sha256 双钉，改它就必须同 PR 重钉摘要并写明理由；我在本地只跑了 pytest 与 ruff，没跑 `zero-dep-check`。补钉后本地 `verify_no_akshare.py`（census 仍 741、findings 仍 9）与 `check_brand.py` 均绿。
+
+#### 4. OpenData batch5 身份刻度的两处过期钉（[#166](https://github.com/cloudQuant/opendata/pull/166)）
+
+31 个逐文件摘要里只有 2 个失配，`git diff --numstat 1ad2aee0 HEAD` 证明净漂移是 **+1 行 / 0 删除、两行都是注释**（`typing.cast` 返回第二个实参，域 id、绑定、`__all__` 都没动）。按仓库既有惯例**就地**入账 `yfinance_cast_comment_rebase`（不新造 `snapshot_id`），并保留 175 个仍写着旧摘要的 `docs/evidence` 文件（`C101/claims.merged.json` 一个文件就 100 处）——那是当轮的人工评审凭证，不是活体刻度，也没有 gate 成员读它。修复后四个文件 **118 passed**（原 7 failed / 111 passed）。
+
+#### 5. 18 个已冻结格子的性质分类（决定后续投入用）
+
+读 `measure_*`/`judge_*` 后的判断，不含臆测：
+
+- **纯代码面可收口**：AC-4\|01、AC-1\|03、AC-8\|02、AC-17\|02、AC-17\|03、AC-17\|05、AC-17\|08、AC-18\|01、AC-1\|09；
+- **必须实连外部系统或重跑证据轮**：AC-11\|04（真实 MySQL 仓库 EXPLAIN）、AC-16\|07（干净 venv 集成重跑）、AC-5\|07 / AC-17\|06（≤24h 的 bandit 档案、随 HEAD 漂移的覆盖率钢印——这类是"可续期"而非"永久闭合"）；
+- **属主/产品决策**：AC-1\|08（§1 权利登记表 35 个引用源目前 0 行）、AC-5\|03、AC-16\|05/06（9 处上游来源身份字面量）；
+- **判据自身不可满足（`judge` 族）**：AC-1\|08 的 `repair.dated="*rows"` 继承了 `rows=0`、AC-16\|07 的 `repair` 漏了 `archive_self_written`、AC-17\|02 的 `repair` 漏了 `raw_findings`——修探针不等于收口内容。
+
+**留给属主的一个真实问题**（本轮刻意没有自动"修好"）：`47ed8e59` 把 README 的数据免责声明从「本项目不构成任何投资建议」改成限定句式，未留理由，而 `docs/data-rights-registry.md` §4 标题写着「与 README 同步维护」却仍是全称句式——AC-16\|08 读出 gap 正是这个分叉。恢复全称能让判据变绿，但那是法务口径的改动，不是我能替属主定的。
+
+#### 6. 共同非声明
+
+本轮全部结论属 **code/offline 与 CI 平面**：#253/#254/#165/#166 是依赖声明、矩阵与测试刻度的收口；#163/#164 让门禁**可判**，其中 #164 的 20 条入账是 owner 裁定的"已知红"登记，**不是 proven**，也不构成真实源、部署或自然周期验收。真实源取数与权利/保留、生产 MySQL 与备份恢复、影子对账、单写者切换、全 A 股权威域与逐标的完整历史、授权签发/吊销审计、报告门禁的生产适配器仍按前几轮的口径保持未闭合。
