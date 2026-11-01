@@ -240,11 +240,11 @@ class SdkServiceReadSession:
 
     def _expected_binding_specs(self) -> set[tuple[str, str, frozenset[str]]]:
         expected: set[tuple[str, str, frozenset[str]]] = set()
-        for binding in self._account_bindings.values():
+        for account_binding in self._account_bindings.values():
             expected.add(
                 (
-                    binding.mount,
-                    binding.scope_ref,
+                    account_binding.mount,
+                    account_binding.scope_ref,
                     frozenset({"account.snapshot", "account.head"}),
                 )
             )
@@ -253,22 +253,58 @@ class SdkServiceReadSession:
             order_query_operations.add("orders.query")
         if self._account_book_bindings:
             order_query_operations.add("execution.account_books.query")
-        for binding in self._order_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
-        for binding in self._account_book_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset(order_query_operations)))
-        for binding in self._order_submit_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
-        for binding in self._paper_submit_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset({"orders.submit"})))
-        for binding in self._paper_legacy_import_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, PAPER_LEGACY_IMPORT_OPERATIONS))
-        for binding in self._approved_target_bindings.values():
+        for order_binding in self._order_bindings.values():
             expected.add(
-                (binding.mount, binding.scope_ref, frozenset({"orders.submit_approved_target"}))
+                (order_binding.mount, order_binding.scope_ref, frozenset(order_query_operations))
             )
-        for binding in self._monitor_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, frozenset({"telemetry.snapshot"})))
+        for account_book_binding in self._account_book_bindings.values():
+            expected.add(
+                (
+                    account_book_binding.mount,
+                    account_book_binding.scope_ref,
+                    frozenset(order_query_operations),
+                )
+            )
+        for order_submit_binding in self._order_submit_bindings.values():
+            expected.add(
+                (
+                    order_submit_binding.mount,
+                    order_submit_binding.scope_ref,
+                    frozenset({"orders.submit"}),
+                )
+            )
+        for paper_submit_binding in self._paper_submit_bindings.values():
+            expected.add(
+                (
+                    paper_submit_binding.mount,
+                    paper_submit_binding.scope_ref,
+                    frozenset({"orders.submit"}),
+                )
+            )
+        for paper_legacy_binding in self._paper_legacy_import_bindings.values():
+            expected.add(
+                (
+                    paper_legacy_binding.mount,
+                    paper_legacy_binding.scope_ref,
+                    PAPER_LEGACY_IMPORT_OPERATIONS,
+                )
+            )
+        for approved_target_binding in self._approved_target_bindings.values():
+            expected.add(
+                (
+                    approved_target_binding.mount,
+                    approved_target_binding.scope_ref,
+                    frozenset({"orders.submit_approved_target"}),
+                )
+            )
+        for monitor_binding in self._monitor_bindings.values():
+            expected.add(
+                (
+                    monitor_binding.mount,
+                    monitor_binding.scope_ref,
+                    frozenset({"telemetry.snapshot"}),
+                )
+            )
         analytics_operations = frozenset(
             {
                 "analysis.input_upload",
@@ -277,14 +313,32 @@ class SdkServiceReadSession:
                 "analysis.cancel",
             }
         )
-        for binding in self._portfolio_analytics_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, analytics_operations))
-        for binding in self._risk_policy_budget_bindings.values():
-            expected.add((binding.mount, binding.management_scope_ref, binding.operations))
-            for scope_ref in binding.member_scope_refs.values():
-                expected.add((binding.mount, scope_ref, binding.operations))
-        for binding in self._risk_account_policy_bindings.values():
-            expected.add((binding.mount, binding.scope_ref, binding.operations))
+        for portfolio_analytics_binding in self._portfolio_analytics_bindings.values():
+            expected.add(
+                (
+                    portfolio_analytics_binding.mount,
+                    portfolio_analytics_binding.scope_ref,
+                    analytics_operations,
+                )
+            )
+        for risk_policy_binding in self._risk_policy_budget_bindings.values():
+            expected.add(
+                (
+                    risk_policy_binding.mount,
+                    risk_policy_binding.management_scope_ref,
+                    risk_policy_binding.operations,
+                )
+            )
+            for scope_ref in risk_policy_binding.member_scope_refs.values():
+                expected.add((risk_policy_binding.mount, scope_ref, risk_policy_binding.operations))
+        for risk_account_binding in self._risk_account_policy_bindings.values():
+            expected.add(
+                (
+                    risk_account_binding.mount,
+                    risk_account_binding.scope_ref,
+                    risk_account_binding.operations,
+                )
+            )
         return expected
 
     def _validate_registered_bindings(self) -> None:
@@ -300,9 +354,11 @@ class SdkServiceReadSession:
                 "active runtime bindings do not exactly match configured read bindings",
             )
 
-        for account_ref, configured in self._account_bindings.items():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            scope = binding.scope
+        for account_ref, account_config in self._account_bindings.items():
+            account_registered = self._one_registered_binding(
+                account_config.mount, account_config.scope_ref
+            )
+            scope = account_registered.scope
             if getattr(
                 scope, "account_ref", None
             ) != account_ref or self._scope_has_unbounded_account_alias(scope):
@@ -311,25 +367,31 @@ class SdkServiceReadSession:
                     "account binding scope is not exact for its configured account",
                 )
 
-        for configured in self._order_bindings.values():
-            self._one_registered_binding(configured.mount, configured.scope_ref)
+        for order_config in self._order_bindings.values():
+            self._one_registered_binding(order_config.mount, order_config.scope_ref)
 
-        for configured in self._order_submit_bindings.values():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+        for order_submit_config in self._order_submit_bindings.values():
+            order_submit_registered = self._one_registered_binding(
+                order_submit_config.mount, order_submit_config.scope_ref
+            )
             if not self._scope_is_manual_order_scope(
-                binding.scope, configured.account_ref, configured.manual_book_ref
+                order_submit_registered.scope,
+                order_submit_config.account_ref,
+                order_submit_config.manual_book_ref,
             ):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "manual-order scope does not match its configured account and book",
                 )
 
-        for configured in self._paper_submit_bindings.values():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            scope = binding.scope
+        for paper_submit_config in self._paper_submit_bindings.values():
+            paper_submit_registered = self._one_registered_binding(
+                paper_submit_config.mount, paper_submit_config.scope_ref
+            )
+            scope = paper_submit_registered.scope
             try:
-                configured.paper_owner_domain.validate_binding(
-                    configured.wire_scope, configured.execution_scope
+                paper_submit_config.paper_owner_domain.validate_binding(
+                    paper_submit_config.wire_scope, paper_submit_config.execution_scope
                 )
             except Exception:
                 raise ServiceReadSessionError(
@@ -337,13 +399,13 @@ class SdkServiceReadSession:
                     "paper owner domain no longer validates against its trusted scope",
                 ) from None
             if (
-                type(scope) is not type(configured.wire_scope)
-                or scope != configured.wire_scope
+                type(scope) is not type(paper_submit_config.wire_scope)
+                or scope != paper_submit_config.wire_scope
                 or not self._scope_is_paper_order_scope(
                     scope,
-                    configured.account_ref,
-                    configured.execution_domain_ref,
-                    configured.strategy_ref,
+                    paper_submit_config.account_ref,
+                    paper_submit_config.execution_domain_ref,
+                    paper_submit_config.strategy_ref,
                 )
             ):
                 raise ServiceReadSessionError(
@@ -351,10 +413,12 @@ class SdkServiceReadSession:
                     "paper submit scope does not match its configured owner domain",
                 )
 
-        for configured in self._paper_legacy_import_bindings.values():
-            paper = configured.paper_binding
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            scope = binding.scope
+        for legacy_import_config in self._paper_legacy_import_bindings.values():
+            paper = legacy_import_config.paper_binding
+            legacy_import_registered = self._one_registered_binding(
+                legacy_import_config.mount, legacy_import_config.scope_ref
+            )
+            scope = legacy_import_registered.scope
             try:
                 paper.paper_owner_domain.validate_binding(paper.wire_scope, paper.execution_scope)
             except Exception:
@@ -365,8 +429,8 @@ class SdkServiceReadSession:
             if (
                 type(scope) is not type(paper.wire_scope)
                 or scope != paper.wire_scope
-                or configured.scope_ref != paper.scope_ref
-                or configured.legacy_account_id != paper.legacy_account_id
+                or legacy_import_config.scope_ref != paper.scope_ref
+                or legacy_import_config.legacy_account_id != paper.legacy_account_id
                 or not self._scope_is_paper_order_scope(
                     scope,
                     paper.account_ref,
@@ -379,64 +443,76 @@ class SdkServiceReadSession:
                     "legacy import scope does not match its trusted paper owner",
                 )
 
-        for configured in self._approved_target_bindings.values():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
+        for approved_config in self._approved_target_bindings.values():
+            approved_registered = self._one_registered_binding(
+                approved_config.mount, approved_config.scope_ref
+            )
             if not self._scope_is_approved_target_scope(
-                binding.scope,
-                configured.account_ref,
-                configured.strategy_ref,
-                configured.wire_scope,
+                approved_registered.scope,
+                approved_config.account_ref,
+                approved_config.strategy_ref,
+                approved_config.wire_scope,
             ):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "approved-target scope does not match its configured owner binding",
                 )
 
-        for account_ref, configured in self._account_book_bindings.items():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            if not self._scope_is_account_scope(binding.scope, account_ref):
+        for account_ref, account_book_config in self._account_book_bindings.items():
+            account_book_registered = self._one_registered_binding(
+                account_book_config.mount, account_book_config.scope_ref
+            )
+            if not self._scope_is_account_scope(account_book_registered.scope, account_ref):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "account-book scope is not exact for its configured account",
                 )
 
-        for configured in self._monitor_bindings.values():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            scope = binding.scope
+        for monitor_config in self._monitor_bindings.values():
+            monitor_registered = self._one_registered_binding(
+                monitor_config.mount, monitor_config.scope_ref
+            )
+            scope = monitor_registered.scope
             if getattr(
                 scope, "strategy_ref", None
-            ) != configured.strategy_ref or self._scope_has_unbounded_account_alias(scope):
+            ) != monitor_config.strategy_ref or self._scope_has_unbounded_account_alias(scope):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "monitor binding scope does not match its configured strategy",
                 )
 
-        for portfolio_ref, configured in self._portfolio_analytics_bindings.items():
-            binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            if not self._scope_is_portfolio_analytics_scope(binding.scope, portfolio_ref):
+        for portfolio_ref, analytics_config in self._portfolio_analytics_bindings.items():
+            analytics_registered = self._one_registered_binding(
+                analytics_config.mount, analytics_config.scope_ref
+            )
+            if not self._scope_is_portfolio_analytics_scope(
+                analytics_registered.scope, portfolio_ref
+            ):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "analytics scope does not match its configured portfolio",
                 )
 
-        for portfolio_ref, configured in self._risk_policy_budget_bindings.items():
-            if configured.portfolio_ref != portfolio_ref:
+        for portfolio_ref, risk_policy_config in self._risk_policy_budget_bindings.items():
+            if risk_policy_config.portfolio_ref != portfolio_ref:
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "budget selector does not match its configured portfolio",
                 )
             management = self._one_registered_binding(
-                configured.mount, configured.management_scope_ref
+                risk_policy_config.mount, risk_policy_config.management_scope_ref
             ).scope
             if not self._scope_is_budget_management_scope(
-                management, portfolio_ref, frozenset(configured.member_scope_refs)
+                management, portfolio_ref, frozenset(risk_policy_config.member_scope_refs)
             ):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "budget management scope does not match its configured members",
                 )
-            for account_ref, scope_ref in configured.member_scope_refs.items():
-                member = self._one_registered_binding(configured.mount, scope_ref).scope
+            for account_ref, member_scope_ref in risk_policy_config.member_scope_refs.items():
+                member = self._one_registered_binding(
+                    risk_policy_config.mount, member_scope_ref
+                ).scope
                 if not self._scope_is_budget_member_scope(
                     member, portfolio_ref, account_ref, management.execution_domain_ref
                 ):
@@ -445,13 +521,15 @@ class SdkServiceReadSession:
                         "budget member scope does not match its configured account",
                     )
 
-        for account_ref, configured in self._risk_account_policy_bindings.items():
-            if configured.account_ref != account_ref:
+        for account_ref, risk_account_config in self._risk_account_policy_bindings.items():
+            if risk_account_config.account_ref != account_ref:
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "account policy selector does not match its configured account",
                 )
-            scope = self._one_registered_binding(configured.mount, configured.scope_ref).scope
+            scope = self._one_registered_binding(
+                risk_account_config.mount, risk_account_config.scope_ref
+            ).scope
             if not self._scope_is_manual_policy_scope(scope, account_ref):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
@@ -1241,10 +1319,10 @@ class SdkServiceReadSession:
         self._close_failures.extend(failures)
         if failures:
             self._close_succeeded = False
-            error = ServiceReadSessionError(
+            close_error = ServiceReadSessionError(
                 "SERVICE_READ_CLOSE_FAILED",
                 "one or more service-read resources did not close cleanly",
                 failures=tuple(failures),
             )
-            raise error from failures[0].error
+            raise close_error from failures[0].error
         self._close_succeeded = True

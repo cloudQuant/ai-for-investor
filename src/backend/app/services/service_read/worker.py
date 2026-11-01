@@ -494,6 +494,7 @@ class ServiceReadWorker:
             self._signal_future(self._thread_done)
 
     def _dispatch(self, session: ServiceReadSession, request: _Request) -> None:
+        result: Any
         try:
             if request.kind is _Kind.ACCOUNT:
                 result = session.read_account(request.arguments[0], currency=request.arguments[1])
