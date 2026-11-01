@@ -400,13 +400,17 @@ async def start_instance(
                 processes.pop(instance_id, None)
             raise RuntimeError("SERVICE_EXECUTION_START_FAILED") from None
 
+    # ``build_subprocess_env`` enriches ``launch_instance`` (for example with
+    # runtime contract metadata resolved from the broker adapter).  Merge from
+    # that same copy: ``inst`` is the pre-spawn store snapshot and never sees
+    # builder mutations.
     refreshed_inst = inst
     now = instance_timestamp()
     async with _optional_lock(instance_lock):
         latest = load_instances()
         latest_inst = latest.get(instance_id)
         if isinstance(latest_inst, dict):
-            _merge_runtime_contract_metadata(latest_inst, refreshed_inst)
+            _merge_runtime_contract_metadata(latest_inst, launch_instance)
             inst = latest_inst
         else:
             inst = refreshed_inst

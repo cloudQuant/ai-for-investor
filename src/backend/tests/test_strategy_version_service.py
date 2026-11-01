@@ -18,6 +18,57 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 
+async def _seed_owner_versions(*version_specs):
+    """Persist a synthetic owner, strategy, and strategy versions.
+
+    ``VersionControlService`` performs freshness mutations inside a fresh
+    database transaction (see ``_freshness_mutation``), so these tests must
+    seed real rows instead of replacing repositories with mocks.
+    """
+    from app.db.database import async_session_maker
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion
+    from app.models.user import User
+
+    async with async_session_maker() as session:
+        async with session.begin():
+            if await session.get(User, "user_123") is None:
+                session.add(
+                    User(
+                        id="user_123",
+                        username="version-service-owner",
+                        email="version-service-owner@example.invalid",
+                        hashed_password="test-only-not-a-credential",
+                        principal_kind="HUMAN",
+                    )
+                )
+            if await session.get(Strategy, "strat_123") is None:
+                session.add(
+                    Strategy(
+                        id="strat_123",
+                        user_id="user_123",
+                        name="synthetic version strategy",
+                        code="pass",
+                        params={},
+                    )
+                )
+            for spec in version_specs:
+                values = {
+                    "strategy_id": "strat_123",
+                    "branch": "main",
+                    "status": "draft",
+                    "tags": [],
+                    "code": "pass",
+                    "params": {},
+                    "is_active": False,
+                    "is_default": False,
+                    "is_current": False,
+                    "created_by": "user_123",
+                }
+                values.update(spec)
+                session.add(StrategyVersion(**values))
+
+
 class TestVersionControlServiceInitialization:
     """Test service initialization."""
 
@@ -241,24 +292,22 @@ class TestSetVersionDefault:
 
     async def test_set_version_default_success(self):
         """Test successful default version set."""
+        from app.db.database import async_session_maker
+        from app.models.strategy_version import StrategyVersion
         from app.services.strategy.version import VersionControlService
 
+        await _seed_owner_versions({"id": "ver_123", "version_number": 1, "version_name": "v1"})
+
+        # The API injects a session-less service, whose repositories own and
+        # commit their own unit of work.
         service = VersionControlService()
-
-        mock_version = Mock()
-        mock_version.id = "ver_123"
-        mock_version.strategy_id = "strat_123"
-        mock_version.branch = "main"
-        mock_version.created_by = "user_123"
-
-        service.version_repo = AsyncMock()
-        service.version_repo.get_by_id = AsyncMock(return_value=mock_version)
-        service.version_repo.update = AsyncMock(return_value=mock_version)
-        service.version_repo.list = AsyncMock(return_value=[])
-
         result = await service.set_version_default("ver_123", "user_123")
 
         assert result is True
+        async with async_session_maker() as session:
+            persisted = await session.get(StrategyVersion, "ver_123")
+            assert persisted is not None
+            assert persisted.is_default is True
 
     async def test_set_version_default_not_found(self):
         """Test setting non-existent version as default."""
@@ -280,24 +329,21 @@ class TestActivateVersion:
 
     async def test_activate_version_success(self):
         """Test successful version activation."""
+        from app.db.database import async_session_maker
+        from app.models.strategy_version import StrategyVersion
         from app.services.strategy.version import VersionControlService
 
-        service = VersionControlService()
+        await _seed_owner_versions({"id": "ver_123", "version_number": 1, "version_name": "v1"})
 
-        mock_version = Mock()
-        mock_version.id = "ver_123"
-        mock_version.strategy_id = "strat_123"
-        mock_version.branch = "main"
-        mock_version.created_by = "user_123"
-
-        service.version_repo = AsyncMock()
-        service.version_repo.get_by_id = AsyncMock(return_value=mock_version)
-        service.version_repo.update = AsyncMock(return_value=mock_version)
-        service.version_repo.list = AsyncMock(return_value=[])
-
-        result = await service.activate_version("ver_123", "user_123")
+        async with async_session_maker() as session:
+            service = VersionControlService(session=session)
+            result = await service.activate_version("ver_123", "user_123")
 
         assert result is True
+        async with async_session_maker() as session:
+            persisted = await session.get(StrategyVersion, "ver_123")
+            assert persisted is not None
+            assert persisted.is_active is True
 
     async def test_activate_version_not_found(self):
         """Test activating non-existent version."""
@@ -319,33 +365,29 @@ class TestUpdateVersion:
 
     async def test_update_version_success(self):
         """Test successful version update."""
+        from app.db.database import async_session_maker
+        from app.models.strategy_version import StrategyVersion
+        from app.schemas.strategy_version import VersionUpdate
         from app.services.strategy.version import VersionControlService
 
-        service = VersionControlService()
+        await _seed_owner_versions({"id": "ver_123", "version_number": 1, "version_name": "v1"})
 
-        mock_version = Mock()
-        mock_version.id = "ver_123"
-        mock_version.status = "draft"
-        mock_version.created_by = "user_123"
-
-        service.version_repo = AsyncMock()
-        service.version_repo.get_by_id = AsyncMock(return_value=mock_version)
-        service.version_repo.update = AsyncMock(return_value=mock_version)
-
-        update_data = Mock()
-        update_data.code = "new code"
-        update_data.params = None
-        update_data.description = None
-        update_data.tags = None
-        update_data.status = None
-        update_data.changelog = None
-
-        # Mock ws_manager.send_to_task as async
         with patch("app.services.strategy.version.ws_manager") as mock_ws:
             mock_ws.send_to_task = AsyncMock()
-            result = await service.update_version("ver_123", "user_123", update_data)
+            async with async_session_maker() as session:
+                service = VersionControlService(session=session)
+                result = await service.update_version(
+                    "ver_123", "user_123", VersionUpdate(code="new code")
+                )
 
             assert result is not None
+            assert result.id == "ver_123"
+            mock_ws.send_to_task.assert_awaited_once()
+
+        async with async_session_maker() as session:
+            persisted = await session.get(StrategyVersion, "ver_123")
+            assert persisted is not None
+            assert persisted.code == "new code"
 
     async def test_update_version_not_found(self):
         """Test updating non-existent version."""
@@ -496,53 +538,46 @@ class TestRollbackVersion:
 
     async def test_rollback_version_success(self):
         """Test successful version rollback."""
+        from app.db.database import async_session_maker
+        from app.models.strategy_version import StrategyVersion
         from app.services.strategy.version import VersionControlService
 
-        service = VersionControlService()
+        await _seed_owner_versions(
+            {
+                "id": "target_ver",
+                "version_number": 1,
+                "version_name": "v1.0.0",
+                "code": "old code",
+                "params": {"a": 1},
+                "description": "old version",
+            },
+            {
+                "id": "current_ver",
+                "version_number": 2,
+                "version_name": "v2.0.0",
+                "code": "new code",
+                "params": {"a": 2},
+                "description": "new version",
+                "is_active": True,
+                "is_current": True,
+            },
+        )
 
-        mock_target_version = Mock()
-        mock_target_version.id = "target_ver"
-        mock_target_version.code = "old code"
-        mock_target_version.params = {"a": 1}
-        mock_target_version.description = "old version"
-        mock_target_version.version_name = "v1.0.0"
-        mock_target_version.created_by = "user_123"
-        mock_target_version.strategy_id = "strat_123"
+        async with async_session_maker() as session:
+            service = VersionControlService(session=session)
+            result = await service.rollback_version(
+                "user_123", "strat_123", "target_ver", "Bug fix"
+            )
 
-        mock_current_version = Mock()
-        mock_current_version.id = "current_ver"
-        mock_current_version.code = "new code"
-        mock_current_version.params = {"a": 2}
-        mock_current_version.description = "new version"
-        mock_current_version.created_by = "user_123"
-        mock_current_version.strategy_id = "strat_123"
-
-        mock_new_version = Mock()
-        mock_new_version.id = "new_rollback_ver"
-
-        service.version_repo = AsyncMock()
-        service.version_repo.get_by_id = AsyncMock(return_value=mock_target_version)
-        service.version_repo.list = AsyncMock(return_value=[])
-        service.version_repo.create = AsyncMock(return_value=mock_new_version)
-
-        service.rollback_repo = AsyncMock()
-        service.rollback_repo.create = AsyncMock()
-
-        # Strategy ownership check used by rollback_version.
-        mock_strategy = Mock()
-        mock_strategy.id = "strat_123"
-        mock_strategy.user_id = "user_123"
-        service.strategy_repo = AsyncMock()
-        service.strategy_repo.get_by_id = AsyncMock(return_value=mock_strategy)
-
-        with patch.object(service, "_get_current_version", return_value=mock_current_version):
-            with patch.object(service, "_get_next_version_number", return_value=3):
-                with patch.object(service, "_unset_active_versions"):
-                    result = await service.rollback_version(
-                        "user_123", "strat_123", "target_ver", "Bug fix"
-                    )
-
-                    assert result is not None
+        assert result is not None
+        assert result.version_name == "rollback-v1.0.0"
+        assert result.code == "old code"
+        assert result.parent_version_id == "target_ver"
+        assert result.created_by == "user_123"
+        async with async_session_maker() as session:
+            persisted = await session.get(StrategyVersion, result.id)
+            assert persisted is not None
+            assert persisted.code == "old code"
 
     async def test_rollback_version_not_found(self):
         """Test rollback to non-existent version."""

@@ -258,7 +258,7 @@ async def test_live_trading_manager_missing_branches(tmp_path: Path, monkeypatch
 
     started = []
 
-    async def _start_instance(iid):
+    async def _start_instance(iid, **_kwargs):
         started.append(iid)
         return {"id": iid}
 
@@ -578,28 +578,93 @@ def test_strategy_service_to_response_paramspec_and_inference():
 
 @pytest.mark.asyncio
 async def test_strategy_version_service_missing_branches(monkeypatch):
-    """Cover strategy_version_service: parent_version_id, update_dict fields, changelog set, get_current, unset default/active loops."""
-    from app.models.strategy_version import VersionStatus
+    """Cover strategy version parent linkage, update fields, and unset loops."""
+    from sqlalchemy import select
+
+    from app.db.database import async_session_maker
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion
+    from app.models.user import User
     from app.schemas.strategy_version import VersionUpdate
-    from app.services.strategy.version import VersionControlService
+    from app.services.strategy.version import VersionControlService, ws_manager
 
-    svc = _new_service_without_init(VersionControlService)
-    svc.strategy_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(id="s1", user_id="u1"))
-    )
-    svc.version_repo = SimpleNamespace(create=AsyncMock(), list=AsyncMock(), update=AsyncMock())
-    svc.branch_repo = SimpleNamespace(get_by_id=AsyncMock(), create=AsyncMock(), update=AsyncMock())
+    # Freshness mutations run in their own transaction against persisted rows.
+    async with async_session_maker() as session:
+        async with session.begin():
+            session.add(
+                User(
+                    id="u1",
+                    username="service-edge-version-owner",
+                    email="service-edge-version-owner@example.invalid",
+                    hashed_password="test-only-not-a-credential",
+                    principal_kind="HUMAN",
+                )
+            )
+            session.add(
+                Strategy(
+                    id="s1",
+                    user_id="u1",
+                    name="synthetic version strategy",
+                    code="pass",
+                    params={},
+                )
+            )
+            session.add(
+                Strategy(id="s2", user_id="u1", name="synthetic current strategy", code="pass")
+            )
+            session.add_all(
+                [
+                    StrategyVersion(
+                        id="v_last",
+                        strategy_id="s1",
+                        version_number=1,
+                        version_name="v_last",
+                        branch="main",
+                        status="stable",
+                        tags=[],
+                        code="pass",
+                        params={},
+                        is_active=True,
+                        is_default=True,
+                        is_current=True,
+                        created_by="u1",
+                    ),
+                    StrategyVersion(
+                        id="v1",
+                        strategy_id="s1",
+                        version_number=2,
+                        version_name="v1",
+                        branch="main",
+                        status="draft",
+                        tags=[],
+                        code="pass",
+                        params={},
+                        is_active=False,
+                        is_default=True,
+                        is_current=False,
+                        created_by="u1",
+                    ),
+                    StrategyVersion(
+                        id="v_cur",
+                        strategy_id="s2",
+                        version_number=1,
+                        version_name="v_cur",
+                        branch="main",
+                        status="stable",
+                        tags=[],
+                        code="pass",
+                        params={},
+                        is_active=True,
+                        is_default=False,
+                        is_current=True,
+                        created_by="u1",
+                    ),
+                ]
+            )
 
-    svc._get_or_create_branch = AsyncMock(return_value=SimpleNamespace(id="b1"))
-    svc._get_next_version_number = AsyncMock(return_value=2)
-    svc._unset_default_versions = AsyncMock()
-    svc._update_branch = AsyncMock()
+    svc = VersionControlService()
 
-    last = SimpleNamespace(id="v_last")
-    svc._get_latest_version = AsyncMock(return_value=last)
-
-    await VersionControlService.create_version(
-        svc,
+    created = await svc.create_version(
         user_id="u1",
         strategy_id="s1",
         version_name="v2",
@@ -610,53 +675,47 @@ async def test_strategy_version_service_missing_branches(monkeypatch):
         changelog="c",
         is_default=False,
     )
-    # version_repo.create gets a version whose parent_version_id was set.
-    args, _kwargs = svc.version_repo.create.call_args
-    assert getattr(args[0], "parent_version_id", None) == "v_last"
+    # The created version is linked to the latest active version.
+    assert created.parent_version_id == "v_last"
+    assert created.version_number == 3
 
     # update_version: params/description/tags/status/changelog branches
-    version_obj = SimpleNamespace(
-        id="v1",
-        strategy_id="s1",
-        status=VersionStatus.DRAFT,
-        changelog=None,
-        is_active=True,
-        is_default=False,
-        created_by="u1",
-    )
-    svc.version_repo.get_by_id = AsyncMock(return_value=version_obj)
-    svc.version_repo.update = AsyncMock(return_value=version_obj)
-    from app.services.strategy.version import ws_manager
-
     monkeypatch.setattr(ws_manager, "send_to_task", AsyncMock())
-
     upd = VersionUpdate(
-        params={"p": 1}, description="d", tags=["t"], status=VersionStatus.STABLE, changelog="cl"
+        params={"p": 1}, description="d", tags=["t"], status="stable", changelog="cl"
     )
-    got = await VersionControlService.update_version(svc, "v1", "u1", upd)
-    assert got.id == "v1"
-    upd_dict = svc.version_repo.update.call_args.args[1]
-    assert upd_dict["params"] == {"p": 1}
-    assert upd_dict["description"] == "d"
-    assert upd_dict["tags"] == ["t"]
-    assert upd_dict["status"] == VersionStatus.STABLE
-    assert upd_dict["changelog"] == "cl"
+    got = await svc.update_version("v1", "u1", upd)
+    assert got is not None and got.id == "v1"
+    async with async_session_maker() as session:
+        updated = await session.get(StrategyVersion, "v1")
+        assert updated is not None
+        assert updated.params == {"p": 1}
+        assert updated.description == "d"
+        assert updated.tags == ["t"]
+        assert updated.status == "stable"
+        assert updated.changelog == "cl"
 
-    # _get_current_version (lines 621-629)
-    svc.version_repo.list = AsyncMock(return_value=[SimpleNamespace(id="vcur")])
-    cur = await VersionControlService._get_current_version(svc, "s1")
-    assert cur.id == "vcur"
+    # _get_current_version
+    cur = await svc._get_current_version("s2")
+    assert cur is not None and cur.id == "v_cur"
 
-    # _unset_default_versions loop (line 683)
-    svc.version_repo.list = AsyncMock(
-        return_value=[SimpleNamespace(id="v1"), SimpleNamespace(id="v2")]
-    )
-    previous_update_count = svc.version_repo.update.await_count
-    await VersionControlService._unset_default_versions(svc, "s1", "main")
-    assert svc.version_repo.update.await_count == previous_update_count + 2
+    # _unset_default_versions loop (all default versions on the branch)
+    await svc._unset_default_versions("s1", "main")
+    async with async_session_maker() as session:
+        rows = (
+            await session.scalars(
+                select(StrategyVersion).where(
+                    StrategyVersion.strategy_id == "s1",
+                    StrategyVersion.is_default.is_(True),
+                )
+            )
+        ).all()
+        assert rows == []
 
-    # _unset_active_versions loop (line 706)
-    svc.version_repo.update.reset_mock()
-    svc.version_repo.list = AsyncMock(return_value=[SimpleNamespace(id="v1")])
-    await VersionControlService._unset_active_versions(svc, "s1", "main")
-    svc.version_repo.update.assert_awaited_once()
+    # _unset_active_versions loop (all active versions on the branch)
+    await svc._unset_active_versions("s1", "main")
+    async with async_session_maker() as session:
+        active = await session.get(StrategyVersion, "v_last")
+        assert active is not None and active.is_active is False
+        new_active = await session.get(StrategyVersion, created.id)
+        assert new_active is not None and new_active.is_active is False

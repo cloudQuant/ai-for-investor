@@ -478,30 +478,82 @@ async def test_strategy_version_service_additional_coverage():
     assert total == 1
     assert items[0]["id"] == "v1"
 
-    # update_version unauthorized returns None
-    svc.version_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(id="v2", created_by="x")),
-        update=AsyncMock(),
-    )
-    assert (
-        await svc.update_version(
-            "v2",
-            "u1",
-            SimpleNamespace(
-                code=None, params=None, description=None, tags=None, status=None, changelog=None
-            ),
+    # Freshness-mutating methods re-enter their own DB transaction, so the
+    # unauthorized / rollback / branch branches below need real rows.
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion, VersionBranch
+    from app.models.user import User
+    from app.schemas.strategy_version import VersionUpdate
+
+    def _user(user_id: str, username: str) -> User:
+        return User(
+            id=user_id,
+            username=username,
+            email=f"{username}@example.invalid",
+            hashed_password="test-only-not-a-credential",
+            principal_kind="HUMAN",
         )
-        is None
-    )
+
+    def _strategy(strategy_id: str) -> Strategy:
+        return Strategy(
+            id=strategy_id,
+            user_id="u1",
+            name=f"synthetic {strategy_id}",
+            code="pass",
+            params={},
+        )
+
+    def _version(version_id: str, strategy_id: str, created_by: str, **extra) -> StrategyVersion:
+        values = {
+            "id": version_id,
+            "strategy_id": strategy_id,
+            "version_number": 1,
+            "version_name": f"v-{version_id}",
+            "branch": "main",
+            "status": "draft",
+            "tags": [],
+            "code": "pass",
+            "params": {},
+            "is_active": False,
+            "is_default": False,
+            "is_current": False,
+            "created_by": created_by,
+        }
+        values.update(extra)
+        return StrategyVersion(**values)
+
+    async with db.async_session_maker() as session:
+        async with session.begin():
+            session.add_all(
+                [_user("u1", "version-coverage-owner"), _user("x", "version-coverage-foreign")]
+            )
+            session.add_all([_strategy("s1"), _strategy("s_a"), _strategy("s_b"), _strategy("s_c")])
+            session.add_all(
+                [
+                    _version("v2", "s1", "x"),
+                    _version("t_a", "s_a", "u1"),
+                    _version("t_b", "s_b", "u1"),
+                    _version("c_b", "s_b", "x", is_current=True),
+                    _version("t_c", "s_c", "x"),
+                    VersionBranch(
+                        id="b1",
+                        strategy_id="s1",
+                        branch_name="dev",
+                        version_count=0,
+                        is_default=False,
+                        created_by="u1",
+                    ),
+                ]
+            )
+
+    db_svc = VersionControlService()
+
+    # update_version unauthorized returns None
+    assert await db_svc.update_version("v2", "u1", VersionUpdate()) is None
 
     # set_version_default / activate_version unauthorized
-    svc.version_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(id="v2", created_by="x")),
-        update=AsyncMock(),
-        list=AsyncMock(return_value=[]),
-    )
-    assert await svc.set_version_default("v2", "u1") is False
-    assert await svc.activate_version("v2", "u1") is False
+    assert await db_svc.set_version_default("v2", "u1") is False
+    assert await db_svc.activate_version("v2", "u1") is False
 
     # compare_versions forbidden
     svc.version_repo = SimpleNamespace(
@@ -513,38 +565,19 @@ async def test_strategy_version_service_additional_coverage():
         await svc.compare_versions("u1", "s1", "a", "b")
 
     # rollback_version: missing current version
-    svc.strategy_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(id="s1", user_id="u1"))
-    )
-    svc.version_repo = SimpleNamespace(
-        get_by_id=AsyncMock(
-            return_value=SimpleNamespace(
-                id="t1", created_by="u1", version_name="v1", code="x", params={}
-            )
-        )
-    )
-    svc._get_current_version = AsyncMock(return_value=None)
-    with pytest.raises(ValueError):
-        await svc.rollback_version("u1", "s1", "t1", "r")
+    with pytest.raises(ValueError, match="Current version not found"):
+        await db_svc.rollback_version("u1", "s_a", "t_a", "r")
 
     # rollback_version: current version forbidden
-    svc._get_current_version = AsyncMock(return_value=SimpleNamespace(id="c1", created_by="x"))
     with pytest.raises(PermissionError):
-        await svc.rollback_version("u1", "s1", "t1", "r")
+        await db_svc.rollback_version("u1", "s_b", "t_b", "r")
 
     # rollback_version: target version forbidden
-    svc.version_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(id="t1", created_by="x"))
-    )
     with pytest.raises(PermissionError):
-        await svc.rollback_version("u1", "s1", "t1", "r")
+        await db_svc.rollback_version("u1", "s_c", "t_c", "r")
 
     # create_branch: existing branch early return
-    svc.branch_repo = SimpleNamespace(list=AsyncMock(return_value=[SimpleNamespace(id="b1")]))
-    svc.strategy_repo = SimpleNamespace(
-        get_by_id=AsyncMock(return_value=SimpleNamespace(id="s1", user_id="u1"))
-    )
-    b = await svc.create_branch(
+    b = await db_svc.create_branch(
         user_id="u1", strategy_id="s1", branch_name="dev", parent_branch=None
     )
     assert b.id == "b1"

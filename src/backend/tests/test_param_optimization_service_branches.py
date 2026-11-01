@@ -274,45 +274,66 @@ async def test_backtest_service_task_limits_and_cancel_cleanup_excepts(monkeypat
 
 @pytest.mark.asyncio
 async def test_strategy_version_service_create_version_and_update_version_branches():
-    from app.models.strategy_version import VersionStatus
+    from app.db.database import async_session_maker
+    from app.models.strategy import Strategy
+    from app.models.strategy_version import StrategyVersion
+    from app.models.user import User
+    from app.schemas.strategy_version import VersionUpdate
     from app.services.strategy.version import VersionControlService
+
+    # create_version/update_version run inside their own freshness transaction,
+    # so they consume persisted rows rather than injected repository mocks.
+    async with async_session_maker() as session:
+        async with session.begin():
+            session.add(
+                User(
+                    id="u1",
+                    username="param-optimization-version-owner",
+                    email="param-optimization-version-owner@example.invalid",
+                    hashed_password="test-only-not-a-credential",
+                    principal_kind="HUMAN",
+                )
+            )
+            session.add(
+                Strategy(
+                    id="s1",
+                    user_id="u1",
+                    name="synthetic version strategy",
+                    code="pass",
+                    params={},
+                )
+            )
+            session.add(
+                StrategyVersion(
+                    id="v2",
+                    strategy_id="s1",
+                    version_number=1,
+                    version_name="v2",
+                    branch="main",
+                    status="stable",
+                    tags=[],
+                    code="pass",
+                    params={},
+                    is_active=True,
+                    is_default=False,
+                    is_current=True,
+                    created_by="u1",
+                )
+            )
 
     svc = VersionControlService()
 
-    # create_version uses several repos.
-    svc.strategy_repo = AsyncMock()
-    svc.strategy_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id="s1", user_id="u1"))
-
-    svc.branch_repo = AsyncMock()
-    svc.branch_repo.list = AsyncMock(return_value=[])
-    svc.branch_repo.create = AsyncMock(return_value=SimpleNamespace(id="b1", version_count=0))
-    svc.branch_repo.update = AsyncMock()
-
-    svc.version_repo = AsyncMock()
-    svc.version_repo.list = AsyncMock(return_value=[])
-    svc.version_repo.create = AsyncMock(
-        side_effect=lambda v: SimpleNamespace(**{**v.__dict__, "id": "v1"})
-    )
-
     v = await svc.create_version("u1", "s1", "v1.0.0", code="x=1", params={"a": 1}, is_default=True)
-    assert v.id == "v1"
+    assert v.id
+    assert v.version_number == 2
+    assert v.parent_version_id == "v2"
+    assert v.is_default is True
+
+    async with async_session_maker() as session:
+        persisted = await session.get(StrategyVersion, v.id)
+        assert persisted is not None
+        assert persisted.params == {"a": 1}
 
     # update_version raises if not DRAFT.
-    svc.version_repo.get_by_id = AsyncMock(
-        return_value=SimpleNamespace(
-            id="v2",
-            status=VersionStatus.STABLE,
-            strategy_id="s1",
-            is_active=True,
-            is_default=False,
-            created_by="u1",
-        )
-    )
     with pytest.raises(ValueError, match="Can only update"):
-        await svc.update_version(
-            "v2",
-            "u1",
-            SimpleNamespace(
-                code=None, params=None, description=None, tags=None, status=None, changelog=None
-            ),
-        )
+        await svc.update_version("v2", "u1", VersionUpdate())
