@@ -1341,3 +1341,41 @@ after : 9143 collected, 0 errors (24 deselected)
 
 
 
+
+### Wave 17：MySQL 9.4 迁移回归的根因修复、单测真实边界与 OpenData gate 恢复运转
+
+#### 1. #245 撤回之后：MySQL 9.4 恢复、catalog 测试重新失败
+
+`#245`（`662c13ad7`）把 #243 的四个迁移守卫撤回后，`dev` 的 `Asset Research - MySQL 9.4 Contract` 恢复 **success**（`662c13ad7` 的 check-runs 实测）；代价是 `test_catalog_migration_accepts_current_startup_created_schema_at_iteration_196_baseline` 重新失败——`#245` 的 PR 正文已把这个后果写明。
+
+#### 2. [AFI #246](https://github.com/cloudQuant/ai-for-investor/pull/246)：从 #243 的 CI 日志拿到确切根因并修复
+
+#243 的 PR CI 日志给出了 MySQL 9.4 上真正的失败点，而不是 #245 无法本地复现的那段：
+
+```
+pymysql.err.OperationalError: (1828, "Cannot drop column 'source_import_receipt_id':
+needed in a foreign key constraint 'fk_legacy_paper_cutover_import_receipt'")
+```
+
+根因：#243 在 `20261017_legacy_paper_import_cutover` 的 downgrade 里删掉了显式 `drop_constraint("fk_legacy_paper_cutover_import_receipt", type_="foreignkey")`，假定"删列会连带删 FK"。MySQL 明确拒绝（1828）；SQLite 的 batch 重建把 FK 随列一起丢掉，所以 SQLite 测试一直是绿的。修复方式：
+
+- 重新应用四个 adopt-or-reject 守卫；
+- 两处 downgrade（cutover、approval authority sources）改为**先反射 schema 上真实的 FK 名并显式 drop，再删列**：迁移创建的 schema 反射到 `fk_legacy_paper_cutover_import_receipt` / `fk_strategy_target_source_version`，startup 创建的 ORM schema 则反射到模型自己的约束名；SQLite 不保留约束名，反射不到时仍交给 batch 重建；
+- `tests/test_quote_service_market.py` 与 `tests/test_afi01_owner_scope_service_host_integration.py` 加 `pytest.importorskip`（`bt_api_base` / `bt_api_py` 不是本项目依赖）——这正是 `--maxfail=5` 一直掩盖的 **19 项**失败。
+
+**证据**：SQLite `tests/market_data_platform/test_catalog.py` **17 passed**（含 196 基线正向往返）；本地 MySQL **8.0.46** 隔离实例完整跑 CI 序列 `upgrade head → alembic check（No new upgrade operations detected）→ downgrade 20260911_market_data_semantic_record_keys → upgrade head → current=head`（修复前同序列以 1828 失败）；**PR CI 的 `Asset Research - MySQL 9.4 Contract` = success**，即该修复在真实 9.4 服务容器上通过了整条链；clean worktree 全量 **5 failed / 8935 passed / 234 skipped**（5 项分别是 `test_ai_chat_service` 1 项、`test_ai_strategy_research_service` 2 项、`test_ensure_dual_stress_running_script` 2 项；三个文件隔离运行 **278 passed**，属顺序/并行相关，不涉及本 PR 改动的文件）；`ruff check` / `ruff format --check` 通过。**未声明**：5 项顺序相关失败仍未消除，单测矩阵腿在 PR CI 上的最终结论以其运行结果为准。
+
+#### 3. OpenData `quality gate` 从"从未执行"恢复为真实判据
+
+OpenData 的 gate 因 `alembic check` 与两个证据册长期失真而**在 `Verify migrations match the models` 一步就停住**，后面的 `make gate` 从未执行。本轮把它推到真实判据：
+
+- **Drift（[OpenData #161](https://github.com/cloudQuant/opendata/pull/161)）**：`od_job_definitions` 与 `od_metadata_publication_receipts` 由迁移创建、由原生 SQL 读写、不进 `Base.metadata`，autogenerate 每次把它们判成 removed。`alembic/env.py` 增加只排除这两张表及其索引的 `include_object`（附原因）。本地 MySQL 8.0.46 复现了与 CI 相同的 4 条 remove 与 exit 255，修复后 `alembic check` 报 `No new upgrade operations detected.`
+- **零依赖证据册**：13 个注册路径的 sha 在真实改动后过期、4 个新模块带入 9 处来源身份字面量、扫描面 741 而 census 记 658。逐条用"pin 字节所属 revision → 当前 HEAD 的实际 diff"复核后重钉 13 条、新增 4 条注册，census **658→741**、冻结基线 **0→9**（9 处全为 Literal/常量来源身份，逐文件 reviewer 记录在案）。`--self-test` 与正式扫描均 OK。
+- **brand-check**：13 处旧库名 token 按既有的 `runtime_inventory` 同类理由加入 **token 路径白名单**（旧库名与 rights_evidence 标签是事实标识，改名会破坏端点/路径哈希校验）；只有这 9 个路径对该 token 放行，其余品牌与包引用检查不变。
+- **已合入的 [OpenData #160](https://github.com/cloudQuant/opendata/pull/160) / [#159](https://github.com/cloudQuant/opendata/pull/159)**：补 C150 的叙事与可追踪测量文件（此前 `.log` 被 `.gitignore` 忽略，重命名为 `.txt` 入档），并刷新 v1 OpenAPI 合同基线到实际 schema。它们分别解决 `evidence-traceability` 与 `published-openapi-check`。
+
+**实测（clean worktree，避免本机 5.2GB 未跟踪 `var/` 干扰）**：`zero-dep-check`、`brand-check`、`ledger-check`、`evidence-traceability`、`js-points-check`、`loguru-check`、`a2-check`、`published-openapi-check`、`quality-ratchet`、`public-api-quality` 全部 **exit 0**。**仍红**：`acceptance-probe-check` 报 **22 个 stale-proof 格**（台账记 proven、探针此刻读 gap，含 AC-16|05–09 等），本地缺 gitleaks 等 CI 环境因素未能排除，所以**不能把 22 格都判成真实漂移**；`test-cov` 与 `frontend-*` 尚未在该分支上本地实测。结论只到"gate 已开始真实执行、前 10 个成员在干净树上通过"，**不是整链通过**。
+
+#### 4. 共同非声明
+
+MySQL 9.4 的结论来自 PR CI 的真实 9.4 服务容器；本地 8.0.46 仅用于复现与回归。OpenData 的 `make gate` 尚未整链绿；acceptance-probe 的 22 个 stale-proof 格需要 CI 环境下的复测与逐格判定。以上均为 CODE/OFFLINE 与 CI 证据，不构成真实源/生产/自然周期验收。
