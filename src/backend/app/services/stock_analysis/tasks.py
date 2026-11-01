@@ -26,6 +26,7 @@ from app.schemas.ai_observability import AICallStatus
 from app.schemas.stock_analysis import StockAnalysisParams
 from app.services.ai_observability.cost_calculator import calculate_estimated_cost_usd
 from app.services.ai_observability.logger import hash_prompt
+from app.services.stock_analysis import report_evidence_producer as _producer
 from app.services.stock_analysis.analysis_engine import StockAnalysisEngine
 from app.services.stock_analysis.data_collector import StockAnalysisDataCollector
 from app.services.stock_analysis.exporter import StockAnalysisExporter
@@ -91,6 +92,7 @@ class StockAnalysisTaskService:
         *,
         report_evidence_gate: StockDailyReportEvidenceGate | None = None,
         report_evidence_session_factory: ReportEvidenceSessionFactory | None = None,
+        stock_daily_snapshot_reader: _producer.StockDailyReportEvidenceReader | None = None,
     ) -> None:
         self.db = db
         self.collector = StockAnalysisDataCollector(db)
@@ -99,9 +101,8 @@ class StockAnalysisTaskService:
         self.report_builder = StockAnalysisReportBuilder()
         self.exporter = StockAnalysisExporter()
         self.report_evidence_gate = report_evidence_gate or StockDailyReportEvidenceGate()
-        self.report_evidence_session_factory: ReportEvidenceSessionFactory = (
-            report_evidence_session_factory or async_session_maker
-        )
+        self.evidence_session_factory = report_evidence_session_factory or async_session_maker
+        self.stock_daily_snapshot_reader = stock_daily_snapshot_reader
 
     async def create_and_run(
         self,
@@ -350,6 +351,7 @@ class StockAnalysisTaskService:
     ) -> StockAnalysisReportModel:
         run_started = time.perf_counter()
         self._mark(task, 5, "running", "data_collection", "正在采集股票研究数据")
+        await _producer.produce_report_evidence(self, task, params)
         if commit_progress:
             await self._commit_progress()
             await self._stop_if_cancelled(task)
@@ -570,7 +572,7 @@ class StockAnalysisTaskService:
                 contract_sha256=selector.contract_sha256,
             ),
         )
-        async with self.report_evidence_session_factory() as evidence_session:
+        async with self.evidence_session_factory() as evidence_session:
             return await self.report_evidence_gate.revalidate_for_report(
                 session=evidence_session,
                 user_id=task.user_id,
