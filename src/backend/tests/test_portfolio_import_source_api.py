@@ -32,6 +32,8 @@ from app.models.portfolio_ledger import (  # noqa: E402
     PortfolioLedgerModel,
     PortfolioLedgerTransactionModel,
 )
+from app.models.strategy_approval_authority import StrategyApprovalAuthorityEpoch  # noqa: E402
+from app.models.user import User  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 
 
@@ -47,7 +49,31 @@ def test_import_source_version_is_owner_scoped_preserved_and_not_valued() -> Non
             await connection.run_sync(PortfolioLedgerModel.__table__.create)
             await connection.run_sync(PortfolioLedgerImportModel.__table__.create)
             await connection.run_sync(PortfolioLedgerTransactionModel.__table__.create)
+            await connection.run_sync(User.__table__.create)
+            await connection.run_sync(StrategyApprovalAuthorityEpoch.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_maker() as session:
+            session.add_all(
+                [
+                    User(
+                        id="owner-a",
+                        username="owner-a",
+                        email="owner-a@example.com",
+                        hashed_password="synthetic",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                    User(
+                        id="owner-b",
+                        username="owner-b",
+                        email="owner-b@example.com",
+                        hashed_password="synthetic",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                ]
+            )
+            await session.commit()
 
         async def override_db():
             async with session_maker() as session:
