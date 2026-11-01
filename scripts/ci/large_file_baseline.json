@@ -19,15 +19,15 @@
     "src/backend/app/services/asset_research/providers/akshare.py": 1310,
     "src/backend/app/services/backtest/service.py": 1293,
     "src/backend/app/services/gateway/manual.py": 2682,
-    "src/backend/app/services/legacy_paper_import_migration.py": 1776,
-    "src/backend/app/services/live_trading/manager.py": 1972,
+    "src/backend/app/services/legacy_paper_import_migration.py": 1798,
+    "src/backend/app/services/live_trading/manager.py": 1970,
     "src/backend/app/services/log_parser_service.py": 1042,
     "src/backend/app/services/market_data/akshare_provider.py": 2416,
     "src/backend/app/services/market_data/bootstrap.py": 1139,
     "src/backend/app/services/market_data/cffex_settlement_collector.py": 1336,
     "src/backend/app/services/market_data/legacy_stock_daily_import.py": 1770,
     "src/backend/app/services/market_data/opendata_instrument_reference.py": 1288,
-    "src/backend/app/services/market_data/opendata_provider.py": 1141,
+    "src/backend/app/services/market_data/opendata_provider.py": 1145,
     "src/backend/app/services/market_data/publication.py": 1109,
     "src/backend/app/services/market_data/query_service.py": 1778,
     "src/backend/app/services/market_data/research_binding.py": 2337,
@@ -36,15 +36,15 @@
     "src/backend/app/services/market_data_coverage_service.py": 1003,
     "src/backend/app/services/market_instrument.py": 1275,
     "src/backend/app/services/market_instrument_asset_adapter.py": 1233,
-    "src/backend/app/services/mig03_boundary_inventory.py": 1729,
-    "src/backend/app/services/monitoring_control.py": 1556,
-    "src/backend/app/services/paper_runtime_service.py": 1190,
-    "src/backend/app/services/paper_trading_service.py": 2009,
-    "src/backend/app/services/portfolio_composition.py": 1370,
-    "src/backend/app/services/portfolio_valuation_bindings.py": 1020,
+    "src/backend/app/services/mig03_boundary_inventory.py": 1713,
+    "src/backend/app/services/monitoring_control.py": 1564,
+    "src/backend/app/services/paper_runtime_service.py": 1168,
+    "src/backend/app/services/paper_trading_service.py": 2010,
+    "src/backend/app/services/portfolio_composition.py": 1376,
+    "src/backend/app/services/portfolio_valuation_bindings.py": 1186,
     "src/backend/app/services/position_valuation.py": 1128,
-    "src/backend/app/services/quote/service_market.py": 1101,
-    "src/backend/app/services/quote_service.py": 1039,
+    "src/backend/app/services/quote/service_market.py": 1087,
+    "src/backend/app/services/quote_service.py": 1024,
     "src/backend/app/services/rag_service.py": 1187,
     "src/backend/app/services/research/approval.py": 1891,
     "src/backend/app/services/research/approval_authority.py": 1329,
@@ -58,14 +58,14 @@
     "src/backend/app/services/research/promotion.py": 2603,
     "src/backend/app/services/research/quota.py": 1308,
     "src/backend/app/services/research/run_records.py": 1819,
-    "src/backend/app/services/service_read/client.py": 1218,
-    "src/backend/app/services/service_read/deployment.py": 1793,
-    "src/backend/app/services/service_read/session.py": 1274,
+    "src/backend/app/services/service_read/client.py": 1219,
+    "src/backend/app/services/service_read/deployment.py": 1797,
+    "src/backend/app/services/service_read/session.py": 1328,
     "src/backend/app/services/stock_analysis/data_collector.py": 1268,
-    "src/backend/app/services/stock_analysis/opendata_sina_fzb_snapshot.py": 1007,
-    "src/backend/app/services/stock_analysis/opendata_sina_lrb_snapshot.py": 1106,
-    "src/backend/app/services/stock_analysis/pipeline.py": 1143,
-    "src/backend/app/services/strategy_target_approvals.py": 1451,
+    "src/backend/app/services/stock_analysis/opendata_sina_fzb_snapshot.py": 1011,
+    "src/backend/app/services/stock_analysis/opendata_sina_lrb_snapshot.py": 1108,
+    "src/backend/app/services/stock_analysis/pipeline.py": 1129,
+    "src/backend/app/services/strategy_target_approvals.py": 1465,
     "src/backend/app/services/sync_service.py": 2525,
     "src/backend/app/services/trading_asset_info_service.py": 2209,
     "src/backend/app/services/trading_workspace_service.py": 2034,
@@ -165,6 +165,61 @@
         ],
         "target": "group settings sections, instrument adapters and valuation bindings into their own modules",
         "prerequisite": "none beyond the per-module suites; schedule last"
+      }
+    },
+    "baseline_adjustments": {
+      "2026-11-01_mypy_wave_growth": {
+        "reason": "The repo-wide mypy campaign (329 -> 0 errors) added type annotations, guards, Protocol views and TypedDicts to already-frozen files. Measured: 12 files, +286 lines total, no functional growth. The baseline is refreshed to the post-campaign size and every entry is frozen again from here; the per-file split waves above are unchanged.",
+        "files": {
+          "src/backend/app/services/legacy_paper_import_migration.py": {
+            "was": 1776,
+            "now": 1798
+          },
+          "src/backend/app/services/market_data/opendata_provider.py": {
+            "was": 1141,
+            "now": 1145
+          },
+          "src/backend/app/services/monitoring_control.py": {
+            "was": 1556,
+            "now": 1564
+          },
+          "src/backend/app/services/paper_trading_service.py": {
+            "was": 2009,
+            "now": 2010
+          },
+          "src/backend/app/services/portfolio_composition.py": {
+            "was": 1370,
+            "now": 1376
+          },
+          "src/backend/app/services/portfolio_valuation_bindings.py": {
+            "was": 1020,
+            "now": 1186
+          },
+          "src/backend/app/services/service_read/client.py": {
+            "was": 1218,
+            "now": 1219
+          },
+          "src/backend/app/services/service_read/deployment.py": {
+            "was": 1793,
+            "now": 1797
+          },
+          "src/backend/app/services/service_read/session.py": {
+            "was": 1274,
+            "now": 1328
+          },
+          "src/backend/app/services/stock_analysis/opendata_sina_fzb_snapshot.py": {
+            "was": 1007,
+            "now": 1011
+          },
+          "src/backend/app/services/stock_analysis/opendata_sina_lrb_snapshot.py": {
+            "was": 1106,
+            "now": 1108
+          },
+          "src/backend/app/services/strategy_target_approvals.py": {
+            "was": 1451,
+            "now": 1465
+          }
+        }
       }
     }
   }
