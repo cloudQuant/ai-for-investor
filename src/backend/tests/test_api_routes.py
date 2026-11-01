@@ -21,20 +21,32 @@ class TestRouterMetadata:
     """API router metadata tests."""
 
     def test_live_trading_routes_are_not_deprecated(self):
+        """Only the two retired legacy gateway entry points are deprecated.
+
+        ``gateways/connect`` and ``gateways/disconnect`` reject every call with
+        ``LEGACY_GATEWAY_MIGRATION_REQUIRED``; their OpenAPI deprecation is the
+        documented contract.  Every other live-trading route must stay active.
+        """
         from app.api.router import api_router
 
         app = FastAPI()
         app.include_router(api_router)
         openapi_paths = app.openapi()["paths"]
-        http_routes = [
-            operation
+        http_routes = {
+            (method.upper(), path): operation
             for path, methods in openapi_paths.items()
             if path.startswith("/live-trading") and not path.startswith("/live-trading-crypto")
-            for operation in methods.values()
-        ]
+            for method, operation in methods.items()
+        }
 
         assert http_routes
-        assert all(route.get("deprecated") is not True for route in http_routes)
+        deprecated = {
+            route for route, operation in http_routes.items() if operation.get("deprecated") is True
+        }
+        assert deprecated == {
+            ("POST", "/live-trading/gateways/connect"),
+            ("POST", "/live-trading/gateways/disconnect"),
+        }
 
 
 # ==================== Data API ====================
