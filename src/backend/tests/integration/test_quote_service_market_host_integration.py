@@ -13,14 +13,23 @@ from typing import Any
 
 import httpx
 import pytest
-import zmq
-from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_gateway.market_hub import GatewayMarketHub
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_gateway", reason="optional bt_api_gateway SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_gateway.market_hub import GatewayMarketHub  # noqa: E402
+from bt_api_py.service_components import ComponentResources  # noqa: E402
+from bt_api_py.service_config import parse_service_config  # noqa: E402
+from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
 
 _SERVICE_ID = "afi-okx-market-service"
 _INSTANCE_ID = "afi-okx-market-hub"

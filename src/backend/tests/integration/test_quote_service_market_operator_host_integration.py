@@ -14,21 +14,30 @@ import time
 from types import SimpleNamespace
 from typing import Any
 
-import bt_api_py.gateway_operator_application as operator_sdk
-import httpx
 import pytest
-import zmq
-from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_okx.containers.tickers import OkxTickerData
-from bt_api_okx.market_provider import BoundedOkxTickerQueue
-from bt_api_py.gateway_operator import (
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_okx", reason="optional bt_api_okx SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import bt_api_py.gateway_operator_application as operator_sdk  # noqa: E402
+import httpx  # noqa: E402
+import zmq  # noqa: E402
+from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_okx.containers.tickers import OkxTickerData  # noqa: E402
+from bt_api_okx.market_provider import BoundedOkxTickerQueue  # noqa: E402
+from bt_api_py.gateway_operator import (  # noqa: E402
     GatewayOkxMarketBinding,
     GatewayOperatorDeployment,
 )
-from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_config import parse_service_config  # noqa: E402
+from bt_api_py.service_host import TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
 
 _SERVICE_ID = "afi-operator-market-service"
 _INSTANCE_ID = "afi-operator-market-hub"

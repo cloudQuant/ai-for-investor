@@ -12,38 +12,60 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-import zmq
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_execution import SqliteExecutionStore
-from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1
-from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_client_config, parse_service_config
-from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
-from bt_api_py.service_runtime import ClientCurveKeys, ServiceClientRuntime, ZmqTransportFactory
-from sqlalchemy import select
 
-from app.api.deps import get_current_user
-from app.api.service_read import configure_service_read
-from app.db import database
-from app.models.alerts import Alert, AlertNotification, AlertRule
-from app.models.legacy_paper_import import LegacyPaperImportReceipt
-from app.models.paper_runtime import PaperEquitySnapshot, RiskRule
-from app.models.strategy_approval_authority import (
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_execution", reason="optional bt_api_execution SDK package is required")
+
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
+from bt_api_execution import SqliteExecutionStore  # noqa: E402
+from bt_api_execution.paper_legacy_import import LegacyPaperSymbolBindingV1  # noqa: E402
+from bt_api_py.service_components import ComponentResources  # noqa: E402
+from bt_api_py.service_config import parse_client_config, parse_service_config  # noqa: E402
+from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority  # noqa: E402
+from bt_api_py.service_registry import PrincipalGrant, ResourceGrant  # noqa: E402
+from bt_api_py.service_runtime import (  # noqa: E402
+    ClientCurveKeys,
+    ServiceClientRuntime,
+    ZmqTransportFactory,
+)
+from sqlalchemy import select  # noqa: E402
+
+from app.api.deps import get_current_user  # noqa: E402
+from app.api.service_read import configure_service_read  # noqa: E402
+from app.db import database  # noqa: E402
+from app.models.alerts import Alert, AlertNotification, AlertRule  # noqa: E402
+from app.models.legacy_paper_import import LegacyPaperImportReceipt  # noqa: E402
+from app.models.paper_runtime import PaperEquitySnapshot, RiskRule  # noqa: E402
+from app.models.strategy_approval_authority import (  # noqa: E402
     StrategyApprovalAuthorityEpoch,
     StrategyOrderApprovalPolicyHead,
     StrategyOrderApprovalPolicyVersion,
 )
-from app.models.strategy_target_approval import StrategyTargetApproval, StrategyTargetApprovalEvent
-from app.models.workspace import StrategyUnit, Workspace
-from app.services.legacy_paper_migration import _model_row, inspect_stable_legacy_paper_account
-from app.services.paper_runtime_service import PaperRuntimeService
-from app.services.paper_trading_service import PaperTradingService
-from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory
-from app.services.service_read.client import PaperLegacyImportBinding, PaperSubmitBinding
-from app.services.service_read.session import SdkServiceReadSession
-from app.services.service_read.worker import ServiceReadWorker
-from tests import test_legacy_paper_import_migration as legacy
+from app.models.strategy_target_approval import (  # noqa: E402
+    StrategyTargetApproval,
+    StrategyTargetApprovalEvent,
+)
+from app.models.workspace import StrategyUnit, Workspace  # noqa: E402
+from app.services.legacy_paper_migration import (  # noqa: E402
+    _model_row,
+    inspect_stable_legacy_paper_account,
+)
+from app.services.paper_runtime_service import PaperRuntimeService  # noqa: E402
+from app.services.paper_trading_service import PaperTradingService  # noqa: E402
+from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory  # noqa: E402
+from app.services.service_read.client import (  # noqa: E402
+    PaperLegacyImportBinding,
+    PaperSubmitBinding,
+)
+from app.services.service_read.session import SdkServiceReadSession  # noqa: E402
+from app.services.service_read.worker import ServiceReadWorker  # noqa: E402
+from tests import test_legacy_paper_import_migration as legacy  # noqa: E402
 
 _SERVICE_ID = "afi12-http-host-service"
 _SERVICE_PRINCIPAL = "afi12-http-host-service-principal"

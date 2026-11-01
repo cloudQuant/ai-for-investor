@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import zmq
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
 
 _SERVICE_ID = "afi04-http-risk-service"
 _INSTANCE_ID = "afi04-http-risk-instance"

@@ -9,24 +9,28 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import bt_api_py.gateway_operator_application as operator_sdk
-import httpx
-from fastapi import FastAPI
+import pytest
 
-import app.main as main_module
-import app.services.quote_service as quote_service_module
-from app.api.afi_owner_scope import (
+pytest.importorskip("bt_api_py", reason="optional bt_api_py SDK package is required")
+
+import bt_api_py.gateway_operator_application as operator_sdk  # noqa: E402
+import httpx  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+
+import app.main as main_module  # noqa: E402
+import app.services.quote_service as quote_service_module  # noqa: E402
+from app.api.afi_owner_scope import (  # noqa: E402
     PersistedOwnerScope,
     require_persisted_owner_scope,
 )
-from app.api.service_gateway_operator import router
-from app.services.live_trading import manager as live_manager_module
-from app.services.live_trading.service_gateway_operator_guard import (
+from app.api.service_gateway_operator import router  # noqa: E402
+from app.services.live_trading import manager as live_manager_module  # noqa: E402
+from app.services.live_trading.service_gateway_operator_guard import (  # noqa: E402
     is_legacy_manual_gateway_excluded,
 )
-from app.services.quote.service_market import ServiceMarketDeploymentError
-from app.services.quote_service import QuoteService
-from app.services.service_gateway_operator import ServiceGatewayOperatorControl
+from app.services.quote.service_market import ServiceMarketDeploymentError  # noqa: E402
+from app.services.quote_service import QuoteService  # noqa: E402
+from app.services.service_gateway_operator import ServiceGatewayOperatorControl  # noqa: E402
 
 _OWNER = "operator-owner-1"
 _ACCOUNT_PROFILE = "test.account-session"

@@ -11,8 +11,14 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from bt_api_base.service_protocol import WireScope
-from bt_api_risk import (
+import pytest
+
+pytest.importorskip("bt_api_base", reason="optional bt_api_base SDK package is required")
+
+pytest.importorskip("bt_api_risk", reason="optional bt_api_risk SDK package is required")
+
+from bt_api_base.service_protocol import WireScope  # noqa: E402
+from bt_api_risk import (  # noqa: E402
     AccountScope,
     DispatchResolutionReceiptStatus,
     DurableRiskGate,
@@ -20,8 +26,8 @@ from bt_api_risk import (
     RiskIntent,
     RiskPolicy,
 )
-from bt_api_risk.budget_admission import PolicyCatalogBudgetAdmissionResolver
-from bt_api_risk.service_component import (
+from bt_api_risk.budget_admission import PolicyCatalogBudgetAdmissionResolver  # noqa: E402
+from bt_api_risk.service_component import (  # noqa: E402
     ConfirmedPolicyStore,
     PolicyCatalogService,
     PolicyCatalogStore,

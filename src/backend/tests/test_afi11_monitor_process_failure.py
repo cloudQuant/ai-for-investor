@@ -28,7 +28,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import zmq
+
+pytest.importorskip("zmq", reason="optional ZMQ transport is required")
+
+import zmq  # noqa: E402
 
 _BACKEND_ENV = "AFI11_BACKEND_ROOT"
 _SDK_ENV = "AFI11_SDK_EXPORT_ROOT"
