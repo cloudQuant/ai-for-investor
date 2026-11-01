@@ -144,7 +144,7 @@ def test_legacy_requirements_rejects_a_python_311_lock_include(
         (
             "3.11",
             ["akshare==1.18.97", "fincore==0.5.0"],
-            {"akshare": ">=1.18.96", "fincore": "<0.6.0,>=0.5.0"},
+            {"akshare": "<1.19,>=1.18.96", "fincore": "<0.6.0,>=0.5.0"},
         ),
     ],
     ids=["python-310-fallback", "python-311-current"],
@@ -192,8 +192,8 @@ def test_check_sync_rejects_drift_in_a_canonical_production_extra(
     )
     pyproject.write_text(
         project_text.replace(
-            '"akshare>=1.18.96; python_version >= \'3.11\'"',
-            '"akshare>=1.19.0; python_version >= \'3.11\'"',
+            '"akshare>=1.18.96,<1.19; python_version >= \'3.11\'"',
+            '"akshare>=1.19.0,<1.20; python_version >= \'3.11\'"',
             1,
         ),
         encoding="utf-8",
