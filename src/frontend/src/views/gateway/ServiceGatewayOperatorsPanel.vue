@@ -274,8 +274,18 @@ function getOperatorErrorKey(error: unknown): string {
   if (!error || typeof error !== 'object' || !('response' in error)) {
     return 'gatewayStatus.operatorUnavailable'
   }
-  const response = (error as { response?: { status?: number; data?: { detail?: { code?: unknown } } } }).response
-  const code = response?.data?.detail?.code
+  const response = (error as {
+    response?: {
+      status?: number
+      data?: {
+        detail?: { code?: unknown }
+        details?: { code?: unknown }
+      }
+    }
+  }).response
+  // The API error middleware re-wraps FastAPI's `detail` payload as `details`;
+  // accept both envelopes so the closed error projection still sees `code`.
+  const code = response?.data?.details?.code ?? response?.data?.detail?.code
   if (code === 'OPERATOR_NOT_CONFIGURED') return 'gatewayStatus.operatorNotConfigured'
   if (code === 'OWNER_NOT_AUTHORIZED' || code === 'OPERATION_NOT_GRANTED' || response?.status === 401 || response?.status === 403) {
     return 'gatewayStatus.operatorForbidden'

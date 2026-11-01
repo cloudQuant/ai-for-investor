@@ -1,5 +1,20 @@
-import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+  type Response,
+  type TestInfo,
+} from '@playwright/test';
 import { restorePersistedAuthSession } from '../support/auth';
+
+type UnconfiguredOperatorState = {
+  /** Service Gateway operator endpoints that may report the unconfigured state. */
+  apiPaths: readonly string[];
+  /** The explicit page surface that documents the unconfigured state. */
+  uiSelector: string;
+  uiText: RegExp;
+};
 
 type FeaturePage = {
   name: string;
@@ -7,6 +22,20 @@ type FeaturePage = {
   expected: RegExp;
   readySelector?: string;
   adminOnly?: boolean;
+  unconfiguredOperator?: UnconfiguredOperatorState;
+};
+
+// Without SERVICE_GATEWAY_OPERATOR_DEPLOYMENT_JSON the backend answers the
+// operator endpoints with 503 {detail: {code: "OPERATOR_NOT_CONFIGURED"}}. That
+// is a documented deployment state, not an unexplained server error: accept it
+// only when the page renders its explicit "not configured" surface below.
+const UNCONFIGURED_OPERATOR_STATE: UnconfiguredOperatorState = {
+  apiPaths: [
+    '/api/v1/service-gateway/operators',
+    '/api/v1/service-gateway/legacy-gateways',
+  ],
+  uiSelector: '[data-test="operator-list-error"]',
+  uiText: /未配置|not configured/i,
 };
 
 const featurePages: FeaturePage[] = [
@@ -40,7 +69,13 @@ const featurePages: FeaturePage[] = [
   { name: 'scanners', path: '/data/intelligence/scanners', expected: /条件扫描|Scanners/i },
   { name: 'trading workspaces', path: '/trading/workspaces', expected: /新建工作区|策略交易|Trading/i },
   { name: 'trading brokers', path: '/trading/brokers', expected: /Broker|券商|配置/i },
-  { name: 'trading gateways', path: '/trading/gateways', expected: /账户管理|Gateways|网关/i },
+  {
+    name: 'trading gateways',
+    path: '/trading/gateways',
+    expected: /账户管理|Gateways|网关/i,
+    readySelector: '[data-test="gateway-page"]',
+    unconfiguredOperator: UNCONFIGURED_OPERATOR_STATE,
+  },
   { name: 'trading ai', path: '/trading/ai', expected: /AI交易|AI Trading|自然语言/i },
   { name: 'portfolio overview', path: '/portfolio/overview', expected: /组合|Portfolio|总资产/i },
   // Ledger is retired and intentionally redirects to the unified portfolio overview.
@@ -62,7 +97,13 @@ const legacyPaths: FeaturePage[] = [
   { name: 'legacy backtest', path: '/backtest', expected: /新建工作区|策略研究|Workspace/i },
   { name: 'legacy quote', path: '/quote', expected: /行情报价|Quote/i },
   { name: 'legacy brokers', path: '/brokers', expected: /Broker|券商|配置/i },
-  { name: 'legacy gateways', path: '/gateways', expected: /账户管理|Gateways|网关/i },
+  {
+    name: 'legacy gateways',
+    path: '/gateways',
+    expected: /账户管理|Gateways|网关/i,
+    readySelector: '[data-test="gateway-page"]',
+    unconfiguredOperator: UNCONFIGURED_OPERATOR_STATE,
+  },
   { name: 'legacy portfolio', path: '/portfolio', expected: /组合|Portfolio|总资产/i },
   { name: 'legacy portfolio ledger', path: '/portfolio-ledger', expected: /组合|Portfolio|总资产/i },
   { name: 'legacy ai chat', path: '/ai-chat', expected: /知识问答|Knowledge Q&A|Knowledge Base/i },
@@ -110,20 +151,64 @@ async function navigateToFeaturePage(page: Page, target: FeaturePage, baseURL: s
   }
 }
 
+/**
+ * A 503 is the documented unconfigured state only when both the endpoint and
+ * the response payload identify OPERATOR_NOT_CONFIGURED. Every other 5xx (or a
+ * 503 without that code) remains a failure.
+ */
+async function isDocumentedUnconfiguredOperatorResponse(
+  response: Response,
+  expectation: UnconfiguredOperatorState,
+): Promise<boolean> {
+  if (response.status() !== 503) return false;
+  let pathname: string;
+  try {
+    pathname = new URL(response.url()).pathname;
+  } catch {
+    return false;
+  }
+  if (!expectation.apiPaths.includes(pathname)) return false;
+  try {
+    const body = (await response.json()) as {
+      detail?: { code?: unknown };
+      details?: { code?: unknown };
+    };
+    // The API error middleware wraps FastAPI's `detail` as `details`; accept
+    // either envelope but require the exact code.
+    return body?.details?.code === 'OPERATOR_NOT_CONFIGURED'
+      || body?.detail?.code === 'OPERATOR_NOT_CONFIGURED';
+  } catch {
+    return false;
+  }
+}
+
 async function assertFeaturePageUsable(page: Page, target: FeaturePage, baseURL: string) {
   const pageErrors: string[] = [];
   const apiFailures: string[] = [];
+  const responseChecks: Promise<void>[] = [];
+  let sawUnconfiguredOperatorResponse = false;
   const onPageError = (error: Error) => {
     // Some route redirects cancel an in-flight request after the destination renders.
     if (error.message === 'Request aborted') return;
     pageErrors.push(error.message);
   };
-  const onResponse = (response: { status: () => number; url: () => string }) => {
+  const onResponse = (response: Response) => {
     const status = response.status();
     if (!response.url().includes('/api/')) return;
-    if (status === 401 || status === 403 || status >= 500) {
-      apiFailures.push(`${status} ${response.url()}`);
-    }
+    // Response bodies must be read asynchronously; collect the checks so the
+    // final assertions see every classified response.
+    responseChecks.push((async () => {
+      if (
+        target.unconfiguredOperator
+        && await isDocumentedUnconfiguredOperatorResponse(response, target.unconfiguredOperator)
+      ) {
+        sawUnconfiguredOperatorResponse = true;
+        return;
+      }
+      if (status === 401 || status === 403 || status >= 500) {
+        apiFailures.push(`${status} ${response.url()}`);
+      }
+    })());
   };
   page.on('pageerror', onPageError);
   page.on('response', onResponse);
@@ -150,6 +235,20 @@ async function assertFeaturePageUsable(page: Page, target: FeaturePage, baseURL:
       ].join(', '),
     );
     await expect(usableSurface.first()).toBeVisible({ timeout: 10_000 });
+
+    await Promise.all(responseChecks);
+    if (sawUnconfiguredOperatorResponse && target.unconfiguredOperator) {
+      const unconfiguredState = page.locator(target.unconfiguredOperator.uiSelector);
+      await expect(
+        unconfiguredState,
+        `${target.name} should render the documented unconfigured Service Gateway operator state`,
+      ).toBeVisible({ timeout: 10_000 });
+      await expect(unconfiguredState).toContainText(target.unconfiguredOperator.uiText);
+    }
+
+    // Retrying requests can settle after the page-level assertions above;
+    // classify every response that arrived while waiting.
+    await Promise.all(responseChecks);
 
     expect(pageErrors, `${target.name} should not raise uncaught browser errors`).toEqual([]);
     expect(apiFailures, `${target.name} should not return unauthorized or server-error API responses`).toEqual([]);

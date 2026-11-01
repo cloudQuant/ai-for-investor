@@ -105,9 +105,12 @@ describe('ServiceGatewayOperatorsPanel', () => {
     wrapper.unmount()
   })
 
-  it('shows explicit unavailable state without falling back when the service is not configured', async () => {
+  it.each([
+    ['middleware details envelope', { details: { code: 'OPERATOR_NOT_CONFIGURED' } }],
+    ['FastAPI detail envelope', { detail: { code: 'OPERATOR_NOT_CONFIGURED' } }],
+  ])('shows the explicit not-configured state for the %s', async (_label, data) => {
     apiMocks.list.mockRejectedValue({
-      response: { status: 503, data: { detail: { code: 'OPERATOR_NOT_CONFIGURED' } } },
+      response: { status: 503, data },
     })
     const wrapper = mountPanel()
     await flushUi()
