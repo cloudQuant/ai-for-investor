@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
+from app.models.portfolio_composition import PortfolioCompositionVersion
 from app.schemas.auth import TokenPayload
 from app.schemas.portfolio_analytics_tasks import PortfolioAnalyticsTaskCreate
 from app.schemas.portfolio_analytics_v1 import (
@@ -95,7 +96,7 @@ async def _owned_membership(
     current_user: TokenPayload,
     portfolio_ref: str,
     membership_version: int,
-):
+) -> PortfolioCompositionVersion:
     if membership_version < 1:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -318,21 +319,23 @@ def _bound_v1_task_service(
         )
     binding = bindings.get(portfolio_ref)
     worker = getattr(access, "worker", None)
+    scope_ref = getattr(binding, "scope_ref", None)
     if (
         getattr(binding, "portfolio_ref", None) != portfolio_ref
         or getattr(binding, "mount", None) != "application.risk_analysis"
-        or type(getattr(binding, "scope_ref", None)) is not str
-        or not getattr(binding, "scope_ref", None)
+        or type(scope_ref) is not str
+        or not scope_ref
         or worker is None
     ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "ANALYTICS_SERVICE_NOT_CONFIGURED"},
         )
+    assert isinstance(scope_ref, str)
     try:
         return PortfolioAnalyticsV1TaskService(
             worker,
-            scope_ref=binding.scope_ref,
+            scope_ref=scope_ref,
             owner_subject=current_user.sub,
             membership=membership,
         )

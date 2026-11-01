@@ -202,7 +202,7 @@ class AkshareToMySql(MysqlBase):
                         f"WHERE {date_column} BETWEEN %s AND %s "
                         f"ORDER BY {date_column}"
                     )
-                    params: tuple[object, ...] = (start_date, end_date)
+                    params: tuple[str, ...] = (start_date, end_date)
                 else:
                     query = (  # nosec B608
                         f"SELECT {date_column} FROM {table_name} "

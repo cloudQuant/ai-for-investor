@@ -6,7 +6,7 @@ import json
 import re
 import time
 import uuid
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -235,11 +235,15 @@ async def create_approved_target(
             StrategyOrderApprovalPolicyVersion.policy_version == policy_head.policy_version,
         )
     )
+    policy_json: str | None = (
+        # SQLAlchemy Column(Text) attributes are Column[str] to mypy but str on instances.
+        cast(str, policy_row.canonical_policy_json) if policy_row is not None else None
+    )
     if (
         policy_row is None
+        or policy_json is None
         or policy_row.policy_sha256 != policy_head.policy_sha256
-        or canonical_policy_sha256(json.loads(policy_row.canonical_policy_json))
-        != policy_head.policy_sha256
+        or canonical_policy_sha256(json.loads(policy_json)) != policy_head.policy_sha256
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -323,13 +327,13 @@ async def create_approved_target(
         "time_in_force": payload.time_in_force,
         "reduce_only": payload.reduce_only,
         "deadline_ns": payload.deadline_ns,
-        "limits": dict(json.loads(policy_row.canonical_policy_json)["limits"]),
+        "limits": dict(json.loads(policy_json)["limits"]),
         "policy_ref": policy_row.policy_ref,
         "policy_version": policy_row.policy_version,
         "policy_sha256": policy_row.policy_sha256,
     }
     try:
-        validate_target_against_policy(target, json.loads(policy_row.canonical_policy_json))
+        validate_target_against_policy(target, json.loads(policy_json))
         approval = await approve_strategy_order_target(
             db,
             target=target,
