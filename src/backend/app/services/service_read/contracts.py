@@ -941,8 +941,8 @@ class OrderReadView:
                 # state a caller could read as a real order fact.
                 raise ServiceReadContractError("ABSENT_VIEW_MUST_NOT_CARRY_VALUES")
             return
-        _text(self.state, "INVALID_STATE", maximum=32)
-        if self.state != self.state.upper():
+        state = _text(self.state, "INVALID_STATE", maximum=32)
+        if state != state.upper():
             raise ServiceReadContractError("INVALID_STATE")
         for value, code in (
             (self.provider_order_id, "INVALID_PROVIDER_ORDER_ID"),
@@ -950,12 +950,12 @@ class OrderReadView:
         ):
             if value is not None:
                 _text(value, code)
-        for value, code in (
+        for decimal_value, code in (
             (self.filled_quantity, "INVALID_FILLED_QUANTITY"),
             (self.average_price, "INVALID_AVERAGE_PRICE"),
             (self.cumulative_commission, "INVALID_COMMISSION"),
         ):
-            _optional_decimal(value, code)
+            _optional_decimal(decimal_value, code)
         if self.is_terminal is not None and type(self.is_terminal) is not bool:
             raise ServiceReadContractError("INVALID_TERMINAL_FLAG")
         if self.updated_at_ns is not None and (

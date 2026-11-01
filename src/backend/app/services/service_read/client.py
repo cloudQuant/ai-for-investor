@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 from app.services.service_read.contracts import (
     AccountBookReadView,
@@ -515,11 +515,15 @@ class RiskPolicyBudgetBinding:
             )
         )
         if explicit_actor_binding:
-            for value, code in (
+            for actor_value, code in (
                 (self.owner_subject, "INVALID_OWNER_SUBJECT"),
                 (self.maker_principal_ref, "INVALID_MAKER_PRINCIPAL"),
             ):
-                if type(value) is not str or not value or value != value.strip():
+                if (
+                    type(actor_value) is not str
+                    or not actor_value
+                    or actor_value != actor_value.strip()
+                ):
                     raise ServiceReadContractError(code)
             if self.checker_principal_ref is not None and (
                 type(self.checker_principal_ref) is not str
@@ -673,32 +677,33 @@ class AuthorizedServiceReadClient:
             if not isinstance(binding, AccountBinding):
                 raise ServiceReadContractError("INVALID_ACCOUNT_BINDING")
         account_book_map: dict[str, AccountBookBinding] = {}
-        for account_ref, binding in dict(account_book_bindings or {}).items():
+        for account_ref, account_book_binding in dict(account_book_bindings or {}).items():
             if type(account_ref) is not str or not account_ref:
                 raise ServiceReadContractError("INVALID_ACCOUNT_REF")
-            if not isinstance(binding, AccountBookBinding):
+            if not isinstance(account_book_binding, AccountBookBinding):
                 raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_BINDING")
             snapshot_binding = account_bindings.get(account_ref)
             if snapshot_binding is not None and (
-                snapshot_binding.account_key.account_key_id != binding.account_key.account_key_id
+                snapshot_binding.account_key.account_key_id
+                != account_book_binding.account_key.account_key_id
             ):
                 raise ServiceReadContractError("ACCOUNT_BOOK_KEY_MISMATCH")
-            account_book_map[account_ref] = binding
+            account_book_map[account_ref] = account_book_binding
         monitor_map: dict[str, MonitorBinding] = {}
-        for scope_ref, binding in dict(monitor_bindings or {}).items():
+        for scope_ref, monitor_binding in dict(monitor_bindings or {}).items():
             if type(scope_ref) is not str or not scope_ref:
                 raise ServiceReadContractError("INVALID_SCOPE_REF")
-            if not isinstance(binding, MonitorBinding):
+            if not isinstance(monitor_binding, MonitorBinding):
                 raise ServiceReadContractError("INVALID_MONITOR_BINDING")
-            monitor_map[scope_ref] = binding
+            monitor_map[scope_ref] = monitor_binding
 
         order_map: dict[str, OrderBinding] = {}
-        for scope_ref, binding in dict(order_bindings or {}).items():
+        for scope_ref, order_binding in dict(order_bindings or {}).items():
             if type(scope_ref) is not str or not scope_ref:
                 raise ServiceReadContractError("INVALID_SCOPE_REF")
-            if not isinstance(binding, OrderBinding):
+            if not isinstance(order_binding, OrderBinding):
                 raise ServiceReadContractError("INVALID_ORDER_BINDING")
-            order_map[scope_ref] = binding
+            order_map[scope_ref] = order_binding
 
         self._runtime = runtime
         self._account_bindings = dict(account_bindings)
@@ -740,8 +745,8 @@ class AuthorizedServiceReadClient:
                 del self._account_clients[account_ref]
         self._close_failures.extend(failures)
         if failures:
-            error = ServiceReadClientCloseError(tuple(failures))
-            raise error from failures[0]
+            close_error = ServiceReadClientCloseError(tuple(failures))
+            raise close_error from failures[0]
 
     def _require_open(self) -> None:
         if self._closed:
@@ -866,7 +871,9 @@ class AuthorizedServiceReadClient:
             value=value,
             observed_at_utc=observed_at,
             received_age_seconds=_age(now, getattr(state, "received_at_monotonic", None)),
-            fresh_for_seconds=_age(fresh_until, now),
+            # The state exposes fresh_until_monotonic as an untyped attribute;
+            # _age keeps its existing runtime coercion for non-numeric values.
+            fresh_for_seconds=_age(cast(float, fresh_until), now),
             positions_count=_count(getattr(observation, "positions", None)),
             open_orders_count=_count(getattr(observation, "open_orders", None)),
             account_key=account_key,

@@ -134,10 +134,10 @@ class ReadAccess:
         if not isinstance(bindings, Mapping) or len(bindings) > 4096:
             raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
         normalized: dict[str, StrategyBookBinding] = {}
-        for selector, binding in bindings.items():
-            if not _valid_identifier(selector) or type(binding) is not StrategyBookBinding:
+        for selector, strategy_binding in bindings.items():
+            if not _valid_identifier(selector) or type(strategy_binding) is not StrategyBookBinding:
                 raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
-            normalized[selector] = binding
+            normalized[selector] = strategy_binding
         if normalized and not inspect.iscoroutinefunction(
             getattr(self.worker, "read_account_book", None)
         ):
@@ -154,14 +154,14 @@ class ReadAccess:
         if not isinstance(submit_bindings, Mapping) or len(submit_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_ORDER_SUBMIT_BINDINGS")
         normalized_submit: dict[str, OrderSubmitBinding] = {}
-        for selector, binding in submit_bindings.items():
+        for selector, submit_binding in submit_bindings.items():
             if (
                 not _valid_identifier(selector)
-                or type(binding) is not OrderSubmitBinding
-                or binding.scope_ref != selector
+                or type(submit_binding) is not OrderSubmitBinding
+                or submit_binding.scope_ref != selector
             ):
                 raise ServiceReadAccessError("INVALID_ORDER_SUBMIT_BINDINGS")
-            normalized_submit[selector] = binding
+            normalized_submit[selector] = submit_binding
         if set(normalized_submit) != set(self.allow_order_submit_scope_refs):
             raise ServiceReadAccessError("ORDER_SUBMIT_BINDING_MISMATCH")
         if normalized_submit:
@@ -185,15 +185,15 @@ class ReadAccess:
         if not isinstance(paper_bindings, Mapping) or len(paper_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
         normalized_paper: dict[str, PaperSubmitBinding] = {}
-        for selector, binding in paper_bindings.items():
+        for selector, paper_submit_binding in paper_bindings.items():
             if (
                 not _valid_identifier(selector)
-                or type(binding) is not PaperSubmitBinding
-                or binding.legacy_account_id != selector
-                or binding.scope_ref in self.allow_order_submit_scope_refs
+                or type(paper_submit_binding) is not PaperSubmitBinding
+                or paper_submit_binding.legacy_account_id != selector
+                or paper_submit_binding.scope_ref in self.allow_order_submit_scope_refs
             ):
                 raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
-            normalized_paper[selector] = binding
+            normalized_paper[selector] = paper_submit_binding
         if set(normalized_paper) != set(self.allow_paper_submit_account_ids):
             raise ServiceReadAccessError("PAPER_SUBMIT_BINDING_MISMATCH")
         if normalized_paper:
@@ -230,17 +230,17 @@ class ReadAccess:
         if not isinstance(import_bindings, Mapping) or len(import_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_PAPER_LEGACY_IMPORT_BINDINGS")
         normalized_imports: dict[str, PaperLegacyImportBinding] = {}
-        for selector, binding in import_bindings.items():
+        for selector, import_binding in import_bindings.items():
             paper_binding = normalized_paper.get(selector)
             if (
                 not _valid_identifier(selector)
-                or type(binding) is not PaperLegacyImportBinding
-                or binding.legacy_account_id != selector
+                or type(import_binding) is not PaperLegacyImportBinding
+                or import_binding.legacy_account_id != selector
                 or paper_binding is None
-                or binding.paper_binding is not paper_binding
+                or import_binding.paper_binding is not paper_binding
             ):
                 raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
-            normalized_imports[selector] = binding
+            normalized_imports[selector] = import_binding
         if set(normalized_imports) != set(self.allow_paper_legacy_import_account_ids):
             raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_GRANT_MISMATCH")
         if normalized_imports:
@@ -269,14 +269,14 @@ class ReadAccess:
         if not isinstance(approved_bindings, Mapping) or len(approved_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
         normalized_approved: dict[str, ApprovedTargetSubmitBinding] = {}
-        for selector, binding in approved_bindings.items():
+        for selector, approved_binding in approved_bindings.items():
             if (
                 not _valid_identifier(selector)
-                or type(binding) is not ApprovedTargetSubmitBinding
-                or binding.scope_ref != selector
+                or type(approved_binding) is not ApprovedTargetSubmitBinding
+                or approved_binding.scope_ref != selector
             ):
                 raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
-            normalized_approved[selector] = binding
+            normalized_approved[selector] = approved_binding
         if normalized_approved:
             if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
                 raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
@@ -306,14 +306,14 @@ class ReadAccess:
         if not isinstance(analytics_bindings, Mapping) or len(analytics_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
         normalized_analytics: dict[str, PortfolioAnalyticsBinding] = {}
-        for portfolio_ref, binding in analytics_bindings.items():
+        for portfolio_ref, analytics_binding in analytics_bindings.items():
             if (
                 not _valid_identifier(portfolio_ref)
-                or type(binding) is not PortfolioAnalyticsBinding
-                or binding.portfolio_ref != portfolio_ref
+                or type(analytics_binding) is not PortfolioAnalyticsBinding
+                or analytics_binding.portfolio_ref != portfolio_ref
             ):
                 raise ServiceReadAccessError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
-            normalized_analytics[portfolio_ref] = binding
+            normalized_analytics[portfolio_ref] = analytics_binding
         if set(normalized_analytics) != set(self.allow_portfolio_refs):
             raise ServiceReadAccessError("PORTFOLIO_ANALYTICS_BINDING_MISMATCH")
         if normalized_analytics:
@@ -348,14 +348,14 @@ class ReadAccess:
         if not isinstance(budget_bindings, Mapping) or len(budget_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
         normalized_budgets: dict[str, RiskPolicyBudgetBinding] = {}
-        for portfolio_ref, binding in budget_bindings.items():
+        for portfolio_ref, budget_binding in budget_bindings.items():
             if (
                 not _valid_identifier(portfolio_ref)
-                or type(binding) is not RiskPolicyBudgetBinding
-                or binding.portfolio_ref != portfolio_ref
+                or type(budget_binding) is not RiskPolicyBudgetBinding
+                or budget_binding.portfolio_ref != portfolio_ref
             ):
                 raise ServiceReadAccessError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
-            normalized_budgets[portfolio_ref] = binding
+            normalized_budgets[portfolio_ref] = budget_binding
         if set(normalized_budgets) != set(self.allow_risk_policy_budget_refs):
             raise ServiceReadAccessError("RISK_POLICY_BUDGET_BINDING_MISMATCH")
         if normalized_budgets:
@@ -383,14 +383,14 @@ class ReadAccess:
         if not isinstance(account_policy_bindings, Mapping) or len(account_policy_bindings) > 4096:
             raise ServiceReadAccessError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
         normalized_account_policies: dict[str, RiskAccountPolicyBinding] = {}
-        for account_ref, binding in account_policy_bindings.items():
+        for account_ref, policy_binding in account_policy_bindings.items():
             if (
                 not _valid_identifier(account_ref)
-                or type(binding) is not RiskAccountPolicyBinding
-                or binding.account_ref != account_ref
+                or type(policy_binding) is not RiskAccountPolicyBinding
+                or policy_binding.account_ref != account_ref
             ):
                 raise ServiceReadAccessError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
-            normalized_account_policies[account_ref] = binding
+            normalized_account_policies[account_ref] = policy_binding
         if set(normalized_account_policies) != set(self.allow_risk_account_policy_refs):
             raise ServiceReadAccessError("RISK_ACCOUNT_POLICY_BINDING_MISMATCH")
         if normalized_account_policies:
@@ -586,6 +586,9 @@ class ServiceReadAccessDirectory:
 
 
 def _immutable_selectors(value: object) -> frozenset[str]:
+    if not isinstance(value, (frozenset, set, tuple, list)):
+        raise ServiceReadAccessError("INVALID_SELECTORS")
+    # Reject subclasses and oversized inputs; keep the exact-type contract.
     if type(value) not in {frozenset, set, tuple, list} or len(value) > 4096:
         raise ServiceReadAccessError("INVALID_SELECTORS")
     selectors = frozenset(value)

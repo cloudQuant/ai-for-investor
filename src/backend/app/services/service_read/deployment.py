@@ -1250,6 +1250,8 @@ def _parse_risk_policy_budget_bindings(
             management, portfolio_ref, frozenset(member_scope_refs)
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
+        # _is_budget_management_scope rejects None, so the scope is present here.
+        assert management is not None
         execution_domain_ref = management.execution_domain_ref
         for account_ref, scope_ref in member_scope_refs.items():
             if not _is_budget_member_scope(
@@ -1363,20 +1365,20 @@ def _validate_profile_bindings(
 ) -> None:
     declared: dict[tuple[str, str], tuple[str, str | None]] = {}
     budget_management_portfolios: dict[tuple[str, str], str] = {}
-    for account_ref, binding in account_bindings.items():
-        scope = scopes.get(binding.scope_ref)
+    for account_ref, account_binding in account_bindings.items():
+        scope = scopes.get(account_binding.scope_ref)
         if (
-            binding.mount != "application.account"
+            account_binding.mount != "application.account"
             or scope is None
             or scope.account_ref != account_ref
             or scope.account_refs
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
-    for account_ref, binding in account_book_bindings.items():
-        scope = scopes.get(binding.scope_ref)
+        _add_declared(declared, account_binding.mount, account_binding.scope_ref, account_ref)
+    for account_ref, account_book_binding in account_book_bindings.items():
+        scope = scopes.get(account_book_binding.scope_ref)
         if (
-            binding.mount != "application.order_query"
+            account_book_binding.mount != "application.order_query"
             or scope is None
             or scope.account_ref != account_ref
             or not _is_account_scope(scope)
@@ -1385,56 +1387,65 @@ def _validate_profile_bindings(
         snapshot_binding = account_bindings.get(account_ref)
         if (
             snapshot_binding is not None
-            and snapshot_binding.account_key.account_key_id != binding.account_key.account_key_id
+            and snapshot_binding.account_key.account_key_id
+            != account_book_binding.account_key.account_key_id
         ):
             raise ServiceReadDeploymentError("ACCOUNT_BOOK_KEY_MISMATCH")
-        _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
-    for scope_ref, binding in order_bindings.items():
-        if binding.mount != "application.order_query" or scope_ref not in scopes:
+        _add_declared(
+            declared, account_book_binding.mount, account_book_binding.scope_ref, account_ref
+        )
+    for order_scope_ref, order_binding in order_bindings.items():
+        if order_binding.mount != "application.order_query" or order_scope_ref not in scopes:
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        scope = scopes[scope_ref]
-        _add_declared(declared, binding.mount, scope_ref, scope.account_ref)
-    for scope_ref, binding in order_submit_bindings.items():
-        scope = scopes.get(scope_ref)
+        scope = scopes[order_scope_ref]
+        _add_declared(declared, order_binding.mount, order_scope_ref, scope.account_ref)
+    for submit_scope_ref, submit_binding in order_submit_bindings.items():
+        scope = scopes.get(submit_scope_ref)
         if (
-            binding.mount != "application.orders"
+            submit_binding.mount != "application.orders"
             or scope is None
-            or not _is_manual_order_scope(scope, binding.account_ref, binding.manual_book_ref)
+            or not _is_manual_order_scope(
+                scope, submit_binding.account_ref, submit_binding.manual_book_ref
+            )
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
-    for scope_ref, binding in approved_target_bindings.items():
-        scope = scopes.get(scope_ref)
+        _add_declared(declared, submit_binding.mount, submit_scope_ref, submit_binding.account_ref)
+    for approved_scope_ref, approved_binding in approved_target_bindings.items():
+        scope = scopes.get(approved_scope_ref)
         if (
-            binding.mount != "application.orders"
+            approved_binding.mount != "application.orders"
             or scope is None
-            or not _is_approved_target_scope(scope, binding.account_ref, binding.strategy_ref)
-            or scope != binding.wire_scope
+            or not _is_approved_target_scope(
+                scope, approved_binding.account_ref, approved_binding.strategy_ref
+            )
+            or scope != approved_binding.wire_scope
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, scope_ref, binding.account_ref)
-    for legacy_account_id, binding in paper_submit_bindings.items():
-        scope = scopes.get(binding.scope_ref)
-        query = scopes.get(binding.query_scope_ref)
+        _add_declared(
+            declared, approved_binding.mount, approved_scope_ref, approved_binding.account_ref
+        )
+    for legacy_account_id, paper_binding in paper_submit_bindings.items():
+        scope = scopes.get(paper_binding.scope_ref)
+        query = scopes.get(paper_binding.query_scope_ref)
         if (
-            legacy_account_id != binding.legacy_account_id
-            or binding.mount != "application.orders"
+            legacy_account_id != paper_binding.legacy_account_id
+            or paper_binding.mount != "application.orders"
             or scope is None
             or query is None
-            or scope != binding.wire_scope
-            or scope.account_ref != binding.account_ref
-            or scope.execution_domain_ref != binding.execution_domain_ref
-            or scope.strategy_ref != binding.strategy_ref
+            or scope != paper_binding.wire_scope
+            or scope.account_ref != paper_binding.account_ref
+            or scope.execution_domain_ref != paper_binding.execution_domain_ref
+            or scope.strategy_ref != paper_binding.strategy_ref
             or scope.account_refs
             or scope.run_id is not None
             or scope.manual_book_ref is not None
             or scope.portfolio_ref is not None
             or scope.group_id is not None
             or scope.leg_id is not None
-            or query.execution_domain_ref != binding.execution_domain_ref
-            or query.account_ref != binding.account_ref
+            or query.execution_domain_ref != paper_binding.execution_domain_ref
+            or query.account_ref != paper_binding.account_ref
             or query.account_refs
-            or query.strategy_ref != binding.strategy_ref
+            or query.strategy_ref != paper_binding.strategy_ref
             or query.run_id is not None
             or query.manual_book_ref is not None
             or query.portfolio_ref is not None
@@ -1442,65 +1453,79 @@ def _validate_profile_bindings(
             or query.leg_id is not None
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, binding.scope_ref, binding.account_ref)
-    for legacy_account_id, binding in paper_legacy_import_bindings.items():
+        _add_declared(
+            declared, paper_binding.mount, paper_binding.scope_ref, paper_binding.account_ref
+        )
+    for legacy_account_id, legacy_import_binding in paper_legacy_import_bindings.items():
         paper = paper_submit_bindings.get(legacy_account_id)
-        scope = scopes.get(binding.scope_ref)
+        scope = scopes.get(legacy_import_binding.scope_ref)
         if (
-            binding.mount != "application.paper_legacy_import"
-            or binding.legacy_account_id != legacy_account_id
-            or binding.owner_subject != subject
+            legacy_import_binding.mount != "application.paper_legacy_import"
+            or legacy_import_binding.legacy_account_id != legacy_account_id
+            or legacy_import_binding.owner_subject != subject
             or paper is None
-            or binding.paper_binding is not paper
-            or binding.scope_ref != paper.scope_ref
+            or legacy_import_binding.paper_binding is not paper
+            or legacy_import_binding.scope_ref != paper.scope_ref
             or scope is None
             or scope != paper.wire_scope
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         paper.paper_owner_domain.validate_binding(paper.wire_scope, paper.execution_scope)
-        _add_declared(declared, binding.mount, binding.scope_ref, paper.account_ref)
-    for scope_ref, binding in monitor_bindings.items():
-        scope = scopes.get(binding.scope_ref)
+        _add_declared(
+            declared,
+            legacy_import_binding.mount,
+            legacy_import_binding.scope_ref,
+            paper.account_ref,
+        )
+    for monitor_scope_ref, monitor_binding in monitor_bindings.items():
+        scope = scopes.get(monitor_binding.scope_ref)
         if (
-            binding.mount != "application.monitor"
+            monitor_binding.mount != "application.monitor"
             or scope is None
-            or scope.strategy_ref != binding.strategy_ref
+            or scope.strategy_ref != monitor_binding.strategy_ref
             or scope.account_refs
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, scope_ref, None)
-    for portfolio_ref, binding in portfolio_analytics_bindings.items():
-        scope = scopes.get(binding.scope_ref)
-        if binding.mount != "application.risk_analysis" or not _is_portfolio_analytics_scope(
-            scope, portfolio_ref
+        _add_declared(declared, monitor_binding.mount, monitor_scope_ref, None)
+    for analytics_portfolio_ref, analytics_binding in portfolio_analytics_bindings.items():
+        scope = scopes.get(analytics_binding.scope_ref)
+        if analytics_binding.mount != "application.risk_analysis" or (
+            not _is_portfolio_analytics_scope(scope, analytics_portfolio_ref)
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, binding.scope_ref, portfolio_ref)
-    for portfolio_ref, binding in risk_policy_budget_bindings.items():
-        management_scope = scopes.get(binding.management_scope_ref)
-        member_refs = frozenset(binding.member_scope_refs)
+        _add_declared(
+            declared,
+            analytics_binding.mount,
+            analytics_binding.scope_ref,
+            analytics_portfolio_ref,
+        )
+    for budget_portfolio_ref, budget_binding in risk_policy_budget_bindings.items():
+        management_scope = scopes.get(budget_binding.management_scope_ref)
+        member_refs = frozenset(budget_binding.member_scope_refs)
         if (
-            binding.mount != "application.risk_policy"
-            or binding.portfolio_ref != portfolio_ref
-            or not _is_budget_management_scope(management_scope, portfolio_ref, member_refs)
+            budget_binding.mount != "application.risk_policy"
+            or budget_binding.portfolio_ref != budget_portfolio_ref
+            or not _is_budget_management_scope(management_scope, budget_portfolio_ref, member_refs)
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        management_pair = (binding.mount, binding.management_scope_ref)
-        _add_declared(declared, binding.mount, binding.management_scope_ref, None)
+        management_pair = (budget_binding.mount, budget_binding.management_scope_ref)
+        _add_declared(declared, budget_binding.mount, budget_binding.management_scope_ref, None)
         previous_portfolio = budget_management_portfolios.get(management_pair)
-        if previous_portfolio is not None and previous_portfolio != portfolio_ref:
+        if previous_portfolio is not None and previous_portfolio != budget_portfolio_ref:
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        budget_management_portfolios[management_pair] = portfolio_ref
-        for account_ref, scope_ref in binding.member_scope_refs.items():
-            member_scope = scopes.get(scope_ref)
+        budget_management_portfolios[management_pair] = budget_portfolio_ref
+        for account_ref, member_scope_ref in budget_binding.member_scope_refs.items():
+            member_scope = scopes.get(member_scope_ref)
+            # _is_budget_management_scope rejects None, so management_scope is present.
+            assert management_scope is not None
             if not _is_budget_member_scope(
                 member_scope,
-                portfolio_ref,
+                budget_portfolio_ref,
                 account_ref,
                 management_scope.execution_domain_ref,
             ):
                 raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            _add_declared(declared, binding.mount, scope_ref, account_ref)
+            _add_declared(declared, budget_binding.mount, member_scope_ref, account_ref)
 
     budget_scope_refs = {
         binding.management_scope_ref for binding in risk_policy_budget_bindings.values()
@@ -1545,10 +1570,10 @@ def _validate_profile_bindings(
             pair = (mount, scope_ref)
             if pair in observed or pair not in declared:
                 raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
-            account_ref = declared[pair][1]
+            declared_account_ref = declared[pair][1]
             if mount == "application.risk_analysis":
                 if (
-                    binding.get("portfolio_ref") != account_ref
+                    binding.get("portfolio_ref") != declared_account_ref
                     or binding.get("account_ref") is not None
                 ):
                     raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
@@ -1560,11 +1585,11 @@ def _validate_profile_bindings(
                     raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
             elif mount == "application.risk_policy":
                 if (
-                    binding.get("account_ref") != account_ref
+                    binding.get("account_ref") != declared_account_ref
                     or binding.get("portfolio_ref") is not None
                 ):
                     raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            elif binding.get("account_ref") != account_ref:
+            elif binding.get("account_ref") != declared_account_ref:
                 raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
             service_id = binding.get("service_id")
             transport_ref = binding.get("transport_ref")
