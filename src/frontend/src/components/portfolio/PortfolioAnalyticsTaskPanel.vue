@@ -4,10 +4,9 @@
     data-test="portfolio-analytics-task-panel"
   >
     <header>
-      <h3>离线组合分析 / Offline portfolio analytics</h3>
+      <h3>{{ t('portfolio.analyticsTitle') }}</h3>
       <p>
-        Risk 会按版本计算敞口/回撤、VaR/ES 与情景结果。输入必须是带来源、版本和时间切片的 V2 快照；
-        缺失数据请保留为 unavailable，不能填成零。此入口不读取账户、不连接 provider，也不授予交易权限。
+        {{ t('portfolio.analyticsDescription') }}
       </p>
     </header>
 
@@ -16,14 +15,14 @@
       class="analytics-panel__unavailable"
       role="status"
     >
-      Live 组合不接受离线分析输入。请切换到 research、imported 或 paper 的固定版本。
+      {{ t('portfolio.analyticsLiveUnavailable') }}
     </p>
 
     <template v-else>
       <p class="analytics-panel__selection">
         {{ portfolioRef }} · membership v{{ membershipVersion }} · {{ sourceType }}
       </p>
-      <label for="portfolio-analytics-input-file">读取已有 V2 JSON 文件</label>
+      <label for="portfolio-analytics-input-file">{{ t('portfolio.analyticsReadFile') }}</label>
       <input
         id="portfolio-analytics-input-file"
         type="file"
@@ -32,14 +31,14 @@
         :disabled="loading"
         @change="readFile"
       >
-      <label for="portfolio-analytics-input">V2 facts 与 request</label>
+      <label for="portfolio-analytics-input">{{ t('portfolio.analyticsFactsAndRequest') }}</label>
       <textarea
         id="portfolio-analytics-input"
         v-model="rawInput"
         rows="14"
         spellcheck="false"
         data-test="portfolio-analytics-input"
-        placeholder="粘贴包含 facts 与 request 的离线 JSON；本页不会填充价格、FX、NAV 或损失样本。"
+        :placeholder="t('portfolio.analyticsPlaceholder')"
         :disabled="loading"
       />
       <div class="analytics-panel__actions">
@@ -49,7 +48,7 @@
           :disabled="loading || !rawInput.trim()"
           @click="submit"
         >
-          {{ loading ? '处理中…' : '提交离线分析' }}
+          {{ loading ? t('portfolio.analyticsProcessing') : t('portfolio.analyticsSubmit') }}
         </button>
         <button
           v-if="task && (task.state === 'pending' || task.state === 'running')"
@@ -58,7 +57,7 @@
           :disabled="loading"
           @click="cancel"
         >
-          取消任务
+          {{ t('portfolio.analyticsCancelTask') }}
         </button>
         <button
           v-if="task && !polling && (task.state === 'pending' || task.state === 'running')"
@@ -67,7 +66,7 @@
           :disabled="loading"
           @click="refresh"
         >
-          刷新状态
+          {{ t('portfolio.analyticsRefreshStatus') }}
         </button>
       </div>
     </template>
@@ -85,12 +84,12 @@
       class="analytics-panel__task"
       data-test="portfolio-analytics-task"
     >
-      <p>任务状态：<strong>{{ task.state }}</strong></p>
+      <p>{{ t('portfolio.analyticsTaskState') }}<strong>{{ task.state }}</strong></p>
       <p v-if="task.detail_code">
-        诊断码：<code>{{ task.detail_code }}</code>
+        {{ t('portfolio.analyticsDiagnosticCode') }}<code>{{ task.detail_code }}</code>
       </p>
-      <p>输入摘要：<code>{{ task.input_sha256 }}</code></p>
-      <p>任务摘要：<code>{{ task.task_ref }}</code></p>
+      <p>{{ t('portfolio.analyticsInputSummary') }}<code>{{ task.input_sha256 }}</code></p>
+      <p>{{ t('portfolio.analyticsTaskSummary') }}<code>{{ task.task_ref }}</code></p>
       <pre
         v-if="task.result"
         data-test="portfolio-analytics-result"
@@ -101,6 +100,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   type PortfolioAnalyticsFactsV2,
@@ -114,6 +114,7 @@ const props = defineProps<{
   sourceType: string
 }>()
 
+const { t } = useI18n()
 const rawInput = ref('')
 const runner = usePortfolioAnalyticsTask()
 const task = runner.task
@@ -132,7 +133,9 @@ const errorMessage = computed(() => {
   const response = (error.value as { response?: { data?: { detail?: { code?: unknown } } } })
     .response
   const code = response?.data?.detail?.code
-  return typeof code === 'string' ? `分析任务未完成：${code}` : '分析请求失败，请检查输入或稍后重试。'
+  return typeof code === 'string'
+    ? t('portfolio.analyticsTaskFailed', { code })
+    : t('portfolio.analyticsRequestFailed')
 })
 
 function isObject(value: unknown): value is Record<string, unknown> {

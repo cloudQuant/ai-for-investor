@@ -500,10 +500,10 @@
               v-if="compositionProjection.market_valuation"
               data-test="portfolio-market-valuation-summary"
             >
-              行情输入 / Market inputs:
+              {{ t('portfolio.compositionMarketInputs') }}
               {{ compositionProjection.market_valuation.status }}
               · positions {{ compositionProjection.market_valuation.position_count }}
-              · market event skew {{ compositionProjection.market_valuation.market_event_skew_ns ?? '未建立 / Not established' }} ns
+              · market event skew {{ compositionProjection.market_valuation.market_event_skew_ns ?? t('portfolio.compositionNotEstablished') }} ns
               · reconciliation {{ compositionProjection.market_valuation.reconciliation_status }}
               · market facts do not alter account totals, cash, credit, or admission.
             </p>
@@ -511,10 +511,10 @@
               v-if="compositionProjection.provider_snapshot_consistency"
               data-test="portfolio-provider-snapshot-consistency"
             >
-              授权账户快照偏差 / Authorized account snapshot skew:
+              {{ t('portfolio.compositionProviderSnapshotSkew') }}
               {{ compositionProjection.provider_snapshot_consistency.status }}
               · coverage {{ compositionProjection.provider_snapshot_consistency.coverage_status }}
-              · {{ compositionProjection.provider_snapshot_consistency.skew_ns ?? '未建立 / Not established' }} ns
+              · {{ compositionProjection.provider_snapshot_consistency.skew_ns ?? t('portfolio.compositionNotEstablished') }} ns
               · {{ compositionProjection.provider_snapshot_consistency.skew_policy }}
             </p>
             <p v-if="compositionProjection.accounts.length === 0">
@@ -547,7 +547,7 @@
                   data-test="portfolio-provider-account-observation"
                 >
                   <summary>
-                    授权账户事实 / Authorized provider facts:
+                    {{ t('portfolio.compositionAuthorizedProviderFacts') }}
                     {{ account.provider_observation.status }}
                   </summary>
                   <p
@@ -562,7 +562,7 @@
                   >
                     <dl data-test="portfolio-provider-account-cut">
                       <div>
-                        <dt>观测质量 / Observation quality</dt>
+                        <dt>{{ t('portfolio.compositionObservationQuality') }}</dt>
                         <dd>{{ account.provider_observation.quality }}</dd>
                       </div>
                       <div>
@@ -572,47 +572,46 @@
                       <div>
                         <dt>Session generation / cursor</dt>
                         <dd>
-                          <code>{{ account.provider_observation.session_generation ?? '缺失 / Missing' }}</code>
-                          · {{ account.provider_observation.cursor ?? '缺失 / Missing' }}
+                          <code>{{ account.provider_observation.session_generation ?? t('portfolio.compositionMissing') }}</code>
+                          · {{ account.provider_observation.cursor ?? t('portfolio.compositionMissing') }}
                         </dd>
                       </div>
                       <div>
-                        <dt>一致性 / Consistency</dt>
+                        <dt>{{ t('portfolio.compositionConsistency') }}</dt>
                         <dd>
                           {{ account.provider_observation.consistency }}
                           · {{ account.provider_observation.consistency === 'multi_query'
-                            ? '原子性未建立 / atomicity not established'
+                            ? t('portfolio.compositionAtomicityNotEstablished')
                             : 'Provider atomic' }}
                         </dd>
                       </div>
                       <div>
-                        <dt>独立 cut / Independent cut</dt>
+                        <dt>{{ t('portfolio.compositionIndependentCut') }}</dt>
                         <dd>
                           <code>{{ account.provider_observation.cut.started_at_utc }}</code>
                           → <code>{{ account.provider_observation.cut.completed_at_utc }}</code>
                         </dd>
                       </div>
                       <div>
-                        <dt>行时间偏差 / Row time spread</dt>
+                        <dt>{{ t('portfolio.compositionRowTimeSpread') }}</dt>
                         <dd>
-                          {{ account.provider_observation.cut.row_skew_ns ?? '未建立 / Not established' }} ns
+                          {{ account.provider_observation.cut.row_skew_ns ?? t('portfolio.compositionNotEstablished') }} ns
                           · {{ account.provider_observation.cut.row_observed_at_count }}/{{ account.provider_observation.cut.row_count }}
                         </dd>
                       </div>
                       <div>
-                        <dt>覆盖完整性 / Coverage</dt>
+                        <dt>{{ t('portfolio.compositionCoverageIntegrity') }}</dt>
                         <dd>
                           {{ account.provider_observation.coverage.state }}
-                          · balances {{ account.provider_observation.coverage.balances_complete ? '完整 / complete' : '不完整 / incomplete' }}
-                          · positions {{ account.provider_observation.coverage.positions_complete ? '完整 / complete' : '不完整 / incomplete' }}
+                          · balances {{ account.provider_observation.coverage.balances_complete ? t('portfolio.compositionComplete') : t('portfolio.compositionIncomplete') }}
+                          · positions {{ account.provider_observation.coverage.positions_complete ? t('portfolio.compositionComplete') : t('portfolio.compositionIncomplete') }}
                         </dd>
                       </div>
                     </dl>
                     <p data-test="portfolio-provider-account-reconciliation">
-                      账户观察与执行账簿为独立来源；未声明已对账。
-                      / Provider account facts and execution books are independent sources; reconciliation is not established.
+                      {{ t('portfolio.compositionProviderReconciliation') }}
                     </p>
-                    <p>账户估值来源数值 / Provider account valuation (unconverted)</p>
+                    <p>{{ t('portfolio.compositionProviderValuation') }}</p>
                     <p v-if="account.provider_observation.valuation">
                       {{ compositionAmount(
                         account.provider_observation.valuation.available_cash,
@@ -625,9 +624,9 @@
                       <code>{{ account.provider_observation.valuation.observed_at_utc }}</code>
                     </p>
                     <p v-else>
-                      估值字段缺失 / Provider valuation missing.
+                      {{ t('portfolio.compositionValuationMissing') }}
                     </p>
-                    <p>逐币种余额（不换汇）/ Balances by original currency (no FX conversion)</p>
+                    <p>{{ t('portfolio.compositionBalancesByCurrency') }}</p>
                     <ul data-test="portfolio-provider-account-balances">
                       <li
                         v-for="(balance, index) in account.provider_observation.balances"
@@ -641,10 +640,10 @@
                         · <code>{{ balance.observed_at_utc }}</code>
                       </li>
                       <li v-if="account.provider_observation.balances.length === 0">
-                        余额行缺失 / No balance rows reported.
+                        {{ t('portfolio.compositionNoBalanceRows') }}
                       </li>
                     </ul>
-                    <p>Provider 持仓（均价不是 mark）/ Provider positions (average price is not a mark)</p>
+                    <p>{{ t('portfolio.compositionProviderPositions') }}</p>
                     <ul data-test="portfolio-provider-account-positions">
                       <li
                         v-for="(position, index) in account.provider_observation.positions"
@@ -666,13 +665,13 @@
                           v-if="position.valuation_inputs.market_cut"
                           data-test="portfolio-market-input-cut"
                         >
-                          <summary>行情独立 cut / Independent market cut</summary>
+                          <summary>{{ t('portfolio.compositionIndependentMarketCut') }}</summary>
                           <p>
                             account position {{ position.valuation_inputs.market_cut.account_position_observed_at_utc ?? 'missing' }}
                             · market event {{ position.valuation_inputs.market_cut.market_event_at_utc ?? 'missing' }}
-                            · skew {{ position.valuation_inputs.market_cut.account_to_market_skew_ns ?? '未建立 / Not established' }} ns
+                            · skew {{ position.valuation_inputs.market_cut.account_to_market_skew_ns ?? t('portfolio.compositionNotEstablished') }} ns
                             · cursor {{ position.valuation_inputs.market_cut.cursor_available ? 'available' : 'missing' }}
-                            · coverage {{ position.valuation_inputs.market_cut.coverage?.status ?? '未建立 / Not established' }}
+                            · coverage {{ position.valuation_inputs.market_cut.coverage?.status ?? t('portfolio.compositionNotEstablished') }}
                             ({{ position.valuation_inputs.market_cut.coverage?.accepted_event_count ?? '—' }}/{{ position.valuation_inputs.market_cut.coverage?.expected_event_count ?? '—' }} accepted, {{ position.valuation_inputs.market_cut.coverage?.missing_event_count ?? '—' }} missing)
                             · query {{ position.valuation_inputs.market_cut.query_id ?? 'missing' }}
                             · identity metadata {{ position.valuation_inputs.market_cut.identity_metadata_version }}
@@ -688,13 +687,13 @@
                           v-if="position.valuation_inputs.fx_market_cut"
                           data-test="portfolio-fx-input-cut"
                         >
-                          <summary>汇率独立 cut / FX input cut</summary>
+                          <summary>{{ t('portfolio.compositionFxInputCut') }}</summary>
                           <p>
                             account position {{ position.valuation_inputs.fx_market_cut.account_position_observed_at_utc ?? 'missing' }}
                             · FX event {{ position.valuation_inputs.fx_market_cut.market_event_at_utc ?? 'missing' }}
-                            · skew {{ position.valuation_inputs.fx_market_cut.account_to_market_skew_ns ?? '未建立 / Not established' }} ns
+                            · skew {{ position.valuation_inputs.fx_market_cut.account_to_market_skew_ns ?? t('portfolio.compositionNotEstablished') }} ns
                             · cursor {{ position.valuation_inputs.fx_market_cut.cursor_available ? 'available' : 'missing' }}
-                            · coverage {{ position.valuation_inputs.fx_market_cut.coverage?.status ?? '未建立 / Not established' }}
+                            · coverage {{ position.valuation_inputs.fx_market_cut.coverage?.status ?? t('portfolio.compositionNotEstablished') }}
                             ({{ position.valuation_inputs.fx_market_cut.coverage?.accepted_event_count ?? '—' }}/{{ position.valuation_inputs.fx_market_cut.coverage?.expected_event_count ?? '—' }} accepted, {{ position.valuation_inputs.fx_market_cut.coverage?.missing_event_count ?? '—' }} missing)
                             · query {{ position.valuation_inputs.fx_market_cut.query_id ?? 'missing' }}
                             · identity metadata {{ position.valuation_inputs.fx_market_cut.identity_metadata_version }}
@@ -708,12 +707,11 @@
                         </details>
                       </li>
                       <li v-if="account.provider_observation.positions.length === 0">
-                        持仓行缺失 / No position rows reported.
+                        {{ t('portfolio.compositionNoPositionRows') }}
                       </li>
                     </ul>
                     <p>
-                      估值仅供展示，缺少 mark、合约乘数或 FX 时不计算市值；不进入现金、授信或交易准入。
-                      / Display only: no market value is calculated without a mark, contract multiplier, and FX fact; these facts do not affect cash, credit, or admission.
+                      {{ t('portfolio.compositionValuationDisplayOnly') }}
                     </p>
                   </template>
                   <p
@@ -767,16 +765,15 @@
                 class="portfolio-composition__financial"
                 data-test="portfolio-account-book-financial"
               >
-                <h4>持久财务账簿 / Persisted financial books</h4>
+                <h4>{{ t('portfolio.compositionPersistedFinancialBooks') }}</h4>
                 <p>
-                  持久执行账簿资金与成本仅作账簿投影，不是实时账户总额，也不会加入账户总额。
-                  / Persisted execution-ledger cash and cost are a book projection, not live account equity, and are not added to the account total.
+                  {{ t('portfolio.compositionPersistedFinancialDisclaimer') }}
                 </p>
                 <p
                   v-if="!source.financial || source.financial.status === 'absent'"
                   data-test="portfolio-account-book-financial-absent"
                 >
-                  财务子投影未提供 / Financial projection not provided.
+                  {{ t('portfolio.compositionFinancialProjectionMissing') }}
                 </p>
                 <p
                   v-else-if="source.financial.status === 'unavailable'"
@@ -790,23 +787,23 @@
                 <template v-else>
                   <dl data-test="portfolio-account-book-financial-cut">
                     <div>
-                      <dt>财务账簿状态 / Financial state</dt>
+                      <dt>{{ t('portfolio.compositionFinancialState') }}</dt>
                       <dd>{{ source.financial.state }}</dd>
                     </div>
                     <div>
-                      <dt>账簿投影完整 / Projection complete</dt>
-                      <dd>{{ source.financial.complete ? '是 / Yes' : '否 / No' }}</dd>
+                      <dt>{{ t('portfolio.compositionProjectionComplete') }}</dt>
+                      <dd>{{ source.financial.complete ? t('portfolio.compositionYes') : t('portfolio.compositionNo') }}</dd>
                     </div>
                     <div>
-                      <dt>独立账簿 cut / Independent ledger cut</dt>
+                      <dt>{{ t('portfolio.compositionIndependentLedgerCut') }}</dt>
                       <dd>{{ source.financial.cut_relationship }}</dd>
                     </div>
                     <div>
-                      <dt>新鲜度 / Freshness</dt>
+                      <dt>{{ t('portfolio.compositionFreshness') }}</dt>
                       <dd>{{ source.financial.freshness }}</dd>
                     </div>
                     <div>
-                      <dt>采集时间（纳秒）/ Captured at (ns)</dt>
+                      <dt>{{ t('portfolio.compositionCapturedAtNs') }}</dt>
                       <dd><code>{{ source.financial.ledger_cut.captured_at_ns }}</code></dd>
                     </div>
                     <div>
@@ -831,7 +828,7 @@
                     data-test="portfolio-account-book-financial-owner"
                   >
                     <h5>{{ book.owner.kind }}/{{ book.owner.owner_ref }}</h5>
-                    <p>现金 / Cash</p>
+                    <p>{{ t('portfolio.compositionCash') }}</p>
                     <ul
                       v-if="book.cash.length > 0"
                       data-test="portfolio-account-book-financial-cash"
@@ -844,9 +841,9 @@
                       </li>
                     </ul>
                     <p v-else>
-                      未报告现金条目 / No cash rows reported.
+                      {{ t('portfolio.compositionNoCashRows') }}
                     </p>
-                    <p>持仓成本 / Position cost basis</p>
+                    <p>{{ t('portfolio.compositionPositionCostBasis') }}</p>
                     <ul v-if="book.positions.length > 0">
                       <li
                         v-for="position in book.positions"
@@ -856,16 +853,16 @@
                         {{ position.instrument }} · quantity {{ position.quantity }}
                         · cost basis
                         {{ position.cost_basis === null
-                          ? '缺失 / Missing'
+                          ? t('portfolio.compositionMissing')
                           : compositionAmount(position.cost_basis, position.cost_currency) }}
                         · {{ position.cost_method }} / {{ position.product_model }}
                         · metadata {{ position.metadata_version }}
                       </li>
                     </ul>
                     <p v-else>
-                      未报告持仓成本 / No position costs reported.
+                      {{ t('portfolio.compositionNoPositionCosts') }}
                     </p>
-                    <p>累计费用 / Cumulative fees</p>
+                    <p>{{ t('portfolio.compositionCumulativeFees') }}</p>
                     <ul
                       v-if="book.cumulative_fees.length > 0"
                       data-test="portfolio-account-book-financial-fees"
@@ -878,9 +875,9 @@
                       </li>
                     </ul>
                     <p v-else>
-                      未报告费用条目 / No fee rows reported.
+                      {{ t('portfolio.compositionNoFeeRows') }}
                     </p>
-                    <p>已实现盈亏 / Realized PnL</p>
+                    <p>{{ t('portfolio.compositionRealizedPnl') }}</p>
                     <ul v-if="book.realized_pnl.length > 0">
                       <li
                         v-for="amount in book.realized_pnl"
@@ -890,16 +887,16 @@
                       </li>
                     </ul>
                     <p v-else>
-                      未报告盈亏条目 / No realized PnL rows reported.
+                      {{ t('portfolio.compositionNoRealizedPnlRows') }}
                     </p>
                     <p>
-                      成本基础完整 / Cost basis complete:
-                      {{ book.cost_basis_complete ? '是 / Yes' : '否 / No' }}
+                      {{ t('portfolio.compositionCostBasisComplete') }}
+                      {{ book.cost_basis_complete ? t('portfolio.compositionYes') : t('portfolio.compositionNo') }}
                     </p>
                   </article>
                   <section data-test="portfolio-account-book-financial-unallocated">
-                    <h5>未分配财务账 / Unallocated financial book</h5>
-                    <p>现金 / Cash</p>
+                    <h5>{{ t('portfolio.compositionUnallocatedFinancialBook') }}</h5>
+                    <p>{{ t('portfolio.compositionCash') }}</p>
                     <ul v-if="source.financial.unallocated.cash.length > 0">
                       <li
                         v-for="amount in source.financial.unallocated.cash"
@@ -909,9 +906,9 @@
                       </li>
                     </ul>
                     <p v-else>
-                      未报告现金条目 / No cash rows reported.
+                      {{ t('portfolio.compositionNoCashRows') }}
                     </p>
-                    <p>持仓数量 / Position quantities</p>
+                    <p>{{ t('portfolio.compositionPositionQuantities') }}</p>
                     <ul v-if="source.financial.unallocated.positions.length > 0">
                       <li
                         v-for="position in source.financial.unallocated.positions"
@@ -921,9 +918,9 @@
                       </li>
                     </ul>
                     <p v-else>
-                      未报告持仓 / No positions reported.
+                      {{ t('portfolio.compositionNoPositions') }}
                     </p>
-                    <p>费用 / Fees</p>
+                    <p>{{ t('portfolio.compositionFees') }}</p>
                     <ul v-if="source.financial.unallocated.fees.length > 0">
                       <li
                         v-for="amount in source.financial.unallocated.fees"
@@ -933,7 +930,7 @@
                       </li>
                     </ul>
                     <p v-else>
-                      未报告费用条目 / No fee rows reported.
+                      {{ t('portfolio.compositionNoFeeRows') }}
                     </p>
                   </section>
                 </template>
@@ -2655,7 +2652,7 @@ async function renderPnlChart() {
     : readThemeColor('--danger-color', '#cf222e')
   pnlChart.setOption({
     title: {
-      text: '累计 P&L',
+      text: t('portfolio.chartCumulativePnl'),
       left: 80,
       top: 8,
       textStyle: { color: colors.primaryText, fontSize: 13, fontWeight: 600 },
@@ -2667,7 +2664,7 @@ async function renderPnlChart() {
       textStyle: { color: colors.primaryText },
       formatter: (params: { axisValue?: string; value?: number } | { axisValue?: string; value?: number }[]) => {
         const p = Array.isArray(params) ? params[0] : params
-        return `${p?.axisValue ?? ''}<br/>累计 P&L: ${formatSignedMoney(Number(p?.value ?? 0))}`
+        return `${p?.axisValue ?? ''}<br/>${t('portfolio.chartCumulativePnl')}: ${formatSignedMoney(Number(p?.value ?? 0))}`
       },
     },
     grid: { left: 80, right: 20, top: 38, bottom: 30 },
@@ -2684,7 +2681,7 @@ async function renderPnlChart() {
       splitLine: { lineStyle: { color: colors.border } },
     },
     series: [{
-      name: '累计 P&L',
+      name: t('portfolio.chartCumulativePnl'),
       type: 'line',
       data: curve.cumulativePnl,
       areaStyle: { color: pnlColor, opacity: 0.1 },
@@ -2716,7 +2713,7 @@ async function renderDrawdownChart() {
   const colors = chartThemeColors()
   drawdownChart.setOption({
     title: {
-      text: '回撤',
+      text: t('portfolio.chartDrawdown'),
       left: 80,
       top: 8,
       textStyle: { color: colors.primaryText, fontSize: 13, fontWeight: 600 },
@@ -2747,7 +2744,7 @@ async function renderDrawdownChart() {
       splitLine: { lineStyle: { color: colors.border } },
     },
     series: [{
-      name: '回撤',
+      name: t('portfolio.chartDrawdown'),
       type: 'line',
       data: curve.drawdown,
       areaStyle: { color: PORTFOLIO_DRAWDOWN_AREA_COLOR },
