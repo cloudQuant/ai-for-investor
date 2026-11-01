@@ -80,7 +80,7 @@
     "src/frontend/src/views/DataPage.vue": 1225,
     "src/frontend/src/views/KnowledgeBaseDocumentPage.vue": 1109,
     "src/frontend/src/views/NewsIntelligencePage.vue": 1521,
-    "src/frontend/src/views/PortfolioPage.vue": 3572,
+    "src/frontend/src/views/PortfolioPage.vue": 3591,
     "src/frontend/src/views/PromptTemplatesPage.vue": 1041,
     "src/frontend/src/views/QuotePage.vue": 2319,
     "src/frontend/src/views/ScannerPage.vue": 2275,
@@ -218,6 +218,15 @@
           "src/backend/app/services/strategy_target_approvals.py": {
             "was": 1451,
             "now": 1465
+          }
+        }
+      },
+      "2026-11-01_frontend_eslint_format_growth": {
+        "reason": "The frontend lint fix (#226) auto-applied vue/max-attributes-per-line and vue/*-html-element-content-newline to five templates. On this file that re-wraps attributes and text onto their own lines: +19 lines, template whitespace only, verified by compiling the templates with @vue/compiler-sfc before/after and comparing the ASTs. The file is frozen again at 3591 and its wave-2 split target is unchanged.",
+        "files": {
+          "src/frontend/src/views/PortfolioPage.vue": {
+            "was": 3572,
+            "now": 3591
           }
         }
       }
