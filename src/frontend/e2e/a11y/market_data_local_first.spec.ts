@@ -57,6 +57,48 @@ function stockBundle() {
   }
 }
 
+function stockCapabilities() {
+  // The page only derives the automatic local-only lifecycle read from an
+  // explicit legacy route census. A bare feature-flag document is rejected as
+  // CAPABILITY_CENSUS_INVALID, which leaves the page waiting for an explicit
+  // OpenData query instead of exercising this legacy bootstrap contract.
+  const rollout = (capabilityId: string, enabled: boolean) => ({
+    capability_id: capabilityId,
+    scope: 'rollout' as const,
+    route_id: null,
+    declared: true,
+    installed: true,
+    verified: true,
+    authorized: true,
+    effective: enabled,
+    reason_code: enabled ? null : 'ROLLOUT_DISABLED',
+  })
+  return {
+    version: 'market-data-capabilities-v1',
+    query_v2_enabled: true,
+    online_fetch_enabled: true,
+    research_cache_fill_enabled: false,
+    research_backtest_bridge_enabled: false,
+    capability_states: [
+      rollout('market-data.query-v2', true),
+      rollout('market-data.online-fetch', true),
+      rollout('market-data.research-cache-fill', false),
+      rollout('market-data.research-backtest-bridge', false),
+      {
+        capability_id: 'market-data.route:akshare-stock-kline-legacy-v1',
+        scope: 'route' as const,
+        route_id: 'akshare-stock-kline-legacy-v1',
+        declared: true,
+        installed: true,
+        verified: true,
+        authorized: true,
+        effective: true,
+        reason_code: null,
+      },
+    ],
+  }
+}
+
 function stockContract() {
   return {
     version: 'market-data-v2',
@@ -142,13 +184,7 @@ test('market page keeps lifecycle reads local-only and reserves local-first for 
     const path = new URL(request.url()).pathname
 
     if (path.endsWith('/market-data/capabilities')) {
-      return json(route, {
-        version: 'market-data-capabilities-v1',
-        query_v2_enabled: true,
-        online_fetch_enabled: true,
-        research_cache_fill_enabled: false,
-        research_backtest_bridge_enabled: false,
-      })
+      return json(route, stockCapabilities())
     }
     if (path.endsWith('/market-instruments/query-bundle')) return json(route, stockBundle())
     if (path.endsWith('/market-instruments/query-contract')) return json(route, stockContract())
