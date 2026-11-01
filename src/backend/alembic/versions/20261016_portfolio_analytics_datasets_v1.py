@@ -18,34 +18,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    if inspector.has_table("portfolio_analytics_datasets_v1"):
-        # A startup-created current ORM schema already carries this table.
-        required = {
-            "id",
-            "dataset_ref",
-            "owner_subject",
-            "portfolio_ref",
-            "membership_version",
-            "membership_sha256",
-            "source_type",
-            "source_trust",
-            "source_ref",
-            "source_version",
-            "source_generation",
-            "facts_snapshot_ref",
-            "facts_sha256",
-            "facts_json",
-            "idempotency_key_sha256",
-            "created_at",
-        }
-        columns = {
-            column["name"] for column in inspector.get_columns("portfolio_analytics_datasets_v1")
-        }
-        if not required.issubset(columns):
-            raise RuntimeError("PORTFOLIO_ANALYTICS_DATASET_SCHEMA_CONFLICT")
-        return
-
     op.create_table(
         "portfolio_analytics_datasets_v1",
         sa.Column("id", sa.String(length=36), nullable=False),
