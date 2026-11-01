@@ -1348,7 +1348,7 @@ after : 9143 collected, 0 errors (24 deselected)
 
 `#245`（`662c13ad7`）把 #243 的四个迁移守卫撤回后，`dev` 的 `Asset Research - MySQL 9.4 Contract` 恢复 **success**（`662c13ad7` 的 check-runs 实测）；代价是 `test_catalog_migration_accepts_current_startup_created_schema_at_iteration_196_baseline` 重新失败——`#245` 的 PR 正文已把这个后果写明。
 
-#### 2. [AFI #246](https://github.com/cloudQuant/ai-for-investor/pull/246)：从 #243 的 CI 日志拿到确切根因并修复
+#### 2. [AFI #246](https://github.com/cloudQuant/ai-for-investor/pull/246)（合入 `3f45d281c`）：从 #243 的 CI 日志拿到确切根因并修复
 
 #243 的 PR CI 日志给出了 MySQL 9.4 上真正的失败点，而不是 #245 无法本地复现的那段：
 
@@ -1369,13 +1369,17 @@ needed in a foreign key constraint 'fk_legacy_paper_cutover_import_receipt'")
 
 OpenData 的 gate 因 `alembic check` 与两个证据册长期失真而**在 `Verify migrations match the models` 一步就停住**，后面的 `make gate` 从未执行。本轮把它推到真实判据：
 
-- **Drift（[OpenData #161](https://github.com/cloudQuant/opendata/pull/161)）**：`od_job_definitions` 与 `od_metadata_publication_receipts` 由迁移创建、由原生 SQL 读写、不进 `Base.metadata`，autogenerate 每次把它们判成 removed。`alembic/env.py` 增加只排除这两张表及其索引的 `include_object`（附原因）。本地 MySQL 8.0.46 复现了与 CI 相同的 4 条 remove 与 exit 255，修复后 `alembic check` 报 `No new upgrade operations detected.`
+- **Drift（[OpenData #161](https://github.com/cloudQuant/opendata/pull/161)，合入 `1ba6d7d9`）**：`od_job_definitions` 与 `od_metadata_publication_receipts` 由迁移创建、由原生 SQL 读写、不进 `Base.metadata`，autogenerate 每次把它们判成 removed。`alembic/env.py` 增加只排除这两张表及其索引的 `include_object`（附原因）。本地 MySQL 8.0.46 复现了与 CI 相同的 4 条 remove 与 exit 255，修复后 `alembic check` 报 `No new upgrade operations detected.`
 - **零依赖证据册**：13 个注册路径的 sha 在真实改动后过期、4 个新模块带入 9 处来源身份字面量、扫描面 741 而 census 记 658。逐条用"pin 字节所属 revision → 当前 HEAD 的实际 diff"复核后重钉 13 条、新增 4 条注册，census **658→741**、冻结基线 **0→9**（9 处全为 Literal/常量来源身份，逐文件 reviewer 记录在案）。`--self-test` 与正式扫描均 OK。
 - **brand-check**：13 处旧库名 token 按既有的 `runtime_inventory` 同类理由加入 **token 路径白名单**（旧库名与 rights_evidence 标签是事实标识，改名会破坏端点/路径哈希校验）；只有这 9 个路径对该 token 放行，其余品牌与包引用检查不变。
-- **已合入的 [OpenData #160](https://github.com/cloudQuant/opendata/pull/160) / [#159](https://github.com/cloudQuant/opendata/pull/159)**：补 C150 的叙事与可追踪测量文件（此前 `.log` 被 `.gitignore` 忽略，重命名为 `.txt` 入档），并刷新 v1 OpenAPI 合同基线到实际 schema。它们分别解决 `evidence-traceability` 与 `published-openapi-check`。
+- **已合入的 [OpenData #160](https://github.com/cloudQuant/opendata/pull/160)（`b079e816`）/ [#159](https://github.com/cloudQuant/opendata/pull/159)（`f33bfc9a`）**：补 C150 的叙事与可追踪测量文件（此前 `.log` 被 `.gitignore` 忽略，重命名为 `.txt` 入档），并刷新 v1 OpenAPI 合同基线到实际 schema。它们分别解决 `evidence-traceability` 与 `published-openapi-check`。
 
-**实测（clean worktree，避免本机 5.2GB 未跟踪 `var/` 干扰）**：`zero-dep-check`、`brand-check`、`ledger-check`、`evidence-traceability`、`js-points-check`、`loguru-check`、`a2-check`、`published-openapi-check`、`quality-ratchet`、`public-api-quality` 全部 **exit 0**。**仍红**：`acceptance-probe-check` 报 **22 个 stale-proof 格**（台账记 proven、探针此刻读 gap，含 AC-16|05–09 等），本地缺 gitleaks 等 CI 环境因素未能排除，所以**不能把 22 格都判成真实漂移**；`test-cov` 与 `frontend-*` 尚未在该分支上本地实测。结论只到"gate 已开始真实执行、前 10 个成员在干净树上通过"，**不是整链通过**。
+**实测（clean worktree，避免本机 5.2GB 未跟踪 `var/` 干扰）**：`zero-dep-check`、`brand-check`、`ledger-check`、`evidence-traceability`、`js-points-check`、`loguru-check`、`a2-check`、`published-openapi-check`、`quality-ratchet`、`public-api-quality` 全部 **exit 0**；CI（`cc9e3760` 的 quality gate，含 gitleaks 与 MySQL）同样通过了这 11 个成员。**仍红**：`acceptance-probe-check` —— CI 报 **20 个 stale-proof 格**（台账记 proven、探针此刻读 gap）与 **14 条新棘轮条目**（AC-16|05/06/07/09、AC-17|03/05、AC-18|01、AC-19|02、AC-1|08/09、AC-4|01、AC-5|03、AC-8|02）。其中一个根因已经定位：AC-16|05 的判据要求零依赖冻结基线 `recorded_findings == 0`，而本迭代新增的股票日线模块合法携带 **9 处上游来源身份字符串**（`Literal["akshare.daily"]`、`ADAPTER_ID` 等，已逐条复核并登记）。要抹平它只有改产品身份/判据或由 owner 裁定 `--sync-ratchet` 显式入账两条路，**不在无裁定情况下自行处理**。`test-cov` 与 `frontend-*` 尚未在该分支上执行。结论只到"gate 已开始真实执行、11 个成员通过"，**不是整链通过**。
 
-#### 4. 共同非声明
+#### 4. AFI CI 的 diff-coverage 修复（[#248](https://github.com/cloudQuant/ai-for-investor/pull/248)，`bf24d397f`）
+
+`Backend - Unit Tests` 长期在**每个** PR 上红，与测试无关：`Check diff coverage` 拿 `origin/master` 当比较基线，而 `dev` 领先 master 数百个提交。#246 的单测腿实测 **8940 passed / 234 skipped** 仍被判定失败（`Missing: 9281 lines`, coverage below 60%），缺的正是 dev 自己尚未发布的代码。改为比较该 PR 的真实目标分支（并先 `git fetch` 该 ref，因为 `checkout` 只取合并提交），阈值与测量口径不变；`diff-cover` 本身会跳过 `--cov=app` 未测量的文件（测试、`alembic/versions/*`），本地以 `--compare-branch=origin/dev` 验证输出 `No lines with coverage information in this diff.`、exit 0。
+
+#### 5. 共同非声明
 
 MySQL 9.4 的结论来自 PR CI 的真实 9.4 服务容器；本地 8.0.46 仅用于复现与回归。OpenData 的 `make gate` 尚未整链绿；acceptance-probe 的 22 个 stale-proof 格需要 CI 环境下的复测与逐格判定。以上均为 CODE/OFFLINE 与 CI 证据，不构成真实源/生产/自然周期验收。
