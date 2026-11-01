@@ -27,6 +27,53 @@ _SQLITE_FENCE_TRIGGERS = (
 )
 
 
+_IMPORT_BINDING_COLUMNS = frozenset(
+    {
+        "source_kind",
+        "source_import_receipt_id",
+        "source_import_generation",
+        "target_import_sha256",
+    }
+)
+
+
+def _has_import_binding() -> bool:
+    """Return whether a complete startup-created import binding already exists."""
+    inspector = sa.inspect(op.get_bind())
+    columns = {column["name"] for column in inspector.get_columns(_RECEIPT)}
+    if not _IMPORT_BINDING_COLUMNS.issubset(columns):
+        return False
+    checks = {check["name"] for check in inspector.get_check_constraints(_RECEIPT)}
+    if not {
+        "ck_legacy_paper_cutover_source_kind",
+        "ck_legacy_paper_cutover_source_profile",
+    }.issubset(checks):
+        return False
+    return any(
+        foreign_key.get("constrained_columns") == ["source_import_receipt_id"]
+        and foreign_key.get("referred_table") == _IMPORT_RECEIPT
+        for foreign_key in inspector.get_foreign_keys(_RECEIPT)
+    )
+
+
+def _import_binding_foreign_key_name(bind) -> str | None:  # type: ignore[no-untyped-def]
+    """Return the reflected FK name for the import binding when the dialect records one.
+
+    MySQL refuses to drop a column that a foreign key still uses (error 1828).
+    The migration names that FK ``fk_legacy_paper_cutover_import_receipt``, but a
+    startup-created ORM schema carries the model's own constraint name, so the
+    downgrade drops whatever name this schema actually reflects.  SQLite keeps no
+    constraint names; its batch rebuild removes the FK together with the column.
+    """
+    for foreign_key in sa.inspect(bind).get_foreign_keys(_RECEIPT):
+        if (
+            foreign_key.get("constrained_columns") == ["source_import_receipt_id"]
+            and foreign_key.get("referred_table") == _IMPORT_RECEIPT
+        ):
+            return foreign_key.get("name")
+    return None
+
+
 def _source_profile_constraint() -> sa.CheckConstraint:
     return sa.CheckConstraint(
         "(source_kind = 'empty_account' AND receipt_version = 1 "
@@ -99,6 +146,16 @@ def _restore_sqlite_writer_fence_triggers() -> None:
 
 
 def upgrade() -> None:
+    if _has_import_binding():
+        # A startup-created current ORM schema already carries the import
+        # binding and its named constraints.  Replaying the batch would try to
+        # drop constraints the ORM schema never had.
+        return
+    inspector = sa.inspect(op.get_bind())
+    columns = {column["name"] for column in inspector.get_columns(_RECEIPT)}
+    if columns & _IMPORT_BINDING_COLUMNS:
+        raise RuntimeError("LEGACY_PAPER_IMPORT_CUTOVER_SCHEMA_CONFLICT")
+
     # SQLite batch rebuild drops/renames the receipt table while the existing
     # account and source-ledger triggers still refer to its old name.
     _drop_sqlite_writer_fence_triggers()
@@ -146,8 +203,10 @@ def downgrade() -> None:
 
     if bind.dialect.name == "sqlite":
         _drop_sqlite_writer_fence_triggers()
+    import_binding_foreign_key = _import_binding_foreign_key_name(bind)
     with op.batch_alter_table(_RECEIPT) as batch_op:
-        batch_op.drop_constraint("fk_legacy_paper_cutover_import_receipt", type_="foreignkey")
+        if import_binding_foreign_key is not None:
+            batch_op.drop_constraint(import_binding_foreign_key, type_="foreignkey")
         batch_op.drop_constraint("ck_legacy_paper_cutover_source_profile", type_="check")
         batch_op.drop_constraint("ck_legacy_paper_cutover_source_kind", type_="check")
         batch_op.drop_column("target_import_sha256")

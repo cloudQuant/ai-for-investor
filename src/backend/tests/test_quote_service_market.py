@@ -10,6 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
+pytest.importorskip("bt_api_base", reason="optional SDK protocol package is required")
+pytest.importorskip("bt_api_py", reason="optional SDK service runtime package is required")
+
 import app.services.quote.service_market as service_market_module
 from app.services.quote.service_market import (
     MarketQuoteResult,

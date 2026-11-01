@@ -12,6 +12,8 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+pytest.importorskip("bt_api_py", reason="optional SDK service execution package is required")
+
 
 def test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
