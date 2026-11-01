@@ -88,8 +88,7 @@ class _ApprovedTargetStorePort:
             connection = await session.connection()
             present = await connection.run_sync(
                 lambda sync_connection: {
-                    name for name in _REQUIRED_TABLES
-                    if inspect(sync_connection).has_table(name)
+                    name for name in _REQUIRED_TABLES if inspect(sync_connection).has_table(name)
                 }
             )
             if present != _REQUIRED_TABLES:
@@ -188,9 +187,7 @@ class _ApprovedTargetStorePort:
         if self._loop.is_closed() or self._loop.is_running():
             raise RuntimeError("APPROVAL_LOOP_UNAVAILABLE")
         task = self._loop.create_task(awaitable)
-        done, pending = self._loop.run_until_complete(
-            asyncio.wait((task,), timeout=timeout)
-        )
+        done, pending = self._loop.run_until_complete(asyncio.wait((task,), timeout=timeout))
         if pending:
             task.cancel()
             cancelled, still_pending = self._loop.run_until_complete(

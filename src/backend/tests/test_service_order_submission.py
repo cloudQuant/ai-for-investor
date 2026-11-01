@@ -173,9 +173,9 @@ def _manual_order_profile() -> dict:
             "instrument_metadata_versions": {"BTC-USDT": "manual-order-instrument-v1"},
         }
     }
-    profile["client_config"]["clients"]["execution"]["settings"]["bindings"][0][
-        "account_ref"
-    ] = "account-a"
+    profile["client_config"]["clients"]["execution"]["settings"]["bindings"][0]["account_ref"] = (
+        "account-a"
+    )
     return profile
 
 
@@ -188,15 +188,11 @@ def test_manual_order_profile_requests_only_normal_submit_operation():
     assert configured.scope_ref == "manual-current"
     assert configured.account_ref == "account-a"
     assert configured.manual_book_ref == "manual-book-a"
-    assert configured.instrument_metadata_versions == {
-        "BTC-USDT": "manual-order-instrument-v1"
-    }
+    assert configured.instrument_metadata_versions == {"BTC-USDT": "manual-order-instrument-v1"}
     profile["order_submit_bindings"]["manual-current"]["instrument_metadata_versions"][
         "BTC-USDT"
     ] = "mutated-after-parse"
-    assert configured.instrument_metadata_versions["BTC-USDT"] == (
-        "manual-order-instrument-v1"
-    )
+    assert configured.instrument_metadata_versions["BTC-USDT"] == ("manual-order-instrument-v1")
     with pytest.raises(TypeError):
         configured.instrument_metadata_versions["BTC-USDT"] = "caller-mutation"
 
@@ -209,16 +205,12 @@ def test_manual_order_profile_requests_only_normal_submit_operation():
         instrument_metadata_versions=mutable_versions,
     )
     mutable_versions["BTC-USDT"] = "mutated-after-construction"
-    assert direct_binding.instrument_metadata_versions["BTC-USDT"] == (
-        "manual-order-instrument-v1"
-    )
+    assert direct_binding.instrument_metadata_versions["BTC-USDT"] == ("manual-order-instrument-v1")
 
     runtime = _create_runtime(parsed[0])
     try:
         assert runtime.state == "new"
-        assert runtime._requested_operations == {
-            "application.orders": frozenset({"orders.submit"})
-        }
+        assert runtime._requested_operations == {"application.orders": frozenset({"orders.submit"})}
     finally:
         runtime.close()
 
@@ -227,9 +219,7 @@ def test_manual_order_profile_requests_only_normal_submit_operation():
     ("mutate", "expected_code"),
     (
         (
-            lambda profile: profile["scope_claims"]["manual-current"].pop(
-                "manual_book_ref"
-            ),
+            lambda profile: profile["scope_claims"]["manual-current"].pop("manual_book_ref"),
             "SCOPE_BINDING_MISMATCH",
         ),
         (
@@ -254,16 +244,9 @@ def test_manual_order_profile_rejects_nonmanual_or_expanded_grants(mutate, expec
 
 def test_manual_order_profile_keeps_empty_metadata_map_startup_compatible():
     profile = _manual_order_profile()
-    profile["order_submit_bindings"]["manual-current"].pop(
-        "instrument_metadata_versions"
-    )
+    profile["order_submit_bindings"]["manual-current"].pop("instrument_metadata_versions")
     parsed = _parse_deployment(_document([profile]))
-    assert (
-        parsed[0]
-        .order_submit_bindings["manual-current"]
-        .instrument_metadata_versions
-        == {}
-    )
+    assert parsed[0].order_submit_bindings["manual-current"].instrument_metadata_versions == {}
 
 
 @pytest.mark.parametrize(
@@ -278,9 +261,7 @@ def test_manual_order_profile_keeps_empty_metadata_map_startup_compatible():
 )
 def test_manual_order_profile_rejects_invalid_instrument_metadata_versions(versions):
     profile = _manual_order_profile()
-    profile["order_submit_bindings"]["manual-current"][
-        "instrument_metadata_versions"
-    ] = versions
+    profile["order_submit_bindings"]["manual-current"]["instrument_metadata_versions"] = versions
     with pytest.raises(ServiceReadDeploymentError):
         _parse_deployment(_document([profile]))
 
@@ -486,9 +467,7 @@ def test_manual_order_parser_accepts_actual_sdk_call_result(tmp_path):
         assert parsed_record["state"] == "ACKED"
         assert parsed_record["provider_order_id"] == "provider-order-no-host"
         with pytest.raises(HTTPException) as wrapped_reply_error:
-            _parse_submit_reply(
-                {"ok": True, "code": "OK", "result": sdk_call_result}, intent_id
-            )
+            _parse_submit_reply({"ok": True, "code": "OK", "result": sdk_call_result}, intent_id)
         assert wrapped_reply_error.value.status_code == 503
         assert wrapped_reply_error.value.detail["code"] == "INVALID_EXECUTION_REPLY"
     finally:
@@ -539,9 +518,7 @@ async def test_manual_submit_uses_trusted_metadata_and_binds_it_to_idempotency(
                 scope_ref="manual-current",
                 account_ref="account-a",
                 manual_book_ref="manual-book-a",
-                instrument_metadata_versions={
-                    "BTC-USDT": "manual-order-instrument-v1"
-                },
+                instrument_metadata_versions={"BTC-USDT": "manual-order-instrument-v1"},
             )
         },
         application_identity=identity,
@@ -570,9 +547,7 @@ async def test_manual_submit_uses_trusted_metadata_and_binds_it_to_idempotency(
         )
         assert first["service_code"] == "OK"
         assert worker.calls[0][1]["metadata_version"] == "manual-order-instrument-v1"
-        first_operation = (
-            await db.execute(select(ServiceOrderOperation))
-        ).scalar_one()
+        first_operation = (await db.execute(select(ServiceOrderOperation))).scalar_one()
         first_fingerprint = first_operation.request_sha256
         first_intent_id = first_operation.intent_id
 
@@ -593,9 +568,7 @@ async def test_manual_submit_uses_trusted_metadata_and_binds_it_to_idempotency(
         assert conflict.value.status_code == 409
         assert conflict.value.detail["code"] == "IDEMPOTENCY_CONFLICT"
         assert len(worker.calls) == 1
-        persisted = (
-            await db.execute(select(ServiceOrderOperation))
-        ).scalar_one()
+        persisted = (await db.execute(select(ServiceOrderOperation))).scalar_one()
         assert persisted.intent_id == first_intent_id
         assert persisted.request_sha256 == first_fingerprint
 
@@ -662,9 +635,7 @@ async def test_manual_submit_missing_metadata_fails_before_reservation_or_dispat
                 db=db,
             )
         assert missing.value.status_code == 503
-        assert missing.value.detail["code"] == (
-            "INSTRUMENT_METADATA_VERSION_NOT_CONFIGURED"
-        )
+        assert missing.value.detail["code"] == ("INSTRUMENT_METADATA_VERSION_NOT_CONFIGURED")
         assert worker.calls == 0
         assert (await db.execute(select(ServiceOrderOperation))).scalars().all() == []
 
@@ -679,9 +650,7 @@ def test_manual_submission_permission_excludes_guest_and_approval_admin():
 
 @pytest.mark.asyncio
 async def test_operation_key_mapping_is_durable_actor_scoped_and_conflict_detecting():
-    request_hash = sha256_canonical_json(
-        {"instrument": "BTC-USDT", "quantity": "1", "side": "BUY"}
-    )
+    request_hash = sha256_canonical_json({"instrument": "BTC-USDT", "quantity": "1", "side": "BUY"})
 
     async with async_session_maker() as db:
         first = await reserve_manual_order_operation(
@@ -758,12 +727,16 @@ async def test_operation_key_mapping_is_durable_actor_scoped_and_conflict_detect
         assert persisted.last_service_code == "OK"
         assert persisted.last_record_state == "ACKED"
         rows = (
-            await db.execute(
-                select(ServiceOrderOperation).where(
-                    ServiceOrderOperation.operation_key_sha256.is_not(None)
+            (
+                await db.execute(
+                    select(ServiceOrderOperation).where(
+                        ServiceOrderOperation.operation_key_sha256.is_not(None)
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert {row.intent_id for row in rows} >= {first_id, other_actor_id}
 
 

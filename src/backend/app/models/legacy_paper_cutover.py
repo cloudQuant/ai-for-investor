@@ -57,9 +57,7 @@ class LegacyPaperCutoverReceipt(Base):
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE")
     receipt_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     source_inventory_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    source_kind: Mapped[str] = mapped_column(
-        String(24), nullable=False, default="empty_account"
-    )
+    source_kind: Mapped[str] = mapped_column(String(24), nullable=False, default="empty_account")
     source_import_receipt_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("legacy_paper_import_receipts.id", ondelete="RESTRICT"),

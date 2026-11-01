@@ -570,9 +570,7 @@ def test_pipeline_preserves_source_financial_yoy_values() -> None:
         snapshot={
             "analysis_date": "2026-07-30",
             "financials": {
-                "annual": [
-                    {"report_date": "2025-12-31", "revenue": 130.0, "net_income": 42.0}
-                ],
+                "annual": [{"report_date": "2025-12-31", "revenue": 130.0, "net_income": 42.0}],
                 "quarterly": [
                     {
                         "report_date": "2026-03-31",
@@ -644,16 +642,10 @@ async def test_trader_and_bear_reports_separate_quote_from_missing_financial_dat
     assert "本处未独立验证数据质量。" in trader_report
     assert "质量检查" not in trader_report
     assert "目前基本面比技术面更强" not in trader_report
-    assert "缺少历史收盘价样本，无法确认高点折让或回归空间。" in output[
-        "bull_researcher"
-    ]
+    assert "缺少历史收盘价样本，无法确认高点折让或回归空间。" in output["bull_researcher"]
     assert "历史收盘价样本不足，无法确认短期均线压力。" in output["bull_researcher"]
-    assert "财务记录缺失，无法基于财务指标验证盈利能力或基本面稳定性。" in output[
-        "bear_researcher"
-    ]
-    assert "历史收盘价样本不足，无法判断短线趋势压力或是否反转。" in output[
-        "bear_researcher"
-    ]
+    assert "财务记录缺失，无法基于财务指标验证盈利能力或基本面稳定性。" in output["bear_researcher"]
+    assert "历史收盘价样本不足，无法判断短线趋势压力或是否反转。" in output["bear_researcher"]
     assert "本次未收集到新闻样本，无法判断催化方向。" in output["bear_researcher"]
     assert "当前最大的风险是短线趋势和催化不足" not in output["bear_researcher"]
     assert "暂不据此确认压力位或防守位" in output["bear_researcher"]
@@ -684,9 +676,7 @@ async def test_trader_and_bear_reports_note_missing_metrics_in_existing_financia
     assert "有当前价格报价，但无历史收盘价样本，技术证据有限。" in trader_report
     assert "有财务记录，但净利润和 ROE 均缺少有效数值，基本面证据不足。" in trader_report
     assert "质量检查" not in trader_report
-    assert "缺少历史收盘价样本，无法确认高点折让或回归空间。" in output[
-        "bull_researcher"
-    ]
+    assert "缺少历史收盘价样本，无法确认高点折让或回归空间。" in output["bull_researcher"]
     assert (
         "当前报告期财务记录存在，但净利润和 ROE 均缺少有效数值，"
         "无法据此验证盈利能力或基本面稳定性。"
@@ -722,9 +712,7 @@ async def test_bear_report_respects_positive_trend_and_available_news_samples() 
     assert "本次收集到 1 条新闻样本，需结合内容评估催化方向。" in bear_report
     assert "当前最大的风险是短线趋势和催化不足" not in bear_report
     assert "无近期新闻会降低短线交易热度" not in bear_report
-    assert "当前技术信号偏强，暂不支持短期均线承压的判断。" in output[
-        "bull_researcher"
-    ]
+    assert "当前技术信号偏强，暂不支持短期均线承压的判断。" in output["bull_researcher"]
 
 
 @pytest.mark.asyncio

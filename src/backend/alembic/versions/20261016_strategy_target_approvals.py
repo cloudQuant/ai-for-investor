@@ -232,7 +232,13 @@ def _validate_event_table() -> None:
         )
     if not restrictive_reference:
         raise RuntimeError("STRATEGY_TARGET_APPROVAL_SCHEMA_CONFLICT")
-    nullable = {"reason_code", "operation_key_sha256", "intent_id", "intent_sha256", "consumption_ref"}
+    nullable = {
+        "reason_code",
+        "operation_key_sha256",
+        "intent_id",
+        "intent_sha256",
+        "consumption_ref",
+    }
     for name in _EVENT_REQUIRED:
         if columns[name]["nullable"] != (name in nullable):
             raise RuntimeError("STRATEGY_TARGET_APPROVAL_SCHEMA_CONFLICT")

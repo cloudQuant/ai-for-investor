@@ -108,8 +108,7 @@ class PortfolioAnalyticsDatasetV1Service:
                 select(PortfolioAnalyticsDatasetV1).where(
                     PortfolioAnalyticsDatasetV1.owner_subject == owner_subject,
                     PortfolioAnalyticsDatasetV1.portfolio_ref == membership.portfolio_ref,
-                    PortfolioAnalyticsDatasetV1.membership_version
-                    == membership.membership_version,
+                    PortfolioAnalyticsDatasetV1.membership_version == membership.membership_version,
                     PortfolioAnalyticsDatasetV1.idempotency_key_sha256 == idempotency_sha256,
                 )
             )
@@ -183,8 +182,13 @@ class PortfolioAnalyticsDatasetV1Service:
                 if type(member) is dict and set(member) == {"kind", "ref"}
             )
         except (KeyError, TypeError, ValueError):
-            raise PortfolioAnalyticsDatasetV1Error("ANALYTICS_MEMBERSHIP_UNAVAILABLE", 503) from None
-        if len(expected_refs) != len(membership.members) or facts.membership.member_refs != expected_refs:
+            raise PortfolioAnalyticsDatasetV1Error(
+                "ANALYTICS_MEMBERSHIP_UNAVAILABLE", 503
+            ) from None
+        if (
+            len(expected_refs) != len(membership.members)
+            or facts.membership.member_refs != expected_refs
+        ):
             raise PortfolioAnalyticsDatasetV1Error("ANALYTICS_MEMBERSHIP_MISMATCH", 422)
 
     def _decode_and_verify(
@@ -209,7 +213,9 @@ class PortfolioAnalyticsDatasetV1Service:
                 raise ValueError("noncanonical")
             facts = PortfolioAnalyticsFactsV1.model_validate(decoded)
         except (UnicodeError, ValueError, TypeError, RecursionError):
-            raise PortfolioAnalyticsDatasetV1Error("ANALYTICS_DATASET_INTEGRITY_ERROR", 503) from None
+            raise PortfolioAnalyticsDatasetV1Error(
+                "ANALYTICS_DATASET_INTEGRITY_ERROR", 503
+            ) from None
         if (
             hashlib.sha256(encoded).hexdigest() != row.facts_sha256
             or row.source_trust != "USER_SUPPLIED_OFFLINE"
@@ -296,5 +302,3 @@ def _canonical_json(value: object) -> bytes:
         ).encode("ascii")
     except (TypeError, ValueError, OverflowError, UnicodeEncodeError) as error:
         raise PortfolioAnalyticsDatasetV1Error("ANALYTICS_DATASET_INVALID", 422) from error
-
-

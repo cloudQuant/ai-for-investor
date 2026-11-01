@@ -288,13 +288,9 @@ class StockAnalysisPipeline:
         record_label = "本报告期" if report_date else "当前财务记录"
         record_scope = "单个报告期指标" if report_date else "单条财务记录"
         roe = self._finite_metric(context["roe"])
-        roe_value_text = (
-            "数据不足" if roe is None else f"{latest.get('roe')}（单位与口径待确认）"
-        )
+        roe_value_text = "数据不足" if roe is None else f"{latest.get('roe')}（单位与口径待确认）"
         net_income = self._finite_metric(latest.get("net_income"))
-        net_income_value_text = (
-            "数据不足" if net_income is None else str(latest.get("net_income"))
-        )
+        net_income_value_text = "数据不足" if net_income is None else str(latest.get("net_income"))
         revenue = self._finite_metric(latest.get("revenue"))
         revenue_value_text = "数据不足" if revenue is None else str(latest.get("revenue"))
         revenue_growth = self._finite_metric(context["revenue_growth"])
@@ -311,9 +307,7 @@ class StockAnalysisPipeline:
             roe_evidence = f"{record_label} ROE 数据不足，单位与口径待确认。"
         else:
             roe_evidence = f"{record_label} ROE 原始值为 {roe_value_text}。"
-        stability_limit = (
-            f"{record_scope}不足以判断盈利稳定性。"
-        )
+        stability_limit = f"{record_scope}不足以判断盈利稳定性。"
         eps = self._finite_metric(latest.get("eps"))
         price = self._float_or_none(context["price"])
         eps_text = latest.get("eps") if eps is not None else "数据不足"
@@ -362,9 +356,7 @@ class StockAnalysisPipeline:
         has_financials = bool(context["latest_financial"])
         has_report_date = bool(context["latest_financial"].get("report_date"))
         record_label = (
-            "当前报告期财务记录"
-            if has_report_date
-            else "当前财务记录（报告期截止日数据不足）"
+            "当前报告期财务记录" if has_report_date else "当前财务记录（报告期截止日数据不足）"
         )
         record_scope = "单个报告期指标" if has_report_date else "单条财务记录"
         financial_premise = (
@@ -525,8 +517,7 @@ class StockAnalysisPipeline:
             evidence = "净利润和 ROE 均缺少有效数值，无法据此判断盈利能力。"
         else:
             evidence = (
-                f"{record_label}包含 {'；'.join(metrics)}；"
-                "单条财务记录不足以判断盈利稳定性。"
+                f"{record_label}包含 {'；'.join(metrics)}；单条财务记录不足以判断盈利稳定性。"
             )
         return f"2. 基本面：基本面评分 {fundamental_score:.2f}；{evidence}\n"
 
@@ -542,9 +533,7 @@ class StockAnalysisPipeline:
         latest = context["latest_financial"]
         has_report_date = bool(latest.get("report_date"))
         record_label = (
-            "当前报告期记录"
-            if has_report_date
-            else "当前财务记录（报告期截止日数据不足）"
+            "当前报告期记录" if has_report_date else "当前财务记录（报告期截止日数据不足）"
         )
         fundamental_evidence = (
             self._research_manager_financial_evidence(
@@ -611,7 +600,9 @@ class StockAnalysisPipeline:
             financial_evidence = "有财务记录，但净利润和 ROE 均缺少有效数值，基本面证据不足。"
         else:
             available_metrics = [
-                f"净利润 {latest.get('net_income')}" if net_income is not None else "净利润数据不足",
+                f"净利润 {latest.get('net_income')}"
+                if net_income is not None
+                else "净利润数据不足",
                 (
                     f"ROE 原始值 {latest.get('roe')}（单位与口径待确认）"
                     if roe is not None
@@ -619,8 +610,7 @@ class StockAnalysisPipeline:
                 ),
             ]
             financial_evidence = (
-                f"有财务记录，指标为 {'；'.join(available_metrics)}；"
-                "单条记录不足以判断盈利稳定性。"
+                f"有财务记录，指标为 {'；'.join(available_metrics)}；单条记录不足以判断盈利稳定性。"
             )
         evidence_comment = (
             f"行情证据：{market_evidence}财务证据：{financial_evidence}"
@@ -667,9 +657,7 @@ class StockAnalysisPipeline:
             or self._finite_metric(latest.get("roe")) is not None
         )
         record_label = (
-            "当前报告期财务记录"
-            if has_report_date
-            else "当前财务记录（报告期截止日数据不足）"
+            "当前报告期财务记录" if has_report_date else "当前财务记录（报告期截止日数据不足）"
         )
         if stance == "激进":
             premise = (
@@ -733,9 +721,7 @@ class StockAnalysisPipeline:
         has_financials = bool(latest)
         has_report_date = bool(latest.get("report_date"))
         record_label = (
-            "当前报告期财务记录"
-            if has_report_date
-            else "当前财务记录（报告期截止日数据不足）"
+            "当前报告期财务记录" if has_report_date else "当前财务记录（报告期截止日数据不足）"
         )
         has_net_income = self._finite_metric(latest.get("net_income")) is not None
         has_roe = self._finite_metric(context["roe"]) is not None

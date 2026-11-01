@@ -287,9 +287,11 @@ def run_backfill(
             )
             tail = list(
                 provider.client.iter_klines(
-                    symbol, interval, since_ms=date_to_ms(
+                    symbol,
+                    interval,
+                    since_ms=date_to_ms(
                         datetime.now(timezone.utc).date() - timedelta(days=tail_days)
-                    )
+                    ),
                 )
             )
             outcome.tail_rows = int(provider.store(tail, symbol) or 0) if tail else 0
@@ -303,8 +305,7 @@ def run_backfill(
         print(
             f"[{index}/{total}] {symbol} {interval}: written={outcome.written} "
             f"(archive={outcome.archive_rows} tail={outcome.tail_rows}) "
-            f"{outcome.seconds:.1f}s"
-            + (f" ERROR {outcome.error[:90]}" if outcome.error else "")
+            f"{outcome.seconds:.1f}s" + (f" ERROR {outcome.error[:90]}" if outcome.error else "")
         )
     return outcomes
 
@@ -328,9 +329,13 @@ def resolve_symbols(raw: str | None) -> list[str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("mode", choices=("report", "plan", "run"), help="what to do")
-    parser.add_argument("--symbols", help=f"comma-separated, default: the {len(DEFAULT_CRYPTO_SYMBOLS)} core pairs")
+    parser.add_argument(
+        "--symbols", help=f"comma-separated, default: the {len(DEFAULT_CRYPTO_SYMBOLS)} core pairs"
+    )
     parser.add_argument("--intervals", default="1d", help="comma-separated of 1d/1h (default: 1d)")
-    parser.add_argument("--since", type=iso_date, default=None, help="archive start (default per interval)")
+    parser.add_argument(
+        "--since", type=iso_date, default=None, help="archive start (default per interval)"
+    )
     parser.add_argument("--until", type=iso_date, default=None, help="archive end (default: today)")
     parser.add_argument("--tail-days", type=int, default=5, help="recent days re-pulled over REST")
     parser.add_argument(
@@ -339,11 +344,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="rest",
         help="rest = 1000 bars/request (fast); archive = monthly CSV zips (no request weight)",
     )
-    parser.add_argument("--limit", type=int, default=None, help="cap number of jobs this invocation runs")
-    parser.add_argument("--force", action="store_true", help="re-fetch even if already in the resume log")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="cap number of jobs this invocation runs"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="re-fetch even if already in the resume log"
+    )
     parser.add_argument("--resume-file", type=Path, default=None, help="JSONL progress file")
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
-    parser.add_argument("--json", action="store_true", help="dump the machine-readable report to stdout")
+    parser.add_argument(
+        "--json", action="store_true", help="dump the machine-readable report to stdout"
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
@@ -372,14 +383,17 @@ def main() -> int:
                 "intervals": intervals,
                 "resume_completed": len(progress.done),
                 "tables_present": {
-                    INTERVAL_TABLES[i][0]: table_exists(conn, INTERVAL_TABLES[i][0]) for i in intervals
+                    INTERVAL_TABLES[i][0]: table_exists(conn, INTERVAL_TABLES[i][0])
+                    for i in intervals
                 },
                 "total_rows": sum(item.rows for item in coverage),
                 "symbols_with_data": sum(1 for item in coverage if item.rows),
                 "coverage": [item.as_dict() for item in coverage],
             }
             report_path = write_report(payload, args.report_dir, "crypto_coverage")
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str) if args.json else "")
+            print(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str) if args.json else ""
+            )
             for item in coverage:
                 print(
                     f"  {item.interval} {item.symbol:10s} rows={item.rows:>7} "
@@ -414,7 +428,9 @@ def main() -> int:
                 "plan": plan,
             }
             report_path = write_report(payload, args.report_dir, "crypto_plan")
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str) if args.json else "")
+            print(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str) if args.json else ""
+            )
             if not args.json:
                 for item in plan[:12]:
                     print(

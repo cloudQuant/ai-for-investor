@@ -76,9 +76,7 @@ def _collector(
 ) -> StockAnalysisDataCollector:
     return StockAnalysisDataCollector(
         SimpleNamespace(),
-        settings=SimpleNamespace(
-            STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ENABLED=enabled
-        ),
+        settings=SimpleNamespace(STOCK_ANALYSIS_OPENDATA_FINANCIAL_ARCHIVE_ENABLED=enabled),
         financial_archive_reader=reader,
     )
 
@@ -202,10 +200,7 @@ async def test_enabled_reader_preserves_raw_rows_and_never_sends_them_to_llm() -
     )
     assert archive["eligible_for_decision_or_backtest"] is False
     assert snapshot["data_quality"]["status"] == "degraded"
-    assert any(
-        "provenance不完整" in item
-        for item in snapshot["data_quality"]["degraded_reasons"]
-    )
+    assert any("provenance不完整" in item for item in snapshot["data_quality"]["degraded_reasons"])
 
     engine = object.__new__(StockAnalysisEngine)
     source_context = json.loads(engine._source_context(snapshot))
@@ -258,10 +253,7 @@ async def test_http_failures_degrade_without_akshare_fallback(
     assert expected_reason in {query.get("reason_code") for query in archive["queries"]}
     assert _API_KEY not in json.dumps(archive)
     assert snapshot["data_quality"]["status"] == "degraded"
-    assert any(
-        expected_reason in item
-        for item in snapshot["data_quality"]["degraded_reasons"]
-    )
+    assert any(expected_reason in item for item in snapshot["data_quality"]["degraded_reasons"])
     assert snapshot["financials"]["annual"] == []
     assert snapshot["financials"]["quarterly"] == []
 
@@ -314,9 +306,7 @@ async def test_scope_mismatch_is_rejected_and_only_valid_scopes_are_preserved() 
     assert evidence["status"] == "partial"
     assert len(evidence["records"]) == 4
     assert {
-        query.get("reason_code")
-        for query in evidence["queries"]
-        if query["status"] == "failed"
+        query.get("reason_code") for query in evidence["queries"] if query["status"] == "failed"
     } == {"response_scope_mismatch"}
 
 
@@ -364,9 +354,9 @@ async def test_non_loopback_http_is_rejected_before_sending_api_key() -> None:
 
     assert sent_requests == 0
     assert evidence["status"] == "unavailable"
-    assert {
-        query.get("reason_code") for query in evidence["queries"]
-    } == {"base_url_insecure_transport"}
+    assert {query.get("reason_code") for query in evidence["queries"]} == {
+        "base_url_insecure_transport"
+    }
     assert _API_KEY not in json.dumps(evidence)
 
 
@@ -392,9 +382,9 @@ async def test_unlisted_https_host_is_rejected_before_sending_api_key() -> None:
 
     assert sent_requests == 0
     assert evidence["status"] == "unavailable"
-    assert {
-        query.get("reason_code") for query in evidence["queries"]
-    } == {"base_url_host_not_allowed"}
+    assert {query.get("reason_code") for query in evidence["queries"]} == {
+        "base_url_host_not_allowed"
+    }
     assert _API_KEY not in json.dumps(evidence)
 
 
@@ -423,9 +413,9 @@ async def test_remote_https_nonstandard_port_requires_exact_host_port_allowlist(
 
     assert sent_requests == 0
     assert evidence["status"] == "unavailable"
-    assert {
-        query.get("reason_code") for query in evidence["queries"]
-    } == {"base_url_host_not_allowed"}
+    assert {query.get("reason_code") for query in evidence["queries"]} == {
+        "base_url_host_not_allowed"
+    }
     assert _API_KEY not in json.dumps(evidence)
 
 
@@ -490,9 +480,7 @@ async def test_unsafe_base_url_shapes_are_rejected_before_sending_api_key(
 
     assert sent_requests == 0
     assert evidence["status"] == "unavailable"
-    assert {
-        query.get("reason_code") for query in evidence["queries"]
-    } == {"base_url_invalid"}
+    assert {query.get("reason_code") for query in evidence["queries"]} == {"base_url_invalid"}
     assert _API_KEY not in json.dumps(evidence)
 
 
@@ -796,9 +784,10 @@ async def test_oversized_body_is_rejected_without_exposing_its_contents() -> Non
 
     assert evidence["status"] == "unavailable"
     assert request_count == 4
-    assert {
-        query.get("reason_code") for query in evidence["queries"]
-    } == {"response_too_large", "archive_response_too_large"}
+    assert {query.get("reason_code") for query in evidence["queries"]} == {
+        "response_too_large",
+        "archive_response_too_large",
+    }
     assert all(query["status"] == "not_attempted" for query in evidence["queries"][4:])
     assert evidence["records"] == []
     assert _API_KEY not in json.dumps(evidence)

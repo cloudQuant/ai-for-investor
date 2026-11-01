@@ -42,9 +42,7 @@ _COMMAND_TTL_SECONDS = 30.0
 _MAX_IDEMPOTENCY_KEY_BYTES = 256
 _CONTROL_HMAC_DOMAIN = b"bt-api-monitor.control-command.hmac.v1\0"
 _KEY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_COMMAND_ID_RE = re.compile(
-    r"^afi-monitor-(?P<action>freeze|stop-new|cancel)-v1-[0-9a-f]{32}$"
-)
+_COMMAND_ID_RE = re.compile(r"^afi-monitor-(?P<action>freeze|stop-new|cancel)-v1-[0-9a-f]{32}$")
 _STOP_NEW_EFFECT_REF_RE = re.compile(r"^strategy-stop-new-v1:[0-9a-f]{64}$")
 _Z85_ALPHABET = frozenset(
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
@@ -210,7 +208,9 @@ class OwnerControlDeployment:
         try:
             if len(raw.encode("utf-8", errors="strict")) > _MAX_DEPLOYMENT_BYTES:
                 raise OwnerControlError("DEPLOYMENT_INVALID")
-            json.loads(raw, object_pairs_hook=_reject_duplicate_pairs, parse_constant=_reject_constant)
+            json.loads(
+                raw, object_pairs_hook=_reject_duplicate_pairs, parse_constant=_reject_constant
+            )
             config = _DeploymentConfig.model_validate_json(raw)
             _validate_timestamp(config.not_before_utc)
             _validate_timestamp(config.expires_at_utc)
@@ -232,7 +232,15 @@ class OwnerControlDeployment:
             return cls(config, bindings)
         except OwnerControlError:
             raise
-        except (ArithmeticError, OSError, UnicodeError, ValueError, TypeError, ValidationError, RecursionError):
+        except (
+            ArithmeticError,
+            OSError,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            ValidationError,
+            RecursionError,
+        ):
             raise OwnerControlError("DEPLOYMENT_INVALID") from None
 
     def binding_for(
@@ -245,8 +253,7 @@ class OwnerControlDeployment:
         require_active: bool = True,
     ) -> OwnerControlBinding | None:
         if action is not None and (
-            type(action) is not str
-            or action not in {"FREEZE", "STOP_NEW", "CANCEL"}
+            type(action) is not str or action not in {"FREEZE", "STOP_NEW", "CANCEL"}
         ):
             raise OwnerControlError("CONTROL_ACTION_INVALID")
         now = datetime.now(UTC).timestamp()
@@ -420,9 +427,7 @@ class OwnerControlDeployment:
             ),
             transport_factory=sdk.ZmqTransportFactory(binding.curve_keys),
             requested_operations={
-                "application.monitor": frozenset(
-                    {"monitor.control", "monitor.control_status"}
-                )
+                "application.monitor": frozenset({"monitor.control", "monitor.control_status"})
             },
         )
         try:
@@ -459,9 +464,7 @@ class OwnerControlDeployment:
                 # result; the next status call remains available for recovery.
                 raise OwnerControlError("OWNER_CLIENT_CLEANUP_UNCERTAIN") from None
 
-    def _query_cancel_owner(
-        self, binding: OwnerControlBinding, command_id: str
-    ) -> dict[str, Any]:
+    def _query_cancel_owner(self, binding: OwnerControlBinding, command_id: str) -> dict[str, Any]:
         """Read/submit one durable owner.cancel batch using its same command id."""
         sdk = _load_sdk()
         runtime = sdk.ServiceClientRuntime(
@@ -474,9 +477,7 @@ class OwnerControlDeployment:
                 {binding.config.service_id: binding.peer_identity}, service_id
             ),
             transport_factory=sdk.ZmqTransportFactory(binding.curve_keys),
-            requested_operations={
-                "upstream.owner_control": frozenset({"owner.cancel"})
-            },
+            requested_operations={"upstream.owner_control": frozenset({"owner.cancel"})},
         )
         projection: dict[str, Any]
         try:
@@ -563,9 +564,7 @@ class OwnerControlDeployment:
             and config.not_before_utc <= now < config.expires_at_utc
         ):
             raise OwnerControlError("DEPLOYMENT_INACTIVE_OR_EXPIRED")
-        action_slug = {"FREEZE": "freeze", "STOP_NEW": "stop-new", "CANCEL": "cancel"}[
-            action
-        ]
+        action_slug = {"FREEZE": "freeze", "STOP_NEW": "stop-new", "CANCEL": "cancel"}[action]
         wire_action = {
             "FREEZE": "freeze",
             "STOP_NEW": "stop_new",
@@ -736,8 +735,7 @@ class OwnerControlDeployment:
             }
             if "owner_projection_json" not in columns:
                 connection.execute(
-                    "ALTER TABLE afi_monitor_control_issuance "
-                    "ADD COLUMN owner_projection_json TEXT"
+                    "ALTER TABLE afi_monitor_control_issuance ADD COLUMN owner_projection_json TEXT"
                 )
             return connection
         except (OSError, sqlite3.Error):
@@ -948,10 +946,7 @@ def _build_binding(config: _BindingConfig, sdk: Any) -> OwnerControlBinding:
             or client_binding.get("service_id") != config.service_id
             or client_binding.get("instance_id") != config.instance_id
             or client_binding.get("scope_ref") != config.scope_ref
-            or (
-                cancel_binding
-                and client_binding.get("account_ref") != config.wire_account_ref
-            )
+            or (cancel_binding and client_binding.get("account_ref") != config.wire_account_ref)
         ):
             raise OwnerControlError("DEPLOYMENT_INVALID")
         if (
@@ -1010,7 +1005,9 @@ def _parse_identity(value: Mapping[str, str], sdk: Any, *, role: Any) -> Any:
     if any(type(item) is not str or not item or item != item.strip() for item in value.values()):
         raise OwnerControlError("DEPLOYMENT_INVALID")
     try:
-        return sdk.WireIdentity(role, value["principal_ref"], value["actor_ref"], value["delegate_ref"])
+        return sdk.WireIdentity(
+            role, value["principal_ref"], value["actor_ref"], value["delegate_ref"]
+        )
     except Exception:
         raise OwnerControlError("DEPLOYMENT_INVALID") from None
 
@@ -1101,9 +1098,10 @@ def _validate_owner_projection(
                 "ALREADY_ACTIVE": (True, "active"),
                 "ALREADY_RESOLVED": (False, "resolved"),
             }.get(effect["activation_status"])
-            if expected_state is None or (
-                effect["cause_active"], effect["risk_state"]
-            ) != expected_state:
+            if (
+                expected_state is None
+                or (effect["cause_active"], effect["risk_state"]) != expected_state
+            ):
                 raise OwnerControlError("OWNER_RECEIPT_INVALID")
         else:
             effect_ref = value.get("effect_ref")

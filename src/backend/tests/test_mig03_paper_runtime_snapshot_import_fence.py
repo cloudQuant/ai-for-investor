@@ -115,9 +115,7 @@ class _CountingWorker:
         self, legacy_account_id: str, operation: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
         self.calls += 1
-        return await self._worker.call_paper_legacy_import(
-            legacy_account_id, operation, arguments
-        )
+        return await self._worker.call_paper_legacy_import(legacy_account_id, operation, arguments)
 
 
 @pytest.mark.asyncio
@@ -154,9 +152,7 @@ async def test_unbound_running_runtime_fails_import_before_target_and_remains_op
                 scope=scope,
                 domain=domain,
                 symbol_bindings=(
-                    legacy.LegacyPaperSymbolBindingV1(
-                        legacy._LEGACY_SYMBOL, legacy._INSTRUMENT
-                    ),
+                    legacy.LegacyPaperSymbolBindingV1(legacy._LEGACY_SYMBOL, legacy._INSTRUMENT),
                 ),
             )
         assert denied.value.code == "LEGACY_RUNTIME_INSTANCE_RELATION_UNPROVEN"
@@ -203,9 +199,7 @@ async def test_bound_scheduler_is_stopped_by_active_import_receipt_and_write_fen
         await scheduler.stop(instance_id)
         assert len(before_import) >= 2
         assert worker_snapshot.id != seed_snapshot.id
-        assert all(
-            row.paper_account_id == legacy._SOURCE_ACCOUNT_ID for row in before_import
-        )
+        assert all(row.paper_account_id == legacy._SOURCE_ACCOUNT_ID for row in before_import)
 
         migrated = await legacy.migrate_nonempty_legacy_paper_account(
             legacy.PaperTradingService(),
@@ -215,19 +209,14 @@ async def test_bound_scheduler_is_stopped_by_active_import_receipt_and_write_fen
             scope=scope,
             domain=domain,
             symbol_bindings=(
-                legacy.LegacyPaperSymbolBindingV1(
-                    legacy._LEGACY_SYMBOL, legacy._INSTRUMENT
-                ),
+                legacy.LegacyPaperSymbolBindingV1(legacy._LEGACY_SYMBOL, legacy._INSTRUMENT),
             ),
         )
         assert migrated.receipt.state == "ACTIVE"
         async with database.async_session_maker() as session:
             source_receipt = await session.scalar(
                 select(LegacyPaperImportReceipt)
-                .where(
-                    LegacyPaperImportReceipt.legacy_account_id
-                    == legacy._SOURCE_ACCOUNT_ID
-                )
+                .where(LegacyPaperImportReceipt.legacy_account_id == legacy._SOURCE_ACCOUNT_ID)
                 .order_by(LegacyPaperImportReceipt.generation.desc())
                 .limit(1)
             )
@@ -235,8 +224,7 @@ async def test_bound_scheduler_is_stopped_by_active_import_receipt_and_write_fen
             preserved_context = json.loads(source_receipt.preserved_context_json)
         assert preserved_context["schema"] == "afi.legacy-paper-preserved-context.v1"
         preserved_snapshots = {
-            row["id"]: row
-            for row in preserved_context["categories"]["paper_equity_snapshots"]
+            row["id"]: row for row in preserved_context["categories"]["paper_equity_snapshots"]
         }
         assert set(preserved_snapshots) == {row.id for row in before_import}
         for row in before_import:
@@ -276,9 +264,7 @@ async def test_bound_scheduler_is_stopped_by_active_import_receipt_and_write_fen
         await asyncio.wait_for(task, timeout=5.0)
         after_restart = await _snapshot_rows(instance_id)
         assert [row.id for row in after_restart] == [row.id for row in before_import]
-        assert all(
-            row.paper_account_id == legacy._SOURCE_ACCOUNT_ID for row in after_restart
-        )
+        assert all(row.paper_account_id == legacy._SOURCE_ACCOUNT_ID for row in after_restart)
         async with database.async_session_maker() as session:
             active_receipt = await session.scalar(
                 select(LegacyPaperImportReceipt).where(

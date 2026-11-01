@@ -103,7 +103,11 @@ def validate_interval(interval: str) -> str:
 def date_to_ms(value: date, *, end_of_day: bool = False) -> int:
     """Midnight (or end-of-day) UTC for ``value`` as Binance epoch millis."""
     moment = datetime(
-        value.year, value.month, value.day, 23 if end_of_day else 0, 59 if end_of_day else 0,
+        value.year,
+        value.month,
+        value.day,
+        23 if end_of_day else 0,
+        59 if end_of_day else 0,
         tzinfo=timezone.utc,
     )
     return int(moment.timestamp() * 1000)
@@ -158,8 +162,10 @@ def iter_month_windows(start: date, end: date | None = None) -> Iterator[str]:
     cursor = date(start.year, start.month, 1)
     while cursor <= ceiling:
         yield cursor.strftime("%Y-%m")
-        cursor = date(cursor.year + 1, 1, 1) if cursor.month == 12 else date(
-            cursor.year, cursor.month + 1, 1
+        cursor = (
+            date(cursor.year + 1, 1, 1)
+            if cursor.month == 12
+            else date(cursor.year, cursor.month + 1, 1)
         )
 
 
@@ -345,12 +351,16 @@ class BinanceClient:
         """Closed-month archive. Empty when the month has not rolled up yet."""
         if not _MONTH_RE.match(year_month):
             raise ValueError(f"invalid month window: {year_month!r}")
-        return self._fetch_archive("monthly", validate_symbol(symbol), validate_interval(interval), year_month)
+        return self._fetch_archive(
+            "monthly", validate_symbol(symbol), validate_interval(interval), year_month
+        )
 
     def fetch_day_bars(self, symbol: str, interval: str, day: str) -> list[dict[str, Any]]:
         if not _DAY_RE.match(day):
             raise ValueError(f"invalid day window: {day!r}")
-        return self._fetch_archive("daily", validate_symbol(symbol), validate_interval(interval), day)
+        return self._fetch_archive(
+            "daily", validate_symbol(symbol), validate_interval(interval), day
+        )
 
     def iter_archive_bars(
         self,
@@ -370,7 +380,9 @@ class BinanceClient:
             window_end = min(last, ceiling)
             bars = self._fetch_archive("monthly", pair, step, year_month)
             if bars:
-                yield from (bar for bar in bars if window_start <= bar["trade_time"].date() <= window_end)
+                yield from (
+                    bar for bar in bars if window_start <= bar["trade_time"].date() <= window_end
+                )
                 continue
             cursor = window_start
             while cursor <= window_end:

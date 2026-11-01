@@ -71,7 +71,12 @@ _SCOPE_FIELDS = frozenset(
     }
 )
 _READ_MOUNTS = frozenset(
-    {"application.account", "application.order_query", "application.monitor", "application.risk_analysis"}
+    {
+        "application.account",
+        "application.order_query",
+        "application.monitor",
+        "application.risk_analysis",
+    }
 )
 _DEPLOYMENT_MOUNTS = _READ_MOUNTS | {
     "application.orders",
@@ -313,9 +318,7 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
             raise ServiceReadDeploymentError("MIXED_PAPER_ORDER_WRITE_PROFILE")
         requested_operations["application.orders"] = frozenset({"orders.submit"})
     if profile.approved_target_bindings:
-        requested_operations["application.orders"] = frozenset(
-            {"orders.submit_approved_target"}
-        )
+        requested_operations["application.orders"] = frozenset({"orders.submit_approved_target"})
     if profile.portfolio_analytics_bindings:
         requested_operations["application.risk_analysis"] = frozenset(
             {
@@ -344,9 +347,7 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
             *risk_policy_operation_sets
         )
     if profile.paper_legacy_import_bindings:
-        requested_operations["application.paper_legacy_import"] = (
-            PAPER_LEGACY_IMPORT_OPERATIONS
-        )
+        requested_operations["application.paper_legacy_import"] = PAPER_LEGACY_IMPORT_OPERATIONS
     return ServiceClientRuntime(
         profile.client_config,
         identity=profile.identity,
@@ -401,8 +402,7 @@ def _parse_deployment(value: SecretStr | str | None) -> tuple[_SubjectProfile, .
         type(profile) is dict and "paper_submit_bindings" in profile for profile in subjects
     )
     has_paper_import_bindings = any(
-        type(profile) is dict and "paper_legacy_import_bindings" in profile
-        for profile in subjects
+        type(profile) is dict and "paper_legacy_import_bindings" in profile for profile in subjects
     )
     sdk = _load_sdk_types(
         include_paper=has_paper_bindings or has_paper_import_bindings,
@@ -655,15 +655,11 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
     account_book_grants = frozenset(_string_list(grants_raw.get("account_book_refs", [])))
     strategy_book_grants = frozenset(_string_list(grants_raw.get("strategy_book_refs", [])))
     order_grants = frozenset(_string_list(grants_raw["order_scope_refs"]))
-    order_submit_grants = frozenset(
-        _string_list(grants_raw.get("order_submit_scope_refs", []))
-    )
+    order_submit_grants = frozenset(_string_list(grants_raw.get("order_submit_scope_refs", [])))
     approved_target_grants = frozenset(
         _string_list(grants_raw.get("approved_target_scope_refs", []))
     )
-    paper_submit_grants = frozenset(
-        _string_list(grants_raw.get("paper_submit_account_ids", []))
-    )
+    paper_submit_grants = frozenset(_string_list(grants_raw.get("paper_submit_account_ids", [])))
     paper_legacy_import_grants = frozenset(
         _string_list(grants_raw.get("paper_legacy_import_account_ids", []))
     )
@@ -1072,9 +1068,7 @@ def _parse_paper_legacy_import_bindings(
                     )
                 )
             except Exception:
-                raise ServiceReadDeploymentError(
-                    "INVALID_PAPER_LEGACY_SYMBOL_BINDINGS"
-                ) from None
+                raise ServiceReadDeploymentError("INVALID_PAPER_LEGACY_SYMBOL_BINDINGS") from None
         try:
             result[legacy_account_id] = PaperLegacyImportBinding(
                 mount=mount,
@@ -1085,23 +1079,19 @@ def _parse_paper_legacy_import_bindings(
                 symbol_bindings=tuple(symbols),
             )
         except Exception:
-            raise ServiceReadDeploymentError(
-                "INVALID_PAPER_LEGACY_IMPORT_BINDINGS"
-            ) from None
+            raise ServiceReadDeploymentError("INVALID_PAPER_LEGACY_IMPORT_BINDINGS") from None
     return result
 
 
 def _paper_risk_monitor_selected(binding: Mapping[str, Any]) -> bool:
     for key, value in binding.items():
         if type(key) is str and (
-            key in {"risk", "monitor"}
-            or key.startswith(("risk_", "monitor_"))
+            key in {"risk", "monitor"} or key.startswith(("risk_", "monitor_"))
         ):
             return True
         if key in {"controls", "required_controls", "enabled_components"}:
             if type(value) is list and any(
-                type(item) is str and item.lower() in {"risk", "monitor"}
-                for item in value
+                type(item) is str and item.lower() in {"risk", "monitor"} for item in value
             ):
                 return True
     return False
@@ -1256,11 +1246,8 @@ def _parse_risk_policy_budget_bindings(
         if len(set(member_scope_refs.values())) != len(member_scope_refs):
             raise ServiceReadDeploymentError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
         management = scopes.get(management_scope_ref)
-        if (
-            mount != "application.risk_policy"
-            or not _is_budget_management_scope(
-                management, portfolio_ref, frozenset(member_scope_refs)
-            )
+        if mount != "application.risk_policy" or not _is_budget_management_scope(
+            management, portfolio_ref, frozenset(member_scope_refs)
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         execution_domain_ref = management.execution_domain_ref
@@ -1348,9 +1335,7 @@ def _parse_risk_account_policy_bindings(
                 checker_principal_ref=checker_principal_ref,
             )
         except Exception:
-            raise ServiceReadDeploymentError(
-                "INVALID_RISK_ACCOUNT_POLICY_BINDINGS"
-            ) from None
+            raise ServiceReadDeploymentError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS") from None
     scope_refs = [binding.scope_ref for binding in result.values()]
     if len(scope_refs) != len(set(scope_refs)):
         raise ServiceReadDeploymentError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
@@ -1486,9 +1471,8 @@ def _validate_profile_bindings(
         _add_declared(declared, binding.mount, scope_ref, None)
     for portfolio_ref, binding in portfolio_analytics_bindings.items():
         scope = scopes.get(binding.scope_ref)
-        if (
-            binding.mount != "application.risk_analysis"
-            or not _is_portfolio_analytics_scope(scope, portfolio_ref)
+        if binding.mount != "application.risk_analysis" or not _is_portfolio_analytics_scope(
+            scope, portfolio_ref
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         _add_declared(declared, binding.mount, binding.scope_ref, portfolio_ref)
@@ -1498,15 +1482,11 @@ def _validate_profile_bindings(
         if (
             binding.mount != "application.risk_policy"
             or binding.portfolio_ref != portfolio_ref
-            or not _is_budget_management_scope(
-                management_scope, portfolio_ref, member_refs
-            )
+            or not _is_budget_management_scope(management_scope, portfolio_ref, member_refs)
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
         management_pair = (binding.mount, binding.management_scope_ref)
-        _add_declared(
-            declared, binding.mount, binding.management_scope_ref, None
-        )
+        _add_declared(declared, binding.mount, binding.management_scope_ref, None)
         previous_portfolio = budget_management_portfolios.get(management_pair)
         if previous_portfolio is not None and previous_portfolio != portfolio_ref:
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
@@ -1523,8 +1503,7 @@ def _validate_profile_bindings(
             _add_declared(declared, binding.mount, scope_ref, account_ref)
 
     budget_scope_refs = {
-        binding.management_scope_ref
-        for binding in risk_policy_budget_bindings.values()
+        binding.management_scope_ref for binding in risk_policy_budget_bindings.values()
     } | {
         scope_ref
         for binding in risk_policy_budget_bindings.values()

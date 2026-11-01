@@ -35,9 +35,7 @@ _OPERATIONS = frozenset(
     {"analysis.input_upload", "analysis.submit", "analysis.query", "analysis.cancel"}
 )
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
-_TERMINAL_STATES = frozenset(
-    {"succeeded", "unavailable", "failed", "cancelled", "expired"}
-)
+_TERMINAL_STATES = frozenset({"succeeded", "unavailable", "failed", "cancelled", "expired"})
 _MAX_WIRE_MESSAGE_BYTES = 1_048_576
 _WIRE_ENVELOPE_HEADROOM_BYTES = 16_384
 _CHILD_FAILURE_MARKER_MAX_BYTES = 16_384
@@ -103,9 +101,7 @@ def _service_config(endpoint: str) -> dict[str, Any]:
     }
 
 
-def _deployment_profile(
-    subject: str, endpoint: str, keys: dict[str, str]
-) -> dict[str, Any]:
+def _deployment_profile(subject: str, endpoint: str, keys: dict[str, str]) -> dict[str, Any]:
     subject_tag = hashlib.sha256(subject.encode("utf-8")).hexdigest()[:16]
     principal_ref = f"afi04-user-{subject_tag}"
     delegate_ref = f"afi04-delegate-{subject_tag}"
@@ -479,9 +475,7 @@ def _child_failure_payload(
         exception_type = type(error).__name__
         message = _exception_message(error, 512)
         try:
-            formatted = "".join(
-                traceback.format_exception(type(error), error, error.__traceback__)
-            )
+            formatted = "".join(traceback.format_exception(type(error), error, error.__traceback__))
         except BaseException as formatting_error:
             formatted = f"<traceback unavailable: {type(formatting_error).__name__}>"
 
@@ -491,7 +485,7 @@ def _child_failure_payload(
         "code": _exception_field(error, "code", 128),
         "path": _exception_field(error, "path", 512),
         "message": message[:512],
-        "traceback": formatted[-_CHILD_FAILURE_TRACEBACK_MAX_CHARS :],
+        "traceback": formatted[-_CHILD_FAILURE_TRACEBACK_MAX_CHARS:],
         "cleanup_errors": [
             {
                 "exception_type": type(item).__name__[:128],
@@ -505,9 +499,7 @@ def _child_failure_payload(
         _CHILD_FAILURE_TRACEBACK_MAX_CHARS // 2,
         0,
     ):
-        diagnostic["traceback"] = (
-            formatted[-traceback_limit:] if traceback_limit else ""
-        )
+        diagnostic["traceback"] = formatted[-traceback_limit:] if traceback_limit else ""
         encoded = json.dumps(
             diagnostic,
             sort_keys=True,
@@ -704,6 +696,7 @@ def _sdk_import_roots() -> list[str]:
             roots.append(root_path)
     return roots
 
+
 def _wait_for_marker(
     process: subprocess.Popen[bytes],
     ready: Path,
@@ -771,6 +764,7 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
     from app import main as main_module
     from app.config import get_settings
     from app.db import database as database_module
+
     assert main_module.settings is database_module.settings is get_settings()
     # This shared in-memory test DB is intentionally created by the real startup hook.
     monkeypatch.setattr(main_module.settings, "DB_AUTO_CREATE_SCHEMA", True)
@@ -811,10 +805,7 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
 
     endpoint = _endpoint()
     keys = _wire_keys()
-    paths = {
-        name: tmp_path / f"{name}.json"
-        for name in ("host-config", "deployment")
-    }
+    paths = {name: tmp_path / f"{name}.json" for name in ("host-config", "deployment")}
     markers = {
         name: tmp_path / f"{name}.marker"
         for name in ("host-ready", "host-stop", "host-closed", "host-failure")
@@ -865,7 +856,12 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
     deployment = None
     with host_log.open("wb") as host_log_stream:
         host_process = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "--risk-host", str(paths["host-config"])],
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--risk-host",
+                str(paths["host-config"]),
+            ],
             cwd=str(_BACKEND_ROOT),
             env=environment,
             stdout=host_log_stream,
@@ -897,9 +893,7 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
                         "portfolio_ref": _PORTFOLIO,
                         "source_type": "imported",
                         "base_currency": "USD",
-                        "members": [
-                            {"kind": "imported_ledger", "ref": "afi04-import-version"}
-                        ],
+                        "members": [{"kind": "imported_ledger", "ref": "afi04-import-version"}],
                     },
                 )
                 assert created.status_code == 201, created.text
@@ -1014,9 +1008,7 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
                 assert cancellable_response.status_code == 202, cancellable_response.text
                 cancellable_ref = cancellable_response.json()["task_ref"]
                 cancellable_path = f"{task_root}/{cancellable_ref}"
-                running_cancel_task = await _query_running(
-                    client, auth_headers, cancellable_path
-                )
+                running_cancel_task = await _query_running(client, auth_headers, cancellable_path)
                 assert running_cancel_task["state"] == "running"
                 cancelled = await client.post(
                     f"{cancellable_path}/cancel",
@@ -1024,9 +1016,7 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
                 )
                 assert cancelled.status_code == 200, cancelled.text
                 assert cancelled.json()["state"] == "cancelled"
-                cancelled_query = await client.get(
-                    cancellable_path, headers=auth_headers
-                )
+                cancelled_query = await client.get(cancellable_path, headers=auth_headers)
                 assert cancelled_query.status_code == 200, cancelled_query.text
                 assert cancelled_query.json()["state"] == "cancelled"
 
@@ -1035,9 +1025,7 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
             assert main_module.app.state.service_read_deployment is None
         finally:
             primary_error = sys.exc_info()[1]
-            primary_traceback = (
-                primary_error.__traceback__ if primary_error is not None else None
-            )
+            primary_traceback = primary_error.__traceback__ if primary_error is not None else None
             cleanup_errors: list[str] = []
             if host_process is not None:
                 try:
@@ -1064,18 +1052,14 @@ async def test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_
                             host_process.kill()
                             await asyncio.to_thread(host_process.wait, timeout=5.0)
                         except BaseException as error:
-                            cleanup_errors.append(
-                                f"kill_or_reap:{type(error).__name__}"
-                            )
+                            cleanup_errors.append(f"kill_or_reap:{type(error).__name__}")
                         else:
                             cleanup_errors.append("killed_after_terminate_timeout")
                     except BaseException as error:
                         cleanup_errors.append(f"terminate_wait:{type(error).__name__}")
 
                 if host_process.returncode != 0:
-                    cleanup_errors.append(
-                        f"host_returncode:{host_process.returncode}"
-                    )
+                    cleanup_errors.append(f"host_returncode:{host_process.returncode}")
                 if not markers["host-closed"].is_file():
                     cleanup_errors.append("host_closed_marker_missing")
                 if markers["host-failure"].is_file():
@@ -1294,7 +1278,12 @@ async def test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_r
     deployment = None
     with host_log.open("wb") as host_log_stream:
         host_process = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "--risk-host", str(paths["host-config"])],
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--risk-host",
+                str(paths["host-config"]),
+            ],
             cwd=str(_BACKEND_ROOT),
             env=environment,
             stdout=host_log_stream,
@@ -1325,9 +1314,7 @@ async def test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_r
                         "portfolio_ref": _PORTFOLIO,
                         "source_type": "imported",
                         "base_currency": "USD",
-                        "members": [
-                            {"kind": "imported_ledger", "ref": "afi04-v1-import-version"}
-                        ],
+                        "members": [{"kind": "imported_ledger", "ref": "afi04-v1-import-version"}],
                     },
                 )
                 assert created.status_code == 201, created.text
@@ -1419,9 +1406,7 @@ async def test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_r
                 assert re.fullmatch(r"[0-9a-f]{64}", report["input_sha256"])
                 assert report["input_sha256"] != available["input_sha256"]
 
-                unavailable_dataset = await import_dataset(
-                    "unavailable", flow_complete=False
-                )
+                unavailable_dataset = await import_dataset("unavailable", flow_complete=False)
                 unavailable_task = await submit(unavailable_dataset, "unavailable")
                 unavailable = await _query_terminal(
                     client,
@@ -1437,18 +1422,12 @@ async def test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_r
                 assert unavailable_report["ending"]["nav"] is None
                 assert unavailable_report["external_cashflow_net"] is None
 
-                cancellation_dataset = await import_dataset(
-                    "cancel", flow_count=2_500
-                )
+                cancellation_dataset = await import_dataset("cancel", flow_count=2_500)
                 cancellation_task = await submit(cancellation_dataset, "cancel")
-                cancellation_path = (
-                    f"{v1_base}/analytics-v1-tasks/{cancellation_task['task_ref']}"
-                )
+                cancellation_path = f"{v1_base}/analytics-v1-tasks/{cancellation_task['task_ref']}"
                 running = await _query_running(client, auth_headers, cancellation_path)
                 assert running["state"] == "running"
-                cancelled = await client.post(
-                    f"{cancellation_path}/cancel", headers=auth_headers
-                )
+                cancelled = await client.post(f"{cancellation_path}/cancel", headers=auth_headers)
                 assert cancelled.status_code == 200, cancelled.text
                 assert cancelled.json()["state"] == "cancelled"
                 queried_cancelled = await client.get(cancellation_path, headers=auth_headers)
@@ -1460,9 +1439,7 @@ async def test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_r
             assert main_module.app.state.service_read_deployment is None
         finally:
             primary_error = sys.exc_info()[1]
-            primary_traceback = (
-                primary_error.__traceback__ if primary_error is not None else None
-            )
+            primary_traceback = primary_error.__traceback__ if primary_error is not None else None
             cleanup_errors: list[str] = []
             if host_process is not None:
                 try:

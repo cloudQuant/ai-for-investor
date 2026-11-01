@@ -69,8 +69,16 @@ _BASE_KEY = {
 _QUERY_CANONICALS = {
     suffix: f"instrument:futures:SYN-EX:{suffix.upper()}"
     for suffix in (
-        "eur", "zero", "missing", "error", "stale", "coverage",
-        "multiplier-stale", "multiplier-unit-error", "multiplier-missing", "binding-stale",
+        "eur",
+        "zero",
+        "missing",
+        "error",
+        "stale",
+        "coverage",
+        "multiplier-stale",
+        "multiplier-unit-error",
+        "multiplier-missing",
+        "binding-stale",
         "market-binding-stale",
     )
 }
@@ -128,9 +136,7 @@ def _binding_config_json() -> str:
         quantity_unit = "lots" if suffix == "multiplier-unit-error" else "contracts"
         multiplier_end = "2026-10-16T11:58:00Z" if suffix == "multiplier-stale" else None
         binding_end = "2026-10-16T11:58:00Z" if suffix == "binding-stale" else None
-        market_binding_end = (
-            "2026-10-16T11:58:00Z" if suffix == "market-binding-stale" else None
-        )
+        market_binding_end = "2026-10-16T11:58:00Z" if suffix == "market-binding-stale" else None
         multiplier = None if suffix == "multiplier-missing" else "10"
         instruments.append(
             {
@@ -278,7 +284,9 @@ class _AuthorizedSyntheticWorker:
     def __init__(self, view: AccountReadView) -> None:
         self.view = view
 
-    async def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView:
+    async def read_account(
+        self, account_ref: str, *, currency: str | None = None
+    ) -> AccountReadView:
         assert account_ref == self.view.account_ref
         assert currency == "USD"
         return self.view
@@ -523,9 +531,7 @@ async def _seed_membership(subject: str, portfolio_ref: str) -> None:
 async def _grant_market_data_read_role(subject: str) -> None:
     """Grant the explicit data-read entitlement required by MarketData v2."""
     async with async_session_maker() as session:
-        await session.execute(
-            insert(user_roles).values(user_id=subject, role=Role.USER.value)
-        )
+        await session.execute(insert(user_roles).values(user_id=subject, role=Role.USER.value))
         await session.commit()
 
 
@@ -637,9 +643,7 @@ async def test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_se
         assert request.required_fields == ("close",)
         assert request.adjustment is None
         assert request.price_basis == "close"
-        assert request.currency == (
-            "USD" if is_fx or suffix != "eur" else "EUR"
-        )
+        assert request.currency == ("USD" if is_fx or suffix != "eur" else "EUR")
         assert request.unit == ("EUR" if is_fx else "contract")
         assert request.source_policy_id == "market-default-v1"
         assert request.consistency == "display"
@@ -663,20 +667,26 @@ async def test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_se
     async with main_module.lifespan(app):
         registry = app.state.portfolio_valuation_bindings
         assert type(registry) is PortfolioValuationBindingRegistry
-        assert registry.instrument(
-            {
-                **_BASE_KEY,
-                "instrument_id": "contract:eur",
-                "native_symbol": "SYN-EUR-202612",
-            }
-        ) is not None
-        assert registry.instrument(
-            {
-                **_BASE_KEY,
-                "instrument_id": "contract:EUR",
-                "native_symbol": "SYN-EUR-202612",
-            }
-        ) is None
+        assert (
+            registry.instrument(
+                {
+                    **_BASE_KEY,
+                    "instrument_id": "contract:eur",
+                    "native_symbol": "SYN-EUR-202612",
+                }
+            )
+            is not None
+        )
+        assert (
+            registry.instrument(
+                {
+                    **_BASE_KEY,
+                    "instrument_id": "contract:EUR",
+                    "native_symbol": "SYN-EUR-202612",
+                }
+            )
+            is None
+        )
         configure_service_read(
             ServiceReadAccessDirectory(
                 {
@@ -764,33 +774,52 @@ async def test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_se
                 "coverage_incomplete"
             )
             assert positions["coverage"]["valuation_inputs"]["mark_price"]["value"] == "17.25"
-            assert positions["coverage"]["valuation_inputs"]["mark_price"]["coverage"][
-                "missing_event_count"
-            ] == 1
-            assert positions["multiplier-stale"]["valuation_inputs"]["contract_multiplier"][
-                "status"
-            ] == "stale"
-            assert positions["multiplier-stale"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["value"] == "10"
-            assert positions["multiplier-stale"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["valid_to_utc"] == "2026-10-16T11:58:00Z"
-            assert positions["multiplier-unit-error"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["status"] == "error"
-            assert positions["multiplier-unit-error"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["value"] == "10"
-            assert positions["multiplier-unit-error"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["position_quantity_unit"] == "contracts"
-            assert positions["multiplier-missing"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["status"] == "unsupported"
-            assert positions["multiplier-missing"]["valuation_inputs"][
-                "contract_multiplier"
-            ]["value"] is None
+            assert (
+                positions["coverage"]["valuation_inputs"]["mark_price"]["coverage"][
+                    "missing_event_count"
+                ]
+                == 1
+            )
+            assert (
+                positions["multiplier-stale"]["valuation_inputs"]["contract_multiplier"]["status"]
+                == "stale"
+            )
+            assert (
+                positions["multiplier-stale"]["valuation_inputs"]["contract_multiplier"]["value"]
+                == "10"
+            )
+            assert (
+                positions["multiplier-stale"]["valuation_inputs"]["contract_multiplier"][
+                    "valid_to_utc"
+                ]
+                == "2026-10-16T11:58:00Z"
+            )
+            assert (
+                positions["multiplier-unit-error"]["valuation_inputs"]["contract_multiplier"][
+                    "status"
+                ]
+                == "error"
+            )
+            assert (
+                positions["multiplier-unit-error"]["valuation_inputs"]["contract_multiplier"][
+                    "value"
+                ]
+                == "10"
+            )
+            assert (
+                positions["multiplier-unit-error"]["valuation_inputs"]["contract_multiplier"][
+                    "position_quantity_unit"
+                ]
+                == "contracts"
+            )
+            assert (
+                positions["multiplier-missing"]["valuation_inputs"]["contract_multiplier"]["status"]
+                == "unsupported"
+            )
+            assert (
+                positions["multiplier-missing"]["valuation_inputs"]["contract_multiplier"]["value"]
+                is None
+            )
             assert positions["unmapped"]["valuation_inputs"]["mark_price"]["status"] == (
                 "unsupported"
             )
@@ -800,27 +829,42 @@ async def test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_se
             assert positions["binding-stale"]["valuation_inputs"]["mark_price"]["code"] == (
                 "VALUATION_BINDING_OUTSIDE_VALIDITY"
             )
-            assert positions["binding-stale"]["valuation_inputs"]["mark_price"]["source"][
-                "canonical_id"
-            ] == _QUERY_CANONICALS["binding-stale"]
-            assert positions["binding-stale"]["valuation_inputs"]["market_cut"][
-                "market_event_at_utc"
-            ] is None
-            assert positions["binding-stale"]["valuation_inputs"]["market_cut"][
-                "account_position_observed_at_utc"
-            ] == ACCOUNT_OBSERVED_AT
-            assert positions["market-binding-stale"]["valuation_inputs"][
-                "mark_price"
-            ]["status"] == "stale"
-            assert positions["market-binding-stale"]["valuation_inputs"][
-                "mark_price"
-            ]["code"] == "MARKET_DATA_BINDING_OUTSIDE_VALIDITY"
-            assert positions["market-binding-stale"]["valuation_inputs"][
-                "market_cut"
-            ]["market_event_at_utc"] is None
-            assert positions["market-binding-stale"]["valuation_inputs"][
-                "market_cut"
-            ]["account_position_observed_at_utc"] == ACCOUNT_OBSERVED_AT
+            assert (
+                positions["binding-stale"]["valuation_inputs"]["mark_price"]["source"][
+                    "canonical_id"
+                ]
+                == _QUERY_CANONICALS["binding-stale"]
+            )
+            assert (
+                positions["binding-stale"]["valuation_inputs"]["market_cut"]["market_event_at_utc"]
+                is None
+            )
+            assert (
+                positions["binding-stale"]["valuation_inputs"]["market_cut"][
+                    "account_position_observed_at_utc"
+                ]
+                == ACCOUNT_OBSERVED_AT
+            )
+            assert (
+                positions["market-binding-stale"]["valuation_inputs"]["mark_price"]["status"]
+                == "stale"
+            )
+            assert (
+                positions["market-binding-stale"]["valuation_inputs"]["mark_price"]["code"]
+                == "MARKET_DATA_BINDING_OUTSIDE_VALIDITY"
+            )
+            assert (
+                positions["market-binding-stale"]["valuation_inputs"]["market_cut"][
+                    "market_event_at_utc"
+                ]
+                is None
+            )
+            assert (
+                positions["market-binding-stale"]["valuation_inputs"]["market_cut"][
+                    "account_position_observed_at_utc"
+                ]
+                == ACCOUNT_OBSERVED_AT
+            )
 
             assert projection["market_valuation"]["account_total_included"] is False
             assert projection["market_valuation"]["creditable"] is False
@@ -843,9 +887,9 @@ async def test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_se
                 headers=headers,
             )
             assert zero_fx_response.status_code == 200, zero_fx_response.text
-            zero_fx = zero_fx_response.json()["accounts"][0]["provider_observation"]["positions"][0][
-                "valuation_inputs"
-            ]["fx_rate"]
+            zero_fx = zero_fx_response.json()["accounts"][0]["provider_observation"]["positions"][
+                0
+            ]["valuation_inputs"]["fx_rate"]
             assert zero_fx["status"] == "error"
             assert zero_fx["code"] == "FX_RATE_NON_POSITIVE"
             assert zero_fx["value"] == "0"
@@ -858,9 +902,9 @@ async def test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_se
             assert reversed_fx_response.status_code == 200, reversed_fx_response.text
             reversed_positions = {
                 row["instrument"]["instrument_id"].split(":", 1)[1]: row
-                for row in reversed_fx_response.json()["accounts"][0][
-                    "provider_observation"
-                ]["positions"]
+                for row in reversed_fx_response.json()["accounts"][0]["provider_observation"][
+                    "positions"
+                ]
             }
             reversed_fx = reversed_positions["eur"]["valuation_inputs"]["fx_rate"]
             assert reversed_fx["status"] == "error"
@@ -939,9 +983,7 @@ async def test_market_data_denial_is_unavailable_and_does_not_change_account_tot
     worker_authorized = _AuthorizedSyntheticWorker(_account_view())
     directory = ServiceReadAccessDirectory(
         {
-            denied_subject: ReadAccess(
-                worker_denied, allow_account_refs=frozenset({ACCOUNT_REF})
-            ),
+            denied_subject: ReadAccess(worker_denied, allow_account_refs=frozenset({ACCOUNT_REF})),
             subject: ReadAccess(worker_authorized, allow_account_refs=frozenset({ACCOUNT_REF})),
         }
     )
@@ -966,24 +1008,29 @@ async def test_market_data_denial_is_unavailable_and_does_not_change_account_tot
                 "MARKET_DATA_ACCESS_DENIED"
             )
             assert denied_position["valuation_inputs"]["fx_rate"]["status"] == "unavailable"
-            assert denied_position["valuation_inputs"]["market_cut"][
-                "account_position_observed_at_utc"
-            ] == ACCOUNT_OBSERVED_AT
-            assert denied_position["valuation_inputs"]["market_cut"][
-                "market_event_at_utc"
-            ] is None
-            assert denied_position["valuation_inputs"]["fx_market_cut"][
-                "account_position_observed_at_utc"
-            ] == ACCOUNT_OBSERVED_AT
-            assert denied_position["valuation_inputs"]["fx_market_cut"][
-                "market_event_at_utc"
-            ] is None
-            assert denied_positions["zero"]["valuation_inputs"]["fx_rate"][
-                "status"
-            ] == "not_required"
-            assert denied_positions["market-binding-stale"]["valuation_inputs"][
-                "mark_price"
-            ]["status"] == "stale"
+            assert (
+                denied_position["valuation_inputs"]["market_cut"][
+                    "account_position_observed_at_utc"
+                ]
+                == ACCOUNT_OBSERVED_AT
+            )
+            assert denied_position["valuation_inputs"]["market_cut"]["market_event_at_utc"] is None
+            assert (
+                denied_position["valuation_inputs"]["fx_market_cut"][
+                    "account_position_observed_at_utc"
+                ]
+                == ACCOUNT_OBSERVED_AT
+            )
+            assert (
+                denied_position["valuation_inputs"]["fx_market_cut"]["market_event_at_utc"] is None
+            )
+            assert (
+                denied_positions["zero"]["valuation_inputs"]["fx_rate"]["status"] == "not_required"
+            )
+            assert (
+                denied_positions["market-binding-stale"]["valuation_inputs"]["mark_price"]["status"]
+                == "stale"
+            )
             assert denied_subject not in executions
 
             authorized = await client.get(
@@ -995,9 +1042,7 @@ async def test_market_data_denial_is_unavailable_and_does_not_change_account_tot
             assert authorized_projection["account_total"]["value"] == "500.00"
             authorized_position = next(
                 row
-                for row in authorized_projection["accounts"][0][
-                    "provider_observation"
-                ]["positions"]
+                for row in authorized_projection["accounts"][0]["provider_observation"]["positions"]
                 if row["instrument"]["instrument_id"] == "contract:eur"
             )
             authorized_mark = authorized_position["valuation_inputs"]["mark_price"]

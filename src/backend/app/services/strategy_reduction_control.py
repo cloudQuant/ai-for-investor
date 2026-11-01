@@ -123,9 +123,7 @@ class StrategyReductionDeployment:
         self.profiles = profiles
 
     @classmethod
-    def from_secret(
-        cls, value: SecretStr | str | None
-    ) -> StrategyReductionDeployment | None:
+    def from_secret(cls, value: SecretStr | str | None) -> StrategyReductionDeployment | None:
         if isinstance(value, SecretStr):
             raw = value.get_secret_value()
         elif type(value) is str:
@@ -160,7 +158,15 @@ class StrategyReductionDeployment:
             return cls(config, profiles)
         except StrategyReductionControlError:
             raise
-        except (ArithmeticError, OSError, UnicodeError, ValueError, TypeError, ValidationError, RecursionError):
+        except (
+            ArithmeticError,
+            OSError,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            ValidationError,
+            RecursionError,
+        ):
             raise StrategyReductionControlError("DEPLOYMENT_INVALID") from None
         except Exception:
             # Import/config parser failures are deliberately value-free; no

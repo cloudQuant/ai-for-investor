@@ -42,9 +42,7 @@ def test_upgrade_to_merged_head_preserves_existing_portfolio_composition(tmp_pat
     with sqlite3.connect(database_path) as connection:
         tables_before = {
             row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         assert "portfolio_composition_versions" in tables_before
         assert "portfolio_analytics_datasets_v1" not in tables_before
@@ -84,9 +82,7 @@ def test_upgrade_to_merged_head_preserves_existing_portfolio_composition(tmp_pat
     with sqlite3.connect(database_path) as connection:
         tables_after = {
             row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         assert "portfolio_analytics_datasets_v1" in tables_after
         assert "legacy_paper_cutover_receipts" in tables_after
@@ -109,9 +105,7 @@ def test_upgrade_to_merged_head_preserves_existing_portfolio_composition(tmp_pat
     with sqlite3.connect(database_path) as connection:
         tables_after_head = {
             row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         assert "legacy_paper_import_receipts" in tables_after_head
         after_full_upgrade = connection.execute(
@@ -139,9 +133,7 @@ def test_fresh_database_upgrades_to_the_single_merged_head(tmp_path: Path) -> No
     with sqlite3.connect(database_path) as connection:
         tables = {
             row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         assert {
             "portfolio_composition_versions",
@@ -152,4 +144,3 @@ def test_fresh_database_upgrades_to_the_single_merged_head(tmp_path: Path) -> No
         assert connection.execute("SELECT version_num FROM alembic_version").fetchall() == [
             (_FINAL_REVISION,)
         ]
-

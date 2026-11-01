@@ -20,9 +20,7 @@ from fractions import Fraction
 from bt_api_risk.portfolio_analytics import FxObservationV1
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_VERSIONED_POLICY_REF_RE = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._:-]*-v[1-9][0-9]*$"
-)
+_VERSIONED_POLICY_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*-v[1-9][0-9]*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 _BUDGET_KIND = "afi.static_account_budget"
@@ -129,9 +127,7 @@ def compile_static_portfolio_budget(
     portfolio_ref = _identifier(plan.portfolio_ref, "INVALID_PORTFOLIO_REF")
     if type(plan.membership_version) is not int or plan.membership_version < 1:
         raise RiskPolicyBudgetError("INVALID_MEMBERSHIP_VERSION")
-    if type(plan.membership_sha256) is not str or not _SHA256_RE.fullmatch(
-        plan.membership_sha256
-    ):
+    if type(plan.membership_sha256) is not str or not _SHA256_RE.fullmatch(plan.membership_sha256):
         raise RiskPolicyBudgetError("INVALID_MEMBERSHIP_DIGEST")
     currency = _currency(plan.currency)
     if plan.metric != _SUPPORTED_METRIC:
@@ -150,9 +146,7 @@ def compile_static_portfolio_budget(
 
     if fx_observations is None:
         fx_by_currency: Mapping[str, FxObservationV1] = {}
-    elif isinstance(fx_observations, Mapping) and all(
-        type(key) is str for key in fx_observations
-    ):
+    elif isinstance(fx_observations, Mapping) and all(type(key) is str for key in fx_observations):
         fx_by_currency = fx_observations
     else:
         raise RiskPolicyBudgetError("INVALID_BUDGET_FX_FACTS")
@@ -176,10 +170,7 @@ def compile_static_portfolio_budget(
         source_amount = _amount(allocation.amount, "INVALID_ALLOCATION_AMOUNT")
         if source_amount <= 0:
             raise RiskPolicyBudgetError("INVALID_ALLOCATION_AMOUNT")
-        if (
-            type(allocation.max_increase_count) is not int
-            or allocation.max_increase_count < 0
-        ):
+        if type(allocation.max_increase_count) is not int or allocation.max_increase_count < 0:
             raise RiskPolicyBudgetError("INVALID_INCREASE_COUNT")
 
         fx_payload: dict[str, object] | None = None

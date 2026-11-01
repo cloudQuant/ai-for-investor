@@ -58,9 +58,12 @@ class PortfolioAnalyticsDatasetV1(Base):
             name="ck_portfolio_analytics_dataset_v1_source_trust",
         ),
         CheckConstraint(
-            "length(membership_sha256) = 64", name="ck_portfolio_analytics_dataset_v1_membership_sha"
+            "length(membership_sha256) = 64",
+            name="ck_portfolio_analytics_dataset_v1_membership_sha",
         ),
-        CheckConstraint("length(facts_sha256) = 64", name="ck_portfolio_analytics_dataset_v1_facts_sha"),
+        CheckConstraint(
+            "length(facts_sha256) = 64", name="ck_portfolio_analytics_dataset_v1_facts_sha"
+        ),
         CheckConstraint(
             "length(idempotency_key_sha256) = 64",
             name="ck_portfolio_analytics_dataset_v1_idempotency_sha",

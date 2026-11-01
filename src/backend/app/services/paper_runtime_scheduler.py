@@ -67,11 +67,8 @@ class PaperRuntimeSnapshotScheduler:
                     == PaperEquitySnapshot.paper_account_id,
                     LegacyPaperImportReceipt.active_fence_key
                     == PaperEquitySnapshot.paper_account_id,
-                    LegacyPaperImportReceipt.owner_subject
-                    == PaperEquitySnapshot.user_id,
-                    LegacyPaperImportReceipt.state.in_(
-                        ("PREPARED", "COMMITTED", "ACTIVE")
-                    ),
+                    LegacyPaperImportReceipt.owner_subject == PaperEquitySnapshot.user_id,
+                    LegacyPaperImportReceipt.state.in_(("PREPARED", "COMMITTED", "ACTIVE")),
                 ),
             )
             .where(

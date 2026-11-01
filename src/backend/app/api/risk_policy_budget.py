@@ -49,9 +49,7 @@ router = APIRouter(
 )
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_VERSIONED_IDENTIFIER_RE = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._:-]*-v[1-9][0-9]*$"
-)
+_VERSIONED_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*-v[1-9][0-9]*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _MAX_MEMBERS = 256
@@ -67,9 +65,7 @@ _BUDGET_GENERATION_STATES = frozenset(
         "retracted",
     }
 )
-_BUDGET_MEMBER_STATES = frozenset(
-    {"pending", "published", "confirmed", "rejected", "unknown"}
-)
+_BUDGET_MEMBER_STATES = frozenset({"pending", "published", "confirmed", "rejected", "unknown"})
 
 
 class BudgetAllocationRequest(BaseModel):
@@ -207,9 +203,7 @@ def _worker_unavailable(error: BaseException) -> HTTPException:
     )
 
 
-def _binding(
-    current_user: TokenPayload, portfolio_ref: str
-) -> tuple[ReadAccess, Any]:
+def _binding(current_user: TokenPayload, portfolio_ref: str) -> tuple[ReadAccess, Any]:
     _validate_identifier(portfolio_ref, "INVALID_PORTFOLIO_REF")
     try:
         access = resolve_risk_policy_budget_access(current_user, portfolio_ref)
@@ -330,8 +324,7 @@ async def _latest_live_membership(
             "The live membership has no unique supported account roster.",
         )
     if expected_version is not None and (
-        row.membership_version != expected_version
-        or row.membership_sha256 != expected_sha256
+        row.membership_version != expected_version or row.membership_sha256 != expected_sha256
     ):
         raise _error(
             "STALE_PORTFOLIO_MEMBERSHIP",
@@ -425,9 +418,7 @@ def _plan_objects(
     allocations: list[AccountBudgetAllocation] = []
     for item in request.allocations:
         _validate_identifier(item.account_ref, "INVALID_ACCOUNT_REF")
-        policy_refs[item.account_ref] = _policy_ref_for_generation(
-            generation_ref, item.account_ref
-        )
+        policy_refs[item.account_ref] = _policy_ref_for_generation(generation_ref, item.account_ref)
         if _DECIMAL_RE.fullmatch(item.amount) is None:
             raise _error(
                 "INVALID_BUDGET_AMOUNT",
@@ -520,7 +511,11 @@ def _plan_objects(
 
 
 def _budget_proposal(
-    *, pool_ref: str, generation_ref: str, compiled: Any, catalog_requests: tuple[dict[str, object], ...]
+    *,
+    pool_ref: str,
+    generation_ref: str,
+    compiled: Any,
+    catalog_requests: tuple[dict[str, object], ...],
 ) -> dict[str, object]:
     allocations: list[dict[str, object]] = []
     for request in catalog_requests:
@@ -581,9 +576,7 @@ def _generation_view(
     view["authority_ready"] = state == "authority_ready"
     view["consumer_effective"] = False
     view["consumer_status"] = (
-        "awaiting_account_gate_binding"
-        if state == "authority_ready"
-        else "not_authority_ready"
+        "awaiting_account_gate_binding" if state == "authority_ready" else "not_authority_ready"
     )
     if latest_membership is not None:
         view["membership_current"] = (
@@ -814,9 +807,7 @@ async def propose_budget_generation(
         compiled=compiled,
         catalog_requests=catalog_requests,
     )
-    result = await _catalog_call(
-        access, portfolio_ref, "policy.budget.propose", proposal
-    )
+    result = await _catalog_call(access, portfolio_ref, "policy.budget.propose", proposal)
     view = _generation_view(result, latest_membership=membership)
     return view
 

@@ -269,7 +269,9 @@ def capture_afi_boundary(
             budget,
         )
         requested_users = tuple(sorted({row["user_id"] for row in accounts}))
-        if not requested_users or any(type(value) is not str or not value for value in requested_users):
+        if not requested_users or any(
+            type(value) is not str or not value for value in requested_users
+        ):
             raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
         all_user_accounts = _query_rows(
             session,
@@ -333,8 +335,7 @@ def capture_afi_boundary(
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
     paper_user_by_account = {row["id"]: row["user_id"] for row in accounts}
     if any(
-        row["user_id"] != paper_user_by_account.get(row["paper_account_id"])
-        for row in snapshots
+        row["user_id"] != paper_user_by_account.get(row["paper_account_id"]) for row in snapshots
     ):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
     _validate_import_receipts(import_receipts, accounts, account_values)
@@ -387,35 +388,20 @@ def capture_afi_boundary(
         snapshots,
         import_receipts,
     )
-    amounts = _financial_amounts(
-        accounts, positions, orders, trades, snapshots, import_receipts
-    )
+    amounts = _financial_amounts(accounts, positions, orders, trades, snapshots, import_receipts)
     position_amounts = _position_amounts(positions)
     unresolved_ids = tuple(
         sorted(
             row["id"]
             for row in orders
-            if type(row["status"]) is not str
-            or row["status"].lower() not in _PAPER_TERMINAL_STATES
+            if type(row["status"]) is not str or row["status"].lower() not in _PAPER_TERMINAL_STATES
         )
     )
     reservation_ids = tuple(
         sorted(
-            {
-                row["intent_id"]
-                for row in operations
-                if row["intent_id"]
-            }
-            | {
-                row["intent_id"]
-                for row in approved_http_operations
-                if row["intent_id"]
-            }
-            | {
-                row["intent_id"]
-                for row in approvals
-                if row["intent_id"]
-            }
+            {row["intent_id"] for row in operations if row["intent_id"]}
+            | {row["intent_id"] for row in approved_http_operations if row["intent_id"]}
+            | {row["intent_id"] for row in approvals if row["intent_id"]}
         )
     )
     return AfiBoundarySnapshot(
@@ -628,10 +614,7 @@ def enumerate_paper_snapshot_writers(
                 encoded = _canonical_json(identity)
                 snapshot_bytes += len(encoded)
                 snapshot_rows_seen += 1
-                if (
-                    snapshot_rows_seen > _MAX_BOUNDARY_ROWS
-                    or snapshot_bytes > _MAX_BOUNDARY_BYTES
-                ):
+                if snapshot_rows_seen > _MAX_BOUNDARY_ROWS or snapshot_bytes > _MAX_BOUNDARY_BYTES:
                     raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
                 (
                     snapshot_id,
@@ -644,7 +627,12 @@ def enumerate_paper_snapshot_writers(
                 if (
                     type(snapshot_id) is not str
                     or not snapshot_id
-                    or (snapshot_user_id, snapshot_workspace_id, snapshot_unit_id, snapshot_instance_id)
+                    or (
+                        snapshot_user_id,
+                        snapshot_workspace_id,
+                        snapshot_unit_id,
+                        snapshot_instance_id,
+                    )
                     != (user_id, workspace_id, unit_id, instance_id)
                     or type(paper_account_id) is not str
                     or not paper_account_id
@@ -706,9 +694,7 @@ def enumerate_paper_snapshot_writers(
             configuration_digest = hashlib.sha256(
                 _canonical_json(configuration_document)
             ).hexdigest()
-            scope_digest = hashlib.sha256(
-                _canonical_json(scope_document)
-            ).hexdigest()
+            scope_digest = hashlib.sha256(_canonical_json(scope_document)).hexdigest()
             consumer_id = "afi-snapshot-writer-v1:" + configuration_digest
             consumers.append(
                 AfiConfiguredSnapshotWriter(
@@ -851,15 +837,11 @@ def _preflight_query_budget(
     byte_lengths = []
     for column in columns:
         if isinstance(column.type, LargeBinary):
-            byte_lengths.append(
-                func.coalesce(func.sum(func.length(column)), 0)
-            )
+            byte_lengths.append(func.coalesce(func.sum(func.length(column)), 0))
         elif isinstance(column.type, (String, Text, JSON)):
             # SQL length counts Unicode code points on supported backends;
             # six bytes per code point bounds UTF-8 plus JSON escaping.
-            byte_lengths.append(
-                6 * func.coalesce(func.sum(func.length(cast(column, String))), 0)
-            )
+            byte_lengths.append(6 * func.coalesce(func.sum(func.length(cast(column, String))), 0))
     if byte_lengths:
         size_query = select(*byte_lengths).select_from(model)
         if where_clause is not None:
@@ -874,9 +856,7 @@ def _preflight_query_budget(
         raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
 
 
-def _http_operation_matches_approval(
-    operation: dict[str, Any], approval: dict[str, Any]
-) -> bool:
+def _http_operation_matches_approval(operation: dict[str, Any], approval: dict[str, Any]) -> bool:
     return all(
         operation[operation_field] == approval[approval_field]
         for operation_field, approval_field in (
@@ -920,8 +900,7 @@ def _validate_approval_event_chains(
             or [row["record_version"] for row in approval_events]
             != list(range(1, record_version + 1))
             or any(
-                row["approval_version"] != approval["approval_version"]
-                for row in approval_events
+                row["approval_version"] != approval["approval_version"] for row in approval_events
             )
             or any(row["owner_subject"] != approval["owner_subject"] for row in approval_events)
             or any(row["target_sha256"] != approval["target_sha256"] for row in approval_events)
@@ -954,14 +933,11 @@ def _validate_approval_event_chains(
             value is not None for value in reservation_values
         ):
             raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        if (
-            len(reserved_events) != int(has_reserved_operation)
-            or any(
-                row["intent_id"] != approval["intent_id"]
-                or row["operation_key_sha256"] != approval["operation_key_sha256"]
-                or row["occurred_at_ns"] != approval["operation_reserved_at_ns"]
-                for row in reserved_events
-            )
+        if len(reserved_events) != int(has_reserved_operation) or any(
+            row["intent_id"] != approval["intent_id"]
+            or row["operation_key_sha256"] != approval["operation_key_sha256"]
+            or row["occurred_at_ns"] != approval["operation_reserved_at_ns"]
+            for row in reserved_events
         ):
             raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
         expected_prefix = ("APPROVED",) + (
@@ -1137,10 +1113,7 @@ def _validate_identity_fields(
     ):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
     order_ids = {row["id"] for row in orders}
-    if any(
-        row["order_id"] is not None and row["order_id"] not in order_ids
-        for row in trades
-    ):
+    if any(row["order_id"] is not None and row["order_id"] not in order_ids for row in trades):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
 
 
@@ -1233,8 +1206,7 @@ def _validate_import_receipts(
                 _canonical_json(source_document) != source_bytes
                 or hashlib.sha256(source_bytes).hexdigest() != row["source_inventory_sha256"]
                 or _canonical_json(context_document) != context_bytes
-                or hashlib.sha256(context_bytes).hexdigest()
-                != row["preserved_context_sha256"]
+                or hashlib.sha256(context_bytes).hexdigest() != row["preserved_context_sha256"]
             ):
                 raise ValueError("non-canonical receipt payload")
         except (RecursionError, TypeError, ValueError, UnicodeError):
@@ -1351,33 +1323,41 @@ def _inspected_schema_rows(session: Session, models: tuple[type, ...]) -> tuple[
                     _schema_value(inspector.get_pk_constraint(table.name, schema=schema)),
                     tuple(
                         sorted(
-                            (_schema_value(item) for item in inspector.get_unique_constraints(
-                                table.name, schema=schema
-                            )),
+                            (
+                                _schema_value(item)
+                                for item in inspector.get_unique_constraints(
+                                    table.name, schema=schema
+                                )
+                            ),
                             key=_canonical_json,
                         )
                     ),
                     tuple(
                         sorted(
-                            (_schema_value(item) for item in inspector.get_indexes(
-                                table.name, schema=schema
-                            )),
+                            (
+                                _schema_value(item)
+                                for item in inspector.get_indexes(table.name, schema=schema)
+                            ),
                             key=_canonical_json,
                         )
                     ),
                     tuple(
                         sorted(
-                            (_schema_value(item) for item in inspector.get_foreign_keys(
-                                table.name, schema=schema
-                            )),
+                            (
+                                _schema_value(item)
+                                for item in inspector.get_foreign_keys(table.name, schema=schema)
+                            ),
                             key=_canonical_json,
                         )
                     ),
                     tuple(
                         sorted(
-                            (_schema_value(item) for item in inspector.get_check_constraints(
-                                table.name, schema=schema
-                            )),
+                            (
+                                _schema_value(item)
+                                for item in inspector.get_check_constraints(
+                                    table.name, schema=schema
+                                )
+                            ),
                             key=_canonical_json,
                         )
                     ),
@@ -1493,9 +1473,7 @@ def _identity_links(
             run_ref = metadata["run_ref"]
             if type(run_ref) is not str or not run_ref:
                 raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            links.append(
-                ("paper_equity_snapshot", row["id"], "paper_run_ref", run_ref)
-            )
+            links.append(("paper_equity_snapshot", row["id"], "paper_run_ref", run_ref))
         links.append(
             (
                 "paper_equity_snapshot",
@@ -1575,9 +1553,7 @@ def _financial_amounts(
             values.append((f"equity_snapshot:{row['id']}:{key}", _decimal(row[key])))
     for row in import_receipts:
         for key in ("opening_cash", "cumulative_fees", "unallocated_equity_residual"):
-            values.append(
-                (f"legacy_import_receipt:{row['id']}:{key}", _decimal(row[key]))
-            )
+            values.append((f"legacy_import_receipt:{row['id']}:{key}", _decimal(row[key])))
     return tuple(sorted((key, _decimal_text(value)) for key, value in values))
 
 
@@ -1586,7 +1562,10 @@ def _position_amounts(
 ) -> tuple[tuple[str, str], ...]:
     return tuple(
         sorted(
-            (f"{row['account_id']}:{row['symbol']}:{row['id']}", _decimal_text(_decimal(row["size"])))
+            (
+                f"{row['account_id']}:{row['symbol']}:{row['id']}",
+                _decimal_text(_decimal(row["size"])),
+            )
             for row in positions
         )
     )
@@ -1646,10 +1625,7 @@ def _decimal(value: Any) -> Decimal:
         if type(value) is dict:
             if set(value) == {"float_hex"} and type(value["float_hex"]) is str:
                 source_float = float.fromhex(value["float_hex"])
-                if (
-                    not math.isfinite(source_float)
-                    or source_float.hex() != value["float_hex"]
-                ):
+                if not math.isfinite(source_float) or source_float.hex() != value["float_hex"]:
                     raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
                 number = Decimal(str(source_float))
             elif set(value) == {"decimal"} and type(value["decimal"]) is str:
@@ -1691,9 +1667,7 @@ def _decimal_text(value: Decimal) -> str:
     else:
         point = len(digits) + exponent
         body = (
-            digits[:point] + "." + digits[point:]
-            if point > 0
-            else "0." + ("0" * -point) + digits
+            digits[:point] + "." + digits[point:] if point > 0 else "0." + ("0" * -point) + digits
         )
     return ("-" if sign else "") + body
 
@@ -1701,7 +1675,9 @@ def _decimal_text(value: Decimal) -> str:
 def _text_set(values: Iterable[str]) -> tuple[str, ...]:
     if type(values) not in (tuple, list) or len(values) > _MAX_BOUNDARY_ROWS:
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
-    if any(type(value) is not str or not value for value in values) or len(set(values)) != len(values):
+    if any(type(value) is not str or not value for value in values) or len(set(values)) != len(
+        values
+    ):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
     result = tuple(sorted(values))
     return result

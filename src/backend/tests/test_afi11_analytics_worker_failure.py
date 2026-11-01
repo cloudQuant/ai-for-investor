@@ -103,14 +103,12 @@ def _assert_r236_sources() -> dict[str, Path]:
         package_path = root / package
         assert (package_path / "__init__.py").is_file(), (package, "fixed package missing")
 
-    analytics_path = (
-        r236_risk_export / "src" / "bt_api_risk" / "service_analytics.py"
-    ).resolve()
+    analytics_path = (r236_risk_export / "src" / "bt_api_risk" / "service_analytics.py").resolve()
     analytics_bytes = analytics_path.read_bytes()
     assert len(analytics_bytes) == _R236_RISK_ANALYTICS_BYTES
     assert hashlib.sha256(analytics_bytes).hexdigest() == _R236_RISK_ANALYTICS_SHA256
     analytics_source = analytics_bytes.decode("utf-8")
-    assert "multiprocessing.get_context(\"spawn\")" in analytics_source
+    assert 'multiprocessing.get_context("spawn")' in analytics_source
     assert "TASK_WORKER_START_TIMEOUT" in analytics_source
     assert "_WORKER_STARTUP_TIMEOUT_NS: Final[int] = 10_000_000_000" in analytics_source
 
@@ -141,15 +139,27 @@ def _assert_r236_sources() -> dict[str, Path]:
     module_paths = (
         (WireIdentity, root_by_name["bt_api_base"] / "bt_api_base" / "service_protocol.py"),
         (ExecutionScope, root_by_name["bt_api_execution"] / "bt_api_execution" / "contracts.py"),
-        (ProviderObservation, root_by_name["bt_api_execution"] / "bt_api_execution" / "contracts.py"),
+        (
+            ProviderObservation,
+            root_by_name["bt_api_execution"] / "bt_api_execution" / "contracts.py",
+        ),
         (SqliteExecutionStore, root_by_name["bt_api_execution"] / "bt_api_execution" / "store.py"),
-        (ExecutionOrderEntryService, root_by_name["bt_api_execution"] / "bt_api_execution" / "service_order_entry.py"),
+        (
+            ExecutionOrderEntryService,
+            root_by_name["bt_api_execution"] / "bt_api_execution" / "service_order_entry.py",
+        ),
         (AccountScope, root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "admission.py"),
         (DurableRiskGate, root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "admission.py"),
         (RiskPolicy, root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "admission.py"),
         (RiskDeniedError, root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "admission.py"),
-        (InstrumentRiskMetadata, root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "instrument.py"),
-        (InstrumentRiskRegistry, root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "instrument.py"),
+        (
+            InstrumentRiskMetadata,
+            root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "instrument.py",
+        ),
+        (
+            InstrumentRiskRegistry,
+            root_by_name["bt_api_risk"] / "bt_api_risk" / "core" / "instrument.py",
+        ),
         (ComponentResources, root_by_name["bt_api_py"] / "bt_api_py" / "service_components.py"),
         (ServiceHost, root_by_name["bt_api_py"] / "bt_api_py" / "service_host.py"),
         (TrustedServiceAuthority, root_by_name["bt_api_py"] / "bt_api_py" / "service_host.py"),
@@ -299,6 +309,7 @@ def _owner_process(
     denial_reasons: list[str] = []
     provider_construction_count = 0
     try:
+
         class SyntheticProvider:
             def __init__(self) -> None:
                 nonlocal provider_construction_count
@@ -376,9 +387,7 @@ def _owner_process(
             grants=grants,
         )
 
-        def resource_provider(
-            component: str, instance_id: str, _options: Any, _scope: Any
-        ) -> Any:
+        def resource_provider(component: str, instance_id: str, _options: Any, _scope: Any) -> Any:
             if component != "execution" or instance_id != _OWNER_INSTANCE_ID:
                 raise AssertionError("unexpected execution owner resource request")
             return ComponentResources.borrowed(
@@ -564,9 +573,7 @@ class _StartupBarrierContext:
             args=(target, args, str(self._entered_path), release_receiver),
             **kwargs,
         )
-        return _ObservedBarrierProcess(
-            process, (release_receiver,), self._event_path
-        )
+        return _ObservedBarrierProcess(process, (release_receiver,), self._event_path)
 
     def close(self) -> None:
         for connection in self._parent_connections:
@@ -591,9 +598,9 @@ def _risk_host_entry(config_path: Path) -> int:
         Path(config["worker_events"]),
     )
     service_module.multiprocessing = SimpleNamespace(
-        get_context=lambda method: barrier
-        if method == "spawn"
-        else multiprocessing.get_context(method)
+        get_context=lambda method: (
+            barrier if method == "spawn" else multiprocessing.get_context(method)
+        )
     )
     try:
         return support._host_worker(config_path)
@@ -761,7 +768,10 @@ async def test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_ow
         (main_module, backend_root / "app" / "main.py"),
         (analytics_routes, backend_root / "app" / "api" / "portfolio" / "analytics_tasks.py"),
         (analytics_service, backend_root / "app" / "services" / "portfolio_analytics_tasks.py"),
-        (service_read_deployment, backend_root / "app" / "services" / "service_read" / "deployment.py"),
+        (
+            service_read_deployment,
+            backend_root / "app" / "services" / "service_read" / "deployment.py",
+        ),
         (service_read_worker, backend_root / "app" / "services" / "service_read" / "worker.py"),
     )
     for module, expected in app_module_origins:
@@ -943,7 +953,9 @@ async def test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_ow
         json.dumps(
             {
                 "schema_version": 1,
-                "subjects": [support._deployment_profile(subject, analytics_endpoint, analytics_keys)],
+                "subjects": [
+                    support._deployment_profile(subject, analytics_endpoint, analytics_keys)
+                ],
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -1038,7 +1050,12 @@ async def test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_ow
 
         with host_log_path.open("wb") as host_log:
             host_process = subprocess.Popen(
-                [sys.executable, str(Path(__file__).resolve()), "--risk-host", str(host_config_path)],
+                [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "--risk-host",
+                    str(host_config_path),
+                ],
                 cwd=str(backend_root),
                 env=child_env,
                 stdout=host_log,
@@ -1106,7 +1123,9 @@ async def test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_ow
                 assert host_process.poll() is None
                 assert host_markers["worker_entered"].read_text(encoding="ascii") == "entered"
 
-                worker_events = json.loads(host_markers["worker_events"].read_text(encoding="ascii"))
+                worker_events = json.loads(
+                    host_markers["worker_events"].read_text(encoding="ascii")
+                )
                 assert worker_events["schema"] == "afi11-v2-startup-child-v1"
                 assert type(worker_events["pid"]) is int and worker_events["pid"] > 0
                 assert worker_events["pid"] != risk_host_pid
@@ -1116,9 +1135,15 @@ async def test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_ow
                 assert worker_events["started"] is True
                 assert worker_events["daemon"] is True
                 assert worker_events["events"].count("start") == 1
-                assert worker_events["events"].index("start") < worker_events["events"].index("terminate")
-                assert worker_events["events"].index("terminate") < worker_events["events"].index("join")
-                assert worker_events["events"].index("join") < worker_events["events"].index("close")
+                assert worker_events["events"].index("start") < worker_events["events"].index(
+                    "terminate"
+                )
+                assert worker_events["events"].index("terminate") < worker_events["events"].index(
+                    "join"
+                )
+                assert worker_events["events"].index("join") < worker_events["events"].index(
+                    "close"
+                )
                 assert worker_events["alive_after_join"] is False
                 assert worker_events["alive_before_close"] is False
                 assert worker_events["closed"] is True
@@ -1256,7 +1281,9 @@ async def _wait_terminal_running(client: Any, headers: dict[str, str], url: str)
         if latest.get("state") in _TERMINAL_STATES:
             raise AssertionError({"expected": "running", "actual": latest.get("state")})
         await asyncio.sleep(0.025)
-    raise AssertionError({"expected": "running", "last_state": latest.get("state") if latest else None})
+    raise AssertionError(
+        {"expected": "running", "last_state": latest.get("state") if latest else None}
+    )
 
 
 def _loopback_endpoint() -> str:

@@ -104,9 +104,7 @@ def list_authorized_service_account_refs(subject: str) -> tuple[str, ...]:
     return () if directory is None else directory.account_refs_for(subject)
 
 
-async def read_authorized_service_account(
-    subject: str, account_ref: str
-) -> AccountReadView:
+async def read_authorized_service_account(subject: str, account_ref: str) -> AccountReadView:
     """Read one account through the existing subject-bound service worker.
 
     This in-process bridge has the same exact subject/account authorization as
@@ -194,25 +192,19 @@ def resolve_portfolio_analytics_access(
     return _resolve_access(current_user, portfolio_ref, "portfolio_analytics")
 
 
-def resolve_risk_policy_budget_access(
-    current_user: TokenPayload, portfolio_ref: str
-) -> ReadAccess:
+def resolve_risk_policy_budget_access(current_user: TokenPayload, portfolio_ref: str) -> ReadAccess:
     """Resolve one deployment-owned budget-control binding for this subject."""
 
     return _resolve_access(current_user, portfolio_ref, "risk_policy_budget")
 
 
-def resolve_risk_account_policy_access(
-    current_user: TokenPayload, account_ref: str
-) -> ReadAccess:
+def resolve_risk_account_policy_access(current_user: TokenPayload, account_ref: str) -> ReadAccess:
     """Resolve one exact account-only policy grant for the authenticated subject."""
 
     return _resolve_access(current_user, account_ref, "risk_account_policy")
 
 
-def resolve_paper_submit_access(
-    subject: str, legacy_account_id: str
-) -> tuple[ReadAccess, Any]:
+def resolve_paper_submit_access(subject: str, legacy_account_id: str) -> tuple[ReadAccess, Any]:
     """Resolve a legacy account selector to its server-owned paper binding.
 
     Callers pass only the authenticated subject and public legacy account ID.
@@ -239,9 +231,7 @@ def resolve_paper_legacy_import_access(
         raise _access_denied() from None
     directory = _require_directory()
     try:
-        access = directory.resolve_paper_legacy_import_account(
-            current_user.sub, legacy_account_id
-        )
+        access = directory.resolve_paper_legacy_import_account(current_user.sub, legacy_account_id)
     except ServiceReadAccessError:
         raise _access_denied() from None
     binding = access.paper_legacy_import_bindings.get(legacy_account_id)

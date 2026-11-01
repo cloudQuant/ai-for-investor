@@ -540,6 +540,7 @@ class StrategyService:
         Returns:
             True if deletion succeeded, False if not found or unauthorized.
         """
+
         async def delete_in_session(db: AsyncSession) -> bool:
             from app.services.strategy_approval_authority import (
                 advance_strategy_approval_authority_epoch,

@@ -536,7 +536,9 @@ async def test_sqlite_epoch_serializes_publishers_and_rolls_back_with_source(aut
                 await asyncio.sleep(0.03)
                 return row.policy_version
 
-    versions = await asyncio.gather(publish_one("policy-concurrent"), publish_one("policy-concurrent"))
+    versions = await asyncio.gather(
+        publish_one("policy-concurrent"), publish_one("policy-concurrent")
+    )
     assert sorted(versions) == [1, 2]
     async with authority_db() as db:
         epoch_before = await db.get(StrategyApprovalAuthorityEpoch, "subject-a")

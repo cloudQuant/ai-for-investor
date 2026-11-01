@@ -212,8 +212,7 @@ async def test_monitoring_summary_and_metric_value_sources():
     # account: retained live-task rules are unavailable without the retired runtime.
     assert not hasattr(svc, "live_trading_service")
     assert (
-        await svc._get_current_metric_value(rule, {"live_task_id": "t1", "metric": "cash"})
-        is None
+        await svc._get_current_metric_value(rule, {"live_task_id": "t1", "metric": "cash"}) is None
     )
     assert (
         await svc._get_current_metric_value(rule, {"live_task_id": "t1", "metric": "equity"})

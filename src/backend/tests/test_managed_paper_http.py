@@ -38,9 +38,7 @@ class _ManagedPaperRouteAdapter:
             "source": "managed_paper",
         }
 
-    async def prepare_cutover(
-        self, *, subject: str, legacy_account_id: str
-    ) -> dict[str, Any]:
+    async def prepare_cutover(self, *, subject: str, legacy_account_id: str) -> dict[str, Any]:
         self.cutovers.append((subject, legacy_account_id))
         return {
             "receipt_id": "receipt-1",
@@ -79,9 +77,7 @@ async def test_manual_http_submit_and_status_url_use_managed_journal(
         payload = submitted.json()
         assert payload["state"] == "ACKED"
         status_url = urlparse(payload["status_url"])
-        assert status_url.path.endswith(
-            f"/managed-orders/{payload['intent_id']}"
-        )
+        assert status_url.path.endswith(f"/managed-orders/{payload['intent_id']}")
         assert parse_qs(status_url.query) == {"account_id": ["legacy-account-1"]}
         assert adapter.submissions[0][2] == "manual-click-42"
 

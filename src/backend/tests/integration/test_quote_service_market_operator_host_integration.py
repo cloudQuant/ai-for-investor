@@ -445,9 +445,7 @@ def test_quote_http_route_uses_operator_okx_queue_and_service_market_client(
             async with httpx.AsyncClient(
                 transport=transport, base_url="http://testserver"
             ) as client:
-                return await client.post(
-                    f"/api/v1/service-gateway/operators/{profile_ref}/stop"
-                )
+                return await client.post(f"/api/v1/service-gateway/operators/{profile_ref}/stop")
 
         stop_response = asyncio.run(stop_operator())
         assert stop_response.status_code == 200, stop_response.text

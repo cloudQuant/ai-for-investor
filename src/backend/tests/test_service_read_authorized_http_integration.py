@@ -2174,10 +2174,7 @@ def _run_live_composition_projection(
                         },
                     )
                     assert unbound_owner.status_code == 403, unbound_owner.text
-                    assert (
-                        unbound_owner.json()["details"]["code"]
-                        == "SERVICE_READ_ACCESS_DENIED"
-                    )
+                    assert unbound_owner.json()["details"]["code"] == "SERVICE_READ_ACCESS_DENIED"
                     assert _STRATEGY_B not in unbound_owner.text
                     unbound_version_two = await client.get(
                         "/api/v1/portfolio/compositions/unbound-owner-view/versions/2/projection",
@@ -3293,8 +3290,8 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
         assert parsed_profile.account_bindings[account_ref].account_key == account_keys[name]
         assert parsed_profile.account_book_bindings[account_ref].account_key == account_keys[name]
         gateway = service["gateway"]
-        assert parsed_profile.account_bindings[account_ref].scope_ref == (
-            gateway["client_scope_ref"]
+        assert (
+            parsed_profile.account_bindings[account_ref].scope_ref == (gateway["client_scope_ref"])
         )
         gateway_binding = next(
             binding
@@ -3303,9 +3300,10 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
         )
         assert gateway_binding["scope_ref"] == gateway["client_scope_ref"]
         assert gateway_binding["transport_ref"] == gateway["transport_ref"]
-        assert gateway_binding["instance_id"] == gateway["config"]["components"]["gateway"][
-            "settings"
-        ]["instance_id"]
+        assert (
+            gateway_binding["instance_id"]
+            == gateway["config"]["components"]["gateway"]["settings"]["instance_id"]
+        )
         assert peers[gateway["service_id"]] == {
             "principal_ref": f"{gateway['service_id']}-principal",
             "actor_ref": gateway["service_id"],
@@ -3327,9 +3325,10 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
         )
         assert execution_binding["scope_ref"] == execution["client_scope_ref"]
         assert execution_binding["transport_ref"] == execution["transport_ref"]
-        assert execution_binding["instance_id"] == execution["config"]["components"][
-            "execution"
-        ]["settings"]["instance_id"]
+        assert (
+            execution_binding["instance_id"]
+            == execution["config"]["components"]["execution"]["settings"]["instance_id"]
+        )
         assert peers[execution["service_id"]] == {
             "principal_ref": f"{execution['service_id']}-principal",
             "actor_ref": execution["service_id"],
@@ -3343,8 +3342,9 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
             "account_ref": account_ref,
             "strategy_ref": None,
         }
-        assert parsed_profile.account_book_bindings[account_ref].scope_ref == (
-            execution["client_scope_ref"]
+        assert (
+            parsed_profile.account_book_bindings[account_ref].scope_ref
+            == (execution["client_scope_ref"])
         )
         strategy_binding = parsed_profile.strategy_book_bindings[service["strategy_ref"]]
         assert strategy_binding.account_ref == account_ref
@@ -3489,17 +3489,13 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
             return "unclassified"
         return f"{module_name}.{qualified_name}"
 
-    def safe_exception_code(
-        error_type: type[BaseException], error: BaseException
-    ) -> str | None:
+    def safe_exception_code(error_type: type[BaseException], error: BaseException) -> str | None:
         if (error_type.__module__, error_type.__name__) not in coded_startup_errors:
             return None
         return _safe_diagnostic_code(getattr(error, "code", None))
 
     def observe_startup_exceptions(frame: Any, event: str, _argument: Any) -> Any:
-        if event != "call" or not threading.current_thread().name.startswith(
-            "afi-service-read-"
-        ):
+        if event != "call" or not threading.current_thread().name.startswith("afi-service-read-"):
             return None
         phase = startup_trace_phases.get(
             (frame.f_globals.get("__name__"), frame.f_code.co_qualname)
@@ -3725,15 +3721,12 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
                         for row in combined["strategies"]
                     )
                     assert {
-                        row["strategy_ref"]: row["positions"]
-                        for row in combined["strategies"]
+                        row["strategy_ref"]: row["positions"] for row in combined["strategies"]
                     } == {
                         _STRATEGY_A: [
                             {"instrument": "PAPER:SIM:AFI-DUAL-A", "net_quantity": "2.5"}
                         ],
-                        _STRATEGY_B: [
-                            {"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "4"}
-                        ],
+                        _STRATEGY_B: [{"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "4"}],
                     }
                     assert {
                         row["strategy_ref"]: row["fees_since_baseline"]
@@ -3789,12 +3782,8 @@ def _run_dual_live_composition_projection(tmp_path: Any, monkeypatch: pytest.Mon
                         row["account_ref"]: row["provider_position_change"]
                         for row in combined["account_book_sources"]
                     } == {
-                        _ACCOUNT_A: [
-                            {"instrument": "PAPER:SIM:AFI-DUAL-A", "net_quantity": "1"}
-                        ],
-                        _ACCOUNT_B: [
-                            {"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "2"}
-                        ],
+                        _ACCOUNT_A: [{"instrument": "PAPER:SIM:AFI-DUAL-A", "net_quantity": "1"}],
+                        _ACCOUNT_B: [{"instrument": "PAPER:SIM:AFI-DUAL-B", "net_quantity": "2"}],
                     }
                     assert {
                         row["account_ref"]: row["position_residual"]
@@ -4011,9 +4000,7 @@ def test_default_service_read_runtime_assembly_requests_gateway_owner_health(
         requested_operations.append(kwargs.get("requested_operations"))
         return real_runtime_type(config, **kwargs)
 
-    monkeypatch.setattr(
-        service_runtime, "ServiceClientRuntime", observe_real_runtime_constructor
-    )
+    monkeypatch.setattr(service_runtime, "ServiceClientRuntime", observe_real_runtime_constructor)
     profile = SimpleNamespace(
         curve_keys={},
         account_bindings={_ACCOUNT_A: object(), _ACCOUNT_B: object()},
@@ -4081,9 +4068,7 @@ def test_afi09_gateway_health_http_reads_real_owner_facts_without_connecting_aga
     from app.services.service_read.deployment import start_service_read_deployment
 
     account_ref = _ACCOUNT_A
-    account_key = AccountKey(
-        "PAPER", "synthetic-venue", "simulation", "afi-health-account-a"
-    )
+    account_key = AccountKey("PAPER", "synthetic-venue", "simulation", "afi-health-account-a")
     app_public, app_secret = zmq.curve_keypair()
     server_public, server_secret = zmq.curve_keypair()
     endpoint = _order._endpoint()
@@ -4221,6 +4206,7 @@ def test_afi09_gateway_health_http_reads_real_owner_facts_without_connecting_aga
             "monitor_bindings": {},
             "worker": {"maintenance_interval_seconds": 60},
         }
+
         async def exercise_http() -> None:
             deployment = await start_service_read_deployment(
                 SecretStr(json.dumps({"schema_version": 1, "subjects": [profile]}))
@@ -4286,12 +4272,8 @@ def test_afi09_gateway_health_http_reads_real_owner_facts_without_connecting_aga
 _MANUAL_SUBMIT_SELECTOR = "afi-manual-order-current-v1"
 _MANUAL_BOOK_A = "afi-manual-book-a-v1"
 _MANUAL_BOOK_B = "afi-manual-book-b-v1"
-_MANUAL_SCOPE_A = WireScope(
-    _DOMAIN, account_ref=_ACCOUNT_A, manual_book_ref=_MANUAL_BOOK_A
-)
-_MANUAL_SCOPE_B = WireScope(
-    _DOMAIN, account_ref=_ACCOUNT_B, manual_book_ref=_MANUAL_BOOK_B
-)
+_MANUAL_SCOPE_A = WireScope(_DOMAIN, account_ref=_ACCOUNT_A, manual_book_ref=_MANUAL_BOOK_A)
+_MANUAL_SCOPE_B = WireScope(_DOMAIN, account_ref=_ACCOUNT_B, manual_book_ref=_MANUAL_BOOK_B)
 _MANUAL_HTTP_PHASES = frozenset(
     {
         "first-owner-A-submit",
@@ -4384,9 +4366,12 @@ def test_manual_order_http_error_diagnostic_uses_real_exception_handler() -> Non
     ):
         response = asyncio.run(_response_for_service_code(service_code))
         payload = json.loads(response.body)
-        assert _manual_order_http_response_fact(
-            phase, response.status_code, payload
-        ) == (f"{phase}", status_code, f"HTTP_{status_code}", service_code)
+        assert _manual_order_http_response_fact(phase, response.status_code, payload) == (
+            f"{phase}",
+            status_code,
+            f"HTTP_{status_code}",
+            service_code,
+        )
 
     validation = RequestValidationError(
         [
@@ -4765,6 +4750,7 @@ def _run_manual_order_submission_integration(
 
     threading.setprofile(_observe_owner_call)
     try:
+
         async def _prepare_database() -> None:
             import app.models  # noqa: F401 - register all mapped models before create_all
 
@@ -4884,7 +4870,9 @@ def _run_manual_order_submission_integration(
                     workers = deployment._workers
                     assert len(workers) == 2
                     current_threads = tuple(worker._thread for worker in workers)
-                    assert all(thread is not None and thread.is_alive() for thread in current_threads)
+                    assert all(
+                        thread is not None and thread.is_alive() for thread in current_threads
+                    )
                     thread_ids = tuple(thread.ident for thread in current_threads)
                     assert len(set(thread_ids)) == 2
                     assert all(ident != main_thread for ident in thread_ids)
@@ -4894,6 +4882,7 @@ def _run_manual_order_submission_integration(
                         transport=httpx.ASGITransport(app=app),
                         base_url="http://manual-order.synthetic.test",
                     ) as client:
+
                         async def submit(token: str, payload: dict[str, Any] = body):
                             return await client.post(
                                 "/api/v1/service-orders/manual",
@@ -4909,8 +4898,12 @@ def _run_manual_order_submission_integration(
                             replay_a = await submit(token_a)
                             other_actor = await submit(token_b)
                             changed = await submit(token_a, {**body, "quantity": "2"})
-                            forged_actor = await submit(token_a, {**body, "actor_ref": "forged-actor"})
-                            unknown_scope = await submit(token_a, {**body, "scope_ref": "manual-other-account"})
+                            forged_actor = await submit(
+                                token_a, {**body, "actor_ref": "forged-actor"}
+                            )
+                            unknown_scope = await submit(
+                                token_a, {**body, "scope_ref": "manual-other-account"}
+                            )
                             assert first_a.status_code == replay_a.status_code == 200, (
                                 _manual_order_http_response_fact_from_response(
                                     "first-owner-A-submit", first_a
@@ -4922,8 +4915,10 @@ def _run_manual_order_submission_integration(
                                     "same-key-owner-B-submit", other_actor
                                 ),
                             )
-                            assert other_actor.status_code == 200, _manual_order_http_response_fact_from_response(
-                                "same-key-owner-B-submit", other_actor
+                            assert other_actor.status_code == 200, (
+                                _manual_order_http_response_fact_from_response(
+                                    "same-key-owner-B-submit", other_actor
+                                )
                             )
                             result_a = first_a.json()
                             result_b = other_actor.json()
@@ -4937,20 +4932,28 @@ def _run_manual_order_submission_integration(
                             assert result_b["account_ref"] == _ACCOUNT_B
                             assert result_a["record"]["state"] == "ACKED"
                             assert result_b["record"]["state"] == "ACKED"
-                            assert changed.status_code == 409, _manual_order_http_response_fact_from_response(
-                                "changed-terms-idempotency-conflict", changed
+                            assert changed.status_code == 409, (
+                                _manual_order_http_response_fact_from_response(
+                                    "changed-terms-idempotency-conflict", changed
+                                )
                             )
-                            assert forged_actor.status_code == 422, _manual_order_http_response_fact_from_response(
-                                "client-supplied-actor-ref-refusal", forged_actor
+                            assert forged_actor.status_code == 422, (
+                                _manual_order_http_response_fact_from_response(
+                                    "client-supplied-actor-ref-refusal", forged_actor
+                                )
                             )
-                            assert unknown_scope.status_code == 403, _manual_order_http_response_fact_from_response(
-                                "unknown-server-scope-ref-refusal", unknown_scope
+                            assert unknown_scope.status_code == 403, (
+                                _manual_order_http_response_fact_from_response(
+                                    "unknown-server-scope-ref-refusal", unknown_scope
+                                )
                             )
                             result_a_id = result_a["intent_id"]
                         else:
                             restarted_replay = await submit(token_a)
-                            assert restarted_replay.status_code == 200, _manual_order_http_response_fact_from_response(
-                                "post-lifespan-restart-owner-A-replay", restarted_replay
+                            assert restarted_replay.status_code == 200, (
+                                _manual_order_http_response_fact_from_response(
+                                    "post-lifespan-restart-owner-A-replay", restarted_replay
+                                )
                             )
                             assert restarted_replay.json()["intent_id"] == result_a_id
 
@@ -4993,6 +4996,7 @@ def _run_manual_order_submission_integration(
                 _close_default_deployment_service_host(host)
             except BaseException as error:
                 cleanup_failures.append(error)
+
         async def _dispose_database() -> None:
             async with engine.begin() as connection:
                 await connection.run_sync(database.Base.metadata.drop_all)
@@ -5942,6 +5946,7 @@ def _approved_target_service_process(
     config = parse_service_config(raw_config)
     store = SqliteExecutionStore(store_path)
     provider = _ApprovedTargetSyntheticProvider()
+
     class _RecordingRiskGate(_order._Gate):
         def __init__(self) -> None:
             super().__init__()
@@ -6173,9 +6178,7 @@ def _approved_target_service_process_synthetic_environment(
         os.environ = previous_environment  # noqa: B003 - restore child interpreter inputs
 
 
-def _approved_target_deployment_profile(
-    *, endpoint: str, keys: dict[str, bytes]
-) -> dict[str, Any]:
+def _approved_target_deployment_profile(*, endpoint: str, keys: dict[str, bytes]) -> dict[str, Any]:
     client_config = _order._client_config(
         endpoint,
         "application_client",
@@ -6251,7 +6254,10 @@ def _approved_target_http_fact(response: Any) -> tuple[int, str | None, str | No
             and 1 <= len(value) <= 64
             and value.isascii()
             and value[0].isalpha()
-            and all(character.isupper() or character.isdigit() or character == "_" for character in value)
+            and all(
+                character.isupper() or character.isdigit() or character == "_"
+                for character in value
+            )
         ):
             return value
         return None
@@ -6342,9 +6348,7 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
         "application_secret": application_secret,
     }
     raw_config = _order._service_config(endpoint)
-    raw_config["components"]["execution"]["settings"]["bind_ports"] = [
-        "service.order_entry"
-    ]
+    raw_config["components"]["execution"]["settings"]["bind_ports"] = ["service.order_entry"]
     raw_config["components"]["execution"]["settings"]["options"] = {
         "role": "account_owner",
         "approved_target_required": True,
@@ -6563,9 +6567,7 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
                 assert first_result["record"]["intent_id"] == first_result["intent_id"]
                 assert first_result["record"]["state"] == "ACKED"
                 assert replay_result["record"]["state"] == "ACKED"
-                changed_claim = await submit(
-                    {**submit_body, "target_sha256": "0" * 64}
-                )
+                changed_claim = await submit({**submit_body, "target_sha256": "0" * 64})
                 assert _approved_target_http_fact(changed_claim) == (
                     409,
                     "HTTP_409",
@@ -6715,8 +6717,13 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
                 )
                 assert authority_ready is True
                 assert len(identity_call_facts) == 3
-                assert all(call_thread == owner_thread for call_thread, owner_thread, *_ in identity_call_facts)
-                assert all(call_thread != threading.get_ident() for call_thread, *_ in identity_call_facts)
+                assert all(
+                    call_thread == owner_thread
+                    for call_thread, owner_thread, *_ in identity_call_facts
+                )
+                assert all(
+                    call_thread != threading.get_ident() for call_thread, *_ in identity_call_facts
+                )
                 assert all(
                     row[2:] == (_APPLICATION_IDENTITY_A.actor_ref, _DELEGATE_A)
                     for row in identity_call_facts
@@ -6768,13 +6775,9 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
         assert len(set(close_reserved_permits)) == 2
         assert closed[2][0][0] in close_reserved_permits
         close_denied_intent = next(
-            reference
-            for reference in close_reserved_permits
-            if reference != closed[2][0][0]
+            reference for reference in close_reserved_permits if reference != closed[2][0][0]
         )
-        assert closed[5] == (
-            (f"permit-{close_denied_intent}", "APPROVAL_POLICY_STALE"),
-        )
+        assert closed[5] == ((f"permit-{close_denied_intent}", "APPROVAL_POLICY_STALE"),)
         assert len(closed[6]) == 3
         assert closed[7] is False
         assert closed[8] is True
@@ -6804,9 +6807,7 @@ def test_approved_target_http_reaches_real_execution_host_and_replays_journal(
 
     if primary_error is not None:
         if cleanup_failures:
-            primary_error.__dict__["approved_target_cleanup_failure_count"] = len(
-                cleanup_failures
-            )
+            primary_error.__dict__["approved_target_cleanup_failure_count"] = len(cleanup_failures)
             primary_error.add_note(
                 f"approved-target integration cleanup reported {len(cleanup_failures)} failure(s)"
             )
@@ -6903,9 +6904,7 @@ def _run_approved_target_cross_process_integration(tmp_path: Any) -> None:
     }
     endpoint = _order._endpoint()
     raw_config = _order._service_config(endpoint)
-    raw_config["components"]["execution"]["settings"]["bind_ports"] = [
-        "service.order_entry"
-    ]
+    raw_config["components"]["execution"]["settings"]["bind_ports"] = ["service.order_entry"]
     raw_config["components"]["execution"]["settings"]["options"] = {
         "role": "account_owner",
         "approved_target_required": True,
@@ -7003,9 +7002,7 @@ def _run_approved_target_cross_process_integration(tmp_path: Any) -> None:
         if idempotency_key is not None:
             headers["Idempotency-Key"] = idempotency_key
         async with httpx.AsyncClient(timeout=30.0) as client:
-            return await client.post(
-                f"http://127.0.0.1:{port}{path}", json=body, headers=headers
-            )
+            return await client.post(f"http://127.0.0.1:{port}{path}", json=body, headers=headers)
 
     try:
         asyncio.run(_prepare_database())
@@ -7194,8 +7191,7 @@ def _run_approved_target_cross_process_integration(tmp_path: Any) -> None:
         assert not cleanup_failures, tuple(type(error).__name__ for error in cleanup_failures)
         assert all(server["cleanup"]["exit_code"] == 0 for server in first_generation_servers)
         assert all(
-            server["cleanup"]["terminate_attempted"] is False
-            for server in first_generation_servers
+            server["cleanup"]["terminate_attempted"] is False for server in first_generation_servers
         )
 
         primary_error_phase = "restart_generation_start"
@@ -7222,16 +7218,12 @@ def _run_approved_target_cross_process_integration(tmp_path: Any) -> None:
                 idempotency_key=_APPROVED_TARGET_SHARED_OPERATION_KEY,
             )
         )
-        assert restarted_result.status_code == 200, _approved_target_http_fact(
-            restarted_result
-        )
+        assert restarted_result.status_code == 200, _approved_target_http_fact(restarted_result)
         restarted_payload = restarted_result.json()
         assert restarted_payload["intent_id"] == first_payload["intent_id"]
         assert restarted_payload["record"]["intent_id"] == first_payload["intent_id"]
         assert restarted_payload["record"]["state"] == "ACKED"
-        assert (
-            restarted_payload["record"]["provider_order_id"] == "synthetic-approved-order-1"
-        )
+        assert restarted_payload["record"]["provider_order_id"] == "synthetic-approved-order-1"
         operation_rows_after_restart = _approved_target_operation_rows(database_url)
         assert operation_rows_after_restart == operation_rows_after_race
 
@@ -7318,9 +7310,7 @@ def _run_approved_target_cross_process_integration(tmp_path: Any) -> None:
     if primary_error is not None:
         child_cleanup_facts = _manual_order_http_cleanup_facts(all_app_servers)
         if child_cleanup_facts:
-            primary_error.__dict__["approved_target_http_child_cleanup_facts"] = (
-                child_cleanup_facts
-            )
+            primary_error.__dict__["approved_target_http_child_cleanup_facts"] = child_cleanup_facts
             primary_error.add_note(
                 "approved-target HTTP child cleanup facts: "
                 + json.dumps(child_cleanup_facts, sort_keys=True)
@@ -7542,9 +7532,7 @@ def _afi07_group_fact(group_store: Any) -> dict[str, Any]:
         "revision": snapshot.revision,
         "state": snapshot.state.value,
         "budget_state": (
-            None
-            if snapshot.budget_reservation is None
-            else snapshot.budget_reservation.state.value
+            None if snapshot.budget_reservation is None else snapshot.budget_reservation.state.value
         ),
         "reservation_phases": tuple(
             reservation.phase.value for reservation in snapshot.reservations
@@ -7995,9 +7983,7 @@ def _afi07_combined_owner_process_synthetic_environment(
 
 def _afi07_owner_config(endpoint: str) -> dict[str, Any]:
     raw_config = _order._service_config(endpoint)
-    raw_config["components"]["execution"]["settings"]["bind_ports"] = [
-        "service.order_entry"
-    ]
+    raw_config["components"]["execution"]["settings"]["bind_ports"] = ["service.order_entry"]
     raw_config["components"]["execution"]["settings"]["options"] = {
         "role": "account_owner",
         "approved_target_required": True,
@@ -8207,12 +8193,16 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
                     )
 
                 manual_first = await manual_submit()
-                assert manual_first.status_code == 200, _manual_order_http_response_fact_from_response(
-                    "first-owner-A-submit", manual_first
+                assert manual_first.status_code == 200, (
+                    _manual_order_http_response_fact_from_response(
+                        "first-owner-A-submit", manual_first
+                    )
                 )
                 manual_replay = await manual_submit()
-                assert manual_replay.status_code == 200, _manual_order_http_response_fact_from_response(
-                    "same-key-owner-A-replay", manual_replay
+                assert manual_replay.status_code == 200, (
+                    _manual_order_http_response_fact_from_response(
+                        "same-key-owner-A-replay", manual_replay
+                    )
                 )
                 manual_payload = manual_first.json()
                 assert manual_payload["intent_id"] == manual_replay.json()["intent_id"]
@@ -8220,10 +8210,7 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
                 assert manual_payload["delegate_ref"] == _DELEGATE_B
                 assert manual_payload["account_ref"] == _ACCOUNT_A
                 assert manual_payload["record"]["state"] == "ACKED"
-                assert (
-                    manual_payload["record"]["provider_order_id"]
-                    == "synthetic-approved-order-1"
-                )
+                assert manual_payload["record"]["provider_order_id"] == "synthetic-approved-order-1"
                 observed["manual_intent"] = manual_payload["intent_id"]
 
                 auth_a = {"Authorization": f"Bearer {token_a}"}
@@ -8292,9 +8279,7 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
                     )
 
                 approved_first = await approved_submit()
-                assert approved_first.status_code == 200, _approved_target_http_fact(
-                    approved_first
-                )
+                assert approved_first.status_code == 200, _approved_target_http_fact(approved_first)
                 approved_replay = await approved_submit()
                 assert approved_replay.status_code == 200, _approved_target_http_fact(
                     approved_replay
@@ -8304,8 +8289,7 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
                 assert approved_payload["operation_kind"] == "approved_strategy_target"
                 assert approved_payload["record"]["state"] == "ACKED"
                 assert (
-                    approved_payload["record"]["provider_order_id"]
-                    == "synthetic-approved-order-2"
+                    approved_payload["record"]["provider_order_id"] == "synthetic-approved-order-2"
                 )
                 observed["approved_intent"] = approved_payload["intent_id"]
 
@@ -8477,9 +8461,7 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
 
         ordinary_ids = [intent_id for intent_id, _ in submitted]
         assert all(not intent_id.startswith("group:") for intent_id in ordinary_ids)
-        assert all(
-            not intent_id.startswith("group:") for intent_id, _, _ in approved_calls
-        )
+        assert all(not intent_id.startswith("group:") for intent_id, _, _ in approved_calls)
 
         journal = SqliteExecutionStore(str(Path(tmp_path) / "afi07-owner-execution.sqlite3"))
         try:
@@ -8501,9 +8483,10 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
         assert manual_row["owner_subject"] == _SUBJECT_B
         assert manual_row["actor_ref"] == _SUBJECT_B
         assert manual_row["delegate_ref"] == _DELEGATE_B
-        assert manual_row["operation_key_sha256"] == hashlib.sha256(
-            _AFI07_MANUAL_OPERATION_KEY.encode("ascii")
-        ).hexdigest()
+        assert (
+            manual_row["operation_key_sha256"]
+            == hashlib.sha256(_AFI07_MANUAL_OPERATION_KEY.encode("ascii")).hexdigest()
+        )
         assert manual_row["intent_id"] == observed["manual_intent"]
         assert manual_row["scope_ref"] == _MANUAL_SUBMIT_SELECTOR
         assert manual_row["account_ref"] == _ACCOUNT_A
@@ -8513,9 +8496,10 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
         assert len(approved_rows) == 1
         approved_row = approved_rows[0]
         assert approved_row["owner_subject"] == _SUBJECT_A
-        assert approved_row["operation_key_sha256"] == hashlib.sha256(
-            _AFI07_APPROVED_OPERATION_KEY.encode("ascii")
-        ).hexdigest()
+        assert (
+            approved_row["operation_key_sha256"]
+            == hashlib.sha256(_AFI07_APPROVED_OPERATION_KEY.encode("ascii")).hexdigest()
+        )
         assert approved_row["intent_id"] == observed["approved_intent"]
         assert approved_row["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
         assert approved_row["account_ref"] == _ACCOUNT_A
@@ -8526,12 +8510,8 @@ def _run_afi07_strategy_and_http_one_owner(tmp_path: Any, monkeypatch: pytest.Mo
             call_thread == owner_thread and call_thread != threading.get_ident()
             for _, call_thread, owner_thread, *_ in owner_facts
         )
-        assert [
-            (row[3], row[4]) for row in owner_facts
-        ].count((_SUBJECT_B, _DELEGATE_B)) == 2
-        assert [
-            (row[3], row[4]) for row in owner_facts
-        ].count((_SUBJECT_A, _DELEGATE_A)) == 2
+        assert [(row[3], row[4]) for row in owner_facts].count((_SUBJECT_B, _DELEGATE_B)) == 2
+        assert [(row[3], row[4]) for row in owner_facts].count((_SUBJECT_A, _DELEGATE_A)) == 2
     except BaseException as error:
         primary_error = error
         primary_traceback = error.__traceback__
@@ -8701,9 +8681,7 @@ def _run_afi07_group_leg_namespace_isolation(
         assert isinstance(closed, tuple) and closed[0] == "closed", closed
         assert closed[1] == "closed"
         assert closed[2] == ()
-        assert closed[3] == (
-            (_AFI07_STRATEGY_INTENT_ID, True, "synthetic-approved-order-1"),
-        )
+        assert closed[3] == ((_AFI07_STRATEGY_INTENT_ID, True, "synthetic-approved-order-1"),)
         assert closed[4] == ()
         assert closed[5] == ()
         assert closed[6] == (_AFI07_STRATEGY_INTENT_ID,)
@@ -8744,9 +8722,9 @@ def _run_afi07_group_leg_namespace_isolation(
                 group_leg_intent_id_value,
                 group_leg_intent_id(_AFI07_GROUP_ID, _AFI07_GROUP_HEDGE_LEG_ID),
             ):
-                assert (
-                    journal.get(reserved, scope=_afi07_execution_scope(_STRATEGY_B)) is None
-                ), reserved
+                assert journal.get(reserved, scope=_afi07_execution_scope(_STRATEGY_B)) is None, (
+                    reserved
+                )
         finally:
             journal.close()
 
@@ -8843,17 +8821,13 @@ def test_afi07_accepted_group_revocation_disposition_is_durable(tmp_path: Any) -
         assert admitted.error_code is None
         assert admitted.budget_reservation is not None
         assert admitted.budget_reservation.state.value == "RESERVED"
-        assert tuple(item.phase.value for item in admitted.reservations) == (
-            "NOT_STARTED",
-        )
+        assert tuple(item.phase.value for item in admitted.reservations) == ("NOT_STARTED",)
         admitted_events = store.events(_AFI07_GROUP_PORTFOLIO, _AFI07_GROUP_ID)
         assert [event.event_type for event in admitted_events] == ["GROUP_ACCEPTED"]
         assert admitted_events[0].payload["budget"]["decision"] == "RESERVED"
         assert admitted_events[0].payload["budget"]["denial_code"] is None
 
-        replay_admission = store.create_or_get(
-            request, budget_policy=policy, now_ns=base_ns + 1
-        )
+        replay_admission = store.create_or_get(request, budget_policy=policy, now_ns=base_ns + 1)
         assert replay_admission.to_payload() == admitted.to_payload()
 
         querying = store.update(
@@ -8867,9 +8841,7 @@ def test_afi07_accepted_group_revocation_disposition_is_durable(tmp_path: Any) -
             now_ns=base_ns + 2,
         )
         assert querying.revision == 1
-        assert tuple(item.phase.value for item in querying.reservations) == (
-            "REQUESTING",
-        )
+        assert tuple(item.phase.value for item in querying.reservations) == ("REQUESTING",)
 
         with pytest.raises(ContractValidationError) as unsafe_refusal:
             store.update(
@@ -8969,8 +8941,7 @@ def test_afi07_accepted_group_revocation_disposition_is_durable(tmp_path: Any) -
     connection = sqlite3.connect(store_path)
     try:
         row = connection.execute(
-            "SELECT state, budget_state, revision FROM order_group_snapshots "
-            "WHERE group_id = ?",
+            "SELECT state, budget_state, revision FROM order_group_snapshots WHERE group_id = ?",
             (_AFI07_GROUP_ID,),
         ).fetchone()
         event_count = connection.execute(

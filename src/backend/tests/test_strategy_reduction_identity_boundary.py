@@ -94,7 +94,9 @@ _SCOPE = WireScope(
 )
 
 
-def _identity(role: WireRole, *, actor: str = _ACTOR, delegate: str | None = _DELEGATE) -> WireIdentity:
+def _identity(
+    role: WireRole, *, actor: str = _ACTOR, delegate: str | None = _DELEGATE
+) -> WireIdentity:
     return WireIdentity(
         role=role,
         principal_ref=_PRINCIPAL,
@@ -103,7 +105,9 @@ def _identity(role: WireRole, *, actor: str = _ACTOR, delegate: str | None = _DE
     )
 
 
-def _target(target_ref: str, *, close_only: bool, policy_sha256: str, policy_version: int) -> dict[str, object]:
+def _target(
+    target_ref: str, *, close_only: bool, policy_sha256: str, policy_version: int
+) -> dict[str, object]:
     return {
         "schema_id": "bt_api.approved_order_target",
         "schema_version": 1,
@@ -231,7 +235,9 @@ async def _seed_sources(factory) -> tuple[str, int]:
         return row.policy_sha256, row.policy_version
 
 
-async def _approve_target(factory, *, target_ref: str, close_only: bool, policy_sha256: str, policy_version: int):
+async def _approve_target(
+    factory, *, target_ref: str, close_only: bool, policy_sha256: str, policy_version: int
+):
     target = _target(
         target_ref,
         close_only=close_only,

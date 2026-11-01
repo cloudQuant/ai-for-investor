@@ -257,10 +257,7 @@ def test_live_composition_api_reports_independent_account_cuts_and_exact_skew(
     assert rows["account-b"]["session_generation"] == "generation-b"
     assert rows["account-b"]["source_service_id"] == "service-b"
     assert rows["account-b"]["observed_at_utc"] == times[1]
-    assert all(
-        "account_key" not in row and "account_key_id" not in row
-        for row in rows.values()
-    )
+    assert all("account_key" not in row and "account_key_id" not in row for row in rows.values())
 
     consistency = projection["account_snapshot_consistency"]
     assert consistency["cut_model"] == "independent_per_account"

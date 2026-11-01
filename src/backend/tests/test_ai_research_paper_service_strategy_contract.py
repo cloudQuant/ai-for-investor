@@ -120,9 +120,10 @@ def test_attested_paper_strategy_requires_bound_managed_order_metadata(tmp_path)
         run_path,
         runtime_digest,
     )
-    assert source_digest == hashlib.sha256(
-        (run_path.parent / "strategy_ai_paper.py").read_bytes()
-    ).hexdigest()
+    assert (
+        source_digest
+        == hashlib.sha256((run_path.parent / "strategy_ai_paper.py").read_bytes()).hexdigest()
+    )
 
     (run_path.parent / "strategy_ai_paper.py").write_text(
         _managed_strategy_source(omit="managed_metadata_version"),

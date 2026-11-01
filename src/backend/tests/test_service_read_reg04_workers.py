@@ -242,9 +242,7 @@ def _reg04_stop_app_servers(
             elif receipt[1] != (server.get("ready") or (None, None))[1]:
                 failures.append(AssertionError((server["label"], "close_pid_mismatch")))
             elif receipt[2][5] != expected_workers:
-                failures.append(
-                    AssertionError((server["label"], "owner_worker_count_mismatch"))
-                )
+                failures.append(AssertionError((server["label"], "owner_worker_count_mismatch")))
             if cleanup["terminate_attempted"]:
                 failures.append(AssertionError((server["label"], "forced_termination_used")))
         except BaseException as error:
@@ -288,9 +286,7 @@ def _reg04_require_ok(response: Any, *, label: str) -> None:
     )
 
 
-async def _reg04_manual_submit(
-    port: int, *, token: str, key: str, label: str
-) -> dict[str, Any]:
+async def _reg04_manual_submit(port: int, *, token: str, key: str, label: str) -> dict[str, Any]:
     """One HTTP manual submit; server-side attribution must stay book A."""
 
     response = await _reg04_http_post(
@@ -379,9 +375,7 @@ async def _reg04_approved_submit_flow(
         "reduce_only": False,
         "expires_in_seconds": 600,
     }
-    created = await _reg04_http_post(
-        create_port, _APPROVED_TARGETS_PATH, create_body, token=token
-    )
+    created = await _reg04_http_post(create_port, _APPROVED_TARGETS_PATH, create_body, token=token)
     assert created.status_code == 201, (
         "approved-target-create",
         created.status_code,
@@ -480,9 +474,7 @@ def _reg04_assert_single_live_claim(
         for session in sessions
         if session["identity"]["role"] == _WireRole.APPLICATION_CLIENT.value
     ]
-    assert all(
-        session["principal"] == _APP_PRINCIPAL for session in application_sessions
-    )
+    assert all(session["principal"] == _APP_PRINCIPAL for session in application_sessions)
     assert claim["active_registration_id"] not in {
         session["registration_id"] for session in application_sessions
     }
@@ -499,9 +491,7 @@ def _reg04_assert_application_sessions(
         for session in registry["sessions"]
         if session["identity"]["role"] == _WireRole.APPLICATION_CLIENT.value
     ]
-    counts = Counter(
-        session["identity"]["actor_ref"] for session in application_sessions
-    )
+    counts = Counter(session["identity"]["actor_ref"] for session in application_sessions)
     assert dict(counts) == expected_actor_counts, counts
     assert len({session["registration_id"] for session in application_sessions}) == sum(
         expected_actor_counts.values()
@@ -555,9 +545,7 @@ def _reg04_assert_owner_close_facts(
     assert all(not intent_id.startswith("group:") for intent_id, _, _ in expected_dispatches)
 
 
-def _reg04_assert_manual_rows(
-    database_url: str, expected_key_intents: dict[str, str]
-) -> None:
+def _reg04_assert_manual_rows(database_url: str, expected_key_intents: dict[str, str]) -> None:
     manual_rows = _afi07._manual_order_operation_rows(database_url)
     assert len(manual_rows) == len(expected_key_intents), manual_rows
     by_digest = {row["operation_key_sha256"]: row for row in manual_rows}
@@ -581,9 +569,7 @@ def _reg04_assert_manual_rows(
     assert len({row["intent_id"] for row in manual_rows}) == len(manual_rows)
 
 
-def _reg04_assert_approved_row(
-    database_url: str, *, operation_key: str, intent_id: str
-) -> None:
+def _reg04_assert_approved_row(database_url: str, *, operation_key: str, intent_id: str) -> None:
     approved_rows = _afi07._approved_target_operation_rows(database_url)
     assert len(approved_rows) == 1, approved_rows
     row = approved_rows[0]
@@ -591,18 +577,14 @@ def _reg04_assert_approved_row(
     assert row["principal_ref"] == _APP_PRINCIPAL
     assert row["actor_ref"] == _SUBJECT_A
     assert row["delegate_ref"] == _DELEGATE_A
-    assert row["operation_key_sha256"] == hashlib.sha256(
-        operation_key.encode("ascii")
-    ).hexdigest()
+    assert row["operation_key_sha256"] == hashlib.sha256(operation_key.encode("ascii")).hexdigest()
     assert row["intent_id"] == intent_id
     assert row["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
     assert row["account_ref"] == _ACCOUNT_A
     assert row["strategy_ref"] == _STRATEGY_A
 
 
-def _reg04_assert_journal(
-    tmp_path: Any, expected: tuple[tuple[str, str, str], ...]
-) -> None:
+def _reg04_assert_journal(tmp_path: Any, expected: tuple[tuple[str, str, str], ...]) -> None:
     from bt_api_execution import SqliteExecutionStore, group_leg_intent_id
 
     journal = SqliteExecutionStore(str(Path(tmp_path) / _OWNER_EXECUTION_FILE))
@@ -618,8 +600,7 @@ def _reg04_assert_journal(
         ):
             leg_intent_id = group_leg_intent_id(_afi07._AFI07_GROUP_ID, leg_id)
             assert (
-                journal.get(leg_intent_id, scope=_afi07._afi07_execution_scope(_STRATEGY_B))
-                is None
+                journal.get(leg_intent_id, scope=_afi07._afi07_execution_scope(_STRATEGY_B)) is None
             ), leg_intent_id
     finally:
         journal.close()
@@ -719,9 +700,7 @@ def _run_reg04_dual_worker_one_owner(tmp_path: Any) -> None:
         assert first_strategy.state == "ACKED"
 
         phase = "worker_operation_under_claim"
-        asyncio.run(
-            _reg04_dual_worker_under_claim(port2, token_b, observed)
-        )
+        asyncio.run(_reg04_dual_worker_under_claim(port2, token_b, observed))
 
         phase = "second_strategy_run_attempt"
         second_producer = _reg04_strategy_runtime(endpoint, keys)
@@ -963,9 +942,7 @@ async def _reg04_dual_workers_before_strategy(
     )
 
 
-async def _reg04_dual_worker_under_claim(
-    port: int, token_b: str, observed: dict[str, Any]
-) -> None:
+async def _reg04_dual_worker_under_claim(port: int, token_b: str, observed: dict[str, Any]) -> None:
     """A worker keeps operating while the strategy claim is held."""
 
     under_claim = await _reg04_manual_submit(

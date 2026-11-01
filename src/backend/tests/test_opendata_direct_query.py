@@ -415,8 +415,8 @@ async def direct_kline_dependencies(monkeypatch: pytest.MonkeyPatch) -> Any:
     app.dependency_overrides[get_authorized_market_data_access] = lambda: access
     app.dependency_overrides[get_market_data_capability_evaluation] = lambda: evaluation
     app.dependency_overrides[get_market_data_query_service] = lambda: service
-    app.dependency_overrides[data_base.get_legacy_market_data_query_contract_resolver] = (
-        lambda: resolver
+    app.dependency_overrides[data_base.get_legacy_market_data_query_contract_resolver] = lambda: (
+        resolver
     )
     try:
         yield db, store, service, resolver, authorizer, provider, provider_requests

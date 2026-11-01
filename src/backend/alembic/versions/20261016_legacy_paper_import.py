@@ -59,13 +59,25 @@ def upgrade() -> None:
             "state IN ('PREPARED', 'COMMITTED', 'ACTIVE', 'ABORTED')",
             name="ck_legacy_paper_import_state",
         ),
-        sa.CheckConstraint("length(source_inventory_sha256) = 64", name="ck_legacy_paper_import_source_hash"),
-        sa.CheckConstraint("length(target_import_sha256) = 64", name="ck_legacy_paper_import_target_hash"),
-        sa.CheckConstraint("length(target_domain_sha256) = 64", name="ck_legacy_paper_import_domain_hash"),
-        sa.CheckConstraint("length(binding_sha256) = 64", name="ck_legacy_paper_import_binding_hash"),
-        sa.CheckConstraint("length(preserved_context_sha256) = 64", name="ck_legacy_paper_import_context_hash"),
+        sa.CheckConstraint(
+            "length(source_inventory_sha256) = 64", name="ck_legacy_paper_import_source_hash"
+        ),
+        sa.CheckConstraint(
+            "length(target_import_sha256) = 64", name="ck_legacy_paper_import_target_hash"
+        ),
+        sa.CheckConstraint(
+            "length(target_domain_sha256) = 64", name="ck_legacy_paper_import_domain_hash"
+        ),
+        sa.CheckConstraint(
+            "length(binding_sha256) = 64", name="ck_legacy_paper_import_binding_hash"
+        ),
+        sa.CheckConstraint(
+            "length(preserved_context_sha256) = 64", name="ck_legacy_paper_import_context_hash"
+        ),
         sa.CheckConstraint("source_order_count >= 0", name="ck_legacy_paper_import_order_count"),
-        sa.CheckConstraint("source_position_count >= 0", name="ck_legacy_paper_import_position_count"),
+        sa.CheckConstraint(
+            "source_position_count >= 0", name="ck_legacy_paper_import_position_count"
+        ),
         sa.CheckConstraint("source_trade_count >= 0", name="ck_legacy_paper_import_trade_count"),
         sa.ForeignKeyConstraint(
             ["legacy_account_id"],
@@ -322,7 +334,10 @@ def _install_source_write_fence() -> None:
         return
 
     if dialect == "mysql":
-        targets = [("paper_trading_accounts", "UPDATE", "OLD.id"), ("paper_trading_accounts", "DELETE", "OLD.id")]
+        targets = [
+            ("paper_trading_accounts", "UPDATE", "OLD.id"),
+            ("paper_trading_accounts", "DELETE", "OLD.id"),
+        ]
         for table in _SOURCE_TABLES:
             targets.extend(
                 [
@@ -359,12 +374,11 @@ def _install_source_write_fence() -> None:
 
 
 def downgrade() -> None:
-    active_import = op.get_bind().execute(
-        sa.text(
-            f"SELECT 1 FROM {_RECEIPT} "
-            "WHERE state <> 'ABORTED' LIMIT 1"
-        )
-    ).first()
+    active_import = (
+        op.get_bind()
+        .execute(sa.text(f"SELECT 1 FROM {_RECEIPT} WHERE state <> 'ABORTED' LIMIT 1"))
+        .first()
+    )
     if active_import is not None:
         raise RuntimeError("cannot remove the legacy paper import fence while an import is active")
 

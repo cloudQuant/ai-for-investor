@@ -123,20 +123,14 @@ def test_paper_binding_exposes_cutover_facts_from_its_typed_owner_domain():
     assert binding.opening_positions == ()
 
 
-@pytest.mark.parametrize(
-    "mode", ["execution_only", "execution_risk", "execution_risk_monitor"]
-)
+@pytest.mark.parametrize("mode", ["execution_only", "execution_risk", "execution_risk_monitor"])
 def test_paper_binding_accepts_only_the_three_server_owned_composition_modes(mode: str):
-    binding = _parse({"legacy-account-1": _paper_config(control_mode=mode)})[
-        "legacy-account-1"
-    ]
+    binding = _parse({"legacy-account-1": _paper_config(control_mode=mode)})["legacy-account-1"]
 
     assert binding.control_mode == mode
 
 
-@pytest.mark.parametrize(
-    "mode", ["risk", "monitor", "risk_and_monitor", "execution_with_monitor"]
-)
+@pytest.mark.parametrize("mode", ["risk", "monitor", "risk_and_monitor", "execution_with_monitor"])
 def test_paper_binding_rejects_unregistered_composition_modes(mode: str):
     with pytest.raises(ServiceReadDeploymentError) as error:
         _parse({"legacy-account-1": _paper_config(control_mode=mode)})

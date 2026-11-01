@@ -169,9 +169,7 @@ def _account_observation_service_process(
         allowed_kinds=frozenset({GatewayCommandKind.READ}),
     )
 
-    def resource_provider(
-        component: str, _instance_id: str, options: Any, _scope: Any
-    ) -> Any:
+    def resource_provider(component: str, _instance_id: str, options: Any, _scope: Any) -> Any:
         if component != "gateway" or options.get("role") != "account_session_worker":
             raise AssertionError("unexpected Gateway resource request")
         guard = LocalAccountSessionGuard(
@@ -362,9 +360,7 @@ def _account_observation_service_process(
                             "result_fits",
                             outcome="false",
                             result_type=type(result).__name__,
-                            result_keys=sorted(
-                                key for key in result if type(key) is str
-                            )[:64]
+                            result_keys=sorted(key for key in result if type(key) is str)[:64]
                             if isinstance(result, Mapping)
                             else None,
                         )
@@ -406,8 +402,7 @@ def _account_observation_service_process(
                     record_gateway_diagnostic("registry_dispatch", error=error)
                 raise
             if (
-                getattr(getattr(request, "header", None), "operation", None)
-                == "account.snapshot"
+                getattr(getattr(request, "header", None), "operation", None) == "account.snapshot"
                 and isinstance(response, Mapping)
                 and response.get("ok") is not True
             ):
@@ -766,12 +761,11 @@ def _account_snapshot_reply_diagnostic(
     observation = observation if isinstance(observation, Mapping) else {}
     raw_account_key = observation.get("account_key")
     account_key_present = raw_account_key is not None
-    account_key_shape_matches = (
-        type(raw_account_key) is dict
-        and set(raw_account_key) == set(expected_account)
+    account_key_shape_matches = type(raw_account_key) is dict and set(raw_account_key) == set(
+        expected_account
     )
-    account_key_matches_expected = (
-        account_key_shape_matches and raw_account_key == dict(expected_account)
+    account_key_matches_expected = account_key_shape_matches and raw_account_key == dict(
+        expected_account
     )
     coverage = observation.get("coverage")
     balances = observation.get("balances")
@@ -819,19 +813,13 @@ def _account_snapshot_reply_diagnostic(
         "account_key_shape_matches_expected": account_key_shape_matches,
         "account_key_matches_expected": account_key_matches_expected,
         "ready": status.get("ready") if type(status.get("ready")) is bool else None,
-        "fresh_for_seconds": fresh_for_seconds
-        if type(fresh_for) in {int, float}
-        else None,
-        "generation_relation": (
-            "match" if status_generation == payload_generation else "mismatch"
-        )
+        "fresh_for_seconds": fresh_for_seconds if type(fresh_for) in {int, float} else None,
+        "generation_relation": ("match" if status_generation == payload_generation else "mismatch")
         if generations_present
         else "missing",
         "snapshot_page_cursor_relation": compare(snapshot_cursor, next_cursor),
         "page_latest_cursor_relation": compare(next_cursor, latest_cursor),
-        "coverage_resource_count": len(coverage)
-        if type(coverage) in {tuple, list}
-        else None,
+        "coverage_resource_count": len(coverage) if type(coverage) in {tuple, list} else None,
         "balances_complete": observation.get("balances_complete")
         if type(observation.get("balances_complete")) is bool
         else None,
@@ -909,8 +897,7 @@ def _start_process(context: Any, target: Any, arguments: tuple[Any, ...]) -> dic
             close_process_handle("close_unstarted_process")
         _add_failure_note(
             start_error,
-            "Synthetic Gateway ServiceHost startup cleanup: "
-            + json.dumps(cleanup, sort_keys=True),
+            "Synthetic Gateway ServiceHost startup cleanup: " + json.dumps(cleanup, sort_keys=True),
         )
         raise
     return {"pipe": parent, "process": process}
@@ -936,7 +923,10 @@ _CHILD_CLEANUP_FIELDS = frozenset(
 def _finite_child_cleanup(value: Any) -> dict[str, Any] | None:
     if type(value) is not dict or not _CHILD_CLEANUP_FIELDS <= set(value):
         return None
-    if any(type(value.get(key)) is not bool for key in _CHILD_CLEANUP_FIELDS - {"host_cleanup_failure_count"}):
+    if any(
+        type(value.get(key)) is not bool
+        for key in _CHILD_CLEANUP_FIELDS - {"host_cleanup_failure_count"}
+    ):
         return None
     failures = value.get("host_cleanup_failure_count")
     if type(failures) is not int or failures < 0:
@@ -993,7 +983,11 @@ def _close_process(host: dict[str, Any] | None) -> dict[str, Any]:
                         key: payload.get(key)
                         if type(payload.get(key)) is int and payload.get(key) >= 0
                         else None
-                        for key in ("provider_connect_calls", "provider_read_calls", "provider_close_calls")
+                        for key in (
+                            "provider_connect_calls",
+                            "provider_read_calls",
+                            "provider_close_calls",
+                        )
                     }
                     outcome["close_ack"] = {**(ack or {}), **counts}
                     outcome["close_ack_valid"] = bool(
@@ -1138,9 +1132,7 @@ def _account_total_failure_diagnostic(
     total = projected.get("account_total") if isinstance(projected, Mapping) else None
     total = total if isinstance(total, Mapping) else {}
     return {
-        "account_total_status": total.get("status")
-        if type(total.get("status")) is str
-        else None,
+        "account_total_status": total.get("status") if type(total.get("status")) is str else None,
         "account_total_currency": total.get("currency")
         if type(total.get("currency")) is str
         and total["currency"].isascii()
@@ -1398,9 +1390,7 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
             raise
         with observation_events_lock:
             runtime_reply_events.append(
-                _account_snapshot_reply_diagnostic(
-                    reply, expected_account=account_key.to_dict()
-                )
+                _account_snapshot_reply_diagnostic(reply, expected_account=account_key.to_dict())
             )
         return reply
 
@@ -1618,9 +1608,7 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                                     source_type="live",
                                     base_currency="USDT",
                                     members=[
-                                        PortfolioCompositionMember(
-                                            kind="account", ref=account_ref
-                                        )
+                                        PortfolioCompositionMember(kind="account", ref=account_ref)
                                     ],
                                 ),
                             )
@@ -1648,8 +1636,8 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                     current = await overview("authorized-account-observation", headers_a)
                     assert current.status_code == 200, current.text
                     projected = current.json()
-                    assert projected["source_status"] == "projected", (
-                        account_failure_diagnostic(projected)
+                    assert projected["source_status"] == "projected", account_failure_diagnostic(
+                        projected
                     )
                     expected_account_total = {
                         "status": "current",
@@ -1658,9 +1646,7 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                     }
                     account_total_failure_message = ""
                     if projected.get("account_total") != expected_account_total:
-                        diagnostic_path = (
-                            tmp_path / "afi03-authorized-http-first-failure.json"
-                        )
+                        diagnostic_path = tmp_path / "afi03-authorized-http-first-failure.json"
                         diagnostic = account_failure_diagnostic(projected)
                         gateway_diagnostic_path = root / "gateway-failure-traceback.json"
                         try:
@@ -1681,8 +1667,7 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                             "gateway_failure_diagnostic": gateway_diagnostic,
                         }
                         diagnostic_path.write_text(
-                            json.dumps(first_failure, sort_keys=True, separators=(",", ":"))
-                            + "\n",
+                            json.dumps(first_failure, sort_keys=True, separators=(",", ":")) + "\n",
                             encoding="utf-8",
                         )
                         account_total_failure_message = (
@@ -1690,8 +1675,7 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                             f"USDT projection; finite diagnostic saved at {diagnostic_path}"
                         )
                     assert projected["account_total"] == expected_account_total, (
-                        account_total_failure_message
-                        or account_failure_diagnostic(projected)
+                        account_total_failure_message or account_failure_diagnostic(projected)
                     )
                     assert projected["account_snapshot_consistency"]["status"] == (
                         "single_account_cut"
@@ -1720,8 +1704,9 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                     }
                     assert observation["cut"]["started_at_utc"]
                     assert observation["cut"]["completed_at_utc"]
-                    assert observation["cut"]["started_at_utc"] == (
-                        observation["cut"]["completed_at_utc"]
+                    assert (
+                        observation["cut"]["started_at_utc"]
+                        == (observation["cut"]["completed_at_utc"])
                     )
                     assert observation["cut"]["row_observed_at_count"] == 6
                     assert observation["cut"]["row_count"] == 6
@@ -1729,8 +1714,9 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                     assert observation["valuation"]["currency"] == "USDT"
                     assert observation["valuation"]["available_cash"] == "120.00"
                     assert observation["valuation"]["equity"] == "500.00"
-                    assert observation["valuation"]["observed_at_utc"] == (
-                        observation["cut"]["completed_at_utc"]
+                    assert (
+                        observation["valuation"]["observed_at_utc"]
+                        == (observation["cut"]["completed_at_utc"])
                     )
                     balances = {
                         (row["resource"]["product_type"], row["currency"]): row
@@ -1773,8 +1759,8 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                     assert positions[1]["average_price"] is None
                     assert positions[1]["price_currency"] is None
                     for position in positions:
-                        assert position["observed_at_utc"] == (
-                            observation["cut"]["completed_at_utc"]
+                        assert (
+                            position["observed_at_utc"] == (observation["cut"]["completed_at_utc"])
                         )
                         assert position["valuation_inputs"] == {
                             "mark_price": {"status": "missing", "value": None},
@@ -1844,9 +1830,10 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
                     assert unavailable.json()["provider_snapshot_consistency"]["status"] == (
                         "observation_absent_or_unavailable"
                     )
-                    assert unavailable.json()["provider_snapshot_consistency"][
-                        "coverage_status"
-                    ] == "not_established"
+                    assert (
+                        unavailable.json()["provider_snapshot_consistency"]["coverage_status"]
+                        == "not_established"
+                    )
 
             assert deployment is not None and deployment.closed
             assert deployment.close_failures == ()
@@ -1906,9 +1893,7 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
             owner_threads_alive = None
         try:
             deployment_close_failure_count = (
-                len(observed_deployment.close_failures)
-                if observed_deployment is not None
-                else None
+                len(observed_deployment.close_failures) if observed_deployment is not None else None
             )
             deployment_closed = (
                 observed_deployment.closed if observed_deployment is not None else None
@@ -1945,12 +1930,8 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
         if primary_error is None and not final_cleanup_errors:
             assert host_cleanup_summary is not None
             assert service_read_cleanup["deployment_closed"] is True, full_cleanup_summary
-            assert service_read_cleanup["deployment_close_failure_count"] == 0, (
-                full_cleanup_summary
-            )
-            assert service_read_cleanup["deployment_unbound_from_app"] is True, (
-                full_cleanup_summary
-            )
+            assert service_read_cleanup["deployment_close_failure_count"] == 0, full_cleanup_summary
+            assert service_read_cleanup["deployment_unbound_from_app"] is True, full_cleanup_summary
             assert service_read_cleanup["owner_threads_alive"] == 0, full_cleanup_summary
             assert dependency_override_restored is True, full_cleanup_summary
             assert app_database_disposed is True, full_cleanup_summary

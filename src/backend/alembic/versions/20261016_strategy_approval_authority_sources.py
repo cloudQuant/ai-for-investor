@@ -99,7 +99,9 @@ def upgrade() -> None:
             name="uq_strategy_order_approval_policy_version",
         ),
         sa.CheckConstraint("policy_version > 0", name="ck_strategy_order_policy_version_positive"),
-        sa.CheckConstraint("length(policy_sha256) = 64", name="ck_strategy_order_policy_hash_length"),
+        sa.CheckConstraint(
+            "length(policy_sha256) = 64", name="ck_strategy_order_policy_hash_length"
+        ),
     )
     op.create_index(
         "ix_strategy_order_approval_policy_owner",
@@ -125,8 +127,12 @@ def upgrade() -> None:
             ondelete="RESTRICT",
             name="fk_strategy_order_policy_head_version",
         ),
-        sa.CheckConstraint("head_version > 0", name="ck_strategy_order_policy_head_version_positive"),
-        sa.CheckConstraint("length(policy_sha256) = 64", name="ck_strategy_order_policy_head_hash_length"),
+        sa.CheckConstraint(
+            "head_version > 0", name="ck_strategy_order_policy_head_version_positive"
+        ),
+        sa.CheckConstraint(
+            "length(policy_sha256) = 64", name="ck_strategy_order_policy_head_hash_length"
+        ),
     )
 
     op.create_table(

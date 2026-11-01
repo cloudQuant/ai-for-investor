@@ -184,9 +184,7 @@ async def inspect_stable_legacy_paper_account(
         service, account_id, owner_id, max_rows_per_table=max_rows_per_table
     )
     if not first.complete or not second.complete or first.digest != second.digest:
-        reasons = tuple(
-            dict.fromkeys((*first.reasons, *second.reasons, "inventory_not_stable"))
-        )
+        reasons = tuple(dict.fromkeys((*first.reasons, *second.reasons, "inventory_not_stable")))
         return LegacyPaperInventory(
             account_id=account_id,
             owner_id=owner_id,
@@ -338,8 +336,7 @@ async def prepare_empty_account_cutover(
             async with session.begin():
                 existing = await session.scalar(
                     select(LegacyPaperCutoverReceipt).where(
-                        LegacyPaperCutoverReceipt.legacy_account_id
-                        == payload["legacy_account_id"]
+                        LegacyPaperCutoverReceipt.legacy_account_id == payload["legacy_account_id"]
                     )
                 )
                 if existing is not None:
@@ -510,11 +507,7 @@ async def require_active_paper_cutover_receipt(
             receipt.source_inventory_sha256,
         )
     elif source_kind == "imported_legacy":
-        if (
-            not callable(service_factory)
-            or import_binding is None
-            or target_worker is None
-        ):
+        if not callable(service_factory) or import_binding is None or target_worker is None:
             raise LegacyPaperInventoryError("LEGACY_IMPORT_BINDING_REQUIRED")
         try:
             from app.services.legacy_paper_import_migration import (
@@ -532,9 +525,7 @@ async def require_active_paper_cutover_receipt(
         except LegacyPaperInventoryError:
             raise
         except Exception:
-            raise LegacyPaperInventoryError(
-                "LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH"
-            ) from None
+            raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH") from None
     else:
         raise LegacyPaperInventoryError("MANAGED_PAPER_CUTOVER_BINDING_MISMATCH")
     return receipt
@@ -628,9 +619,7 @@ async def legacy_paper_writer_lease(account_id: str) -> AsyncIterator[None]:
             receipt = None
             import_fence_is_known = False
         if receipt is not None or import_fence_is_known:
-            raise LegacyPaperInventoryError(
-                "MANAGED_PAPER_LEGACY_ACCOUNT_FENCED"
-            ) from None
+            raise LegacyPaperInventoryError("MANAGED_PAPER_LEGACY_ACCOUNT_FENCED") from None
         raise LegacyPaperInventoryError("LEGACY_WRITE_FENCE_UNAVAILABLE") from None
 
     try:
@@ -748,7 +737,9 @@ def _paper_binding_payload(binding: Any) -> dict[str, Any]:
             raise LegacyPaperInventoryError("INVALID_PAPER_BINDING", details={"field": name})
         values[name] = value
     if not _is_sha256(values["paper_domain_sha256"]):
-        raise LegacyPaperInventoryError("INVALID_PAPER_BINDING", details={"field": "paper_domain_sha256"})
+        raise LegacyPaperInventoryError(
+            "INVALID_PAPER_BINDING", details={"field": "paper_domain_sha256"}
+        )
     decimals: dict[str, str] = {}
     for name in ("initial_cash", "initial_fees", "fee_rate", "fee_quantum"):
         value = _decimal(_binding_value(binding, name))
@@ -757,7 +748,9 @@ def _paper_binding_payload(binding: Any) -> dict[str, Any]:
         decimals[name] = format(value, "f")
     max_quote_age_ns = _binding_value(binding, "max_quote_age_ns")
     if type(max_quote_age_ns) is not int or max_quote_age_ns <= 0:
-        raise LegacyPaperInventoryError("INVALID_PAPER_BINDING", details={"field": "max_quote_age_ns"})
+        raise LegacyPaperInventoryError(
+            "INVALID_PAPER_BINDING", details={"field": "max_quote_age_ns"}
+        )
     raw_versions = _binding_value(binding, "instrument_metadata_versions")
     if not isinstance(raw_versions, Mapping) or not raw_versions:
         raise LegacyPaperInventoryError(
@@ -770,13 +763,17 @@ def _paper_binding_payload(binding: Any) -> dict[str, Any]:
             or instrument != instrument.strip().upper()
             or not _identifier(version)
         ):
-            raise LegacyPaperInventoryError("INVALID_PAPER_BINDING", details={"field": "instrument_metadata_versions"})
+            raise LegacyPaperInventoryError(
+                "INVALID_PAPER_BINDING", details={"field": "instrument_metadata_versions"}
+            )
         versions[instrument] = version
     positions = _binding_value(binding, "opening_positions")
     if positions is None:
         positions = ()
     if type(positions) not in {tuple, list}:
-        raise LegacyPaperInventoryError("INVALID_PAPER_BINDING", details={"field": "opening_positions"})
+        raise LegacyPaperInventoryError(
+            "INVALID_PAPER_BINDING", details={"field": "opening_positions"}
+        )
     return {
         **values,
         **decimals,
@@ -826,9 +823,7 @@ def _model_row(model: Any) -> dict[str, Any]:
         raise LegacyPaperInventoryError("INVENTORY_MODEL_UNSUPPORTED")
     mapper = sa_inspect(type(model))
     return {
-        column.key: _canonical_value(
-            getattr(model, mapper.get_property_by_column(column).key)
-        )
+        column.key: _canonical_value(getattr(model, mapper.get_property_by_column(column).key))
         for column in columns
     }
 

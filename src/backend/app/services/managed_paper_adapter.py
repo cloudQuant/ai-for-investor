@@ -171,9 +171,7 @@ class ManagedPaperOrderAdapter:
         try:
             view = await worker.read_order(query_scope_ref, intent_id)
         except Exception as error:
-            raise ManagedPaperOrderError(
-                _safe_code(error), status_code=503
-            ) from None
+            raise ManagedPaperOrderError(_safe_code(error), status_code=503) from None
         _require_view_identity(view, intent_id)
         return _project_managed_view(
             view,
@@ -312,9 +310,7 @@ class ManagedPaperOrderAdapter:
         if not _identifier(metadata_version):
             raise ManagedPaperOrderError("PAPER_INSTRUMENT_NOT_CONFIGURED", status_code=422)
 
-        intent_id = _stable_intent_id(
-            operation_source, subject, legacy_account_id, operation_key
-        )
+        intent_id = _stable_intent_id(operation_source, subject, legacy_account_id, operation_key)
         arguments = {
             "intent_id": intent_id,
             "signal_id": intent_id,
@@ -334,19 +330,13 @@ class ManagedPaperOrderAdapter:
         submit_error: str | None = None
         submission_acknowledged = False
         try:
-            reply = await worker.submit_paper_order(
-                _binding_value(binding, "scope_ref"), arguments
-            )
+            reply = await worker.submit_paper_order(_binding_value(binding, "scope_ref"), arguments)
         except Exception as error:
             # The call may have crossed the process boundary.  Query this same
             # stable intent exactly once; never resubmit with a new identifier.
             submit_error = _safe_code(error)
         else:
-            if (
-                isinstance(reply, Mapping)
-                and reply.get("ok") is True
-                and reply.get("code") == "OK"
-            ):
+            if isinstance(reply, Mapping) and reply.get("ok") is True and reply.get("code") == "OK":
                 submission_acknowledged = True
             else:
                 code = reply.get("code") if isinstance(reply, Mapping) else None
@@ -632,10 +622,7 @@ def _safe_code(error: BaseException) -> str:
 
 def _safe_public_code(value: object) -> bool:
     return (
-        type(value) is str
-        and bool(value)
-        and len(value) <= 64
-        and value.replace("_", "").isalnum()
+        type(value) is str and bool(value) and len(value) <= 64 and value.replace("_", "").isalnum()
     )
 
 

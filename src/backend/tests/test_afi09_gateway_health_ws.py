@@ -144,6 +144,7 @@ def test_afi09_gateway_health_ws_is_an_authorized_projection_only() -> None:
         "username": "synthetic-user",
     }
     try:
+
         async def exercise_asgi() -> None:
             path = f"/api/v1/service-gateway/ws/accounts/{account_ref}/health"
             events = await _drive_asgi_websocket(
@@ -161,9 +162,7 @@ def test_afi09_gateway_health_ws_is_an_authorized_projection_only() -> None:
             second = json.loads(projections[1]["text"])
             assert first == second
             assert first["type"] == "gateway_health"
-            assert first["data"]["gateway_session"]["session_generation"] == (
-                "owner-generation-7"
-            )
+            assert first["data"]["gateway_session"]["session_generation"] == ("owner-generation-7")
             assert first["data"]["account_observation"]["same_session_generation"] is True
             assert first["data"]["market_data_feed"]["status"] == "unobserved"
             assert "credential" not in str(first).lower()
@@ -175,9 +174,7 @@ def test_afi09_gateway_health_ws_is_an_authorized_projection_only() -> None:
                 messages=(),
             )
             denied_closes = [
-                event
-                for event in denied_events
-                if event.get("type") == "websocket.close"
+                event for event in denied_events if event.get("type") == "websocket.close"
             ]
             assert len(denied_closes) == 1
             assert denied_closes[0].get("code") == 1008
@@ -311,6 +308,7 @@ def _assert_gateway_health_ws_rejects_post_frame_authorization_loss(
     original_decoder = auth_dependencies.decode_access_token
     auth_dependencies.decode_access_token = controlled_decoder
     try:
+
         async def exercise_asgi() -> list[dict[str, Any]]:
             path = f"/api/v1/service-gateway/ws/accounts/{account_ref}/health"
 
@@ -352,4 +350,3 @@ def test_afi09_gateway_health_ws_revalidates_expiry_before_next_worker_read() ->
 
 def test_afi09_gateway_health_ws_rechecks_owner_after_fresh_read_transaction() -> None:
     _assert_gateway_health_ws_rejects_post_frame_authorization_loss("revoked")
-

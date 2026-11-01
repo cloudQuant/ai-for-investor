@@ -41,14 +41,10 @@ class _AnalyticsSession:
     ) -> dict[str, Any]:
         return self._record("submit", scope_ref, task_ref, input_snapshot_id, request)
 
-    def query_portfolio_analytics_task(
-        self, scope_ref: str, task_ref: str
-    ) -> dict[str, Any]:
+    def query_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> dict[str, Any]:
         return self._record("query", scope_ref, task_ref)
 
-    def cancel_portfolio_analytics_task(
-        self, scope_ref: str, task_ref: str
-    ) -> dict[str, Any]:
+    def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> dict[str, Any]:
         return self._record("cancel", scope_ref, task_ref)
 
 
@@ -76,12 +72,8 @@ async def test_four_fixed_analytics_actions_share_the_service_read_owner_thread(
         submit = await worker.submit_portfolio_analytics_task(
             "configured-analysis-scope", "task-1", "input-cut-1", {"version": 2}
         )
-        query = await worker.query_portfolio_analytics_task(
-            "configured-analysis-scope", "task-1"
-        )
-        cancel = await worker.cancel_portfolio_analytics_task(
-            "configured-analysis-scope", "task-1"
-        )
+        query = await worker.query_portfolio_analytics_task("configured-analysis-scope", "task-1")
+        cancel = await worker.cancel_portfolio_analytics_task("configured-analysis-scope", "task-1")
     finally:
         await worker.aclose()
 

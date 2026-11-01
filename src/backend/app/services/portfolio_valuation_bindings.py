@@ -27,8 +27,15 @@ from app.services.market_data.dataset_contracts import DEFAULT_DATASET_CONTRACT_
 from app.services.market_data.query_service import MarketDataQueryExecution, MarketDataQueryService
 
 InputStatus = Literal[
-    "available", "coverage_incomplete", "error", "missing", "not_calculated",
-    "not_required", "stale", "unavailable", "unsupported",
+    "available",
+    "coverage_incomplete",
+    "error",
+    "missing",
+    "not_calculated",
+    "not_required",
+    "stale",
+    "unavailable",
+    "unsupported",
 ]
 _MAX_CONFIG_BYTES = 262_144
 _MAX_QUERIES_PER_PROJECTION = 128
@@ -73,7 +80,9 @@ class AccountMarketKey(_StrictModel):
     instrument_id: str = Field(min_length=1, max_length=255)
     native_symbol: str = Field(min_length=1, max_length=255)
 
-    @field_validator("provider", "venue", "environment", "product_type", "instrument_id", "native_symbol")
+    @field_validator(
+        "provider", "venue", "environment", "product_type", "instrument_id", "native_symbol"
+    )
     @classmethod
     def validate_key_part(cls, value: str) -> str:
         value = value.strip()
@@ -83,8 +92,12 @@ class AccountMarketKey(_StrictModel):
 
     def exact_key(self) -> tuple[str, str, str, str, str, str]:
         return (
-            self.provider, self.venue, self.environment, self.product_type,
-            self.instrument_id, self.native_symbol,
+            self.provider,
+            self.venue,
+            self.environment,
+            self.product_type,
+            self.instrument_id,
+            self.native_symbol,
         )
 
 
@@ -120,10 +133,22 @@ class MarketDataReadBinding(_StrictModel):
     fx_quote_currency: str | None = Field(default=None, max_length=3)
 
     @field_validator(
-        "canonical_id", "venue", "product_type", "metadata_version", "family_id",
-        "family_contract_version", "dataset_code", "frequency", "value_field",
-        "price_basis", "currency", "unit", "source_policy_id", "binding_ref",
-        "binding_version", "provenance_ref",
+        "canonical_id",
+        "venue",
+        "product_type",
+        "metadata_version",
+        "family_id",
+        "family_contract_version",
+        "dataset_code",
+        "frequency",
+        "value_field",
+        "price_basis",
+        "currency",
+        "unit",
+        "source_policy_id",
+        "binding_ref",
+        "binding_version",
+        "provenance_ref",
     )
     @classmethod
     def validate_text(cls, value: str) -> str:
@@ -232,7 +257,10 @@ class InstrumentValuationBinding(_StrictModel):
     multiplier_valid_to_utc: datetime | None = None
 
     @field_validator(
-        "binding_ref", "binding_version", "quantity_unit", "multiplier_provenance_ref",
+        "binding_ref",
+        "binding_version",
+        "quantity_unit",
+        "multiplier_provenance_ref",
         "multiplier_metadata_version",
     )
     @classmethod
@@ -522,8 +550,12 @@ async def attach_market_valuation_inputs(
             _input(position, "fx_rate", "missing", "POSITION_PRICE_CURRENCY_MISSING")
         elif source_currency.upper() == target_currency:
             _input(
-                position, "fx_rate", "not_required", None,
-                from_currency=target_currency, to_currency=target_currency,
+                position,
+                "fx_rate",
+                "not_required",
+                None,
+                from_currency=target_currency,
+                to_currency=target_currency,
                 rate_convention="to_per_from",
             )
         else:
@@ -546,7 +578,12 @@ async def attach_market_valuation_inputs(
 
 async def _query_context(
     db: AsyncSession, current_user: TokenPayload
-) -> tuple[MarketDataQueryAccess | None, MarketDataQueryService | None, MarketDataCapabilityEvaluation | None, str | None]:
+) -> tuple[
+    MarketDataQueryAccess | None,
+    MarketDataQueryService | None,
+    MarketDataCapabilityEvaluation | None,
+    str | None,
+]:
     authorizer = MarketDataAccessAuthorizer(db)
     try:
         access = await get_authorized_market_data_access(
@@ -566,7 +603,13 @@ async def _execute_query(
     binding: MarketDataReadBinding,
     *,
     now: datetime,
-    context: tuple[MarketDataQueryAccess | None, MarketDataQueryService | None, MarketDataCapabilityEvaluation | None, str | None] | None,
+    context: tuple[
+        MarketDataQueryAccess | None,
+        MarketDataQueryService | None,
+        MarketDataCapabilityEvaluation | None,
+        str | None,
+    ]
+    | None,
     cache: dict[str, tuple[MarketDataQueryExecution | None, str | None]],
     db: AsyncSession,
 ) -> tuple[MarketDataQueryExecution | None, str | None]:
@@ -582,15 +625,22 @@ async def _execute_query(
         execution = await execute_market_data_query_with_singleflight(
             service=context[1], db=db, request=request, access=context[0]
         )
-        result = (execution, None) if type(execution) is MarketDataQueryExecution else (
-            None, "MARKET_DATA_QUERY_CONTRACT_INVALID"
+        result = (
+            (execution, None)
+            if type(execution) is MarketDataQueryExecution
+            else (None, "MARKET_DATA_QUERY_CONTRACT_INVALID")
         )
     except asyncio.CancelledError:
         raise
     except Exception as error:
         await db.rollback()
         code = getattr(error, "code", None)
-        result = (None, code if isinstance(code, str) and code in _SAFE_QUERY_ERRORS else "MARKET_DATA_QUERY_FAILED")
+        result = (
+            None,
+            code
+            if isinstance(code, str) and code in _SAFE_QUERY_ERRORS
+            else "MARKET_DATA_QUERY_FAILED",
+        )
     cache[request.query_fingerprint] = result
     return result
 
@@ -603,21 +653,57 @@ async def _project_fx(
     target_currency: str,
     position_at: datetime,
     now: datetime,
-    query_context: tuple[MarketDataQueryAccess | None, MarketDataQueryService | None, MarketDataCapabilityEvaluation | None, str | None] | None,
+    query_context: tuple[
+        MarketDataQueryAccess | None,
+        MarketDataQueryService | None,
+        MarketDataCapabilityEvaluation | None,
+        str | None,
+    ]
+    | None,
     request_cache: dict[str, tuple[MarketDataQueryExecution | None, str | None]],
     db: AsyncSession,
 ) -> None:
     if binding is None:
-        _input(position, "fx_rate", "unsupported", "FX_BINDING_NOT_CONFIGURED", from_currency=source_currency, to_currency=target_currency)
+        _input(
+            position,
+            "fx_rate",
+            "unsupported",
+            "FX_BINDING_NOT_CONFIGURED",
+            from_currency=source_currency,
+            to_currency=target_currency,
+        )
         return
     if not binding.is_active(now) or not binding.is_active(position_at):
-        _input(position, "fx_rate", "stale", "FX_BINDING_OUTSIDE_VALIDITY", from_currency=source_currency, to_currency=target_currency, binding_ref=binding.binding_ref)
+        _input(
+            position,
+            "fx_rate",
+            "stale",
+            "FX_BINDING_OUTSIDE_VALIDITY",
+            from_currency=source_currency,
+            to_currency=target_currency,
+            binding_ref=binding.binding_ref,
+        )
         return
     if not binding.market_data.is_active(now) or not binding.market_data.is_active(position_at):
-        _input(position, "fx_rate", "stale", "FX_MARKET_DATA_BINDING_OUTSIDE_VALIDITY", from_currency=source_currency, to_currency=target_currency, binding_ref=binding.binding_ref)
+        _input(
+            position,
+            "fx_rate",
+            "stale",
+            "FX_MARKET_DATA_BINDING_OUTSIDE_VALIDITY",
+            from_currency=source_currency,
+            to_currency=target_currency,
+            binding_ref=binding.binding_ref,
+        )
         return
     if binding.market_data.currency != target_currency:
-        _input(position, "fx_rate", "error", "FX_QUERY_CURRENCY_MISMATCH", from_currency=source_currency, to_currency=target_currency)
+        _input(
+            position,
+            "fx_rate",
+            "error",
+            "FX_QUERY_CURRENCY_MISMATCH",
+            from_currency=source_currency,
+            to_currency=target_currency,
+        )
         return
     execution, error_code = await _execute_query(
         binding.market_data, now=now, context=query_context, cache=request_cache, db=db
@@ -692,9 +778,7 @@ def _project_market_input(
     if expected_fx_pair is not None:
         price_convention = getattr(details, "price_convention", None)
         normalized_price_convention = (
-            price_convention.strip().casefold()
-            if isinstance(price_convention, str)
-            else None
+            price_convention.strip().casefold() if isinstance(price_convention, str) else None
         )
         from_currency, to_currency = expected_fx_pair
         quote_per_base_convention = f"{to_currency}_per_{from_currency}".casefold()
@@ -710,8 +794,14 @@ def _project_market_input(
     if not execution.observations:
         coverage = _coverage(execution)
         status = "missing" if coverage["status"] == "complete" else "coverage_incomplete"
-        code = "MARKET_DATA_VALUE_MISSING" if status == "missing" else "MARKET_DATA_COVERAGE_INCOMPLETE"
-        return _input_record(status, code, binding, query_id=query.query_fingerprint, coverage=coverage), None
+        code = (
+            "MARKET_DATA_VALUE_MISSING"
+            if status == "missing"
+            else "MARKET_DATA_COVERAGE_INCOMPLETE"
+        )
+        return _input_record(
+            status, code, binding, query_id=query.query_fingerprint, coverage=coverage
+        ), None
 
     observation = max(
         execution.observations,
@@ -719,13 +809,32 @@ def _project_market_input(
     )
     raw_value = observation.fields.get(binding.value_field)
     if observation.quality.value != "pass":
-        return _input_record("error", "MARKET_DATA_OBSERVATION_QUALITY_REJECTED", binding, value=_number_text(raw_value), observation=observation, execution=execution), observation
+        return _input_record(
+            "error",
+            "MARKET_DATA_OBSERVATION_QUALITY_REJECTED",
+            binding,
+            value=_number_text(raw_value),
+            observation=observation,
+            execution=execution,
+        ), observation
     try:
         value = _to_decimal(raw_value)
     except (InvalidOperation, ValueError, TypeError):
-        return _input_record("error", "MARKET_DATA_VALUE_INVALID", binding, observation=observation, execution=execution), observation
+        return _input_record(
+            "error",
+            "MARKET_DATA_VALUE_INVALID",
+            binding,
+            observation=observation,
+            execution=execution,
+        ), observation
     if value is None:
-        return _input_record("missing", "MARKET_DATA_VALUE_MISSING", binding, observation=observation, execution=execution), observation
+        return _input_record(
+            "missing",
+            "MARKET_DATA_VALUE_MISSING",
+            binding,
+            observation=observation,
+            execution=execution,
+        ), observation
     age = (now - _aware_utc(observation.event_at)).total_seconds()
     if age < 0:
         status, code = "error", "MARKET_DATA_EVENT_TIME_IN_FUTURE"
@@ -735,7 +844,14 @@ def _project_market_input(
         status, code = "coverage_incomplete", "MARKET_DATA_COVERAGE_INCOMPLETE"
     else:
         status, code = "available", None
-    result = _input_record(status, code, binding, value=format(value, "f"), observation=observation, execution=execution)
+    result = _input_record(
+        status,
+        code,
+        binding,
+        value=format(value, "f"),
+        observation=observation,
+        execution=execution,
+    )
     result["age_seconds"] = max(0, age)
     result["freshness_max_age_seconds"] = binding.freshness_max_age_seconds
     return result, observation
@@ -805,9 +921,18 @@ def _input_record(
     return result
 
 
-def _multiplier(position: dict[str, Any], binding: InstrumentValuationBinding, at: datetime | None) -> None:
+def _multiplier(
+    position: dict[str, Any], binding: InstrumentValuationBinding, at: datetime | None
+) -> None:
     if binding.multiplier is None:
-        _input(position, "contract_multiplier", "unsupported", "CONTRACT_MULTIPLIER_UNSUPPORTED", provenance_ref=binding.multiplier_provenance_ref, metadata_version=binding.multiplier_metadata_version)
+        _input(
+            position,
+            "contract_multiplier",
+            "unsupported",
+            "CONTRACT_MULTIPLIER_UNSUPPORTED",
+            provenance_ref=binding.multiplier_provenance_ref,
+            metadata_version=binding.multiplier_metadata_version,
+        )
     elif at is None:
         _input(
             position,
@@ -863,8 +988,15 @@ def _multiplier(position: dict[str, Any], binding: InstrumentValuationBinding, a
         )
 
 
-def _input(position: dict[str, Any], name: str, status: InputStatus, code: str | None, **extra: Any) -> None:
-    position.setdefault("valuation_inputs", {})[name] = {"status": status, "code": code, "value": extra.pop("value", None), **extra}
+def _input(
+    position: dict[str, Any], name: str, status: InputStatus, code: str | None, **extra: Any
+) -> None:
+    position.setdefault("valuation_inputs", {})[name] = {
+        "status": status,
+        "code": code,
+        "value": extra.pop("value", None),
+        **extra,
+    }
 
 
 def _unavailable(position: dict[str, Any], code: str, *, unsupported: bool = False) -> None:
@@ -876,17 +1008,36 @@ def _unavailable(position: dict[str, Any], code: str, *, unsupported: bool = Fal
 
 def _overall(position: dict[str, Any]) -> None:
     inputs = position.setdefault("valuation_inputs", {})
-    statuses = [inputs.get(key, {}).get("status") for key in ("mark_price", "contract_multiplier", "fx_rate")]
-    for status in ("error", "unavailable", "coverage_incomplete", "stale", "missing", "unsupported"):
+    statuses = [
+        inputs.get(key, {}).get("status")
+        for key in ("mark_price", "contract_multiplier", "fx_rate")
+    ]
+    for status in (
+        "error",
+        "unavailable",
+        "coverage_incomplete",
+        "stale",
+        "missing",
+        "unsupported",
+    ):
         if status in statuses:
             inputs["status"] = status
             break
     else:
         inputs["status"] = "available"
-    inputs["market_value"] = {"status": "not_calculated", "code": "AFI04_VALUATION_NOT_CALCULATED", "value": None}
+    inputs["market_value"] = {
+        "status": "not_calculated",
+        "code": "AFI04_VALUATION_NOT_CALCULATED",
+        "value": None,
+    }
 
 
-def _cut(account_at: object, execution: MarketDataQueryExecution | None, observation: Any | None, binding: MarketDataReadBinding) -> dict[str, Any]:
+def _cut(
+    account_at: object,
+    execution: MarketDataQueryExecution | None,
+    observation: Any | None,
+    binding: MarketDataReadBinding,
+) -> dict[str, Any]:
     account_time = _parse_time(account_at)
     market_time = _aware_utc(observation.event_at) if observation is not None else None
     return {
@@ -894,8 +1045,12 @@ def _cut(account_at: object, execution: MarketDataQueryExecution | None, observa
         "atomic": False,
         "account_position_observed_at_utc": _iso(account_time),
         "market_event_at_utc": _iso(market_time),
-        "market_available_at_utc": _iso(observation.available_at) if observation is not None else None,
-        "market_committed_at_utc": _iso(observation.committed_at) if observation is not None else None,
+        "market_available_at_utc": _iso(observation.available_at)
+        if observation is not None
+        else None,
+        "market_committed_at_utc": _iso(observation.committed_at)
+        if observation is not None
+        else None,
         "account_to_market_skew_ns": _skew_ns(account_time, market_time),
         "query_id": execution.context.query.query_fingerprint if execution else None,
         "knowledge_cutoff_utc": _iso(execution.knowledge_cutoff) if execution else None,
@@ -923,7 +1078,9 @@ def _positions(projection: dict[str, Any]) -> list[dict[str, Any]]:
     for account in projection.get("accounts", ()):
         observation = account.get("provider_observation")
         if isinstance(observation, Mapping) and observation.get("status") in {"available", "stale"}:
-            result.extend(item for item in observation.get("positions", ()) if isinstance(item, dict))
+            result.extend(
+                item for item in observation.get("positions", ()) if isinstance(item, dict)
+            )
     return result
 
 
@@ -940,13 +1097,19 @@ def _summary(positions: Any, *, code: str | None) -> dict[str, Any]:
             event_times.append(event_time)
     event_times.sort()
     return {
-        "status": "not_collected" if not rows else "current" if all(row.get("valuation_inputs", {}).get("status") == "available" for row in rows) else "incomplete",
+        "status": "not_collected"
+        if not rows
+        else "current"
+        if all(row.get("valuation_inputs", {}).get("status") == "available" for row in rows)
+        else "incomplete",
         "code": code,
         "position_count": len(rows),
         "position_status_counts": counts,
         "cut_model": "independent_market_query_per_identity",
         "atomic": False,
-        "market_event_skew_ns": _skew_ns(event_times[0], event_times[-1]) if len(event_times) > 1 else None,
+        "market_event_skew_ns": _skew_ns(event_times[0], event_times[-1])
+        if len(event_times) > 1
+        else None,
         "reconciliation_status": "not_established",
         "account_total_included": False,
         "creditable": False,

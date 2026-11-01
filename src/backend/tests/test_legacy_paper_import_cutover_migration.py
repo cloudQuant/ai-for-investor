@@ -29,7 +29,11 @@ _LPC_TRIGGERS = {
     "trg_lpc_receipt_no_delete",
     "trg_lpc_account_update",
     "trg_lpc_account_delete",
-    *(f"trg_lpc_{table[-5:]}_{action}" for table in _SOURCE_TABLES for action in ("insert", "update", "delete")),
+    *(
+        f"trg_lpc_{table[-5:]}_{action}"
+        for table in _SOURCE_TABLES
+        for action in ("insert", "update", "delete")
+    ),
 }
 _V1_FIELDS = (
     "id",
@@ -70,9 +74,7 @@ def _apply_revision(connection: Connection, revision: ModuleType, action: str) -
 
 
 def _create_legacy_tables(connection: Connection) -> None:
-    connection.exec_driver_sql(
-        "CREATE TABLE paper_trading_accounts (id VARCHAR(36) PRIMARY KEY)"
-    )
+    connection.exec_driver_sql("CREATE TABLE paper_trading_accounts (id VARCHAR(36) PRIMARY KEY)")
     for table in _SOURCE_TABLES:
         connection.exec_driver_sql(
             f"CREATE TABLE {table} (id VARCHAR(36) PRIMARY KEY, account_id VARCHAR(36) NOT NULL)"
@@ -115,14 +117,18 @@ def _insert_v1_receipt(connection: Connection) -> dict[str, Any]:
     row = _v1_receipt_row()
     names = ", ".join(row)
     binds = ", ".join(f":{name}" for name in row)
-    connection.execute(sa.text(f"INSERT INTO legacy_paper_cutover_receipts ({names}) VALUES ({binds})"), row)
+    connection.execute(
+        sa.text(f"INSERT INTO legacy_paper_cutover_receipts ({names}) VALUES ({binds})"), row
+    )
     columns = ", ".join(_V1_FIELDS)
-    persisted = connection.execute(
-        sa.text(
-            f"SELECT {columns} FROM legacy_paper_cutover_receipts WHERE id=:id"
-        ),
-        {"id": _V1_RECEIPT_ID},
-    ).mappings().one()
+    persisted = (
+        connection.execute(
+            sa.text(f"SELECT {columns} FROM legacy_paper_cutover_receipts WHERE id=:id"),
+            {"id": _V1_RECEIPT_ID},
+        )
+        .mappings()
+        .one()
+    )
     return dict(persisted)
 
 
@@ -241,27 +247,40 @@ def test_upgrade_preserves_existing_empty_v1_receipt_and_downgrade_restores_writ
             ).one()
             _apply_revision(connection, new_cutover, "upgrade")
 
-            migrated = connection.execute(
-                sa.text("SELECT * FROM legacy_paper_cutover_receipts WHERE id=:id"),
-                {"id": _V1_RECEIPT_ID},
-            ).mappings().one()
+            migrated = (
+                connection.execute(
+                    sa.text("SELECT * FROM legacy_paper_cutover_receipts WHERE id=:id"),
+                    {"id": _V1_RECEIPT_ID},
+                )
+                .mappings()
+                .one()
+            )
             assert {field: migrated[field] for field in _V1_FIELDS} == original
             assert migrated["source_kind"] == "empty_account"
             assert migrated["source_import_receipt_id"] is None
             assert migrated["source_import_generation"] is None
             assert migrated["target_import_sha256"] is None
             assert _LPC_TRIGGERS == _trigger_names(connection, prefix="trg_lpc_")
-            assert connection.execute(
-                sa.text("SELECT id, account_id FROM paper_trading_orders WHERE id='legacy-order'")
-            ).one() == source_before
+            assert (
+                connection.execute(
+                    sa.text(
+                        "SELECT id, account_id FROM paper_trading_orders WHERE id='legacy-order'"
+                    )
+                ).one()
+                == source_before
+            )
 
             _apply_revision(connection, new_cutover, "downgrade")
 
             assert set(_V1_FIELDS) == _table_columns(connection, "legacy_paper_cutover_receipts")
-            downgraded = connection.execute(
-                sa.text("SELECT * FROM legacy_paper_cutover_receipts WHERE id=:id"),
-                {"id": _V1_RECEIPT_ID},
-            ).mappings().one()
+            downgraded = (
+                connection.execute(
+                    sa.text("SELECT * FROM legacy_paper_cutover_receipts WHERE id=:id"),
+                    {"id": _V1_RECEIPT_ID},
+                )
+                .mappings()
+                .one()
+            )
             assert dict(downgraded) == original
             assert _LPC_TRIGGERS == _trigger_names(connection, prefix="trg_lpc_")
             with pytest.raises(IntegrityError):
@@ -310,18 +329,20 @@ def test_downgrade_refuses_when_imported_v2_cutover_receipt_exists() -> None:
             _seed_import_receipt(connection)
             _seed_v2_cutover_receipt(connection)
 
-            with pytest.raises(RuntimeError, match="cannot downgrade while imported cutover receipts exist"):
+            with pytest.raises(
+                RuntimeError, match="cannot downgrade while imported cutover receipts exist"
+            ):
                 _apply_revision(connection, new_cutover, "downgrade")
 
             assert "source_kind" in _table_columns(connection, "legacy_paper_cutover_receipts")
             receipt = connection.execute(
-                sa.text("SELECT source_kind, receipt_version FROM legacy_paper_cutover_receipts WHERE id=:id"),
+                sa.text(
+                    "SELECT source_kind, receipt_version FROM legacy_paper_cutover_receipts WHERE id=:id"
+                ),
                 {"id": _V2_RECEIPT_ID},
             ).one()
             assert receipt == ("imported_legacy", 2)
             assert _LPC_TRIGGERS == _trigger_names(connection, prefix="trg_lpc_")
-            assert "trg_lpi_receipt_update_guard" in _trigger_names(
-                connection, prefix="trg_lpi_"
-            )
+            assert "trg_lpi_receipt_update_guard" in _trigger_names(connection, prefix="trg_lpi_")
     finally:
         engine.dispose()

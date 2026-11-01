@@ -48,9 +48,7 @@ class StrategyProcessStopReceipt:
     account_ref: str
     strategy_ref: str
     run_id: str
-    stop_new_status: Literal[
-        "acknowledged", "rejected", "pending", "claimed", "expired", "unknown"
-    ]
+    stop_new_status: Literal["acknowledged", "rejected", "pending", "claimed", "expired", "unknown"]
     stop_new_command_id: str | None
     stop_new_owner_final: bool
     stop_new_reconciliation_required: bool

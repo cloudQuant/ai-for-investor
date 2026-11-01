@@ -271,9 +271,7 @@ class ServiceReadWorker:
 
         return await self._submit(_Kind.PAPER_ORDER, scope_ref, arguments)
 
-    async def submit_approved_target(
-        self, scope_ref: str, arguments: dict[str, Any]
-    ) -> Any:
+    async def submit_approved_target(self, scope_ref: str, arguments: dict[str, Any]) -> Any:
         """Queue one approved target on the existing SDK owner thread."""
 
         return await self._submit(_Kind.APPROVED_TARGET, scope_ref, arguments)
@@ -281,9 +279,7 @@ class ServiceReadWorker:
     async def upload_portfolio_analytics_input(
         self, scope_ref: str, input_snapshot_id: str, facts: dict[str, Any]
     ) -> Any:
-        return await self._submit(
-            _Kind.ANALYTICS_INPUT, scope_ref, input_snapshot_id, facts
-        )
+        return await self._submit(_Kind.ANALYTICS_INPUT, scope_ref, input_snapshot_id, facts)
 
     async def submit_portfolio_analytics_task(
         self, scope_ref: str, task_ref: str, input_snapshot_id: str, request: dict[str, Any]
@@ -321,9 +317,7 @@ class ServiceReadWorker:
     ) -> dict[str, Any]:
         """Queue one bounded account-policy catalog call on the owner thread."""
 
-        return await self._submit(
-            _Kind.RISK_ACCOUNT_POLICY, account_ref, operation, arguments
-        )
+        return await self._submit(_Kind.RISK_ACCOUNT_POLICY, account_ref, operation, arguments)
 
     async def call_paper_legacy_import(
         self, legacy_account_id: str, operation: str, arguments: dict[str, Any]
@@ -510,17 +504,11 @@ class ServiceReadWorker:
             elif request.kind is _Kind.ORDER:
                 result = session.read_order(request.arguments[0], request.arguments[1])
             elif request.kind is _Kind.MANUAL_ORDER:
-                result = session.submit_manual_order(
-                    request.arguments[0], request.arguments[1]
-                )
+                result = session.submit_manual_order(request.arguments[0], request.arguments[1])
             elif request.kind is _Kind.PAPER_ORDER:
-                result = session.submit_paper_order(
-                    request.arguments[0], request.arguments[1]
-                )
+                result = session.submit_paper_order(request.arguments[0], request.arguments[1])
             elif request.kind is _Kind.APPROVED_TARGET:
-                result = session.submit_approved_target(
-                    request.arguments[0], request.arguments[1]
-                )
+                result = session.submit_approved_target(request.arguments[0], request.arguments[1])
             elif request.kind is _Kind.ANALYTICS_INPUT:
                 result = session.upload_portfolio_analytics_input(
                     request.arguments[0], request.arguments[1], request.arguments[2]

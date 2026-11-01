@@ -117,9 +117,7 @@ async def _register_manual_order_user(client: Any) -> tuple[str, dict[str, str]]
     assert registration.status_code == 200, registration.text
     subject = str(registration.json()["id"])
     async with async_session_maker() as db:
-        await db.execute(
-            insert(user_roles).values(user_id=subject, role=Role.USER.value)
-        )
+        await db.execute(insert(user_roles).values(user_id=subject, role=Role.USER.value))
         await db.commit()
     login = await client.post(
         "/api/v1/auth/login",
@@ -470,9 +468,7 @@ def _application_profile(
                 "mount": "application.orders",
                 "account_ref": _ACCOUNT,
                 "manual_book_ref": _MANUAL_BOOK,
-                "instrument_metadata_versions": {
-                    _INSTRUMENT: _METADATA_VERSION
-                },
+                "instrument_metadata_versions": {_INSTRUMENT: _METADATA_VERSION},
             }
         },
         "monitor_bindings": {},
@@ -520,9 +516,7 @@ class _SyntheticProvider:
             "data": [dict(row)],
         }
 
-    def query_order(
-        self, _symbol: str, order_id: str, **_kwargs: Any
-    ) -> dict[str, object]:
+    def query_order(self, _symbol: str, order_id: str, **_kwargs: Any) -> dict[str, object]:
         self.order_queries.append(order_id)
         row = self.rows.get(order_id)
         return {
@@ -599,7 +593,9 @@ class _HostOwner:
         code = getattr(error, "code", None) if error is not None else None
         return {
             "state": self.state,
-            "error_code": code if type(code) is str else (type(error).__name__ if error is not None else None),
+            "error_code": code
+            if type(code) is str
+            else (type(error).__name__ if error is not None else None),
             "resource_error_code": self.resource_error_code,
             "close_error_code": self.close_error_code,
             "thread_alive": self._thread.is_alive(),
@@ -660,10 +656,12 @@ class _HostOwner:
                         self.error = error
                         self.close_error_code = getattr(error, "code", type(error).__name__)
                         self.state = host.state
-                        reply.put({
-                            "host_state": host.state,
-                            "error_code": getattr(error, "code", type(error).__name__),
-                        })
+                        reply.put(
+                            {
+                                "host_state": host.state,
+                                "error_code": getattr(error, "code", type(error).__name__),
+                            }
+                        )
                         return
                     self.state = host.state
                     reply.put({"host_state": host.state})
@@ -870,8 +868,7 @@ async def test_authenticated_manual_http_order_uses_confirmed_budget_risk_host(
 ) -> None:
     subject, auth_headers = await _register_manual_order_user(client)
     assert (
-        decode_access_token(auth_headers["Authorization"].removeprefix("Bearer "))["sub"]
-        == subject
+        decode_access_token(auth_headers["Authorization"].removeprefix("Bearer "))["sub"] == subject
     )
     endpoint = _endpoint()
     server_public, server_secret = zmq.curve_keypair()
@@ -1083,9 +1080,7 @@ def _assert_budget_activation_refusal(blocker: str, tmp_path: Path) -> None:
             binding = reopened.bind_policy(old_scope)
             assert after["increase_count"] == old_snapshot["increase_count"] == 1
             assert (
-                after["increase_notional"]
-                == old_snapshot["increase_notional"]
-                == Decimal("12.5")
+                after["increase_notional"] == old_snapshot["increase_notional"] == Decimal("12.5")
             )
             assert after["policy_fingerprint"] == old_snapshot["policy_fingerprint"]
             assert binding.policy_id == old_policy.policy_id

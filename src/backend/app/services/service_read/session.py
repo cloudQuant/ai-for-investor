@@ -280,9 +280,7 @@ class SdkServiceReadSession:
         for binding in self._portfolio_analytics_bindings.values():
             expected.add((binding.mount, binding.scope_ref, analytics_operations))
         for binding in self._risk_policy_budget_bindings.values():
-            expected.add(
-                (binding.mount, binding.management_scope_ref, binding.operations)
-            )
+            expected.add((binding.mount, binding.management_scope_ref, binding.operations))
             for scope_ref in binding.member_scope_refs.values():
                 expected.add((binding.mount, scope_ref, binding.operations))
         for binding in self._risk_account_policy_bindings.values():
@@ -415,9 +413,7 @@ class SdkServiceReadSession:
 
         for portfolio_ref, configured in self._portfolio_analytics_bindings.items():
             binding = self._one_registered_binding(configured.mount, configured.scope_ref)
-            if not self._scope_is_portfolio_analytics_scope(
-                binding.scope, portfolio_ref
-            ):
+            if not self._scope_is_portfolio_analytics_scope(binding.scope, portfolio_ref):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "analytics scope does not match its configured portfolio",
@@ -455,9 +451,7 @@ class SdkServiceReadSession:
                     "SERVICE_READ_SCOPE_MISMATCH",
                     "account policy selector does not match its configured account",
                 )
-            scope = self._one_registered_binding(
-                configured.mount, configured.scope_ref
-            ).scope
+            scope = self._one_registered_binding(configured.mount, configured.scope_ref).scope
             if not self._scope_is_manual_policy_scope(scope, account_ref):
                 raise ServiceReadSessionError(
                     "SERVICE_READ_SCOPE_MISMATCH",
@@ -558,8 +552,7 @@ class SdkServiceReadSession:
             view.scope_ref != configured.scope_ref
             or view.account_ref != account_ref
             or view.mount != configured.mount
-            or frozenset(view.operations)
-            != frozenset({"account.snapshot", "account.head"})
+            or frozenset(view.operations) != frozenset({"account.snapshot", "account.head"})
             or getattr(view.rpc_scope, "account_ref", None) != account_ref
             or self._scope_has_unbounded_account_alias(view.rpc_scope)
         ):
@@ -598,9 +591,7 @@ class SdkServiceReadSession:
         )
 
     @staticmethod
-    def _scope_is_manual_order_scope(
-        scope: Any, account_ref: str, manual_book_ref: str
-    ) -> bool:
+    def _scope_is_manual_order_scope(scope: Any, account_ref: str, manual_book_ref: str) -> bool:
         return (
             getattr(scope, "account_ref", None) == account_ref
             and not getattr(scope, "account_refs", ())
@@ -745,9 +736,7 @@ class SdkServiceReadSession:
             scope_ref=configured.scope_ref,
         )
 
-    def submit_paper_order(
-        self, scope_ref: str, arguments: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
+    def submit_paper_order(self, scope_ref: str, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         """Submit one exact paper-owner intent through the existing runtime."""
 
         self._assert_owner()
@@ -793,8 +782,7 @@ class SdkServiceReadSession:
         if (
             not isinstance(arguments, Mapping)
             or any(type(key) is not str for key in arguments)
-            or set(arguments)
-            != {"approval_ref", "approval_version", "target_sha256", "intent_id"}
+            or set(arguments) != {"approval_ref", "approval_version", "target_sha256", "intent_id"}
         ):
             raise ServiceReadUnavailableError("INVALID_APPROVED_TARGET_ARGUMENTS")
         self._validate_runtime()
@@ -845,16 +833,12 @@ class SdkServiceReadSession:
             {"task_ref", "input_snapshot_id", "request"},
         )
 
-    def query_portfolio_analytics_task(
-        self, scope_ref: str, task_ref: str
-    ) -> Mapping[str, Any]:
+    def query_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Mapping[str, Any]:
         return self._portfolio_analytics_call(
             scope_ref, "analysis.query", {"task_ref": task_ref}, {"task_ref"}
         )
 
-    def cancel_portfolio_analytics_task(
-        self, scope_ref: str, task_ref: str
-    ) -> Mapping[str, Any]:
+    def cancel_portfolio_analytics_task(self, scope_ref: str, task_ref: str) -> Mapping[str, Any]:
         return self._portfolio_analytics_call(
             scope_ref, "analysis.cancel", {"task_ref": task_ref}, {"task_ref"}
         )
@@ -952,18 +936,10 @@ class SdkServiceReadSession:
                 }
             ),
             "policy.budget.approve": frozenset({"generation_ref"}),
-            "policy.budget.publish_member": frozenset(
-                {"generation_ref", "account_ref"}
-            ),
-            "policy.budget.confirm_member": frozenset(
-                {"generation_ref", "account_ref"}
-            ),
-            "policy.budget.owner_confirm_member": frozenset(
-                {"generation_ref", "account_ref"}
-            ),
-            "policy.budget.reject_member": frozenset(
-                {"generation_ref", "account_ref"}
-            ),
+            "policy.budget.publish_member": frozenset({"generation_ref", "account_ref"}),
+            "policy.budget.confirm_member": frozenset({"generation_ref", "account_ref"}),
+            "policy.budget.owner_confirm_member": frozenset({"generation_ref", "account_ref"}),
+            "policy.budget.reject_member": frozenset({"generation_ref", "account_ref"}),
             "policy.budget.mark_unknown": frozenset({"generation_ref"}),
             "policy.budget.retract": frozenset({"generation_ref"}),
             "policy.budget.read": frozenset({"generation_ref"}),
@@ -1001,9 +977,13 @@ class SdkServiceReadSession:
         else:
             if member_account_ref is not None:
                 raise ServiceReadUnavailableError("INVALID_RISK_POLICY_BUDGET_SCOPE")
-            if operation in {
-                "policy.budget.publish_member",
-            } and arguments.get("account_ref") not in binding.member_scope_refs:
+            if (
+                operation
+                in {
+                    "policy.budget.publish_member",
+                }
+                and arguments.get("account_ref") not in binding.member_scope_refs
+            ):
                 raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_MEMBER_NOT_CONFIGURED")
             scope_ref = binding.management_scope_ref
 
@@ -1046,9 +1026,7 @@ class SdkServiceReadSession:
         if binding is None:
             raise ServiceReadUnavailableError("RISK_ACCOUNT_POLICY_NOT_CONFIGURED")
         if operation not in binding.operations:
-            raise ServiceReadUnavailableError(
-                "RISK_ACCOUNT_POLICY_OPERATION_NOT_AUTHORIZED"
-            )
+            raise ServiceReadUnavailableError("RISK_ACCOUNT_POLICY_OPERATION_NOT_AUTHORIZED")
         expected_arguments: dict[str, frozenset[str]] = {
             "policy.draft": frozenset({"policy_ref", "content"}),
             "policy.approve": frozenset({"policy_ref"}),
@@ -1059,9 +1037,7 @@ class SdkServiceReadSession:
         }
         required = expected_arguments.get(operation)
         if required is None or set(arguments) != required:
-            raise ServiceReadUnavailableError(
-                "INVALID_RISK_ACCOUNT_POLICY_ARGUMENTS"
-            )
+            raise ServiceReadUnavailableError("INVALID_RISK_ACCOUNT_POLICY_ARGUMENTS")
         self._validate_runtime()
         assert self._runtime is not None
         reply = _thaw_json(

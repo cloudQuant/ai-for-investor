@@ -103,9 +103,7 @@ async def _collect_with_sina_reader(
         "history": {"rows": [{"trade_date": "2026-10-30"}]},
         "indicators": {"rsi": 50.0},
     }
-    monkeypatch.setattr(
-        collector, "_collect_market", AsyncMock(return_value=market_payload)
-    )
+    monkeypatch.setattr(collector, "_collect_market", AsyncMock(return_value=market_payload))
     monkeypatch.setattr(
         collector,
         "_collect_company_context",
@@ -147,7 +145,9 @@ def test_legacy_stock_analysis_parameters_default_to_no_sina_snapshot(
 
 
 def test_sina_snapshot_server_switch_defaults_off() -> None:
-    assert Settings.model_fields["STOCK_ANALYSIS_OPENDATA_SINA_FZB_SNAPSHOT_ENABLED"].default is False
+    assert (
+        Settings.model_fields["STOCK_ANALYSIS_OPENDATA_SINA_FZB_SNAPSHOT_ENABLED"].default is False
+    )
 
 
 def test_sina_snapshot_selection_is_explicit_and_bound_to_analysis_symbol() -> None:
@@ -433,12 +433,9 @@ async def test_sina_failure_detail_is_limited_to_explicit_failed_selection(
     )
 
     assert reader.calls == []
-    assert result["financials"]["opendata_sina_fzb_snapshot"]["reason_code"] == (
-        "selector_missing"
-    )
+    assert result["financials"]["opendata_sina_fzb_snapshot"]["reason_code"] == ("selector_missing")
     assert all(
-        "快照读取失败" not in reason
-        for reason in result["data_quality"]["degraded_reasons"]
+        "快照读取失败" not in reason for reason in result["data_quality"]["degraded_reasons"]
     )
     assert "selector_missing" not in repr(result["data_quality"])
 
@@ -456,8 +453,7 @@ async def test_successful_sina_selection_does_not_add_failure_degraded_reason(
     assert result["financials"]["opendata_sina_fzb_snapshot"]["status"] == "ok"
     assert result["financials"]["opendata_sina_fzb_snapshot"]["reason_code"] is None
     assert all(
-        "快照读取失败" not in reason
-        for reason in result["data_quality"]["degraded_reasons"]
+        "快照读取失败" not in reason for reason in result["data_quality"]["degraded_reasons"]
     )
     assert raw_marker not in repr(result)
 
@@ -591,9 +587,7 @@ async def test_background_task_runner_forwards_persisted_selector_to_collector(
             return None
 
     monkeypatch.setattr(stock_analysis_tasks_module, "StockSignalService", _FakeSignalService)
-    service.pipeline = SimpleNamespace(
-        run=AsyncMock(return_value={"scores": {}, "decision": {}})
-    )  # type: ignore[assignment]
+    service.pipeline = SimpleNamespace(run=AsyncMock(return_value={"scores": {}, "decision": {}}))  # type: ignore[assignment]
     service.report_builder = SimpleNamespace(
         build=lambda **_kwargs: {"decision": {}, "executive_summary": "report"}
     )  # type: ignore[assignment]

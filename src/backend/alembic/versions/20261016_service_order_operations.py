@@ -67,7 +67,10 @@ def _validate_existing_table() -> None:
         raise RuntimeError("SERVICE_ORDER_OPERATION_SCHEMA_CONFLICT")
     checks = inspector.get_check_constraints(_TABLE)
     check_text = " ".join(check.get("sqltext") or "" for check in checks)
-    if "length(operation_key_sha256) = 64" not in check_text or "length(request_sha256) = 64" not in check_text:
+    if (
+        "length(operation_key_sha256) = 64" not in check_text
+        or "length(request_sha256) = 64" not in check_text
+    ):
         raise RuntimeError("SERVICE_ORDER_OPERATION_SCHEMA_CONFLICT")
     if not any(
         index.get("name") == "ix_service_order_operations_owner_subject"
@@ -101,9 +104,7 @@ def upgrade() -> None:
         sa.Column("last_record_state", sa.String(length=32), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint(
-            "length(operation_key_sha256) = 64", name="ck_service_order_key_hash"
-        ),
+        sa.CheckConstraint("length(operation_key_sha256) = 64", name="ck_service_order_key_hash"),
         sa.CheckConstraint("length(request_sha256) = 64", name="ck_service_order_request_hash"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
