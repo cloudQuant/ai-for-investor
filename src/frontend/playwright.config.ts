@@ -15,6 +15,11 @@ export default defineConfig({
   // 测试文件位置
   testDir: './e2e/tests',
 
+  // This spec belongs to e2e/afi09-gateway-health.config.ts, which supplies the
+  // synthetic API target and credentials it asserts on. Under this config those
+  // environment variables are absent, so collecting it only yields a false failure.
+  testIgnore: ['**/afi09-gateway-health.spec.ts'],
+
   globalSetup: './e2e/global.setup.ts',
 
   // 每个测试的超时时间
