@@ -46,6 +46,7 @@ _STOCK_DAILY_MIGRATION_PATH = (
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _PRE_GRANT_REVISION = "20261017_legacy_paper_import_cutover"
 _STOCK_DAILY_REVISION = "20261031_stock_daily_snapshot_grants"
+_REPORT_EVIDENCE_REVISION = "20261101_stock_analysis_report_evidence_vector"
 _STOCK_DAILY_DATASET = "cn-equity-stock-daily"
 _STOCK_DAILY_SOURCE = "akshare.daily"
 _TABLES = (
@@ -1237,6 +1238,9 @@ def test_grant_revision_chain_round_trips_on_empty_sqlite_database(tmp_path) -> 
     try:
         with engine.begin() as connection:
             connection.exec_driver_sql("CREATE TABLE users (id VARCHAR(36) PRIMARY KEY)")
+            connection.exec_driver_sql(
+                "CREATE TABLE stock_analysis_reports (id VARCHAR(36) PRIMARY KEY)"
+            )
     finally:
         engine.dispose()
 
@@ -1269,7 +1273,7 @@ def test_grant_revision_chain_round_trips_on_empty_sqlite_database(tmp_path) -> 
         with engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == _STOCK_DAILY_REVISION
+                == _REPORT_EVIDENCE_REVISION
             )
     finally:
         engine.dispose()

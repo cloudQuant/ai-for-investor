@@ -18,7 +18,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PREVIOUS_HEAD_REVISION = "20260911_market_data_semantic_record_keys"
 B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION = "20261012_optimization_objective_direction"
-CURRENT_HEAD_REVISION = "20261031_stock_daily_snapshot_grants"
+CURRENT_HEAD_REVISION = "20261101_stock_analysis_report_evidence_vector"
 RECEIPTS_TABLE = "md_b2_completeness_receipts"
 ENTRIES_TABLE = "md_b2_completeness_manifest_entries"
 

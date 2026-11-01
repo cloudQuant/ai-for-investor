@@ -96,6 +96,9 @@ class StockAnalysisReportModel(Base):
     risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     source_snapshot_json: Mapped[JSONMapping | None] = mapped_column(JSON, nullable=True)
     data_quality_json: Mapped[JSONMapping | None] = mapped_column(JSON, nullable=True)
+    # Default-off OpenData provenance: null for legacy reports, otherwise the
+    # revalidated stock-daily publication vector recorded before persistence.
+    evidence_vector_json: Mapped[JSONMapping | None] = mapped_column(JSON, nullable=True)
     report_json: Mapped[JSONMapping] = mapped_column(JSON, nullable=False)
     markdown_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     html_content: Mapped[str | None] = mapped_column(Text, nullable=True)

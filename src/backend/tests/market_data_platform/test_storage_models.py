@@ -44,7 +44,7 @@ SEMANTIC_RECORD_KEYS_REVISION = "20260911_market_data_semantic_record_keys"
 B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION = "20261012_optimization_objective_direction"
 INTEGRATED_HEAD_REVISION = OPTIMIZATION_OBJECTIVE_DIRECTION_REVISION
-CURRENT_HEAD_REVISION = "20261031_stock_daily_snapshot_grants"
+CURRENT_HEAD_REVISION = "20261101_stock_analysis_report_evidence_vector"
 OBSERVATION_STORAGE_TABLES = {
     "md_instrument_lookup_keys",
     "md_data_series",

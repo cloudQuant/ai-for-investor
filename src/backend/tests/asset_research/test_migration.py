@@ -27,7 +27,7 @@ _DEFERRED_PUBLICATIONS_REVISION = "20260911_market_data_deferred_publications"
 _SEMANTIC_RECORD_KEYS_REVISION = "20260911_market_data_semantic_record_keys"
 _B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 _INTEGRATED_HEAD = "20261012_optimization_objective_direction"
-_CURRENT_HEAD = "20261031_stock_daily_snapshot_grants"
+_CURRENT_HEAD = "20261101_stock_analysis_report_evidence_vector"
 _LEGACY_HEAD = "20260805_asset_research_outcome_reliability"
 _TABLES = {
     "asset_instruments",

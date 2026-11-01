@@ -26,7 +26,7 @@ from app.services.asset_research.orchestrator import AssetResearchOrchestrator
 from app.services.asset_research.task_runner import AssetResearchTaskRunner
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
-_HEAD = "20261031_stock_daily_snapshot_grants"
+_HEAD = "20261101_stock_analysis_report_evidence_vector"
 _MYSQL_VERSION = "9.4.0"
 _DATABASE_URL_ENV = "ASSET_RESEARCH_MYSQL_SHARED_SCHEMA_URL"
 _CONFIRM_ENV = "ASSET_RESEARCH_MYSQL_SHARED_SCHEMA_CONFIRM"

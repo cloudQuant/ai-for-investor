@@ -39,7 +39,7 @@ from app.services.optimization.trial_runner import run_single_trial
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _OLD_HEAD = "20260911_market_data_b2_completeness_evidence"
 _OBJECTIVE_REVISION = "20261012_optimization_objective_direction"
-_CURRENT_HEAD = "20261031_stock_daily_snapshot_grants"
+_CURRENT_HEAD = "20261101_stock_analysis_report_evidence_vector"
 
 
 class _SingleWorkerProcessPool(ProcessPoolExecutor):
