@@ -1383,3 +1383,36 @@ OpenData 的 gate 因 `alembic check` 与两个证据册长期失真而**在 `Ve
 #### 5. 共同非声明
 
 MySQL 9.4 的结论来自 PR CI 的真实 9.4 服务容器；本地 8.0.46 仅用于复现与回归。OpenData 的 `make gate` 尚未整链绿；acceptance-probe 的 22 个 stale-proof 格需要 CI 环境下的复测与逐格判定。以上均为 CODE/OFFLINE 与 CI 证据，不构成真实源/生产/自然周期验收。
+
+### Wave 18：Backend 单测首个绿腿、diff-coverage 基线、akshare 上游删模块与报告证据生产者接缝
+
+#### 1. 第一个真正跑完并变绿的单测腿
+
+AFI `dev` @ `3f45d281c` 的 `Backend - Unit Tests (py3.11)` = **success**：**8940 passed / 234 skipped**。这是该作业在"因 lint 失败被 skipped"与"被 `--maxfail=5` 截断"之后的第一次完整绿腿；同一提交上 MySQL 9.4 Contract、Lint、四个 mypy ratchet、前端四作业与 E2E 五作业也全部 success。
+
+#### 2. py3.10/py3.12：不是挂起，而是跑完后的上游删模块
+
+两条腿各跑 62 分钟（3.11 为 32 分钟），结论是 **1 failed / 8838 passed / 1 error**，不是卡死。根因：unit-test 作业只在 canonical Python 上安装 `config/requirements-dev.lock`；3.10/3.12 腿自由解析依赖，作业日志里 `akshare-1.20.21` 覆盖了锁定的 1.18.97，而 1.20 删除了 `akshare.forex` 与 `akshare.stock_feature`：
+
+- `test_forex_hist_em_default_uses_bounded_usd_cnh_symbol` → `ModuleNotFoundError: akshare.forex`；
+- `tests/test_akshare_script_service.py` 在导入期即失败（其导入的脚本模块级引用 `akshare.stock_feature`）。
+
+[#251](https://github.com/cloudQuant/ai-for-investor/pull/251)（`819be711`）按仓库既有的 `pytest.importorskip` 约定给这两个入口加保护，并在原因里写明版本差异；生产仍安装锁定的 1.18.97，脚本的模块级导入不改。**3.10/3.12 是否转绿以该合并后的 CI 为准**。
+
+#### 3. diff-coverage 的比较基线（[#248](https://github.com/cloudQuant/ai-for-investor/pull/248)，`bf24d397`）
+
+`Check diff coverage` 原先比较 `origin/master`，而 `dev` 领先 master 数百个提交：#246 的单测腿实测 8940 passed 仍被判 `Missing: 9281 lines`（缺的全是 dev 自己未发布的代码）。改为比较该 PR 的真实目标分支并先 `git fetch` 该 ref；`diff-cover` 本身会跳过 `--cov=app` 未测量的文件（测试、`alembic/versions/*`），本地以 `--compare-branch=origin/dev` 验证为 `No lines with coverage information in this diff.`、exit 0。
+
+#### 4. E03-04/05 报告证据生产者接缝（[#250](https://github.com/cloudQuant/ai-for-investor/pull/250)，`c3877b6b`）
+
+`report_evidence_producer.py` 在任务执行开始时读取**声明的固定 publication**（经注入的授权感知 reader），构造 `StockDailyReportEvidenceVector` 并写回 `parameters_json`（`flag_modified`），保存前的 `_revalidate_report_evidence` 仍是唯一闸门。缺 reader、reader 授权/coverage 拒绝、选择器与返回不一致、观测时间缺失/冲突全部 fail-closed，13 项新测试 + 22 项既有证据测试通过，回归 85 passed / 1 skipped。
+
+**明确未完成（不得写成已满足）**：选择器只含 instrument/publication 身份、不含业务窗口，而 reader 的 `MarketDataProviderRequest` 必须先给 `start_at/end_at`；`read_authorized` 也只返回结果、不暴露授权 receipt。选窗口策略与暴露 receipt 属产品决定，未擅自编造。因此真实运行中的选择器任务仍以 `stock_daily_report_evidence_reader_unavailable` fail-closed、不产生报告——E03-04/05 保持 **PARTIAL**，`SUBAGENT_TASKS.md` 已同步。
+
+#### 5. OpenData `test-cov` 首次实测与冻结迁移修复（[OpenData #162](https://github.com/cloudQuant/opendata/pull/162)，`968cd6a0`）
+
+clean worktree 全量 `make test-cov`：**35307 passed / 247 skipped / 73 failed / 18 errors**（9:21）。分诊：18 errors 是本机 venv 缺 `pytest-timeout`；约 49 项 yfinance 失败是本机 `curl_cffi` 与锁不一致（`YFINANCE_UNSUPPORTED_CURL_CFFI_VERSION`）；**6 项是真实问题**——`test_publication_stock_scope_migration.py` 对 0017/0018 的冻结字节做 sha 校验，而 #158 给 A2 mypy 平面补注解时改动了这两个历史 revision。重钉哈希并记录改动性质：0017 仅加注解；0018 另把一个字段取到局部变量再做 `String/length` 收窄，语义不变。修复后该模块 **13 passed**。**非声明**：`test-cov` 在 CI 的整链结论仍需 CI 复核；本地环境差异已逐类列明。
+
+#### 6. OpenData gate 仍未整链通过
+
+11 个成员在 CI 通过；`acceptance-probe-check` 仍红：**20 个 stale-proof 格 + 14 条新棘轮条目**。已定位的根因之一是 AC-16|05 要求零依赖冻结基线 `recorded_findings == 0`，而迭代新增的股票日线模块合法携带 **9 处上游来源身份字符串**（`Literal["akshare.daily"]`、`ADAPTER_ID` 等，已逐条复核登记）。抹平它只有改产品身份/判据或由 owner 裁定 `--sync-ratchet` 两条路，本轮不自行处理。
