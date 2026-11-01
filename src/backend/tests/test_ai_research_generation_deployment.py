@@ -251,8 +251,10 @@ def _settings(tmp_path: Path, **changes: object) -> Settings:
 
     object_root = tmp_path / "objects"
     receipt_store = tmp_path / "receipts"
-    object_root.mkdir(exist_ok=True)
-    receipt_store.mkdir(exist_ok=True)
+    # Controlled roots must not be group/world writable.  Create them explicitly
+    # private so the test does not depend on the runner's umask.
+    object_root.mkdir(mode=0o700, exist_ok=True)
+    receipt_store.mkdir(mode=0o700, exist_ok=True)
     prompt = "Return only one reviewed research-generation-v1 JSON object."
     accounting = _accounting_contract()
     values: dict[str, object] = {

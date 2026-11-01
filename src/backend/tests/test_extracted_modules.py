@@ -2556,6 +2556,9 @@ class TestLiveExecutionService:
         proc.stderr = None
         proc.wait = AsyncMock()
         proc._bt_stderr_path = str(stderr_path)
+        # A bare AsyncMock invents a truthy ``_bt_service_execution`` attribute;
+        # mark this as a legacy subprocess explicitly.
+        proc._bt_service_execution = False
         saved = {}
         released = []
 
@@ -2704,6 +2707,9 @@ class TestLiveExecutionService:
         proc.wait = AsyncMock()
         proc.terminate = Mock()
         proc.kill = Mock()
+        # A bare Mock invents a truthy ``_bt_service_execution`` attribute; this
+        # test covers the legacy subprocess stop path.
+        proc._bt_service_execution = False
         processes = {"inst1": proc}
         stopping_instances: set[str] = set()
         killed = []

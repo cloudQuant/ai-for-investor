@@ -1278,6 +1278,11 @@ def test_authorized_gateway_observation_reaches_portfolio_projection_http(
 ) -> None:
     """Exercise AccountObservation → ServiceAccountClient → authorized HTTP projection."""
 
+    pytest.importorskip("zmq", reason="optional ZeroMQ transport is required")
+    pytest.importorskip("bt_api_base", reason="optional SDK protocol package is required")
+    pytest.importorskip("bt_api_py", reason="optional Python SDK package is required")
+    pytest.importorskip("bt_api_gateway", reason="optional Gateway SDK package is required")
+
     import httpx
     import zmq
     from bt_api_base.account_protocol import AccountKey, AccountResourceKey

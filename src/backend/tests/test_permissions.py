@@ -59,6 +59,11 @@ class TestRolePermissions:
             not in {
                 Permission.APPROVE_RESEARCH,
                 Permission.MANAGE_APPROVAL_GRANTS,
+                # Strategy-target order authority is opt-in through the
+                # dedicated trade roles and is never inherited by ADMIN.
+                Permission.APPROVE_STRATEGY_ORDER_TARGET,
+                Permission.MANAGE_STRATEGY_ORDER_APPROVAL_POLICY,
+                Permission.SUBMIT_APPROVED_STRATEGY_TARGET,
             }
         }
 

@@ -15,12 +15,34 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
 from pydantic import ValidationError
 from starlette.websockets import WebSocketDisconnect
 
 _USER = SimpleNamespace(sub="u1")
 _OTHER_USER = SimpleNamespace(sub="u2")
+
+
+class _FakeUrl:
+    """Minimal URL object supporting the route's status-link construction."""
+
+    def __init__(self, url: str) -> None:
+        self._url = url
+
+    def include_query_params(self, **params: object) -> _FakeUrl:
+        query = "&".join(f"{key}={value}" for key, value in params.items())
+        return _FakeUrl(f"{self._url}?{query}")
+
+    def __str__(self) -> str:
+        return self._url
+
+
+class _FakeRequest:
+    """Request double exposing only ``url_for`` used by the managed order route."""
+
+    def url_for(self, name: str, **path_params: object) -> _FakeUrl:
+        assert name == "get_managed_paper_order"
+        return _FakeUrl(f"http://test/api/v1/paper/managed-orders/{path_params['intent_id']}")
 
 
 def _make_account(account_id="acct-1", user_id="u1"):
@@ -117,7 +139,9 @@ async def test_create_paper_account():
         commission_rate=0.001,
         slippage_rate=0.0005,
     )
-    result = await create_paper_account(request=request, current_user=_USER, service=svc)
+    result = await create_paper_account(
+        request=request, current_user=_USER, response=Response(), service=svc
+    )
     assert result.id == "acct-1"
     svc.create_account.assert_called_once_with(
         user_id="u1",
@@ -153,7 +177,9 @@ async def test_list_paper_accounts():
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
     svc.list_accounts = AsyncMock(return_value=([acct], 1))
-    result = await list_paper_accounts(current_user=_USER, service=svc, limit=20, offset=0)
+    result = await list_paper_accounts(
+        current_user=_USER, response=Response(), service=svc, limit=20, offset=0
+    )
     assert result.total == 1
     assert len(result.items) == 1
     svc.list_accounts.assert_called_once_with(user_id="u1", limit=20, offset=0)
@@ -165,7 +191,9 @@ async def test_get_paper_account_success():
     from app.api.paper_trading import get_paper_account
 
     svc = _MockService()
-    result = await get_paper_account(account_id="acct-1", current_user=_USER, service=svc)
+    result = await get_paper_account(
+        account_id="acct-1", current_user=_USER, response=Response(), service=svc
+    )
     assert result.id == "acct-1"
 
 
@@ -177,7 +205,9 @@ async def test_get_paper_account_not_found():
     svc = _MockService()
     svc.get_account = AsyncMock(return_value=None)
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_account(account_id="missing", current_user=_USER, service=svc)
+        await get_paper_account(
+            account_id="missing", current_user=_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 404
 
 
@@ -188,7 +218,9 @@ async def test_get_paper_account_forbidden():
 
     svc = _MockService()
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_account(account_id="acct-1", current_user=_OTHER_USER, service=svc)
+        await get_paper_account(
+            account_id="acct-1", current_user=_OTHER_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 403
 
 
@@ -198,7 +230,9 @@ async def test_delete_paper_account_success():
     from app.api.paper_trading import delete_paper_account
 
     svc = _MockService()
-    result = await delete_paper_account(account_id="acct-1", current_user=_USER, service=svc)
+    result = await delete_paper_account(
+        account_id="acct-1", current_user=_USER, response=Response(), service=svc
+    )
     assert result["message"] == "Account deleted successfully"
 
 
@@ -210,7 +244,9 @@ async def test_delete_paper_account_not_found():
     svc = _MockService()
     svc.delete_account = AsyncMock(return_value=False)
     with pytest.raises(HTTPException) as exc_info:
-        await delete_paper_account(account_id="missing", current_user=_USER, service=svc)
+        await delete_paper_account(
+            account_id="missing", current_user=_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 404
 
 
@@ -221,58 +257,75 @@ async def test_delete_paper_account_not_found():
 
 @pytest.mark.asyncio
 async def test_submit_paper_order():
-    """Submit order verifies account ownership then unpacks the request to the service."""
+    """Submit order forwards the manual request to the managed-paper adapter."""
     from app.api.paper_trading import submit_paper_order
+    from app.schemas.paper_trading import OrderRequest
 
-    svc = _MockService()
-    request = SimpleNamespace(
-        account_id="acct-1",
-        symbol="000001.SZ",
-        side="buy",
-        order_type="limit",
-        size=100,
-        price=10.5,
-        stop_price=None,
-        limit_price=None,
+    adapter = SimpleNamespace(
+        submit_manual=AsyncMock(return_value={"intent_id": "intent-1", "state": "ACKED"})
     )
-    result = await submit_paper_order(request=request, current_user=_USER, service=svc)
-    assert result.id == "ord-1"
-    svc.get_account.assert_awaited_once_with("acct-1")
-    svc.submit_order.assert_called_once_with(
+    request = OrderRequest(
         account_id="acct-1",
         symbol="000001.SZ",
-        order_type="limit",
         side="buy",
+        order_type="market",
         size=100,
-        price=10.5,
-        stop_price=None,
-        limit_price=None,
+    )
+    response = Response()
+
+    result = await submit_paper_order(
+        request=request,
+        http_request=_FakeRequest(),
+        response=response,
+        idempotency_key="idem-1",
+        current_user=_USER,
+        adapter=adapter,
+    )
+
+    assert result["intent_id"] == "intent-1"
+    assert result["status_url"] == (
+        "http://test/api/v1/paper/managed-orders/intent-1?account_id=acct-1"
+    )
+    assert response.headers["X-Paper-Data-Source"] == "managed_paper"
+    adapter.submit_manual.assert_awaited_once_with(
+        subject="u1",
+        request=request,
+        idempotency_key="idem-1",
     )
 
 
 @pytest.mark.asyncio
 async def test_submit_paper_order_maps_service_validation_error_to_400():
-    """Service-side validation failures should not become 500 responses."""
+    """Managed adapter validation failures become explicit HTTP errors, not 500s."""
     from app.api.paper_trading import submit_paper_order
+    from app.schemas.paper_trading import OrderRequest
+    from app.services.managed_paper_adapter import ManagedPaperOrderError
 
-    svc = _MockService()
-    svc.submit_order = AsyncMock(side_effect=ValueError("side must be one of: buy, sell"))
-    request = SimpleNamespace(
+    adapter = SimpleNamespace(
+        submit_manual=AsyncMock(
+            side_effect=ManagedPaperOrderError("UNSUPPORTED_PAPER_SIDE", status_code=422)
+        )
+    )
+    request = OrderRequest(
         account_id="acct-1",
         symbol="000001.SZ",
-        side="hold",
+        side="buy",
         order_type="market",
         size=100,
-        price=None,
-        stop_price=None,
-        limit_price=None,
     )
 
     with pytest.raises(HTTPException) as exc:
-        await submit_paper_order(request=request, current_user=_USER, service=svc)
+        await submit_paper_order(
+            request=request,
+            http_request=_FakeRequest(),
+            response=Response(),
+            idempotency_key="idem-1",
+            current_user=_USER,
+            adapter=adapter,
+        )
 
-    assert exc.value.status_code == 400
-    assert "side" in exc.value.detail
+    assert exc.value.status_code == 422
+    assert exc.value.detail["code"] == "UNSUPPORTED_PAPER_SIDE"
 
 
 def test_order_request_accepts_fractional_non_stock_symbol():
@@ -323,25 +376,37 @@ def test_order_request_rejects_incomplete_stop_limit():
 
 @pytest.mark.asyncio
 async def test_submit_paper_order_rejects_foreign_account():
-    """Submitting against another user's account returns 404."""
+    """Submitting against another user's account surfaces the adapter's 404 denial."""
     from app.api.paper_trading import submit_paper_order
+    from app.schemas.paper_trading import OrderRequest
+    from app.services.managed_paper_adapter import ManagedPaperOrderError
 
-    svc = _MockService()
-    svc.get_account = AsyncMock(return_value=_make_account(user_id="someone-else"))
-    request = SimpleNamespace(
+    adapter = SimpleNamespace(
+        submit_manual=AsyncMock(
+            side_effect=ManagedPaperOrderError("PAPER_ACCOUNT_NOT_FOUND", status_code=404)
+        )
+    )
+    request = OrderRequest(
         account_id="acct-1",
         symbol="000001.SZ",
         side="buy",
         order_type="market",
         size=100,
-        price=None,
-        stop_price=None,
-        limit_price=None,
     )
+
     with pytest.raises(HTTPException) as exc:
-        await submit_paper_order(request=request, current_user=_USER, service=svc)
+        await submit_paper_order(
+            request=request,
+            http_request=_FakeRequest(),
+            response=Response(),
+            idempotency_key="idem-1",
+            current_user=_USER,
+            adapter=adapter,
+        )
+
     assert exc.value.status_code == 404
-    svc.submit_order.assert_not_called()
+    assert exc.value.detail["code"] == "PAPER_ACCOUNT_NOT_FOUND"
+    adapter.submit_manual.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -354,6 +419,7 @@ async def test_list_paper_orders_no_filters():
     svc.list_orders = AsyncMock(return_value=([], 0))
     result = await list_paper_orders(
         current_user=_USER,
+        response=Response(),
         service=svc,
         account_id=None,
         symbol=None,
@@ -374,6 +440,7 @@ async def test_list_paper_orders_with_filters():
     svc.list_orders = AsyncMock(return_value=([], 0))
     await list_paper_orders(
         current_user=_USER,
+        response=Response(),
         service=svc,
         account_id="acct-1",
         symbol="BTC/USDT",
@@ -399,7 +466,9 @@ async def test_get_paper_order_success():
     from app.api.paper_trading import get_paper_order
 
     svc = _MockService()
-    result = await get_paper_order(order_id="ord-1", current_user=_USER, service=svc)
+    result = await get_paper_order(
+        order_id="ord-1", current_user=_USER, response=Response(), service=svc
+    )
     assert result.id == "ord-1"
 
 
@@ -411,7 +480,9 @@ async def test_get_paper_order_not_found():
     svc = _MockService()
     svc.get_order = AsyncMock(return_value=None)
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_order(order_id="missing", current_user=_USER, service=svc)
+        await get_paper_order(
+            order_id="missing", current_user=_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 404
 
 
@@ -423,7 +494,9 @@ async def test_get_paper_order_forbidden():
     svc = _MockService()
     # get_account returns account owned by u1, but current_user is u2
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_order(order_id="ord-1", current_user=_OTHER_USER, service=svc)
+        await get_paper_order(
+            order_id="ord-1", current_user=_OTHER_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 403
 
 
@@ -435,7 +508,9 @@ async def test_get_paper_order_account_not_found():
     svc = _MockService()
     svc.get_account = AsyncMock(return_value=None)
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_order(order_id="ord-1", current_user=_USER, service=svc)
+        await get_paper_order(
+            order_id="ord-1", current_user=_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 403
 
 
@@ -445,7 +520,9 @@ async def test_cancel_paper_order_success():
     from app.api.paper_trading import cancel_paper_order
 
     svc = _MockService()
-    result = await cancel_paper_order(order_id="ord-1", current_user=_USER, service=svc)
+    result = await cancel_paper_order(
+        order_id="ord-1", current_user=_USER, response=Response(), service=svc
+    )
     assert result["message"] == "Order has been cancelled"
 
 
@@ -457,7 +534,9 @@ async def test_cancel_paper_order_not_found():
     svc = _MockService()
     svc.cancel_order = AsyncMock(return_value=False)
     with pytest.raises(HTTPException) as exc_info:
-        await cancel_paper_order(order_id="missing", current_user=_USER, service=svc)
+        await cancel_paper_order(
+            order_id="missing", current_user=_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 404
 
 
@@ -475,6 +554,7 @@ async def test_list_paper_positions_no_filters():
     svc.list_positions = AsyncMock(return_value=([], 0))
     result = await list_paper_positions(
         current_user=_USER,
+        response=Response(),
         service=svc,
         account_id=None,
         symbol=None,
@@ -493,6 +573,7 @@ async def test_list_paper_positions_with_filters():
     svc.list_positions = AsyncMock(return_value=([], 0))
     await list_paper_positions(
         current_user=_USER,
+        response=Response(),
         service=svc,
         account_id="acct-1",
         symbol="ETH/USDT",
@@ -512,7 +593,9 @@ async def test_get_paper_position_success():
     from app.api.paper_trading import get_paper_position
 
     svc = _MockService()
-    result = await get_paper_position(position_id="pos-1", current_user=_USER, service=svc)
+    result = await get_paper_position(
+        position_id="pos-1", current_user=_USER, response=Response(), service=svc
+    )
     assert result.id == "pos-1"
 
 
@@ -524,7 +607,9 @@ async def test_get_paper_position_not_found():
     svc = _MockService()
     svc.get_position = AsyncMock(return_value=None)
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_position(position_id="missing", current_user=_USER, service=svc)
+        await get_paper_position(
+            position_id="missing", current_user=_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 404
 
 
@@ -535,7 +620,9 @@ async def test_get_paper_position_forbidden():
 
     svc = _MockService()
     with pytest.raises(HTTPException) as exc_info:
-        await get_paper_position(position_id="pos-1", current_user=_OTHER_USER, service=svc)
+        await get_paper_position(
+            position_id="pos-1", current_user=_OTHER_USER, response=Response(), service=svc
+        )
     assert exc_info.value.status_code == 403
 
 
@@ -553,6 +640,7 @@ async def test_list_paper_trades_no_filters():
     svc.list_trades = AsyncMock(return_value=([], 0))
     result = await list_paper_trades(
         current_user=_USER,
+        response=Response(),
         service=svc,
         account_id=None,
         symbol=None,
@@ -572,6 +660,7 @@ async def test_list_paper_trades_with_filters():
     svc.list_trades = AsyncMock(return_value=([], 0))
     await list_paper_trades(
         current_user=_USER,
+        response=Response(),
         service=svc,
         account_id="acct-1",
         symbol="BTC/USDT",

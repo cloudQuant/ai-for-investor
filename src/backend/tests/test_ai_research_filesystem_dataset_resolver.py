@@ -22,11 +22,12 @@ async def test_filesystem_resolver_persists_real_byte_attestation_across_instanc
 
     object_root = tmp_path / "objects"
     receipt_store = tmp_path / "receipts"
-    object_root.mkdir()
-    receipt_store.mkdir()
+    object_root.mkdir(mode=0o700)
+    receipt_store.mkdir(mode=0o700)
     source = object_root / "discovery.parquet"
     payload = b"real controlled dataset bytes\n"
     source.write_bytes(payload)
+    source.chmod(0o600)
 
     resolver = FilesystemDatasetObjectResolver(
         object_root=object_root,
@@ -333,7 +334,7 @@ def test_filesystem_resolver_rejects_overlapping_or_nonabsolute_control_roots(
     """Object bytes and writable receipt manifests must have separate operator-owned roots."""
 
     object_root = tmp_path / "objects"
-    object_root.mkdir()
+    object_root.mkdir(mode=0o700)
 
     with pytest.raises(ValueError, match="DATASET_FILESYSTEM_CONFIGURATION_INVALID"):
         FilesystemDatasetObjectResolver(
@@ -348,7 +349,7 @@ def test_filesystem_resolver_rejects_overlapping_or_nonabsolute_control_roots(
             max_object_bytes=1024,
         )
     receipt_store = tmp_path / "receipts"
-    receipt_store.mkdir()
+    receipt_store.mkdir(mode=0o700)
     object_root.chmod(0o777)
     with pytest.raises(ValueError, match="DATASET_FILESYSTEM_CONFIGURATION_INVALID"):
         FilesystemDatasetObjectResolver(
@@ -361,8 +362,9 @@ def test_filesystem_resolver_rejects_overlapping_or_nonabsolute_control_roots(
 def _controlled_file(tmp_path: Path, payload: bytes) -> tuple[Path, Path, Path]:
     object_root = tmp_path / "objects"
     receipt_store = tmp_path / "receipts"
-    object_root.mkdir()
-    receipt_store.mkdir()
+    object_root.mkdir(mode=0o700)
+    receipt_store.mkdir(mode=0o700)
     source = object_root / "dataset.parquet"
     source.write_bytes(payload)
+    source.chmod(0o600)
     return object_root, receipt_store, source
