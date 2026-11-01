@@ -620,7 +620,14 @@ jobs:
       - name: Check diff coverage
         if: github.event_name == 'pull_request'
         run: |
-          diff-cover coverage.xml --compare-branch=origin/master --fail-under=60
+          # Compare against this pull request's base branch.  Comparing against
+          # origin/master measured every unreleased commit on dev, so the step
+          # failed on diffs the pull request never touched (9281 missing lines
+          # at 35cde6592, with all 8940 tests green).  diff-cover skips changed
+          # files that --cov=app does not measure (tests, alembic revisions), so
+          # this gate stays about application code.
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=60
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
