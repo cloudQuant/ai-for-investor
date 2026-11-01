@@ -492,7 +492,7 @@ def _validate_server_attested_ai_research_strategy_source(
         syntax_tree = ast.parse(source, filename=str(module_path))
     except (SyntaxError, UnicodeError, ValueError):
         raise ServiceStrategyProfileError("PAPER_STRATEGY_SOURCE_INVALID") from None
-    contract_values = []
+    contract_values: list[ast.expr | None] = []
     for statement in syntax_tree.body:
         if isinstance(statement, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id == "AFI_SERVICE_INTENT_CONTRACT_REF"
@@ -766,7 +766,7 @@ def run_profiled_strategy_script(
         import ast
 
         syntax_tree = ast.parse(source, filename=str(script_path))
-        declared_contracts = []
+        declared_contracts: list[ast.expr | None] = []
         for statement in syntax_tree.body:
             if isinstance(statement, ast.Assign) and any(
                 isinstance(target, ast.Name) and target.id == "AFI_SERVICE_INTENT_CONTRACT_REF"

@@ -222,6 +222,7 @@ class OpenDataSinaLrbSnapshotReader:
         self._credentials = credentials
         self._transport = transport
         self._configuration_error = _safe_configuration_error(configuration_error)
+        self._allowed_origins: frozenset[tuple[str, int]]
         if allowed_hosts is None:
             self._allowed_origins = frozenset()
         elif isinstance(allowed_hosts, str):
@@ -416,6 +417,7 @@ class OpenDataSinaLrbSnapshotReader:
             raise OpenDataSinaLrbSnapshotError(self._configuration_error)
         if self._credentials is None:
             raise OpenDataSinaLrbSnapshotError("credential_missing")
+        credentials = self._credentials
         if max_response_bytes <= 0:
             raise OpenDataSinaLrbSnapshotError("total_response_too_large")
         remaining = self._remaining_seconds(started_at)
@@ -429,7 +431,7 @@ class OpenDataSinaLrbSnapshotReader:
                 params=params,
                 json=json_body,
                 headers={
-                    "X-API-Key": self._credentials.api_key,
+                    "X-API-Key": credentials.api_key,
                     "Accept": "application/json",
                 },
                 timeout=httpx.Timeout(min(_REQUEST_TIMEOUT_SECONDS, remaining)),

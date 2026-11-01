@@ -27,7 +27,7 @@ _RUN_FIELD = "_server_service_execution_run_id"
 _STOP_NEW_REF_RE = re.compile(r"^strategy-stop-new-v1:[0-9a-f]{64}$")
 _COMMAND_ID_RE = re.compile(r"^afi-monitor-stop-new-v1-[0-9a-f]{32}$")
 _SAFE_ERROR_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
-_OPEN_ORDER_POLICY = "leave_open_and_report"
+_OPEN_ORDER_POLICY: Literal["leave_open_and_report"] = "leave_open_and_report"
 
 
 class StrategyProcessStopError(ValueError):

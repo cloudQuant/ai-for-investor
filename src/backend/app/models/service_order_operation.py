@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, Column, DateTime, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -33,24 +34,24 @@ class ServiceOrderOperation(Base):
         CheckConstraint("length(request_sha256) = 64", name="ck_service_order_request_hash"),
     )
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    owner_subject = Column(String(256), nullable=False, index=True)
-    principal_ref = Column(String(128), nullable=False)
-    actor_ref = Column(String(128), nullable=False)
-    delegate_ref = Column(String(128), nullable=False, default="")
-    operation_kind = Column(String(32), nullable=False, default="manual_order")
-    operation_key_sha256 = Column(String(64), nullable=False)
-    request_sha256 = Column(String(64), nullable=False)
-    intent_id = Column(String(128), nullable=False)
-    scope_ref = Column(String(128), nullable=False)
-    account_ref = Column(String(128), nullable=False)
-    manual_book_ref = Column(String(128), nullable=False)
-    last_service_code = Column(String(64), nullable=True)
-    last_record_state = Column(String(32), nullable=True)
-    created_at = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_subject: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    principal_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    delegate_ref: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    operation_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="manual_order")
+    operation_key_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    intent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    scope_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    manual_book_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    last_service_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_record_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),

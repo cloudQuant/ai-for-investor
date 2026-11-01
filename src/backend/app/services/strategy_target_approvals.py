@@ -18,9 +18,10 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, localcontext
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1060,7 +1061,8 @@ async def _cas_update(
             )
             .values(**values)
         )
-        if result.rowcount != 1:
+        # UPDATE statements always return a cursor-backed result at runtime.
+        if cast(CursorResult[Any], result).rowcount != 1:
             return False
         for name, value in values.items():
             setattr(row, name, value)
@@ -1338,7 +1340,10 @@ def _validate_target(value: Mapping[str, object]) -> dict[str, object]:
         normalized_limits[field] = (
             None if limit is None else _positive_decimal_text(limit, f"limits.{field}")[1]
         )
-    max_quantity = Decimal(normalized_limits["max_quantity"])
+    max_quantity_text = normalized_limits["max_quantity"]
+    # The normalization loop above rejects a None max_quantity.
+    assert max_quantity_text is not None
+    max_quantity = Decimal(max_quantity_text)
     if quantity > max_quantity:
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     if target["order_type"] == "MARKET" and normalized_limits["max_notional"] is not None:

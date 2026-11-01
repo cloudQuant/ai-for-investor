@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -152,7 +152,9 @@ async def record_manual_order_outcome(
         raise ManualOrderOperationError("OPERATION_STORE_UNAVAILABLE") from None
 
 
-async def _find_operation(db: AsyncSession, filters: tuple[object, ...]):
+async def _find_operation(
+    db: AsyncSession, filters: tuple[ColumnElement[bool], ...]
+) -> ServiceOrderOperation | None:
     try:
         result = await db.execute(select(ServiceOrderOperation).where(*filters))
         return result.scalar_one_or_none()
