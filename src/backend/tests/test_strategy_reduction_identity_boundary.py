@@ -37,6 +37,7 @@ def _settings_without_dotenv(self, *args, **kwargs):
 
 _BaseSettings.__init__ = _settings_without_dotenv
 os.environ = dict(_SYNTHETIC_ENV)  # noqa: B003 - isolate synthetic DB/settings only
+pytest.importorskip("bt_api_base", reason="optional SDK protocol package is required")
 try:
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402
 
