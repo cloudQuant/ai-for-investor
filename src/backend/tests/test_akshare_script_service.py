@@ -5,6 +5,12 @@ import pandas as pd
 import pytest
 
 pytest.importorskip("akshare", reason="optional akshare provider package is required")
+# Several imported scripts use ``akshare.stock_feature`` at module import time. The
+# lock pins 1.18.97, but CI resolves akshare freely on the 3.10/3.12 matrix legs and
+# 1.20 removed that submodule, so this module cannot be imported there.
+pytest.importorskip(
+    "akshare.stock_feature", reason="the pinned akshare exposes akshare.stock_feature"
+)
 
 from app.data_fetch.scripts.common.daily.article_rlab_rv import ArticleRlabRv  # noqa: E402
 from app.data_fetch.scripts.common.daily.get_receipt import GetReceipt  # noqa: E402

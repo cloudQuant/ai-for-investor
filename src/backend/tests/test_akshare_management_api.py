@@ -3654,6 +3654,10 @@ def test_forex_em_returns_standard_empty_when_eastmoney_unreachable(monkeypatch)
 
 
 def test_forex_hist_em_default_uses_bounded_usd_cnh_symbol(monkeypatch):
+    # The script imports ``akshare.forex`` at module import time. CI resolves akshare
+    # freely on the 3.10/3.12 matrix legs while the lock pins 1.18.97, and 1.20
+    # removed that submodule, so the assertion below cannot run there.
+    pytest.importorskip("akshare.forex", reason="the pinned akshare exposes akshare.forex")
     from app.data_fetch.scripts.common.daily import forex_hist_em
 
     script = object.__new__(forex_hist_em.ForexHistEm)
