@@ -25,17 +25,18 @@ def _inventory(**overrides: object) -> LegacyPaperInventory:
         "slippage_rate": "0",
     }
     account.update(overrides.pop("account", {}))  # type: ignore[arg-type]
-    return LegacyPaperInventory(
-        account_id="legacy-account-1",
-        owner_id="subject-1",
-        complete=True,
-        digest="a" * 64,
-        account=account,
-        order_count=0,
-        position_count=0,
-        trade_count=0,
-        **overrides,  # type: ignore[arg-type]
-    )
+    values: dict[str, object] = {
+        "account_id": "legacy-account-1",
+        "owner_id": "subject-1",
+        "complete": True,
+        "digest": "a" * 64,
+        "account": account,
+        "order_count": 0,
+        "position_count": 0,
+        "trade_count": 0,
+    }
+    values.update(overrides)
+    return LegacyPaperInventory(**values)  # type: ignore[arg-type]
 
 
 def _binding(**overrides: object) -> SimpleNamespace:

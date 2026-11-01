@@ -9,12 +9,19 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from alembic import command
 
 _BASE_REVISION = "20261016_approved_target_http_operations"
 _MERGED_REVISION = "20261016_afi04_analytics_paper_merge"
-_FINAL_REVISION = "20261016_legacy_paper_import"
+
+
+def _current_head(alembic_config: Config) -> str:
+    """Return the single migration head without pinning a dated revision."""
+    heads = ScriptDirectory.from_config(alembic_config).get_heads()
+    assert len(heads) == 1, f"expected one migration head, found {heads}"
+    return heads[0]
 
 
 def _alembic_config(backend_root: Path, database_path: Path) -> Config:
@@ -37,6 +44,7 @@ def test_upgrade_to_merged_head_preserves_existing_portfolio_composition(tmp_pat
     backend_root = Path(__file__).resolve().parents[1]
     database_path = tmp_path / "analytics-migration-preserves-existing.sqlite"
     alembic_config = _alembic_config(backend_root, database_path)
+    head_revision = _current_head(alembic_config)
 
     _upgrade_without_user_settings(alembic_config, _BASE_REVISION)
     with sqlite3.connect(database_path) as connection:
@@ -119,7 +127,7 @@ def test_upgrade_to_merged_head_preserves_existing_portfolio_composition(tmp_pat
         ).fetchone()
         assert after_full_upgrade == before
         assert connection.execute("SELECT version_num FROM alembic_version").fetchall() == [
-            (_FINAL_REVISION,)
+            (head_revision,)
         ]
 
 
@@ -127,6 +135,7 @@ def test_fresh_database_upgrades_to_the_single_merged_head(tmp_path: Path) -> No
     backend_root = Path(__file__).resolve().parents[1]
     database_path = tmp_path / "analytics-migration-fresh.sqlite"
     alembic_config = _alembic_config(backend_root, database_path)
+    head_revision = _current_head(alembic_config)
 
     _upgrade_without_user_settings(alembic_config, "head")
 
@@ -142,5 +151,5 @@ def test_fresh_database_upgrades_to_the_single_merged_head(tmp_path: Path) -> No
             "legacy_paper_import_receipts",
         }.issubset(tables)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchall() == [
-            (_FINAL_REVISION,)
+            (head_revision,)
         ]
