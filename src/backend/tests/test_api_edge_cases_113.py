@@ -135,8 +135,14 @@ async def test_portfolio_api_overview_positions_equity_missing_branches(tmp_path
             },
         ):
             with patch.object(api, "parse_trade_log", return_value=[{"pnlcomm": 1.0}]):
+                # FastAPI resolves the Query/Depends defaults; a direct call has
+                # to pass the plain values used by this non-composition path.
                 overview = await api.get_portfolio_overview(
-                    current_user=SimpleNamespace(sub="u1"), mgr=mgr
+                    current_user=SimpleNamespace(sub="u1"),
+                    mgr=mgr,
+                    portfolio_ref=None,
+                    membership_version=None,
+                    db=None,
                 )
                 assert overview["strategy_count"] == 1
                 assert overview["total_assets"] == 110.0
