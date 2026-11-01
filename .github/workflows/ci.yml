@@ -592,12 +592,16 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
-          if [ "${{ matrix.python-version }}" = "${{ env.PYTHON_VERSION }}" ]; then
-            .venv/bin/pip install --requirement ../../config/requirements-dev.lock
-            .venv/bin/pip install --no-deps -e .
-          else
-            .venv/bin/pip install -e ".[dev,backtrader,data,redis]"
-          fi
+          # Every interpreter installs the same lock.  The non-canonical legs used
+          # to run `pip install -e ".[dev,backtrader,data,redis]"` freely instead,
+          # which resolved akshare to 1.20 (it removed `akshare.forex` and
+          # `akshare.stock_feature`) and an unpinned scientific stack that hard
+          # crashed an xdist worker ("node down: Not properly terminated").  Those
+          # legs were reporting the resolver, not the code: 8851 passed while the
+          # job failed.  Free resolution stays covered by the nightly workflow,
+          # which installs the extras without the lock.
+          .venv/bin/pip install --requirement ../../config/requirements-dev.lock
+          .venv/bin/pip install --no-deps -e .
           .venv/bin/pip install pytest-cov pytest-xdist
 
       - name: Activate virtualenv
