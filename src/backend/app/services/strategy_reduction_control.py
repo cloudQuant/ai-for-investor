@@ -15,7 +15,7 @@ import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeGuard, cast
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
@@ -498,8 +498,9 @@ def _reject_constant(_value: str) -> None:
     raise ValueError("non-finite deployment number")
 
 
-def _finite(value: object) -> bool:
-    return type(value) in (int, float) and math.isfinite(float(value))
+def _finite(value: object) -> TypeGuard[int | float]:
+    # ``type(...) in (int, float)`` proves a real number for ``float``.
+    return type(value) in (int, float) and math.isfinite(float(cast("int | float", value)))
 
 
 def _safe_text(value: object) -> bool:

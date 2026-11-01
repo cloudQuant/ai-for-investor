@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -177,7 +177,12 @@ def _validate_source_pnl_projection(account: Mapping[str, Any]) -> None:
     total_equity = _decimal(account.get("total_equity"))
     profit_loss = _decimal(account.get("profit_loss"))
     profit_loss_pct = _decimal(account.get("profit_loss_pct"))
-    if None in {initial_cash, total_equity, profit_loss, profit_loss_pct}:
+    if (
+        initial_cash is None
+        or total_equity is None
+        or profit_loss is None
+        or profit_loss_pct is None
+    ):
         raise LegacyPaperImportError("LEGACY_PNL_NOT_RECONCILED")
 
     expected_profit_loss = total_equity - initial_cash
@@ -1020,7 +1025,8 @@ def _require_active_import_row_for_cutover(
         != hashlib.sha256(_canonical_json(dict(binding_payload)).encode("utf-8")).hexdigest()
         or row.cash_currency != binding_payload["cash_currency"]
         or any(type(value) is not int or value < 0 for value in counts)
-        or sum(counts) <= 0
+        # The preceding check guarantees every count is an int.
+        or sum(cast("tuple[int, ...]", counts)) <= 0
     ):
         raise LegacyPaperInventoryError("LEGACY_IMPORT_CUTOVER_BINDING_MISMATCH")
     if residual is None:
@@ -1505,7 +1511,7 @@ async def migrate_nonempty_legacy_paper_account(
             skip=0,
             limit=(preflight.trade_count or 0) + 1,
         )
-        source_document = {
+        source_document: dict[str, Any] = {
             "schema": "afi.legacy-paper-inventory.v1",
             "account": dict(preflight.account),
             "orders": sorted(

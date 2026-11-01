@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -151,8 +151,7 @@ async def submit_manual_order(
             ) from None
         raise _operation_store_unavailable() from None
 
-    # SQLAlchemy Column(String) attributes are Column[str] to mypy but str on instances.
-    intent_id = cast(str, claim.operation.intent_id)
+    intent_id = claim.operation.intent_id
     arguments: dict[str, object] = {
         "intent_id": intent_id,
         "signal_id": f"afi-manual-{intent_id}",

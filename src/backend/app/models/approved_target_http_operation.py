@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
     String,
     UniqueConstraint,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
 
@@ -53,25 +53,25 @@ class ApprovedTargetHttpOperation(Base):
         CheckConstraint("approval_version > 0", name="ck_approved_target_http_version"),
     )
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    owner_subject = Column(String(256), nullable=False, index=True)
-    principal_ref = Column(String(128), nullable=False)
-    actor_ref = Column(String(128), nullable=False)
-    delegate_ref = Column(String(128), nullable=False, default="")
-    operation_key_sha256 = Column(String(64), nullable=False)
-    request_sha256 = Column(String(64), nullable=False)
-    approval_ref = Column(
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_subject: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    principal_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    delegate_ref: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    operation_key_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    approval_ref: Mapped[str] = mapped_column(
         String(128),
         ForeignKey("strategy_target_approvals.approval_ref", ondelete="RESTRICT"),
         nullable=False,
     )
-    approval_version = Column(Integer, nullable=False)
-    target_sha256 = Column(String(64), nullable=False)
-    intent_id = Column(String(128), nullable=False)
-    selector_ref = Column(String(128), nullable=False)
-    scope_ref = Column(String(128), nullable=False)
-    account_ref = Column(String(128), nullable=False)
-    strategy_ref = Column(String(128), nullable=False)
-    created_at = Column(
+    approval_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    intent_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    selector_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    scope_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    strategy_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

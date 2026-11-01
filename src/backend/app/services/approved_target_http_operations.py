@@ -7,7 +7,7 @@ import re
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,6 +124,7 @@ async def reserve_approved_target_http_operation(
         if approval_mapping is not None:
             raise ApprovedTargetHttpOperationError("APPROVAL_OPERATION_CONFLICT")
 
+        intent_id = uuid.uuid4().hex
         operation = ApprovedTargetHttpOperation(
             owner_subject=owner_subject,
             principal_ref=principal_ref,
@@ -134,7 +135,7 @@ async def reserve_approved_target_http_operation(
             approval_ref=approval_ref,
             approval_version=approval_version,
             target_sha256=target_sha256,
-            intent_id=uuid.uuid4().hex,
+            intent_id=intent_id,
             selector_ref=selector_ref,
             scope_ref=scope_ref,
             account_ref=account_ref,
@@ -142,7 +143,7 @@ async def reserve_approved_target_http_operation(
         )
         db.add(operation)
         await db.commit()
-        return ApprovedTargetHttpOperationClaim(operation.intent_id, True)
+        return ApprovedTargetHttpOperationClaim(intent_id, True)
     except ApprovedTargetHttpOperationError:
         if db.in_transaction():
             await db.rollback()
@@ -180,7 +181,9 @@ async def reserve_approved_target_http_operation(
         ) from None
 
 
-async def _load_mapping(db: AsyncSession, filters: tuple[object, ...]):
+async def _load_mapping(
+    db: AsyncSession, filters: tuple[ColumnElement[bool], ...]
+) -> ApprovedTargetHttpOperation | None:
     try:
         return await db.scalar(select(ApprovedTargetHttpOperation).where(*filters).limit(1))
     except SQLAlchemyError:

@@ -10,7 +10,7 @@ import re
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, TypeGuard
 from urllib.parse import urlsplit
 
 import httpx
@@ -135,6 +135,7 @@ class OpenDataFinancialArchiveReader:
         self._total_timeout_seconds = total_timeout_seconds
         self._max_response_bytes = max_response_bytes
         self._max_archive_response_bytes = max_archive_response_bytes
+        self._allowed_origins: frozenset[tuple[str, int]]
         if allowed_hosts is None:
             self._allowed_origins = frozenset()
         elif isinstance(allowed_hosts, str):
@@ -301,6 +302,7 @@ class OpenDataFinancialArchiveReader:
                 )
                 continue
 
+            error_code: str | None
             try:
                 remaining = self._total_timeout_seconds - (
                     asyncio.get_running_loop().time() - started_at
@@ -551,7 +553,7 @@ class OpenDataFinancialArchiveReader:
         return {field: row[field] for field in _RECORD_FIELDS}
 
 
-def _is_iso_date(value: Any) -> bool:
+def _is_iso_date(value: Any) -> TypeGuard[str]:
     if not isinstance(value, str) or len(value) != 10:
         return False
     try:

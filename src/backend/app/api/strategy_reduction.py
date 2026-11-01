@@ -6,7 +6,7 @@ import json
 import re
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -276,8 +276,7 @@ def _validate_persisted_close_target(
             detail={"code": "APPROVAL_SCOPE_MISMATCH"},
         )
     try:
-        # SQLAlchemy Column(Text) attributes are Column[str] to mypy but str on instances.
-        canonical_target = cast(str, approval.canonical_target_json)
+        canonical_target = approval.canonical_target_json
         target = json.loads(canonical_target)
         if (
             type(target) is not dict

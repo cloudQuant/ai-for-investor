@@ -950,12 +950,12 @@ class OrderReadView:
         ):
             if value is not None:
                 _text(value, code)
-        for decimal_value, code in (
+        for decimal_value, decimal_code in (
             (self.filled_quantity, "INVALID_FILLED_QUANTITY"),
             (self.average_price, "INVALID_AVERAGE_PRICE"),
             (self.cumulative_commission, "INVALID_COMMISSION"),
         ):
-            _optional_decimal(decimal_value, code)
+            _optional_decimal(decimal_value, decimal_code)
         if self.is_terminal is not None and type(self.is_terminal) is not bool:
             raise ServiceReadContractError("INVALID_TERMINAL_FLAG")
         if self.updated_at_ns is not None and (

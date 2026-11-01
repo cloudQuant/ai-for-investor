@@ -264,7 +264,7 @@ class PortfolioCompositionService:
             reads.append((account_ref, view, _verified_account_key_id(view)))
 
         account_rows, account_total, account_snapshot_consistency = _project_account_total(
-            reads, cast(str, row.base_currency)
+            reads, row.base_currency
         )
         provider_snapshot_consistency = _provider_snapshot_consistency(reads)
         account_facts_complete = account_total["status"] == "current"

@@ -103,7 +103,7 @@ def _history_time_text(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _parse_history_time(value: str) -> datetime:
+def _parse_history_time(value: object) -> datetime:
     if type(value) is not str or not value.endswith("Z"):
         raise ValueError
     parsed = datetime.fromisoformat(value[:-1] + "+00:00")
@@ -754,7 +754,9 @@ class QuoteService:
     def _get_live_trading_manager():
         """Read an existing manager without starting legacy session restoration."""
         try:
-            from app.services.live_trading_manager import get_existing_live_trading_manager
+            from app.services.live_trading.manager import (
+                get_existing_live_trading_manager,
+            )
 
             return get_existing_live_trading_manager()
         except Exception:

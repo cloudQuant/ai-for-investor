@@ -348,10 +348,7 @@ class StrategyOrderTargetCurrentStateProvider:
                 or approval.strategy_version_source_id is None
                 or approval.strategy_version_branch is None
                 or approval.strategy_version_sha256 is None
-                or not _HASH_RE.fullmatch(
-                    # The legacy ORM descriptor yields the scalar string here.
-                    cast(str, approval.strategy_version_sha256)
-                )
+                or not _HASH_RE.fullmatch(approval.strategy_version_sha256)
             ):
                 raise StrategyTargetApprovalError("APPROVAL_POLICY_STALE")
             target = _target_from_row(approval)
