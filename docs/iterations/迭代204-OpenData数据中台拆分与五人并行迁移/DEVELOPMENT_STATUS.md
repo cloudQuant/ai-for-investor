@@ -1536,3 +1536,17 @@ OpenData 的引用策略按 **path + sha256** 登记了 `pyproject.toml`、`Make
 #### 5. 共同非声明
 
 本轮所有绿都在 **code/offline 与 CI 平面**：#168 让一个格子从 gap 变 proven 是登记完整性的修复，不是验收；#170/#171/#172 改的是测试如何测量，不是产品是否可用；#173 让验收仪器变得可复现，但它本身不关闭任何验收面。AC-1\|08（§1 权利登记 35 个引用源 0 行）、AC-5\|03 / AC-16\|05 / AC-16\|06（9 处上游来源身份字面量）、AC-4\|01（判据按字面拼写把关节，见 #164 讨论）以及真实源、生产 MySQL/部署、影子对账、单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。棘轮重测由 dispatch 作业 `41362343738` 产出，只有那次测量落在真实 gate 形态上才允许入账。
+
+#### 7. 一次我自己制造、CI 看不见的回归（#171 → #176）
+
+诚实记录：**#171 引入了一条 dev 上的真实回归，而且当天无法被 CI 发现**。`alembic_data/versions/20261027-0015_source_attempt_gate.py` 不只是一个迁移文件——它的字节是 `alembic_source_gate/schema_contract.py` 里 `V1_REFERENCE_SHA256` 钉住的 **v1 参照**；adopt 任何 source-gate schema 之前都要先与它比对。#171 为了让 0015 也能离线渲染改了它，契约随即拒绝 adopt，本地实测后果：
+
+| 命令 | dev 修复前 | 修复后（#176） |
+| --- | --- | --- |
+| `make test-cov` | **134 failed / 154 errors**（49 个 `test_source_gate_quota_provisioning`、40 个 `test_source_attempt_gate_one_shot_v4`、28 个 `test_ths_one_shot_transport` …） | **15 failed / 35414 passed / 247 skipped / 0 errors**，覆盖率 88.33% |
+| `pytest tests/test_warehouse_migrations.py tests/test_source_gate_quota_provisioning.py` | 1 failed / 5 passed / **49 errors** | 64 passed / 1 skipped |
+| 邻近 4 个 source-gate / publication 迁移模块 | 未测 | 107 passed |
+
+修法不是把 `V1_REFERENCE_SHA256` 改成新摘要（那会让"adopt 对照的是原始 v1 revision"这句话失去所指），而是**把 0015 恢复成被钉的字节，并让它把自己不能离线渲染这件事声明进 `_ONLINE_ONLY_REFUSALS`**；`OFFLINE_HEAD=0013` 不变（0014 早已是前缀终点），边界测试改为断言 0015 属于 refused，这样将来有人再往反方向"修"，刻度会立刻叫出来。
+
+教训两条，都已写进长期记忆：① 文件可以被**代码里的常量**按 sha256 钉住，而不只是被 JSON 登记——动 `alembic*/versions/` 之前必须跨 `alembic_source_gate/`、`opendata/`、`scripts/`、`tests/` grep 文件名找摘要常量；② 只要有成员挡在 `test-cov` 前面，这类破坏 CI 就看不见，**合并过迁移/生成 schema 相关改动之后必须本地跑一次全量**。
