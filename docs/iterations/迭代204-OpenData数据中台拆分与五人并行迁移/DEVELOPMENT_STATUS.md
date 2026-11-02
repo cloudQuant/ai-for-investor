@@ -1481,7 +1481,7 @@ clean worktree 全量 `make test-cov`：**35307 passed / 247 skipped / 73 failed
 
 - **纯代码面可收口**：AC-4\|01、AC-1\|03、AC-8\|02、AC-17\|02、AC-17\|03、AC-17\|05、AC-17\|08、AC-18\|01、AC-1\|09；
 - **必须实连外部系统或重跑证据轮**：AC-11\|04（真实 MySQL 仓库 EXPLAIN）、AC-16\|07（干净 venv 集成重跑）、AC-5\|07 / AC-17\|06（≤24h 的 bandit 档案、随 HEAD 漂移的覆盖率钢印——这类是"可续期"而非"永久闭合"）；
-- **属主/产品决策**：AC-1\|08（§1 权利登记表 35 个引用源目前 0 行）、AC-5\|03、AC-16\|05/06（9 处上游来源身份字面量）；
+- **属主/产品决策**：AC-1\|08（§1 权利登记表 35 个引用源目前 0 行——**此句已被 Wave 21 §8 证伪**：35 行齐全，红来自探针按字面量要求列名）、AC-5\|03、AC-16\|05/06（9 处上游来源身份字面量）；
 - **判据自身不可满足（`judge` 族）**：AC-1\|08 的 `repair.dated="*rows"` 继承了 `rows=0`、AC-16\|07 的 `repair` 漏了 `archive_self_written`、AC-17\|02 的 `repair` 漏了 `raw_findings`——修探针不等于收口内容。
 
 **留给属主的一个真实问题**（本轮刻意没有自动"修好"）：`47ed8e59` 把 README 的数据免责声明从「本项目不构成任何投资建议」改成限定句式，未留理由，而 `docs/data-rights-registry.md` §4 标题写着「与 README 同步维护」却仍是全称句式——AC-16\|08 读出 gap 正是这个分叉。恢复全称能让判据变绿，但那是法务口径的改动，不是我能替属主定的。
@@ -1489,3 +1489,165 @@ clean worktree 全量 `make test-cov`：**35307 passed / 247 skipped / 73 failed
 #### 6. 共同非声明
 
 本轮全部结论属 **code/offline 与 CI 平面**：#253/#254/#165/#166 是依赖声明、矩阵与测试刻度的收口；#163/#164 让门禁**可判**，其中 #164 的 20 条入账是 owner 裁定的"已知红"登记，**不是 proven**，也不构成真实源、部署或自然周期验收。真实源取数与权利/保留、生产 MySQL 与备份恢复、影子对账、单写者切换、全 A 股权威域与逐标的完整历史、授权签发/吊销审计、报告门禁的生产适配器仍按前几轮的口径保持未闭合。
+
+---
+
+### Wave 20：OpenData 门禁从「不可判」变成「可判」，test-cov 首次真实分诊
+
+本轮把上一轮留下的两个结构性障碍真正解决，并把 `test-cov` 的可归因失败分批改掉。合入记录（OpenData `dev`）：
+
+| PR | 合入 SHA | 内容 |
+| --- | --- | --- |
+| [#167](https://github.com/cloudQuant/opendata/pull/167) | `4068b45b` | PR 跑改测 head 分支树；`make acceptance-probe-check` 前补全历史；gate 前后各打印一次形状 |
+| [#168](https://github.com/cloudQuant/opendata/pull/168) | `cc14b327` | AC-1\|03 的 5 个未登记路径按 path+sha256 入账，格子读出 **proven** |
+| [#169](https://github.com/cloudQuant/opendata/pull/169) | `e3564508` | 两个 alembic head 断言改为测图形状（单头/无分支/边保留），pandas 3 Arrow str dtype 造成的假通过修回 |
+| [#170](https://github.com/cloudQuant/opendata/pull/170) | `02df8948` | FastAPI 0.162 的 `_IncludedRouter` 嵌套：跨 include 走查路由；先证明端点集合在 0.115/0.162 下逐项相同，再改判据读取方式 |
+| [#171](https://github.com/cloudQuant/opendata/pull/171) | `70eeacbd` | 离线 `--sql` 渲染只跳过「服务器版本断言」这一条、且只在 `upgrade()` 且 bind 真是 `MockConnection` 时；离线边界改为**声明+被测**（`OFFLINE_HEAD=0013`，越界即红），0012 双处摘要随改动重钉 |
+| [#172](https://github.com/cloudQuant/opendata/pull/172) | `26a6eb5e` | 用 18 个共驻 CPU 负载实测子进程完成预算（p95 6.4–12.3s、max 18.1s）后统一为文档化的 60s；patrol 日期炸弹改为相对式；csi500 的 inode 复用假设修正 |
+| [#173](https://github.com/cloudQuant/opendata/pull/173) | `cc17835b` | **探针自修历史**：九个读历史的面在读取前一刻补全链条（清单不止两个），补不了就 `refused` 并照旧判 gap，绝不造事实 |
+
+#### 1. 「形状不确定」这件事被解决，并有对照数据
+
+#173 之前：PR 作业 `124981684123` 里 AC-16\|09 读到 `HEAD/all=2/1002, shallow=true` 判 gap，而 dev push 作业 `124957785974` 两侧形状一致（975 commits）判 proven。#173 之后，同一个 PR 形态的作业 `125006024661` 读出：
+
+```
+台账↔读数：agrees=113, unflipped=0, open=0, deferred=0, stale-proof=17
+VERDICT AC-16|09: proven      VERDICT AC-19|02: proven
+```
+
+与 dev push 作业的 `agrees=113 / stale-proof=17` **完全一致**。也就是说 PR 跑与 push 跑现在量的是同一批格子，#164 那种「冻结一次就永远对不上」的困境来自的那个变量被消掉了。判据完整性有证明：排除 `readings` 赋值后九个 judge 的 AST 逐字节相同，`breaks` 与 moment 面集合未变，因此没有一条既有钉被这次修复作废。
+
+留下的手段也留在门禁里：`history_repair = already-complete|unshallowed|refused|unread` 会打印在每次读数里，谁在 gate 期间截断仓库仍然没查到，但判定不再依赖它。
+
+#### 2. 新暴露的同类问题：AC-17|07 的红来自「跑与跑之间比较的基线不同」
+
+#173 之后 PR 跑仍有 10 条新增，其中 **AC-17|07（新增公开 callable 的 docstring/注解 100%）在 push/本地是 proven，在 PR 跑是 gap**，原因是这个格子经 `a2_check` 取「新增面」：PR 跑带 `A2_BASE_REF=dev`，于是 population = 本 PR 自己改的文件（本例里没有新的公开 API）→ 判据明确写着「空群体上的 100% 不算测量」→ gap；push/dispatch 跑没有 `A2_BASE_REF`，population = 自基线以来的全部 A2 文件（本地实测 179 文件 / 599 callable）→ proven。
+
+这是**判据语义**问题而不是环境问题：同一条 AC 在两种运行里量了不同总体。把它钉进棘轮会重演「一侧新增、一侧收口未重钉」，所以本轮不冻结它，需要属主先定「新增面」的定义应当是"本差分母"还是"全仓 A2 分母"（若选后者，改法是这一格忽略 `A2_BASE_REF`，不改任何阈值）。
+
+#### 3. 流程教训（同一坑踩了三次）
+
+OpenData 的引用策略按 **path + sha256** 登记了 `pyproject.toml`、`Makefile`、`scripts/quality/acceptance_item_probe.py` 等文件的字节；改这些文件而不同 PR 重钉摘要，`zero-dep-check`（gate 第 2 个成员）会直接中止整条门禁，前面所有信号都拿不到。#165、#167、#173 各中一次。规则固化为：**推之前先跑 `python scripts/codemod/verify_no_akshare.py`**，重钉理由要写明 pin 所属 revision、此后 revision 数、带品牌行数与出现次数前后相等。
+
+#### 4. `test-cov` 的真实进度（不再是「从没跑过」）
+
+基线 73 failed / 18 errors / 35307 passed（8:55，覆盖率 87.52%，阈值 84 不是阻塞）。#165/#166/#169/#171/#172 之后，可归因项已清；**仍红且理由明确**：deadline-window 一族在 >2× 超订下仍敏感（要重推 deadline/child-sleep/观测窗口三元组，不是加大数字）、`test_sina_fzb_recorded_transport_e2e`（25s 子进程 vs `lease_ttl=3s`，慢而活的 worker 会被判死——属主决定）、`tests/test_reviewed_app.py` 两个计时用例、`test_ths_csi500_one_shot_sqlite_gate` 的 marker 格式用例（`-n 0` 也红，是真失败）、以及 `tests/test_frontend_endpoint_contract.py`：`reviewedRuns.ts` 调的 4 个 `/reviewed/*` 路径只有 `create_reviewed_app` 注册，`main.py` 只挂 `api_router`（/api/v1、/api）与 `api_v2_router`，是否线上 404 属 DEPLOYMENT 面，需真实部署核对。
+
+#### 5. 共同非声明
+
+本轮所有绿都在 **code/offline 与 CI 平面**：#168 让一个格子从 gap 变 proven 是登记完整性的修复，不是验收；#170/#171/#172 改的是测试如何测量，不是产品是否可用；#173 让验收仪器变得可复现，但它本身不关闭任何验收面。AC-1\|08（§1 权利登记 35 个引用源 0 行——**已被 Wave 21 §8 证伪**，登记表 35 行齐全）、AC-5\|03 / AC-16\|05 / AC-16\|06（9 处上游来源身份字面量）、AC-4\|01（判据按字面拼写把关节，见 #164 讨论）以及真实源、生产 MySQL/部署、影子对账、单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。棘轮重测由 dispatch 作业 `41362343738` 产出，只有那次测量落在真实 gate 形态上才允许入账。
+
+#### 6. 一次我自己制造、CI 看不见的回归（#171 → #176）
+
+诚实记录：**#171 引入了一条 dev 上的真实回归，而且当天无法被 CI 发现**。`alembic_data/versions/20261027-0015_source_attempt_gate.py` 不只是一个迁移文件——它的字节是 `alembic_source_gate/schema_contract.py` 里 `V1_REFERENCE_SHA256` 钉住的 **v1 参照**；adopt 任何 source-gate schema 之前都要先与它比对。#171 为了让 0015 也能离线渲染改了它，契约随即拒绝 adopt，本地实测后果：
+
+| 命令 | dev 修复前 | 修复后（#176） |
+| --- | --- | --- |
+| `make test-cov` | **134 failed / 154 errors**（49 个 `test_source_gate_quota_provisioning`、40 个 `test_source_attempt_gate_one_shot_v4`、28 个 `test_ths_one_shot_transport` …） | **15 failed / 35414 passed / 247 skipped / 0 errors**，覆盖率 88.33% |
+| `pytest tests/test_warehouse_migrations.py tests/test_source_gate_quota_provisioning.py` | 1 failed / 5 passed / **49 errors** | 64 passed / 1 skipped |
+| 邻近 4 个 source-gate / publication 迁移模块 | 未测 | 107 passed |
+
+修法不是把 `V1_REFERENCE_SHA256` 改成新摘要（那会让"adopt 对照的是原始 v1 revision"这句话失去所指），而是**把 0015 恢复成被钉的字节，并让它把自己不能离线渲染这件事声明进 `_ONLINE_ONLY_REFUSALS`**；`OFFLINE_HEAD=0013` 不变（0014 早已是前缀终点），边界测试改为断言 0015 属于 refused，这样将来有人再往反方向"修"，刻度会立刻叫出来。
+
+教训两条，都已写进长期记忆：① 文件可以被**代码里的常量**按 sha256 钉住，而不只是被 JSON 登记——动 `alembic*/versions/` 之前必须跨 `alembic_source_gate/`、`opendata/`、`scripts/`、`tests/` grep 文件名找摘要常量；② 只要有成员挡在 `test-cov` 前面，这类破坏 CI 就看不见，**合并过迁移/生成 schema 相关改动之后必须本地跑一次全量**。
+
+### Wave 21：棘轮入账后第一次真实读数，剩余红被分成「过期钉 / 只在我的笔记本上红 / 属主决定」
+
+上一轮结束时 `acceptance-probe-check` 刚刚第一次通过，`test-cov` 第一次拿到真实读数。本轮把那条读数拆开：哪些是**测试对账本读错了**，哪些**根本不是仓库的红**，哪些必须属主先裁定。合入记录（OpenData `dev`）：
+
+| PR | 合入 SHA | 内容 |
+| --- | --- | --- |
+| [#164](https://github.com/cloudQuant/opendata/pull/164) | `b389d6fe` | 棘轮按 **CI 自己那次测量**入账：16 个格子 / 17 条钉，无删除；来源是 dispatch 作业 `41362343738`，不是任何笔记本 |
+
+判据形状被解决之后，PR #164 的门禁作业 `41372558789`（作业 `125045929651`）第一次走到 `test-cov`：
+
+```
+= 14 failed, 35419 passed, 243 skipped, 11 subtests passed in 1047.60s (0:17:27) =
+Required test coverage of 84% reached. Total coverage: 88.33%
+```
+
+#### 1. 六个测试文件的过期钉（[OpenData #177](https://github.com/cloudQuant/opendata/pull/177)，head `1b2a47ae`）
+
+同一棵树在钉住的 3.11 extra 环境里，改前 `4 failed, 80 passed, 1 skipped`，改后 `84 passed, 1 skipped`，四条失败恰好各命中本 PR 触碰的一个文件：
+
+| 格子 | 账本后来怎么动的 | 旧钉为什么错 |
+| --- | --- | --- |
+| `test_a2_exclusion_scope`（迁移清单） | #161 `1ba6d7d9` 改了 `alembic/env.py` | 它不再是「早于 A0 且从未被改」的唯一例外，`dark` 必须是空集 |
+| `test_check_brand` | #161 为 `*_data` 一个 token 追加 9 条路径 | 账本共 15 条路径；用例现在显式承认这第三类，等式仍然钉住完整 15 条，新增被登记路径依旧会红 |
+| `test_nested_vendor_quality_scope` | `eea69cca` 起 `opendata_client` 计 3（`6169b9e0` 给严格快照 SDK 加了 `snapshots.py`）；参照基线 0→9 条 finding（#161） | 两者都是**计数钉**，所以把 9 条上游身份字面量逐条列出，作为「上游引用不能悄悄进账本」的绊线 |
+| `test_ths_csi500_one_shot_sqlite_gate` | 迁移夹具实际持有 `sg0004_source_one_shot_v4`（实测），而两个 marker 格式用例硬写 `V2_REVISION` | 校验器按 marker 分派参照 schema：接受用例直接失败，**拒绝用例因为「V2 参照 vs V4 表」而假绿**。改为重新写入夹具真实持有的 revision 后，那条 fail-closed 断言才真的在验「约束名被改」 |
+
+同一个文件里还有第二个反向过期钉，是 CI 教我的：两个清单用例直接调 `guard.resolve_files(None)`，而 `a2_check` 只要看到 `A2_BASE_REF` 就把总体缩成**本次运行自己改的文件**——工作流只在 pull_request 跑导出它。于是同一棵树 push 跑绿、PR 跑红。用本分支的 base 导出该变量本地复现：改前 `2 failed, 61 passed`（19 个适配文件被报「dropped from the zero-tolerance set」、32 个迁移文件被报 dark，而这个 PR 两棵树都没碰），改后 `63 passed` 且在**有与没有** `A2_BASE_REF` 两种形状下同结果。两处都改走 #175 为探针加的 `a2_files_on_recorded_baseline()`（弹出变量→按登记的基线解析→恢复），清单没有因此变虚：把 `opendata/data/providers/akshare/provider.py` 从解析结果里删掉只红适配用例，删 `alembic/env.py` 只红迁移用例（都实测后还原）。
+
+#### 2. 五条「红」其实只存在于我的笔记本：CI 一直在供给 OpenBB 钉定检出
+
+`test_openbb_inventory_guard` 四条 + `test_ac2_case_probe::test_self_test_closes_and_every_break_flips`（其 self-test 的三条内部失败 `AC2-01/12/25` 全部同因）。仓库的供给机制早就存在且是 dev 的祖先：`a755f4aa` 在 `.github/workflows/ci.yml:140-148` 用 `git fetch --depth=1 …/OpenBB.git "$COMMIT"` 取 `UPSTREAM_COMMIT = 3e071fcc2cd9f891cac6040ae60296dba76dab46`（`scripts/quality/provider_model_inventory.py:26`）并导出 `OPENDATA_OPENBB_PATH`；模块只读对象库，从不检出工作树。缺省回退路径 `/Users/yunjinqi/Documents/new_projects/OpenBB/openbb_platform`（同文件 29 行）是维护者笔记本专用——这就是本地报 `Pinned upstream Git object is unavailable.` 的全部原因。实测：只导出环境变量 `OPENDATA_OPENBB_PATH=/home/yun/Documents/OpenBB/openbb_platform`（该仓库含 `3e071fcc` 且可从 HEAD 到达）即 `5 failed, 43 passed` → `48 passed`，未改任何文件。**结论：这五条不是产品也不是测试缺陷，属主需要定的只是本地跑法（导出变量，或把 29 行的个人路径换成显式必填）。**
+
+#### 3. `test-cov` 的真实进度：14 → 9（CI 实测），分类见下
+
+#177 第一个 head 的 CI 作业 `41377376327`：
+
+```
+= 9 failed, 35424 passed, 243 skipped, 11 subtests passed in 795.19s (0:13:15) =
+Required test coverage of 84% reached. Total coverage: 88.33%
+```
+
+9 条的归属（不是「再修修就绿」，而是三种不同性质）：
+
+| 归属 | 条数 | 处置 |
+| --- | --- | --- |
+| A2 清单的形状依赖 | 2 | 本轮第 1 节已修，随 #177 合入 |
+| `/reviewed/*` 契约 | 1 | **不是过期钉**，属主决定，见第 4 节 |
+| AC-1\|08 权利登记 | 2 | **不是数据缺口**，见第 8 节：判据按字面量要求列名，探针缺陷 |
+| AC-1\|09 gitleaks 正则 | 1 | 镜像分支已就绪，等 CI 自己的棘轮读数，见第 5 节 |
+| `test_process_executor` deadline 一族 | 3 | 负载敏感，需要重推 deadline/child-sleep/观测窗口三元组，不是加大数字 |
+
+两次读数的**逐条差分**比计数更有信息量，所以把 14 条与 9 条的 id 都取回来对齐（`125045929651` 与 `41377376327`）：
+
+| 14 条里有、9 条里消失 | 是否被本分支修掉 |
+| --- | --- |
+| `test_check_brand`（1）、`test_nested_vendor_quality_scope`（1）、`test_ths_csi500_one_shot_sqlite_gate` 的 marker 用例（1） | **是**，第 1 节的三个过期钉 |
+| `tests/test_reviewed_worker.py::test_cancelled_lease_stops_running_child_without_publication` | **否**——本分支未触碰该文件，它自己变绿了 |
+| `tests/test_sina_fzb_recorded_transport_e2e.py::test_recorded_sina_response_traverses_transport_worker_publication_and_rest_pages` | **否**——同上 |
+
+而 `test_process_executor` 一族在两次里都是 3 条，但**参数化 id 换了**：14 次里是 `messages7-response_invalid` / `messages13-process_exit_status_invalid` / `extra_ipc`，9 次里是 `messages5-worker_setup_failed` / `messages10-response_invalid` / `extra_ipc`。两条 a2 清单项在两次里都在（第二个 commit 才修掉）。
+
+由此得出一条比「红变少了」更有用的判断：计数从 14 到 9 中只有 **3 条是真实收口**，另 **2 条是会自己漂移的用例**（`test_reviewed_worker` 取消租约、`test_sina_fzb_recorded_transport_e2e`），加上参数化身份在族内跳变的 3 条 deadline 用例——即**这 5 条的绿不能当作已验收的证据**，它们测量的东西依赖机器负载。Wave 20 §4 把本地 transcript 与 CI 读数混在一起列「仍红」清单，那份清单里哪些属于同一类漂移并未逐条回溯；从本节起，`test-cov` 的状态以「CI 某次作业的 id 清单 + 该清单是否由某个 commit 改变」表述，不再只报计数。
+
+#### 4. `/reviewed/*` 量出来的结论与上一轮的猜测相反
+
+上一轮 §4 写的「需真实部署核对」这一条被**离线证据替代**了：`backend_table()` 走的不是朴素的 `app.routes` 走查，而是 `app.openapi()`，而 FastAPI 0.162 的 OpenAPI 生成器**确实会跨越 `_IncludedRouter` 嵌套**（main.app 只有 8 个 `app.routes` 对象却生成 151 条路径）。手工跨越 include 分支遍历活对象得到 178 条路由，其中 `/reviewed` 前缀 **0 条**；四个操作真实存在于 `opendata/api/reviewed_runs.py:263`（`APIRouter(prefix="/reviewed")`），但只有 `create_reviewed_app` 挂载它，而 `grep -rn create_reviewed_app opendata/ scripts/` 只有定义与 `__all__` 两处——`Dockerfile`、`opendata.service`、`start_app.sh` 全部服务 `opendata.main:app`，nginx 也只把 `/api/` 转给这一个进程。参照契约 `docs/afi204-v1-openapi.json`（140 路径）与 v2（9 路径）里没有任何 reviewed 路径。
+
+所以「部署后可能 404」的措辞可以升级为：**按当前仓库的接线，浏览器可达的进程里没有任何东西挂载这四个调用**，而 `frontend/src/router/index.ts:88-92` 的后台页真的在调它们。两条捷径都被检查并拒绝：删客户端声明等于拆掉一个已交付功能的传输；把 router 挂进 `main` 而没有 runtime，`get_reviewed_runtime`（`reviewed_runs.py:266-299`）会答 503，门禁转绿而页面照旧坏。反例（只在内存里）：往调用集合加 `GET /reviewed/nonexistent-probe` 仍然原样输出该 id，绊线没钝。#177 只把这段测量写进守卫的模块 docstring（28 增 0 删，断言一行未动，`1 failed, 13 passed` 前后相同），**属主需要裁定的是：哪一个进程持有 `ReviewedRuntime`、它的台账 schema 与角色计划**。
+
+#### 5. AC-1|09：镜像 C150 的正则，但棘轮必须由 CI 自己重测
+
+`.gitleaks.toml` 的 `generic-api-key` 允许清单被 `e940fd7d`（#154，C150 那一轮）加了第 8 条正则，而探针常量 `GENERIC_API_KEY_ALLOWED_REGEXES` 仍是 7 条——历史上每一条允许清单变更都在同一 PR 里回写探针（C75 `60148ce5`、C89 `bddbb06f`、C101–C105 `b15717b6`、C149 单独镜像 commit `50ab04d4`），这次漏了。分支 `fix/od-ac109-regex-drift`（commit `31777488`）选择**镜像而不是删清单**：`regexTarget="secret"` 加两侧锚点意味着只有与八个夹具标签逐字节相同的串被豁免，不改变凭证检测的宽度；而 `docs/evidence/C150/gitleaks-counterfactual.txt` 量过删除那条的臂（`without_c150` 把 10 条命中全部还回来），且 `fixture-ths-quota-v1` 已无活树载体，工作树里无从改名。探针文件本身按 path+sha256 登记，`verify_no_akshare.py` 随即 `stale sha256` → 同 PR 重钉 `1ab81a26b988f60e…` → `6c71ae68f49023ad…`（pin 属 rev `01e3a179`、此后 0 revision；品牌行 212==212、akshare 163==163、openbb 96==96、扫描器 (module,kind) 重数集 13==13）。实测这一面：`exact public-rule exceptions preserved` 由 `no` 变 `yes`；本地整格仍 `gap`，因为剩下三面要 gitleaks 真跑（本机未装，`template_scan_rc: 127`）。
+
+但 AC-1\|09 在棘轮里有一条 `stale-proof` 钉（`ledger_state: proven` + 探针读 gap 才成立）。镜像之后 CI 会把这一格读成 **proven**，即「收口未重钉」方向的红——所以入账必须来自 CI 自己的测量：dispatch 作业 `41379944842` 正在跑 `--sync-ratchet`，产物落地后再把删掉 AC-1|09 那一格的账本作为同分支的第二个 commit 推上去。
+
+#### 6. AFI #256 的红不在正文，而在 GitHub 的重跑语义
+
+`Frontend - Lint & Type Check` 里那一步（`Iteration 175 §4.7 — PR template i18n manifest`）实际读的是 **PR 正文快照**。实测：正文在 `01:28:44Z` 就已含 `- 测试证据`（出现次数 1，脚本核对），而 attempt 2 于 `02:23:44Z–02:24:44Z` 重跑仍报 `FAIL: PR description contract incomplete: - governance field missing: 测试证据`——**rerun 复用创建该 run 时的 event payload，不会重读正文**。修法不是再 rerun 一次，而是产生一个新事件（本轮即随 Wave 21 文档提交新 commit，从而带上新正文）。这条语义写进长期记忆，避免下一次再花一个 30 分钟往返。
+
+#### 7. 共同非声明
+
+本轮的绿全部在 **code/offline 与 CI 平面**：#177 改的是测试如何对账，AC-1|09 改的是探针如何镜像清单，二者都不关闭任何验收面；`/reviewed/*` 的结论是「按仓库当前接线浏览器会 404」的静态推断 + 活应用对象的路由枚举，仍**不是** DEPLOYMENT 面（没有真实部署核对过）。AC-1\|08（判据字面量缺陷，见第 8 节——登记表本身 35 行齐全）、AC-5\|03 / AC-16\|05 / AC-16\|06（9 处上游来源身份字面量）、AC-4\|01、AC-16\|08（免责声明与权利登记的措辞分歧）以及真实源、生产 MySQL/部署、影子对账、单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。
+
+#### 8. 更正：AC-1|08 是仪器缺陷，不是数据缺口——我在 Wave 19/20 写错过一次
+
+**我写下过一句错误的话**：Wave 19 §5 与 Wave 20 §5 都记成「AC-1\|08 需要属主决定，因为 §1 权利登记表 35 个引用源目前 0 行」。**这是错的**，而且错的正是本轮反复在防的那类东西：把仪器读不出来当成事实不存在。本轮把两格红拿到手之后逐条重测：
+
+* `docs/data-rights-registry.md:41` 的表头是 `| # | 数据源 | 接入方式 | 条款链接 | 允许本项目落库 | 允许再分发 | 允许商业使用 | 公开条款复核日期 | 责任人 | 状态 |`；`_parse_rights_registration_table`（`scripts/quality/acceptance_item_probe.py:1615` 一带）要求列名**逐字等于** `复核日期`。
+* 表头校验一失败，`records` 就是空，`rows` 量到 0，`uncovered` 于是**级联**成 35——「35 个引用源 0 行」是 `table_valid=False` 的下游伪影，不是登记表的真实状态。
+* 决定性实验（在 detach 出来的临时 worktree 里做，做完还原，未提交）：只把表头的 `公开条款复核日期` 改回 `复核日期`，`acceptance_item_probe.py --item 'AC-1|08'` 立刻 `VERDICT AC-1|08: proven`；把 table_valid 单独修好后重算六面是 `rows=35 / dated=35 / undecided=0 / unlinked=0 / responsible_missing=0 / uncovered=0`。
+* 回归点可以精确归属：`5db160ba`（#23「reconcile source rights declaration」，2026-10-27）同时做了两件事——把列名改掉，并把 v1.8 的告诫句「登记完整性不等于所有用途获准」重写成 v1.9 的「不代表独立核验或全量许可」。探针的字面量早于它（`3f05f636`，2026-10-08）。上一次这条读绿的存档还在 `docs/evidence/C75/ac1-08-rights-registry-repin.txt`（`'table_valid': 'yes'`、verdict proven）。
+
+修法选择**改仪器，不改数据**：探针现在要求「恰好一列以 `复核日期` 结尾」，并把那一列重新键入 `RIGHTS_DATE_COLUMN`，下游面只认一种拼写。三条反例实测（`table_valid` 仍会红）：列名改成不含后缀 → False；出现两列同后缀 → False； shipped 表 → True / 35 行。测试里断言旧告诫句的那一行同步改成现行句，紧邻的反空话守卫（`"全部获准" not in verdict.readings`）保留。**登记表一行都没有动**，也不该动：为了这条绿去编辑权利声明就是把仪器缺陷转嫁给事实记录。
+
+顺带查清两件仍未解的事，都记下来而不是顺手改掉：
+
+1. **`repair` 仍然不可达（二阶仪器缺陷）**：AC-1\|08 的 `repair` 写 `dated="*rows"` 却没有 `rows` 键，`resolve_repair` 会把**量到的** `rows="0"` 抄进去，`int(rows)>0` 因此失败。table_valid 修好后 `rows` 量到 35，所以它今天不再是拦路原因；但「一旦真出现 0 行就无法自动补齐」这条路径依旧存在，需要单独修。
+2. **`unlinked` 只看 URL 形状，不看它是不是条款**：#22 `https://www.multpl.com/`、#30 `https://finviz.com/`、#31 `https://www.usa.gov/`、#35 `https://www.wsj.com`、#27 `https://api.congress.gov` 都是站点首页，§1.2 自己已经声明这些链接「原样取自其 `website` 字段，不代表已取得或审阅条款」。也就是说这一格存在**假绿**风险：全部行「合规」但其中若干行的条款其实从未取得。属主要定的是「条款链接」的最低语义（必须是条款页？还是允许首页 + 状态标注？），这是新的属主问题，替代了那个被证伪的旧问题。
+
+于是 Wave 20 §5 的「属主决定」清单要改口径：AC-1\|08 不再是数据缺口，但它换来一个更小的问题（条款链接语义）与一个探针待修项（`repair.rows`）。AC-1\|08 的棘轮入账同样只能来自 CI 自己的测量（dispatch 作业在本次修复后重出），不在本地钉。
