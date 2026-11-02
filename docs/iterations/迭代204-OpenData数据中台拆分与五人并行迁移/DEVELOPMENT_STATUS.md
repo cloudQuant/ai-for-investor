@@ -1651,3 +1651,65 @@ Required test coverage of 84% reached. Total coverage: 88.33%
 2. **`unlinked` 只看 URL 形状，不看它是不是条款**：#22 `https://www.multpl.com/`、#30 `https://finviz.com/`、#31 `https://www.usa.gov/`、#35 `https://www.wsj.com`、#27 `https://api.congress.gov` 都是站点首页，§1.2 自己已经声明这些链接「原样取自其 `website` 字段，不代表已取得或审阅条款」。也就是说这一格存在**假绿**风险：全部行「合规」但其中若干行的条款其实从未取得。属主要定的是「条款链接」的最低语义（必须是条款页？还是允许首页 + 状态标注？），这是新的属主问题，替代了那个被证伪的旧问题。
 
 于是 Wave 20 §5 的「属主决定」清单要改口径：AC-1\|08 不再是数据缺口，但它换来一个更小的问题（条款链接语义）与一个探针待修项（`repair.rows`）。AC-1\|08 的棘轮入账同样只能来自 CI 自己的测量（dispatch 作业在本次修复后重出），不在本地钉。
+
+### Wave 22：test-cov 从 14 红到 3 红，最后一条红原来是单写者切换的可见端
+
+四个 PR 合入 OpenData `dev`：
+
+| PR | 合入 SHA | 内容 |
+| --- | --- | --- |
+| [#177](https://github.com/cloudQuant/opendata/pull/177) | `d781d189` | 六个测试文件的过期钉 + A2 清单改为按登记基线解析 + `/reviewed/*` 的测量写进守卫 docstring |
+| [#178](https://github.com/cloudQuant/opendata/pull/178) | `397a8508` | C150 的 gitleaks 正则镜像进 AC-1\|09，并按 dispatch 作业 `41379944842` 的产物入账（16 格/17 钉 → 15/16，其他格 family hash 零漂移） |
+| [#179](https://github.com/cloudQuant/opendata/pull/179) | `a4fb18fd` | `test_process_executor` 一族改为事件驱动；根因是夹具的假子进程在未被调度的线程里 `os.dup` 一个**已关闭**的 fd（产品写完命令即关闭，`process_executor.py:608`），于是退出从不上报、父进程烧完 deadline |
+| [#180](https://github.com/cloudQuant/opendata/pull/180) | `4d972657` | AC-1\|08 的列名改为「恰有一列以 `复核日期` 结尾」并重新键入规范名，并按 dispatch 作业 `41387268027` 入账（15/16 → **14 格/14 钉**） |
+
+AFI 侧：#256 以 `ef425cdf` 合入（Wave 20 + 21 文档）。
+
+#### 1. CI 读数（以作业 id 清单表述）
+
+| 作业 | 树 | 结果 |
+| --- | --- | --- |
+| `125045929651` | #164（首次执行 test-cov） | 14 failed / 35419 passed，1047.60s，覆盖率 88.33% |
+| `125070735018` | #177 首个 head | 9 failed / 35424 passed，795.19s |
+| （PR #179）`41386120435` | dev `d781d189` + 事件化 harness | **5 failed / 35428 passed**，1405.37s；`test_process_executor` **全族消失** |
+| （PR #180）`41390775162` | dev `397a8508` + 判据修复 | **3 failed / 35430 passed**，809.70s；12 个成员依次绿到 `acceptance-probe-check`，说明 14/14 的账本与真实 gate 形态一致 |
+
+本地在合并后的 `4d972657` 上对六个受影响文件复测：`309 passed, 2 skipped`，且
+`verify_no_akshare.py` 仍是 `OK: 1069 file(s) walked … frozen baseline: 9`（重钉摘要在 rebase 时按
+#178 之后的字节重算：`6c71ae68…` → `0e0044c5…`，含品牌行 234==234、akshare 163==163、openbb 113==113）。
+
+#### 2. 「一族恒为 3、但名字每次换一个」是怎样被抓住的
+
+三次读数里 `test_process_executor` 都是 3 条，而参数化 id 依次是
+`messages7/13`（14 红）→ `messages5/10`（9 红）→ `messages8 + no_bytecode_flags`（7 红）。**计数不变、身份漂移**
+这个形状本身就排除了「机器偶尔慢一点」的解释，指向一个必然发生但被 deadline 掩盖的缺陷；把三次 id 对齐之后，
+根因（closed-fd dup）才被复现出来。若只报「14 → 9 → 7 → 3」，这条会一直被当成负载噪声推后。
+
+#### 3. 最后一条红不是遗漏，而是单写者切换的可见端
+
+`tests/test_frontend_endpoint_contract.py` 的四条 `/reviewed/*` 在 dev 上仍然红，本轮读到了它**为什么**红：
+`deploy/afi204-reviewed/README.md` 明确写着 reviewed 运行时按设计尚未在生产装配——「production composition root
+仍需构造 task catalog、engine、dispatcher、worker SPI 与 role plan」，而未来的部署必须先「declare the sink IDs
+owned by that reviewed app，**stop legacy writers for those sinks**」再启用 unit，且
+「Do not run this alongside legacy collectors writing the same sink」。`nginx.conf` 里也没有任何 reviewed
+location（只有 `:81` 的 `location /api/ → backend`）。
+
+因此这不是「忘记挂载」，而是**单写者切换这一验收面尚未发生的另一端**：提前把 router 挂进 `main.app` 会让
+`get_reviewed_runtime` 答 503，门禁转绿而后台页照旧不可用，同时诱导人在 legacy 采集器仍在写的情况下启动第二个写者。
+
+连带后果必须说清：`make gate` 是 fail-fast，`test-cov` 排在四个前端成员之前，只要这条还红，
+`frontend-lint / frontend-typecheck / frontend-collection / frontend-test / frontend-e2e` 就**永远不会被测量**；
+本机也无法替代（`frontend/node_modules` 不存在，网络不足以安装）。所以属主实际是三选一：
+(a) 把后台页在运行时未装配时改为显式「未启用」（前端小改动，同时四条声明消失，守卫自然绿）；
+(b) 执行单写者切换并装配 reviewed 运行时（真正的收口，但那是本迭代最大的未闭合面）；
+(c) 让这条红继续作为提醒，同时接受前端五个成员在 CI 里持续不可测。
+
+#### 4. 共同非声明
+
+本轮所有绿都在 **code/offline 与 CI 平面**：账本从 17 钉降到 14 钉是两次真实收口的入账（AC-1|09、AC-1|08），
+不是把红格子改名；#179 改的是测量方式，产品的 60s deadline、可杀性与栅栏传播未变。AC-5\|03 /
+AC-16\|05 / AC-16\|06（9 处上游来源身份字面量）、AC-4\|01、AC-16\|08 措辞、AC-17\|07 分母、
+`repair.rows` 不可达、`unlinked` 只看 URL 形状的假绿风险，以及真实源、生产 MySQL/部署、影子对账、
+单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。
+另需记录：本轮一次异常打印把 `Authorization: Bearer …` 带进了会话输出（`subprocess` 抛出时回显 argv），
+该 PAT 应立即轮换；后续脚本已改为 check=False 并屏蔽 argv。
