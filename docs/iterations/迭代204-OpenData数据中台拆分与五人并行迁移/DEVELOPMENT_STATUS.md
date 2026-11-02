@@ -1713,3 +1713,57 @@ AC-16\|05 / AC-16\|06（9 处上游来源身份字面量）、AC-4\|01、AC-16\|
 单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。
 另需记录：本轮一次异常打印把 `Authorization: Bearer …` 带进了会话输出（`subprocess` 抛出时回显 argv），
 该 PAT 应立即轮换；后续脚本已改为 check=False 并屏蔽 argv。
+
+### Wave 23：`make gate` 第一次整链变绿——但绿的是仪器，不是验收
+
+合入记录（OpenData `dev`）：
+
+| PR | 合入 SHA | 内容 |
+| --- | --- | --- |
+| [#181](https://github.com/cloudQuant/opendata/pull/181) | `b54ee558` | AC-1\|08 的 `repair` 配方原本在自己要修复的那种读数下不可达（`resolve_repair` 从**实测** facts 复制 `*key`，于是 `dated="*rows"` 继承了塌陷读数的 `rows=0`）；两个计数改为同指 `cited`。塌陷读数对照实测：dev 配方 → gap，本配方 → proven；健康读数两侧都 proven |
+| [#182](https://github.com/cloudQuant/opendata/pull/182) | `49a5b4ea` | `/reviewed/*` 的决定：按 `deploy/afi204-reviewed/README.md` 所述，审核运行时**按设计尚未装配**（切换前要声明自有 sink 并停止这些 sink 的旧写入者），所以页面改为显式陈述「审核运行时未装配」，由 `VITE_REVIEWED_RUNTIME_ENABLED === 'true'` 控制（严格相等，未设置即失败关闭）；transport 是**搬家不是删除**（`git mv` 到 `frontend/src/reviewed/api.ts`），守卫反而变强（同一抽取器钉到 `opendata.api.reviewed_runs.router`、主平面不得出现 `/reviewed`、任何出厂构建不得打开该开关、反例固化为常驻用例） |
+| [#183](https://github.com/cloudQuant/opendata/pull/183) | 待合 | 最后一条 test-cov 红的分诊与预算对齐，见第 3 节 |
+
+AFI 侧：#257 `02cdd029`（Wave 22 文档，四条工作流全绿后合入）。
+
+#### 1. 门禁整链首次全绿，并且前端平面第一次被测量
+
+dev `49a5b4ea` 的 push 作业 `41403148134`：**`make gate` PASSED**，18 个成员依次执行完毕——
+
+```
+brand-check, zero-dep-check, secret-check, ledger-check, evidence-traceability, js-points-check,
+loguru-check, a2-check, published-openapi-check, quality-ratchet, public-api-quality,
+acceptance-probe-check, test-cov,
+frontend-lint, frontend-typecheck, frontend-collection, frontend-test, frontend-e2e   => PASSED
+Required test coverage of 84% reached. Total coverage: 88.33%
+after-gate shallow=false head_commits=992 all_commits=1044
+```
+
+这里有两条必须写清的性质。**其一**，后五个前端成员在本迭代里**从来没有被执行过**：门禁 fail-fast，`test-cov` 排在它们之前，只要套件红着它们就轮不到，而本机也测不了（`frontend/node_modules` 不存在，网络不足以安装）。**其二**，因此 #182 的 TS/Vue 改动在合入时是**明确标注 NOT VERIFIED** 的——现在由 CI 判定为绿（eslint、`vue-tsc`、vitest 三个新增未启用用例、collection、Playwright 全过），这才第一次有了证据；本条记录的顺序很重要：先声明未验证，再由 CI 补上，而不是把未验证说成已验证。
+
+`test-cov` 的完整轨迹（以作业 id 清单而非计数表述）：14（`125045929651`，本成员史上首次执行）→ 9（`125070735018`）→ 5（`41386120435`）→ 3（`41390775162`）→ dev 上 2（`41393936947`：`/reviewed` 契约 + sina e2e）→ 1（`41397694887`，只剩 sina）→ **0**（`41403148134`）。覆盖率始终 88.33%，阈值 84 从未是障碍。
+
+#### 2. 绿的是仪器一致性：账里仍有 14 格 stale-proof
+
+门禁绿与验收之间存在一条硬差距，就在 `docs/quality/acceptance-gate-ratchet.json`：**14 格 / 14 钉**，每一格都是 `ledger_state = proven` 而探针当场读出 **gap**，被属主裁定为「已知红」入账：
+
+```
+AC-4|01, AC-5|03, AC-5|07, AC-8|02, AC-11|04, AC-16|05, AC-16|06, AC-16|07,
+AC-16|08, AC-17|02, AC-17|03, AC-17|05, AC-17|06, AC-17|08
+```
+
+这些格子的性质在 Wave 20 §5 已分类：一部分是纯代码/登记工作（可继续收口），一部分需要活的 MySQL 或新鲜 clean-venv 证据轮（AC-11|04、AC-16|07、AC-5|07、AC-17|06，其中后两格本身带**时效门槛**，过期就红，属可续期证据而非永久收口），其余属属主裁定（AC-5|03、AC-16|05/06 的 9 处上游来源身份字面量、AC-16|08 的免责声明措辞、AC-4|01 按字面拼写判关节）。入账一次红不等于验收一次绿——**迭代 204 的「开发」面至此可以自称 CI 平面全绿，「验收」面没有闭合。**
+
+#### 3. 最后一条红的分诊：parked 的猜测是错的，但它掩盖了一个真的产品限制
+
+`test_sina_fzb_recorded_transport_e2e` 在五次读数里出现两次。上一轮把它 park 成「25s 子进程 vs `lease_ttl=3s`，慢而活的 worker 会被判死，需属主决定」。**这个说法被实测推翻**：父进程在孩子活动期持续续租（`opendata/pipeline/process_executor.py:615-617`、`655-657`），实测 200–223 次心跳、最大间隔 idle 264ms / 72 hogs 时 1008–1329ms，而租约是 3000ms——孩子从未危及租约。
+
+真正无法续租的是**围栏发布提交**：`commit_result` 独占该 worker Engine 的唯一连接（`create_worker_engine` 钉 `pool_size=1`，`opendata/reviewed_worker.py:288-291`）并在提交里重读进入时抓到的到期时间（`opendata/pipeline/run_ledger.py:586`、`601-602`），所以 **`lease_ttl` 单独为那 103 行写入封顶**。实测 `commit_result`：idle 0.74s → 36 hogs 2.25s → 72 hogs 5.05–6.88s，而最后一次续租只比它早 0.32s。72 hogs 时 3s 租约到期，成功转换回滚，而记录失败的 `fail` 转换同样需要活租约（`run_ledger.py:745-759`），于是运行留在 `running`。
+
+#183 的做法是把**测试**预算对齐到同族用例早已测过并采用的数值（60s 子进程 / 60s 租约，`tests/test_sina_fzb_process_job.py:130`、`:907`），不降任何断言、不动产品文件，并且反例非空转：把 `heartbeat` 改成永不续租 → `2 failed`，报 `_LeaseLostError`。复现门槛也要诚实写下：≤0.7× 超订在本机从不失败（serial 7.48/7.71/7.66s、12 hogs 14.45/12.00s、`-n 4` 组合 227 passed），只有 72 hogs 才复现；修复后 72 hogs 十连过（45.41–93.57s），但其中一次在输出结果前失败且未捕获错误码、其后 18 个样本未复现——记为 NOT VERIFIED，不抹掉。
+
+**被这条红掩盖的真实产品限制仍然开放**，且没有被我悄悄选择方案：在足够超订的 runner 上，一次**成功**的发布可能回滚并且无法记录自己的失败，运行卡在 `running`。围栏发布窗口除了 `lease_ttl` 之外不受任何东西封顶，因为它持有唯一连接且写入期间不能心跳，而事后记失败又需要同一条已过期的租约。属主三选一：(1) worker Engine 允许多连接或改用第二条连接续租；(2) 给发布本身设语句级超时并由不需要过期租约的监督者带外记录失败；(3) 把「过期后仍 `running`」当作预期状态，配一条文档化的对账清扫。三条都触及单写者、worker 可杀性、栅栏传播这些本迭代保护的不变量，所以是决定而不是清理。
+
+#### 4. 共同非声明
+
+本轮的绿全部落在 **code/offline 与 CI 平面**：门禁全绿说明仪器之间一致、套件不再失败，**不说明任何数据来自真实源、不说明部署形态可用、更不说明自然周期成立**。上面 14 格 stale-proof 是入账的已知红；AC-5|03 / AC-16|05 / AC-16|06、AC-4|01、AC-16|08、AC-17|07 分母、条款链接语义、fenced 发布续租限制，以及生产 MySQL/部署、影子对账、单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。#182 让页面停止发出无人应答的请求，是把它原本无法工作的事实说清楚，不是把审核运行时上线。
