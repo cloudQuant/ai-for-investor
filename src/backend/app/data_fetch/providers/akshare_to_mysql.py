@@ -9,7 +9,7 @@ import time
 import uuid
 from datetime import date, datetime
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import akshare as ak
 import pandas as pd
@@ -137,24 +137,6 @@ class AkshareToMySql(MysqlBase):
         except Exception as e:
             self.logger.error(f"从Akshare获取数据失败: {e}")
             raise
-
-    if TYPE_CHECKING:
-        # Declared for the type plane only. The base must not grow a runtime `fetch_data`:
-        # the driver resolves a script by `hasattr(instance, "fetch_data")` first and `run`
-        # second, so an inherited no-op would mis-route the 164 scripts that only define
-        # their own `run`.
-        def fetch_data(self, **kwargs: Any) -> pd.DataFrame:
-            """Collection-script entry point: fetch, convert, persist, return the frame."""
-            ...
-
-    def run(self, **kwargs: Any) -> pd.DataFrame:
-        """Standalone entry point; delegates the way the driver invokes a script.
-
-        831 scripts end with ``script = SomeScript(); script.run()`` while no class in their
-        MRO defined ``run`` — the call only worked in the scheduler, which resolves
-        ``fetch_data`` itself. Subclasses that define their own ``run`` keep winning.
-        """
-        return self.fetch_data(**kwargs)
 
     def save_to_mysql(
         self,

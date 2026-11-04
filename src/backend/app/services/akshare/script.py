@@ -233,7 +233,7 @@ class AkshareScriptService:
             if (
                 isinstance(obj, type)
                 and obj.__module__ == module.__name__
-                and ("fetch_data" in obj.__dict__ or "run" in obj.__dict__)  # not inherited
+                and (hasattr(obj, "fetch_data") or hasattr(obj, "run"))
             ):
                 try:
                     return obj()
