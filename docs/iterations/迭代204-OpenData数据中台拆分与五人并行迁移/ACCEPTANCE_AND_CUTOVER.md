@@ -22,6 +22,28 @@
 
 近期可并行准备、但按依赖串联验收的工作见 [SUBAGENT_TASKS.md 当前基线与近期执行矩阵](SUBAGENT_TASKS.md)。核心顺序是：只读刷新实际运行清单和目标身份 → 冻结逐交易所主数据/分页及来源grant合同 → 建立真实源到原始工件/仓/API的受控样本 → 按完整instrument×dataset分母对账head/interior/tail → 评估跨进程预算及旧worker/permit fence → 满足各域门槛后进行自然周期、备份恢复和唯一写者切换。真实数据请求经统一预算，不能因五路并行而重复扩大供应商流量。
 
+## 2026-11-04 基线更正（CI 平面已绿；验收矩阵逐行未动）
+
+**本节只更正事实，不关闭任何验收行。** 上面 Wave 15 段落里「**CI 不是绿色**」那句话到 2026-11-02 已经过期，按本文档惯例保留原句并在此标注更正。
+
+执行时 HEAD：OpenData `dev` = `6db4382f13a42043bb29bd1076cda31459d17e8c`；AFI `dev` = `1fef35a63`（本次更正提交在其后）。两仓工作树干净，本节改动未提交时 dirty hash 由提交本身给出。
+
+**CI 平面（CODE/OFFLINE + CI）现状，逐条带作业号：**
+
+- OpenData `make gate` 在 dev `6db4382f` 上 **整链 PASSED**，作业 `41413362276`：18 个成员依次通过，含此前从未被执行过的 `frontend-lint / frontend-typecheck / frontend-collection / frontend-test / frontend-e2e`（门禁 fail-fast，`test-cov` 排在它们之前）；`Total coverage: 88.33%`；`after-gate shallow=false head_commits=993 all_commits=1046`。`test-cov` 的收口过程以作业 id 清单记录：14（`125045929651`，该成员史上第一次执行）→ 9（`125070735018`）→ 5（`41386120435`）→ 3（`41390775162`）→ dev 上 2（`41393936947`）→ 1（`41397694887`）→ 0。
+- 棘轮现为 **14 格 / 14 钉**：`AC-4|01, AC-5|03, AC-5|07, AC-8|02, AC-11|04, AC-16|05, AC-16|06, AC-16|07, AC-16|08, AC-17|02, AC-17|03, AC-17|05, AC-17|06, AC-17|08`。这些是**台账写 proven 而探针当场读出 gap** 的入账已知红，属于验收面未闭合的清单，不是通过清单。
+- AFI 侧发现并已处理一处真实的门禁绕过：四个 dependabot 升级（`a44cb3346` vue-echarts、`c40a34129` sass-embedded、`5fbd967f5` **eslint 9→10**、`1fef35a63` monaco 0.57）是在 `CI - Quality Checks` 与 `PR Governance` 双红的情况下合入的，红的都是同一个阻塞步骤 `npm_audit_ratchet`（`package-lock.json changed; review audit results and update the baseline intentionally`）。该步骤由 `scripts/ci/baseline_update_guard.py` 刻意设计成只能由人本地带 `ALLOW_BASELINE_UPDATE=1` 完成，所以「合入红灯 PR」既留下了未经审阅的锁文件，又因为它排在 `Frontend - Lint & Type Check` 靠前的位置，把 lint / typecheck / 单元测试 / 构建全部遮蔽——合入本身不证明升级可用。已按该门禁的要求补做审阅（dev 锁 hash `9dd9c879…` → `4856e2f7…`，两种独立读数均为 0 high / 0 critical），并在隔离副本里对合并后的版本跑完此前被遮蔽的链条：`eslint . --max-warnings 0` rc0、`vue-tsc --noEmit` rc0、`vite build` 通过、`check_bundle_size.sh` 全部预算 PASS、icon-a11y PASS。唯一失败的一条是本机测量自身的伪影（该用例派生校验器要读 `frontendRoot/../backend/...`，隔离副本里没有；在真实工作树中它输出 `Verified ai-research-approval-errors/v1: 48 … entries` 并 rc0）。**这一批改只写在 PR #264 里，其 `Frontend - Unit Tests`/构建/e2e/Lighthouse 与后端各腿仍由 CI 判定，本节不称其已通过。**
+
+**流程缺口（需要 owner 决定，非本文档能修）：** 一个刻意设计为人工审阅的阻塞门禁，可以被管理员权限直接合入绕过。可选做法：把 `Frontend - Lint & Type Check` 设为分支保护的必需检查；或要求改动 `package-lock.json` 的 PR 必须同时带基线提交，否则治理检查直接失败。本文档未改动任何 workflow 或保护设置。
+
+**验收矩阵状态：AC01–AC18 全部保持原判定，本节没有把任何一行改为通过。** 明确重申：CI 绿只说明仪器之间一致；AC05 全历史覆盖仍为 `UNKNOWN`（逐交易所分母、退市证券、跨板换码、逐 instrument×dataset 的 head/interior/tail 未完成）；AC09 精确 grant 的排队/读取/保存前复核与吊销生效仍无运行态证据；AC10 真实源逐字段对照对新增路径仍 `NOT_RUN`；AC13 单写者与租约恢复未闭合；AC14 自然周期（小时 48 次、日 7 个周期、周/月各 2/1 次）`NOT_RUN`；AC17 隔离环境恢复与双向 writer 演练 `NOT_RUN`；AC18 「最终只通过 API」`NOT_RUN`。
+
+本轮新查出、且属于本矩阵范围的三个开放事实（记录而非掩盖）：
+
+1. **围栏发布窗口无法续租（AC13）。** 实测：worker Engine 钉 `pool_size=1`，`commit_result` 在同一事务里独占该连接并重读进入时抓到的到期时间，因此 `lease_ttl` 单独为发布写入封顶（idle 0.74s → 36 路负载 2.25s → 72 路 5.05–6.88s，最后一次续租仅早 0.32s）。足够超订时，一次**成功**的发布会回滚，而记录失败同样需要那条已过期租约，运行于是留在 `running`。测试预算已按同族实测值对齐（OpenData #183），产品限制本身未动，需 owner 在「第二条连接续租 / 发布自带语句级超时并带外记失败 / 把过期后 `running` 当预期并配 reconciliation 清扫」之间选择。
+2. **审核运行时按设计尚未装配（AC16/AC18）。** `deploy/afi204-reviewed/README.md` 要求先静态装配 task catalog/engine/dispatcher/worker SPI/role plan，并声明自有 sink 且**停止这些 sink 的旧写入者**；因此 OpenData #182 让后台页显式呈现「审核运行时未装配」而不是发出四个必然 404 的请求。这不构成 AC16 或 AC18 的任何进度。
+3. **`条款链接` 的最低语义未定义（AC09/AC10）。** 权利登记的 `unlinked` 只校验 URL 形状，五行指向站点首页而 §1.2 自己写明这些取自 `website` 字段、不代表已取得或审阅条款——即该格可在若干来源其实没有条款页的情况下读 proven，是假绿风险。另需更正记录：AC-1|08 曾被本文档写成「35 个引用源 0 行、待属主填」，实测为仪器缺陷（表头字面量要求），登记表 35 行齐全，已按实测更正，不属属主数据缺口。
+
 ## 1 验收矩阵
 
 | ID | 验收场景 | 通过标准与所需证据 | 主责与复核 |
