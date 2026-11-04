@@ -51,7 +51,7 @@ class FundAchievementXq(AkshareToMySql):
                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='基金业绩数据表(雪球)';
                             """
 
-    def parse_float(self, value: Any, default: float = None) -> float | None:
+    def parse_float(self, value: Any, default: float | None = None) -> float | None:
         """解析浮点数值"""
         if pd.isna(value) or value in ("---", "", "--", "-", "---%", "--%"):
             return default
@@ -208,7 +208,7 @@ class FundAchievementXq(AkshareToMySql):
 
     def run(
         self,
-        fund_code: str = None,
+        fund_code: str | None = None,
         fund_codes=None,
         limit: int = DEFAULT_FUND_CODE_LIMIT,
     ):

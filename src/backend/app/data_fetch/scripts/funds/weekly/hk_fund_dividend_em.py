@@ -237,7 +237,9 @@ class HkFundDividendEm(AkshareToMySql):
             self.logger.error(f"获取已存在数据ID失败: {e}")
             return set()
 
-    def run(self, fund_codes=None, fund_code: str = None, limit: int = DEFAULT_FUND_CODE_LIMIT):
+    def run(
+        self, fund_codes=None, fund_code: str | None = None, limit: int = DEFAULT_FUND_CODE_LIMIT
+    ):
         """
         执行数据获取和保存
 
