@@ -2184,3 +2184,21 @@ post-fix  每个模式都 = ['partial']，os.replace(partial, marker) True ×5
 AC-5|03、AC-11|04、AC-16|05、AC-16|06、AC-16|08（待 #195 重钉后消失）、AC-17|03、AC-17|06。
 dev 侧的复测作业 `41936293992`、#195 的 sync dispatch 作业 `41936345046`、#194 与 AFI #270 的门禁作业
 在写这一节时仍在跑；本波不把在跑的作业写成已通过，也不把任何 PR 合并本身当成验收面闭合。
+
+#### 7. AC01 脚本半区刷新：现行分母是 1057，不是 1066，且有 9 行无源映射（CODE/OFFLINE，本机清点）
+
+顺着采集脚本这条线把 AC01 要求的「带环境身份/采集时间的清单 + 双向 anti-join」在脚本半区做了一遍现行刷新，
+结论与九条异常行都记在 [INVENTORY_AUDIT_20261105.md](INVENTORY_AUDIT_20261105.md)。要点：
+
+* 分母：`app/data_fetch/scripts/` 下 tracked `.py` = **1108**，其中非 `__init__` = **1057**，未跟踪 0。
+  `INVENTORY.md:11` 的「1,066」是 CSV 行数当文件数，差的正是下面 9 行。
+* 正查（清单→树）：1066 行里 9 行在树里不存在；对这 9 行又做了三重检验——
+  git 历史既无 `--diff-filter=A` 也无 `--diff-filter=D` 记录（从未入库）、其 `source_sha256`
+  不匹配全仓任何 `.py` 的内容哈希、在 `opendata` 工作树按文件名也是 0 命中。
+  即：**这 9 行带着哈希，但没有任何可复核的来源**。其中 2 行 `static_role=helper_review_only`、
+  7 行 `entrypoint_run` 且 `route=PENDING_PROVIDER_MAPPING`。
+* 反查（树→清单）：1057 个非 `__init__` 脚本全部在 CSV 内，未列 0 条；51 个 `__init__.py` 按 CSV 口径不计。
+* 判定：脚本半区可称「已刷新」，不可称「已闭合」——`无未解释项` 还要求说清这 9 行从哪来，
+  本会话拿不出证据归类，故交属主裁定，且 CSV 自此不得被引用为「1,066 个脚本已有迁移映射」的依据。
+  AC11 的分母自此按 1057 计。AC01 另一半（实际 DB 任务含 inactive、systemd/cron/worker、表、消费者）
+  本次**未刷新**——需要只读连库，而运行库在本迭代被明确约束为不可触碰，故 AC01 整体仍是 `NOT_PROVEN`。
