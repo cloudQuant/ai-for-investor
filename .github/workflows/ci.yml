@@ -367,13 +367,22 @@ jobs:
         id: cache-backend-venv-lint
         with:
           path: src/backend/.venv
-          key: venv-lint-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
+          key: venv-lint-v2-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
           restore-keys: |
-            venv-lint-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+            venv-lint-v2-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
 
       - name: Install dependencies
-        if: steps.cache-backend-venv-lint.outputs.cache-hit != 'true'
         run: |
+          # Same stale-interpreter hazard as the backend-test leg: the cached
+          # .venv's console scripts keep an absolute shebang into the previous
+          # tool-cache path, so after a runner-image patch bump a cache hit
+          # restores a venv whose ruff/mypy cannot execute and the leg fails as
+          # an environment error rather than a lint finding.
+          if .venv/bin/ruff --version >/dev/null 2>&1 && .venv/bin/mypy --version >/dev/null 2>&1; then
+            echo "cached virtualenv is usable; skipping install"
+            exit 0
+          fi
+          rm -rf .venv
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           # Install from the pinned dev lock (same resolution as the
@@ -591,13 +600,26 @@ jobs:
           path: src/backend/.venv
           # v3: the install recipe changed (every leg now installs the lock), so a
           # v2 cache would be restored and skip the install step entirely.
-          key: venv-test-v3-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
+          key: venv-test-v4-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('src/backend/pyproject.toml', 'config/requirements-dev.lock') }}
           restore-keys: |
-            venv-test-v3-${{ runner.os }}-py${{ matrix.python-version }}-
+            venv-test-v4-${{ runner.os }}-py${{ matrix.python-version }}-
 
       - name: Install dependencies
-        if: steps.cache-backend-venv-test.outputs.cache-hit != 'true'
         run: |
+          # A restored .venv is only reusable if its interpreter still resolves.
+          # The venv stores bin/python as a symlink into setup-python's tool cache
+          # and every console script (pytest/ruff/mypy) carries that absolute path
+          # in its shebang, so when the runner image moves the patch version
+          # (3.12.12 -> 3.12.16) a cache *hit* hands back a venv that cannot
+          # execute: the job dies with
+          # `.venv/bin/pytest: cannot execute: required file not found`, exit 127,
+          # and reports it as a test failure. Probe the restored venv and rebuild
+          # when it is unusable, so a cache hit can never mask a leg.
+          if .venv/bin/pytest --version >/dev/null 2>&1; then
+            echo "cached virtualenv is usable; skipping install"
+            exit 0
+          fi
+          rm -rf .venv
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           # Every interpreter installs the same lock.  The non-canonical legs used
