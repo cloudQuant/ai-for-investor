@@ -1999,3 +1999,81 @@ VERDICT AC-16|07: proven（本机读数；入账仍要等 CI 的 --sync-ratchet 
 「窗口本身是实测绿的……缺的是留档正文的 query_module_sha 和当下的查询层代码对不上」）：生产 MySQL/部署形态、影子对账、单写者切换、
 自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计、报告门禁生产适配器、AC-11\|04 的活分区表 EXPLAIN、
 AC-17\|06 的当次 coverage 归档。要关这些，需要属主提供部署与日历时间，而不是更多代码。
+
+### Wave 25：把「还剩 8 钉」逐项变成可判定的三类：环境、属主裁定、仪器缺陷
+
+Wave 24 结束时账上是 8 格 / 8 钉。本轮不猜它们属于哪一类——逐格读出判据要求的每个面、跑一次单格度量、
+再用能落地的改动去验证归类。三条 PR 在跑（#191 已合入 `58e14c54`，#192、#193 待门禁）。
+
+#### 1. AC-17|05 的最后一格红是**登记缺项**，不是政策分歧（已改，PR #192）
+
+#191 把上游检出送进 CI 之后，这一格只剩一句自陈：三处人工改动登记 `upstream.lock` 10 条 /
+`THIRD_PARTY_NOTICES.md` 9 条 / `port_module.MANUAL_EDITS` 9 条，不一致 1 条。对三本账做集合运算，
+差集恰好是 `__init__.py` 一行。它不是「要不要算人工改动」的分歧：`upstream.lock` 早已写
+`manual_edits = true` 并带上 `LAZY_VENDOR_FACADE_MANUAL_EDIT_REASON`，
+`migrate_provider_layout.py:982-984` 在生成时就是这么声明的，而
+`docs/evidence/C74/README.md` + `ac2-case-ledger.json`（`360c61dd`，2026-10-14）已经把生成式惰性门面
+判为「可登记的偏离」。缺的是两本账没同步。
+
+改法只登记、不改行为：`MANUAL_EDITS` 加一条 `transforms=()` 的条目（`apply_manual_edits` 遍历 transforms，
+空元组不可能重写字节；根包在 `report_port.py:266`、`port_module.py:798` 又都在 `port_source` 之前被特判），
+`THIRD_PARTY_NOTICES.md` 补第三小节并把「分两类」改成「分三类」。实测它既无效又有效：
+重放仍 `327 files, 0 pending TODOs`、渲染与归档 `docs/port-report.md` 逐字节一致，
+而 `--item 'AC-17|05'` 从 gap 变 **proven**。
+反向方案（把锁里的 `manual_edits` 改成 false）被证据否决：它会与 `report_port._registration_todos`、
+`tests/test_port_module.py:438-446`、AC2-04 的签名保真面（`ported_signature_fidelity.py:230`）以及
+`provider_source_review_evidence_build.py:300` 对根文件的描述相互矛盾。
+
+#### 2. AC-17|06 的 11 条红里，**8 条是仪器键解析缺陷**（已改，PR #193），剩下 3 类才是要人决定的
+
+`_cov_relative` 把归档报告里的 `<source>`（打标机器的绝对路径）拿去 `relative_to(root)`，
+抛 `ValueError` 就退回 Cobertura 原始名。于是换一台机器读同一份归档：报告侧键是 `pipeline/x.py`，
+A2 侧是 `opendata/pipeline/x.py`，两边永远连不上，被判的总体静默变成空集——
+「总体为空然后 0/0」正是判据自己警告的那种假红。同一份归档、同一枚戳记，改前改后：
+
+```
+联接命中 0 → 290    解析起作用 no → yes
+A2 新代码 0.00% / 0 文件 → 89.85% / 290 文件（门 85%）
+戳记自合 0/5 → 5/5   分总体 2/8 → 8/8   点名根空总体 2 → 0   红灯理由 11 条 → 4 条
+```
+
+回退分支只在文件真的存在时才返回连接结果，连不上仍旧交回原始名，所以这一面仍是失败关闭方向；阈值与面名没动。
+**这一格照旧判红**，且红得更有意义：归档报告只覆盖 2026-10-10 的 320 个文件而今天 A2∩`opendata` 有 710 个
+（要一次真的 `make test-cov` + 重新盖章）、戳记源码树与 HEAD 不同树（每改一次 `opendata/` 就会重新老化，
+是滚动续期）、CI 在读这一格时盘上没有 `coverage.xml`。第三条不是「再跑一次」能解决的：
+`Makefile:223` 的 `acceptance-probe-check` 排在 `:225` 的 `test-cov` 之前，
+而 `coverage.xml` 只由 `test-cov` 写出且被 `.gitignore:49` 忽略，全新 runner 上它必然不存在——
+要么改门禁成员次序（改变门禁形状，属主决定），要么承认「归档与 HEAD 同树即足够」。
+另有一条我一并记下而没有动手：`COV_STAMP_DIR` 硬编码 `docs/evidence/C85`（探针 `:14401`），
+而 `coverage_archive_stamp.py:120-160` 是**就地覆盖**归档轮次——「续期」目前等于改写一轮历史证据，
+这该由属主裁定，我不替它选。
+
+#### 3. AC-17|03 的红是 `orphan_py`，而它是**属主裁定**，不是可以顺手改的数（不动）
+
+单格度量里判据其余各半全绿（`ratchet` exit 0 / face none、`ruff_selfdev` 129 ≤ 148、`mypy_selfdev` 0、
+`bandit_selfdev` 0、平面可见性 1616/1616 与 937/937、触碰即达标 1539↔1539），唯一红灯是
+「全体 tracked `.py` = 2291，既不在被测根下也不在 A2 集里的 = 334」。我用离线脚本复现了这个数：
+**334 个全部在 `docs/evidence/` 下**（Wave 21 的猜测方向正确，数字也对，不是仪器多数）。
+`a2_check.py:83 ARCHIVE_PREFIXES=("docs/evidence/",)` 旁边就写着 *Owner ruling 2026-10-22 (option C)*，
+所以「排除」本身是有据的裁定。三条看似可走的路都被证据挡住：按名字排除正是判据禁止的事；
+把 `docs/evidence` 计入 A2 要先量代价——该子树 ruff 33 条 / bandit 43 条 / 4 个文件需要 format，
+`129+33=162 > 148` 快照上限，会把债务面直接判红并触发一次「抬高」；改成 `SELFDEV_PATHS` 加根则撞上
+`ratchet._scope_changes` 的「package added to scope」保护，且从此每写一轮证据都要交税。
+现成的替代登记（`docs/quality/immutable-evidence.json`，343 个 `active_entrypoints`）覆盖这 334 个里的
+**0 个**——那些路径根本不在里面。所以这一格要的是属主一句话：一次性归档仪器属不属于静态债务平面。
+
+顺带记下一条仪器缺陷而我**没有**顺手修：`touched_dropped_selfdev` 是恒真的——`touched` 与 `a2_files`
+取自同一个 `changed_files(baseline)`（`:3267-3268`、`:3228`），因此它按构造看不见任何被前缀排除的文件。
+把它改成能看见，第一次读数就会把上面那 334 个全部报成「被排除的自研文件」，
+直接与 2026-10-22 的裁定相撞。修它之前必须先有属主对 `orphan_py` 的裁定，否则就是把仪器改成
+「要么假绿、要么必红」的形状——这属于决定，不属于清理。
+
+#### 4. 本轮之后剩下的格与它们的性质
+
+入账之后账本预期是 7 钉（AC-17|05 由 #192 释放）。逐项：
+**环境类** AC-11|04（活分区表 EXPLAIN，本机已证不可产出）、AC-17|06（要 `test-cov` 重跑 + 盖章 + 次序决定）；
+**属主裁定类** AC-5|03 / AC-16|05 / AC-16|06（同一件事：`1ba6d7d9` 把 9 个新串塞进 baseline 而未裁定）、
+AC-16|08（README 与判据字面不一致的措辞采纳哪一句）、AC-17|03（本轮判定）；
+**时效类** AC-5|07（24 小时，会再红，属可续期证据）。
+这七格没有一格是「再写点产品代码」就能关的——这是本轮最重要的结论，也据此把计划里
+「开发完成 ⇒ 验收完成」的隐含推论正式拆开。
