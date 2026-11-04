@@ -4,10 +4,12 @@ import asyncio
 import hashlib
 import json
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from importlib import import_module
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import database
@@ -20,7 +22,10 @@ from app.models.ai_research_v2 import (
     ResearchHoldoutEvaluationCommand,
     ResearchHoldoutExecution,
 )
+from app.services.research import holdout_claim as holdout_claim_module
+from app.services.research import holdout_finalize as holdout_finalize_module
 from app.services.research.canonical import canonical_json, content_hash
+from app.services.research.database_clock import database_utc_now
 from app.services.research.evidence_package import EvidencePackageService
 from app.services.research.holdout_claim import (
     HoldoutClaimService,
@@ -467,6 +472,7 @@ async def test_cross_worker_crash_after_prepare_waits_for_expiry_and_proves_not_
 async def test_cross_worker_crash_after_checkpoint_recovers_without_redispatch(
     client,
     auth_user,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context, command, runtime = await _queued_context(client, auth_user, "worker-checkpoint-crash")
     executor = _Executor(await _trusted_passing_measurements(context, runtime=runtime))
@@ -476,14 +482,58 @@ async def test_cross_worker_crash_after_checkpoint_recovers_without_redispatch(
         executor,
         claim_service=HoldoutClaimService(
             dataset_registry=_dataset_registry(context),
-            lease_seconds=1,
+            lease_seconds=300,
         ),
         finalize_service=_CrashAfterCheckpointFinalizer(),
     )
 
+    # Crash arm: the lease is the production default 300 s so it cannot expire
+    # inside the dispatch-to-checkpoint segment.  With the old 1 s lease a
+    # loaded runner could let the expiry land before the checkpoint commit;
+    # the except-ValueError arm of holdout_worker._checkpoint_finalize_package
+    # (HOLDOUT_FINALIZE_LEASE_EXPIRED/STALE) then settled the run PASSED via
+    # observed recovery and the simulated crash never happened (same
+    # wall-clock-lease fragility documented in
+    # tests/asset_research/test_task_runner.py:407-410).  FAILED here is now a
+    # pure statement: a worker that crashes after checkpointing is recorded
+    # FAILED and keeps its checkpoint.
     assert (await crashed.run_once(limit=1))[0].status == "FAILED"
+    assert executor.execute_calls == 1
     assert await _count(ResearchHoldoutArtifactBinding) == 1
-    await asyncio.sleep(1.1)
+
+    # Recovery arm: expire the lease deterministically instead of relying on
+    # asyncio.sleep(1.1) to outlast a 1 s lease.  Two product invariants have
+    # to hold together, so this reuses the codebase's own precedent
+    # (tests/test_ai_research_evidence_package_command_graph.py::
+    # test_new_worker_recovers_expired_lease_then_reconciles_evidence_package):
+    # the command row gets a database-computed past expiry because SQL fences
+    # such as holdout_worker._lease_is_active compare against the real
+    # DatabaseUtcNow(), while the claim/finalize services' database clock is
+    # advanced one second past the expiry the checkpoint recorded immutably in
+    # the binding, so the LEASE_EXPIRED_RECONCILING audit lands inside the
+    # evidence-package audit window (evidence_package._audit_time_is_valid)
+    # that the sleep used to satisfy only by waiting.
+    async with database.async_session_maker() as session:
+        stored = await session.get(ResearchHoldoutEvaluationCommand, command["id"])
+        binding = await session.scalar(
+            select(ResearchHoldoutArtifactBinding).where(
+                ResearchHoldoutArtifactBinding.command_id == command["id"]
+            )
+        )
+        assert stored is not None and binding is not None
+        recorded_expiry = binding.lease_expires_at
+        assert recorded_expiry is not None
+        if recorded_expiry.tzinfo is None or recorded_expiry.utcoffset() is None:
+            recorded_expiry = recorded_expiry.replace(tzinfo=timezone.utc)
+        recovery_time = recorded_expiry + timedelta(seconds=1)
+        stored.lease_expires_at = await database_utc_now(session) - timedelta(seconds=1)
+        await session.commit()
+
+    async def database_time_after_expiry(_session: AsyncSession) -> datetime:
+        return recovery_time
+
+    monkeypatch.setattr(holdout_claim_module, "database_utc_now", database_time_after_expiry)
+    monkeypatch.setattr(holdout_finalize_module, "database_utc_now", database_time_after_expiry)
     recovery = _worker(
         context,
         replace(runtime, worker_identity="checkpoint-recovery-worker"),
@@ -495,6 +545,7 @@ async def test_cross_worker_crash_after_checkpoint_recovers_without_redispatch(
     assert [(item.status, item.error_code) for item in completed] == [("PASSED", None)]
     assert executor.execute_calls == 1
     assert await _count(ResearchEvidencePackage) == 1
+    assert await _count(ResearchHoldoutArtifactBinding) == 1
 
 
 @pytest.mark.asyncio
