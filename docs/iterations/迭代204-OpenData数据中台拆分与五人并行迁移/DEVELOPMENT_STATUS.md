@@ -1767,3 +1767,235 @@ AC-16|08, AC-17|02, AC-17|03, AC-17|05, AC-17|06, AC-17|08
 #### 4. 共同非声明
 
 本轮的绿全部落在 **code/offline 与 CI 平面**：门禁全绿说明仪器之间一致、套件不再失败，**不说明任何数据来自真实源、不说明部署形态可用、更不说明自然周期成立**。上面 14 格 stale-proof 是入账的已知红；AC-5|03 / AC-16|05 / AC-16|06、AC-4|01、AC-16|08、AC-17|07 分母、条款链接语义、fenced 发布续租限制，以及生产 MySQL/部署、影子对账、单写者切换、自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计与报告门禁生产适配器**依旧未闭合**。#182 让页面停止发出无人应答的请求，是把它原本无法工作的事实说清楚，不是把审核运行时上线。
+
+### Wave 24：六格由 CI 度量入账（14 钉 → 8 钉），AC-17|08 的「0」先被量化再被相信
+
+#### 1. 入账：14 钉 → 10 钉，读数来自 CI 自己的产物
+
+OpenData `dev` 现在读 **10 items / 10 pins**（`5fc3615f`，PR #185）。入账依据是 dispatch 作业
+`41783225848`（head `e9a716b7`）产出的 `--sync-ratchet` 产物，逐字为：
+
+```
+CI items: 10 pins: 10
+tree items: 14 pins: 14
+closed vs tree: ['AC-17|02', 'AC-4|01', 'AC-5|07', 'AC-8|02']
+new vs tree: []
+other family-hash movement: {}
+```
+
+也就是说这四格之外**没有任何一格的族哈希动过**，入账不是「顺手多关了几格」。合入后 PR 门禁作业
+`41787031996` 与 dev push 作业分别 PASSED，这条记录写的是：绿的是仪器之间一致。
+
+四格各自的性质必须分开写，不能合并成「修好了」：
+
+| 格 | 真实原因 | 平面 | 会不会再红 |
+| --- | --- | --- | --- |
+| AC-4\|01 | 判据按字面量 `with self._semaphore_for(host)` 找闸门，而代码在 `7ee1ef25` 后改成先绑定再在调用处进入（`http_client.py:1868/1887` 绑定，`:1107/:1147` 进入） | CODE/OFFLINE | 否（改为 AST 判别，见下） |
+| AC-8\|02 | `lifespan` 在 `1ee7be9c` 变成委派包装，守卫本体仍在 `_existing_lifespan` | CODE/OFFLINE | 否 |
+| AC-5\|07 | 24 小时时效窗过期；C89 用同一棵树重扫（`source_sha256` 与归档逐字相同）续期 | CODE/OFFLINE 的**时效证据** | **会**（可续期，不是永久收口） |
+| AC-17\|02 | 42 处 `# nosec` 只写规则号不写理由，另有 3 处豁免 suppressing nothing | CODE/OFFLINE | 否 |
+
+AC-4\|01 的新读法不是把判据放宽，而是把它写得更严：`per_host_semaphore_entered()` 用 AST 判断「有没有真的进入」，
+允许直接 `with`、同函数内绑定后进入、以及经一层 `@contextmanager` 委托（该委托必须 acquire→yield→finally
+release）；**只绑定不进入仍然判红**。反例实测：赋值不进入→否；`._semaphore_for` 从不调用→否；回到
+`7ee1ef25^` 的旧写法→是；把当前树改回旧写法→是。AC-8\|02 同样只跟进**一条**可静态解析的 `lifespan` 委派，
+且旗标表达式逐字节相同，所以「委派里悄悄丢掉检查」照样判红。两格都没有动阈值、没有动判据语义。
+
+#### 2. AC-17|08：先把「0」的覆盖面量出来，再决定能不能入账
+
+这一格要求 `docs/evidence/C44/shell_audit.py` 的四个面同时为 0。本轮把可数的一族清掉了，但**没有**在它读 0
+之后就入账——原因见 §3。
+
+- PR #184（合入 `ba1e41b8`）：定义抄写 46 → 19，恒真断言 1 → 0。
+- PR #186（`d6b64b2e`，在跑）：定义抄写 19 → **0**。我在rebase 后的树上独立复算，读的是脚本自己打的
+  摘要行而不是 `HIT` 计数（该脚本在摘要之前还会为反例打印若干 `HIT`，用 grep 数会多数）：
+
+  ```
+  shell_count[self-reference] = 11      shell_count[vacuous-assert] = 0
+  shell_count[constant-shell] = 0       shell_count[source-form-check] = 0
+  files_scanned = 670                   VERDICT shells=found t1=met exit=1
+  ```
+
+  19 条替换都是「让断言能因产品回归而变红」：页/字节/窗口上限改判边界行为（4,000 条翻页通过、4,001 条
+  在第 1 次请求就抛 `FMP_PROVIDER_LIMIT_VIOLATION`；3,650 天可、3,651 拒），身份串改判注册表解析结果，
+  凭据环境变量名改判真正发到线上的 `Authorization` 头。五处反例在 /tmp 的副本里改动产物字节后确实变红。
+- 自指一族的问题在**判据本身**：`self_reference_findings()` 扫整条 assert，只要同句里既出现本地计算 helper
+  又出现生产符号就开火。它既产假阳性（现存 11 条全是「用 builder 造输入 + 写死的期望」这种形状），又漏掉
+  真正危险的 `expected = helper(...)` 先赋值再比较，以及只经属性链触到生产的断言。
+  改成按 `ast.Compare` 逐操作数判定后：11 → 0，同时**新抓到 6 条旧规则看不见的真自指**
+  （`tests/test_ecb_series_parser.py:192/238/239/307` 的 `_key` 重新拼了生产侧的 series-key 格式；
+  `tests/test_source_grant_provisioning.py:564-565` 的 `_datetime_to_epoch_us` 重跑了生产侧的换算），
+  这 6 条已按独立期望重写。反例表在 `docs/evidence/C44/README.md` §十 +
+  `tests/test_shell_audit_self_reference.py`（17 passed）。
+
+#### 3. 为什么 AC-17|08 现在还不能入账：把「盲区」变成可数的量
+
+规则读 0 之后，我没有直接派 sync 作业入账，而是先用一次性分支把四类被规则刻意忽略的形状量了出来
+（opt-in 旗标，默认输出与出货版逐字节相同）：
+
+| 形状 | 命中 | 深读样本 | 其中真自指 | 主要构成 |
+| --- | --- | --- | --- | --- |
+| A 期望值取自本地重算对象的成员/下标 | 14（2 文件） | 6 | **0/6** | 读假客户端的 `calls[0]["url"]`、读 sha 钉住的录制夹具 |
+| B 期望值经生产常量/算术 | 38（25 文件） | 10 | **2/10** | 合法差分（`fencing_token + 1`、`pytest.approx(close * 0.8)`）；真问题见下 |
+| C 经 fixture/conftest 间接可达 | 0 | 3（放宽探针） | 0/3 | `set(ameribor_fixture)` 这类是输入 |
+| D 无比较的断言 | 142 | 8 | **0/8** | 70 条是 `isinstance` 契约检查，28 条是真值判断 |
+
+结论不是「盲区很大所以放弃」，也不是「盲区存在所以读 0 算数」：**194 条里只有 1–2 条是真自指**，
+其中危险的形状是「期望值由被测试对象自己的方法算出来」——
+`tests/test_c85_runner.py:160` 的 `pipeline.invalidated == [pipeline._pipeline_id(WINDOW)] * 2`，
+以及 `tests/test_run_ledger.py:360/409` 把租约政策原样复述成 `NOW + timedelta(seconds=12)`。
+这类断言在生产算法改动时**不可能变红**，正是 AC-17|08 要抓的空壳，所以我把它单独提升为默认判据的一臂，
+并修掉被它点到的用例；A/C/D 三臂不提升——把它们变成默认只会把「isinstance 契约」和「token+1 顺序检查」
+这两类有用断言逼成删除，属于用仪器把人逼向假绿。
+
+**因此本波明确不入账 AC-17|08**：登记里这一格继续留在 10 钉内，等「生产自证期望」这一臂落地、
+且 #186 与规则分支都在 `dev` 上之后再由 CI 度量决定。把四个面读 0 当成验收完成，就是我这一轮要防的那类假绿。
+
+#### 4. 对迭代计划的一次修正：验收面需要的是环境，不是更多工时
+
+我用只读方式盘了本机能不能产出这些证据，结论直接写进计划：
+
+- 本机 MySQL 跑在 127.0.0.1:**13306**（`opendata_ci`）与 **13307**（`opendata`、`opendata_data`、
+  `codex_iter191_local`），**没有任何分区表，也没有任何 `dwd*` 表**；不存在 `akshare_data` /
+  `ai_for_investor` 这两个 AFI 运行时库。仓库里也没有 `OPENDATA_*_MYSQL_DSN` 这类变量，DSN 由
+  `MYSQL_*` / `DATA_MYSQL_*`（默认 localhost:3306）在 `opendata/core/config.py` 组装。
+- 于是 **AC-11|04 在本机不可能续期**：它要的 `window-pruning-explain.txt` 必须带
+  `query_module_sha == sha256(opendata/pipeline/query.py)[:12]`（归档钉 `2f73f2bf9d44`，当前
+  `e3c7ecf301dd`），而那条 EXPLAIN 问的是活的分区表。同理，影子对账、单写者切换、自然周期、
+  全 A 权威域、逐标的完整历史、授权签发/吊销审计、报告门禁生产适配器**都不在这台机器能证明的范围里**。
+  这些不是「再努力一点」的差距，是平面缺失：要关它们需要一次真实部署与足够长的日历。
+- **AC-17|06 另有一道结构性障碍**：`COV_STAMP_DIR` 被硬编码成 `docs/evidence/C85`，而 `make gate` 把
+  `acceptance-probe-check` 排在 `test-cov` **之前**，所以 CI 在读这一格时盘上根本没有当次
+  `coverage.xml`——要么改 gate 内成员次序（会改变门禁形状，属主决定），要么让探针承认「归档与 HEAD 同树」
+  即足够。阈值我没有动。
+- **AC-17\|05 的红九成是环境，不是一切都还没做**：`port_replay()`（探针 `:3287`）调
+  `scripts/codemod/report_port.py` 时不传 `--upstream-repo`，于是回退到
+  `port_module.py:58` 的 `REPO_ROOT.parent / "akshare"` —— 维护者笔记本旁的一个检出，CI 永远没有。
+  `collect_drift` 又不调 `verify_upstream`，缺上游不会大声失败，而是每条锁记录变成一句
+  「upstream file … disappeared upstream」：同一格在笔记本上是 0 待办 / 327 行逐字一致，在 CI 上是
+  `report_exit 1 / rows_total 0 / render_matches_archive no`。PR #191 按 OpenBB 已有的路子加同一条缝
+  `OPENDATA_AKSHARE_UPSTREAM_PATH`（只在 `port_module` 一处解析，四个调用者共享），workflow 从
+  `upstream.lock` 自己读 URL 与 commit 并断言抓到的 HEAD 等于锁内 commit。本机用
+  `git archive c4f6a631…` 只读取出锁钉的树实测：327 files / 0 TODOs / 渲染与归档
+  `docs/port-report.md` 逐字节一致，重放面全绿。
+  **但这一格仍判 gap，只剩一条**：`upstream.lock` 记 10 条人工改动，而 `THIRD_PARTY_NOTICES.md` 与
+  `port_module.MANUAL_EDITS` 各 9 条，差的正是 `_vendor/akshare/__init__.py`（锁里的理由写的是
+  「Generated lazy flat facade …」）。两种改法都能让数字一致，但它们断言的事实不同——「补登记」等于说它是
+  一次人工偏离，「取消 manual_edits 标记」等于说它是 codemod 自己生成的必然产物。这是属主对三处登记语义的
+  裁定，本轮一处登记文件都没动，也没有入账。
+
+- 本机**可以**产出的是 AC-16|07：两个依赖面恰为 `.[web,dev]` 的干净 venv，在没有源码包的验证目录里跑
+  `pytest tests -m 'integration and not e2e' --no-cov -o addopts= -v`，归档 `ARCHIVE_ROUND` 与目录名一致。
+  这一条在写 C151 轮次（进行中）。
+
+对计划的改法：把「迭代 204 开发完成」与「迭代 204 验收完成」正式拆成两个判据——前者等于 CI 平面全绿 +
+棘轮里可代码收口的格子清空；后者需要 DEPLOYMENT / NATURAL_CYCLE 证据，属主必须先给环境。
+
+#### 4b. CI 平面上冒出来的两条负载敏感红，都是仪器/框架问题，但其中一条藏着产品缺陷
+
+门禁转绿不是终点，同一条链上又出现两处「只在跑得慢的时候红」：
+
+1. `test_partial_ipc_frame_does_not_block_parent_deadline_or_cleanup` 报
+   `ValueError: invalid literal for int() with base 10: ''`（作业 `41800821881`，35,437 项里 1 项）。
+   根因在测试自己的同步方式：`_ReadinessClock` 用 `marker.exists()` 认定 worker 已起，而子进程用
+   `Path.write_text()` 发布 pid —— 该调用先 `O_TRUNC` 打开再写，中间存在「文件已存在但为空」的窗口。
+   改成先写同目录兄弟文件再 `os.replace()` 原子替换，窗口消失。反例可复现：注入 20ms 延迟后，
+   旧写法 400 轮里 **398 轮**能被读到且不可解析，新写法 **0/400**（`/tmp/marker_race_demo.py`）。
+   #189 合入 `f7108c61`，未动任何断言、超时或产物代码。
+2. `frontend-e2e` 里 `test_real_browser_download_chain_against_owned_mysql` 报
+   `assert set() == {91, 92, 93, 94, 95}`（dev 作业 `41798566273`）。读代码定位到两件事：
+   **其一**，用例在 `:1500` 先断言录制到的来源调用，之后才在 `:1728/:1764` 看 Playwright 退出码，
+   而 trace 由 `afterEach` 无条件写出，所以任何浏览器/基础设施中断都会伪装成「产品没打到来源层」——
+   这是判据掩盖，#190 把它改成先验基础设施健康（非零退出必须命中既有的
+   `AC21 natural UI navigation failed` 标记，否则按基础设施失败报出退出码与脱敏输出），并要求正好 5 个 202。
+   **其二**，路由在 `opendata/api/data.py:149` 用 `bg = asyncio.create_task(_bg_download())` 把任务只绑在
+   函数局部变量上，而 CPython 明确说明事件循环对 task 只持**弱引用**——被回收就是「发了 202 但永远不干活」。
+   #190 按仓库自己的既有做法（`api/pipeline.py:63` 的 `_TASKS` 注册表 + `services/scheduler.py:456-466` 的
+   done-callback 释放）补上强引用，仍 202、仍同状态码、请求路径不新增 await。
+
+两条都必须写清各自没有证明什么：#189 的反例是本机注入延迟得到的，不是 CI 现场；#190 的新用例断言的是
+「注册表在飞行中持引用、完成后释放」这个不变式，而本机解释器（3.11/3.12）实测**不会**在 ready queue 里丢任务
+（2,000 个无引用 sleep task 全部跑完），所以它不是丢任务的复现。`41798566273` 究竟是弱引用回收还是基础设施中断，
+我没有证据去断言——区分两者的档案在那次作业的证据目录里，本轮只把「不能再被伪装」这件事做完。#190 的门禁作业
+`41815883011` 全 18 成员绿，含 `frontend-e2e`。
+
+#### 5. AFI 侧本轮状态（平面：CODE/OFFLINE + CI）
+
+#264 已合入 `40e6808a`：npm audit 基线在四个依赖 bump 合入后重新钉（`lockfile_sha256`
+`9dd9c879…` → `4856e2f7…`，high/critical 两边都是 0/0），并且给 venv 缓存加了自愈——
+`.venv/bin/pytest --version` 探测失败就整棵重建，因为还原出来的解释器是指向 setup-python 缓存的符号链接，
+runner 小版本一动就会 `exit 127`，而 `actions/cache` 从不覆盖已存在的键。前端链（eslint / vue-tsc / vitest /
+build / bundle 预算）在隔离的 `npm ci` 副本里跑通并留档：vitest 2176/2177，唯一那条失败的用例被证明是副本
+缺 `../backend` 路径，不是产品回归。
+
+#265（纯文档，更正验收基线）遇到一次与文档无关的红：`Backend - Unit Tests (py3.11)` 里
+`tests/test_ai_research_holdout_worker.py::test_cross_worker_crash_after_checkpoint_recovers_without_redispatch`
+在 42 分钟的 xdist 全量里失败于 `assert 'PASSED' == 'FAILED'`，同一 run 的 py3.12 腿通过，本机单跑该文件
+13 passed（3.13、serial、`--no-cov`）。#265 重跑后同一 head 变绿并合入 `0080d329`；但**没有把它写成「已修」**，
+而是把根因读清楚了：
+
+- 该用例唯一的 PASSED 通路是 `holdout_worker.py:359-385` 的 `except ValueError` 分支——它只接受
+  `HOLDOUT_FINALIZE_LEASE_EXPIRED` / `_STALE`（由 `holdout_finalize.py:1993-1994` 与 `_second_authority_fence`
+  2056/2065 抛出），随后走 observed-recovery 就地结算成 PASSED；也就是说**模拟崩溃根本没发生**，
+  于是没有失败可记。
+- 触发条件被算出来了：1 秒租约在「派发 CAS 与 checkpoint 提交之间」到期。实测该段只要 ~20 ms，
+  所以必须约 50 倍膨胀才会命中；纯加负载复现失败（5 次 `-n 4` 全绿、14 hogs + `--cov` 15 次全绿），
+  而注入 `_StallAfterResultJournal(1.05)` 后**逐次**复现出 CI 的那条签名。
+- 污染被结构排除：`tests/conftest.py:25,64-70` 是进程内 in-memory SQLite + StaticPool，逐用例重建。
+- 修法不是加大超时：把崩溃臂与恢复臂解耦（崩溃臂用不会到期的租约，恢复臂用**确定性**把租约置为过去，
+  走数据库时间而不是 `sleep(1.1)`），四条断言一条不减。同族脆弱性在本仓早有记录，见
+  `tests/asset_research/test_task_runner.py:407-410` 的注释。
+- 分诊同时暴露一条**必须交给属主**的产品事实：`holdout_worker.py:359-385` 允许一个已经丢租约的 worker
+  在同一次 `run_once` 内自己结算运行（由数据库时间 CAS 与 generation bump 双重栅栏：
+  `holdout_finalize.py:1560/1588`、`holdout_finalize.py:1507` + `holdout_claim.py:585`，所以不会二次结算）。
+  如果本迭代保护的不变量是「丢租约的 worker 不得结算」，那这是一处被代码接受的例外，旧用例看不见它。
+  本轮把它写进 §7 的决定队列，不代替属主判定。
+
+#### 6. AC-16|07 的干净环境证据已经真的重跑过（待入账）
+
+C65 那一轮的留档只点到 9 个模块，而 `integration` 标记集现在是 10 个，所以 `archive_blind=1` 把这一格判红——
+这是**刻意的棘轮**：扩大标记集必须重跑干净环境证据，否则正向证据会随着分母膨胀悄悄变成部分证据。
+PR #187（`docs(evidence): C151 …`）交的是两个从零建的 venv（依赖面恰为 `.[web,dev]`，`akshare`/`openbb`/
+`openbb_platform` 三者 `find_spec` 全 absent，`pip check` 通过），在**移除 `opendata/` 源包**的验证目录里
+各跑一遍 `pytest tests -m 'integration and not e2e' --no-cov -o addopts= -v`：
+
+```
+A (clean-a): 229 selected → 229 passed / 0 failed / 0 skipped, 196.93 s → CLEAN_A_RUN_EXIT=0
+B (clean-b): 229 passed / 0 failed / 0 skipped, 161.58 s                    → CLEAN_RUN_EXIT=0
+archive_round=C151  archive_self_written=yes  archive_absent=yes  archive_blind=0  marked_units=10
+VERDICT AC-16|07: proven（本机读数；入账仍要等 CI 的 --sync-ratchet 产物）
+```
+
+没有裁剪、没有 deselect、没有 xfail、没有改用例；留档正文含全部 458 条逐用例行。诚实的限制也要写下：这台机器
+的开发解释器本来就没有那两个包，所以「干净」在本机既是钩子强制的也是环境巧合，CI 自己的解释器才是独立读数。
+
+入账确实发生了，而且是由门禁自己叫出来的：#187 的第一次门禁作业 `41796550488` 红在
+`棘轮收口（AC-16|07 / stale-proof）：基线钉的这条 finding 这一遍没有再出现`，也就是 **CI 当场量到这一格已经过**，
+要求显式重钉。据此派 dispatch 作业 `41796605842`，产物读数为
+`closed = [AC-16|07]、new = []、other family-hash movement = {}`，逐字应用到分支后门禁转绿，合入 `db927f56`。
+账本自此 **9 格 / 9 钉**。这条流程本身就是仪器的一个证明：它不仅能钉住红，也能自己叫出「这一格该释放了」。
+
+#### 7. 属主决定队列（本轮没有替任何人做决定）
+
+| # | 决定 | 本轮已做到 | 还差什么 |
+| --- | --- | --- | --- |
+| 1 | fenced 发布续租窗口：成功的发布在高负载下可能回滚且无法记录自身失败（卡 `running`） | 机制已量化并复现（72 hogs 才出现） | 三选一：多连接/第二连接续租、发布语句级超时+带外记录、接受 `running` 加对账清扫 |
+| 2 | `条款链接` 的最小语义 | 已证实现有 `unlinked` 只查 URL 形状 | 决定「首页链接」是否算权利行，否则 AC-1\|08 有假绿风险 |
+| 3 | AC-16\|08 免责声明措辞 | 定位到 README:171-180 与判据字面不一致 | 采纳哪一句：改 README 还是改判据（都不动阈值） |
+| 4 | AC-17\|07 的分母 | 已证明 PR 跑与 push 跑量的是不同总体 | 本差分母还是全仓 A2 分母 |
+| 5 | AC-5\|03 + AC-16\|05 + AC-16\|06 是同一个决定 | 定位到 `1ba6d7d9` 把 9 个新串塞进 baseline 而未裁定 | 注册为来源元数据，还是改名 |
+| 6 | `make gate` 是否继续 fail-fast；`acceptance-probe-check` 与 `test-cov` 的次序 | 已证明 AC-17\|06 在现行次序下不可能读活 | 次序或「归档同树即足够」二选一 |
+| 7 | AFI 前端 leg 是否设为 required check | 已证明人可以让门禁绿着合进去 | 分支保护改动属维护者 |
+| 8 | PAT 轮换 | 已提醒（一次异常把 argv 暴露到终端） | 属主执行 |
+| 9 | 丢租约的 worker 可否自己结算 | 机制、栅栏与不可复现性已量化（§5） | 判定「允许并补文档」还是「禁止并改产品」，两者都不能用加大超时蒙过去 |
+
+#### 8. 共同非声明
+
+本波所有绿都落在 **CODE/OFFLINE 与 CI 平面**：14 → 8 钉是六次入账，其中 AC-5\|07 是 24 小时时效续期，
+会再红；AC-17\|08 四个面读 0 之后**故意不入账**，因为要先确定那个 0 覆盖到什么。#184/#186/#187 与规则分支
+都没有真实源调用、没有生产部署、没有经历自然周期，也就都不能被引用为「迭代 204 验收完成」。
+
+真实需要环境的面按 §4 已被证明**不在这台机器可证明的范围内**（AC-11\|04 也再次由 CI 自己的判词确认：
+「窗口本身是实测绿的……缺的是留档正文的 query_module_sha 和当下的查询层代码对不上」）：生产 MySQL/部署形态、影子对账、单写者切换、
+自然周期、全 A 权威域、逐标的完整历史、授权签发/吊销审计、报告门禁生产适配器、AC-11\|04 的活分区表 EXPLAIN、
+AC-17\|06 的当次 coverage 归档。要关这些，需要属主提供部署与日历时间，而不是更多代码。
