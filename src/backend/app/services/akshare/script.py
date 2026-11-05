@@ -5,10 +5,18 @@ Service for akshare data scripts.
 from __future__ import annotations
 
 import asyncio
+import builtins
+import functools
 import importlib
 import inspect
 import json
 import os
+import pickle
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -29,8 +37,34 @@ from app.models.akshare_mgmt import (
 )
 from app.services.akshare.data import AkshareDataService
 from app.services.akshare.execution import AkshareExecutionService
+from app.services.akshare.write_fence import (
+    committed_mysql_writes,
+    committed_row_count,
+    current_write_fence,
+    fence_identity,
+    merge_committed_mysql_writes,
+    reset_write_fence,
+    set_write_fence,
+)
 
 settings = get_settings()
+
+_WORKER_MODULE = "app.services.akshare.script_worker"
+_WORKER_REAP_TIMEOUT_SECONDS = 10.0
+_WORKER_CEILING_GRACE_SECONDS = 5.0
+
+
+class _WorkerTimeoutError(RuntimeError):
+    """Raised inside the blocking worker wait when the child outlives its budget."""
+
+
+def _resolve_attribute_chain(root: Any, qualname: str) -> Any:
+    """Follow a dotted ``qualname`` from an imported module, as the child does."""
+    target = root
+    for part in qualname.split("."):
+        target = getattr(target, part)
+    return target
+
 
 _SCRIPT_MIN_TIMEOUT_SECONDS: dict[str, float] = {
     "macro_bank_english_interest_rate": 90.0,
@@ -49,6 +83,12 @@ _SCRIPT_MIN_TIMEOUT_SECONDS: dict[str, float] = {
     "macro_euro_ppi_mom": 120.0,
     "macro_global_sox_index": 240.0,
     "etf_fund_hist_em": 600.0,
+    # Measured on this host 2026-11-05: the 14:03 UTC occurrence was marked failed at
+    # 601 s, yet the same run kept committing rows until 14:18:44 (~946 s) — 59,983
+    # rows. An hourly task with a 3,600 s cadence gets a 1,800 s floor: ~2x the observed
+    # catch-up run, still inside the next occurrence. The task/script rows still say 600;
+    # this floor is the auditable place where the budget lives, not a hand-edited row.
+    "crypto_hourly_market": 1800.0,
     "macro_shipping_bdi": 120.0,
     "macro_shipping_bpi": 120.0,
     "macro_usa_api_crude_stock": 120.0,
@@ -467,8 +507,18 @@ class AkshareScriptService:
         rows_before: int | None,
         rows_after: int | None,
         result: Any,
+        committed_rows: int | None = None,
     ) -> None:
+        """Gate a run that left its target table empty.
+
+        ``committed_rows`` carries the write receipts reported by the killable
+        child worker for this exact target table.  The child commits on its own
+        connection, so a legacy writer that really wrote must not be judged
+        empty by a table-metadata read that has not caught up.
+        """
         if int(rows_before or 0) > 0 or int(rows_after or 0) > 0:
+            return
+        if int(committed_rows or 0) > 0:
             return
         if script_id in _ALLOW_EMPTY_TARGET_TABLE_SCRIPT_IDS:
             return
@@ -499,7 +549,246 @@ class AkshareScriptService:
             return max(60.0, min_timeout)
 
     @staticmethod
-    async def _execute_callable(callable_obj: Any, params: dict[str, Any], timeout_s: float) -> Any:
+    def _backend_root() -> str:
+        """Directory holding the ``app`` package; used as the worker import root."""
+        return str(Path(__file__).resolve().parents[3])
+
+    @classmethod
+    def _worker_environment(cls) -> dict[str, str]:
+        """Environment for the child worker, with the parent's import roots exported."""
+        env = os.environ.copy()
+        paths: list[str] = [cls._backend_root()]
+        existing = env.get("PYTHONPATH")
+        if existing:
+            paths.extend(part for part in str(existing).split(os.pathsep) if part)
+        for entry in sys.path:
+            if isinstance(entry, str) and entry and os.path.isdir(entry):
+                paths.append(entry)
+        env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(paths))
+        return env
+
+    @staticmethod
+    def _callable_descriptor(callable_obj: Any) -> dict[str, str] | None:
+        """Describe an entrypoint as ``module`` + ``qualname`` for child execution.
+
+        Returns ``None`` for anything the child cannot rebuild identically
+        (closures, ``functools.partial``, locally defined functions, objects
+        whose defining module is not importable); those keep the legacy thread
+        path, which is the only option for a non-importable callable.
+        """
+        if isinstance(callable_obj, functools.partial):
+            return None
+        module_name = getattr(callable_obj, "__module__", None)
+        qualname = getattr(callable_obj, "__qualname__", None)
+        if not isinstance(module_name, str) or not isinstance(qualname, str):
+            return None
+        if not module_name or "<locals>" in qualname:
+            return None
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            return None
+
+        owner = getattr(callable_obj, "__self__", None)
+        if owner is not None:
+            method_name = getattr(callable_obj, "__name__", None)
+            if not isinstance(method_name, str) or not method_name:
+                return None
+            owner_class = owner if isinstance(owner, type) else type(owner)
+            class_module_name = getattr(owner_class, "__module__", None)
+            class_qualname = getattr(owner_class, "__qualname__", None)
+            if not isinstance(class_module_name, str) or not isinstance(class_qualname, str):
+                return None
+            if "<locals>" in class_qualname:
+                return None
+            try:
+                class_module = importlib.import_module(class_module_name)
+                resolved_class = _resolve_attribute_chain(class_module, class_qualname)
+            except Exception:
+                return None
+            if resolved_class is not owner_class or not isinstance(owner_class, type):
+                return None
+            class_attribute = getattr(owner_class, method_name, None)
+            if class_attribute is None:
+                return None
+            if isinstance(class_attribute, (classmethod, staticmethod)):
+                underlying = class_attribute.__func__
+            else:
+                underlying = class_attribute
+            expected = getattr(callable_obj, "__func__", callable_obj)
+            if underlying is not expected:
+                return None
+            kind = "classmethod" if isinstance(owner, type) else "method"
+            return {
+                "kind": kind,
+                "module": class_module_name,
+                "class_qualname": class_qualname,
+                "method": method_name,
+            }
+
+        try:
+            resolved = _resolve_attribute_chain(module, qualname)
+        except AttributeError:
+            return None
+        if resolved is not callable_obj:
+            return None
+        return {"kind": "function", "module": module_name, "qualname": qualname}
+
+    @staticmethod
+    def _kill_worker_group(proc: subprocess.Popen[bytes]) -> None:
+        """SIGKILL the worker's process group and reap it before returning."""
+        try:
+            pgid = os.getpgid(proc.pid)
+        except (ProcessLookupError, PermissionError, AttributeError):
+            pgid = None
+        if pgid is not None:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        else:
+            try:
+                proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+        try:
+            proc.wait(timeout=_WORKER_REAP_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+            proc.wait(timeout=_WORKER_REAP_TIMEOUT_SECONDS)
+
+    @classmethod
+    def _await_worker(
+        cls,
+        proc: subprocess.Popen[bytes],
+        payload: bytes,
+        timeout_s: float,
+    ) -> tuple[int, bytes, bytes]:
+        """Block for the child, killing and reaping its group if it runs long.
+
+        The kill happens here rather than in the async layer so that
+        ``_execute_callable_in_worker`` cannot raise a failure while the worker
+        is still able to commit rows.
+        """
+        try:
+            stdout, stderr = proc.communicate(input=payload, timeout=timeout_s)
+            return proc.returncode, stdout, stderr
+        except subprocess.TimeoutExpired:
+            cls._kill_worker_group(proc)
+            leftover = cls._drain_worker_pipes(proc)
+            raise _WorkerTimeoutError(
+                f"worker exceeded {timeout_s:g} seconds: {leftover[-300:].decode('utf-8', 'replace')}"
+            ) from None
+
+    @staticmethod
+    def _drain_worker_pipes(proc: subprocess.Popen[bytes]) -> bytes:
+        """Read whatever the finished worker left on its captured pipes."""
+        output = b""
+        try:
+            if proc.stdout is not None:
+                output += proc.stdout.read()
+        except (OSError, ValueError):
+            pass
+        return output
+
+    @staticmethod
+    def _read_worker_receipt(path: str) -> dict[str, Any] | None:
+        try:
+            with open(path, "rb") as handle:
+                receipt = pickle.load(handle)
+        except (OSError, ValueError, EOFError, pickle.UnpicklingError):
+            return None
+        return receipt if isinstance(receipt, dict) else None
+
+    @staticmethod
+    def _worker_exception(receipt: dict[str, Any]) -> Exception:
+        error_type = str(receipt.get("error_type") or "RuntimeError")
+        message = str(receipt.get("error") or "Script call failed in the worker process")
+        candidate: Any = getattr(builtins, error_type, None)
+        exception_class: type[Exception] = RuntimeError
+        if isinstance(candidate, type) and issubclass(candidate, Exception):
+            exception_class = candidate
+        return exception_class(message)
+
+    @classmethod
+    async def _execute_callable_in_worker(
+        cls,
+        descriptor: dict[str, str],
+        params: dict[str, Any],
+        timeout_s: float,
+        fence: dict[str, Any] | None = None,
+    ) -> Any:
+        """Run one script entrypoint in a killable child process group.
+
+        On timeout or cancellation the whole group is SIGKILLed and reaped
+        before the error leaves this function, so no provider write can land
+        after the caller records the failure.  Committed-write receipts the
+        child collected are merged into the parent's write-fence tracker.
+        """
+        receipt_dir = tempfile.mkdtemp(prefix="akshare-script-worker-")
+        receipt_path = os.path.join(receipt_dir, "receipt.pkl")
+        payload = pickle.dumps(
+            {
+                "descriptor": descriptor,
+                "params": params,
+                "result_path": receipt_path,
+                "fence": fence,
+            },
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-m", _WORKER_MODULE],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            # Inherit the parent's stderr so the writer's progress lines keep
+            # flowing into the operator log stream.
+            stderr=None,
+            cwd=cls._backend_root(),
+            env=cls._worker_environment(),
+            start_new_session=True,
+        )
+        try:
+            try:
+                returncode, stdout, _ = await asyncio.wait_for(
+                    asyncio.to_thread(cls._await_worker, proc, payload, timeout_s),
+                    timeout=timeout_s + _WORKER_CEILING_GRACE_SECONDS,
+                )
+            except asyncio.TimeoutError as exc:
+                cls._kill_worker_group(proc)
+                raise asyncio.TimeoutError(
+                    f"Script call timed out after {timeout_s:g} seconds"
+                ) from exc
+            except _WorkerTimeoutError as exc:
+                cls._kill_worker_group(proc)
+                raise asyncio.TimeoutError(
+                    f"Script call timed out after {timeout_s:g} seconds"
+                ) from exc
+            except asyncio.CancelledError:
+                cls._kill_worker_group(proc)
+                raise
+
+            receipt = cls._read_worker_receipt(receipt_path)
+            if receipt is None:
+                detail = stdout[-500:].decode("utf-8", errors="replace")
+                raise RuntimeError(
+                    f"Script worker exited with code {returncode} and left no receipt: {detail}"
+                )
+            merge_committed_mysql_writes(receipt.get("committed_writes"))
+            if not receipt.get("ok"):
+                raise cls._worker_exception(receipt)
+            return receipt.get("result")
+        finally:
+            if proc.poll() is None:
+                cls._kill_worker_group(proc)
+            shutil.rmtree(receipt_dir, ignore_errors=True)
+
+    @staticmethod
+    async def _execute_callable_in_thread(
+        callable_obj: Any, params: dict[str, Any], timeout_s: float
+    ) -> Any:
         configure_akshare_network_proxy()
         if inspect.iscoroutinefunction(callable_obj):
             awaitable = callable_obj(**params)
@@ -512,6 +801,33 @@ class AkshareScriptService:
             raise asyncio.TimeoutError(
                 f"Script call timed out after {timeout_s:g} seconds"
             ) from exc
+
+    @classmethod
+    async def _execute_callable(
+        cls,
+        callable_obj: Any,
+        params: dict[str, Any],
+        timeout_s: float,
+        fence: dict[str, Any] | None = None,
+    ) -> Any:
+        """Execute a script entrypoint, preferring a killable child process.
+
+        Script entrypoints are module functions or bound methods resolved from
+        ``module`` + ``qualname``; those run in a child process group the parent
+        can kill.  A callable the child cannot rebuild identically (a closure, a
+        ``functools.partial``, a locally defined function) falls back to the
+        legacy thread path, which cannot be killed and is therefore only used
+        when there is no describable entrypoint.
+        """
+        descriptor = cls._callable_descriptor(callable_obj)
+        if descriptor is not None:
+            return await cls._execute_callable_in_worker(
+                descriptor,
+                params,
+                timeout_s,
+                fence=fence,
+            )
+        return await cls._execute_callable_in_thread(callable_obj, params, timeout_s)
 
     @staticmethod
     def _normalize_parameters(parameters: Any) -> dict[str, Any]:
@@ -1733,49 +2049,34 @@ class AkshareScriptService:
         )
         await self.execution_service.mark_running(execution)
 
+        fence_token = set_write_fence(
+            claim_key=f"akshare_script:{script.script_id}",
+            owner_id=str(execution.execution_id),
+            fencing_token=int(execution.id),
+            execution_id=str(execution.execution_id),
+        )
         try:
-            callable_obj = await self._resolve_callable(script)
-            dataframe_table_name = self.data_service.build_table_name(script, params)
-            legacy_callable_name = self._legacy_callable_table_name(callable_obj)
-            legacy_table_name = legacy_callable_name or self._legacy_table_name(script)
-            dataframe_rows_before = await self.data_service.get_row_count(dataframe_table_name)
-            legacy_rows_before = (
-                await self.data_service.get_row_count(legacy_table_name)
-                if legacy_table_name and legacy_table_name != dataframe_table_name
-                else dataframe_rows_before
-            )
-            result = await self._execute_callable(
-                callable_obj,
-                params,
-                self._script_timeout_seconds(script, timeout_seconds=timeout_seconds),
-            )
-
-            if legacy_callable_name is not None and legacy_table_name is not None:
-                table = await self.data_service.sync_existing_table_metadata(
-                    script,
-                    legacy_table_name,
+            fence = fence_identity(current_write_fence())
+            try:
+                callable_obj = await self._resolve_callable(script)
+                dataframe_table_name = self.data_service.build_table_name(script, params)
+                legacy_callable_name = self._legacy_callable_table_name(callable_obj)
+                legacy_table_name = legacy_callable_name or self._legacy_table_name(script)
+                dataframe_rows_before = await self.data_service.get_row_count(dataframe_table_name)
+                legacy_rows_before = (
+                    await self.data_service.get_row_count(legacy_table_name)
+                    if legacy_table_name and legacy_table_name != dataframe_table_name
+                    else dataframe_rows_before
+                )
+                result = await self._execute_callable(
+                    callable_obj,
                     params,
+                    self._script_timeout_seconds(script, timeout_seconds=timeout_seconds),
+                    fence=fence,
                 )
-                rows_before = legacy_rows_before
-                rows_after = table.row_count
-                summary = {
-                    "table_name": table.table_name,
-                    "row_count": table.row_count,
-                    "columns": table.metadata_json.get("columns", []),
-                }
-                self._raise_if_empty_completion(
-                    script_id=script.script_id,
-                    table_name=table.table_name,
-                    rows_before=rows_before,
-                    rows_after=rows_after,
-                    result=result,
-                )
-            else:
-                try:
-                    dataframe = self._coerce_to_dataframe(result)
-                except TypeError:
-                    if legacy_table_name is None:
-                        raise
+                committed_writes = committed_mysql_writes()
+
+                if legacy_callable_name is not None and legacy_table_name is not None:
                     table = await self.data_service.sync_existing_table_metadata(
                         script,
                         legacy_table_name,
@@ -1787,6 +2088,7 @@ class AkshareScriptService:
                         "table_name": table.table_name,
                         "row_count": table.row_count,
                         "columns": table.metadata_json.get("columns", []),
+                        "committed_writes": committed_writes,
                     }
                     self._raise_if_empty_completion(
                         script_id=script.script_id,
@@ -1794,30 +2096,62 @@ class AkshareScriptService:
                         rows_before=rows_before,
                         rows_after=rows_after,
                         result=result,
+                        committed_rows=committed_row_count(table.table_name),
                     )
                 else:
-                    table = await self.data_service.persist_dataframe(script, dataframe, params)
-                    rows_before = dataframe_rows_before
-                    rows_after = table.row_count
-                    summary = {
-                        "table_name": table.table_name,
-                        "row_count": table.row_count,
-                        "columns": list(dataframe.columns),
-                    }
-                    self._raise_if_empty_completion(
-                        script_id=script.script_id,
-                        table_name=table.table_name,
-                        rows_before=rows_before,
-                        rows_after=rows_after,
-                        result=result,
-                    )
-            execution = await self.execution_service.mark_completed(
-                execution,
-                result=summary,
-                rows_before=rows_before,
-                rows_after=rows_after,
-            )
-            return execution
+                    try:
+                        dataframe = self._coerce_to_dataframe(result)
+                    except TypeError:
+                        if legacy_table_name is None:
+                            raise
+                        table = await self.data_service.sync_existing_table_metadata(
+                            script,
+                            legacy_table_name,
+                            params,
+                        )
+                        rows_before = legacy_rows_before
+                        rows_after = table.row_count
+                        summary = {
+                            "table_name": table.table_name,
+                            "row_count": table.row_count,
+                            "columns": table.metadata_json.get("columns", []),
+                            "committed_writes": committed_writes,
+                        }
+                        self._raise_if_empty_completion(
+                            script_id=script.script_id,
+                            table_name=table.table_name,
+                            rows_before=rows_before,
+                            rows_after=rows_after,
+                            result=result,
+                            committed_rows=committed_row_count(table.table_name),
+                        )
+                    else:
+                        table = await self.data_service.persist_dataframe(script, dataframe, params)
+                        rows_before = dataframe_rows_before
+                        rows_after = table.row_count
+                        summary = {
+                            "table_name": table.table_name,
+                            "row_count": table.row_count,
+                            "columns": list(dataframe.columns),
+                            "committed_writes": committed_writes,
+                        }
+                        self._raise_if_empty_completion(
+                            script_id=script.script_id,
+                            table_name=table.table_name,
+                            rows_before=rows_before,
+                            rows_after=rows_after,
+                            result=result,
+                            committed_rows=committed_row_count(table.table_name),
+                        )
+                execution = await self.execution_service.mark_completed(
+                    execution,
+                    result=summary,
+                    rows_before=rows_before,
+                    rows_after=rows_after,
+                )
+                return execution
+            finally:
+                reset_write_fence(fence_token)
         except Exception as exc:
             execution = await self.execution_service.mark_failed(execution, str(exc))
             raise
