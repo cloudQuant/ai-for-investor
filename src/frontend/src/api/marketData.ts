@@ -261,6 +261,49 @@ export interface OpenDataDirectKlineResponse {
 
 export type OpenDataStockDailyFreshnessStatus = 'fresh' | 'stale' | 'missing'
 
+/**
+ * The canonical OpenData coverage evidence states the data-management page
+ * must keep distinct. The project rule is that an unproven state is never
+ * rendered as a proven one, so the only value the page may fall back to is
+ * `UNKNOWN`.
+ *
+ * - `PROVEN`: the intermediary measured coverage and issued evidence (a real
+ *   latest business date and lag).
+ * - `UNKNOWN`: coverage was not measured or the reason is unknown; it does not
+ *   mean a stock has no data or that its history is empty.
+ * - `SOURCE_LIMITED`: the upstream source retention boundary caps coverage;
+ *   the archive cannot establish the full requested range.
+ * - `NOT_SUPPORTED`: the dataset/domain/frequency is outside the OpenData
+ *   service's supported scope.
+ */
+export type OpenDataCoverageState = 'PROVEN' | 'UNKNOWN' | 'SOURCE_LIMITED' | 'NOT_SUPPORTED'
+
+/**
+ * The page-level availability state combines the four coverage evidence states
+ * with `opendata_unavailable`, which reports that the identified OpenData route
+ * could not be reached or was disabled rather than any coverage conclusion.
+ */
+export type OpenDataAvailabilityState = OpenDataCoverageState | 'opendata_unavailable'
+
+const OPEN_DATA_COVERAGE_STATES: readonly OpenDataCoverageState[] = [
+  'PROVEN',
+  'UNKNOWN',
+  'SOURCE_LIMITED',
+  'NOT_SUPPORTED',
+]
+
+/**
+ * Accept only an exact, server-declared coverage state. An unrecognized or
+ * malformed value must fail closed to `null` so callers can never coerce an
+ * unverified coverage claim into `PROVEN`.
+ */
+export function parseOpenDataCoverageState(value: unknown): OpenDataCoverageState | null {
+  if (typeof value !== 'string') return null
+  return (OPEN_DATA_COVERAGE_STATES as readonly string[]).includes(value)
+    ? value as OpenDataCoverageState
+    : null
+}
+
 export interface OpenDataStockDailyFreshnessResponse {
   provider: 'opendata'
   domain: 'stock_daily'
@@ -271,6 +314,64 @@ export interface OpenDataStockDailyFreshnessResponse {
   status: OpenDataStockDailyFreshnessStatus
   expected_data_date: string
   checked_at: string
+  /**
+   * Forward contract only. The fixed stock_daily freshness proxy does not emit
+   * this field yet, so a real read leaves it undefined and coverage is derived
+   * from `status`. When the deployed OpenData service begins declaring
+   * `SOURCE_LIMITED` / `NOT_SUPPORTED` it flows through here rather than being
+   * collapsed into a freshness conclusion.
+   */
+  coverage_state?: OpenDataCoverageState
+}
+
+/**
+ * Derive the coverage evidence state from one measured freshness report.
+ *
+ * A `missing` report is `UNKNOWN` (the reason is unknown), never a date. A
+ * fresh or stale report has a measured latest business date, so its coverage is
+ * `PROVEN` while the separate freshness `status` keeps conveying currency; a
+ * stale report must not be relabeled as current. An explicit server-declared
+ * `coverage_state` overrides the derived value so `SOURCE_LIMITED` and
+ * `NOT_SUPPORTED` are honored once the service emits them.
+ */
+export function deriveOpenDataFreshnessCoverageState(
+  response: OpenDataStockDailyFreshnessResponse,
+): OpenDataCoverageState {
+  if (response.coverage_state) return response.coverage_state
+  return response.status === 'missing' ? 'UNKNOWN' : 'PROVEN'
+}
+
+/**
+ * Resolve the single availability state the freshness card must present.
+ *
+ * It keeps `opendata_unavailable` distinct from a coverage conclusion: a failed
+ * or disabled OpenData read is not `UNKNOWN` coverage and is never a date. Only
+ * a ready report carries a real coverage state, and a `missing` report maps to
+ * `UNKNOWN` so an unmeasured domain cannot look healthy. `null` means the card
+ * has nothing to assert yet (idle/loading).
+ */
+export function deriveOpenDataFreshnessAvailability(input: {
+  displayStatus: 'idle' | 'loading' | 'ready' | 'unavailable'
+  response: OpenDataStockDailyFreshnessResponse | null
+}): OpenDataAvailabilityState | null {
+  if (input.displayStatus === 'unavailable') return 'opendata_unavailable'
+  if (input.displayStatus === 'ready' && input.response) {
+    return deriveOpenDataFreshnessCoverageState(input.response)
+  }
+  return null
+}
+
+/**
+ * Map the direct-kline snapshot provenance coverage label to a canonical state.
+ *
+ * The snapshot-only direct read is a non-durable request: its backend always
+ * reports `unknown` coverage (no snapshot id, committed_at, or durable receipt),
+ * so it renders as `UNKNOWN` and never as a proven range. An unrecognized label
+ * also fails closed to `UNKNOWN` rather than to a healthy state.
+ */
+export function normalizeOpenDataProvenanceCoverage(value: unknown): OpenDataCoverageState {
+  if (value === 'unknown') return 'UNKNOWN'
+  return parseOpenDataCoverageState(value) ?? 'UNKNOWN'
 }
 
 export interface OpenDataStockDailyFreshnessOptions {
@@ -496,8 +597,20 @@ export function parseOpenDataStockDailyFreshnessResponse(
     || !isIsoTimestamp(value.checked_at)
   ) return null
 
+  // A declared coverage_state is optional and forward-only. When it is present
+  // it must be a canonical OpenData state; anything else fails closed so an
+  // unverified coverage claim can never be coerced into a healthy value.
+  let coverageState: OpenDataCoverageState | undefined
+  if (value.coverage_state !== undefined) {
+    const parsedCoverage = parseOpenDataCoverageState(value.coverage_state)
+    if (!parsedCoverage) return null
+    coverageState = parsedCoverage
+  }
+
   if (value.status === 'missing') {
     if (value.field !== null || value.latest !== null || value.lag_days !== null) return null
+    // A missing report has no measured evidence; it must not be labeled PROVEN.
+    if (coverageState === 'PROVEN') return null
   } else if (value.latest === null || value.field === null || value.lag_days === null) {
     return null
   } else if (
@@ -521,6 +634,7 @@ export function parseOpenDataStockDailyFreshnessResponse(
     status: value.status as OpenDataStockDailyFreshnessStatus,
     expected_data_date: value.expected_data_date as string,
     checked_at: value.checked_at as string,
+    ...(coverageState === undefined ? {} : { coverage_state: coverageState }),
   }
 }
 

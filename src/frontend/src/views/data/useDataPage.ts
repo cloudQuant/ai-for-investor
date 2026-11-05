@@ -18,6 +18,7 @@ import { akshareTablesApi } from '@/api/akshare'
 import {
   classifyMarketDataRouteSelection,
   createMarketDataQueryFromContract,
+  deriveOpenDataFreshnessAvailability,
   hasMarketDataCapabilities,
   hasMarketDataQueryBundle,
   hasMarketDataQueryContract,
@@ -25,6 +26,7 @@ import {
   isMarketDataQueryV2FallbackError,
   marketDataFamilyObservationShape,
   marketDataApi,
+  normalizeOpenDataProvenanceCoverage,
   type MarketAssetType,
   type MarketDataCapabilitiesResponse,
   type MarketDataRouteSelection,
@@ -42,6 +44,8 @@ import {
   type MarketDataQueryMode,
   type MarketDataQueryObservation,
   type MarketDataQueryResponse,
+  type OpenDataAvailabilityState,
+  type OpenDataCoverageState,
   type OpenDataDirectKlineRecord,
   type OpenDataDirectKlineRequest,
   type OpenDataDirectKlineResponse,
@@ -75,7 +79,7 @@ export interface OpenDataDirectKlineDisplayState {
   rows: readonly OpenDataDirectKlineRecord[]
   returnedBarCount: number | null
   retrievedAt: string | null
-  coverageStatus: 'unknown' | null
+  coverageStatus: OpenDataCoverageState | null
   sourceAvailableAt: 'unknown' | null
   durableReceipt: 'not_created' | null
   reason: OpenDataDirectKlineDisplayReason | null
@@ -960,6 +964,17 @@ export function useDataPage() {
     ) return 'opendata_unavailable'
     return null
   })
+  // The freshness card's real OpenData availability state. A failed or disabled
+  // read surfaces as `opendata_unavailable`; an unmeasured (missing) report
+  // surfaces as `UNKNOWN`, never a date. Only a measured report is `PROVEN`,
+  // and a forward `coverage_state` lets SOURCE_LIMITED / NOT_SUPPORTED render
+  // distinctly instead of collapsing into a healthy value.
+  const openDataStockDailyFreshnessAvailability = computed<OpenDataAvailabilityState | null>(
+    () => deriveOpenDataFreshnessAvailability({
+      displayStatus: openDataStockDailyFreshnessDisplay.value.status,
+      response: openDataStockDailyFreshnessDisplay.value.response,
+    }),
+  )
   const selectedMarketPageFamily = computed(() => {
     const bundle = marketDataQueryBundle.value
     if (!bundle || bundle.requested_asset_type !== form.asset_type) return null
@@ -2847,7 +2862,7 @@ export function useDataPage() {
         rows: response.records,
         returnedBarCount: response.count,
         retrievedAt: response.provenance.retrieved_at,
-        coverageStatus: response.provenance.coverage_status,
+        coverageStatus: normalizeOpenDataProvenanceCoverage(response.provenance.coverage_status),
         sourceAvailableAt: response.provenance.source_available_at,
         durableReceipt: response.provenance.durable_receipt,
         reason: null,
@@ -4718,6 +4733,7 @@ export function useDataPage() {
     openDataDirectKlineDisplay,
     openDataStockDailyFreshnessDisplay,
     canReadOpenDataStockDailyFreshness,
+    openDataStockDailyFreshnessAvailability,
     stockDataRouteNotice,
     showLocalCoverageMatrix,
     result,
