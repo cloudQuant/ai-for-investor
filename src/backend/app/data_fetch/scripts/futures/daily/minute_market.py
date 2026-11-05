@@ -68,11 +68,11 @@ class FuturesMinuteMarket(AkshareToMySql):
     def _get_latest_trade_datetime(self, symbol: str, period: str) -> str | None:
         try:
             self.connect_db()
-            self.cursor.execute(
+            self.require_cursor().execute(
                 f"SELECT MAX(TRADE_DATETIME) FROM {self.table_name} WHERE SYMBOL = %s AND PERIOD = %s",
                 (symbol, period),
             )
-            row = self.cursor.fetchone()
+            row = self.require_cursor().fetchone()
             return self._format_latest_datetime(row[0] if row else None)
         except Exception as exc:
             self.logger.warning(f"Failed to resolve latest minute datetime for {symbol}: {exc}")

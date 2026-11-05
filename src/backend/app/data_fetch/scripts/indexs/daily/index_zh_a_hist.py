@@ -38,8 +38,8 @@ class IndexZhAHist(AkshareToMySql):
         """Return latest market date stored in the normalized data_date column."""
         try:
             self.connect_db()
-            self.cursor.execute(f"SELECT MAX(`data_date`) FROM `{self.table_name}`")  # nosec B608
-            row = self.cursor.fetchone()
+            self.require_cursor().execute(f"SELECT MAX(`data_date`) FROM `{self.table_name}`")  # nosec B608
+            row = self.require_cursor().fetchone()
             if not row or not row[0]:
                 return None
             parsed = pd.to_datetime(row[0], errors="coerce")

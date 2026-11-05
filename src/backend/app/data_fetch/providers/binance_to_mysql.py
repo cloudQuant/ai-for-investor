@@ -139,8 +139,8 @@ class BinanceToMySql(MysqlBase):
 
     def ensure_table(self) -> None:
         self.connect_db()
-        self._require_cursor().execute(self.create_table_sql)
-        self._require_connection().commit()
+        self.require_cursor().execute(self.create_table_sql)
+        self.require_connection().commit()
 
     def store(self, bars: list[dict[str, Any]], symbol: str) -> int | bool:
         """Idempotent upsert keyed on the table's unique index."""
