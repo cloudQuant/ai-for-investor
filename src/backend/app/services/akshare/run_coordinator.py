@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import database
+from app.db.persistence_boundaries import cursor_rowcount
 from app.models.akshare_mgmt import DataScript, ScheduledTask, TaskExecution, TriggeredBy
 from app.models.akshare_scheduler import AkshareSchedulerControl, AkshareTaskRunClaim
 
@@ -324,7 +325,7 @@ class AkshareRunCoordinator:
                         updated_at=now,
                     )
                 )
-                return result.rowcount == 1
+                return cursor_rowcount(result) == 1
 
     async def set_execution_id(self, lease: RunLease, execution_id: str) -> bool:
         """Associate an execution record with its current claim owner."""
@@ -343,7 +344,7 @@ class AkshareRunCoordinator:
                     )
                     .values(execution_id=execution_id, updated_at=now)
                 )
-                return result.rowcount == 1
+                return cursor_rowcount(result) == 1
 
     async def complete(self, lease: RunLease, execution_id: str) -> bool:
         """Commit successful completion only for the live fenced owner.
@@ -374,7 +375,7 @@ class AkshareRunCoordinator:
                         updated_at=now,
                     )
                 )
-                return result.rowcount == 1
+                return cursor_rowcount(result) == 1
 
     async def fail(
         self,
@@ -405,7 +406,7 @@ class AkshareRunCoordinator:
                         updated_at=now,
                     )
                 )
-                return result.rowcount == 1
+                return cursor_rowcount(result) == 1
 
     async def cancel(self, lease: RunLease, error: str, execution_id: str | None) -> bool:
         """Revoke a cancelled owner's lease, including a just-completed claim.
@@ -441,7 +442,7 @@ class AkshareRunCoordinator:
                         updated_at=now,
                     )
                 )
-                return result.rowcount == 1
+                return cursor_rowcount(result) == 1
 
     async def cancel_unreturned_claim(self, claim_key: str, owner_id: str, error: str) -> bool:
         """Revoke an acquisition interrupted before the scheduler received its lease.
