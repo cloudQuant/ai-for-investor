@@ -59,8 +59,8 @@ class FuturesDeliveryMatchDce(AkshareToMySql):
             # 1. Get DCE symbols from FUTURES_TRADING_RULES
             self.connect_db()
             query = f"SELECT DISTINCT REFERENCE_NAME FROM {trading_rules_table} WHERE EXCHANGE = '大商所' AND REFERENCE_CODE NOT LIKE '%期权%'"  # nosec B608
-            self.cursor.execute(query)
-            dce_symbols = [row[0] for row in self.cursor.fetchall()]
+            self.require_cursor().execute(query)
+            dce_symbols = [row[0] for row in self.require_cursor().fetchall()]
             self.disconnect_db()
 
             if not dce_symbols:
