@@ -2160,7 +2160,10 @@ post-fix  每个模式都 = ['partial']，os.replace(partial, marker) True ×5
   `app/services/akshare/script.py:379-383` 先解析 `fetch_data`，从不走 `main()`。
 * 做法：831 个文件各改一行 `script.run()` → `script.fetch_data()`（831 个目标类都声明
   `fetch_data(self, *args, **kwargs)`，实测 831/831，调用形状不变；另有 50 个脚本本来就这么写）。
-  实测 `1103 → 270 errors`、`881 → 65 files`、`attr-defined 831 → 0`、`override` 保持 3。
+  实测 `1103 → 226 errors`、`881 → 58 files`、`attr-defined 831 → 0`、`assignment 45 → 0`、`override` 保持 3，
+  且没有任何错误类别增长。
+* 同批第三个 commit 修的是 20 个脚本里的假注解：`def fetch(self, fund_code: str = None)` —— 默认值今天就是 None，
+  注解却在说 str。改成 `str | None = None` 不动任何默认值与调用点，`assignment` 45 → 0、`arg-type` 18 → 13。
 * **被自我复核否掉的方案**：第一版给 `AkshareToMySql` 加 `run(**kwargs)` 委托 `fetch_data`，
   一处修 831 个文件。它把 `override` 从 3 变成 162 —— 164 个脚本自带 `run(self, <位置参数>)`，
   任何基类签名都比它们宽；而且若 `fetch_data` 在运行时也挂到基类上，`hasattr(instance,"fetch_data")`
@@ -2168,8 +2171,8 @@ post-fix  每个模式都 = ['partial']，os.replace(partial, marker) True ×5
   没有被抹掉。
 * 平面现在是 advisory：`--scope collection` 在 CI 里只报数不判红，基线要由 CI 自己的读数经
   `ALLOW_BASELINE_UPDATE=1` 的评审式 `--update` 冻结后再摘掉 `--advisory`（本仓 `baseline_update_guard.py`
-  的存在理由就是禁止同一 PR 里既改代码又抬基线，见迭代193 审计项 C10）。270 这个数是笔记本读数，只作引用。
-* 剩下的 270 条**没有**被豁免，主因已量化，供后续波次直接取用：
+  的存在理由就是禁止同一 PR 里既改代码又抬基线，见迭代193 审计项 C10）。226 这个数是笔记本读数，只作引用。
+* 剩下的 226 条**没有**被豁免，主因已量化，供后续波次直接取用：
   88 条 `union-attr` 来自 `Database.cursor: _DatabaseCursor | None`（`core/database.py:73`）——
   这是共享 DB 层的形状问题，修它需要设计决定（`connect_db()` 返回游标或强制 `_require_cursor()`），
   不该塞进验收收尾波次；39 条 `index` 是同一条「按整数下标取字典」的抄写形态；
