@@ -6,9 +6,44 @@ from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Records which plane armed the AkShare APScheduler so the single-writer claim can be
+# evidenced from the running process. Absent means nothing armed the scheduler.
+SCHEDULER_START_SOURCE_ATTR = "akshare_scheduler_start_source"
+SCHEDULER_START_SOURCE_ORCHESTRATION = "orchestration"
+SCHEDULER_START_SOURCE_API_FALLBACK = "orchestration_fallback"
+
+_API_FALLBACK_ALLOW = "allow"
+_API_FALLBACK_FORBID = "forbid"
+_API_FALLBACK_SETTING = "AKSHARE_SCHEDULER_API_FALLBACK"
+
 
 def _get_logger(app: FastAPI):
     return getattr(app.state, "startup_logger", logger)
+
+
+def _api_fallback_allowed(settings: Any, startup_logger: Any) -> bool:
+    """Return whether this process may arm the AkShare scheduler as an API fallback.
+
+    Fail-closed: only the exact value ``allow`` permits it. ``forbid`` and any
+    unrecognised or unset value suppress the fallback, because a typo here decides
+    which plane writes to the warehouse.
+    """
+    raw = getattr(settings, _API_FALLBACK_SETTING, None)
+    value = raw.strip().lower() if isinstance(raw, str) else ""
+    if value == _API_FALLBACK_ALLOW:
+        return True
+    if value == _API_FALLBACK_FORBID:
+        startup_logger.error(
+            f"Akshare APScheduler not started: {_API_FALLBACK_SETTING}=forbid suppresses the "
+            "API-process fallback. A dedicated collector unit must own scheduling."
+        )
+        return False
+    startup_logger.error(
+        f"Akshare APScheduler not started (fail-closed): {_API_FALLBACK_SETTING}={raw!r} is "
+        f"neither '{_API_FALLBACK_ALLOW}' nor '{_API_FALLBACK_FORBID}'; treating an "
+        "unrecognised value as forbid."
+    )
+    return False
 
 
 async def register(app: FastAPI, settings: Any) -> None:
@@ -43,15 +78,24 @@ async def register(app: FastAPI, settings: Any) -> None:
         startup_logger.info(
             f"Orchestration backend started: {backend_status.get('type', 'unknown')}"
         )
-    except Exception:
+        app.state.akshare_scheduler_start_source = SCHEDULER_START_SOURCE_ORCHESTRATION
+    except Exception as orchestration_error:
         startup_logger.exception("Failed to start orchestration backend")
+        if not _api_fallback_allowed(settings, startup_logger):
+            return
         try:
             from app.services.akshare.scheduler_service import get_akshare_scheduler_service
 
             akshare_scheduler_service = get_akshare_scheduler_service()
             app.state.akshare_scheduler_service = akshare_scheduler_service
             await akshare_scheduler_service.start()
-            startup_logger.info("Fallback: Akshare APScheduler started directly")
+            app.state.akshare_scheduler_start_source = SCHEDULER_START_SOURCE_API_FALLBACK
+            startup_logger.warning(
+                "Fallback: Akshare APScheduler started directly by the API process because the "
+                f"orchestration backend failed: {orchestration_error!r}. Set "
+                f"{_API_FALLBACK_SETTING}=forbid where a dedicated collector unit owns "
+                "scheduling."
+            )
         except Exception:
             startup_logger.exception("Failed to start fallback APScheduler")
 
