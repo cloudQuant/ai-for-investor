@@ -68,7 +68,6 @@ def test_every_field_belongs_to_exactly_one_section() -> None:
 def test_repo_root_derivation_still_points_at_the_repository() -> None:
     """``app.settings.paths`` sits one level deeper than ``app/config.py``."""
     assert REPO_ROOT == Path(config_module.__file__).resolve().parents[3]
-    assert Settings.model_config["env_file"][1] == str(REPO_ROOT / ".env")
     assert Settings.model_fields["DATABASE_URL"].default == DEFAULT_SQLITE_DATABASE_URL
     assert Settings.model_fields["DATABASE_URL"].default == (
         f"sqlite+aiosqlite:///{(REPO_ROOT / 'data' / 'dev' / 'backtrader.db').as_posix()}"
@@ -76,6 +75,21 @@ def test_repo_root_derivation_still_points_at_the_repository() -> None:
     assert Settings.model_fields["MARKET_DATA_RESEARCH_ARTIFACT_ROOT"].default == str(
         (REPO_ROOT / "data" / "market_data_research").resolve()
     )
+
+
+def test_env_file_search_root_uses_the_shared_repo_root() -> None:
+    """The ``.env`` search is still the cwd file plus the repository-root file.
+
+    Three suites assign ``Settings.model_config["env_file"] = None`` at import time so a
+    developer ``.env`` cannot leak into their assertions; when one of them has run first
+    the composition itself is still pinned by the tests above, so this one reports why it
+    cannot speak instead of failing on another suite's global state.
+    """
+    env_file = Settings.model_config.get("env_file")
+    if env_file is None:
+        pytest.skip("another suite disabled the .env search path for its assertions")
+    assert env_file[0] == ".env"
+    assert env_file[1] == str(REPO_ROOT / ".env")
 
 
 def test_section_field_validators_fire_on_the_composed_model() -> None:
