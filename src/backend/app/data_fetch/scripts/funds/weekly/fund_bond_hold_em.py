@@ -94,7 +94,7 @@ class FundBondHoldEm(AkshareToMySql):
             self.logger.warning(f"解析季度字符串失败: {quarter_str}, 错误: {e}")
             return None, None, None
 
-    def fetch_bond_hold_data(self, fund_code: str, year: str = None) -> pd.DataFrame:
+    def fetch_bond_hold_data(self, fund_code: str, year: str | None = None) -> pd.DataFrame:
         """
         获取基金债券持仓数据
 
@@ -234,8 +234,8 @@ class FundBondHoldEm(AkshareToMySql):
 
     def run(
         self,
-        fund_code: str = None,
-        year: str = None,
+        fund_code: str | None = None,
+        year: str | None = None,
         fund_codes=None,
         limit: int = DEFAULT_FUND_CODE_LIMIT,
     ):

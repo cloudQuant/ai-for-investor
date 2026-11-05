@@ -2077,3 +2077,141 @@ AC-16|08（README 与判据字面不一致的措辞采纳哪一句）、AC-17|03
 **时效类** AC-5|07（24 小时，会再红，属可续期证据）。
 这七格没有一格是「再写点产品代码」就能关的——这是本轮最重要的结论，也据此把计划里
 「开发完成 ⇒ 验收完成」的隐含推论正式拆开。
+
+### Wave 26（2026-11-05）：把四条缺口逐条变成裁定，并在 AFI 侧新开「采集脚本类型平面」
+
+本轮起点是属主对四处剩余验收缺口的逐项裁定。三条给出可执行结论，一条被证明**不能由这台机器执行**；
+另有一条属主在裁定过程中新提的要求（覆盖 ai-for-investor 里上千个采集脚本），已按实测展开成
+一个新的类型平面。以下每条都标明它属于哪个平面。
+
+#### 1. AC-16\|08：README 免责正文补回原句，本机实测 `gap → proven`（CODE/OFFLINE，PR #195）
+
+判据要求 README 与 `docs/data-rights-registry.md` 两处**正文**都含字面句「不构成任何投资建议」——
+不是看小节标题。登记表自 `4ee1bbca`（A0 建档）起一直带这句；README 的同一句在 `47ed8e59`
+（2026-10-12，提交标题与正文都只谈 C98 门禁逐成员链证据落档）被换成
+「通用数据说明不构成针对特定个人的投资建议；具体服务或输出的性质应按实际内容与适用法律判断」，
+该提交没有为措辞单独留裁定。登记表自身第 125 行要求「本表任何结论变化必须同步更新 README 免责声明」，
+因此这不只是判据字面不满足，而是两文档失同步。
+
+属主裁定：**两句都保留**。README 现在先写「本项目不构成任何投资建议。」再保留 C98 的细化句，
+既不撤回 C98 说过的话，也不删产品文档里的既有免责范围。单格实测（同一探针、同一棵树、改前改后）：
+
+```
+disclaimer_body_ok: no → yes      VERDICT AC-16|08: gap → proven
+registry 侧两次均为 yes；LICENSE 首行与 BSL 四条款 4/4 两次均不变
+```
+
+入账不在这条 PR 里：CI 的门禁原文已经把话说了 ——
+`棘轮收口（AC-16|08 / stale-proof）：基线钉的这条 finding 这一遍没有再出现——真修好了就 --sync-ratchet 把基线减下来`
+（作业 `41932030079`）。已按协议对 `fix/od-disclaimer-wording-sync`（其树在 #192 合入后为 7 钉）
+发 dispatch 作业 `41936345046` 取 `--sync-ratchet` 工件，工件到手才作为第二个 commit 落账，
+期望账本 7 钉 → 6 钉。这台笔记本的读数不构成入账依据。
+
+#### 2. AC-17\|03：属主选了「逐个登记」，实测这条路**不由本机执行**（不动，登记为属主动作）
+
+裁定内容是用 `docs/quality/immutable-evidence.json` 逐个登记那 334 个 `docs/evidence/**/*.py`，
+取代按前缀整片排除。核验结果是这条路对本机封闭，三处都是硬门：
+
+| 门 | 位置 | 实测 |
+|----|------|------|
+| 清单自身被代码钉死 | `scripts/quality/immutable_evidence.py:32` `MANIFEST_SHA256_PIN`，`:362` 默认用它校验 | 现提交清单字节的 sha256 = `6edd0786c62b1e7a…` 恰等于代码钉；加任何一行即门禁红 |
+| 候选身份只来自一份**不在仓库里**的分类 | `:24-26` 钉 `docs/evidence/C100/quality-scope-audit/immutable-wave9-exact5055/classification.json` 的 sha256；`:430` 要求类别恰为 `B` | `.gitignore:249` 整片排除 `/docs/evidence/C100/**`，本机没有这份 5055 行分类，也无法忠实重跑那次审计 |
+| 批准要另一枚代码钉工件 | `:33-35` `APPROVAL_ARTIFACT_SHA256_PIN`，逐行需要 `receipt` 溯源指针与 reviewer/时间戳 | 模块 docstring 原话：「never discovers exemptions by directory or filename pattern」 |
+
+所以这一格维持已入账红，并把属主要做的三件事记进 `SUBAGENT_TASKS.md`（重跑分类审计 → 出经审阅的清单与批准工件 →
+更新两处代码钉）。我没有改用「新寄存器 + 改判据」来绕：判据原文禁止按名字排除，那等于把仪器改成
+「要么假绿、要么必红」，属于决定而不是清理。
+
+#### 3. AC-5\|03 / AC-16\|05 / AC-16\|06：按裁定维持已入账缺口（不动）
+
+同一根因：零依赖扫描器的冻结基线里 9 条 string finding 全是产品身份串
+（`adapter_id "akshare"`、`source_id "akshare.daily"`、`request_source` 默认值、
+`STOCK_DAILY_EXECUTION_SOURCE_ID`）。裁定是维持现状、验收结论写明未闭合；既不收窄扫描器口径
+（那等于放宽已勾的 AC-16\|05 AST 口径），也不改标识符拼写（那是跨仓 wire 契约与已发布 OpenAPI 的字面量，
+也正是 C35 收口过的门禁空转）。
+
+#### 4. #194：#189 只修了一半，CI 红的那条路径根本没被改到（CODE/OFFLINE 实测）
+
+#189 把三个**进程内**发布点改成 write-then-rename，但红仍在 `test_timeout_before_ready_kills_descendant_in_launch_isolated_group`
+（作业 `41855342867` / 作业 id `126662332027`：`ValueError: invalid literal for int() with base 10: ''`，1 failed / 35476 passed）。
+读源码才看清：真正发布 marker 的是 `_write_test_worker()` **生成的子进程脚本文本**，五种模式全部还写着
+`open(marker, 'w')`。守卫测试因此按 operand 判定，而不是按变量名：先对 pre-fix 树与新树各跑一遍同一检测器，
+
+```
+pre-fix   truncate-open 目标 = ['marker'] ×4 + ["'/tmp/…/pid'"]，os.replace 出现 False ×5
+post-fix  每个模式都 = ['partial']，os.replace(partial, marker) True ×5
+```
+
+`before_command` 这一格正是第一版守卫（只认字面 token `marker`）会漏掉的形态——它 open 的是烤进源码的绝对路径；
+这条是靠跑旧文件发现的，不是推理出来的。反事实臂把两种历史形态都断言在内，守卫不会靠看不见而通过。
+
+#### 5. 新开：AFI 的 1108 个采集脚本进类型平面，顺带暴露 831 个真 bug（CODE/OFFLINE，PR #270）
+
+属主在裁定 AC-17\|06 时改提了一条要求：「我希望能够覆盖 ai-for-investor 里面的上千个采集数据的脚本」。
+盘点对象 `src/backend/app/data_fetch/scripts/`：1108 个 tracked `.py`（git 全跟踪、无未跟踪 .py）。
+
+* 为什么此前不在任何门禁里：`src/backend/pyproject.toml:150` 的 mypy `exclude` 写着 `"scripts/"`，
+  mypy 按**非锚定子串**匹配，把 `app/data_fetch/scripts/` 一起吞掉。`mypy app` 报 checked 740 files，
+  另有 1108 个文件从未被类型面读过。ruff 侧本来已覆盖且干净（0 findings、1108 files already formatted）。
+* 指过去实测 1103 errors / 881 files，其中 **831 条是同一个真缺陷**：每个脚本的 `main()` 都写
+  `script = SomeScript(); script.run()`，而整条 MRO 里没有 `run`
+  （`FuturesSpotSys` → `AkshareToMySql` → `MysqlBase` → `Database` → `object`，运行时 `hasattr(cls,'run')` 为 False），
+  `app/data_fetch/` 全树 `__getattr__`/metaclass/`setattr` 注入 0 命中。生产掩盖它是因为调度器
+  `app/services/akshare/script.py:379-383` 先解析 `fetch_data`，从不走 `main()`。
+* 做法：831 个文件各改一行 `script.run()` → `script.fetch_data()`（831 个目标类都声明
+  `fetch_data(self, *args, **kwargs)`，实测 831/831，调用形状不变；另有 50 个脚本本来就这么写）。
+  实测 `1103 → 226 errors`、`881 → 58 files`、`attr-defined 831 → 0`、`assignment 45 → 0`、`override` 保持 3，
+  且没有任何错误类别增长。
+* 同批第三个 commit 修的是 20 个脚本里的假注解：`def fetch(self, fund_code: str = None)` —— 默认值今天就是 None，
+  注解却在说 str。改成 `str | None = None` 不动任何默认值与调用点，`assignment` 45 → 0、`arg-type` 18 → 13。
+* **被自我复核否掉的方案**：第一版给 `AkshareToMySql` 加 `run(**kwargs)` 委托 `fetch_data`，
+  一处修 831 个文件。它把 `override` 从 3 变成 162 —— 164 个脚本自带 `run(self, <位置参数>)`，
+  任何基类签名都比它们宽；而且若 `fetch_data` 在运行时也挂到基类上，`hasattr(instance,"fetch_data")`
+  对所有子类都成立，会把那 164 个脚本在 `script.py:263`/`:380` 误路由。该 commit 以 revert 留在历史里，
+  没有被抹掉。
+* 平面现在是 advisory：`--scope collection` 在 CI 里只报数不判红，基线要由 CI 自己的读数经
+  `ALLOW_BASELINE_UPDATE=1` 的评审式 `--update` 冻结后再摘掉 `--advisory`（本仓 `baseline_update_guard.py`
+  的存在理由就是禁止同一 PR 里既改代码又抬基线，见迭代193 审计项 C10）。226 这个数是笔记本读数，只作引用。
+* 剩下的 226 条**没有**被豁免，主因已量化，供后续波次直接取用：
+  88 条 `union-attr` 来自 `Database.cursor: _DatabaseCursor | None`（`core/database.py:73`）——
+  这是共享 DB 层的形状问题，修它需要设计决定（`connect_db()` 返回游标或强制 `_require_cursor()`），
+  不该塞进验收收尾波次；39 条 `index` 是同一条「按整数下标取字典」的抄写形态；
+  30+ 条 `assignment` 是 `def f(x: str = None)` 这类可安全改注解的默认值。
+* 覆盖平面仍未动，且明确不声称：`.coveragerc` 排除 `app/data_fetch/**`，1057 个非 `__init__` 脚本里
+  只有 120 个（11.35%，出现在 13 个测试文件里）被测试引用。把它们并进 `--cov=app` 的 70% 门槛需要真测试，
+  不是改一行配置。
+
+#### 6. 入账后的账本
+
+`docs/quality/acceptance-gate-ratchet.json` 自 dev `81bc5f9e1`（#192）起为 **7 钉**：
+AC-5|03、AC-11|04、AC-16|05、AC-16|06、AC-16|08（待 #195 重钉后消失）、AC-17|03、AC-17|06。
+dev 侧的复测作业 `41936293992`、#195 的 sync dispatch 作业 `41936345046`、#194 与 AFI #270 的门禁作业
+在写这一节时仍在跑；本波不把在跑的作业写成已通过，也不把任何 PR 合并本身当成验收面闭合。
+
+#### 7. AC01 脚本半区刷新：现行分母是 1057，不是 1066，且有 9 行无源映射（CODE/OFFLINE，本机清点）
+
+顺着采集脚本这条线把 AC01 要求的「带环境身份/采集时间的清单 + 双向 anti-join」在脚本半区做了一遍现行刷新，
+结论与九条异常行都记在 [INVENTORY_AUDIT_20261105.md](INVENTORY_AUDIT_20261105.md)。要点：
+
+* 分母：`app/data_fetch/scripts/` 下 tracked `.py` = **1108**，其中非 `__init__` = **1057**，未跟踪 0。
+  `INVENTORY.md:11` 的「1,066」是 CSV 行数当文件数，差的正是下面 9 行。
+* 正查（清单→树）：1066 行里 9 行在树里不存在；对这 9 行又做了三重检验——
+  git 历史既无 `--diff-filter=A` 也无 `--diff-filter=D` 记录（从未入库）、其 `source_sha256`
+  不匹配全仓任何 `.py` 的内容哈希、在 `opendata` 工作树按文件名也是 0 命中。
+  即：**这 9 行带着哈希，但没有任何可复核的来源**。其中 2 行 `static_role=helper_review_only`、
+  7 行 `entrypoint_run` 且 `route=PENDING_PROVIDER_MAPPING`。
+* 反查（树→清单）：1057 个非 `__init__` 脚本全部在 CSV 内，未列 0 条；51 个 `__init__.py` 按 CSV 口径不计。
+* 判定：脚本半区可称「已刷新」，不可称「已闭合」——`无未解释项` 还要求说清这 9 行从哪来，
+  本会话拿不出证据归类，故交属主裁定，且 CSV 自此不得被引用为「1,066 个脚本已有迁移映射」的依据。
+  AC11 的分母自此按 1057 计。AC01 另一半（实际 DB 任务含 inactive、systemd/cron/worker、表、消费者）
+  本次**已以只读方式刷新**（`ak_scheduled_tasks` 1103 行 / **1098 armed** / 5 inactive；
+  `ak_data_scripts` 1066 注册，9 行无文件、0 文件未注册、0 任务孤儿），但这组数字同时推翻了一条旧前提，见下一小节。
+
+同一份台账还给出一个此前任何文档都没写过的硬数：**AC11 已分派处置的脚本是 0 / 1057**。1057 条活行的 `status` 全是
+「待盘点/待映射」(1049) + 「review_only」(8)，`migration_route` 全是 `PENDING_PROVIDER_MAPPING` / `HELPER_REVIEW`，
+而这两个占位值既不在计划 §5 的七种处置词表内、也没在任何 markdown 里定义（grep 0 命中）。因此 §6 要求每周上报的
+「已处置脚本 / 总脚本」按算术只能写 0/1057；把 1049 条 PENDING 读成「已映射」就是虚报。分族（stock 384 / other 317 /
+index 93 / fund 87 / futures 64 / option 46 / bond 41 / fx 20 / crypto 5）与分频（daily 680 / weekly 266 / hourly 85 /
+monthly 21 / **unspecified 5**）都记在审计文档里供分派直接取用——注意族与频率本身也仍未人工确认，不是已知输入。
+静态形状与类型面互相印证：`entrypoint_fetch_data` 885 个类里 831 个的 `main()` 调用不存在的 `run`（#270 已修），
+`entrypoint_run` 162 个自带入口。

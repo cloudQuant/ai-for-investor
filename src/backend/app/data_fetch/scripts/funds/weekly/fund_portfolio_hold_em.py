@@ -90,7 +90,7 @@ class FundPortfolioHoldEm(AkshareToMySql):
             self.logger.warning(f"解析季度字符串失败: {quarter_str}, 错误: {e}")
             return None, None, None
 
-    def fetch_portfolio_hold_data(self, fund_code: str, year: str = None) -> pd.DataFrame:
+    def fetch_portfolio_hold_data(self, fund_code: str, year: str | None = None) -> pd.DataFrame:
         """
         获取基金持仓数据
 
@@ -231,7 +231,7 @@ class FundPortfolioHoldEm(AkshareToMySql):
             self.logger.error(f"获取已存在数据ID失败: {e}")
             return set()
 
-    def run(self, fund_code: str = None, year: str = None):
+    def run(self, fund_code: str | None = None, year: str | None = None):
         """
         执行数据获取和保存
 

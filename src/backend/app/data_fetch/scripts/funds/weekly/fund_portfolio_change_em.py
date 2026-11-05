@@ -89,7 +89,7 @@ class FundPortfolioChangeEm(AkshareToMySql):
             return None, None, None
 
     def fetch_portfolio_change_data(
-        self, fund_code: str, indicator: str = "累计买入", year: str = None
+        self, fund_code: str, indicator: str = "累计买入", year: str | None = None
     ) -> pd.DataFrame:
         """
         获取基金组合重大变动数据
@@ -232,7 +232,9 @@ class FundPortfolioChangeEm(AkshareToMySql):
             self.logger.error(f"获取已存在数据ID失败: {e}")
             return set()
 
-    def run(self, fund_code: str = None, indicator: str = "累计买入", year: str = None):
+    def run(
+        self, fund_code: str | None = None, indicator: str = "累计买入", year: str | None = None
+    ):
         """
         执行数据获取和保存
 

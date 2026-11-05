@@ -75,7 +75,7 @@ class OpenFundRankEm(AkshareToMySql):
             self.logger.warning(f"解析日期失败: {e}, 原始值: {date_str}")
             return None
 
-    def parse_float(self, value: Any, default: float = None) -> float | None:
+    def parse_float(self, value: Any, default: float | None = None) -> float | None:
         """解析浮点数值"""
         if pd.isna(value) or value in ("---", "", "--"):
             return default
@@ -271,8 +271,8 @@ class OpenFundRankEm(AkshareToMySql):
         try:
             self.connect_db()
             sql = "SELECT R_ID FROM OPEN_FUND_RANK_EM WHERE IS_ACTIVE = 1"
-            self.cursor.execute(sql)
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchall()
             return {row[0] for row in result} if result else set()
         except Exception as e:
             self.logger.error(f"获取已存在数据ID失败: {e}")

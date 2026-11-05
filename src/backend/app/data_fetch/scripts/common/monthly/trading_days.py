@@ -146,8 +146,8 @@ class TradingDaysUpdater(AkshareToMySql):
                 self.logger.info("Clearing existing trading days data")
                 self.connect_db()
                 clear_sql = f"DELETE FROM {self.table_name}"  # nosec B608
-                self.cursor.execute(clear_sql)
-                self.connection.commit()
+                self.require_cursor().execute(clear_sql)
+                self.require_connection().commit()
                 self.disconnect_db()
 
                 # 保存新数据
@@ -177,8 +177,8 @@ class TradingDaysUpdater(AkshareToMySql):
             sql = (
                 f"SELECT MAX(TRADE_DATE) as latest_date FROM {self.table_name} WHERE IS_ACTIVE = 1"  # nosec B608
             )
-            self.cursor.execute(sql)
-            result = self.cursor.fetchone()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchone()
             self.disconnect_db()
 
             if result and result[0]:
@@ -202,8 +202,8 @@ class TradingDaysUpdater(AkshareToMySql):
         try:
             self.connect_db()
             sql = f"SELECT COUNT(*) FROM {self.table_name} WHERE TRADE_DATE = %s AND IS_ACTIVE = 1"  # nosec B608
-            self.cursor.execute(sql, (check_date,))
-            result = self.cursor.fetchone()
+            self.require_cursor().execute(sql, (check_date,))
+            result = self.require_cursor().fetchone()
             self.disconnect_db()
 
             return result[0] > 0 if result else False

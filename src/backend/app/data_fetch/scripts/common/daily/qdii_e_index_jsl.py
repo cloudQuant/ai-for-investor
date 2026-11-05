@@ -68,7 +68,7 @@ def main():
     """Main function to run the data fetch"""
 
     script = QdiiEIndexJsl()
-    script.run()
+    script.fetch_data()
 
 
 if __name__ == "__main__":

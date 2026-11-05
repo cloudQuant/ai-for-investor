@@ -5,7 +5,11 @@ import pytest
 
 pytest.importorskip("akshare", reason="optional akshare provider package is required")
 
-from app.data_fetch.core.mysql_base import MysqlBase  # noqa: E402
+from app.data_fetch.core.mysql_base import (  # noqa: E402
+    MysqlBase,
+    _adapt_connector_connection,
+    _PositionalCursor,
+)
 from app.data_fetch.providers.akshare_to_mysql import AkshareToMySql, FuncThread  # noqa: E402
 from app.data_fetch.utils.common_utils import retry_on_exception  # noqa: E402
 
@@ -405,3 +409,57 @@ def test_akshare_to_mysql_save_data_returns_false_for_empty_input(monkeypatch):
     )
 
     assert service.save_data(pd.DataFrame(), "FAKE_TABLE") is False
+
+
+def test_require_accessors_raise_where_the_handle_is_not_established():
+    """`require_cursor()`/`require_connection()` are checks, not factories."""
+    service = MysqlBase({})
+
+    with pytest.raises(RuntimeError, match="cursor is not established"):
+        service.require_cursor()
+    with pytest.raises(RuntimeError, match="connection is not established"):
+        service.require_connection()
+
+    cursor = object()
+    connection = object()
+    service.cursor = cursor
+    service.connection = connection
+
+    assert service.require_cursor() is cursor
+    assert service.require_connection() is connection
+
+
+def test_positional_cursor_keeps_tuple_rows_and_rejects_dictionary_rows():
+    class ConnectorCursor:
+        def __init__(self, rows):
+            self._rows = list(rows)
+
+        def fetchone(self):
+            return self._rows[0] if self._rows else None
+
+        def fetchall(self):
+            return list(self._rows)
+
+    positional = _PositionalCursor(ConnectorCursor([("2026-11-05", 1)]))
+    assert positional.fetchone() == ("2026-11-05", 1)
+    assert [row[0] for row in positional.fetchall()] == ["2026-11-05"]
+
+    with pytest.raises(RuntimeError, match="dictionary row"):
+        _PositionalCursor(ConnectorCursor([{"TRADE_DATE": "2026-11-05"}])).fetchone()
+    with pytest.raises(RuntimeError, match="dictionary row"):
+        _PositionalCursor(ConnectorCursor([{"TRADE_DATE": "2026-11-05"}])).fetchall()
+
+
+def test_adapting_a_non_connector_connection_keeps_its_identity():
+    """Doubles that already return positional rows are not wrapped into an unrecognisable object."""
+
+    class FakeConnection:
+        def cursor(self):
+            return object()
+
+        def is_connected(self):
+            return True
+
+    connection = FakeConnection()
+
+    assert _adapt_connector_connection(connection) is connection
