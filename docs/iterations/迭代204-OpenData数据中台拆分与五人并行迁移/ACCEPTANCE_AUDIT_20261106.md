@@ -204,3 +204,27 @@ PR head SHA 全部以 `git ls-remote` / API 现读回：#273 `0dbb3f25f5da86b94c
 6. **OpenData AC-5|07**：走 CI 侧 bandit 证据重跑续期（24 h 时效窗口），**不得**用笔记本生成的档案入账（`DEVELOPMENT_STATUS.md:2077`、棘轮 sync 协议 `:2104-2108`）。资源：OpenData CI dispatch。
 7. **6 个已裁定降级的验收棘轮钉**（AC-5|03、AC-11|04、AC-16|05、AC-16|06、AC-17|03、AC-17|06；dev 文件现含 7 钉，AC-16|08 待 #195 sync 后落为 6）：属主 2026-11-05 已逐项裁定维持，勿被后续代理当「待修代码」重开。资源：无（裁定已在册，见 Wave 25 §4 / Wave 26 §2-3）。
 8. **1,098 armed 全量是否为制度本意**（`RUNTIME_REPAIR_20261105.md` §8 遗留）：源配额与 AC13 跨进程预算是活问题；`scheduler.py:132` 只按 `is_active` 武装，无白名单。资源：属主一句话 + 如需收敛则批量 `is_active` 变更审批。
+
+9. **8 个 systemd 单元的执行目标在 git 与磁盘上都不存在（部署完整性，实测 2026-11-06 02:58 CST）。** 用 #285 自带的 `scripts/ops/check_service_runtime_assets.py` 只读审计本机 unit 目录：19 个 unit 文件、16 个有 ExecStart、**12 个有 finding、11 条 missing_file（跨 8 个脚本）+ 1 条 untracked_but_present**。缺位脚本：`run_etf_nav_shard.sh`、`run_dce_option_recovery.sh`、`run_dce_browser_capture.sh`、`run_option_history_loop.sh`、`run_stock_tail_slices.sh`、`policy_expiry_watchdog.py`、`backfill_stock_amount_sina.py`。
+   代价是活的：`ai-for-investor-etf-nav-backfill@.service` = `Restart=always RestartSec=30`，shard1 `NRestarts=2166`、30 分钟 60 次重启事件，四块合计约 11,500 次/天 `203/EXEC` 空转，期间 ETF NAV 回填零产出；stock tail / option / DCE / watchdog 同样停摆。
+   取证边界：两个 `.py` 只剩 `scripts/ops/__pycache__/*.cpython-313.pyc`（符号可查、函数体不可复原），5 个 `.sh` **在本机任何位置、任何 ref 都不存在**（`find /home/yun` 与 `git log --all -- <path>` 双查为空）→ **不属于可从部署备份恢复的那一类**。资源：属主对每个入口给「按 unit 语义重写（需评审）/ 连单元一起退役」的裁定；未经确认不代为 stop/disable。
+   这条同时修正「#6 重建 5 个控制器即恢复平面在跑」的读感：控制器 python 在，shell 入口不在。`list-timers` 的 active 只证明排程存在，不证明工作发生。
+
+10. **最小权限（AC12 侧）。** 应用 DB 账号在同一 MySQL 实例上对无关仓库 `backtrader_web` 持有 `ALL PRIVILEGES`；#291 的 `warehouse_identity.py` 现测 `hosted_schemas = [information_schema, performance_schema, akshare_data, backtrader_web, ai_for_investor]`，且它对 `backtrader_web` 在 apply/plan 两种 mode 下都 `allowed=False / exit_code=2 / write_possible=False`。**应用层拒写不等于权限面收敛**——只要账号仍有 GRANT OPTION 级别的写权，误配 DSN 的进程仍可绕过应用直连。资源：属主/DBA 出一条 `REVOKE` 计划（按库白名单），并确认恢复平面使用的账号与 API 账号分离。
+
+### 幽灵后端 50 个 armed 任务的首个可测槽位（属主裁定用的时刻表）
+
+同一查询独立复算：1,066 条 `ak_data_scripts` 里 **9 条的 `module_path` 在磁盘上无对应 `.py`**，其 armed 任务恰为 **50**（与 `script_file_absent: 50` 闭合）。50 条 `next_execution_at` 全部落在 **2026-11-06（CST 墙钟）**，即本波之后第一次可判定观测：
+
+| 脚本 | 任务数 | 首个槽位（CST） |
+|---|---|---|
+| `forex_hist_sina` | 16 | 11-06 06:30 |
+| `fund_monetary_income_history` | 26 | 11-06 08:35 |
+| `fund_reviewed_unit_nav_history` | 4 | 11-06 08:45 |
+| `etf_realtime_quote_sina` | 1 | 11-06 15:50 |
+| `cffex_option_daily_history` | 1 | 11-06 19:05 |
+| `commodity_option_daily_history` | 1 | 11-06 19:25 |
+| `etf_option_daily_history` | 1 | 11-06 19:45 |
+
+截至本波读数（重启后 14:46→18:47 UTC：77 条 completed / 4 条 failed 且 4 条全属 task 1049 的 600 s 超时），这 50 个任务**一条执行行都还没产生**，所以「持续失败」仍是待验证预测，不是已观测事实；06:30 之后可直接按 `_resolve_callable`（`app/services/akshare/script.py:395-425`，注册 `module_path` 的 `ModuleNotFoundError` 被吞、回落通用装载器）判定它们是走通、走错语义还是失败。
+
