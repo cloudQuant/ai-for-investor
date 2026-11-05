@@ -10,12 +10,9 @@ from __future__ import annotations
 
 import base64
 import binascii
-import csv
 import hashlib
 import hmac
-import io
 import json
-import math
 import os
 import re
 import stat
@@ -23,7 +20,6 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -33,10 +29,12 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.market_data_platform import (
+    MdPublication,
     MdResearchDataBinding,
     MdResearchDataBindingConsumer,
     MdResearchDataBindingRevocation,
     MdResearchDataBindingScope,
+    MdSourceSnapshot,
 )
 from app.models.user import User
 from app.schemas.ai_strategy_research import AIStrategyResearchRunRequest
@@ -54,22 +52,51 @@ from app.services.market_data.dataset_contracts import (
     DatasetContractRegistryError,
 )
 from app.services.market_data.identity import MarketDataIdentityResolutionError
+from app.services.market_data.publication import (
+    PUBLICATION_SOURCE_SNAPSHOT,
+    MarketDataVisibilityAnchor,
+)
 from app.services.market_data.query_resolution import MarketDataQueryResolutionError
 from app.services.market_data.query_service import (
     MarketDataQueryExecution,
     MarketDataQueryServiceError,
 )
+from app.services.market_data.research_binding_contract import (
+    _ASSET_TYPE_PATTERN,
+    _CSV_COLUMNS,
+    _SHA256_PATTERN,
+    MarketDataPublicationReceipt,
+    MarketDataResearchBindingError,
+    _aware_utc,
+    _build_publication_binding_section,
+    _canonical_json,
+    _canonical_sha256,
+    _iso_utc,
+    _manifest_publication_pins,
+    _materialize_csv,
+    _normalized_timeframe,
+    _parse_runtime_timestamp,
+    _required_positive_int,
+    _required_sha256,
+    _required_text,
+    _sealed_source_snapshot_ids,
+    _sha256_bytes,
+    _validate_publication_binding_matches_binding,
+    _validated_pit_anchor,
+    _validated_publication_binding,
+    _validated_query_semantics,
+    market_data_binding_content_sha256,
+    market_data_binding_contract_sha256,  # noqa: F401
+    market_data_binding_publication_pins,  # noqa: F401
+)
 from app.services.market_data.source_policy import MarketDataSourcePolicyError
 from app.services.market_data.store import MarketDataStoreError
 
 UTC = timezone.utc
-_BINDING_SCHEMA_VERSION = "market-data-research-binding-v1"
+_BINDING_SCHEMA_VERSION = "market-data-research-binding-v2"
 _SIGNATURE_SCHEMA_VERSION = "market-data-research-binding-signature-v1"
 _RUNTIME_CAPABILITY_CONTEXT_SCHEMA_VERSION = "market-data-research-runtime-capability-v1"
 _RUNTIME_CAPABILITY_CONTEXT_TTL = timedelta(minutes=15)
-_CSV_COLUMNS = ("datetime", "open", "high", "low", "close", "volume", "openinterest")
-_ASSET_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
-_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _INTENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _CAPABILITY_CONTEXT_SEAL = object()
 _STRICT_RESEARCH_BARS_FAMILY_BY_ASSET_TYPE = MappingProxyType(
@@ -85,14 +112,6 @@ _STRICT_RESEARCH_BARS_FAMILY_BY_ASSET_TYPE = MappingProxyType(
         "crypto": "crypto.range",
     }
 )
-
-
-class MarketDataResearchBindingError(ValueError):
-    """Stable fail-closed error raised by the research binding boundary."""
-
-    def __init__(self, code: str) -> None:
-        self.code = code
-        super().__init__(code)
 
 
 class _QueryService(Protocol):
@@ -133,6 +152,7 @@ class MarketDataResearchRuntimeBinding:
     query_semantics: Mapping[str, object]
     signature_payload: Mapping[str, object]
     runtime_capability_context: Mapping[str, object] | None = None
+    publication_pins: tuple[Mapping[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,12 +283,19 @@ class MarketDataResearchBindingService:
             timeframe=timeframe,
             timeframe_n=request.timeframe_n,
         )
+        publication_binding = await self._publication_binding_section(
+            execution=execution,
+            query_semantics=query_semantics,
+            csv_content=csv_content,
+            observation_evidence=observation_evidence,
+        )
         material = {
             "schema_version": _BINDING_SCHEMA_VERSION,
             "owner_user_id": owner_id,
             "intent_id": normalized_intent_id,
             "query_semantics": query_semantics,
             "pit": _pit_evidence(execution),
+            "publications": publication_binding,
             "artifact": {
                 "sha256": artifact_sha256,
                 "size_bytes": artifact_size,
@@ -915,6 +942,27 @@ class MarketDataResearchBindingService:
             raise MarketDataResearchBindingError(
                 "MARKET_DATA_BINDING_RUNTIME_SOURCE_EVIDENCE_MISMATCH"
             )
+        # The strict replay must reproduce the identical input vector, not merely
+        # the identical bytes: the pinned record-set content hash and every
+        # pinned publication receipt are re-verified here and refuse the run when
+        # either reference no longer resolves to the same sealed vector.
+        section = _validated_publication_binding(material)
+        datasets = section["datasets"]
+        if not isinstance(datasets, list) or not datasets:  # pragma: no cover - validated above
+            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INVALID")
+        replay_content_sha256 = market_data_binding_content_sha256(
+            csv_content=replay_csv,
+            observation_evidence=replay_evidence,
+        )
+        for dataset in datasets:
+            if not isinstance(dataset, dict):  # pragma: no cover - validated above
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INVALID")
+            if replay_content_sha256 != dataset["content_sha256"]:
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_REPLAY_CONTENT_MISMATCH")
+        await self._require_pinned_publications_current(
+            material=material,
+            anchor=_validated_pit_anchor(material.get("pit")),
+        )
         venue = execution.context.identity.venue
         if not isinstance(venue, str) or not venue.strip():
             raise MarketDataResearchBindingError(
@@ -1013,6 +1061,133 @@ class MarketDataResearchBindingService:
             select(MdResearchDataBinding).where(MdResearchDataBinding.binding_hash == binding_hash)
         )
 
+    async def _publication_binding_section(
+        self,
+        *,
+        execution: MarketDataQueryExecution,
+        query_semantics: Mapping[str, object],
+        csv_content: bytes,
+        observation_evidence: list[dict[str, object]],
+    ) -> dict[str, object]:
+        """Pin every contributing sealed source snapshot to its publication receipt.
+
+        A research binding may not describe its input as a loose local snapshot:
+        each source snapshot that supplied sealed bytes must already carry a
+        sealed ``md_publications`` receipt inside the binding's frozen visibility
+        anchor.  Missing, unsealed, or out-of-anchor receipts refuse the binding.
+        """
+        source_snapshot_ids = _sealed_source_snapshot_ids(observation_evidence)
+        receipts = await self._load_publication_receipts(
+            source_snapshot_ids=source_snapshot_ids,
+            anchor=execution.visibility_anchor,
+        )
+        return _build_publication_binding_section(
+            query=execution.context.query,
+            query_semantics=query_semantics,
+            csv_content=csv_content,
+            observation_evidence=observation_evidence,
+            knowledge_cutoff=execution.knowledge_cutoff,
+            receipts=receipts,
+        )
+
+    async def _load_publication_receipts(
+        self,
+        *,
+        source_snapshot_ids: tuple[str, ...],
+        anchor: MarketDataVisibilityAnchor,
+    ) -> tuple[MarketDataPublicationReceipt, ...]:
+        """Read and verify one sealed publication receipt per contributing snapshot."""
+        if not source_snapshot_ids:
+            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_MISSING")
+        statement = (
+            select(MdPublication, MdSourceSnapshot.payload_sha256)
+            .join(MdSourceSnapshot, MdSourceSnapshot.id == MdPublication.entity_id)
+            .where(
+                MdPublication.entity_type == PUBLICATION_SOURCE_SNAPSHOT,
+                MdPublication.entity_id.in_(list(source_snapshot_ids)),
+            )
+            .execution_options(populate_existing=True)
+        )
+        try:
+            rows = (await self._db.execute(statement)).all()
+        except SQLAlchemyError as exc:
+            raise MarketDataResearchBindingError(
+                "MARKET_DATA_BINDING_PUBLICATION_READ_FAILED"
+            ) from exc
+        receipts: dict[str, MarketDataPublicationReceipt] = {}
+        for publication, payload_sha256 in rows:
+            if not isinstance(payload_sha256, str) or not _SHA256_PATTERN.fullmatch(payload_sha256):
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INVALID")
+            if publication.entity_id in receipts:
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_DUPLICATE")
+            if publication.published_at is None or publication.visibility_sequence is None:
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_UNSEALED")
+            if publication.entity_sha256 != payload_sha256:
+                raise MarketDataResearchBindingError(
+                    "MARKET_DATA_BINDING_PUBLICATION_CONTENT_MISMATCH"
+                )
+            visible_at = _stored_utc(publication.published_at, "visible_at")
+            sequence = _required_positive_int(
+                publication.visibility_sequence,
+                "visibility_sequence",
+            )
+            if not anchor.permits(visible_at=visible_at, visibility_sequence=sequence):
+                raise MarketDataResearchBindingError(
+                    "MARKET_DATA_BINDING_PUBLICATION_OUT_OF_ANCHOR"
+                )
+            receipts[publication.entity_id] = MarketDataPublicationReceipt(
+                publication_id=_required_text(publication.id, "publication_id", 36),
+                source_snapshot_id=_required_text(
+                    publication.entity_id,
+                    "source_snapshot_id",
+                    36,
+                ),
+                entity_sha256=_required_sha256(
+                    publication.entity_sha256,
+                    "entity_sha256",
+                ),
+                visible_at=visible_at,
+                visibility_sequence=sequence,
+            )
+        if set(receipts) != set(source_snapshot_ids):
+            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INCOMPLETE")
+        return tuple(receipts[source_snapshot_id] for source_snapshot_id in source_snapshot_ids)
+
+    async def _require_pinned_publications_current(
+        self,
+        *,
+        material: Mapping[str, object],
+        anchor: MarketDataVisibilityAnchor,
+    ) -> None:
+        """Refuse a replay whose pinned publication receipts no longer hold.
+
+        The pinned set is re-read from ``md_publications`` and compared field by
+        field.  A publication row that disappeared, was resealed at a new
+        sequence, or whose entity digest drifted is refused instead of silently
+        binding the run to a different vector.
+        """
+        section = _validated_publication_binding(material)
+        datasets = section["datasets"]
+        if not isinstance(datasets, list) or not datasets:  # pragma: no cover - validated above
+            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INVALID")
+        pinned: list[dict[str, object]] = []
+        for dataset in datasets:
+            if not isinstance(dataset, dict):  # pragma: no cover - validated above
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INVALID")
+            publications = dataset["publications"]
+            if not isinstance(publications, list):  # pragma: no cover - validated above
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_INVALID")
+            pinned.extend(dict(receipt) for receipt in publications if isinstance(receipt, dict))
+        source_snapshot_ids = tuple(sorted(str(item["source_snapshot_id"]) for item in pinned))
+        current = await self._load_publication_receipts(
+            source_snapshot_ids=source_snapshot_ids,
+            anchor=anchor,
+        )
+        current_by_id = {receipt.source_snapshot_id: receipt.to_json() for receipt in current}
+        for receipt in pinned:
+            if current_by_id.get(str(receipt["source_snapshot_id"])) != receipt:
+                raise MarketDataResearchBindingError("MARKET_DATA_BINDING_PUBLICATION_STALE")
+
     def _artifact_destination(self, binding_hash: str) -> tuple[str, Path]:
         relative_path = f"bindings/{binding_hash}/data.csv"
         artifact_path = _safe_artifact_path(
@@ -1098,6 +1273,7 @@ class MarketDataResearchBindingService:
             raise MarketDataResearchBindingError("MARKET_DATA_BINDING_INACTIVE")
         manifest = _validated_manifest(binding)
         query_semantics = _manifest_query_semantics(manifest)
+        publication_pins = _manifest_publication_pins(manifest)
         artifact_path = _safe_artifact_path(
             self._artifact_root,
             relative_path=binding.artifact_relative_path,
@@ -1137,6 +1313,7 @@ class MarketDataResearchBindingService:
             manifest_hash=binding.manifest_sha256,
             query_semantics=MappingProxyType(dict(query_semantics)),
             signature_payload=MappingProxyType(payload),
+            publication_pins=publication_pins,
         )
 
     def _require_signing_key(self) -> bytes:
@@ -1635,15 +1812,6 @@ def _normalized_intent_id(value: object) -> str:
     return value.strip()
 
 
-def _normalized_timeframe(value: object) -> str:
-    if not isinstance(value, str):
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_TIMEFRAME_UNSUPPORTED")
-    normalized = value.strip().lower()
-    if normalized not in {"1d", "1w", "1mo"}:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_TIMEFRAME_UNSUPPORTED")
-    return normalized
-
-
 def _strict_research_bars_family_id(asset_type: str) -> str:
     """Return the server-owned family reserved for strict research OHLC bars."""
     family_id = _STRICT_RESEARCH_BARS_FAMILY_BY_ASSET_TYPE.get(asset_type)
@@ -1675,15 +1843,6 @@ def _require_strict_research_bars_family(*, asset_type: str, timeframe: str) -> 
             "MARKET_DATA_BINDING_STRICT_BARS_TIMEFRAME_UNSUPPORTED"
         )
     return family_id
-
-
-def _normalized_asset_type(value: object) -> str:
-    if not isinstance(value, str):
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    normalized = value.strip().lower()
-    if _ASSET_TYPE_PATTERN.fullmatch(normalized) is None:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    return normalized
 
 
 def _research_window(start: str | None, end: str | None) -> tuple[datetime, datetime]:
@@ -1789,85 +1948,6 @@ def _validate_execution(
         raise MarketDataResearchBindingError("MARKET_DATA_BINDING_LOCAL_INCOMPLETE")
 
 
-def _materialize_csv(execution: MarketDataQueryExecution) -> tuple[bytes, list[dict[str, object]]]:
-    rows = sorted(
-        execution.observations,
-        key=lambda item: (
-            _aware_utc(item.event_at, "event_at"),
-            item.visibility_sequence,
-            item.revision_number,
-            item.revision_id,
-        ),
-    )
-    if not rows:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_NO_OBSERVATIONS")
-    output = io.StringIO(newline="")
-    writer = csv.writer(output, lineterminator="\n")
-    writer.writerow(_CSV_COLUMNS)
-    evidence: list[dict[str, object]] = []
-    previous_event_at: datetime | None = None
-    for item in rows:
-        event_at = _aware_utc(item.event_at, "event_at")
-        if previous_event_at == event_at:
-            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_DUPLICATE_EVENT")
-        previous_event_at = event_at
-        fields = item.fields
-        if not isinstance(fields, Mapping):
-            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_OBSERVATION_INVALID")
-        open_value = _csv_required_number(fields.get("open"), "open")
-        high_value = _csv_required_number(fields.get("high"), "high")
-        low_value = _csv_required_number(fields.get("low"), "low")
-        close_value = _csv_required_number(fields.get("close"), "close")
-        volume_value = _csv_optional_number(fields.get("volume"), "volume")
-        open_interest = fields.get("openinterest", fields.get("open_interest"))
-        open_interest_value = _csv_optional_number(open_interest, "openinterest")
-        writer.writerow(
-            (
-                _iso_utc(event_at),
-                open_value,
-                high_value,
-                low_value,
-                close_value,
-                volume_value,
-                open_interest_value,
-            )
-        )
-        evidence.append(
-            {
-                "revision_id": _required_text(item.revision_id, "revision_id", 36),
-                "source_snapshot_id": _required_text(
-                    item.source_snapshot_id,
-                    "source_snapshot_id",
-                    36,
-                ),
-                "event_at": _iso_utc(event_at),
-                "available_at": _iso_utc(_aware_utc(item.available_at, "available_at")),
-                "visibility_sequence": _required_nonnegative_int(
-                    item.visibility_sequence,
-                    "visibility_sequence",
-                ),
-                "revision_number": _required_positive_int(item.revision_number, "revision_number"),
-            }
-        )
-    return output.getvalue().encode("utf-8"), evidence
-
-
-def _sealed_source_snapshot_ids(evidence: object) -> tuple[str, ...]:
-    """Return every immutable source snapshot that contributed sealed bytes."""
-    if not isinstance(evidence, list):
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    source_snapshot_ids: set[str] = set()
-    for item in evidence:
-        if not isinstance(item, Mapping):
-            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-        source_snapshot_ids.add(
-            _required_text(item.get("source_snapshot_id"), "source_snapshot_id", 36)
-        )
-    if not source_snapshot_ids:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_NO_OBSERVATIONS")
-    return tuple(sorted(source_snapshot_ids))
-
-
 def _query_semantics(
     *,
     execution: MarketDataQueryExecution,
@@ -1954,6 +2034,7 @@ def _validate_material_matches_binding(
         "intent_id",
         "query_semantics",
         "pit",
+        "publications",
         "artifact",
         "observations",
     }
@@ -2008,6 +2089,7 @@ def _validate_material_matches_binding(
         raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
     if not isinstance(material.get("observations"), list):
         raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
+    _validate_publication_binding_matches_binding(binding=binding, material=material)
 
 
 def _manifest_query_semantics(manifest: Mapping[str, object]) -> dict[str, object]:
@@ -2015,69 +2097,6 @@ def _manifest_query_semantics(manifest: Mapping[str, object]) -> dict[str, objec
     if not isinstance(material, Mapping):
         raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
     return _validated_query_semantics(material.get("query_semantics"))
-
-
-def _validated_query_semantics(value: object) -> dict[str, object]:
-    if not isinstance(value, Mapping):
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    expected_keys = {
-        "asset_type",
-        "symbol",
-        "timeframe",
-        "timeframe_n",
-        "full_window_start",
-        "full_window_end",
-        "canonical_id",
-        "dataset_code",
-        "family_id",
-        "family_contract_version",
-        "data_kind",
-        "frequency",
-        "source_policy_id",
-        "instrument_metadata_version",
-        "query_fingerprint",
-    }
-    if set(value) != expected_keys:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    normalized = {
-        "asset_type": _normalized_asset_type(value["asset_type"]),
-        "symbol": _required_text(value["symbol"], "symbol", 50),
-        "timeframe": _normalized_timeframe(value["timeframe"]),
-        "timeframe_n": _required_positive_int(value["timeframe_n"], "timeframe_n"),
-        "full_window_start": _iso_utc(
-            _parse_runtime_timestamp(value["full_window_start"], "full_window_start")
-        ),
-        "full_window_end": _iso_utc(
-            _parse_runtime_timestamp(value["full_window_end"], "full_window_end")
-        ),
-        "canonical_id": _required_text(value["canonical_id"], "canonical_id", 512),
-        "dataset_code": _required_text(value["dataset_code"], "dataset_code", 255),
-        "family_id": _required_text(value["family_id"], "family_id", 128),
-        "family_contract_version": _required_text(
-            value["family_contract_version"],
-            "family_contract_version",
-            64,
-        ),
-        "data_kind": _required_text(value["data_kind"], "data_kind", 64),
-        "frequency": _required_text(value["frequency"], "frequency", 32),
-        "source_policy_id": _required_text(value["source_policy_id"], "source_policy_id", 128),
-        "instrument_metadata_version": _required_text(
-            value["instrument_metadata_version"],
-            "instrument_metadata_version",
-            128,
-        ),
-        "query_fingerprint": _required_sha256(
-            value["query_fingerprint"],
-            "query_fingerprint",
-        ),
-    }
-    if normalized["timeframe_n"] != 1:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    start = _parse_runtime_timestamp(normalized["full_window_start"], "full_window_start")
-    end = _parse_runtime_timestamp(normalized["full_window_end"], "full_window_end")
-    if start >= end or normalized["data_kind"] != "bars":
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    return normalized
 
 
 def _controlled_artifact_root(value: str | Path) -> Path:
@@ -2160,51 +2179,6 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _csv_required_number(value: object, field_name: str) -> str:
-    if value is None:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_OHLC_REQUIRED")
-    try:
-        return _format_decimal(value, field_name=field_name)
-    except MarketDataResearchBindingError as exc:
-        if exc.code == "MARKET_DATA_BINDING_NUMERIC_INVALID":
-            raise MarketDataResearchBindingError("MARKET_DATA_BINDING_OHLC_REQUIRED") from exc
-        raise
-
-
-def _csv_optional_number(value: object, field_name: str) -> str:
-    if value is None:
-        return ""
-    return _format_decimal(value, field_name=field_name)
-
-
-def _format_decimal(value: object, *, field_name: str) -> str:
-    if isinstance(value, bool):
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_NUMERIC_INVALID")
-    try:
-        if isinstance(value, Decimal):
-            decimal_value = value
-        elif isinstance(value, (int, float, str)):
-            if isinstance(value, float) and not math.isfinite(value):
-                raise InvalidOperation
-            decimal_value = Decimal(str(value).strip())
-        else:
-            raise InvalidOperation
-    except (InvalidOperation, ValueError) as exc:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_NUMERIC_INVALID") from exc
-    if not decimal_value.is_finite():
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_NUMERIC_INVALID")
-    rendered = format(decimal_value.normalize(), "f")
-    if "." in rendered:
-        rendered = rendered.rstrip("0").rstrip(".")
-    return "0" if rendered in {"", "-0"} else rendered
-
-
-def _aware_utc(value: object, field_name: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_OBSERVATION_INVALID")
-    return value.astimezone(UTC)
-
-
 def _stored_utc(value: object, field_name: str) -> datetime:
     """Normalize a timestamp read from a timezone-preserving or SQLite column.
 
@@ -2218,20 +2192,6 @@ def _stored_utc(value: object, field_name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
-
-
-def _parse_runtime_timestamp(value: object, field_name: str) -> datetime:
-    if isinstance(value, datetime):
-        return _aware_utc(value, field_name)
-    if not isinstance(value, str) or not value.strip():
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_RUNTIME_TIMESTAMP_INVALID")
-    try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise MarketDataResearchBindingError(
-            "MARKET_DATA_BINDING_RUNTIME_TIMESTAMP_INVALID"
-        ) from exc
-    return _aware_utc(parsed, field_name)
 
 
 def _parse_runtime_window_timestamp(
@@ -2258,10 +2218,6 @@ def _parse_runtime_window_timestamp(
     return _parse_runtime_timestamp(value, field_name)
 
 
-def _iso_utc(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
-
-
 def _trusted_now(clock: Callable[[], datetime]) -> datetime:
     try:
         return _aware_utc(clock(), "clock")
@@ -2271,33 +2227,6 @@ def _trusted_now(clock: Callable[[], datetime]) -> datetime:
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
-
-
-def _required_text(value: object, field_name: str, maximum: int) -> str:
-    if not isinstance(value, str):
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    normalized = value.strip()
-    if not normalized or len(normalized) > maximum:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    return normalized
-
-
-def _required_sha256(value: object, field_name: str) -> str:
-    if not isinstance(value, str) or _SHA256_PATTERN.fullmatch(value) is None:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    return value
-
-
-def _required_positive_int(value: object, field_name: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    return value
-
-
-def _required_nonnegative_int(value: object, field_name: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        raise MarketDataResearchBindingError("MARKET_DATA_BINDING_MANIFEST_INVALID")
-    return value
 
 
 def _optional_signing_key(value: str | bytes | None) -> bytes | None:
@@ -2317,21 +2246,3 @@ def _required_signing_key(value: str | bytes) -> bytes:
     if normalized is None:
         raise MarketDataResearchBindingError("MARKET_DATA_BINDING_SIGNING_KEY_REQUIRED")
     return normalized
-
-
-def _canonical_json(value: object) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-
-
-def _canonical_sha256(value: object) -> str:
-    return _sha256_bytes(_canonical_json(value).encode("utf-8"))
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
