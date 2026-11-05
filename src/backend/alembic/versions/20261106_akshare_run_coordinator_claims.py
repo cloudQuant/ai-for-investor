@@ -206,6 +206,12 @@ def _create_table(
         ),
         sa.PrimaryKeyConstraint(*expected_primary_key),
     )
+    # `index-no-concurrently` (advisory): these indexes are built on the table this
+    # same revision just created, so the table is empty and holds no in-flight
+    # writers; `estimated_rows=0` above. `postgresql_concurrently=True` would also
+    # require running the revision outside its transaction and is not used by any
+    # other revision in this chain, which would make the SQLite/MySQL/PostgreSQL
+    # paths diverge for no locking benefit on a brand-new table.
     for index_name, column_name in expected_indexes:
         op.create_index(index_name, table_name, [column_name], unique=False)
 
@@ -257,4 +263,10 @@ def downgrade() -> None:
             )
         for index_name in index_names:
             op.drop_index(index_name, table_name=table_name)
+        # `drop-table` (advisory): reached only after the row-count proof above, so
+        # this drops an empty coordination table that nothing has claimed through yet.
+        # A table that ever received a claim, lease or cooldown gate keeps its rows and
+        # blocks the rollback instead; operators who want the data gone must archive
+        # and drain it deliberately rather than let a `downgrade -1` erase fencing
+        # history as a side effect.
         op.drop_table(table_name)
