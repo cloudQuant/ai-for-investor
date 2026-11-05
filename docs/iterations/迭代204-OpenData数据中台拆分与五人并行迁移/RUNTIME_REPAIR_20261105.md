@@ -97,3 +97,25 @@
 
 1. 5 个恢复控制器：重建 / 停用 unit / 只恢复 crypto 腿（§5）。
 2. 1098 个 armed 任务是否就是本意：`scheduler.py:106/132` 会把每条 `is_active` 都武装起来，而 2026-10-25 的台账记录的是「1,103 行里 69 条 active」。当前实际是 1,098 armed 全量跑真实源。本次修复按属主指示放行了全量，因此源侧配额与 AC13 的跨进程预算问题立刻变成活问题，而不是以后再说。
+
+## 9 修复后新查出的运行态缺陷（记录，不在本文修）
+
+同一台机器、同一份 dev 代码，修复之后 30 分钟窗口实测 14 completed / 2 failed。两条失败各有明确成因：
+
+1. **失败被记录之后，脚本还在写库。** task 1049 `crypto_hourly_market` 的台账行是
+   `created_at 14:03 / status=failed / end_time 14:13:01 / duration 601.0 /
+   error='Script call timed out after 600 seconds'`；而 `logs/backend.log` 显示同一脚本在
+   `22:13:54`（=14:13:54 UTC）处理 10000/59983 行，`22:18:43` 写「成功保存 59983 行数据到 CRYPTO_HOURLY…」，
+   `22:18:44` 再写 87 行。也就是说台账宣布失败并写下 `end_time` 之后约 5 分钟，写入仍在继续。
+   根因可在 `app/services/akshare/script.py:501-514` 直接读出：执行走
+   `asyncio.wait_for(asyncio.to_thread(...), timeout)`，`wait_for` 取消的是 awaitable，**线程不可杀**。
+   这违反本仓既有操作不变量：脚本入口必须跑在可杀的 child process group 里，超时/取消时先杀组再收割、
+   然后才抛错，并把父侧写栅栏（`claim_key`/`owner_id`/`fencing_token`/`execution_id`）传进子进程、
+   把子进程的已提交写回执并回父侧 tracker。该实现曾在树里（`app/services/akshare/__pycache__/script.cpython-313.pyc`
+   仍含 `_execute_callable_in_worker`，2026-10-27 编译），现已从 dev 源码消失——即这是一次**回归**，不是新缺陷。
+   验收含义：`failed` 不等于「无副作用」，任何按执行状态推导覆盖/新鲜度的做法在该路径上不成立（AC06 崩溃一致性、AC13 取消与重试）。
+2. **参数签名不匹配。** `"EtfFundHistEm.run() got an unexpected keyword argument 'source'"`：驱动按
+   `script.run(**params)` 调用，而该脚本的 `run` 不接受 `source`。这与 #270 的
+   「831 个 `main()` 调用不存在的 `run`」同源，属同一类静态形状问题。
+
+另记一条与 §1 同类的身份事实：产生 4,279 条失败的 raise 语句不在任何 ref 里，说明当时运行的进程与仓库无对应关系。
