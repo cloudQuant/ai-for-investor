@@ -15,10 +15,10 @@ import {
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { akshareTablesApi } from '@/api/akshare'
+import { useOpenDataStockDailyFreshness } from './useOpenDataStockDailyFreshness'
 import {
   classifyMarketDataRouteSelection,
   createMarketDataQueryFromContract,
-  deriveOpenDataFreshnessAvailability,
   hasMarketDataCapabilities,
   hasMarketDataQueryBundle,
   hasMarketDataQueryContract,
@@ -44,12 +44,10 @@ import {
   type MarketDataQueryMode,
   type MarketDataQueryObservation,
   type MarketDataQueryResponse,
-  type OpenDataAvailabilityState,
   type OpenDataCoverageState,
   type OpenDataDirectKlineRecord,
   type OpenDataDirectKlineRequest,
   type OpenDataDirectKlineResponse,
-  type OpenDataStockDailyFreshnessResponse,
 } from '@/api/marketData'
 import { CANDLE_DOWN_COLOR, CANDLE_ITEM_STYLE, CANDLE_UP_COLOR } from '@/constants/chartColors'
 import type { DataTable } from '@/types'
@@ -85,17 +83,6 @@ export interface OpenDataDirectKlineDisplayState {
   reason: OpenDataDirectKlineDisplayReason | null
 }
 
-export type OpenDataStockDailyFreshnessDisplayStatus =
-  | 'idle'
-  | 'loading'
-  | 'ready'
-  | 'unavailable'
-
-export interface OpenDataStockDailyFreshnessDisplayState {
-  status: OpenDataStockDailyFreshnessDisplayStatus
-  response: OpenDataStockDailyFreshnessResponse | null
-}
-
 function emptyOpenDataDirectKlineDisplay(): OpenDataDirectKlineDisplayState {
   return {
     status: 'idle',
@@ -110,10 +97,6 @@ function emptyOpenDataDirectKlineDisplay(): OpenDataDirectKlineDisplayState {
     durableReceipt: null,
     reason: null,
   }
-}
-
-function emptyOpenDataStockDailyFreshnessDisplay(): OpenDataStockDailyFreshnessDisplayState {
-  return { status: 'idle', response: null }
 }
 
 function isValidDirectBusinessDateRange(start: string, end: string): boolean {
@@ -872,9 +855,6 @@ export function useDataPage() {
   const openDataDirectKlineDisplay = ref<OpenDataDirectKlineDisplayState>(
     emptyOpenDataDirectKlineDisplay(),
   )
-  const openDataStockDailyFreshnessDisplay = ref<OpenDataStockDailyFreshnessDisplayState>(
-    emptyOpenDataStockDailyFreshnessDisplay(),
-  )
   const chartMode = ref<ChartMode>('price')
   const marketChartRef = ref<HTMLDivElement>()
   const instrumentOptions = ref<MarketInstrumentOption[]>([])
@@ -932,8 +912,6 @@ export function useDataPage() {
   })
   let openDataDirectRequestEpoch = 0
   let activeOpenDataDirectAbortController: AbortController | null = null
-  let openDataStockDailyFreshnessRequestEpoch = 0
-  let activeOpenDataStockDailyFreshnessAbortController: AbortController | null = null
   let marketPageBootstrapEpoch = 0
 
   const snapshot = computed<Record<string, unknown>>(() => result.value?.snapshot || {})
@@ -947,6 +925,12 @@ export function useDataPage() {
     isOpenDataOnlyStockRoute.value
     && marketDataRouteSelection.value.can_query
   ))
+  const {
+    openDataStockDailyFreshnessDisplay,
+    openDataStockDailyFreshnessAvailability,
+    invalidateOpenDataStockDailyFreshnessRequest,
+    refreshOpenDataStockDailyFreshness,
+  } = useOpenDataStockDailyFreshness(canReadOpenDataStockDailyFreshness)
   const showLocalCoverageMatrix = computed(() => (
     form.asset_type !== 'stock'
     || (
@@ -964,17 +948,6 @@ export function useDataPage() {
     ) return 'opendata_unavailable'
     return null
   })
-  // The freshness card's real OpenData availability state. A failed or disabled
-  // read surfaces as `opendata_unavailable`; an unmeasured (missing) report
-  // surfaces as `UNKNOWN`, never a date. Only a measured report is `PROVEN`,
-  // and a forward `coverage_state` lets SOURCE_LIMITED / NOT_SUPPORTED render
-  // distinctly instead of collapsing into a healthy value.
-  const openDataStockDailyFreshnessAvailability = computed<OpenDataAvailabilityState | null>(
-    () => deriveOpenDataFreshnessAvailability({
-      displayStatus: openDataStockDailyFreshnessDisplay.value.status,
-      response: openDataStockDailyFreshnessDisplay.value.response,
-    }),
-  )
   const selectedMarketPageFamily = computed(() => {
     const bundle = marketDataQueryBundle.value
     if (!bundle || bundle.requested_asset_type !== form.asset_type) return null
@@ -1627,54 +1600,6 @@ export function useDataPage() {
         marketDataCapabilitiesRequest = null
       })
     return marketDataCapabilitiesRequest
-  }
-
-  function invalidateOpenDataStockDailyFreshnessRequest(): void {
-    openDataStockDailyFreshnessRequestEpoch += 1
-    const controller = activeOpenDataStockDailyFreshnessAbortController
-    activeOpenDataStockDailyFreshnessAbortController = null
-    if (controller && !controller.signal.aborted) controller.abort()
-    openDataStockDailyFreshnessDisplay.value = emptyOpenDataStockDailyFreshnessDisplay()
-  }
-
-  function refreshOpenDataStockDailyFreshness(): void {
-    if (!canReadOpenDataStockDailyFreshness.value) return
-
-    const previousController = activeOpenDataStockDailyFreshnessAbortController
-    activeOpenDataStockDailyFreshnessAbortController = null
-    if (previousController && !previousController.signal.aborted) previousController.abort()
-
-    const controller = new AbortController()
-    const requestId = ++openDataStockDailyFreshnessRequestEpoch
-    activeOpenDataStockDailyFreshnessAbortController = controller
-    openDataStockDailyFreshnessDisplay.value = { status: 'loading', response: null }
-
-    void marketDataApi.getOpenDataStockDailyFreshness({ signal: controller.signal })
-      .then((response) => {
-        if (
-          requestId !== openDataStockDailyFreshnessRequestEpoch
-          || activeOpenDataStockDailyFreshnessAbortController !== controller
-          || controller.signal.aborted
-          || !canReadOpenDataStockDailyFreshness.value
-        ) return
-        openDataStockDailyFreshnessDisplay.value = { status: 'ready', response }
-      })
-      .catch(() => {
-        if (
-          requestId !== openDataStockDailyFreshnessRequestEpoch
-          || activeOpenDataStockDailyFreshnessAbortController !== controller
-          || controller.signal.aborted
-          || !canReadOpenDataStockDailyFreshness.value
-        ) return
-        // Transport and protocol errors are not represented as `missing` and
-        // never fall back to the local coverage matrix.
-        openDataStockDailyFreshnessDisplay.value = { status: 'unavailable', response: null }
-      })
-      .finally(() => {
-        if (activeOpenDataStockDailyFreshnessAbortController === controller) {
-          activeOpenDataStockDailyFreshnessAbortController = null
-        }
-      })
   }
 
   function isLocalCoverageMatrixAllowed(): boolean {
