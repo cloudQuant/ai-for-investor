@@ -695,8 +695,19 @@ jobs:
           # at 35cde6592, with all 8940 tests green).  diff-cover skips changed
           # files that --cov=app does not measure (tests, alembic revisions), so
           # this gate stays about application code.
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=60
+          #
+          # Compare against the base *commit*, not the moving branch name.  A
+          # --depth=1 fetch writes whatever dev points at right now as a shallow,
+          # parentless commit; if the PR branch does not already contain that tip,
+          # git cannot relate the two and diff-cover aborts with
+          # `fatal: origin/dev...HEAD: no merge base` even though every test in the
+          # job passed (measured on #287 and #291, 2026-11-05).  The merge ref that
+          # actions/checkout@v7 hands this job already has
+          # pull_request.base.sha as a parent, so that exact commit is present in
+          # the working tree's history and is the honest comparison point for this
+          # diff: it is the revision the PR was cut against.
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          diff-cover coverage.xml --compare-branch="${{ github.event.pull_request.base.sha }}" --fail-under=60
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
