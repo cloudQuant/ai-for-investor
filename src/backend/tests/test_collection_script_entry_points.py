@@ -38,6 +38,21 @@ BROKEN_SAMPLE: Final = (
     "    script.run()\n"
 )
 
+#: The two handles `Database` owns, and the reason they are nullable: `connect_db` establishes
+#: them, `disconnect_db` drops them. Reading them as an attribute and calling into it is a union
+#: dereference - that shape alone was 90 of the plane's mypy `union-attr` errors. The accessor
+#: path is `require_cursor()` / `require_connection()`, which raise instead of handing back `None`.
+DB_HANDLES: Final = frozenset({"cursor", "connection"})
+
+DB_HANDLE_SAMPLE: Final = (
+    "class Demo:\n"
+    "    def go(self):\n"
+    "        self.cursor.execute('SELECT 1')\n"
+    "        self.connection.commit()\n"
+    "        if self.connection:\n"
+    "            self.connection.rollback()\n"
+)
+
 
 def _defines(node: ast.ClassDef, name: str) -> bool:
     return any(
@@ -120,3 +135,45 @@ def test_no_collection_script_calls_an_entry_point_its_class_does_not_define() -
     assert files == 1057, f"the census scope moved: {files} scripts"
     assert unknown_total == 0, f"{unknown_total} calls whose base class the census cannot resolve"
     assert not broken, f"scripts calling a member they do not have: {broken[:10]}"
+
+
+def _db_handle_member_accesses(source: str) -> list[str]:
+    """Every `self.<handle>.<member>` read in `source`.
+
+    A bare `if self.connection:` is not a member access on the handle, so the legal
+    "is the connection still up?" guards stay legal while the dereferences do not.
+    """
+    hits: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "self"
+            and node.value.attr in DB_HANDLES
+        ):
+            hits.append(f"self.{node.value.attr}.{node.attr}")
+    return hits
+
+
+def test_the_handle_census_finds_the_dereferences_and_lets_the_guard_pass() -> None:
+    assert _db_handle_member_accesses(DB_HANDLE_SAMPLE) == [
+        "self.cursor.execute",
+        "self.connection.commit",
+        "self.connection.rollback",
+    ]
+
+
+def test_no_collection_script_dereferences_a_nullable_database_handle() -> None:
+    offenders: list[str] = []
+    files = 0
+    for path in sorted(SCRIPT_ROOT.rglob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        files += 1
+        hits = _db_handle_member_accesses(path.read_text(encoding="utf-8"))
+        if hits:
+            offenders.append(f"{path.relative_to(SCRIPT_ROOT.parent.parent)}: {hits[:3]}")
+
+    assert files == 1057, f"the census scope moved: {files} scripts"
+    assert not offenders, f"scripts dereferencing the nullable handle: {offenders[:10]}"

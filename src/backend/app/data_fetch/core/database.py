@@ -10,20 +10,30 @@ from typing import Any, Literal, Protocol
 
 import pandas as pd
 import pytz
-from mysql.connector.abstracts import MySQLCursorAbstract
 from mysql.connector.types import (
     DescriptionType,
     MySQLConvertibleType,
-    RowItemType,
     RowType,
 )
 
-_DatabaseRow = RowType | dict[str, RowItemType]
+#: A row as the data-fetch plane actually reads it. Every cursor here is created by
+#: ``connection.cursor()`` without ``dictionary=True`` (the only ``dictionary=True`` site in the
+#: tree, ``scripts/common/currency_fallback.py``, opens its own connector connection and never
+#: touches this class), so a row is a positional tuple. It used to be declared as
+#: ``RowType | dict[str, RowItemType]``; that phantom dict arm is what made the 39 ``row[0]``
+#: reads in the scripts indexable only by ``str``, i.e. a shared-layer lie, not per-file noise.
+_DatabaseRow = RowType
 _DatabaseParams = Sequence[MySQLConvertibleType] | dict[str, MySQLConvertibleType]
 
 
 class _DatabaseCursor(Protocol):
-    """The default connector cursor operations used by data-fetch services."""
+    """The default connector cursor operations used by data-fetch services.
+
+    Rows are positional. The connector itself types its cursor rows as ``RowType`` *or* a dict
+    (one cursor class serves both flavours), so the concrete cursor cannot satisfy this protocol
+    directly; ``mysql_base._PositionalCursor`` is the boundary that checks the shape and hands
+    back a row the callers may index by position.
+    """
 
     @property
     def description(self) -> Sequence[DescriptionType] | None: ...
@@ -41,7 +51,7 @@ class _DatabaseCursor(Protocol):
 
     def close(self) -> None: ...
 
-    def __enter__(self) -> MySQLCursorAbstract: ...
+    def __enter__(self) -> "_DatabaseCursor": ...
 
     def __exit__(
         self,
@@ -69,9 +79,36 @@ class Database:
     def __init__(self, db_config: dict[str, Any], logger: logging.Logger | None = None):
         self.db_config = db_config
         self.logger = logger or logging.getLogger("DBBase")
+        # The live handle and its cursor. They are genuinely nullable: ``connect_db`` establishes
+        # them, ``disconnect_db`` drops them. Read them through ``require_connection()`` /
+        # ``require_cursor()``, which is the accessor that hands back a usable object instead of
+        # the union; the bare attributes stay nullable because that is what they are.
         self.connection: _DatabaseConnection | None = None
         self.cursor: _DatabaseCursor | None = None
         self.batch_size = 1000
+
+    def require_connection(self) -> _DatabaseConnection:
+        """Return the established connection, or raise instead of returning ``None``.
+
+        Without this accessor a call site that runs before ``connect_db`` (or after
+        ``disconnect_db``) dereferences ``None`` and dies with ``'NoneType' object has no
+        attribute`` noise; with it the failure names the missing step.
+        """
+        connection = self.connection
+        if connection is None:
+            raise RuntimeError("MySQL connection is not established; call connect_db() first")
+        return connection
+
+    def require_cursor(self) -> _DatabaseCursor:
+        """Return the cursor established with the connection, or raise instead of ``None``.
+
+        Tuple rows only (see ``_DatabaseRow``); a dictionary-mode cursor is not produced anywhere
+        on this plane, so there is no dict entry point to keep in sync.
+        """
+        cursor = self.cursor
+        if cursor is None:
+            raise RuntimeError("MySQL cursor is not established; call connect_db() first")
+        return cursor
 
     def _setup_logging(self, name: str) -> logging.Logger:
         logger = logging.getLogger(name)
