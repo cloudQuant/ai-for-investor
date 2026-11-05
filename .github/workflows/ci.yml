@@ -705,18 +705,19 @@ jobs:
           # `Run tests with coverage` = success).
           #
           # For a pull_request event actions/checkout@v7 hands this job the PR merge
-          # ref, whose first parent is the head commit and whose second parent IS the
-          # base commit GitHub merged it against.  Reading that parent from HEAD is
-          # exact and self-evidencing: the object is already in the fetched history,
-          # so no fetch depth and no assumption about where the branch head happens to
-          # be right now is involved.  The parent order is asserted rather than
-          # trusted, because if it were ever reversed the comparison would silently
-          # measure an empty diff and the gate would read green for nothing.
-          if [ "$(git rev-parse HEAD^1)" != "${{ github.event.pull_request.head.sha }}" ]; then
-            echo "expected the merge ref's first parent to be the PR head commit"
+          # ref.  Measured on #287, #291 and #299 through the API's merge_commit_sha:
+          # its FIRST parent is the base commit GitHub merged against and its SECOND
+          # parent is the PR head.  Reading the base from HEAD^1 is exact and
+          # self-evidencing - the object is already in the fetched history, so no fetch
+          # depth and no assumption about where the branch head sits right now is
+          # involved.  The order is asserted rather than trusted: comparing against the
+          # head itself would measure the base's own movement instead of this diff, and
+          # when dev has not moved at all it would measure nothing and read green.
+          if [ "$(git rev-parse HEAD^2)" != "${{ github.event.pull_request.head.sha }}" ]; then
+            echo "expected the merge ref's second parent to be the PR head commit"
             exit 1
           fi
-          BASE_REV="$(git rev-parse HEAD^2)"
+          BASE_REV="$(git rev-parse HEAD^1)"
           diff-cover coverage.xml --compare-branch="$BASE_REV" --fail-under=60
 
       - name: Upload coverage to Codecov
