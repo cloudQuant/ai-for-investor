@@ -68,8 +68,8 @@ class OpenFundDailyEm(AkshareToMySql):
             WHERE IS_ACTIVE = 1
             """
 
-            self.cursor.execute(sql)
-            result = self.cursor.fetchone()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchone()
             if result and result[0]:
                 return result[0]
             return None

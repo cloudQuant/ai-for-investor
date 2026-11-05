@@ -86,27 +86,27 @@ class FuturesDailyMarket(AkshareToMySql):
     def _ensure_market_scoped_unique_key(self):
         self.connect_db()
         try:
-            self.cursor.execute(
+            self.require_cursor().execute(
                 "SHOW INDEX FROM `FUTURES_DAILY_MARKET` WHERE Key_name = 'IDX_DAILY_MARKET_UNIQUE'"
             )
             columns = [
                 row[4]
                 for row in sorted(
-                    self.cursor.fetchall(),
+                    self.require_cursor().fetchall(),
                     key=lambda item: item[3],
                 )
             ]
             if columns == ["MARKET", "SYMBOL", "TRADE_DATE"]:
                 return
             self.logger.info("Updating FUTURES_DAILY_MARKET unique key to include MARKET")
-            self.cursor.execute(
+            self.require_cursor().execute(
                 "ALTER TABLE `FUTURES_DAILY_MARKET` DROP INDEX `IDX_DAILY_MARKET_UNIQUE`"
             )
-            self.cursor.execute(
+            self.require_cursor().execute(
                 "ALTER TABLE `FUTURES_DAILY_MARKET` "
                 "ADD UNIQUE KEY `IDX_DAILY_MARKET_UNIQUE` (`MARKET`, `SYMBOL`, `TRADE_DATE`)"
             )
-            self.connection.commit()
+            self.require_connection().commit()
         finally:
             self.disconnect_db()
 
