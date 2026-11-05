@@ -23,7 +23,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from app.services.akshare import script as script_module
+from app.services.akshare import script_worker_runtime as runtime_module
 from app.services.akshare.data import AkshareDataService
 from app.services.akshare.script import AkshareScriptService
 from app.services.akshare.write_fence import (
@@ -232,16 +232,16 @@ async def test_non_describable_callable_uses_the_visible_thread_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spawned: list[Any] = []
-    real_popen = script_module.subprocess.Popen
+    real_popen = runtime_module.subprocess.Popen
 
     def guard_popen(*args: Any, **kwargs: Any) -> Any:
         command = " ".join(str(part) for part in (args[0] if args else []))
-        if script_module._WORKER_MODULE in command:
+        if runtime_module._WORKER_MODULE in command:
             spawned.append(command)
             raise AssertionError("a non-describable callable must not spawn a worker")
         return real_popen(*args, **kwargs)
 
-    monkeypatch.setattr(script_module.subprocess, "Popen", guard_popen)
+    monkeypatch.setattr(runtime_module.subprocess, "Popen", guard_popen)
 
     def local_callable() -> dict[str, Any]:
         return {"pid": os.getpid()}

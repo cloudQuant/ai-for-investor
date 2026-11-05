@@ -4124,7 +4124,9 @@ def test_air_quality_hist_returns_empty_when_endpoint_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_callable_times_out_threaded_function(monkeypatch):
-    monkeypatch.setattr("app.services.akshare.script.configure_akshare_network_proxy", lambda: None)
+    monkeypatch.setattr(
+        "app.services.akshare.script_worker_runtime.configure_akshare_network_proxy", lambda: None
+    )
     finished = threading.Event()
 
     def slow_callable():

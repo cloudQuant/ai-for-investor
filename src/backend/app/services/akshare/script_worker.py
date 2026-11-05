@@ -1,8 +1,9 @@
 """Killable child-process worker for one AkShare script call.
 
-Started as ``python -m app.services.akshare.script_worker`` by
-``AkshareScriptService._execute_callable_in_worker``.  The parent sends one
-pickled envelope on stdin and reads one pickled receipt from ``result_path``.
+Started as ``python -m app.services.akshare.script_worker`` by the parent-side
+supervisor in ``script_worker_runtime._execute_callable_in_worker``.  The parent
+sends one pickled envelope on stdin and reads one pickled receipt from
+``result_path``.
 
 The child is started in its own process group so that a timeout can SIGKILL the
 whole worker tree and reap it *before* the parent records the failure.  A
