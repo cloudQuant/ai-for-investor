@@ -701,13 +701,23 @@ jobs:
           # parentless commit; if the PR branch does not already contain that tip,
           # git cannot relate the two and diff-cover aborts with
           # `fatal: origin/dev...HEAD: no merge base` even though every test in the
-          # job passed (measured on #287 and #291, 2026-11-05).  The merge ref that
-          # actions/checkout@v7 hands this job already has
-          # pull_request.base.sha as a parent, so that exact commit is present in
-          # the working tree's history and is the honest comparison point for this
-          # diff: it is the revision the PR was cut against.
-          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
-          diff-cover coverage.xml --compare-branch="${{ github.event.pull_request.base.sha }}" --fail-under=60
+          # job passed (measured on #287 and #291, 2026-11-05, both with
+          # `Run tests with coverage` = success).
+          #
+          # For a pull_request event actions/checkout@v7 hands this job the PR merge
+          # ref, whose first parent is the head commit and whose second parent IS the
+          # base commit GitHub merged it against.  Reading that parent from HEAD is
+          # exact and self-evidencing: the object is already in the fetched history,
+          # so no fetch depth and no assumption about where the branch head happens to
+          # be right now is involved.  The parent order is asserted rather than
+          # trusted, because if it were ever reversed the comparison would silently
+          # measure an empty diff and the gate would read green for nothing.
+          if [ "$(git rev-parse HEAD^1)" != "${{ github.event.pull_request.head.sha }}" ]; then
+            echo "expected the merge ref's first parent to be the PR head commit"
+            exit 1
+          fi
+          BASE_REV="$(git rev-parse HEAD^2)"
+          diff-cover coverage.xml --compare-branch="$BASE_REV" --fail-under=60
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
