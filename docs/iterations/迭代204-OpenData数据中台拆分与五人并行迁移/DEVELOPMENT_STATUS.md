@@ -2204,4 +2204,14 @@ dev 侧的复测作业 `41936293992`、#195 的 sync dispatch 作业 `4193634504
 * 判定：脚本半区可称「已刷新」，不可称「已闭合」——`无未解释项` 还要求说清这 9 行从哪来，
   本会话拿不出证据归类，故交属主裁定，且 CSV 自此不得被引用为「1,066 个脚本已有迁移映射」的依据。
   AC11 的分母自此按 1057 计。AC01 另一半（实际 DB 任务含 inactive、systemd/cron/worker、表、消费者）
-  本次**未刷新**——需要只读连库，而运行库在本迭代被明确约束为不可触碰，故 AC01 整体仍是 `NOT_PROVEN`。
+  本次**已以只读方式刷新**（`ak_scheduled_tasks` 1103 行 / **1098 armed** / 5 inactive；
+  `ak_data_scripts` 1066 注册，9 行无文件、0 文件未注册、0 任务孤儿），但这组数字同时推翻了一条旧前提，见下一小节。
+
+同一份台账还给出一个此前任何文档都没写过的硬数：**AC11 已分派处置的脚本是 0 / 1057**。1057 条活行的 `status` 全是
+「待盘点/待映射」(1049) + 「review_only」(8)，`migration_route` 全是 `PENDING_PROVIDER_MAPPING` / `HELPER_REVIEW`，
+而这两个占位值既不在计划 §5 的七种处置词表内、也没在任何 markdown 里定义（grep 0 命中）。因此 §6 要求每周上报的
+「已处置脚本 / 总脚本」按算术只能写 0/1057；把 1049 条 PENDING 读成「已映射」就是虚报。分族（stock 384 / other 317 /
+index 93 / fund 87 / futures 64 / option 46 / bond 41 / fx 20 / crypto 5）与分频（daily 680 / weekly 266 / hourly 85 /
+monthly 21 / **unspecified 5**）都记在审计文档里供分派直接取用——注意族与频率本身也仍未人工确认，不是已知输入。
+静态形状与类型面互相印证：`entrypoint_fetch_data` 885 个类里 831 个的 `main()` 调用不存在的 `run`（#270 已修），
+`entrypoint_run` 162 个自带入口。

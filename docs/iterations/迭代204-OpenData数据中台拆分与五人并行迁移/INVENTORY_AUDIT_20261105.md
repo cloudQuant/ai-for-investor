@@ -101,3 +101,46 @@ REPLACE_SOURCE / SOURCE_LIMITED / RETIRE_PROPOSED`；清单使用的这两个占
 判定：AC11 保持未完成，进度记为 0/1057 已分派。这一项不是 CI 能变绿的项，需要按 §5 词表逐条分派；
 其中 `unspecified` 5 与 `other` 317 还说明频率与资产族本身尚未人工确认，不能自动当作已知输入。
 平面：以上全部是 CODE/OFFLINE（读台账与源码形状），不涉及 REAL_SOURCE / DEPLOYMENT / NATURAL_CYCLE。
+
+## 运行态读数（同一台机器、同一份库，只读 SELECT + `journalctl --user`）
+
+AC01 的另一半（实际 DB 任务，含 inactive）本次也做了只读盘点：
+
+| 口径 | 实测 |
+|------|------|
+| `ak_scheduled_tasks` 行数 | **1103**（全部 `schedule_type='cron'`） |
+| 其中 armed（`is_active=1`） | **1098**，且这 1098 行 `next_execution_at` 全部非空 |
+| inactive | 5 |
+| `ak_data_scripts` 注册行 | **1066**，`module_path` 全不重复 |
+| 注册但树里没有文件的 | **9**（正是上面 9 行幽灵；其中 7 行 `is_active=1`、2 行 `is_custom=1`、8 行 `function_name='main'`） |
+| 有文件但未注册的 | **0** |
+| 任务 → 注册脚本 反查孤儿 | **0** |
+
+结论先说清两件事：
+
+1. **「69 个精选 active 任务」不再是事实。** 2026-10-25 的迭代203 台账与本机笔记记的是 69 active / ~1034 inactive；
+   2026-10-26 之后到本次读数之间，`updated_at` 分布在 2026-10 的 459 行与 2026-11 的 639 行上，armed 数变成
+   **1098**。调度器 `app/services/akshare/scheduler.py:106/132` 只按 `is_active` 注册，没有任何白名单，
+   所以现在被装填的切换面比 AC13/AC14 取证时的面大 ~16 倍。这不需要判断对错，但需要有人认领。
+2. **采集运行态从 2026-10-27 00:57 起 100% 失败。** `ak_task_executions`：
+   最后一次没有 `error_message` 的运行是 **2026-10-27 00:55:00**；此后到 **2026-11-05 00:19** 共 **4270** 次运行，
+   错误信息全部是同一条 `AKShare script worker exited with code 1 without a result`，覆盖 **1080** 个不同任务；
+   近 7 天 3204 次运行里 completed **0**、failed **3204**。存行的 `error_trace`/`result` 全为空（60/60 无栈），
+   所以台账里只剩一句状态词，九天的全量失败在账面上不可见——这本身就是一条可观测性缺陷。
+   同机的 `ai-for-investor-full-history-recovery.service` 每分钟以
+   `can't open file '.../src/backend/scripts/ops/run_full_history_recovery_worker.py': [Errno 2] No such file or directory`
+   失败；该文件**从未进过任何分支**（`git log --all --diff-filter=A` 0 命中），只在
+   `var/reports/iteration203/**` 与 `var/reports/afi204/2026-10-28-recovery-worker-candidate/**` 里有候选/备份副本，
+   也就是说 unit 依赖的一直是一个未纳入版本控制的工作树文件。
+
+对验收的影响，按平面说：
+
+* REAL_SOURCE / NATURAL_CYCLE：**这两条现在都是红的，不是「未测」。** AC14 的 48 次小时 / 7 个日周期自然运行证据
+  取自 69-任务制度下的旧窗口，既不能续期也不能代表现在的 armed 面；AC05 的全历史覆盖、AC10 的真实源逐字段对照
+  在此状态下不可能有新证据。任何 freshness/覆盖率陈述若晚于 2026-10-27 00:55 都必须作废重取。
+* DEPLOYMENT：以上是**本机**运行态（`ai_for_investor@127.0.0.1:3306`、用户级 systemd timer），不是生产部署读数；
+  它说明的是「这台机器上的部署形态现在采不到数」，不能外推为生产环境结论。
+* 修复归属：恢复 worker 文件、决定 1098 armed 是否是有意的、以及把子进程 stderr 落到台账，都需要属主/运维决定；
+  本迭代我只做只读盘点与记录，不重启服务、不补文件、不改 systemd 单元、不动 `is_active`。
+* 顺带一条与 #270 相互印证的读数：9 行幽灵注册的 `function_name` 有 8 行写的是 `main`——正是「`main()` 是唯一入口」
+  这个假设的产物，而 #270 的实测表明 831 个脚本的 `main()` 连 `run` 都不存在。

@@ -182,6 +182,11 @@ CSV 不得被引用为「1,066 个脚本已有迁移映射」。**任务半区�
 
 工作包状态 `PLANNED/IN_PROGRESS/DEV_DONE/BLOCKED/ACCEPTED`；另列 `source_verification/deployment_verification/natural_cycle/history_coverage/cutover_status`，不可互相代填。opendata既有OFFLINE_ACCEPTED、模型清单DEV_DONE、真实源NOT_RUN各自保留，禁止用注册数或某个验收plane的通过数代表全量完成。
 
+同日的只读运行态盘点推翻了本计划里「69 个精选 active 任务」的旧前提：`ak_scheduled_tasks` 现为 **1103 行 / 1098 armed**，
+且 `ak_task_executions` 自 **2026-10-27 00:57** 起 4270 次运行**全部失败**（近 7 天 0 completed）。切换面与
+自然周期证据的取证基线因此改变——AC13/AC14 的旧结论只覆盖 69-任务制度的历史窗口，不得续期；运行态为红这一事实
+按 REAL_SOURCE/NATURAL_CYCLE 平面记为「已测且失败」，不是「未测」。细节与逐条数字见 `INVENTORY_AUDIT_20261105.md`。
+
 2026-11-05 属主追加了一项范围，须与上面的分栏规则一并遵守：ai-for-investor 的上千个采集脚本要进入质量平面。
 现状按平面分列，不得互相代填——ruff 平面本就覆盖它们（0 findings、1108 文件已格式化）；类型平面自 AFI #270 起以独立
 scope 存在，**advisory 中**（同一批文件实测 1103 → 226 errors，`attr-defined` 831 → 0、`assignment` 45 → 0，其余
