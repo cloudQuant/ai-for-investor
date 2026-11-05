@@ -1768,7 +1768,9 @@ async def test_bind_request_pins_publication_and_replay_identity(tmp_path: Path)
     assert dataset["currency"] == "CNY"
     # Both pinned hashes are recomputable from the sealed vector, never invented.
     assert dataset["contract_sha256"] == market_data_binding_contract_sha256(dataset)
-    artifact = tmp_path / "bindings" / str(bound.data_config["market_data_binding_hash"]) / "data.csv"
+    artifact = (
+        tmp_path / "bindings" / str(bound.data_config["market_data_binding_hash"]) / "data.csv"
+    )
     assert dataset["content_sha256"] == market_data_binding_content_sha256(
         csv_content=artifact.read_bytes(),
         observation_evidence=material["observations"],
@@ -1880,9 +1882,7 @@ async def test_runtime_replay_refuses_pinned_publication_drift(
     user = await _user(username=f"binding-publication-drift-{field}")
     intent_id = f"ai-research-publication-drift-{field}"
     async with async_session_maker() as db:
-        service, bound = await _bind_research_request(
-            db, tmp_path, user=user, intent_id=intent_id
-        )
+        service, bound = await _bind_research_request(db, tmp_path, user=user, intent_id=intent_id)
         workspace_id, unit_id = await _attach_research_unit(
             db=db,
             service=service,
