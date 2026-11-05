@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 UTC = timezone.utc
 
@@ -35,6 +36,10 @@ UTC = timezone.utc
 # ``sub_daily`` and ``weekday_sub_daily`` get no target: four runs a day satisfy neither
 # 48 hourly occurrences nor one daily occurrence, and inventing one would be a false claim.
 CYCLE_TARGETS = {"hourly": 48, "daily": 7, "weekday_daily": 7, "weekly": 2, "monthly": 1}
+# Cron fields are wall-clock in the scheduler zone, not UTC (app/config.py:
+# AKSHARE_SCHEDULER_TIMEZONE default; app/services/akshare/scheduler.py passes it to every
+# trigger), while ak_task_executions.created_at is UTC.
+CRON_TIMEZONE = "Asia/Shanghai"
 
 _COMPLETED = "completed"
 _FAILED = "failed"
@@ -68,6 +73,8 @@ class TaskReport:
     slot_check: str
     observed: int = 0
     completed: int = 0
+    natural_completed: int = 0
+    manual_completed: int = 0
     failed: int = 0
     running: int = 0
     wrote_rows: int = 0
@@ -86,6 +93,8 @@ class TaskReport:
             "slot_check": self.slot_check,
             "observed": self.observed,
             "completed": self.completed,
+            "natural_completed": self.natural_completed,
+            "manual_completed": self.manual_completed,
             "failed": self.failed,
             "running": self.running,
             "wrote_rows": self.wrote_rows,
@@ -120,7 +129,6 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 _DOW_NAMES = {"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
-_WEEKDAYS = frozenset({1, 2, 3, 4, 5})
 
 
 def _cron_field_count(token: str, bound: int) -> int | None:
@@ -170,9 +178,11 @@ def classify_cadence(expression: str | None) -> str | None:
         # One named or numeric weekday is a weekly occurrence, even when that day
         # happens to fall inside Mon-Fri.
         return "weekly"
-    if len(weekday_set) > 1 and weekday_set <= _WEEKDAYS:
-        # A dow list spanning several weekdays is "once per trading day", which
-        # AC14 scores as a daily occurrence rather than a weekly one.
+    if len(weekday_set) > 1:
+        # A dow set spanning several days is "once per listed day", which AC14 scores as a
+        # daily occurrence rather than a weekly one. This is not restricted to Mon-Fri: the
+        # live ledger has `tue-sat` shapes whose set crosses into the weekend, and calling
+        # those unclassifiable would silently drop 17 armed tasks from AC14.
         return "weekday_daily" if hour_count == 1 else "weekday_sub_daily"
     return None
 
@@ -217,8 +227,20 @@ def _field_values(token: str, bound: int) -> set[int] | None:
     return out if out else None
 
 
-def expected_slots(expression: str | None, start: datetime, end: datetime) -> SlotCheck:
-    """Enumerate the occurrence times a 5-field cron expression should have fired."""
+def expected_slots(
+    expression: str | None,
+    start: datetime,
+    end: datetime,
+    cron_tz: str = CRON_TIMEZONE,
+) -> SlotCheck:
+    """Enumerate the occurrence times a 5-field cron expression should have fired.
+
+    Cron fields are wall-clock times in ``cron_tz``, not UTC: APScheduler is built with
+    ``settings.AKSHARE_SCHEDULER_TIMEZONE`` (default ``Asia/Shanghai``) and each cron trigger
+    gets that zone, while ``ak_task_executions.created_at`` is stored in UTC. Enumerating in
+    UTC would put every daily/weekly/monthly slot 8 hours away from when the task actually
+    runs, so those cadences could never line up with a completed execution.
+    """
     cadence = classify_cadence(expression)
     if cadence is None or expression is None:
         return SlotCheck(
@@ -237,10 +259,13 @@ def expected_slots(expression: str | None, start: datetime, end: datetime) -> Sl
         return SlotCheck(
             cadence=cadence, expected_slots=[], unsupported_reason="cron_field_shape_not_supported"
         )
+    zone = ZoneInfo(cron_tz)
+    local_start = _as_utc(start).astimezone(zone)
+    local_end = _as_utc(end).astimezone(zone)
     slots: list[datetime] = []
-    cursor = start.replace(second=0, microsecond=0, minute=0, hour=0)
+    cursor = local_start.replace(second=0, microsecond=0, minute=0, hour=0)
     one_day = timedelta(days=1)
-    while cursor <= end:
+    while cursor <= local_end:
         if (
             cursor.month in month_vals
             and (cursor.day in dom_vals or day == "*")
@@ -249,8 +274,8 @@ def expected_slots(expression: str | None, start: datetime, end: datetime) -> Sl
             for h in sorted(h_vals):
                 for m in sorted(m_vals):
                     moment = cursor.replace(hour=h, minute=m)
-                    if start <= moment <= end:
-                        slots.append(moment)
+                    if local_start <= moment <= local_end:
+                        slots.append(moment.astimezone(timezone.utc))
         cursor += one_day
     slots.sort()
     return SlotCheck(cadence=cadence, expected_slots=slots)
@@ -298,8 +323,14 @@ def summarize(
             status = row.get("status")
             if status == _COMPLETED:
                 report.completed += 1
-                if row.get("created_at"):
-                    completed_at.append(row["created_at"])
+                # AC14 counts natural occurrences only: a manual/direct run must never
+                # satisfy a cron slot, so its timestamp does not enter the streak input.
+                if str(row.get("triggered_by") or "") == "scheduler":
+                    report.natural_completed += 1
+                    if row.get("created_at"):
+                        completed_at.append(row["created_at"])
+                else:
+                    report.manual_completed += 1
             elif status == _FAILED:
                 report.failed += 1
                 reason = (row.get("error_message") or "").strip()
@@ -335,6 +366,8 @@ def aggregate(reports: Sequence[TaskReport]) -> dict[str, Any]:
         bucket = by_cadence[key]
         bucket["tasks"] += 1
         bucket["completed"] += report.completed
+        bucket["natural_completed"] += report.natural_completed
+        bucket["manual_completed"] += report.manual_completed
         bucket["failed"] += report.failed
         bucket["running"] += report.running
         bucket["slot_check_unavailable"] += int(report.slot_check == "unavailable")
@@ -371,13 +404,18 @@ def render_markdown(
         f"- 窗口：{_iso(window_start)} → {_iso(window_end)}（**UTC**；`ak_task_executions.created_at` 存的是 UTC）",
         f"- armed 任务：{summary['armed_tasks']}",
         "- 平面：本机 DEPLOYMENT 观测。**本工具不证明覆盖、不证明源侧一致、不证明 AC13/AC14/AC05。**",
+        "- 计数口径：`最大连续槽位` 只认 `triggered_by='scheduler'` 的完成行——AC14 要的是自然周期，"
+        "手动/直接运行不得顶掉一个 cron 槽位；`completed` 仍为两者合计，差额见「自然/手动」两列。"
+        "cron 字段按调度器时区（默认 Asia/Shanghai）解释后再折算 UTC，因为 `created_at` 存的是 UTC。",
         "",
-        "| cadence | tasks | completed | failed | running | 最大连续槽位 | 达标 | 槽位检查不可用 |",
-        "|---|---|---|---|---|---|---|---|",
+        "| cadence | tasks | completed | 自然(scheduler) | 手动(manual) | failed | running | "
+        "最大连续槽位 | 达标 | 槽位检查不可用 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for cadence, values in summary["by_cadence"].items():
         lines.append(
             f"| {cadence} | {values.get('tasks', 0)} | {values.get('completed', 0)} | "
+            f"{values.get('natural_completed', 0)} | {values.get('manual_completed', 0)} | "
             f"{values.get('failed', 0)} | {values.get('running', 0)} | "
             f"{values.get('max_consecutive', 0)} | {values.get('target_met', 0)} | "
             f"{values.get('slot_check_unavailable', 0)} |"
@@ -430,7 +468,7 @@ def load_from_database(
                     )
                 )
             cur.execute(
-                "SELECT task_id, created_at, status,"
+                "SELECT task_id, created_at, status, triggered_by,"
                 " (rows_after - rows_before) AS rows_delta, error_message"
                 " FROM ak_task_executions WHERE created_at >= %s",
                 (since.replace(tzinfo=None),),

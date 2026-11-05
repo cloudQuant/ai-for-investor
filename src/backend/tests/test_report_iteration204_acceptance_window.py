@@ -46,11 +46,16 @@ def _task(task_id: int, expression: str) -> mod.TaskRow:
 
 
 def _row(
-    created: datetime, status: str = "completed", rows_delta: int | None = 5, error: str = ""
+    created: datetime,
+    status: str = "completed",
+    rows_delta: int | None = 5,
+    error: str = "",
+    triggered: str = "scheduler",
 ) -> dict[str, Any]:
     return {
         "created_at": created,
         "status": status,
+        "triggered_by": triggered,
         "rows_delta": rows_delta,
         "error_message": error,
     }
@@ -190,3 +195,83 @@ def test_no_expected_slot_in_window_is_recorded_not_silently_zero() -> None:
     reports = mod.summarize([_task(1, "45 9 * * *")], {}, start, end)
     assert reports[0].slot_check == "computed"
     assert "no_expected_slot_in_window" in reports[0].notes
+
+
+def test_cron_slots_are_enumerated_in_the_scheduler_zone_not_utc() -> None:
+    # Grounded in the live ledger: task 11 `bond_china_yield`, cron `20 19 * * *`, whose
+    # completed rows are stamped 2026-10-22 11:20 UTC (= 19:20 Asia/Shanghai), because
+    # APScheduler gets settings.AKSHARE_SCHEDULER_TIMEZONE while created_at is UTC.
+    # Enumerating the cron in UTC would place the expected slot at 19:20Z, 8 hours from
+    # every real run, so daily/weekly/monthly streaks would read 0 forever.
+    start = datetime(2026, 10, 22, tzinfo=UTC)
+    end = datetime(2026, 10, 25, tzinfo=UTC)
+    shanghai = mod.expected_slots("20 19 * * *", start, end)
+    assert shanghai.cadence == "daily"
+    assert [slot.isoformat() for slot in shanghai.expected_slots] == [
+        "2026-10-22T11:20:00+00:00",
+        "2026-10-23T11:20:00+00:00",
+        "2026-10-24T11:20:00+00:00",
+    ]
+    runs = [datetime(2026, 10, day, 11, 20, tzinfo=UTC) for day in (22, 23, 24)]
+    assert mod.consecutive_completed_slots(shanghai.expected_slots, runs) == 3
+
+    # Counterfactual: reading the same cron as UTC misses every run that actually fired.
+    as_utc = mod.expected_slots("20 19 * * *", start, end, cron_tz="UTC")
+    assert [slot.hour for slot in as_utc.expected_slots] == [19, 19, 19]
+    assert mod.consecutive_completed_slots(as_utc.expected_slots, runs) == 0
+
+
+def test_weekday_range_that_crosses_into_the_weekend_is_still_scoreable() -> None:
+    # 17 armed tasks use `tue-sat` shapes (task 95 `42 3 * * tue-sat`, 1084-1099 `30 6 * * tue-sat`).
+    # Requiring the dow set to be a subset of Mon-Fri labelled them unclassifiable, which
+    # dropped those tasks from AC14 as "slot check unavailable" instead of scoring them.
+    assert mod.classify_cadence("42 3 * * tue-sat") == "weekday_daily"
+    assert mod.classify_cadence("41 6,9 * * tue-sat") == "weekday_sub_daily"
+    start = datetime(2026, 11, 3, tzinfo=UTC)  # a Tuesday
+    end = datetime(2026, 11, 9, 23, 59, tzinfo=UTC)
+    check = mod.expected_slots("42 3 * * tue-sat", start, end)
+    assert check.unsupported_reason is None
+    assert len(check.expected_slots) == 5  # Tue..Sat, one wall-clock 03:42 each
+    payload = mod.summarize([_task(95, "42 3 * * tue-sat")], {}, start, end)[0].to_dict()
+    assert payload["cadence"] == "weekday_daily"
+    assert payload["target"] == 7
+
+
+def test_manual_runs_cannot_satisfy_a_cron_slot() -> None:
+    # AC14 is a natural-cycle criterion, and this project's rule is that a manual run must
+    # not consume a cron occurrence (the B29 failure). Measured on the live ledger: 26,437
+    # manual vs 5,422 scheduler execution rows, so without this split a hand-triggered run
+    # landing inside a slot would silently extend a streak that never happened on its own.
+    start = datetime(2026, 11, 5, 0, 0, tzinfo=UTC)
+    end = start + timedelta(hours=4)
+    stamps = [start + timedelta(hours=i, minutes=3) for i in range(4)]
+    manual = mod.summarize(
+        [_task(1049, "3 * * * *")],
+        {1049: [_row(s, triggered="manual") for s in stamps]},
+        start,
+        end,
+    )[0].to_dict()
+    assert manual["completed"] == 4
+    assert manual["manual_completed"] == 4
+    assert manual["natural_completed"] == 0
+    assert manual["consecutive_completed_slots"] == 0
+    assert manual["target_met"] is False
+
+    # Counterfactual: the same four timestamps, scheduler-triggered, do satisfy every slot.
+    natural = mod.summarize(
+        [_task(1049, "3 * * * *")],
+        {1049: [_row(s) for s in stamps]},
+        start,
+        end,
+    )[0].to_dict()
+    assert natural["natural_completed"] == 4
+    assert natural["consecutive_completed_slots"] == 4
+
+    # An unlabelled row is not evidence of a natural cycle either: the count fails closed.
+    unknown = mod.summarize(
+        [_task(1049, "3 * * * *")],
+        {1049: [{**_row(s), "triggered_by": None} for s in stamps]},
+        start,
+        end,
+    )[0].to_dict()
+    assert unknown["consecutive_completed_slots"] == 0
