@@ -100,7 +100,7 @@ class FundFeeEm(AkshareToMySql):
 
         return pd.DataFrame(rows, columns=["condition", "term", "original_rate", "promotion_rate"])
 
-    def fetch_fee_data(self, fund_code: str, fee_type: str = None) -> pd.DataFrame:
+    def fetch_fee_data(self, fund_code: str, fee_type: str | None = None) -> pd.DataFrame:
         """
         获取基金费率数据
 
@@ -230,8 +230,8 @@ class FundFeeEm(AkshareToMySql):
 
     def run(
         self,
-        fund_code: str = None,
-        fee_type: str = None,
+        fund_code: str | None = None,
+        fee_type: str | None = None,
         fund_codes=None,
         limit: int = DEFAULT_FUND_CODE_LIMIT,
     ):

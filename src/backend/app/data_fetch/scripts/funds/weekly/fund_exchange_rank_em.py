@@ -74,7 +74,7 @@ class FundExchangeRankEm(AkshareToMySql):
             self.logger.warning(f"解析日期失败: {e}, 原始值: {date_str}")
             return None
 
-    def parse_float(self, value: Any, default: float = None) -> float | None:
+    def parse_float(self, value: Any, default: float | None = None) -> float | None:
         """解析浮点数值"""
         if pd.isna(value) or value in ("---", "", "--", "-", "---%"):
             return default

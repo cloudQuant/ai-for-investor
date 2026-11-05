@@ -74,7 +74,7 @@ class FundLcxRankEm(AkshareToMySql):
             self.logger.warning(f"解析日期失败: {e}, 原始值: {date_str}")
             return None
 
-    def parse_float(self, value: Any, default: float = None) -> float | None:
+    def parse_float(self, value: Any, default: float | None = None) -> float | None:
         """解析浮点数值"""
         if pd.isna(value) or value in ("---", "", "--", "-", "---%"):
             return default
@@ -88,7 +88,7 @@ class FundLcxRankEm(AkshareToMySql):
             self.logger.warning(f"解析浮点数失败: {e}, 原始值: {value}")
             return default
 
-    def parse_int(self, value: Any, default: int = None) -> int | None:
+    def parse_int(self, value: Any, default: int | None = None) -> int | None:
         """解析整数值"""
         if pd.isna(value) or value in ("---", "", "--", "-"):
             return default

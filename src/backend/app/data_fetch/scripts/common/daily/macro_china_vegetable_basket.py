@@ -68,7 +68,7 @@ def main():
     """Main function to run the data fetch"""
 
     script = MacroChinaVegetableBasket()
-    script.run()
+    script.fetch_data()
 
 
 if __name__ == "__main__":

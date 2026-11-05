@@ -57,7 +57,7 @@ class FundValueEstimationEm(AkshareToMySql):
                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='基金净值估算表(东方财富)';
                             """
 
-    def parse_float(self, value: Any, default: float = None) -> float | None:
+    def parse_float(self, value: Any, default: float | None = None) -> float | None:
         """解析浮点数值"""
         if pd.isna(value) or value in (
             "---",
