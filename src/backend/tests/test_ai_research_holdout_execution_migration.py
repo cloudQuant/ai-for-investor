@@ -17,7 +17,7 @@ _PREVIOUS = "20260908_ai_research_evidence_command"
 _HEAD = "20260908_ai_research_holdout_executions"
 _B2_COMPLETENESS_EVIDENCE_REVISION = "20260911_market_data_b2_completeness_evidence"
 _INTEGRATED_HEAD = "20261012_optimization_objective_direction"
-_CURRENT_HEAD = "20261101_stock_analysis_report_evidence_vector"
+_CURRENT_HEAD = "20261106_akshare_run_coordinator_claims"
 _TABLE = "ai_research_holdout_executions"
 _COLUMNS = {
     "id",
