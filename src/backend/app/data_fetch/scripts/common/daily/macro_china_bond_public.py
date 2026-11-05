@@ -34,19 +34,19 @@ class MacroChinaBondPublic(AkshareToMySql):
     def _ensure_identity_columns_wide_enough(self) -> None:
         try:
             self.connect_db()
-            self.cursor.execute(
+            self.require_cursor().execute(
                 f"ALTER TABLE `{self.table_name}` "
                 "MODIFY COLUMN `symbol` VARCHAR(191) NULL COMMENT '品种代码'"
             )
-            self.cursor.execute(
+            self.require_cursor().execute(
                 f"ALTER TABLE `{self.table_name}` "
                 "MODIFY COLUMN `name` VARCHAR(255) NULL COMMENT '品种名称'"
             )
-            self.connection.commit()
+            self.require_connection().commit()
         except Exception as exc:
             self.logger.warning(f"Expand identity columns failed: {exc}")
             if self.connection:
-                self.connection.rollback()
+                self.require_connection().rollback()
         finally:
             self.disconnect_db()
 

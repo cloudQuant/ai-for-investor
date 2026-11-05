@@ -271,8 +271,8 @@ class OpenFundRankEm(AkshareToMySql):
         try:
             self.connect_db()
             sql = "SELECT R_ID FROM OPEN_FUND_RANK_EM WHERE IS_ACTIVE = 1"
-            self.cursor.execute(sql)
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchall()
             return {row[0] for row in result} if result else set()
         except Exception as e:
             self.logger.error(f"获取已存在数据ID失败: {e}")

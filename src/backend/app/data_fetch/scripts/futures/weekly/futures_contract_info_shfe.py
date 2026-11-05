@@ -102,8 +102,8 @@ class FuturesContractInfoShfe(AkshareToMySql):
         safe_table = self.table_name.replace("`", "``")
         try:
             self.connect_db()
-            self.cursor.execute(f"SHOW COLUMNS FROM `{safe_table}`")
-            columns = {str(row[0]).upper() for row in self.cursor.fetchall() or []}
+            self.require_cursor().execute(f"SHOW COLUMNS FROM `{safe_table}`")
+            columns = {str(row[0]).upper() for row in self.require_cursor().fetchall() or []}
 
             if self.required_columns.issubset(columns):
                 return
@@ -117,9 +117,9 @@ class FuturesContractInfoShfe(AkshareToMySql):
                 missing[:10],
                 backup_table,
             )
-            self.cursor.execute(f"RENAME TABLE `{safe_table}` TO `{safe_backup}`")
-            self.cursor.execute(self.create_table_sql)
-            self.connection.commit()
+            self.require_cursor().execute(f"RENAME TABLE `{safe_table}` TO `{safe_backup}`")
+            self.require_cursor().execute(self.create_table_sql)
+            self.require_connection().commit()
             self._columns_cache.pop(safe_table, None)
             self._columns_cache.pop(safe_backup, None)
             self._table_exists_cache[safe_table] = True
@@ -127,7 +127,7 @@ class FuturesContractInfoShfe(AkshareToMySql):
             self._migrate_legacy_rows(backup_table)
         except Exception:
             if self.connection:
-                self.connection.rollback()
+                self.require_connection().rollback()
             self.logger.error("Failed to ensure SHFE contract info table schema", exc_info=True)
             raise
         finally:
@@ -135,12 +135,12 @@ class FuturesContractInfoShfe(AkshareToMySql):
 
     def _migrate_legacy_rows(self, backup_table):
         safe_backup = backup_table.replace("`", "``")
-        self.cursor.execute(f"SELECT * FROM `{safe_backup}`")
-        rows = self.cursor.fetchall() or []
+        self.require_cursor().execute(f"SELECT * FROM `{safe_backup}`")
+        rows = self.require_cursor().fetchall() or []
         if not rows:
             return 0
 
-        columns = [desc[0] for desc in self.cursor.description or []]
+        columns = [desc[0] for desc in self.require_cursor().description or []]
         legacy_df = pd.DataFrame(rows, columns=columns)
         legacy_df.rename(
             columns={
