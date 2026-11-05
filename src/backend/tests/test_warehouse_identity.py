@@ -498,3 +498,17 @@ def test_missing_peer_schema_is_reported_as_evidence_not_a_refusal() -> None:
     assert any(
         "expected_schema_not_hosted_by_target_server: ai_for_investor" in r for r in verdict.reasons
     )
+    assert not any(
+        r.endswith("akshare_data") and "expected_schema_not_hosted" in r for r in verdict.reasons
+    ), "the hosted schema must not be reported as missing"
+
+
+def test_schema_rows_are_reduced_to_their_first_column() -> None:
+    """Counterfactual: DB-API drivers hand back one-column tuples, so a name that keeps the
+    row wrapper never matches and every schema looks missing on a healthy server."""
+    identity = _identity(database="akshare_data", schemas=("akshare_data", "ai_for_investor"))
+    verdict = guard.assert_write_target_allowed(identity, "apply")
+
+    assert identity.hosted_schemas == ("akshare_data", "ai_for_investor")
+    assert not any("expected_schema_not_hosted_by_target_server" in r for r in verdict.reasons)
+    assert verdict.allowed is True

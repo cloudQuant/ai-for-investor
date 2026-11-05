@@ -393,11 +393,16 @@ def _run_probe(connection: Any, sql: str, secrets: Iterable[str] = ()) -> list[A
     return list(rows or [])
 
 
+def _row_scalar(row: Any) -> Any:
+    """Reduce one DB-API row to its first column; drivers hand back tuples, not strings."""
+    if isinstance(row, (tuple, list)):
+        return row[0] if row else None
+    return row
+
+
 def _first_scalar(rows: Sequence[Any]) -> Any:
     for row in rows:
-        if isinstance(row, (tuple, list)):
-            return row[0] if row else None
-        return row
+        return _row_scalar(row)
     return None
 
 
@@ -492,7 +497,7 @@ def resolve_database_identity(
                 rows = _run_probe(target, sql, secrets)
             except WarehouseIdentityError:
                 continue
-            names = [normalize_database_name(row) for row in rows]
+            names = [normalize_database_name(_row_scalar(row)) for row in rows]
             hosted_schemas = tuple(dict.fromkeys(n for n in names if n))
             break
 
