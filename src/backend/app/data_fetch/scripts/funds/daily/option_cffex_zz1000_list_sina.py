@@ -79,7 +79,7 @@ def main():
     """Main function to run the data fetch"""
 
     script = OptionCffexZz1000ListSina()
-    script.run()
+    script.fetch_data()
 
 
 if __name__ == "__main__":

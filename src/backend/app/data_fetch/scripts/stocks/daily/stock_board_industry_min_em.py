@@ -235,7 +235,7 @@ class StockBoardIndustryMinEm(AkshareToMySql):
                         min_date = min_df["DATETIME"].min().strftime("%Y-%m-%d")
                         max_date = min_df["DATETIME"].max().strftime("%Y-%m-%d")
                         min_df["DATETIME"] = min_df["DATETIME"].dt.strftime("%Y-%m-%d %H:%M:%S")
-                        with self.connection.cursor() as cursor:
+                        with self.require_connection().cursor() as cursor:
                             delete_sql = """
                                          DELETE \
                                          FROM STOCK_BOARD_INDUSTRY_MIN_EM
@@ -244,7 +244,7 @@ class StockBoardIndustryMinEm(AkshareToMySql):
                                            AND DATE(DATETIME) BETWEEN %s AND %s \
                                          """
                             cursor.execute(delete_sql, (symbol, period, min_date, max_date))
-                            self.connection.commit()
+                            self.require_connection().commit()
 
                         # 保存新数据
                         self.save_data(

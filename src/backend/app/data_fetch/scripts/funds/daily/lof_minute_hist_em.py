@@ -86,8 +86,8 @@ class LofMinuteHistEm(AkshareToMySql):
             """
             params = (lof_code, period, adjust_type)
 
-            self.cursor.execute(sql, params)
-            result = self.cursor.fetchone()
+            self.require_cursor().execute(sql, params)
+            result = self.require_cursor().fetchone()
             if result and result[0]:
                 return result[0]
             return None

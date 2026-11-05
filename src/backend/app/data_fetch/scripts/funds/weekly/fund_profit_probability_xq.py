@@ -161,7 +161,7 @@ class FundProfitProbabilityXq(AkshareToMySql):
 
     def run(
         self,
-        fund_code: str = None,
+        fund_code: str | None = None,
         fund_codes=None,
         limit: int = DEFAULT_FUND_CODE_LIMIT,
     ):

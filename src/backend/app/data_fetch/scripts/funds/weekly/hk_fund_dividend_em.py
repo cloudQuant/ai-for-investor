@@ -230,14 +230,16 @@ class HkFundDividendEm(AkshareToMySql):
             FROM HK_FUND_DIVIDEND_EM
             WHERE FUND_CODE = %s AND IS_ACTIVE = 1
             """
-            self.cursor.execute(sql, (fund_code,))
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql, (fund_code,))
+            result = self.require_cursor().fetchall()
             return {row[0] for row in result} if result else set()
         except Exception as e:
             self.logger.error(f"获取已存在数据ID失败: {e}")
             return set()
 
-    def run(self, fund_codes=None, fund_code: str = None, limit: int = DEFAULT_FUND_CODE_LIMIT):
+    def run(
+        self, fund_codes=None, fund_code: str | None = None, limit: int = DEFAULT_FUND_CODE_LIMIT
+    ):
         """
         执行数据获取和保存
 

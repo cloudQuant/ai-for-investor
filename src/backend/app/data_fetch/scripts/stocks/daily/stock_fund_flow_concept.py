@@ -68,7 +68,7 @@ def main():
     """Main function to run the data fetch"""
 
     script = StockFundFlowConcept()
-    script.run()
+    script.fetch_data()
 
 
 if __name__ == "__main__":

@@ -89,8 +89,8 @@ class OpenFundHistEm(AkshareToMySql):
             AND IS_ACTIVE = 1
             """
 
-            self.cursor.execute(sql, (fund_code, data_type))
-            result = self.cursor.fetchone()
+            self.require_cursor().execute(sql, (fund_code, data_type))
+            result = self.require_cursor().fetchone()
             if result and result[0]:
                 return result[0]
             return None
@@ -360,8 +360,8 @@ class OpenFundHistEm(AkshareToMySql):
             WHERE IS_ACTIVE = 1
             ORDER BY FUND_CODE
             """
-            self.cursor.execute(sql)
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchall()
             return [row[0] for row in result] if result else []
         except Exception as e:
             self.logger.error(f"获取基金代码列表失败: {e}")

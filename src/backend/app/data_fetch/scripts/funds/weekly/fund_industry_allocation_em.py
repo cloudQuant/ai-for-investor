@@ -76,7 +76,9 @@ class FundIndustryAllocationEm(AkshareToMySql):
             self.logger.warning(f"解析报告日期失败: {date_str}, 错误: {e}")
             return None, None, None
 
-    def fetch_industry_allocation_data(self, fund_code: str, year: str = None) -> pd.DataFrame:
+    def fetch_industry_allocation_data(
+        self, fund_code: str, year: str | None = None
+    ) -> pd.DataFrame:
         """
         获取基金行业配置数据
 
@@ -211,8 +213,8 @@ class FundIndustryAllocationEm(AkshareToMySql):
 
     def run(
         self,
-        fund_code: str = None,
-        year: str = None,
+        fund_code: str | None = None,
+        year: str | None = None,
         fund_codes=None,
         limit: int = DEFAULT_FUND_CODE_LIMIT,
     ):

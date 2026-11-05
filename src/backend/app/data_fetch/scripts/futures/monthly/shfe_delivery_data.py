@@ -102,8 +102,8 @@ class FuturesDeliveryShfe(AkshareToMySql):
 
     def run(
         self,
-        start_month: str = None,
-        end_month: str = None,
+        start_month: str | None = None,
+        end_month: str | None = None,
         sleep_seconds=0,
         lookback_months=None,
         max_months=None,

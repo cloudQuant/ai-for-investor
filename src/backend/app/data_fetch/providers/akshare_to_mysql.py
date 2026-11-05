@@ -152,8 +152,8 @@ class AkshareToMySql(MysqlBase):
         if create_sql:
             try:
                 self.connect_db()
-                self._require_cursor().execute(create_sql)
-                self._require_connection().commit()
+                self.require_cursor().execute(create_sql)
+                self.require_connection().commit()
             except Exception as e:
                 self.logger.warning(f"建表失败（可能已存在）: {e}")
 
@@ -161,7 +161,7 @@ class AkshareToMySql(MysqlBase):
         if "R_ID" not in df.columns:
             try:
                 self.connect_db()
-                cursor = self._require_cursor()
+                cursor = self.require_cursor()
                 cursor.execute(f"SHOW COLUMNS FROM `{table_name}` LIKE 'R_ID'")
                 if cursor.fetchone():
                     df = df.copy()
@@ -211,7 +211,7 @@ class AkshareToMySql(MysqlBase):
                         f"ORDER BY {date_column}"
                     )
                     params = (exchange, start_date, end_date)
-                cursor = self._require_cursor()
+                cursor = self.require_cursor()
                 cursor.execute(query, params)
                 results = cursor.fetchall()
 
@@ -285,7 +285,7 @@ class AkshareToMySql(MysqlBase):
             query = """
                     SELECT DISTINCT(PRODUCT_CODE) FROM FUTURES_TRADING_FEES
                     """
-            cursor = self._require_cursor()
+            cursor = self.require_cursor()
             cursor.execute(query)
             results = cursor.fetchall()
             if results:
@@ -319,7 +319,7 @@ class AkshareToMySql(MysqlBase):
         cursor: _DatabaseCursor | None = None
         try:
             self.connect_db()
-            cursor = self._require_connection().cursor()
+            cursor = self.require_connection().cursor()
 
             selected_columns = ", ".join(column_list)
             query = f"SELECT {selected_columns} FROM {table_name}"  # nosec B608

@@ -38,11 +38,11 @@ class FuturesDeliveryDce(AkshareToMySql):
 
     def run(
         self,
-        start_month: str = None,
-        end_month: str = None,
-        lookback_months: int = None,
-        max_months: int = None,
-        _call_timeout: int = None,
+        start_month: str | None = None,
+        end_month: str | None = None,
+        lookback_months: int | None = None,
+        max_months: int | None = None,
+        _call_timeout: int | None = None,
     ):
         """
         更新大连商品交易所交割统计数据

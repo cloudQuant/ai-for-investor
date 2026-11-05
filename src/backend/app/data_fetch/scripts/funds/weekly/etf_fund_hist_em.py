@@ -249,8 +249,8 @@ class EtfFundHistEm(AkshareToMySql):
             FROM ETF_FUND_HIST_EM
             WHERE FUND_CODE = %s AND IS_ACTIVE = 1
             """
-            self.cursor.execute(sql, (fund_code,))
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql, (fund_code,))
+            result = self.require_cursor().fetchall()
             return {row[0] for row in result} if result else set()
         except Exception as e:
             self.logger.error(f"获取已存在数据日期失败: {e}")
@@ -345,8 +345,8 @@ class EtfFundHistEm(AkshareToMySql):
             WHERE IS_ACTIVE = 1
             ORDER BY FUND_CODE
             """
-            self.cursor.execute(sql)
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchall()
             return [row[0] for row in result] if result else []
         except Exception as e:
             self.logger.error(f"获取ETF基金代码列表失败: {e}")

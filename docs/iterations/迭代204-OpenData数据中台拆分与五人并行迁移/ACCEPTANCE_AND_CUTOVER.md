@@ -44,6 +44,33 @@
 2. **审核运行时按设计尚未装配（AC16/AC18）。** `deploy/afi204-reviewed/README.md` 要求先静态装配 task catalog/engine/dispatcher/worker SPI/role plan，并声明自有 sink 且**停止这些 sink 的旧写入者**；因此 OpenData #182 让后台页显式呈现「审核运行时未装配」而不是发出四个必然 404 的请求。这不构成 AC16 或 AC18 的任何进度。
 3. **`条款链接` 的最低语义未定义（AC09/AC10）。** 权利登记的 `unlinked` 只校验 URL 形状，五行指向站点首页而 §1.2 自己写明这些取自 `website` 字段、不代表已取得或审阅条款——即该格可在若干来源其实没有条款页的情况下读 proven，是假绿风险。另需更正记录：AC-1|08 曾被本文档写成「35 个引用源 0 行、待属主填」，实测为仪器缺陷（表头字面量要求），登记表 35 行齐全，已按实测更正，不属属主数据缺口。
 
+## 2026-11-05 运行态与 CI 平面的分列复核（只读，不改任何判定）
+
+本轮把「CI 平面」与「运行态平面」彻底拆开写，因为今天实测表明二者已经相反。
+
+**CI 平面（CODE/OFFLINE + 仪器一致性）**：AFI `dev` 在 `dfa009cff`、`10bed50f7`、`47767a2b2`、`0080d329b`、
+`40e6808a7` 五个提交上 `CI - Quality Checks` 与 `E2E - End-to-End Tests` 均 completed success；
+前端升级链条的账面是 `1fef35a63`（monaco 0.57.0 合入）当时 CI 红，由 `40e6808a7`（#264 重钉 npm audit 基线）转绿，
+此后一直绿到当前 tip。OpenData 侧 `dev@ba0c27d6`（#193）作业 `41929711705` 全链 success；`#192` 合入后账本
+8 钉 → 7 钉，`#195` 再按 CI `--sync-ratchet` 工件（dispatch 作业 `41936345046`，与 `dev` 7 钉逐键比对仅少
+`AC-16|08`）降到 **6 钉**。CI 绿只说明仪器之间一致，这一点在下面这条运行态读数面前尤其要紧。
+
+**运行态平面（本机部署形态，REAL_SOURCE / NATURAL_CYCLE）**：同一台机器只读复核给出与迭代203 台账相反的结论——
+最后一次没有错误信息的采集运行是 **2026-10-27 00:55:00**，到 2026-11-05 00:19 共 4270 次运行**全部**为
+`AKShare script worker exited with code 1 without a result`，涉及 1080 个任务，近 7 天 completed 0 / failed 3204；
+台账行的 `error_trace`、`result` 为空，所以这笔全量失败在账面上只表现为一个状态词。
+`ai-for-investor-full-history-recovery.service` 每分钟以「找不到 `scripts/ops/run_full_history_recovery_worker.py`」
+失败，而该文件从未进入任何分支（只在 `var/reports/**` 有候选副本）。armed 任务数是 **1098**（`is_active=1` 且
+`next_execution_at` 非空），不是旧记的 69。
+
+**因此判定必须改写方向而不是沿用旧结论**：AC05（全历史覆盖）、AC10（真实源逐字段对照）、AC14（自然周期与
+freshness）今天不是「未测」，而是**已测且为红**；它们此前那些「166 次运行 0 失败 / 69 任务全部 completed」的证据
+只覆盖 69-任务制度下的历史窗口，不得续期，也不得用于支撑任何 freshness 陈述。AC13（单写者）与 AC17（切换、
+备份与回滚）的取证面按 1098 armed 重述。AC01 的脚本半区与任务半区本次都已只读刷新，进程/表/消费者与 OpenData
+能力重叠四项仍未刷新。逐条数字与取证方式见 `INVENTORY_AUDIT_20261105.md`。
+
+本节没有把 §1 任何一行改为通过，也没有修复运行态：未重启服务、未补文件、未改 `is_active`、未写任何一张表。
+
 ## 1 验收矩阵
 
 | ID | 验收场景 | 通过标准与所需证据 | 主责与复核 |

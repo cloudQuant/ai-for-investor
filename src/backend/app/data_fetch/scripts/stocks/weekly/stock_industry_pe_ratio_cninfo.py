@@ -144,23 +144,23 @@ class StockIndustryPeRatioCninfo(AkshareToMySql):
     def _prepare_table_schema(self) -> None:
         self.connect_db()
         try:
-            self.cursor.execute(f"SHOW TABLES LIKE '{self.table_name}'")
-            exists = bool(self.cursor.fetchone())
+            self.require_cursor().execute(f"SHOW TABLES LIKE '{self.table_name}'")
+            exists = bool(self.require_cursor().fetchone())
             if exists:
-                self.cursor.execute(f"SHOW COLUMNS FROM `{self.table_name}`")
-                columns = [row[0] for row in self.cursor.fetchall() or []]
-                self.cursor.execute(f"SELECT COUNT(*) FROM `{self.table_name}`")
-                row_count = int((self.cursor.fetchone() or [0])[0] or 0)
+                self.require_cursor().execute(f"SHOW COLUMNS FROM `{self.table_name}`")
+                columns = [row[0] for row in self.require_cursor().fetchall() or []]
+                self.require_cursor().execute(f"SELECT COUNT(*) FROM `{self.table_name}`")
+                row_count = int((self.require_cursor().fetchone() or [0])[0] or 0)
                 expected = {"R_ID", "TRADE_DATE", "INDUSTRY_CATEGORY", "INDUSTRY_CODE"}
                 if row_count == 0 and not expected.issubset(set(columns)):
-                    self.cursor.execute(f"DROP TABLE `{self.table_name}`")
-                    self.connection.commit()
+                    self.require_cursor().execute(f"DROP TABLE `{self.table_name}`")
+                    self.require_connection().commit()
                     self._columns_cache.pop(self.table_name, None)
                     self._table_exists_cache.pop(self.table_name, None)
                     exists = False
             if not exists:
-                self.cursor.execute(self.create_table_sql)
-                self.connection.commit()
+                self.require_cursor().execute(self.create_table_sql)
+                self.require_connection().commit()
                 self._columns_cache.pop(self.table_name, None)
                 self._table_exists_cache[self.table_name] = True
         finally:
@@ -242,7 +242,7 @@ def main():
     """Main function to run the data fetch"""
 
     script = StockIndustryPeRatioCninfo()
-    script.run()
+    script.fetch_data()
 
 
 if __name__ == "__main__":
