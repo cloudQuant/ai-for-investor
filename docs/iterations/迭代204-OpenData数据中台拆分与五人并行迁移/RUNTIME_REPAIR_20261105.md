@@ -139,3 +139,43 @@
 对验收的直接影响：AC05 的执行者正在由「不存在」变成「可执行但未证」——五个控制器已按属主决定重建（三条已完成：
 stock 46 项、bond 36 项、etf 38 项本机测试通过，适配器分别以 `NotRunError`/未调用诚实标注），
 但每一条都仍是 CODE/OFFLINE + 本机；真实源、真实数仓、真实定时器运行一律 NOT_RUN。
+
+## 11 AC17 的恢复演练在本机不可执行——权限实测，不是没做
+
+AC17 要求「在隔离环境恢复 metadata+warehouse+artifact 并校验」。本机备份已经存在并且可校验
+（`ai_for_investor_pre_upgrade_20261105T2148.sql.gz`，135,093,875 B，`gzip -t` 通过，867 条 CREATE/INSERT）。
+但**隔离恢复需要一个新的库**，而应用账号的权限不允许创建：
+
+```
+SHOW GRANTS FOR CURRENT_USER()
+  GRANT USAGE ON *.*                            TO `backtrader_web`@`127.0.0.1`
+  GRANT ALL PRIVILEGES ON `ai_for_investor`.*   TO ...
+  GRANT ALL PRIVILEGES ON `akshare_data`.*      TO ...
+  GRANT ALL PRIVILEGES ON `backtrader_web`.*    TO ...
+CREATE DATABASE afi204_restore_drill  ->  (1044, "Access denied ... to database 'afi204_restore_drill'")
+```
+
+可选隔离面也都不成立：`docker` 未安装；root@localhost 走 `auth_socket`（`mysql -uroot` 报 1698），
+唯一剩下的可写库是 `backtrader_web`，而它正是本项目明令不碰的那个。
+因此 AC17 不是「还没做」，而是**当前凭据形态下做不了**：需要属主给一个可建库的账号或一套 owned MySQL
+（OpenData 的 `tests/test_afi204_owned_mysql.py` 在 CI 里就是这么做的），否则演练只能在 CI 环境跑。
+未做演练意味着这条备份至今**没有被证明可恢复**——备份存在不等于恢复成立。
+
+## 12 本波交付的 PR 清单（截至 2026-11-05T16:22Z）
+
+已并入 dev：#270（采集脚本类型平面）、#271（Wave 26 台账）。
+开放中：AFI #273 #274 #275 #280 #281 #282 #283 #284；OpenData #196。
+关闭并改道：#272 #276 #277 #279 —— `dev` 只接受 `feature/*|fix/*|docs/*|refactor/*|test/*` 前缀，
+而 PR 的 head 分支无法通过 API 改指，故同一 SHA 以 `feature/*` 重开发，正文与 head 绑定的自审原样带过去。
+
+| PR | 内容 | 平面 |
+|---|---|---|
+| OD#196 | post-commit visibility seal + 单调序列（A04-04，A05-04/06/07 的前置），96 项测试；零依赖台账与 config 摘要按门禁要求重钉 | CODE/OFFLINE + 迁移 |
+| #273 | 恢复 worker + 它的 44 项测试 + 它自己要求的 systemd unit 示例 | 运维资产入库 |
+| #275 | 采集脚本平面 326→200，游标家族消失（union-attr 99→9、index 40→1） | CODE/OFFLINE |
+| #278 | 研究工件绑定 publication vector（E04）+ 为满足尺寸棘轮做的契约层提取 | CODE/OFFLINE |
+| #280 | 可杀子进程 + 写栅栏传递 + crypto 小时腿超时下限 1800s（AC06/AC13 回归） | CODE/OFFLINE |
+| #281 | 数据页覆盖状态不再折叠（E03-03/E05-02） | CODE/OFFLINE |
+| #282 | AC14 自然周期读数器（§6 周报的第一把尺子） | CODE/OFFLINE + 本机读数 |
+| #283 | 五个全历史恢复资产控制器的重建（AC05 从此有了执行者） | CODE/OFFLINE，真实源 NOT_RUN |
+| #284 | 任务参数与脚本入口签名的静态审计（AC11 可证边界：155 binds / 886 因 `**kwargs` 不可证） | CODE/OFFLINE + 本机只读 |
