@@ -73,3 +73,31 @@
   覆盖侧仍被 `.coveragerc` 排除，且仅 120/1057（11.35%，13 个测试文件）被测试引用。
   类型面自 AFI #270 起以独立 scope 存在（advisory，实测 1103 → 270 errors），基线须由 CI 读数冻结。
 * 本文所有结论均属 CODE/OFFLINE 平面：一次本机清点。不涉及 REAL_SOURCE、DEPLOYMENT、NATURAL_CYCLE。
+
+## 处置进度（AC11）：已分派处置的脚本是 **0 / 1057**
+
+读同一份 `script_migration_inventory.csv` 的 1057 条活行（路径存在者），三列一致地说明它们都还没有 §5 要求的处置：
+
+| 列 | 取值与计数 |
+|----|------------|
+| `status` | `待盘点/待映射` 1049、`review_only` 8 |
+| `migration_route` | `PENDING_PROVIDER_MAPPING` 1049、`HELPER_REVIEW` 8 |
+| `target_dataset` | `待数据契约与目标映射` 1049、`不适用；需人工判定` 8 |
+
+**词表漂移**：计划 §5 规定的处置只有七种——`REUSE_PROVIDER / EXTEND_PROVIDER / CONSOLIDATE / HELPER_ONLY /
+REPLACE_SOURCE / SOURCE_LIMITED / RETIRE_PROPOSED`；清单使用的这两个占位值都不在其中，且在本仓任何 markdown
+里都没有定义（`grep -rn PENDING_PROVIDER_MAPPING docs/ --include=*.md` → 0 命中）。后果是直接的：§6 要求每周报告的
+「已处置脚本 / 总脚本」按现清单只能是 **0/1057**，把 1049 条 `PENDING_*` 读成「已映射」就是虚报。
+
+静态盘点口径顺带记全（这些只描述文件形状，**不构成处置**）：
+
+* `static_role`：`entrypoint_fetch_data` 885、`entrypoint_run` 162、`helper_review_only` 8、`entrypoint_main` 2
+  （合计 1057）。这与类型平面实测互相印证：885 个类自带 `fetch_data`，其中 **831 个**的 `main()` 却调用 MRO 里
+  并不存在的 `run`（AFI #270 已按调用点修好）；162 个自带 `run`。
+* `asset_family`：stock 384、other 317、index 93、fund 87、futures 64、option 46、bond 41、fx 20、crypto 5。
+* `legacy_frequency`：daily 680、weekly 266、hourly 85、monthly 21、**unspecified 5**。
+* `owner`：B 604、C 445、review 8。
+
+判定：AC11 保持未完成，进度记为 0/1057 已分派。这一项不是 CI 能变绿的项，需要按 §5 词表逐条分派；
+其中 `unspecified` 5 与 `other` 317 还说明频率与资产族本身尚未人工确认，不能自动当作已知输入。
+平面：以上全部是 CODE/OFFLINE（读台账与源码形状），不涉及 REAL_SOURCE / DEPLOYMENT / NATURAL_CYCLE。
