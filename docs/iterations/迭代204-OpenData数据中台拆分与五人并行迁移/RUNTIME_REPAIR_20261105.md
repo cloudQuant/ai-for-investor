@@ -119,3 +119,23 @@
    「831 个 `main()` 调用不存在的 `run`」同源，属同一类静态形状问题。
 
 另记一条与 §1 同类的身份事实：产生 4,279 条失败的 raise 语句不在任何 ref 里，说明当时运行的进程与仓库无对应关系。
+## 10 「不在任何分支」是一类缺陷，不是孤例（本会话逐个实测）
+
+修复过程中每往里挖一层就多发现一个未入库的运行资产。以下每一条都是 `git ls-files` / `git log --all --diff-filter=A` /
+文件系统三查的读数，不是推断：
+
+| 运行资产 | 谁需要它 | 工作树 | 任一 ref | 本机副本 |
+|---|---|---|---|---|
+| `scripts/ops/run_full_history_recovery_worker.py` | `ai-for-investor-full-history-recovery.timer`（每分钟） | 缺 | 0 | 有（留档 candidate）→ #273 已入库 |
+| `tests/test_full_history_recovery_worker.py` | CI diff-coverage 步 | 缺 | 0 | 有（同 candidate 目录）→ #273 第二提交补回，**44 passed** |
+| `deploy/systemd/ai-for-investor-full-history-recovery.{service,timer}.example` | 上面那条测试自己要求存在 | 缺 | 0 | 有 → #273 一并取回 |
+| `scripts/ops/run_etf_nav_shard.sh` | `ai-for-investor-etf-nav-backfill@.service` 的 `ExecStart=%h/…/run_etf_nav_shard.sh %i 4` | 缺（find 无命中） | `git ls-files` = 0 | 无 → 实例 @0 停在 `activating` |
+| `scripts/{stock_full_history_controller,backfill_etf_nav_controller,bond_convertible_history_controller,cffex_option_history_controller,crypto_full_history_recovery}.py` | 恢复 worker 的五个资产腿 | 全缺 | 逐个 `added-in-any-ref = 0` | 仅 crypto 有两份 proposal 快照 |
+| `scripts/bond_full_history_audit.py` 与生产侧 `normalize_bond_symbol` / `normalize_daily_frame` | 可转债腿的历史审计路径 | 缺 | 未追 | 无（重建因此改为自包含，不 import 死资产） |
+
+规律很清楚：**这套运行时有相当一部分从未进入版本控制**，所以「服务在跑」与「仓库能重建这台机器」长期是两件事。
+这正是 AC01 要求双向 anti-join、AC12 要求先验环境身份的原因，也解释了为什么 4,279 条失败的错误文本在任何 ref 里 `grep` 不到。
+
+对验收的直接影响：AC05 的执行者正在由「不存在」变成「可执行但未证」——五个控制器已按属主决定重建（三条已完成：
+stock 46 项、bond 36 项、etf 38 项本机测试通过，适配器分别以 `NotRunError`/未调用诚实标注），
+但每一条都仍是 CODE/OFFLINE + 本机；真实源、真实数仓、真实定时器运行一律 NOT_RUN。
