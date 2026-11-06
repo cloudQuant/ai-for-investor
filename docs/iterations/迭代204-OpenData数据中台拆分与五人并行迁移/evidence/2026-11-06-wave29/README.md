@@ -15,6 +15,11 @@
 | `runtime_recovery_readout.2026-11-06T1535Z.json` | 上一条在 15:35:22Z 的实际输出，逐字存档 | — |
 | `inventory_anchor_provenance.py` | 把 1066 行锚分成 match / drifted / never_versioned / missing_file 四桶，并对 drifted 命中具体 commit | 只读（git log / git show + 读文件） |
 | `inventory_anchor_provenance.2026-11-06T1545Z.json` | 上一条输出：**166 / 847 / 44 / 9**，drifted 命中 commit 的分布，44 行清单 | — |
+| `scheduler_clock_duality.py` | §5：`last_execution_at` 与最新 `created_at` 的偏移分桶 + 单小时 cron 的墙钟命中率 | 只读 SELECT |
+| `scheduler_clock_duality.2026-11-06T1614Z.json` | 上一条 16:14:50Z 读数：shifted 214 / agrees 821 / older 13；964 个单小时 cron 中 next 964、last 135 | — |
+| `ci_duplicate_run_audit.py` | §24：每仓同一 sha 同时有 push 与 pull_request run 的数量（OD 56/476、AFI 0/229） | 只读 API |
+| `ci_duplicate_run_audit.2026-11-06T1615Z.txt` | 上一条逐行输出 | — |
+| `ac11_assign_gate_proof.py` | §23：AC11 签字门三种状态（空名拒 / 单文件 sha 拒 / 具名接受） | 只跑 `--work-dir`，不写仓库 |
 
 共同约定：DSN 只从 `src/backend/.env` 的 `DATABASE_URL` 读取，不打印口令；除最后一个脚本外
 全部只含 SELECT/SHOW；`ac11_retire_queue_a.py` 在写前落 before-image，且 cohort 完全由

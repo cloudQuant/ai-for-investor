@@ -1,0 +1,2 @@
+{"repo": "ai-for-investor", "distinct_shas_sampled": 229, "shas_with_both_push_and_pr": 0, "push_runs_sampled": 300, "completed_pairs": 0, "note": "minutes not obtainable: run_duration_ms/timing/job durations all null via API"}
+{"repo": "opendata", "distinct_shas_sampled": 476, "shas_with_both_push_and_pr": 56, "push_runs_sampled": 300, "completed_pairs": 55, "note": "minutes not obtainable: run_duration_ms/timing/job durations all null via API"}
