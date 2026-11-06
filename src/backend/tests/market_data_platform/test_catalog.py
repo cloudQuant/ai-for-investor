@@ -17,7 +17,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 ITERATION_196_HEAD = "20260908_ai_research_approval_authority"
 PRE_OPTIMIZATION_HEAD = "20260911_market_data_b2_completeness_evidence"
 INTEGRATED_HEAD = "20261012_optimization_objective_direction"
-CURRENT_HEAD = "20261101_stock_analysis_report_evidence_vector"
+CURRENT_HEAD = "20261106_akshare_run_coordinator_claims"
 RESEARCH_BINDING_RECEIPT_TABLES = {
     "md_research_data_bindings",
     "md_research_data_binding_scopes",
