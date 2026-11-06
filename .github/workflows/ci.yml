@@ -695,8 +695,30 @@ jobs:
           # at 35cde6592, with all 8940 tests green).  diff-cover skips changed
           # files that --cov=app does not measure (tests, alembic revisions), so
           # this gate stays about application code.
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=60
+          #
+          # Compare against the base *commit*, not the moving branch name.  A
+          # --depth=1 fetch writes whatever dev points at right now as a shallow,
+          # parentless commit; if the PR branch does not already contain that tip,
+          # git cannot relate the two and diff-cover aborts with
+          # `fatal: origin/dev...HEAD: no merge base` even though every test in the
+          # job passed (measured on #287 and #291, 2026-11-05, both with
+          # `Run tests with coverage` = success).
+          #
+          # For a pull_request event actions/checkout@v7 hands this job the PR merge
+          # ref.  Measured on #287, #291 and #299 through the API's merge_commit_sha:
+          # its FIRST parent is the base commit GitHub merged against and its SECOND
+          # parent is the PR head.  Reading the base from HEAD^1 is exact and
+          # self-evidencing - the object is already in the fetched history, so no fetch
+          # depth and no assumption about where the branch head sits right now is
+          # involved.  The order is asserted rather than trusted: comparing against the
+          # head itself would measure the base's own movement instead of this diff, and
+          # when dev has not moved at all it would measure nothing and read green.
+          if [ "$(git rev-parse HEAD^2)" != "${{ github.event.pull_request.head.sha }}" ]; then
+            echo "expected the merge ref's second parent to be the PR head commit"
+            exit 1
+          fi
+          BASE_REV="$(git rev-parse HEAD^1)"
+          diff-cover coverage.xml --compare-branch="$BASE_REV" --fail-under=60
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
