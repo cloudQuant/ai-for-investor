@@ -6,6 +6,8 @@ Stock Board Concept Hist Em
 频率: daily
 """
 
+from typing import Any
+
 import akshare as ak
 import pandas as pd
 from akshare.utils.request import request_with_retry as request_eastmoney
@@ -115,10 +117,18 @@ class StockBoardConceptHistEm(AkshareToMySql):
             )
             .sort_values("日期")
         )
-        previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
-        changes = []
-        pct_changes = []
-        amplitudes = []
+        # `preClose` is often absent from the Eastmoney payload. to_numeric(None, errors="coerce")
+        # already returns NaN and every reader below tests only `pd.isna(previous_close)`, so the
+        # explicit None branch keeps the value exactly what the old call produced.
+        raw_pre_close = data.get("preClose")
+        previous_close = (
+            pd.to_numeric(raw_pre_close, errors="coerce")
+            if raw_pre_close is not None
+            else float("nan")
+        )
+        changes: list[Any] = []
+        pct_changes: list[Any] = []
+        amplitudes: list[Any] = []
         for _, row in grouped.iterrows():
             close = row["收盘"]
             high = row["最高"]

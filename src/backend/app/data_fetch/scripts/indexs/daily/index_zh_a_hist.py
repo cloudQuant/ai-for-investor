@@ -6,7 +6,8 @@ Index Zh A Hist
 频率: daily
 """
 
-from datetime import datetime
+from datetime import date, datetime
+from typing import cast
 
 import pandas as pd
 from akshare.utils.request import request_with_retry as request_eastmoney
@@ -42,7 +43,11 @@ class IndexZhAHist(AkshareToMySql):
             row = self.require_cursor().fetchone()
             if not row or not row[0]:
                 return None
-            parsed = pd.to_datetime(row[0], errors="coerce")
+            # Type evidence: `data_date` is declared DATE in this class's own CREATE TABLE above
+            # (`\`data_date\` DATE COMMENT '数据日期'`), and the MySQL connector decodes a DATE
+            # column to datetime.date. The non-null guard above is unchanged, so `cast` (which is
+            # compile-time identity) hands to_datetime exactly the value the old call received.
+            parsed = pd.to_datetime(cast(date, row[0]), errors="coerce")
             if pd.isna(parsed):
                 return None
             return parsed.date().isoformat()
@@ -117,7 +122,15 @@ class IndexZhAHist(AkshareToMySql):
                 )
                 .sort_values("日期")
             )
-            previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
+            # `preClose` is often absent from the Eastmoney payload. to_numeric(None, errors="coerce")
+            # already returns NaN and every reader below tests only `pd.isna(previous_close)`, so the
+            # explicit None branch keeps the value exactly what the old call produced.
+            raw_pre_close = data.get("preClose")
+            previous_close = (
+                pd.to_numeric(raw_pre_close, errors="coerce")
+                if raw_pre_close is not None
+                else float("nan")
+            )
             change_values: list[float | None] = []
             pct_values: list[float | None] = []
             amplitude_values: list[float | None] = []

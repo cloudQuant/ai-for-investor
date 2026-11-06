@@ -51,7 +51,16 @@ class StockSseDealDaily(AkshareToMySql):
             # Process data if needed
             # Add data_date if not exists
             if "data_date" not in df.columns:
-                parsed = pd.to_datetime(kwargs.get("date"), format="%Y%m%d", errors="coerce")
+                # kwargs are untyped task parameters; to_datetime(None, ...) is itself None under
+                # errors="coerce" and the only reader below is `pd.isna(parsed)`, so short-
+                # circuiting None to NaT keeps both outcomes identical while satisfying the
+                # scalar overload, which accepts no None.
+                date_arg = kwargs.get("date")
+                parsed = (
+                    pd.NaT
+                    if date_arg is None
+                    else pd.to_datetime(date_arg, format="%Y%m%d", errors="coerce")
+                )
                 df["data_date"] = (
                     parsed.date() if not pd.isna(parsed) else pd.Timestamp.now().date()
                 )

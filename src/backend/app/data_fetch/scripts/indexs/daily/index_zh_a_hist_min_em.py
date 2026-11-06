@@ -95,7 +95,10 @@ class IndexZhAHistMinEm(AkshareToMySql):
                 continue
             df = df.iloc[:, : len(columns)]
             df.columns = columns
-            df.index = pd.to_datetime(df["时间"], errors="coerce")
+            # The .index setter coerces a Series to an Index anyway (probe on the pinned pandas:
+            # `df.index = series` and `df.index = pd.DatetimeIndex(series)` leave df.index equal,
+            # same type/values/name), and the stubs only accept the Index arm of that coercion.
+            df.index = pd.DatetimeIndex(pd.to_datetime(df["时间"], errors="coerce"))
             df = df[df.index.notna()]
             if start_date or end_date:
                 df = df[start_date:end_date]

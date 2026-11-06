@@ -8,6 +8,9 @@ Stock Hsgt Hold Stock Em
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import pandas as pd
 import requests
 
@@ -104,7 +107,9 @@ class StockHsgtHoldStockEm(AkshareToMySql):
             "Referer": EASTMONEY_REFERER,
         }
 
-    def _request_eastmoney(self, params: dict[str, str | int]) -> dict:
+    # Both callers (_latest_hold_date and the paging loop) build dict[str, str] literals - Eastmoney
+    # query-string parameters, ints already str()pped - so the signature says str, not str | int.
+    def _request_eastmoney(self, params: dict[str, str]) -> dict:
         response = requests.get(
             EASTMONEY_DATACENTER_URL,
             params=params,
@@ -318,7 +323,8 @@ class StockHsgtHoldStockEm(AkshareToMySql):
             "interval_type",
             "date_type",
         ]
-        agg_map = {
+        # pandas named-agg specs: one column gets the callable, the loop below mixes in "first".
+        agg_map: dict[str, str | Callable[[pd.Series[Any]], str | None]] = {
             "board_name": cls._join_unique,
         }
         for col in normalized.columns:

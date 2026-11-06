@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -65,7 +65,7 @@ class FundMoneyRankEm(AkshareToMySql):
                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='货币型基金排行数据表(东方财富)';
                             """
 
-    def parse_date(self, date_str: str) -> datetime.date | None:
+    def parse_date(self, date_str: str) -> date | None:
         """解析日期字符串"""
         if not date_str or pd.isna(date_str) or str(date_str).strip() == "":
             return None
@@ -244,11 +244,17 @@ class FundMoneyRankEm(AkshareToMySql):
             self.logger.info("没有新的货币型基金排行数据需要保存")
             return True
 
-        return self.save_data(
-            df=df,
-            table_name=self.table_name,
-            on_duplicate_update=True,
-            unique_keys=["R_ID"],
+        # save_data() is declared `-> int | Literal[False]` (core/mysql_base.py); this method's
+        # own contract is the bool from its docstring, its callers here use it only through
+        # `if success:` / `return success` truthiness, and sibling fund_rating_sh.py already
+        # narrows the same call with `return bool(saved_rows)`. Zero/False stay False exactly.
+        return bool(
+            self.save_data(
+                df=df,
+                table_name=self.table_name,
+                on_duplicate_update=True,
+                unique_keys=["R_ID"],
+            )
         )
 
     def _get_existing_ids(self) -> set:

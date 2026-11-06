@@ -158,11 +158,13 @@ class FuturesMinuteMarket(AkshareToMySql):
         df["REFERENCE_NAME"] = "期货分时行情数据"
         df["SYMBOL"] = symbol
         df["PERIOD"] = period
-        df["VARIETY"] = (
-            re.match(r"([A-Z]+)", symbol, re.IGNORECASE).group(1).upper()
-            if re.match(r"([A-Z]+)", symbol, re.IGNORECASE)
-            else ""
-        )
+        # DDL evidence: VARIETY is `VARCHAR(10)` (create_table_sql above), so the empty-string
+        # branch for a symbol with no letter prefix is part of the stored shape and stays.
+        # `re.match` is now called once and bound, which is what narrows `.group()`: calling it
+        # again in the guard meant nothing narrowed the object the body dereferenced. Same pattern,
+        # same flags, same argument - one fewer call, identical value.
+        variety_match = re.match(r"([A-Z]+)", symbol, re.IGNORECASE)
+        df["VARIETY"] = variety_match.group(1).upper() if variety_match else ""
         df["IS_ACTIVE"] = 1
         df["DATA_SOURCE"] = "新浪财经"
         df["CREATEUSER"] = "system"

@@ -1,6 +1,7 @@
 import math
 import time
 from collections.abc import Iterable
+from typing import Any
 
 import pandas as pd
 import requests
@@ -51,7 +52,10 @@ def fetch_sina_macro_pages(
     columns = [item[1] for item in first_json["config"]["all"]]
 
     def extract_records(data_json: dict) -> list:
-        data = data_json
+        # demjson hands back a JSON tree, so each step of the data_path walk can hold a value
+        # of any JSON type; the loop's result is genuinely an arbitrary JSON node, and `or []`
+        # only replaces the null/empty ones.
+        data: Any = data_json
         for key in data_path:
             data = data[key]
         return data or []

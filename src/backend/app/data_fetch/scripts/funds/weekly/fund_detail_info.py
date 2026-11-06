@@ -92,13 +92,13 @@ class FundDetailInfoXq(AkshareToMySql):
 
             # 2. Fetch and process data for each fund
             all_new_details = []
-            codes_to_fetch = list(codes_to_fetch)
+            pending_codes = list(codes_to_fetch)
             count = 0
-            random.shuffle(codes_to_fetch)
-            if max_codes is not None and len(codes_to_fetch) > int(max_codes):
-                codes_to_fetch = codes_to_fetch[: int(max_codes)]
+            random.shuffle(pending_codes)
+            if max_codes is not None and len(pending_codes) > int(max_codes):
+                pending_codes = pending_codes[: int(max_codes)]
                 self.logger.info(f"限制处理基金详情数量为{int(max_codes)}个")
-            for symbol in codes_to_fetch:
+            for symbol in pending_codes:
                 if symbol in lost_codes:
                     self.logger.info(f"Skipping {symbol} as it failed before.")
                     continue

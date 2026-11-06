@@ -40,7 +40,10 @@ class OptionSseMinuteSina(AkshareToMySql):
         call_timeout: int | None = None,
     ) -> str | None:
         trade_date = trade_date or pd.Timestamp.now().strftime("%Y%m")
-        kwargs = {
+        # Value types follow the signature above: the three seeded values are all str (the
+        # `or`-fallback keeps trade_date str), and the optional insert is guarded `int | None`
+        # with a non-None check, so it contributes an int.
+        kwargs: dict[str, str | int] = {
             "symbol": option_type,
             "trade_date": trade_date,
             "underlying": underlying,
