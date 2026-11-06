@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 
 import mysql.connector
 import pandas as pd
@@ -57,7 +57,12 @@ SAFE_DIRECT_CODES = {
 
 
 def _connect() -> mysql.connector.MySQLConnection:
-    return mysql.connector.connect(**DB_CONFIG)
+    # Type evidence: the declared return of mysql.connector.connect is the union
+    # PooledMySQLConnection | MySQLConnectionAbstract, and it only takes the pooled arm when the
+    # kwargs carry `pool_name`/`use_pooled`. DB_CONFIG is built by configs/db_config.py's
+    # _build_db_config, which emits exactly host/user/password/database/port - no pooling keys -
+    # so the concrete object is always MySQLConnection; cast is compile-time identity.
+    return cast(mysql.connector.MySQLConnection, mysql.connector.connect(**DB_CONFIG))
 
 
 def _read_sql(sql: str, params: tuple[Any, ...] = ()) -> pd.DataFrame:
@@ -147,7 +152,10 @@ def _boc_safe_rows(
 def _boc_rates_for_row(row: pd.Series) -> dict[str, float]:
     rates = {"CNY": 1.0}
     for name, code in CURRENCY_NAME_TO_CODE.items():
-        value = pd.to_numeric(row.get(name), errors="coerce")
+        # row.get returns None for an absent currency column and to_numeric(None, errors="coerce")
+        # is already NaN, which the `pd.isna(value)` guard below skips identically.
+        rate_cell = row.get(name)
+        value = pd.to_numeric(rate_cell, errors="coerce") if rate_cell is not None else float("nan")
         if pd.isna(value) or float(value) == 0:
             continue
         raw = float(value)
@@ -179,7 +187,12 @@ def _latest_spot_rates() -> tuple[str | None, dict[str, float]]:
     rates = {"CNY": 1.0, "CNH": 1.0}
     for _, row in df.iterrows():
         code = str(row.get("代码") or "").upper()
-        price = pd.to_numeric(row.get("最新价"), errors="coerce")
+        # row.get returns None for an absent price cell and to_numeric(None, errors="coerce")
+        # is already NaN, which the `pd.isna(price)` guard below skips identically.
+        price_cell = row.get("最新价")
+        price = (
+            pd.to_numeric(price_cell, errors="coerce") if price_cell is not None else float("nan")
+        )
         if not code or pd.isna(price) or float(price) == 0:
             continue
         value = float(price)
@@ -309,7 +322,9 @@ def build_currency_time_series_fallback(
         return pd.DataFrame()
 
     frames = []
-    for _, row in rows.iterrows():
+    # The swallowed index must not bind to `_`, which is this function's `**_: Any` catch-all
+    # (a dict[str, Any]); the loop body never reads it, so only the local name changes.
+    for _row_index, row in rows.iterrows():
         data_date = _normalize_date(row.get("日期"))
         if not data_date:
             continue

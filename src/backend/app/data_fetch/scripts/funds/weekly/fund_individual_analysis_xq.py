@@ -72,7 +72,10 @@ class FundAnalysisXq(AkshareToMySql):
             self.logger.warning(f"解析浮点数失败: {e}, 原始值: {value}")
             return default
 
-    def fetch_analysis_data(self, fund_code: str) -> pd.DataFrame | None:
+    # Type evidence: run() below declares `fund_code: str | None = None` and forwards it here
+    # unmodified - a None fund_code is an existing reachable input, so the parameter type must
+    # say so. The body only interpolates it into logs and passes it to the symbol kwarg.
+    def fetch_analysis_data(self, fund_code: str | None) -> pd.DataFrame | None:
         """
         获取基金分析数据
 
@@ -205,11 +208,17 @@ class FundAnalysisXq(AkshareToMySql):
             self.logger.info("没有新的基金分析数据需要保存")
             return True
 
-        return self.save_data(
-            df=df,
-            table_name=self.table_name,
-            on_duplicate_update=True,
-            unique_keys=["R_ID"],
+        # save_data() is declared `-> int | Literal[False]` (core/mysql_base.py); this method's
+        # own contract is the bool from its docstring, its callers here use it only through
+        # `if success:` / `return success` truthiness, and sibling fund_rating_sh.py already
+        # narrows the same call with `return bool(saved_rows)`. Zero/False stay False exactly.
+        return bool(
+            self.save_data(
+                df=df,
+                table_name=self.table_name,
+                on_duplicate_update=True,
+                unique_keys=["R_ID"],
+            )
         )
 
     def _get_existing_ids(self) -> set:

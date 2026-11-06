@@ -33,6 +33,13 @@ def flatten_dict_result(
         return df
 
     if "data_date" not in df.columns:
-        parsed = pd.to_datetime(data_date, format="%Y%m%d", errors="coerce")
+        # to_datetime(None, ...) is itself None under errors="coerce" and the only reader below
+        # is `pd.isna(parsed)`, so short-circuiting None to NaT keeps both outcomes identical
+        # while satisfying the scalar overload, which accepts no None.
+        parsed = (
+            pd.NaT
+            if data_date is None
+            else pd.to_datetime(data_date, format="%Y%m%d", errors="coerce")
+        )
         df["data_date"] = parsed.date() if not pd.isna(parsed) else pd.Timestamp.now().date()
     return df

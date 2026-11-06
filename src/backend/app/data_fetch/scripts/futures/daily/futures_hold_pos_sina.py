@@ -66,6 +66,11 @@ class FuturesHoldPosSina(AkshareToMySql):
         else:
             data_date = pd.Timestamp.now().date()
 
+        # df.get returns None for an absent column and to_numeric(None, errors="coerce") is
+        # already NaN, which is the scalar the constructor broadcast before; the None branch is
+        # the same value, made visible to the type checker (same shape as rank_value below).
+        rank_column = df.get("名次")
+        change_column = df.get("比上交易增减")
         normalized = pd.DataFrame(
             {
                 "symbol": contract_value,
@@ -73,14 +78,22 @@ class FuturesHoldPosSina(AkshareToMySql):
                 "data_date": data_date,
                 "contract": contract_value,
                 "rank_type": rank_type_value,
-                "rank_num": pd.to_numeric(df.get("名次"), errors="coerce"),
+                "rank_num": (
+                    pd.to_numeric(rank_column, errors="coerce")
+                    if rank_column is not None
+                    else float("nan")
+                ),
                 "member_name": df.get("会员简称"),
                 "rank_value": (
                     pd.to_numeric(df[raw_value_column], errors="coerce")
                     if raw_value_column is not None
                     else None
                 ),
-                "change_value": pd.to_numeric(df.get("比上交易增减"), errors="coerce"),
+                "change_value": (
+                    pd.to_numeric(change_column, errors="coerce")
+                    if change_column is not None
+                    else float("nan")
+                ),
                 "raw_value_column": raw_value_column,
             }
         )
