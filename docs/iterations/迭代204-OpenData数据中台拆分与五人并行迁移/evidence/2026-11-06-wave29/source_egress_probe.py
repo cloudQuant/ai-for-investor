@@ -66,6 +66,37 @@ def probe_endata() -> dict:
     return res
 
 
+def probe_names(names, dates) -> dict:
+    """Existence + a real call for the remaining undecided names, same egress discipline."""
+    import akshare as ak
+
+    out = {}
+    for name in names:
+        fn = getattr(ak, name, None)
+        if fn is None:
+            out[name] = "ABSENT_IN_INSTALLED_AKSHARE"
+            continue
+        try:
+            params = list(inspect.signature(fn).parameters)
+        except Exception:  # noqa: BLE001
+            params = []
+        tried = {}
+        if "date" in params:
+            for d in dates:
+                try:
+                    tried[d] = int(fn(date=d).shape[0])
+                except Exception as exc:  # noqa: BLE001
+                    tried[d] = type(exc).__name__
+                time.sleep(0.4)
+        else:
+            try:
+                tried["no-arg"] = int(fn().shape[0])
+            except Exception as exc:  # noqa: BLE001
+                tried["no-arg"] = f"{type(exc).__name__}: {str(exc)[:60]}"
+        out[name] = {"params": params[:6], "observed_rows": tried}
+    return out
+
+
 def probe_akshare(dates) -> dict:
     import akshare as ak
 
@@ -146,6 +177,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repeat", type=int, default=3)
     ap.add_argument("--dates", default="20240219,20250101,20260105,20261104")
+    ap.add_argument("--names", default="cost_living,shfe_stock_weekly,macro_china_nbs_nation,"
+                    "macro_china_nbs_region,futures_to_spot_dce,option_hist_dce")
     ap.add_argument("--backend-root", default="/home/yun/Documents/ai-for-investor/src/backend")
     args = ap.parse_args()
 
@@ -155,6 +188,7 @@ def main() -> None:
         "endata": probe_endata(),
         "akshare_boxoffice_family": probe_akshare(args.dates.split(",")),
         "afis_own_endata_client": probe_afis_side(args.backend_root),
+        "other_undecided_names": probe_names(args.names.split(","), args.dates.split(",")),
         "meaning": (
             "A host listed with ConnectionError on every try cannot be verified from this machine, so "
             "any 0-row result for a script that depends on it is a reachability statement, not a "

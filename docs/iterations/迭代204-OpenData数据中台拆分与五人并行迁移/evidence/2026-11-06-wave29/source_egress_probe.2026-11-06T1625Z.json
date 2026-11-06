@@ -1,21 +1,15 @@
 {
-  "probed_at_utc": "2026-11-06T16:22:45Z",
+  "probed_at_utc": "2026-11-06T16:25:06Z",
   "hosts": {
     "push2.eastmoney.com": [
-      "ConnectionError",
       "ConnectionError",
       "ConnectionError"
     ],
     "82.push2.eastmoney.com": [
       "ConnectionError",
-      "ConnectionError",
       "ConnectionError"
     ],
     "datacenter-web.eastmoney.com": [
-      [
-        200,
-        81
-      ],
       [
         200,
         81
@@ -33,17 +27,9 @@
       [
         200,
         352527
-      ],
-      [
-        200,
-        352527
       ]
     ],
     "hq.sinajs.cn": [
-      [
-        200,
-        169
-      ],
       [
         200,
         169
@@ -115,6 +101,52 @@
         "table3"
       ],
       "n": 12
+    }
+  },
+  "other_undecided_names": {
+    "cost_living": "ABSENT_IN_INSTALLED_AKSHARE",
+    "shfe_stock_weekly": "ABSENT_IN_INSTALLED_AKSHARE",
+    "macro_china_nbs_nation": {
+      "params": [
+        "kind",
+        "path",
+        "period"
+      ],
+      "observed_rows": {
+        "no-arg": "TypeError: macro_china_nbs_nation() missing 2 required positional argum"
+      }
+    },
+    "macro_china_nbs_region": {
+      "params": [
+        "kind",
+        "path",
+        "indicator",
+        "region",
+        "period"
+      ],
+      "observed_rows": {
+        "no-arg": "TypeError: macro_china_nbs_region() missing 3 required positional argum"
+      }
+    },
+    "futures_to_spot_dce": {
+      "params": [
+        "date"
+      ],
+      "observed_rows": {
+        "20240219": 0,
+        "20250101": 0,
+        "20260105": 0,
+        "20261104": 0
+      }
+    },
+    "option_hist_dce": {
+      "params": [
+        "symbol",
+        "trade_date"
+      ],
+      "observed_rows": {
+        "no-arg": 0
+      }
     }
   },
   "meaning": "A host listed with ConnectionError on every try cannot be verified from this machine, so any 0-row result for a script that depends on it is a reachability statement, not a dataset statement. Controls that return rows prove egress works overall."
