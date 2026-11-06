@@ -5,13 +5,14 @@ Execution service for akshare task runs.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.akshare_mgmt import ScheduledTask, TaskExecution, TaskStatus, TriggeredBy
+from app.services.akshare.clock import utcnow_naive
 
 
 class AkshareExecutionService:
@@ -22,7 +23,7 @@ class AkshareExecutionService:
 
     @staticmethod
     def _utcnow_naive() -> datetime:
-        return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+        return utcnow_naive()
 
     @staticmethod
     def _duration_seconds(start_time: datetime | None, end_time: datetime) -> float | None:
