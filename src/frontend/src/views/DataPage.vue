@@ -240,69 +240,10 @@
           </div>
         </template>
 
-        <p
-          v-if="openDataStockDailyFreshnessDisplay.status === 'idle'"
-          role="status"
-          data-test="opendata-stock-daily-freshness-idle"
-        >
-          {{ t('dataMgmt.stockDailyFreshnessIdle') }}
-        </p>
-        <p
-          v-else-if="openDataStockDailyFreshnessDisplay.status === 'loading'"
-          role="status"
-          data-test="opendata-stock-daily-freshness-loading"
-        >
-          {{ t('dataMgmt.stockDailyFreshnessLoading') }}
-        </p>
-        <el-alert
-          v-else-if="openDataStockDailyFreshnessDisplay.status === 'unavailable'"
-          type="warning"
-          :closable="false"
-          show-icon
-          data-test="opendata-stock-daily-freshness-unavailable"
-          :title="t('dataMgmt.stockDailyFreshnessUnavailable')"
+        <OpenDataStockDailyFreshnessStates
+          :display="openDataStockDailyFreshnessDisplay"
+          :availability="openDataStockDailyFreshnessAvailability"
         />
-        <template v-else-if="openDataStockDailyFreshnessDisplay.response">
-          <el-tag
-            :type="openDataStockDailyFreshnessDisplay.response.status === 'fresh'
-              ? 'success'
-              : openDataStockDailyFreshnessDisplay.response.status === 'stale'
-                ? 'warning'
-                : 'info'"
-            data-test="opendata-stock-daily-freshness-status"
-          >
-            {{ t(`dataMgmt.stockDailyFreshnessStatus.${openDataStockDailyFreshnessDisplay.response.status}`) }}
-          </el-tag>
-          <dl class="opendata-stock-daily-freshness-values">
-            <div>
-              <dt>{{ t('dataMgmt.stockDailyFreshnessExpectedDate') }}</dt>
-              <dd>{{ openDataStockDailyFreshnessDisplay.response.expected_data_date }}</dd>
-            </div>
-            <div v-if="openDataStockDailyFreshnessDisplay.response.status !== 'missing'">
-              <dt>{{ t('dataMgmt.stockDailyFreshnessLatestDate') }}</dt>
-              <dd>{{ openDataStockDailyFreshnessDisplay.response.latest }}</dd>
-            </div>
-            <div v-if="openDataStockDailyFreshnessDisplay.response.status !== 'missing'">
-              <dt>{{ t('dataMgmt.stockDailyFreshnessDateDifference') }}</dt>
-              <dd>{{ openDataStockDailyFreshnessDisplay.response.lag_days }}</dd>
-            </div>
-            <div v-if="openDataStockDailyFreshnessDisplay.response.status !== 'missing'">
-              <dt>{{ t('dataMgmt.stockDailyFreshnessField') }}</dt>
-              <dd>{{ openDataStockDailyFreshnessDisplay.response.field }}</dd>
-            </div>
-            <div>
-              <dt>{{ t('dataMgmt.stockDailyFreshnessCheckedAt') }}</dt>
-              <dd>{{ openDataStockDailyFreshnessDisplay.response.checked_at }}</dd>
-            </div>
-          </dl>
-          <p
-            v-if="openDataStockDailyFreshnessDisplay.response.status === 'missing'"
-            class="opendata-stock-daily-freshness-missing"
-            data-test="opendata-stock-daily-freshness-missing"
-          >
-            {{ t('dataMgmt.stockDailyFreshnessMissingMeaning') }}
-          </p>
-        </template>
       </el-card>
     </section>
 
@@ -383,7 +324,9 @@
           </div>
           <div>
             <dt>{{ t('dataMgmt.openDataDirectCoverage') }}</dt>
-            <dd>{{ t('dataMgmt.openDataDirectUnknown') }}</dd>
+            <dd data-test="opendata-direct-coverage">
+              {{ t(`dataMgmt.openDataCoverageState.${openDataDirectKlineDisplay.coverageStatus || 'UNKNOWN'}`) }}
+            </dd>
           </div>
           <div>
             <dt>{{ t('dataMgmt.openDataDirectAvailability') }}</dt>
@@ -1058,6 +1001,7 @@
 <script setup lang="ts">
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { useDataPage } from './data/useDataPage'
+import OpenDataStockDailyFreshnessStates from './data/components/OpenDataStockDailyFreshnessStates.vue'
 
 const dataPage = useDataPage()
 
@@ -1074,6 +1018,7 @@ const {
   openDataDirectKlineDisplay,
   openDataStockDailyFreshnessDisplay,
   canReadOpenDataStockDailyFreshness,
+  openDataStockDailyFreshnessAvailability,
   stockDataRouteNotice,
   showLocalCoverageMatrix,
   result,
@@ -1192,28 +1137,6 @@ defineExpose(dataPage)
 
 .opendata-direct-provenance {
   margin: 18px 0 0;
-}
-
-.opendata-stock-daily-freshness-values {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px 20px;
-  margin: 16px 0 0;
-}
-
-.opendata-stock-daily-freshness-values dt {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-
-.opendata-stock-daily-freshness-values dd {
-  margin: 4px 0 0;
-  overflow-wrap: anywhere;
-}
-
-.opendata-stock-daily-freshness-missing {
-  margin: 14px 0 0;
-  color: var(--el-text-color-secondary);
 }
 
 .opendata-direct-message {

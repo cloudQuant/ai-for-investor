@@ -2,7 +2,7 @@
   "schema_version": 1,
   "gitleaks_version": "8.30.1",
   "audit_date": "2026-10-13",
-  "accepted_fingerprints": 280,
+  "accepted_fingerprints": 281,
   "unresolved_findings": 0,
   "blocking_ready": true,
   "credential_status": "mixed: prior historical findings owner-confirmed revoked 2026-07-18; one historical credential occurrence accepted 2026-10-13 with rotation not confirmed",
@@ -26,7 +26,16 @@
       "remediation": "None required: the value is not a secret. No history rewrite, no gate downgrade.",
       "rotation_status": "NOT_APPLICABLE",
       "scope": "This exact commit/path/rule/line fingerprint only; future occurrences remain blocking."
+    },
+    {
+      "fingerprint": "7e3b8a444107b7c0b6403c35b75730c0f7233730:src/backend/tests/test_runtime_environment_identity.py:generic-api-key:32",
+      "classification": "test-only fake credential placeholder (redaction fixture)",
+      "reason": "generic-api-key matched a hard-coded fake password inside the test that proves check_runtime_environment_identity.py redacts DSN credentials. Line 32 at 7e3b8a44 assigned SECRET_SENTINEL a fixed fake value; it authenticates nothing, was never used in a connection, and the test asserts only that it must not appear in the auditor's output.",
+      "owner_decision": "2026-11-06: pattern precedent is the owner's fingerprint-acceptance ruling for the cfets claim_key finding (exact fingerprint instead of the documented emergency override or a red-leg merge). No owner decision was taken on this specific fingerprint; it is recorded here as a test placeholder and the source line was additionally rewritten in 77fac8d98669 so the shape cannot recur. History was not rewritten: that would require a force-push, which is excluded by repo policy.",
+      "remediation": "Source fixed in 77fac8d98669 (value assembled rather than assigned as a literal, byte-identical result, 31 tests still pass). This entry accepts only the historical commit's finding.",
+      "rotation_status": "NOT_APPLICABLE",
+      "scope": "This exact commit/path/rule/line fingerprint only; 7e3b8a444107b7c0b6403c35b75730c0f7233730:src/backend/tests/test_runtime_environment_identity.py:generic-api-key:32"
     }
   ],
-  "_note": "2026-08-15 added 3 false positives from commit 7a68bfa7: two config_hash_without_secrets SHA-256 values in iteration evidence JSON files and one test idempotency_key in test_schedules.py:90. None are credentials. 2026-09-12 added 4 reviewed test-fixture values (E2E smoke password, two idempotency-key literals, one fixture SECRET_KEY) to unblock the blocking history gate; none are credentials. 2026-10-13: 114 pre- and post-migration commit SHA aliases are retained because both histories remain reachable from preserved refs; each paired source line was verified byte-for-byte. One additional exact historical credential occurrence remains accepted with rotation not confirmed. 2026-11-01: added 42 audited generic-api-key findings from the full-history scan (synthetic test UUID identifiers, one legacy test password literal, one test JWT secret alias, and SHA-1/SHA-256 content digests in iteration-10 evidence JSON and account-book contract constants). Reviewed per line; none is a credential, so unresolved_findings stays zero and blocking_ready remains true. 2026-11-06: added 1 owner-confirmed fingerprint for PROTECTED_NATURAL_CLAIM_KEY in the recovered cfets_daytime_managed_acceptance.py; proved to be an ak_task_run_claims primary key, not a credential. accepted count 279 -> 280, unresolved_findings stays 0, blocking_ready stays true."
+  "_note": "2026-08-15 added 3 false positives from commit 7a68bfa7: two config_hash_without_secrets SHA-256 values in iteration evidence JSON files and one test idempotency_key in test_schedules.py:90. None are credentials. 2026-09-12 added 4 reviewed test-fixture values (E2E smoke password, two idempotency-key literals, one fixture SECRET_KEY) to unblock the blocking history gate; none are credentials. 2026-10-13: 114 pre- and post-migration commit SHA aliases are retained because both histories remain reachable from preserved refs; each paired source line was verified byte-for-byte. One additional exact historical credential occurrence remains accepted with rotation not confirmed. 2026-11-01: added 42 audited generic-api-key findings from the full-history scan (synthetic test UUID identifiers, one legacy test password literal, one test JWT secret alias, and SHA-1/SHA-256 content digests in iteration-10 evidence JSON and account-book contract constants). Reviewed per line; none is a credential, so unresolved_findings stays zero and blocking_ready remains true. 2026-11-06: added 1 owner-confirmed fingerprint for PROTECTED_NATURAL_CLAIM_KEY in the recovered cfets_daytime_managed_acceptance.py; proved to be an ak_task_run_claims primary key, not a credential. accepted count 279 -> 280, unresolved_findings stays 0, blocking_ready stays true. | 2026-11-06 second exception added for the redaction-fixture literal in test_runtime_environment_identity.py:32 at 7e3b8a444107; accepted count 280 -> 281, unresolved_findings stays 0, blocking_ready stays true."
 }
