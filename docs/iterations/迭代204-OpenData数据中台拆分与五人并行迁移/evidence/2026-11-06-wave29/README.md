@@ -26,6 +26,8 @@
 | `verify_adapter_backed_functions.py` | §27：只打"被 OD fetcher 引用的 8 个上游函数"，非空才生成验证记录 | 只读外呼，不写库 |
 | `adapter_backed_verification.2026-11-06T1629Z.json` | 上一条观测：6 个非空行数、2 个失败及其主机归因 | — |
 | `source_verification_export.2026-11-06T1629Z.json` | 喂给 `--source-verification-export` 的记录（仅 6 条非空） | — |
+| `unit_execstart_existence.py` | §28：unit/timer 实况 + ExecStart 目标在磁盘与 git 索引双侧存在性 | 只读 systemctl / git ls-files |
+| `unit_execstart_existence.2026-11-06T1635Z.json` | 上一条输出：8 单元目标缺失、8 个都不在索引、5 个仍挂活定时器、max NRestarts 4738 | — |
 
 共同约定：DSN 只从 `src/backend/.env` 的 `DATABASE_URL` 读取，不打印口令；除最后一个脚本外
 全部只含 SELECT/SHOW；`ac11_retire_queue_a.py` 在写前落 before-image，且 cohort 完全由
