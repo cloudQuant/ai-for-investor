@@ -6,6 +6,8 @@ Fund Lof Hist Em
 频率: daily
 """
 
+from typing import Any
+
 import pandas as pd
 from akshare.utils.request import request_with_retry as request_eastmoney
 
@@ -97,9 +99,9 @@ class FundLofHistEm(AkshareToMySql):
                 .sort_values("日期")
             )
             previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
-            changes = []
-            pct_changes = []
-            amplitudes = []
+            changes: list[Any] = []
+            pct_changes: list[Any] = []
+            amplitudes: list[Any] = []
             for _, row in grouped.iterrows():
                 close = row["收盘"]
                 high = row["最高"]
