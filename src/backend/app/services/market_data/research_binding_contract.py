@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
+from typing import Any
 
 from app.models.market_data_platform import MdResearchDataBinding
 from app.schemas.market_data_platform import ResolvedMarketDataQuery
@@ -591,8 +592,13 @@ def _build_publication_binding_section(
     }
 
 
-def _validated_publication_binding(material: Mapping[str, object]) -> dict[str, object]:
+def _validated_publication_binding(material: Mapping[str, object]) -> dict[str, Any]:
     """Rebuild and verify one material's pinned publication section.
+
+    ``Any`` in the value position is deliberate, not a shortcut: this function refuses
+    anything whose axes do not match the sealed material, and in particular guarantees
+    ``datasets`` is a one-element list, so callers may iterate it without re-testing a
+    condition that cannot be false here.
 
     Every axis is checked against the rest of the sealed material: the dataset
     contract basis must agree with the query semantics, the window must agree
