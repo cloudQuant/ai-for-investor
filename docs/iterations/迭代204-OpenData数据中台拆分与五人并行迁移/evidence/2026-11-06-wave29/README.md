@@ -23,6 +23,9 @@
 | `source_egress_probe.py` | §25：出口对照 + akshare/AFI 两侧 endata 实测 + 逐主机可达性 | 只读网络探测与树内 client 调用，不写库 |
 | `source_egress_probe.2026-11-06T1622Z.json` | 上一条输出：akshare 5 函数×4 日期全 0 行、AFI client 活、push2 两主机 3/3 不可达 | — |
 | `record_provenance_audit.py` | 台账自检：每个有小数的段落是否都指向仪器/CI 作业/sha/file:line | 只读本文与 evidence 目录 |
+| `verify_adapter_backed_functions.py` | §27：只打"被 OD fetcher 引用的 8 个上游函数"，非空才生成验证记录 | 只读外呼，不写库 |
+| `adapter_backed_verification.2026-11-06T1629Z.json` | 上一条观测：6 个非空行数、2 个失败及其主机归因 | — |
+| `source_verification_export.2026-11-06T1629Z.json` | 喂给 `--source-verification-export` 的记录（仅 6 条非空） | — |
 
 共同约定：DSN 只从 `src/backend/.env` 的 `DATABASE_URL` 读取，不打印口令；除最后一个脚本外
 全部只含 SELECT/SHOW；`ac11_retire_queue_a.py` 在写前落 before-image，且 cohort 完全由
