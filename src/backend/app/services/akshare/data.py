@@ -20,6 +20,24 @@ _VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _MYSQL_COMPACT_TABLE_COLUMN_THRESHOLD = 250
 _COMPACT_ROW_COLUMN = "_akshare_row"
 _COMPACT_PAYLOAD_COLUMN = "_akshare_payload"
+_ADJUSTMENT_COLUMN = "adjustment"
+_VALID_ADJUSTMENT_VALUE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+# Bounds for the distinct-basis sample. ``SELECT DISTINCT adjustment FROM <table>
+# LIMIT n`` is NOT a bounded read on MySQL: the engine scans the whole table
+# whenever the true distinct count is below ``n`` (18M+ rows on STOCK_ZH_A_HIST).
+# The inner subquery in ``_sample_observed_bases`` therefore caps engine work at
+# ``_BASIS_SAMPLE_ROWS`` storage-order rows, and the outer LIMIT caps the
+# reported cardinality at ``_BASIS_VALUE_LIMIT`` values.
+_BASIS_SAMPLE_ROWS = 200_000
+_BASIS_VALUE_LIMIT = 50
+
+
+class AdjustmentBasisError(ValueError):
+    """The requested adjustment basis is malformed or absent from the table.
+
+    Raised instead of silently ignoring the filter, so the API layer can map it
+    to a structured 400 rather than an unfiltered (or empty) page.
+    """
 
 
 class AkshareDataService:
@@ -459,27 +477,106 @@ class AkshareDataService:
             for column in columns
         ]
 
+    async def _sample_observed_bases(self, conn: Any, quoted_name: str) -> list[str]:
+        """Collect distinct adjustment values from a bounded storage-order sample.
+
+        The inner ``LIMIT :sample_rows`` subquery is what bounds engine work: a
+        plain ``SELECT DISTINCT adjustment FROM <table> LIMIT n`` would scan an
+        18M-row table in full whenever fewer than ``n`` bases exist. Bases that
+        occur only beyond the sampled rows are under-reported here; the exact
+        existence probe in :meth:`get_table_rows` is what guards filtering.
+        """
+        result = await conn.execute(
+            text(
+                f"SELECT DISTINCT adjustment FROM ("
+                f"SELECT {_ADJUSTMENT_COLUMN} AS adjustment FROM {quoted_name} "
+                f"LIMIT :sample_rows"
+                f") AS basis_sample LIMIT :max_values"
+            ),
+            {"sample_rows": _BASIS_SAMPLE_ROWS, "max_values": _BASIS_VALUE_LIMIT},
+        )
+        return sorted(str(value) for (value,) in result.all() if value is not None)
+
     async def get_table_rows(
         self,
         table_name: str,
         page: int = 1,
         page_size: int = 50,
-    ) -> tuple[list[str], list[dict[str, Any]], int]:
-        """Preview rows from a warehouse table."""
+        adjustment: str | None = None,
+    ) -> tuple[list[str], list[dict[str, Any]], int, dict[str, Any] | None]:
+        """Preview rows from a warehouse table with optional adjustment-basis filtering.
+
+        Returns ``(columns, rows, total, adjustment_basis_meta)``. The metadata
+        block is ``None`` unless the physical table actually has an
+        ``adjustment`` column, so tables without that column keep the exact
+        pre-existing response shape. When the column exists the block reports
+        the echoed filter, the observed distinct bases and whether the table
+        mixes more than one basis; nothing is silently dropped or hidden.
+        """
         if _get_akshare_data_engine() is None:
             raise RuntimeError("AKSHARE_DATA_DATABASE_URL is not configured")
 
         quoted_name = self._quote_identifier(table_name)
         offset = (page - 1) * page_size
 
+        if adjustment is not None and not _VALID_ADJUSTMENT_VALUE.match(adjustment):
+            raise AdjustmentBasisError(f"Invalid adjustment basis: {adjustment!r}")
+
         async with _get_akshare_data_engine().connect() as conn:
-            total_result = await conn.execute(text(f"SELECT COUNT(*) FROM {quoted_name}"))
+            column_names = await conn.run_sync(
+                lambda sync_conn: [
+                    column["name"] for column in inspect(sync_conn).get_columns(table_name)
+                ]
+            )
+            has_adjustment = _ADJUSTMENT_COLUMN in column_names
+
+            where_clause = ""
+            count_params: dict[str, Any] = {}
+            row_params: dict[str, Any] = {"limit": page_size, "offset": offset}
+            if adjustment is not None:
+                if not has_adjustment:
+                    raise AdjustmentBasisError(
+                        f"Table {table_name} has no adjustment column; "
+                        f"cannot filter by {adjustment!r}"
+                    )
+                # Exact existence probe: bounded at the first matching row, and
+                # at most the same scan the filtered data query would perform.
+                probe = await conn.execute(
+                    text(
+                        f"SELECT 1 FROM {quoted_name}"
+                        f" WHERE {_ADJUSTMENT_COLUMN} = :adjustment LIMIT 1"
+                    ),
+                    {"adjustment": adjustment},
+                )
+                if probe.scalar() is None:
+                    observed = await self._sample_observed_bases(conn, quoted_name)
+                    raise AdjustmentBasisError(
+                        f"Unknown adjustment basis {adjustment!r} for table "
+                        f"{table_name}; observed bases: {observed}"
+                    )
+                where_clause = f" WHERE {_ADJUSTMENT_COLUMN} = :adjustment"
+                count_params["adjustment"] = adjustment
+                row_params["adjustment"] = adjustment
+
+            total_result = await conn.execute(
+                text(f"SELECT COUNT(*) FROM {quoted_name}{where_clause}"),
+                count_params,
+            )
             total = int(total_result.scalar() or 0)
             result = await conn.execute(
-                text(f"SELECT * FROM {quoted_name} LIMIT :limit OFFSET :offset"),
-                {"limit": page_size, "offset": offset},
+                text(f"SELECT * FROM {quoted_name}{where_clause} LIMIT :limit OFFSET :offset"),
+                row_params,
             )
             mappings = result.mappings().all()
+
+            basis_meta: dict[str, Any] | None = None
+            if has_adjustment:
+                observed_bases = await self._sample_observed_bases(conn, quoted_name)
+                basis_meta = {
+                    "filter": adjustment,
+                    "observed_bases": observed_bases,
+                    "mixed_adjustment_basis": len(observed_bases) > 1,
+                }
 
         rows = [dict(row) for row in mappings]
         if rows and set(rows[0]) == {_COMPACT_ROW_COLUMN, _COMPACT_PAYLOAD_COLUMN}:
@@ -489,7 +586,7 @@ class AkshareDataService:
                 if row.get(_COMPACT_PAYLOAD_COLUMN)
             ]
             columns = list(expanded_rows[0].keys()) if expanded_rows else []
-            return columns, expanded_rows, total
+            return columns, expanded_rows, total, basis_meta
 
         columns = list(rows[0].keys()) if rows else []
-        return columns, rows, total
+        return columns, rows, total, basis_meta
