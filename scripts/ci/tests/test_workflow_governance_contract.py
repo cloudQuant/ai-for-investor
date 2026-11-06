@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from action_pins import CHECKOUT_PIN
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 PR_CHECK = WORKFLOWS / "pr-check.yml"
@@ -120,7 +122,7 @@ def _normalized_command(script: str) -> str:
 def _uses_issues(workflow: str) -> list[str]:
     parsed = _workflow_mapping(workflow)
     gate = _governance_gate(workflow)
-    expected = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+    expected = CHECKOUT_PIN
     issues: list[str] = []
     if _all_uses(parsed) != [expected]:
         issues.append("workflow must use only the pinned trusted checkout action")
@@ -363,7 +365,7 @@ class TestPrGovernanceWorkflowContract:
         parsed = _workflow_mapping(workflow)
         gate = _governance_gate(workflow)
 
-        assert _all_uses(parsed) == ["actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"]
+        assert _all_uses(parsed) == [CHECKOUT_PIN]
         assert "container" not in gate
         assert "services" not in gate
 
