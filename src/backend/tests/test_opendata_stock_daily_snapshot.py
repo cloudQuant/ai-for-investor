@@ -477,6 +477,99 @@ async def test_rejects_stock_contract_unit_drift() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rejects_undeclared_adjustment_basis_before_network_access() -> None:
+    """Documented rule: the published stock-daily basis is ``raw`` and the
+    caller must name ``unadjusted`` explicitly; an undeclared request is
+    refused rather than silently served unadjusted rows."""
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _response({})
+
+    reader, client = _reader(handler)
+    try:
+        with pytest.raises(OpendataStockDailySnapshotError) as failure:
+            await reader.read(_request(adjustment=None), publication_id=PUBLICATION_ID)
+    finally:
+        await client.aclose()
+
+    assert failure.value.code == "invalid_stock_daily_request"
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_rejects_adjustment_request_outside_the_published_raw_basis() -> None:
+    """A qfq-labelled request must not be served from the raw publication."""
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _response({})
+
+    reader, client = _reader(handler)
+    try:
+        with pytest.raises(OpendataStockDailySnapshotError) as failure:
+            await reader.read(_request(adjustment="qfq"), publication_id=PUBLICATION_ID)
+    finally:
+        await client.aclose()
+
+    assert failure.value.code == "invalid_stock_daily_request"
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("declared_basis", ["qfq", "unknown", "raw_or_mixed"])
+async def test_rejects_publication_declaring_a_non_raw_adjustment_basis(
+    declared_basis: str,
+) -> None:
+    """(b) mislabelled store: a publication whose declared basis is not the
+    frozen ``raw`` is refused inside the provider before any row is returned."""
+    changed = _snapshot(record_count=1)
+    changed["adjustment_basis"] = declared_basis
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return _response(_page([_row("2026-10-27")], snapshot=changed))
+
+    reader, client = _reader(handler)
+    try:
+        with pytest.raises(OpendataStockDailySnapshotError) as failure:
+            await reader.read(_request(), publication_id=PUBLICATION_ID)
+    finally:
+        await client.aclose()
+
+    assert failure.value.code == "opendata_snapshot_page_invalid"
+
+
+@pytest.mark.asyncio
+async def test_rejects_adjustment_basis_flip_across_pages() -> None:
+    """(b) mixed-basis store: page 1 declares ``raw`` and the continuation page
+    flips to another basis; the read is refused, never returned as mixed rows."""
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _response(_page([_row("2026-10-27")], next_cursor="cursor-1"))
+        flipped = _snapshot(record_count=2)
+        flipped["adjustment_basis"] = "qfq"
+        return _response(_page([_row("2026-10-28")], snapshot=flipped))
+
+    reader, client = _reader(handler)
+    try:
+        with pytest.raises(OpendataStockDailySnapshotError) as failure:
+            await reader.read(_request(), publication_id=PUBLICATION_ID)
+    finally:
+        await client.aclose()
+
+    assert failure.value.code == "opendata_snapshot_page_invalid"
+    assert calls == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status_code", "expected_code"),
     [

@@ -335,10 +335,9 @@ class OpendataProvider:
             raise OpendataProviderError("OPENDATA_CREDENTIAL_MISSING")
         try:
             contract = _reviewed_contract_for_request(request)
+            params = prepare_opendata_historical_request(contract, request)
         except ProviderContractError as exc:
             raise OpendataProviderError("OPENDATA_CONTRACT_INVALID", detail=exc.code) from exc
-
-        params = prepare_opendata_historical_request(contract, request)
         endpoint = next(iter(contract.endpoints))
         responses: list[Mapping[str, Any]] = []
         rows: list[Mapping[str, Any]] = []
@@ -366,6 +365,10 @@ class OpendataProvider:
             data = payload.get(_ENVELOPE_DATA_FIELD)
             if not isinstance(data, Mapping):
                 raise OpendataProviderError("OPENDATA_ENVELOPE_INVALID")
+            # AC03: each page must re-declare the adjustment basis the request named.
+            # AC03: each page must re-declare the adjustment basis the request named.
+            if data.get("adjust") != params["adjust"]:
+                raise OpendataProviderError("OPENDATA_ADJUSTMENT_BASIS_MISMATCH")
             page_rows = data.get("rows")
             if not isinstance(page_rows, list):
                 raise OpendataProviderError("OPENDATA_ROWS_INVALID")
@@ -391,12 +394,9 @@ class OpendataProvider:
                 raise OpendataProviderError("OPENDATA_COUNT_INVALID")
             if response_count != len(page_rows):
                 raise OpendataProviderError("OPENDATA_COUNT_MISMATCH")
-            if len(page_rows) > response_page_size:
-                raise OpendataProviderError("OPENDATA_ROWS_INVALID")
 
-            for row in page_rows:
-                if not isinstance(row, Mapping):
-                    raise OpendataProviderError("OPENDATA_ROW_NOT_MAPPING")
+            if not all(isinstance(row, Mapping) for row in page_rows):
+                raise OpendataProviderError("OPENDATA_ROW_NOT_MAPPING")
 
             try:
                 page_metadata = _page_provenance_metadata(data)
@@ -571,6 +571,7 @@ class OpendataProvider:
             or re.fullmatch(r"[0-9a-f]{32}", snapshot_id) is None
             or snapshot_payload.get("dataset_id") != dataset_id
             or snapshot_payload.get("publication_id") != publication_id
+            or snapshot_payload.get("adjustment_basis") != "not_applicable"
             or snapshot_payload.get("contract_sha256") != contract_sha256
             or not isinstance(window, Mapping)
             or window.get("start") != start_date
@@ -713,7 +714,7 @@ class OpendataProvider:
             or request.market not in {"CN-SSE", "CN-SZSE"}
             or request.data_kind != "bars"
             or request.frequency != "1d"
-            or request.adjustment not in {None, "unadjusted"}
+            or request.adjustment != "unadjusted"
             or request.price_basis not in {None, "close"}
             or request.currency != "CNY"
             or request.unit != "share"
@@ -814,6 +815,7 @@ class OpendataProvider:
                 or dict(page_snapshot) != snapshot
                 or snapshot.get("dataset_id") != _PUBLISHED_STOCK_DAILY_DATASET_ID
                 or snapshot.get("publication_id") != publication_id
+                or snapshot.get("adjustment_basis") != "raw"
                 or {key: page_payload.get(key) for key in snapshot} != snapshot
                 or page_payload.get("stock_selection")
                 != {"market": request.market, "symbol": request.provider_symbol}
