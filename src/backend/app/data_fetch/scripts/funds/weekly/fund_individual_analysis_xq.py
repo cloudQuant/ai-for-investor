@@ -48,7 +48,7 @@ class FundAnalysisXq(AkshareToMySql):
                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='基金分析数据表(雪球)';
                             """
 
-    def parse_float(self, value: Any, default: float = None) -> float | None:
+    def parse_float(self, value: Any, default: float | None = None) -> float | None:
         """解析浮点数值"""
         if pd.isna(value) or value in (
             "---",
@@ -217,14 +217,14 @@ class FundAnalysisXq(AkshareToMySql):
         try:
             self.connect_db()
             sql = "SELECT R_ID FROM FUND_ANALYSIS_XQ WHERE IS_ACTIVE = 1"
-            self.cursor.execute(sql)
-            result = self.cursor.fetchall()
+            self.require_cursor().execute(sql)
+            result = self.require_cursor().fetchall()
             return {row[0] for row in result} if result else set()
         except Exception as e:
             self.logger.error(f"获取已存在数据ID失败: {e}")
             return set()
 
-    def run(self, fund_code: str = None):
+    def run(self, fund_code: str | None = None):
         """
         执行数据获取和保存
 

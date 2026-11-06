@@ -73,7 +73,7 @@ def main():
     """Main function to run the data fetch"""
 
     script = AmacSecuritiesInfo()
-    script.run()
+    script.fetch_data()
 
 
 if __name__ == "__main__":

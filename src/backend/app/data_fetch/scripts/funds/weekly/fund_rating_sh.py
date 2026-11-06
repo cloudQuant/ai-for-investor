@@ -104,7 +104,7 @@ class FundRatingSh(AkshareToMySql):
         except (ValueError, TypeError):
             return None
 
-    def fetch_rating_data(self, date: str = None) -> pd.DataFrame:
+    def fetch_rating_data(self, date: str | None = None) -> pd.DataFrame:
         """
         获取上海证券基金评级数据
 
@@ -233,7 +233,7 @@ class FundRatingSh(AkshareToMySql):
             self.logger.error(f"获取已存在数据ID失败: {e}")
             return set()
 
-    def run(self, date: str = None):
+    def run(self, date: str | None = None):
         """
         执行数据获取和保存
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=One bounded stock, crypto, convertible-bond, ETF or option history recovery batch
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/ai-for-investor/src/backend
+Environment=HOME=%h
+Environment=PATH=%h/Documents/ai-for-investor/src/backend/.venv/bin:/usr/bin:/bin
+Environment=TZ=Asia/Shanghai
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/ai-for-investor/runtime-overrides.env
+ExecStart=%h/Documents/ai-for-investor/src/backend/.venv/bin/python %h/Documents/ai-for-investor/src/backend/scripts/ops/run_with_core_environment.py %h/Documents/ai-for-investor/src/backend/.venv/bin/python %h/Documents/ai-for-investor/src/backend/scripts/ops/run_full_history_recovery_worker.py --apply --assets stock crypto bond etf option
+TimeoutStartSec=8min
+TimeoutStopSec=25s
+KillMode=control-group
+UMask=0077
+StandardOutput=journal
+StandardError=journal
