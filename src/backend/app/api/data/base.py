@@ -41,6 +41,7 @@ from app.services.market_data.access import (
     MarketDataQueryAccess,
 )
 from app.services.market_data.capability_ledger import MarketDataCapabilityEvaluation
+from app.services.market_data.capability_ledger_admission import record_admission_observations
 from app.services.market_data.dataset_contracts import (
     FAMILY_CONTRACT_VERSION,
     KLINE_LEGACY_FAMILY_ID,
@@ -157,6 +158,7 @@ async def get_market_data_query_contract(
     query_contracts: LegacyMarketDataQueryContractResolver = Depends(
         get_legacy_market_data_query_contract_resolver
     ),
+    db: AsyncSession = Depends(get_db),
 ) -> typing.Any:
     """Return a strict v2 template without touching legacy data providers.
 
@@ -166,6 +168,7 @@ async def get_market_data_query_contract(
     symbol and the endpoint intentionally returns 404 if bootstrap or
     approved master data is incomplete; clients then retain the legacy path.
     """
+    await record_admission_observations(db, capabilities)
     if not capabilities.response.query_v2_enabled:
         raise HTTPException(
             status_code=503,
@@ -254,6 +257,7 @@ async def get_kline_data(
     the independently authorized public ``stock.realtime`` contract and
     project the REST observations directly with honest, non-durable provenance.
     """
+    await record_admission_observations(db, capabilities)
     if not capabilities.response.query_v2_enabled:
         raise HTTPException(
             status_code=503,

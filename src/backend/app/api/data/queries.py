@@ -41,6 +41,7 @@ from app.services.market_data.capability_ledger import (
     MarketDataCapabilityEvaluation,
     MarketDataCapabilityLedger,
 )
+from app.services.market_data.capability_ledger_admission import record_admission_observations
 from app.services.market_data.catalog import DataCatalogResolver
 from app.services.market_data.dataset_contracts import (
     DEFAULT_DATASET_CONTRACT_REGISTRY,
@@ -794,6 +795,7 @@ async def query_market_data(
     service: MarketDataQueryService = Depends(get_market_data_query_service),
 ) -> MarketDataQueryResponse:
     """Execute a typed v2 data query after the deployment gate is enabled."""
+    await record_admission_observations(db, capabilities)
     if not capabilities.response.query_v2_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

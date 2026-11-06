@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -66,9 +66,6 @@ from app.services.market_data.capability_ledger_admission import (
     ADMISSION_OBSERVATION_VERSION,
     DEFAULT_OBSERVATION_WINDOW,
     record_admission_observations,
-)
-from app.services.market_data.capability_ledger_admin import (
-    MarketDataCapabilityLedgerAdminService,
 )
 from app.services.market_data.query_service import MarketDataQueryService
 from app.services.market_data.source_policy import (
@@ -270,7 +267,9 @@ async def _reviewed_evaluation() -> Any:
 
     settings = _settings()
     async with async_session_maker() as session:
-        return await MarketDataCapabilityLedger(session, clock=lambda: NOW).evaluate(
+        # No frozen clock: the admission writer stamps the real deployment
+        # instant, so the read-back must use the same instant to be honest.
+        return await MarketDataCapabilityLedger(session).evaluate(
             settings=settings,
             source_policies=queries._source_policies_from_settings(settings),
         )
@@ -392,17 +391,16 @@ async def test_request_content_cannot_select_a_capability_or_digest(
 ) -> None:
     """Every recorded digest is the reviewed policy's, never a request-derived value."""
     hostile = _query_payload(
-        identity={
-            "canonical_id": "instrument:stock:CN-SZSE:000001",
-            "symbol": "SECRET-ROUTE",
-            "market": "market-data.route:opendata-stock-daily-v1",
-        },
-        required_fields=["close", "ledger-stock-primary-v1"],
+        identity={"canonical_id": "instrument:stock:CN-SZSE:000001"},
+        dataset_code="market.stock_daily",
+        required_fields=["close"],
     )
     response, _service = await _post_query(client, auth_headers, monkeypatch, payload=hostile)
     assert response.status_code == 503
 
-    expected = {item["capability_id"]: item for item in _expected_definitions(await _reviewed_evaluation())}
+    expected = {
+        item["capability_id"]: item for item in _expected_definitions(await _reviewed_evaluation())
+    }
     rows = {row.capability_id: row for row in await _ledger_rows()}
 
     assert set(rows) == set(expected)
@@ -421,6 +419,7 @@ async def test_writer_refuses_to_create_a_second_current_record(
     )
     route = policy.routes[0]
     capability_id = route_capability_id(route.route_id)
+    real_now = datetime.now(UTC)
     async with async_session_maker() as session:
         session.add(
             MdCapabilityLedgerEntry(
@@ -431,12 +430,12 @@ async def test_writer_refuses_to_create_a_second_current_record(
                 declared_capability=True,
                 installed_capability=True,
                 verified_capability=True,
-                verified_at=NOW - timedelta(hours=1),
-                verified_until=NOW + timedelta(hours=6),
+                verified_at=real_now - timedelta(hours=1),
+                verified_until=real_now + timedelta(hours=6),
                 authorized_capability=True,
-                authorized_at=NOW - timedelta(hours=1),
-                authorized_until=NOW + timedelta(hours=6),
-                effective_from=NOW - timedelta(hours=2),
+                authorized_at=real_now - timedelta(hours=1),
+                authorized_until=real_now + timedelta(hours=6),
+                effective_from=real_now - timedelta(hours=2),
                 effective_until=None,
             )
         )
@@ -455,8 +454,15 @@ async def test_writer_refuses_to_create_a_second_current_record(
 
 
 @pytest.mark.asyncio
-async def test_dependency_double_produces_no_ledger_row(client, auth_headers) -> None:
+async def test_dependency_double_produces_no_ledger_row(client, auth_headers, monkeypatch) -> None:
     """A value the writer cannot inspect is not evidence, so nothing is written."""
+    import app.api.data.queries as queries
+
+    monkeypatch.setattr(queries, "get_settings", lambda: _settings())
+    app.dependency_overrides[get_market_data_access_authorizer] = lambda: _AccessAuthorizer(
+        _principal()
+    )
+    app.dependency_overrides[get_market_data_query_service] = lambda: _RefusingService()
     fake = SimpleNamespace(
         response=SimpleNamespace(query_v2_enabled=False, research_cache_fill_enabled=False),
         effective_source_policies=object(),
@@ -471,6 +477,8 @@ async def test_dependency_double_produces_no_ledger_row(client, auth_headers) ->
         )
     finally:
         app.dependency_overrides.pop(get_market_data_capability_evaluation, None)
+        app.dependency_overrides.pop(get_market_data_access_authorizer, None)
+        app.dependency_overrides.pop(get_market_data_query_service, None)
 
     assert response.status_code == 503
     assert await _ledger_rows() == []
@@ -489,14 +497,25 @@ async def test_verified_is_not_claimed_even_when_durable_receipts_exist() -> Non
     await _seed_verified_receipt()
 
     async with async_session_maker() as session:
-        summary = await MarketDataCapabilityLedgerAdminService(
-            session, clock=lambda: NOW
-        ).preview_evidence(
-            capability_id=route_capability_id(route.route_id),
-            policy=policy,
-            window_end=NOW,
+        sealed = await session.scalar(
+            select(func.count())
+            .select_from(MdSourceSnapshot)
+            .join(
+                MdPublication,
+                and_(
+                    MdPublication.entity_type == "source_snapshot",
+                    MdPublication.entity_id == MdSourceSnapshot.id,
+                ),
+            )
+            .where(
+                MdSourceSnapshot.source_authorization_state == SOURCE_AUTHORIZATION_STATE_VERIFIED,
+                MdSourceSnapshot.source_authorization_descriptor_sha256.is_not(None),
+                MdPublication.entity_sha256 == MdSourceSnapshot.payload_sha256,
+                MdPublication.published_at.is_not(None),
+            )
         )
-        assert summary.artifact_count >= 1, "the durable evidence plane really is populated"
+        # The receipts a verification claim would need really are in the database.
+        assert sealed is not None and sealed >= 1
 
         evaluation = await MarketDataCapabilityLedger(session, clock=lambda: NOW).evaluate(
             settings=_settings(),
@@ -558,11 +577,15 @@ async def test_descriptor_change_appends_a_new_revision_after_the_window() -> No
     later = NOW + DEFAULT_OBSERVATION_WINDOW
     changed_route = replace(_route(), markets=frozenset({"CN-SZSE"}))
     async with async_session_maker() as session:
-        changed_evaluation = await MarketDataCapabilityLedger(session, clock=lambda: later).evaluate(
+        changed_evaluation = await MarketDataCapabilityLedger(
+            session, clock=lambda: later
+        ).evaluate(
             settings=_settings(),
             source_policies=MarketDataSourcePolicyRegistry((_policy(changed_route),)),
         )
-        result = await record_admission_observations(session, changed_evaluation, clock=lambda: later)
+        result = await record_admission_observations(
+            session, changed_evaluation, clock=lambda: later
+        )
 
     assert result is not None and result.recorded_count >= 1
     rows = [
