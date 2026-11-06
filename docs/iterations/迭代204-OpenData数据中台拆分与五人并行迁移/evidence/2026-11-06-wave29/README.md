@@ -19,6 +19,8 @@
 | `scheduler_clock_duality.2026-11-06T1614Z.json` | 上一条 16:14:50Z 读数：shifted 214 / agrees 821 / older 13；964 个单小时 cron 中 next 964、last 135 | — |
 | `ci_duplicate_run_audit.py` | §24：每仓同一 sha 同时有 push 与 pull_request run 的数量（OD 56/476、AFI 0/229） | 只读 API |
 | `ci_duplicate_run_audit.2026-11-06T1615Z.txt` | 上一条逐行输出 | — |
+| `build_ci_env_mirror.py` | §31：按 lock 重建 CI 的 mypy 环境并逐包核对（复现 CI 的 101 后才采用） | 只建 `/tmp/it204/venv-ci` |
+| `collection_plane_detail_CIenv_dev_0a4c5ab31.txt` | dev 在 CI 环境下的逐条平面错误（101 条族构成的来源） | 只读 mypy |
 | `ac11_assign_gate_proof.py` | §23：AC11 签字门三种状态（空名拒 / 单文件 sha 拒 / 具名接受） | 只跑 `--work-dir`，不写仓库 |
 | `source_egress_probe.py` | §25：出口对照 + akshare/AFI 两侧 endata 实测 + 逐主机可达性 | 只读网络探测与树内 client 调用，不写库 |
 | `source_egress_probe.2026-11-06T1622Z.json` | 上一条输出：akshare 5 函数×4 日期全 0 行、AFI client 活、push2 两主机 3/3 不可达 | — |
