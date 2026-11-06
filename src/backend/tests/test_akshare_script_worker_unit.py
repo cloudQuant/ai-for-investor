@@ -14,7 +14,6 @@ import contextvars
 import io
 import os
 import pickle
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -447,7 +446,9 @@ def test_write_receipt_round_trips_the_body(tmp_path: Path) -> None:
         assert pickle.load(handle) == {"ok": True, "result": {"value": 1}}
 
 
-def test_write_receipt_falls_back_when_the_result_is_unpicklable(tmp_path: Path, fenced: Any) -> None:
+def test_write_receipt_falls_back_when_the_result_is_unpicklable(
+    tmp_path: Path, fenced: Any
+) -> None:
     path = tmp_path / "receipt.pkl"
     record_committed_write("TABLE_A", 3)
 
