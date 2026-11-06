@@ -291,35 +291,69 @@ UTC 日 2026-11-06（截至 14:07）：执行 272 completed / 65 failed / 1 runn
   只能读成"今天没轮到"。要把它变成 AC05/AC10 的证据，需要按 §4 的应跑槽位逐任务判定，
   即 #282 那台仪器的职责范围。
 
-## 13. 队列 A 停用后的可观测性后果（比第 6 节的初判更糟）
+## 13. 队列 A 停用后的可观测性后果，以及那 2,400 万行数据的写入者（已绑定）
 
-这一节我先前写错了，必须反过来说。只在元数据库里查表名会得出"表不存在"，
-而采集数据从来不是写在元数据库里的。按 schema 分开查（`AKSHARE_DATA_DATABASE_URL` 指向 `akshare_data`；
-本机可见库为 `ai_for_investor`、`akshare_data`、`backtrader_web`）：
+这一节在本波里被推翻过两次，两次都留下痕迹，因为误判的过程本身就是信息。
 
-| 目标表 | `ai_for_investor` | `akshare_data` 行数（逐表 `COUNT(*)`） |
-|---|---|---|
-| `OPTION_COMMODITY_DAILY_HISTORY` | 不存在 | **22,093,150** |
-| `OPTION_CFFEX_DAILY_HISTORY` | 不存在 | 858,096 |
-| `OPTION_ETF_DAILY_HISTORY` | 不存在 | 854,174 |
-| `FUND_MONETARY_INCOME_HISTORY` | 不存在 | 91,419 |
-| `FOREX_SINA_DAILY_HISTORY` | 不存在 | 37,327 |
-| `ETF_REALTIME_QUOTE_EM` | 不存在 | 13,156（该表 `update_time` = 2025-07-11 16:12:03） |
-| `FUND_REVIEWED_UNIT_NAV_HISTORY` | 不存在 | 4,491 |
-| `release_policy` / `yield_release_policy` | 不存在 | 不存在（任何 schema 都没有；这两个注册也从未有任务） |
+第一次误判：我只查了元数据库 `ai_for_investor`，看到 9 个表名 `information_schema.tables` 计数为 0，
+就写下"表对象不存在"。错。采集数据写在 `AKSHARE_DATA_DATABASE_URL` 指向的 **`akshare_data`**，
+在正确的库里 7 张表都存在且有真实存量：
 
-结论因此与初判相反，而且更难堪：**这 7 个数据集是有存量数据的，而生产这些数据的代码不在任何 ref 里**。
-所以诚实的表述不是"未覆盖"，而是"存量数据的写入者无法绑定"——合计约 2,400 万行，
-目前无据可查是谁、用什么参数、在哪次运行里写的。对 AC05/AC10 的影响随之改变：
-不能再用"表不存在"搪塞，也不能用"表存在且有行"当作覆盖证据。
+| 表 | 行数 | 业务日期列 | MAX 业务日（=新鲜度） | 去重业务日 | 对 `TRADING_DAYS` 的缺口 | 物理最后写入 |
+|---|---|---|---|---|---|---|
+| `OPTION_COMMODITY_DAILY_HISTORY` | 22,093,150 | `TRADE_DATE` | 2026-10-26 | 2322 | 0 / 2322 | 2026-10-26 20:07 (+08) |
+| `OPTION_CFFEX_DAILY_HISTORY` | 858,096 | `TRADE_DATE` | 2026-10-26 | 1656 | 0 / 1656 | 2026-10-26 23:39 |
+| `OPTION_ETF_DAILY_HISTORY` | 854,174 | `TRADE_DATE` | 2026-10-23 | 2847 | 0 / 2842 | 2026-10-23 19:45 |
+| `FUND_MONETARY_INCOME_HISTORY` | 91,419 | `VALUE_DATE` | 2026-10-26 | 4889 | 12 / 3353 | 2026-10-27 08:55 |
+| `FOREX_SINA_DAILY_HISTORY` | 37,327 | `TRADE_DATE` | 2026-10-26 | 4033 | 1 / 2907 | 2026-10-26 22:45 |
+| `ETF_REALTIME_QUOTE_EM` | 13,156 | `QUOTE_DATE`+`OBSERVED_AT` | 2026-10-26 | **8** | 305/312（无意义，见下） | 2026-10-26 15:50 |
+| `FUND_REVIEWED_UNIT_NAV_HISTORY` | 4,491 | `VALUE_DATE` | 2026-10-26 | 3299 | 5 / 3295 | 2026-10-27 08:45→08:51（全表同一批） |
 
-两点必须同时记：
+`MAX(业务日)` 是数据新鲜度，`MAX(OBSERVED_AT/UPDATED_AT)` 是物理写入时刻，两者不同：
+新鲜度停在 2026-10-26，物理写入停在 2026-10-27——后者正是 wave 27 认定的全量失败起点。
 
-1. 新鲜度**本波没有测**。我尝试按常见列名（trade_date / dt / date / datetime / end_date / nav_date）
-   取业务日期，7 张表全部未命中，因此本节只能说行数；判新鲜度必须逐表读实际列名，留给下一步。
-2. 停用队列 A 之后，这 7 个数据集连"任务每分钟失败"这条残存可见信号也没有了。
-   第 6 节 caveat 3 据此改写为：**存量有、生产者无、信号被我亲手关掉**。
+第二次误判：纠正之后我写成"存量有、生产者无法绑定"。这句现在也被证据推翻了——**7 张表的写入者
+全部 BOUND**，绑定方式是两条独立链路的交叉：
 
+1. `ak_task_executions` 按注册 slug 记的执行历史：`cffex_option_daily_history` 728 次（713 completed）、
+   `fund_monetary_income_history` 471（211）、`forex_hist_sina` 250（106）、
+   `fund_reviewed_unit_nav_history` 73（36）、`etf_realtime_quote_sina` 16（7）、
+   `commodity_option_daily_history` 14（4）、`etf_option_daily_history` 11（2）。
+   每个 slug 的**最后一次 completed 与对应表的物理最后写入秒级吻合**（执行行是 UTC，
+   `OBSERVED_AT` 是 +08，换算后一致）。且这些 slug 在 2026-10-19 之前没有任何执行行，
+   而台账本身能追到 2026-06-21——即生产从 10-19~10-22 起来，10-26/27 停。
+2. 磁盘上残留的字节码：`app/data_fetch/scripts/{options/daily,common/daily,funds/weekly,funds/hourly}/__pycache__/<slug>.cpython-313.pyc`
+   的 `co_filename` 逐字等于注册的 `module_path`，常量池里恰好只有其目标表名。
+   七个 sha256：cffex `db8ecc5d…`、commodity `1cad7c92…`、etf-option `e2b21021…`、forex `a8e84b4c…`、
+   monetary `f6270abb…`、reviewed `1fc90a70…`、realtime `288fdfde…`；内嵌源文件 mtime 2026-10-20 02:23
+   至 2026-10-22 17:38、5,664–30,028 字节。副本已存 `/home/yun/afi204-evidence/2026-11-06-ghost-code-plane/pyc/`。
+
+因此当前诚实的表述是：**数据有、新鲜度已知、生产者已由执行台账与字节码双向绑定，
+但生产者的源代码文本不在任何 git ref 里**（OD 侧只有目录记录，无所有权；
+`git log --all -S<表名>` 找不到写入者；HEAD 上只剩读方与
+`run_full_history_recovery_worker.py` 里的 `OPTION_TABLE_NAME` 常量；
+`cffex_option_history_controller.py` 只存在于 `feat/afi-recovery-controllers`，是 11-05 的重建，
+不是 10 月的生产者）。
+
+三条仍然不可知，写明以免被误当已闭合：
+
+1. **`.py` 源文本本身**：只有字节码。反编译未验证；且 `log_bin=ON`、`binlog_format=ROW`，
+   但本用户无 `REPLICATION CLIENT`（`SHOW BINARY LOGS` 报 1227），无法用 binlog 给删除定日。
+2. **谁删的、为什么删**：`var/reports`、`var/backups`（只有
+   `ai_for_investor_pre_upgrade_20261105T2148.sql.gz`）与 `afi204-evidence` 里都没有删除动作的记录。
+3. **逐标的的内部缺口**：上表的缺口是表级并集。按 `SOURCE_SYMBOL`/`FUND_CODE` 各自的日历
+   （期权到期日、基金估值日、外汇周末）需要源原生日历，本机没有。
+
+特例 `ETF_REALTIME_QUOTE_EM`：`information_schema.update_time` 与 `MAX(UPDATE_TIME)` 都是
+2025-07-11，是陈旧 DDL 假象；真实信号是 `OBSERVED_AT` 2026-10-26 15:50 且每个快照日约 1,710 行
+——它是只保留 8 个业务日的滚动快照表，那 305/312 的缺口**不是** AC05 的欠覆盖。
+
+对验收的作用方向：AC05/AC10 对这 7 个数据集**第一次可以有具体内容**（新鲜度到 2026-10-26/23，
+缺口表级为 0~12），但"历史是否从标的上市日起连续"仍未证明，且生产者源码缺失意味着
+这套数据现在**无法被重新生产**——这是 AC12/AC13 的问题，不是覆盖率问题。
+停用队列 A 之后连失败信号也没有了，这句仍然成立。
+
+`release_policy` / `yield_release_policy` 在任何 schema 都不存在，且这两个注册从未有任务，此结论不变。
 ## 14. 停用是否已生效：尚未可判，且预期为"否"
 
 实测：13:47:56 UTC 之后，那 50 个 task_id 的执行数为 **0**（`tasks_still_firing=0`）。
