@@ -25,7 +25,6 @@ from email.utils import parsedate_to_datetime
 from types import MappingProxyType
 from typing import Any
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -55,7 +54,6 @@ from app.services.market_data.providers import (
 )
 
 _UTC = timezone.utc
-_SHANGHAI = ZoneInfo("Asia/Shanghai")
 _MAX_PROVENANCE_BYTES = 10 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 _MAX_TOTAL_RESPONSE_BYTES = 64 * 1024 * 1024
@@ -365,7 +363,6 @@ class OpendataProvider:
             data = payload.get(_ENVELOPE_DATA_FIELD)
             if not isinstance(data, Mapping):
                 raise OpendataProviderError("OPENDATA_ENVELOPE_INVALID")
-            # AC03: each page must re-declare the adjustment basis the request named.
             # AC03: each page must re-declare the adjustment basis the request named.
             if data.get("adjust") != params["adjust"]:
                 raise OpendataProviderError("OPENDATA_ADJUSTMENT_BASIS_MISMATCH")
