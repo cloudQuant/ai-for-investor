@@ -97,6 +97,9 @@ def _normalise_queries(kwargs: dict) -> list[dict]:
             # preset_by_path's keys come from the str "kind"/"path" literals in
             # DEFAULT_NATION_QUERIES, so a lookup whose pair is not a pair of strings was
             # always a miss; the guard skips exactly the lookups that returned None before.
+            # One documented difference: an *unhashable* pair (e.g. a list kind) used to raise
+            # TypeError out of fetch_data at this line, and now follows the same guaranteed-miss
+            # passthrough that every hashable non-match already produced.
             preset = (
                 preset_by_path.get((kind, path))
                 if isinstance(kind, str) and isinstance(path, str)

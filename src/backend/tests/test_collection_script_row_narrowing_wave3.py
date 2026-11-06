@@ -502,6 +502,13 @@ def test_nbs_preset_lookup_guard_matches_the_old_miss() -> None:
     list_miss = _normalise_queries({"queries": [{"kind": 5, "path": 6}]})
     assert list_miss == [{"kind": 5, "path": 6}]
 
+    # Documented crash-path difference (behavior probe, HEAD vs worktree): the old line fed an
+    # unhashable pair straight into dict.get and TypeError escaped fetch_data. Such a pair can
+    # never equal a preset key, so the guard now gives it the same guaranteed-miss passthrough
+    # every hashable miss (the int case above) always had.
+    unhashable = _normalise_queries({"queries": [{"kind": ["年度数据"], "path": 6}]})
+    assert unhashable == [{"kind": ["年度数据"], "path": 6}]
+
 
 def test_currency_connect_cast_and_loop_rename_present() -> None:
     """`mysql.connector.connect` returns MySQLConnection unless pool kwargs are passed, and
