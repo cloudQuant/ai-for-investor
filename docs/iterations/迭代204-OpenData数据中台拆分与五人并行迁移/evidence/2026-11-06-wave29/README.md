@@ -20,6 +20,9 @@
 | `ci_duplicate_run_audit.py` | §24：每仓同一 sha 同时有 push 与 pull_request run 的数量（OD 56/476、AFI 0/229） | 只读 API |
 | `ci_duplicate_run_audit.2026-11-06T1615Z.txt` | 上一条逐行输出 | — |
 | `ac11_assign_gate_proof.py` | §23：AC11 签字门三种状态（空名拒 / 单文件 sha 拒 / 具名接受） | 只跑 `--work-dir`，不写仓库 |
+| `source_egress_probe.py` | §25：出口对照 + akshare/AFI 两侧 endata 实测 + 逐主机可达性 | 只读网络探测与树内 client 调用，不写库 |
+| `source_egress_probe.2026-11-06T1622Z.json` | 上一条输出：akshare 5 函数×4 日期全 0 行、AFI client 活、push2 两主机 3/3 不可达 | — |
+| `record_provenance_audit.py` | 台账自检：每个有小数的段落是否都指向仪器/CI 作业/sha/file:line | 只读本文与 evidence 目录 |
 
 共同约定：DSN 只从 `src/backend/.env` 的 `DATABASE_URL` 读取，不打印口令；除最后一个脚本外
 全部只含 SELECT/SHOW；`ac11_retire_queue_a.py` 在写前落 before-image，且 cohort 完全由

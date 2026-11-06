@@ -1,0 +1,121 @@
+{
+  "probed_at_utc": "2026-11-06T16:22:45Z",
+  "hosts": {
+    "push2.eastmoney.com": [
+      "ConnectionError",
+      "ConnectionError",
+      "ConnectionError"
+    ],
+    "82.push2.eastmoney.com": [
+      "ConnectionError",
+      "ConnectionError",
+      "ConnectionError"
+    ],
+    "datacenter-web.eastmoney.com": [
+      [
+        200,
+        81
+      ],
+      [
+        200,
+        81
+      ],
+      [
+        200,
+        81
+      ]
+    ],
+    "data.eastmoney.com": [
+      [
+        200,
+        352527
+      ],
+      [
+        200,
+        352527
+      ],
+      [
+        200,
+        352527
+      ]
+    ],
+    "hq.sinajs.cn": [
+      [
+        200,
+        169
+      ],
+      [
+        200,
+        169
+      ],
+      [
+        200,
+        169
+      ]
+    ]
+  },
+  "endata": {
+    "old_post": {
+      "status": 405,
+      "len": 166,
+      "head": "<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not"
+    }
+  },
+  "akshare_boxoffice_family": {
+    "akshare_version": "1.18.64",
+    "functions": {
+      "movie_boxoffice_daily": {
+        "20240219": 0,
+        "20250101": 0,
+        "20260105": 0,
+        "20261104": 0
+      },
+      "movie_boxoffice_cinema_daily": {
+        "20240219": 0,
+        "20250101": 0,
+        "20260105": 0,
+        "20261104": 0
+      },
+      "movie_boxoffice_cinema_weekly": {
+        "20240219": 0,
+        "20250101": 0,
+        "20260105": 0,
+        "20261104": 0
+      },
+      "movie_boxoffice_weekly": {
+        "20240219": 0,
+        "20250101": 0,
+        "20260105": 0,
+        "20261104": 0
+      },
+      "movie_boxoffice_monthly": {
+        "20240219": 0,
+        "20250101": 0,
+        "20260105": 0,
+        "20261104": 0
+      },
+      "movie_boxoffice_first_week": "ABSENT_IN_INSTALLED_AKSHARE"
+    },
+    "controls_proving_egress": {
+      "stock_zh_index_daily(sh000001)": 8758,
+      "macro_china_ppi": 249
+    }
+  },
+  "afis_own_endata_client": {
+    "now_date": "2026-11-06",
+    "latest_completed_day": "2026-11-05",
+    "date_data": {
+      "type": "dict",
+      "keys": [
+        "table0",
+        "table1",
+        "table10",
+        "table11",
+        "table2",
+        "table3"
+      ],
+      "n": 12
+    }
+  },
+  "meaning": "A host listed with ConnectionError on every try cannot be verified from this machine, so any 0-row result for a script that depends on it is a reachability statement, not a dataset statement. Controls that return rows prove egress works overall."
+}
