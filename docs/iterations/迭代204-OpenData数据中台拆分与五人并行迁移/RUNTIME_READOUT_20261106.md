@@ -442,3 +442,34 @@ src/backend/.venv/bin/python <instrument> --repo-root . --out-dir <dir> --limit 
 
 需要属主定的两件事随之明确：`EXTEND_PROVIDER` 与 `no_target_found` 之间选哪个口径进 §6 周报；
 以及 11 个已确认落点是否构成第一批可签字的 `assigned`。本波不做选择。
+
+## 14. AC11 分子不再是手算：仪器已入库（PR #307），且读数随运行单调上升
+
+本波前面给出的 143/155 都是我手跑脚本的临时读数。现在它有了受测仪器
+`src/backend/scripts/ops/ac11_runtime_evidence.py`（PR #307，15 项无 DB 测试 + 邻居约定共 27 passed），
+输入是 #284 普查 JSON，只读单条聚合 SELECT，**不读** `last_execution_at`/`next_execution_at`
+（那两列钟的缺陷在 PR #306 里，未部署前不可信），并显式声明：
+runtime-evidenced 是处置的**输入**，不是处置本身；`assigned` 不在这里计算。
+
+同一天三个读数，全部由同一族逻辑产出，差别只在总体与时刻：
+
+| as-of (UTC) | 总体 | completed 且行增 | completed 无行增 | 只失败 | 窗口内未跑 |
+|---|---|---|---|---|---|
+| 13:32 | 1098（停用前） | 143 | 36 | 5 | 703 |
+| 14:18 | 1098（停用前） | 155 | 38 | 12 | 842（放宽口径 193） |
+| **14:50:07** | **1048（停用后）** | **161** | 39 | 13 | 835 |
+
+14:50 那次按族展开的矩阵（`accepts_var_kwargs` 是主缺口）：
+
+| 族 | 且写行 | 完成无增量 | 只失败 | 未跑 |
+|---|---|---|---|---|
+| accepts_var_kwargs | 160 | 38 | 5 | 683 |
+| binds | 1 | 1 | 1 | 152 |
+| unexpected_param | 0 | 0 | **7** | 0 |
+
+两点必须写下来，否则这张表会被误读：
+
+1. `binds` 155 个里只有 2 个有运行证据——不是仪器坏，而是绝大多数 binds 任务的 cron 槽位
+   还没到（窗口不足 24 h，多数是星期受限）。
+2. `unexpected_param` 恒为 100% failed_only，与 §3 队列 B 完全一致，
+   是这张表里唯一"证据已足够下结论"的一行。
