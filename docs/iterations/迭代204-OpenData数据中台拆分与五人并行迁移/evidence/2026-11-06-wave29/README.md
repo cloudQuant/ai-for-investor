@@ -13,6 +13,8 @@
 | `ac11_retire_queue_a.py` | 队列 A 的停用执行（**默认 dry-run**，`--apply` 才写） | 2026-11-06 13:47:56 UTC 由属主裁定后执行过一次 |
 | `runtime_recovery_readout.py` | §19 的九天故障窗口、恢复后 completed/failed 分布、失败分类与 #284 普查交叉、幽灵停用后的可判性、armed 未执行数 | 只读 SELECT（`SET SESSION TRANSACTION READ ONLY` + rollback） |
 | `runtime_recovery_readout.2026-11-06T1535Z.json` | 上一条在 15:35:22Z 的实际输出，逐字存档 | — |
+| `inventory_anchor_provenance.py` | 把 1066 行锚分成 match / drifted / never_versioned / missing_file 四桶，并对 drifted 命中具体 commit | 只读（git log / git show + 读文件） |
+| `inventory_anchor_provenance.2026-11-06T1545Z.json` | 上一条输出：**166 / 847 / 44 / 9**，drifted 命中 commit 的分布，44 行清单 | — |
 
 共同约定：DSN 只从 `src/backend/.env` 的 `DATABASE_URL` 读取，不打印口令；除最后一个脚本外
 全部只含 SELECT/SHOW；`ac11_retire_queue_a.py` 在写前落 before-image，且 cohort 完全由
