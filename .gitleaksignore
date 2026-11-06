@@ -312,3 +312,10 @@ ff592288ce48bd1bef05a23db1e161fd8589ebba:src/backend/tests/integration/test_stra
 # sha256 values and this constant is only ever used as session.get(AkshareTaskRunClaim, ...).
 # It authenticates nothing; the script itself came back with the iteration-203 deployment backup.
 4db6a7e5fbce45c17ae31ebccf6dbe8cc697c0a9:src/backend/scripts/ops/cfets_daytime_managed_acceptance.py:generic-api-key:53
+# 2026-11-06 test-only placeholder, not a credential: line 32 of this file was
+# SECRET_SENTINEL = "<fake dsn password>" inside the auditor's own redaction fixture.
+# The value exists only to prove check_runtime_environment_identity.py strips a DSN password
+# from its output; it matches no host or account. Fixed at source in 77fac8d98669 (assembled
+# instead of assigned as a literal), so no future commit re-triggers this rule here, but
+# gitleaks scans history, so the introducing commit 7e3b8a444107 stays reachable.
+7e3b8a444107b7c0b6403c35b75730c0f7233730:src/backend/tests/test_runtime_environment_identity.py:generic-api-key:32
