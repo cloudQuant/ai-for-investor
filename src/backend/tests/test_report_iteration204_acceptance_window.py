@@ -276,11 +276,13 @@ def test_manual_runs_cannot_satisfy_a_cron_slot() -> None:
     )[0].to_dict()
     assert unknown["consecutive_completed_slots"] == 0
 
+
 def test_all_zero_row_completions_satisfy_status_only_but_not_the_target() -> None:
     start = datetime(2026, 11, 5, 0, 0, tzinfo=UTC)
     end = start + timedelta(hours=48)
-    executions = {1049: [_row(start + timedelta(hours=i, minutes=3), rows_delta=0)
-                         for i in range(48)]}
+    executions = {
+        1049: [_row(start + timedelta(hours=i, minutes=3), rows_delta=0) for i in range(48)]
+    }
     payload = mod.summarize([_task(1049, "3 * * * *")], executions, start, end)[0].to_dict()
     assert payload["consecutive_completed_slots"] == 48
     assert payload["consecutive_slots_with_rows"] == 0
@@ -293,9 +295,13 @@ def test_all_zero_row_completions_satisfy_status_only_but_not_the_target() -> No
 def test_a_null_delta_completion_is_unknown_and_breaks_the_data_bearing_streak() -> None:
     start = datetime(2026, 11, 5, 0, 0, tzinfo=UTC)
     end = start + timedelta(hours=4)
-    executions = {7: [_row(start + timedelta(minutes=3), rows_delta=None),
-                      _row(start + timedelta(hours=1, minutes=3), rows_delta=4),
-                      _row(start + timedelta(hours=2, minutes=3), rows_delta=None)]}
+    executions = {
+        7: [
+            _row(start + timedelta(minutes=3), rows_delta=None),
+            _row(start + timedelta(hours=1, minutes=3), rows_delta=4),
+            _row(start + timedelta(hours=2, minutes=3), rows_delta=None),
+        ]
+    }
     payload = mod.summarize([_task(7, "3 * * * *")], executions, start, end)[0].to_dict()
     assert payload["unknown_delta_completed_slots"] == 2
     assert payload["consecutive_completed_slots"] == 3
@@ -316,4 +322,3 @@ def test_daily_target_needs_seven_data_bearing_occurrences() -> None:
     assert payload["target_met_status_only"] is True
     assert payload["consecutive_slots_with_rows"] == 6
     assert payload["target_met"] is False
-
