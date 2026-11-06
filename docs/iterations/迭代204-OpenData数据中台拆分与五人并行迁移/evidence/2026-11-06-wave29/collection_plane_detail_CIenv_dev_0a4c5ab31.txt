@@ -1,0 +1,144 @@
+app/data_fetch/scripts/common/daily/_sina_macro.py:57: error: Incompatible return value type (got "dict[Any, Any] | list[Never]", expected "list[Any]")  [return-value]
+app/data_fetch/scripts/stocks/weekly/stock_industry_pe_ratio_cninfo.py:153: error: Argument 1 to "int" has incompatible type "Decimal | bytes | date | float | int | set[str] | str | timedelta | time"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+app/data_fetch/scripts/stocks/daily/stock_jgdy_tj_em.py:56: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "str"  [dict-item]
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:155: error: Argument 1 to "_request_eastmoney" of "StockHsgtHoldStockEm" has incompatible type "dict[str, str]"; expected "dict[str, str | int]"  [arg-type]
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:155: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:155: note: Consider using "Mapping" instead, which is covariant in the value type
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:210: error: Argument 1 to "_request_eastmoney" of "StockHsgtHoldStockEm" has incompatible type "dict[str, str]"; expected "dict[str, str | int]"  [arg-type]
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:210: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:210: note: Consider using "Mapping" instead, which is covariant in the value type
+app/data_fetch/scripts/stocks/daily/stock_hsgt_hold_stock_em.py:326: error: Incompatible types in assignment (expression has type "str", target has type "Callable[[Any], str | None]")  [assignment]
+app/data_fetch/scripts/stocks/daily/stock_hot_up_em.py:46: error: Argument "json" to "post" has incompatible type "dict[str, object]"; expected "JsonType"  [arg-type]
+app/data_fetch/scripts/stocks/daily/stock_hot_rank_em.py:46: error: Argument "json" to "post" has incompatible type "dict[str, object]"; expected "JsonType"  [arg-type]
+app/data_fetch/scripts/stocks/daily/stock_hk_hot_rank_em.py:46: error: Argument "json" to "post" has incompatible type "dict[str, object]"; expected "JsonType"  [arg-type]
+app/data_fetch/scripts/stocks/daily/stock_board_industry_hist_em.py:129: error: Need type annotation for "changes" (hint: "changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/stocks/daily/stock_board_industry_hist_em.py:130: error: Need type annotation for "pct_changes" (hint: "pct_changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/stocks/daily/stock_board_industry_hist_em.py:131: error: Need type annotation for "amplitudes" (hint: "amplitudes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/stocks/daily/stock_board_concept_hist_em.py:119: error: Need type annotation for "changes" (hint: "changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/stocks/daily/stock_board_concept_hist_em.py:120: error: Need type annotation for "pct_changes" (hint: "pct_changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/stocks/daily/stock_board_concept_hist_em.py:121: error: Need type annotation for "amplitudes" (hint: "amplitudes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:59: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:59: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:61: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:61: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:63: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:63: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:65: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:65: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:67: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:67: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:69: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:69: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:71: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:71: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:73: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:73: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:75: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:75: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:77: error: Unsupported operand types for * ("None" and "int")  [operator]
+app/data_fetch/scripts/stocks/daily/stock_bid_ask_em.py:77: note: Left operand is of type "Any | None"
+app/data_fetch/scripts/indexs/weekly/sw_index_analysis_daily.py:201: error: Unsupported operand types for < ("str" and "None")  [operator]
+app/data_fetch/scripts/indexs/weekly/sw_index_analysis_daily.py:201: note: Left operand is of type "str | None"
+app/data_fetch/scripts/indexs/weekly/index_global_hist_em.py:116: error: Need type annotation for "amplitudes" (hint: "amplitudes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/indexs/weekly/caixin_spillover_index.py:105: error: Signature of "get_latest_date" incompatible with supertype "app.data_fetch.core.mysql_base.MysqlBase"  [override]
+app/data_fetch/scripts/indexs/weekly/caixin_spillover_index.py:105: note:      Superclass:
+app/data_fetch/scripts/indexs/weekly/caixin_spillover_index.py:105: note:          def get_latest_date(self, table_name: str, date_column: str = ..., conditions: dict[str, Any] | None = ...) -> str | None
+app/data_fetch/scripts/indexs/weekly/caixin_spillover_index.py:105: note:      Subclass:
+app/data_fetch/scripts/indexs/weekly/caixin_spillover_index.py:105: note:          def get_latest_date(self) -> Any
+app/data_fetch/scripts/indexs/weekly/caixin_basic_index.py:103: error: Signature of "get_latest_date" incompatible with supertype "app.data_fetch.core.mysql_base.MysqlBase"  [override]
+app/data_fetch/scripts/indexs/weekly/caixin_basic_index.py:103: note:      Superclass:
+app/data_fetch/scripts/indexs/weekly/caixin_basic_index.py:103: note:          def get_latest_date(self, table_name: str, date_column: str = ..., conditions: dict[str, Any] | None = ...) -> str | None
+app/data_fetch/scripts/indexs/weekly/caixin_basic_index.py:103: note:      Subclass:
+app/data_fetch/scripts/indexs/weekly/caixin_basic_index.py:103: note:          def get_latest_date(self) -> Any
+app/data_fetch/scripts/indexs/weekly/a_share_news_sentiment_index.py:106: error: Signature of "get_latest_date" incompatible with supertype "app.data_fetch.core.mysql_base.MysqlBase"  [override]
+app/data_fetch/scripts/indexs/weekly/a_share_news_sentiment_index.py:106: note:      Superclass:
+app/data_fetch/scripts/indexs/weekly/a_share_news_sentiment_index.py:106: note:          def get_latest_date(self, table_name: str, date_column: str = ..., conditions: dict[str, Any] | None = ...) -> str | None
+app/data_fetch/scripts/indexs/weekly/a_share_news_sentiment_index.py:106: note:      Subclass:
+app/data_fetch/scripts/indexs/weekly/a_share_news_sentiment_index.py:106: note:          def get_latest_date(self) -> Any
+app/data_fetch/scripts/futures/weekly/shfe_stock_weekly.py:84: error: Need type annotation for "previous_datas" (hint: "previous_datas: dict[<type>, <type>] = ...")  [var-annotated]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "Decimal" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "date" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "float" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "int" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "set[str]" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "timedelta" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "None" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:79: error: Item "time" of "Decimal | bytes | date | float | int | set[str] | str | timedelta | time | None" has no attribute "lower"  [union-attr]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:80: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:82: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:92: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:100: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:122: error: Argument 1 to "get" of "dict" has incompatible type "Any | bytes | str"; expected "str"  [arg-type]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:194: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:198: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/dce_delivery_match.py:199: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+app/data_fetch/scripts/futures/weekly/daily_market_data.py:6: error: Library stubs not installed for "dateutil.relativedelta"  [import-untyped]
+app/data_fetch/scripts/futures/weekly/daily_market_data.py:96: error: Argument "key" to "sorted" has incompatible type "Callable[[tuple[Decimal | bytes | date | datetime | float | int | set[str] | str | timedelta | None | Decimal | bytes | date | datetime | float | int | str | time | timedelta | None, ...]], Decimal | bytes | date | datetime | float | int | set[str] | str | timedelta | None | Decimal | bytes | date | datetime | float | int | str | time | timedelta | None]"; expected "Callable[[tuple[Decimal | bytes | date | datetime | float | int | set[str] | str | timedelta | None | Decimal | bytes | date | datetime | float | int | str | time | timedelta | None, ...]], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+app/data_fetch/scripts/futures/weekly/daily_market_data.py:96: error: Incompatible return value type (got "Decimal | bytes | date | datetime | float | int | set[str] | str | timedelta | None | Decimal | bytes | date | datetime | float | int | str | time | timedelta | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
+app/data_fetch/scripts/futures/weekly/daily_market_data.py:96: note: Items in the first union not in the second: "None", "None"
+app/data_fetch/scripts/futures/weekly/daily_market_data.py:266: error: Incompatible types in assignment (expression has type "int", target has type "str")  [assignment]
+app/data_fetch/scripts/futures/monthly/dce_delivery_data.py:5: error: Library stubs not installed for "dateutil.relativedelta"  [import-untyped]
+app/data_fetch/scripts/futures/monthly/dce_delivery_data.py:5: note: Hint: "python3 -m pip install types-python-dateutil"
+app/data_fetch/scripts/futures/monthly/dce_delivery_data.py:5: note: (or run "mypy --install-types" to install all missing stub packages)
+app/data_fetch/scripts/futures/monthly/dce_delivery_data.py:5: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+app/data_fetch/scripts/futures/hourly/futures_spot_sys.py:44: error: Incompatible types in assignment (expression has type "str | AttributeValueList", target has type "str")  [assignment]
+app/data_fetch/scripts/futures/daily/minute_market.py:162: error: Item "None" of "Match[str] | None" has no attribute "group"  [union-attr]
+app/data_fetch/scripts/futures/daily/futures_hist_em.py:117: error: Need type annotation for "changes" (hint: "changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/futures/daily/futures_hist_em.py:118: error: Need type annotation for "pct_changes" (hint: "pct_changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/funds/weekly/reits_hist_em.py:99: error: Need type annotation for "amplitudes" (hint: "amplitudes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py:68: error: Function "datetime.datetime.date" is not valid as a type  [valid-type]
+app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py:68: note: Perhaps you need "Callable[...]" or a callback protocol?
+app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py:262: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py:281: error: Incompatible default for parameter "fund_types" (default has type "None", parameter has type "list[str]")  [assignment]
+app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py:281: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py:281: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+app/data_fetch/scripts/funds/weekly/fund_value_estimation_em.py:250: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_rating_sh.py:80: error: Incompatible return value type (got "None", expected "float")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_rating_sh.py:86: error: Incompatible return value type (got "None", expected "float")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_rating_sh.py:103: error: Incompatible return value type (got "date", expected "tuple[Any, ...]")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_rating_sh.py:105: error: Incompatible return value type (got "None", expected "tuple[Any, ...]")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_portfolio_hold_em.py:255: error: Argument 1 to "fetch_portfolio_hold_data" of "FundPortfolioHoldEm" has incompatible type "str | None"; expected "str"  [arg-type]
+app/data_fetch/scripts/funds/weekly/fund_portfolio_change_em.py:264: error: Argument 1 to "fetch_portfolio_change_data" of "FundPortfolioChangeEm" has incompatible type "str | None"; expected "str"  [arg-type]
+app/data_fetch/scripts/funds/weekly/fund_money_rank_em.py:68: error: Function "datetime.datetime.date" is not valid as a type  [valid-type]
+app/data_fetch/scripts/funds/weekly/fund_money_rank_em.py:68: note: Perhaps you need "Callable[...]" or a callback protocol?
+app/data_fetch/scripts/funds/weekly/fund_money_rank_em.py:247: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_lcx_rank_em.py:67: error: Function "datetime.datetime.date" is not valid as a type  [valid-type]
+app/data_fetch/scripts/funds/weekly/fund_lcx_rank_em.py:67: note: Perhaps you need "Callable[...]" or a callback protocol?
+app/data_fetch/scripts/funds/weekly/fund_lcx_rank_em.py:259: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_individual_analysis_xq.py:208: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_individual_analysis_xq.py:245: error: Argument 1 to "fetch_analysis_data" of "FundAnalysisXq" has incompatible type "str | None"; expected "str"  [arg-type]
+app/data_fetch/scripts/funds/weekly/fund_hk_rank_em.py:68: error: Function "datetime.datetime.date" is not valid as a type  [valid-type]
+app/data_fetch/scripts/funds/weekly/fund_hk_rank_em.py:68: note: Perhaps you need "Callable[...]" or a callback protocol?
+app/data_fetch/scripts/funds/weekly/fund_hk_rank_em.py:255: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_exchange_rank_em.py:67: error: Function "datetime.datetime.date" is not valid as a type  [valid-type]
+app/data_fetch/scripts/funds/weekly/fund_exchange_rank_em.py:67: note: Perhaps you need "Callable[...]" or a callback protocol?
+app/data_fetch/scripts/funds/weekly/fund_exchange_rank_em.py:242: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/weekly/fund_detail_info.py:95: error: Incompatible types in assignment (expression has type "list[Any]", variable has type "set[Any]")  [assignment]
+app/data_fetch/scripts/funds/weekly/fund_detail_info.py:97: error: No overload variant matches argument type "set[Any]"  [call-overload]
+app/data_fetch/scripts/funds/weekly/fund_detail_info.py:97: note: Possible overload variants:
+app/data_fetch/scripts/funds/weekly/fund_detail_info.py:97: note:     def shuffle(self, x: MutableSequence[Any]) -> None
+app/data_fetch/scripts/funds/weekly/fund_detail_info.py:97: note:     def shuffle(self, x: MutableSequence[Any], random: Callable[[], float] | None = ...) -> None
+app/data_fetch/scripts/funds/weekly/fund_detail_info.py:99: error: Value of type "set[Any]" is not indexable  [index]
+app/data_fetch/scripts/funds/weekly/fund_achivement_xq.py:190: error: Incompatible return value type (got "int", expected "bool")  [return-value]
+app/data_fetch/scripts/funds/daily/fund_lof_hist_em.py:100: error: Need type annotation for "changes" (hint: "changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/funds/daily/fund_lof_hist_em.py:101: error: Need type annotation for "pct_changes" (hint: "pct_changes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/funds/daily/fund_lof_hist_em.py:102: error: Need type annotation for "amplitudes" (hint: "amplitudes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/common/currency_fallback.py:60: error: Incompatible return value type (got "PooledMySQLConnection | MySQLConnectionAbstract", expected "MySQLConnection")  [return-value]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for < ("int" and "None")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: note: Left operand is of type "Decimal | bytes | date | datetime | float | int | set[str] | str | timedelta | None | Decimal | bytes | date | datetime | float | int | str | time | timedelta | None"
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("bytes" and "int")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("date" and "int")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("datetime" and "int")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("set[str]" and "int")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("str" and "int")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("timedelta" and "int")  [operator]
+app/data_fetch/scripts/common/monthly/trading_days.py:209: error: Unsupported operand types for > ("time" and "int")  [operator]
+app/data_fetch/scripts/common/daily/macro_china_urban_unemployment.py:88: error: Argument "json" to "post" has incompatible type "dict[str, Sequence[Collection[str]]]"; expected "JsonType"  [arg-type]
+app/data_fetch/scripts/common/daily/macro_china_nbs_nation.py:95: error: Argument 1 to "get" of "dict" has incompatible type "tuple[Any | None, Any | None]"; expected "tuple[Sequence[str], Sequence[str]]"  [arg-type]
+app/data_fetch/scripts/common/daily/macro_china_nbs_nation.py:105: error: Argument 1 to "get" of "dict" has incompatible type "tuple[Any | None, Any | None]"; expected "tuple[Sequence[str], Sequence[str]]"  [arg-type]
+app/data_fetch/scripts/common/daily/forex_hist_em.py:106: error: Need type annotation for "amplitudes" (hint: "amplitudes: list[<type>] = ...")  [var-annotated]
+app/data_fetch/scripts/common/hourly/akshare_catalog_batch.py:129: error: Unsupported operand types for + ("object" and "int")  [operator]
+app/data_fetch/scripts/common/hourly/akshare_catalog_batch.py:130: error: Unsupported operand types for + ("object" and "int")  [operator]
+app/data_fetch/scripts/common/hourly/akshare_catalog_batch.py:132: error: Unsupported operand types for + ("object" and "int")  [operator]
+app/data_fetch/scripts/common/hourly/akshare_catalog_batch.py:135: error: Unsupported operand types for + ("object" and "int")  [operator]
+Found 101 errors in 42 files (checked 1108 source files)
