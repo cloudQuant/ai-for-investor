@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 from datetime import date, datetime
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -206,7 +207,12 @@ class TradingDaysUpdater(AkshareToMySql):
             result = self.require_cursor().fetchone()
             self.disconnect_db()
 
-            return result[0] > 0 if result else False
+            # Type evidence: the only column here is `COUNT(*)`, which MySQL types BIGINT (signed),
+            # and this repo already fixes that reading as `int` in
+            # providers/akshare_provider.py::get_table_row_count (`-> int`, with the same
+            # `isinstance(count, int)` check on the same query). `cast` is compile-time only, so the
+            # value the connector returns still reaches `> 0` unchanged.
+            return cast(int, result[0]) > 0 if result else False
 
         except Exception as e:
             self.logger.error(f"Error checking trading day: {str(e)}")

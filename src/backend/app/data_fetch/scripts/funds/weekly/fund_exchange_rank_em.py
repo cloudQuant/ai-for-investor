@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -64,7 +64,7 @@ class FundExchangeRankEm(AkshareToMySql):
                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='场内交易基金排行数据表(东方财富)';
                             """
 
-    def parse_date(self, date_str: str) -> datetime.date | None:
+    def parse_date(self, date_str: str) -> date | None:
         """解析日期字符串"""
         if not date_str or pd.isna(date_str) or str(date_str).strip() == "":
             return None

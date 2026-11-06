@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -113,7 +114,7 @@ class IndexGlobalHistEm(AkshareToMySql):
             .sort_values("TRADE_DATE")
         )
         previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
-        amplitudes = []
+        amplitudes: list[Any] = []
         for _, row in grouped.iterrows():
             if pd.isna(previous_close) or previous_close == 0:
                 amplitudes.append(None)

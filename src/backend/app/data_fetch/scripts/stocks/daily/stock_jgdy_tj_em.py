@@ -53,7 +53,7 @@ class StockJgdyTjEm(AkshareToMySql):
         page_count = min(total_page, max(1, int(max_pages)))
         frames = []
         for page in range(1, page_count + 1):
-            params.update({"pageNumber": page})
+            params.update({"pageNumber": str(page)})
             response = requests.get(url, params=params, timeout=30)
             data_json = response.json()
             temp_df = pd.DataFrame(data_json["result"]["data"])
