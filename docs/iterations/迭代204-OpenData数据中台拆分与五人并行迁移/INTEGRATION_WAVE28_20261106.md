@@ -328,6 +328,33 @@ dev tip（本文 API 读回）：`3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0`。
    **新增未钉格 AC-5|07 / stale-proof** 挡住（§6 第 3 条），属主裁定或修复后进账；
    管理运维控制台视图（覆盖/回填/容量）为 OFFLINE 面另开 PR。
 
+### 8.1 Wave 28 续记（2026-11-06 本地闭口复核；未推送项已就地标注，勿当已落库）
+
+下表 head、merge SHA 与 file:line 均由本文当场从 GitHub API / Actions / 工作树读回；
+开口窗计数（随时间增长）不在此列。
+
+| PR / 流 | 范围 | 平面 | head SHA（API 读回） | 门禁/复核 | merge SHA（API 读回） |
+|---|---|---|---|---|---|
+| **#273 `fix/afi-recovery-runtime-assets`** | 恢复 worker 运行时资产（§8 上表首行） | DEPLOYMENT/CODE | 旧 head `0dbb3f25f…` | 已合入，把 dev tip 前移到其 squash | `c16f00515cb4b7437bd89ebad3d7b3e33a14efca`（message `fix(ops): restore the recovery worker the systemd unit runs (AC01/AC12 runtime asset gap) (#273)`，merged 2026-11-05T20:41:15Z） |
+| **#289 `feature/afi-run-coordinator`** | 协调器/claim 模型重实现 + **alembic 单头常量重钉** | CODE/OFFLINE | `aeaa071c21ca3f5e7e4dac28b746eb4865217ff1`（较 §8 上表 `bfcacd7e8…` 为再钉后的新 head） | 重钉 **11** 个单头测试常量为 revision `20261106_akshare_run_coordinator_claims`（11 个测试文件各 1 行 + 迁移文件 2 行，本文按 #289 diff 读回）。**注：11 个测试硬编码迁移头，是仓库用来侦测误加第二头的既有约定。** | |
+| **#297 `refactor/afi-settings-module-split`** | `Settings` 拆成 11 个分节 mixin | CODE/OFFLINE | `20b33e17b062cd82509bdb75f4ea1186aa0e8155` | 字段面未变的证明见 #297 证据评论（issue comment id `6669416050`），本文不重述其方法 | |
+| **#299 `fix/ci-diff-cover-base-rev`** | `Check diff coverage` 改用 base 提交（§C 仪器修正） | CI/仪器 | `ac52ff42c6f074cabebdb6b176efc5b4d7b8c71d` | 断言 `HEAD^1==head.sha` 后取 `BASE_REV=git rev-parse HEAD^2`；`--fail-under=60` 不变 | |
+
+**仅本地、未推送的两条流（勿当作已落库；待 #299 先落、队列排空后按 §4/§8 顺序并入）：**
+
+- **本地流 #37 — AC06 发布一致性测试**：`.wt-afi-ac06` 提交 `4a671067de63069c91e2b9e1b369bb653edeba2e`
+  （`test_publication_resubmission.py` 6 例 + `test_publication_reader_isolation.py` 3 例，本地 `9 passed`）。
+  平面 CODE/OFFLINE；**未推送**、**不入本批**。
+- **本地流 #4 — `mark_failed` 相关增量**：属主工作树内的本地改动，**未推送**、无对应 GitHub PR，
+  待队列排空后另议。此两条仅为占位记录，SHA/PR 号在推送前不存在，不得臆造。
+
+**状态更正（相对 §8 与属主工作稿）：** ① §8 记 #287 的 diff-cover 失败 job 为 `127337387339`（旧 head `5e6b513c7`），
+本文在当前 head `d7b80f6f…` 读回的是 py3.12 腿 job `127491841431`，另 #291 双腿 `127499745868`/`127499746065`；
+属主另引的 `127500114307` 本文未能在该步骤对应上，弃用。② §8 表内 #289 的 head `bfcacd7e8…` 已被重钉后的
+`aeaa071c21…` 取代；本文按 §6 惯例保留原行不删，仅在此登记新 head。③ OpenData 侧 §8 第 4 条口径下的
+#199（原「开着且红」）现**已合入**（`cloudQuant/opendata` merge commit `28607e186c9c31ed34389acab27a7397cb3173a6`，
+门禁转绿），#196/#197/#198 仍红在快速失败的 `quality gate` 成员 2 `zero-dep-check`。
+
 ## 9. 属主待办队列
 
 | 待办 | 需要的资源 | 现状证据 |
