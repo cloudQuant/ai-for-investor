@@ -486,6 +486,17 @@ export interface DataTableRowsResponse {
   page: number
   page_size: number
   total: number
+  /** "live" when the exact COUNT(*) ran for this request, "cached" when it was reused. */
+  total_source?: 'live' | 'cached' | null
+  /** Age in seconds of a cached total; 0 when the total was measured live. */
+  total_age_seconds?: number | null
+  /** The total order the rows were paged by, or null when it could not be resolved. */
+  ordering?: {
+    strategy: 'primary_key' | 'unique_key' | 'rowid'
+    columns: string[]
+    direction: 'asc'
+    is_total_order: boolean
+  } | null
   data_available?: boolean
   error?: string | null
 }

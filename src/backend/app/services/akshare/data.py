@@ -15,6 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.akshare_data_database import _get_akshare_data_engine
 from app.models.akshare_mgmt import DataScript, DataTable
+from app.services.akshare.table_pagination import (
+    TotalCountKey,
+    WarehouseTablePage,
+    get_total_count_cache,
+    order_by_clause,
+    reflect_table_ordering,
+    resolve_total_count,
+)
 
 _VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _MYSQL_COMPACT_TABLE_COLUMN_THRESHOLD = 250
@@ -395,6 +403,10 @@ class AkshareDataService:
 
             async with _get_akshare_data_engine().begin() as conn:
                 await conn.run_sync(replace_table)
+            # The rows were just replaced, so any cached total for this table is
+            # now wrong; drop it so the next page re-measures instead of serving a
+            # count that no longer describes the table.
+            get_total_count_cache().evict_table(table_name)
 
         return await self._upsert_table_metadata(
             script=script,
@@ -427,7 +439,10 @@ class AkshareDataService:
 
         total = int((await self.db.execute(count_stmt)).scalar() or 0)
         stmt = (
-            stmt.order_by(DataTable.updated_at.desc())
+            # ``updated_at`` alone ties for rows written in the same tick, and a
+            # tied ORDER BY is not a total order: MySQL could then serve one metadata
+            # row on two pages and skip another.  ``id`` breaks every tie.
+            stmt.order_by(DataTable.updated_at.desc(), DataTable.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -464,19 +479,39 @@ class AkshareDataService:
         table_name: str,
         page: int = 1,
         page_size: int = 50,
-    ) -> tuple[list[str], list[dict[str, Any]], int]:
-        """Preview rows from a warehouse table."""
-        if _get_akshare_data_engine() is None:
+    ) -> WarehouseTablePage:
+        """Preview one page of rows from a warehouse table.
+
+        Ordering is a total order derived from the table's own key constraints (see
+        :mod:`app.services.akshare.table_pagination`); a table for which no such
+        order is provable raises ``StableOrderingUnavailableError`` instead of
+        serving unordered pages.  The exact ``COUNT(*)`` is measured once per
+        (database, table, filter) shape and reused inside the cache TTL, so walking
+        the pages of a large table no longer pays a full count per request.  The
+        response says which of the two happened through ``total_source``.
+        """
+        engine = _get_akshare_data_engine()
+        if engine is None:
             raise RuntimeError("AKSHARE_DATA_DATABASE_URL is not configured")
 
         quoted_name = self._quote_identifier(table_name)
         offset = (page - 1) * page_size
-
-        async with _get_akshare_data_engine().connect() as conn:
-            total_result = await conn.execute(text(f"SELECT COUNT(*) FROM {quoted_name}"))
-            total = int(total_result.scalar() or 0)
+        cache_key = TotalCountKey(
+            database=str(engine.url.database or ""),
+            table_name=table_name,
+            filters=(),
+        )
+        async with engine.connect() as conn:
+            ordering = await conn.run_sync(reflect_table_ordering, table_name)
+            order_sql = order_by_clause(ordering)
+            total, total_source, total_age_seconds = await resolve_total_count(
+                conn,
+                count_sql=f"SELECT COUNT(*) FROM {quoted_name}",
+                cache=get_total_count_cache(),
+                key=cache_key,
+            )
             result = await conn.execute(
-                text(f"SELECT * FROM {quoted_name} LIMIT :limit OFFSET :offset"),
+                text(f"SELECT * FROM {quoted_name} {order_sql} LIMIT :limit OFFSET :offset"),
                 {"limit": page_size, "offset": offset},
             )
             mappings = result.mappings().all()
@@ -489,7 +524,21 @@ class AkshareDataService:
                 if row.get(_COMPACT_PAYLOAD_COLUMN)
             ]
             columns = list(expanded_rows[0].keys()) if expanded_rows else []
-            return columns, expanded_rows, total
+            return WarehouseTablePage(
+                columns=columns,
+                rows=expanded_rows,
+                total=total,
+                total_source=total_source,
+                total_age_seconds=total_age_seconds,
+                ordering=ordering,
+            )
 
         columns = list(rows[0].keys()) if rows else []
-        return columns, rows, total
+        return WarehouseTablePage(
+            columns=columns,
+            rows=rows,
+            total=total,
+            total_source=total_source,
+            total_age_seconds=total_age_seconds,
+            ordering=ordering,
+        )
