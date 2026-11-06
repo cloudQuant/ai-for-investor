@@ -7,6 +7,32 @@ import type {
   MarketDataCoverageMatrixResponse,
 } from '@/types/trust'
 
+import {
+  isIsoCalendarDate,
+  isIsoTimestamp,
+  isPlainRecord,
+  parseOpenDataStockDailyFreshnessResponse,
+  type OpenDataStockDailyFreshnessOptions,
+  type OpenDataStockDailyFreshnessResponse,
+} from './openDataCoverage'
+
+// The OpenData coverage/freshness contract lives in `./openDataCoverage`; it is
+// re-exported here so existing API call sites keep one import path.
+export {
+  deriveOpenDataFreshnessAvailability,
+  deriveOpenDataFreshnessCoverageState,
+  emptyOpenDataStockDailyFreshnessDisplay,
+  normalizeOpenDataProvenanceCoverage,
+  parseOpenDataCoverageState,
+  parseOpenDataStockDailyFreshnessResponse,
+  type OpenDataAvailabilityState,
+  type OpenDataCoverageState,
+  type OpenDataStockDailyFreshnessDisplayState,
+  type OpenDataStockDailyFreshnessDisplayStatus,
+  type OpenDataStockDailyFreshnessResponse,
+  type OpenDataStockDailyFreshnessStatus,
+} from './openDataCoverage'
+
 export type MarketAssetType = 'stock' | 'futures' | 'bond' | 'fund' | 'option' | 'fx' | 'crypto'
 /**
  * Keep this wire union aligned with the v2 public DTO. A family can declare a
@@ -101,10 +127,6 @@ const MARKET_DATA_ROLLOUT_CAPABILITY_IDS = [
 
 const OPENDATA_STOCK_DAILY_ROUTE_ID = 'opendata-stock-daily-v1'
 const AKSHARE_STOCK_KLINE_LEGACY_ROUTE_ID = 'akshare-stock-kline-legacy-v1'
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 function isMarketDataCapabilityState(value: unknown): value is MarketDataCapabilityStateResponse {
   if (!isPlainRecord(value)) return false
@@ -259,74 +281,6 @@ export interface OpenDataDirectKlineResponse {
   provenance: OpenDataDirectKlineProvenance
 }
 
-export type OpenDataStockDailyFreshnessStatus = 'fresh' | 'stale' | 'missing'
-
-export interface OpenDataStockDailyFreshnessResponse {
-  provider: 'opendata'
-  domain: 'stock_daily'
-  source: null
-  field: string | null
-  latest: string | null
-  lag_days: number | null
-  status: OpenDataStockDailyFreshnessStatus
-  expected_data_date: string
-  checked_at: string
-}
-
-export interface OpenDataStockDailyFreshnessOptions {
-  signal?: AbortSignal
-}
-
-function isIsoCalendarDate(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const year = Number(value.slice(0, 4))
-  const month = Number(value.slice(5, 7))
-  const day = Number(value.slice(8, 10))
-  if (year < 1 || month < 1 || month > 12) return false
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-  return day >= 1 && day <= daysInMonth[month - 1]
-}
-
-function isoCalendarDayOrdinal(value: string): number {
-  const year = Number(value.slice(0, 4))
-  const month = Number(value.slice(5, 7))
-  const day = Number(value.slice(8, 10))
-  const completedYears = year - 1
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
-  const daysBeforeMonth = [
-    0,
-    31,
-    leapYear ? 60 : 59,
-    leapYear ? 91 : 90,
-    121,
-    152,
-    182,
-    213,
-    244,
-    274,
-    305,
-    335,
-  ]
-  return completedYears * 365
-    + Math.floor(completedYears / 4)
-    - Math.floor(completedYears / 100)
-    + Math.floor(completedYears / 400)
-    + daysBeforeMonth[month - 1]
-    + day
-}
-
-function calendarDayDifference(laterDate: string, earlierDate: string): number {
-  return isoCalendarDayOrdinal(laterDate) - isoCalendarDayOrdinal(earlierDate)
-}
-
-function isIsoTimestamp(value: unknown): value is string {
-  return typeof value === 'string'
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
-    && isIsoCalendarDate(value.slice(0, 10))
-    && Number.isFinite(Date.parse(value))
-}
-
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -468,59 +422,6 @@ export function parseOpenDataDirectKlineResponse(
       committed_at: null,
       durable_receipt: 'not_created',
     },
-  }
-}
-
-export function parseOpenDataStockDailyFreshnessResponse(
-  value: unknown,
-): OpenDataStockDailyFreshnessResponse | null {
-  if (
-    !isPlainRecord(value)
-    || value.provider !== 'opendata'
-    || value.domain !== 'stock_daily'
-    || value.source !== null
-    || (
-      value.field !== null
-      && (typeof value.field !== 'string' || !/^[a-z][a-z0-9_]{0,127}$/.test(value.field))
-    )
-    || (
-      value.latest !== null
-      && !isIsoCalendarDate(value.latest)
-    )
-    || (
-      value.lag_days !== null
-      && !Number.isSafeInteger(value.lag_days)
-    )
-    || (value.status !== 'fresh' && value.status !== 'stale' && value.status !== 'missing')
-    || !isIsoCalendarDate(value.expected_data_date)
-    || !isIsoTimestamp(value.checked_at)
-  ) return null
-
-  if (value.status === 'missing') {
-    if (value.field !== null || value.latest !== null || value.lag_days !== null) return null
-  } else if (value.latest === null || value.field === null || value.lag_days === null) {
-    return null
-  } else if (
-    calendarDayDifference(
-      value.expected_data_date as string,
-      value.latest as string,
-    ) !== (value.lag_days as number)
-    || (value.status === 'fresh' && (value.lag_days as number) > 0)
-    || (value.status === 'stale' && (value.lag_days as number) <= 0)
-  ) {
-    return null
-  }
-
-  return {
-    provider: 'opendata',
-    domain: 'stock_daily',
-    source: null,
-    field: value.field as string | null,
-    latest: value.latest as string | null,
-    lag_days: value.lag_days as number | null,
-    status: value.status as OpenDataStockDailyFreshnessStatus,
-    expected_data_date: value.expected_data_date as string,
-    checked_at: value.checked_at as string,
   }
 }
 
