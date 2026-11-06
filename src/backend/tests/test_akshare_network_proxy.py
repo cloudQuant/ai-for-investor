@@ -179,7 +179,7 @@ def test_default_request_get_disables_environment_proxies_and_forwards_options(m
 
 @pytest.mark.asyncio
 async def test_akshare_script_execution_configures_network_proxy(monkeypatch):
-    import app.services.akshare.script as script_module
+    import app.services.akshare.script_worker_runtime as runtime_module
     from app.services.akshare.script import AkshareScriptService
 
     calls = []
@@ -191,7 +191,7 @@ async def test_akshare_script_execution_configures_network_proxy(monkeypatch):
     def callable_obj():
         return {"ok": True}
 
-    monkeypatch.setattr(script_module, "configure_akshare_network_proxy", fake_configure)
+    monkeypatch.setattr(runtime_module, "configure_akshare_network_proxy", fake_configure)
 
     result = await AkshareScriptService._execute_callable(callable_obj, {}, 5)
 
