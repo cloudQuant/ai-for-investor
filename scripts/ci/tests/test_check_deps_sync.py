@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -10,6 +11,8 @@ from types import ModuleType
 
 import pytest
 from packaging.requirements import Requirement
+
+import action_pins
 
 try:
     import tomli
@@ -220,3 +223,41 @@ def test_pyproject_parser_accepts_tomli_fallback_for_python_310(monkeypatch) -> 
     )
 
     assert any(requirement.name == "fastapi" for requirement in requirements)
+
+
+# The action-pin drift guards live in this file on purpose: ci.yml is currently the
+# only workflow that executes scripts/ci/tests, and it runs exactly this file, so an
+# unreviewed ``uses: owner/repo@<sha>`` bump trips a test that actually runs in CI.
+_SHA_PIN = re.compile(r"^[^\s#@]+@[0-9a-f]{40}$")
+
+
+def test_every_sha_pinned_action_use_is_in_the_accepted_registry() -> None:
+    found = action_pins.all_workflow_sha_pins()
+
+    assert found, "repository workflows are expected to pin at least one action by SHA"
+    unregistered = sorted(found - action_pins.ACCEPTED_SHA_PINS)
+    assert not unregistered, (
+        "workflow actions pinned to an SHA outside the reviewed registry: "
+        f"{unregistered}. Verify the SHA against the action's upstream tag refs, "
+        "then update scripts/ci/tests/action_pins.py."
+    )
+
+
+def test_accepted_registry_contains_only_full_immutable_pins() -> None:
+    assert action_pins.ACCEPTED_SHA_PINS
+    for pin in action_pins.ACCEPTED_SHA_PINS:
+        assert _SHA_PIN.fullmatch(pin), pin
+
+
+def test_drift_guard_detects_an_unreviewed_pin_bump() -> None:
+    bumped_sha = "f" * 40
+    workflow_text = (
+        "    steps:\n"
+        f"      - uses: actions/checkout@{bumped_sha} # v8.0.0\n"
+        "      - uses: actions/setup-python@v7\n"
+    )
+
+    found = action_pins.sha_pinned_uses(workflow_text)
+
+    assert found == [f"actions/checkout@{bumped_sha}"]
+    assert set(found) - action_pins.ACCEPTED_SHA_PINS == set(found)
