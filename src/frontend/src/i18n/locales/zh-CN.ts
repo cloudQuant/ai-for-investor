@@ -4730,6 +4730,16 @@ export default {
       stale: '域级 freshness 滞后',
       missing: '中台未测得 / 原因未知',
     },
+    stockDailyFreshnessCoverage: 'OpenData 覆盖状态',
+    stockDailyFreshnessAsOf: '新鲜度截止时刻（AFI 校验时间，非源观测时间）',
+    stockDailyFreshnessProvenance: '数据来源',
+    openDataCoverageState: {
+      PROVEN: '覆盖已证实：中台已测得该域',
+      UNKNOWN: '覆盖未知：未测得或原因未知，绝不显示为完整',
+      SOURCE_LIMITED: '源受限：上游保留范围限制了可达历史',
+      NOT_SUPPORTED: '不支持：该域或频率不在 OpenData 支持范围内',
+      opendata_unavailable: 'OpenData 不可用：无法读取该路由；未回退到本地数据',
+    },
     stockDailyFreshnessRouteNotice: {
       resolving: '正在确认股票行情路由；确认前不会请求域级 freshness 或读取本地覆盖矩阵。',
       unknown: '股票行情路由未知或能力声明无效；已停止域级 freshness 请求和本地覆盖查询。',
