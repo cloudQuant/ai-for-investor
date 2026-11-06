@@ -11,6 +11,8 @@
 | `ac11_batches.py <census.json> [out.md]` | AC11 队列 A/B/C 的确切任务清单 | 只读 SELECT |
 | `ghost_classify.py` | 9 条无文件注册的来源判定（树中、git 历史中、按文件名） | 只读 SELECT + git |
 | `ac11_retire_queue_a.py` | 队列 A 的停用执行（**默认 dry-run**，`--apply` 才写） | 2026-11-06 13:47:56 UTC 由属主裁定后执行过一次 |
+| `runtime_recovery_readout.py` | §19 的九天故障窗口、恢复后 completed/failed 分布、失败分类与 #284 普查交叉、幽灵停用后的可判性、armed 未执行数 | 只读 SELECT（`SET SESSION TRANSACTION READ ONLY` + rollback） |
+| `runtime_recovery_readout.2026-11-06T1535Z.json` | 上一条在 15:35:22Z 的实际输出，逐字存档 | — |
 
 共同约定：DSN 只从 `src/backend/.env` 的 `DATABASE_URL` 读取，不打印口令；除最后一个脚本外
 全部只含 SELECT/SHOW；`ac11_retire_queue_a.py` 在写前落 before-image，且 cohort 完全由

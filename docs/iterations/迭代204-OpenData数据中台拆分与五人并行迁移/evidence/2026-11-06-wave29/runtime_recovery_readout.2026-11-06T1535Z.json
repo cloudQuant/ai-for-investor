@@ -1,0 +1,168 @@
+{
+  "read_at_utc": "2026-11-06T15:35:54Z",
+  "since_utc": "2026-11-05 14:00:00",
+  "deactivation_utc": "2026-11-06 13:47:56",
+  "outage_window": {
+    "first": "2026-10-27 00:57:00",
+    "last": "2026-11-05 00:45:00",
+    "runs": 4281,
+    "tasks": 1081
+  },
+  "gap_after_outage": {
+    "runs": 4,
+    "first": "2026-11-05 00:45:00",
+    "last": "2026-11-05 13:58:02"
+  },
+  "post_recovery_mix": [
+    {
+      "status": "completed",
+      "runs": 475,
+      "tasks": 208,
+      "first": "2026-11-05 14:02:00",
+      "last": "2026-11-06 15:30:00"
+    },
+    {
+      "status": "failed",
+      "runs": 99,
+      "tasks": 63,
+      "first": "2026-11-05 14:03:00",
+      "last": "2026-11-06 15:03:00"
+    }
+  ],
+  "post_recovery_failures": [
+    {
+      "message": "No callable entrypoint found for script fund_monetary_income_history",
+      "runs": 26,
+      "tasks": 26
+    },
+    {
+      "message": "Script call timed out after 600 seconds",
+      "runs": 26,
+      "tasks": 1
+    },
+    {
+      "message": "No callable entrypoint found for script forex_hist_sina",
+      "runs": 18,
+      "tasks": 16
+    },
+    {
+      "message": "FuturesDailyMarket.run() got an unexpected keyword argument '_ingest_mode'",
+      "runs": 5,
+      "tasks": 5
+    },
+    {
+      "message": "No callable entrypoint found for script fund_reviewed_unit_nav_history",
+      "runs": 4,
+      "tasks": 4
+    },
+    {
+      "message": "Script futures_to_spot_dce returned no data and target table futures_to_spot_dce is empty",
+      "runs": 4,
+      "tasks": 1
+    },
+    {
+      "message": "Script spot_quotations_sge returned no data and target table spot_quotations_sge is empty",
+      "runs": 4,
+      "tasks": 1
+    },
+    {
+      "message": "EtfFundHistEm.run() got an unexpected keyword argument 'source'",
+      "runs": 3,
+      "tasks": 1
+    },
+    {
+      "message": "StockZhIndexDaily.run() got an unexpected keyword argument 'end_date'",
+      "runs": 2,
+      "tasks": 1
+    },
+    {
+      "message": "No callable entrypoint found for script cffex_option_daily_history",
+      "runs": 1,
+      "tasks": 1
+    },
+    {
+      "message": "No callable entrypoint found for script commodity_option_daily_history",
+      "runs": 1,
+      "tasks": 1
+    },
+    {
+      "message": "No callable entrypoint found for script etf_option_daily_history",
+      "runs": 1,
+      "tasks": 1
+    },
+    {
+      "message": "No callable entrypoint found for script etf_realtime_quote_sina",
+      "runs": 1,
+      "tasks": 1
+    },
+    {
+      "message": "Script business_value_artist returned no data and target table business_value_artist is em",
+      "runs": 1,
+      "tasks": 1
+    },
+    {
+      "message": "Script dce_delivery_data returned no data and target table futures_delivery_dce is empty",
+      "runs": 1,
+      "tasks": 1
+    }
+  ],
+  "ghost_slugs_since_deactivation": [
+    {
+      "script": "fund_monetary_income_history",
+      "runs": 26,
+      "first": "2026-11-06 00:35:00",
+      "last": "2026-11-06 01:43:00",
+      "after_deactivation": 0
+    },
+    {
+      "script": "forex_hist_sina",
+      "runs": 18,
+      "first": "2026-11-05 22:30:00",
+      "last": "2026-11-06 01:42:00",
+      "after_deactivation": 0
+    },
+    {
+      "script": "fund_reviewed_unit_nav_history",
+      "runs": 4,
+      "first": "2026-11-06 00:45:00",
+      "last": "2026-11-06 00:51:00",
+      "after_deactivation": 0
+    },
+    {
+      "script": "etf_realtime_quote_sina",
+      "runs": 1,
+      "first": "2026-11-06 07:50:00",
+      "last": "2026-11-06 07:50:00",
+      "after_deactivation": 0
+    },
+    {
+      "script": "cffex_option_daily_history",
+      "runs": 1,
+      "first": "2026-11-06 11:05:00",
+      "last": "2026-11-06 11:05:00",
+      "after_deactivation": 0
+    },
+    {
+      "script": "commodity_option_daily_history",
+      "runs": 1,
+      "first": "2026-11-06 11:25:00",
+      "last": "2026-11-06 11:25:00",
+      "after_deactivation": 0
+    },
+    {
+      "script": "etf_option_daily_history",
+      "runs": 1,
+      "first": "2026-11-06 11:45:00",
+      "last": "2026-11-06 11:45:00",
+      "after_deactivation": 0
+    }
+  ],
+  "armed_coverage": {
+    "armed": 1048,
+    "no_execution_since_recovery": 827
+  },
+  "ledger_tail": {
+    "runs": 32352,
+    "latest": "2026-11-06 15:30:00"
+  }
+}
