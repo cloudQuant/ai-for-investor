@@ -80,6 +80,8 @@ class TaskReport:
     wrote_rows: int = 0
     idempotent_zero_row_runs: int = 0
     consecutive_completed_slots: int = 0
+    consecutive_slots_with_rows: int = 0
+    unknown_delta_completed_slots: int = 0
     first_occurrence: datetime | None = None
     last_occurrence: datetime | None = None
     last_failure_reason: str | None = None
@@ -100,8 +102,18 @@ class TaskReport:
             "wrote_rows": self.wrote_rows,
             "idempotent_zero_row_runs": self.idempotent_zero_row_runs,
             "consecutive_completed_slots": self.consecutive_completed_slots,
+            "consecutive_slots_with_rows": self.consecutive_slots_with_rows,
+            "unknown_delta_completed_slots": self.unknown_delta_completed_slots,
             "target": CYCLE_TARGETS.get(str(self.cadence)),
+            # AC14 asks for source->published->coverage per cycle, so the streak that
+            # satisfies the target is the data-bearing one. The status-only reading
+            # stays next to it, with the reason for the difference recorded per task.
             "target_met": bool(
+                self.cadence in CYCLE_TARGETS
+                and self.slot_check == "computed"
+                and self.consecutive_slots_with_rows >= CYCLE_TARGETS[self.cadence]
+            ),
+            "target_met_status_only": bool(
                 self.cadence in CYCLE_TARGETS
                 and self.slot_check == "computed"
                 and self.consecutive_completed_slots >= CYCLE_TARGETS[self.cadence]
@@ -319,6 +331,8 @@ def summarize(
         rows = executions.get(task.task_id, [])
         report.observed = len(rows)
         completed_at: list[datetime] = []
+        data_bearing_at: list[datetime] = []
+        empty_success_at: list[datetime] = []
         for row in rows:
             status = row.get("status")
             if status == _COMPLETED:
@@ -329,6 +343,18 @@ def summarize(
                     report.natural_completed += 1
                     if row.get("created_at"):
                         completed_at.append(row["created_at"])
+                        # A completed row only proves a cycle carried data when its
+                        # delta says so. AC14 asks for source->published->coverage per
+                        # cycle, so an empty success cannot satisfy the streak, and a
+                        # NULL delta is unknown rather than zero -- counted separately
+                        # so the reader sees which of the two it is running on.
+                        delta = row.get("rows_delta")
+                        if delta is not None and delta > 0:
+                            data_bearing_at.append(row["created_at"])
+                        elif delta is None:
+                            report.unknown_delta_completed_slots += 1
+                        else:
+                            empty_success_at.append(row["created_at"])
                 else:
                     report.manual_completed += 1
             elif status == _FAILED:
@@ -353,6 +379,13 @@ def summarize(
             report.consecutive_completed_slots = consecutive_completed_slots(
                 check.expected_slots, completed_at
             )
+            report.consecutive_slots_with_rows = consecutive_completed_slots(
+                check.expected_slots, data_bearing_at
+            )
+            if report.consecutive_slots_with_rows < report.consecutive_completed_slots:
+                report.notes.append(
+                    f"streak_contains_{len(empty_success_at)}_zero_row_or_unknown_completions"
+                )
             if not check.expected_slots:
                 report.notes.append("no_expected_slot_in_window")
         reports.append(report)
@@ -371,13 +404,21 @@ def aggregate(reports: Sequence[TaskReport]) -> dict[str, Any]:
         bucket["failed"] += report.failed
         bucket["running"] += report.running
         bucket["slot_check_unavailable"] += int(report.slot_check == "unavailable")
-        bucket["target_met"] += int(
-            report.cadence in CYCLE_TARGETS
-            and report.slot_check == "computed"
-            and report.consecutive_completed_slots >= CYCLE_TARGETS[str(report.cadence)]
+        counts = report.cadence in CYCLE_TARGETS and report.slot_check == "computed"
+        target = CYCLE_TARGETS.get(str(report.cadence), 0)
+        # AC14 needs the cycle to be traceable through to published data, so the
+        # data-bearing streak is what satisfies the target. The status-only streak
+        # stays visible as `target_met_status_only` so tightening this does not
+        # silently rewrite history: a reader can see which tasks moved and why.
+        bucket["target_met"] += int(counts and report.consecutive_slots_with_rows >= target)
+        bucket["target_met_status_only"] += int(
+            counts and report.consecutive_completed_slots >= target
         )
         bucket["max_consecutive"] = max(
             bucket["max_consecutive"], report.consecutive_completed_slots
+        )
+        bucket["max_consecutive_with_rows"] = max(
+            bucket.get("max_consecutive_with_rows", 0), report.consecutive_slots_with_rows
         )
     return {
         "armed_tasks": len(reports),

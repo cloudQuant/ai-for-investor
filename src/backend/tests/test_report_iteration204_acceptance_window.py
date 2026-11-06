@@ -275,3 +275,45 @@ def test_manual_runs_cannot_satisfy_a_cron_slot() -> None:
         end,
     )[0].to_dict()
     assert unknown["consecutive_completed_slots"] == 0
+
+def test_all_zero_row_completions_satisfy_status_only_but_not_the_target() -> None:
+    start = datetime(2026, 11, 5, 0, 0, tzinfo=UTC)
+    end = start + timedelta(hours=48)
+    executions = {1049: [_row(start + timedelta(hours=i, minutes=3), rows_delta=0)
+                         for i in range(48)]}
+    payload = mod.summarize([_task(1049, "3 * * * *")], executions, start, end)[0].to_dict()
+    assert payload["consecutive_completed_slots"] == 48
+    assert payload["consecutive_slots_with_rows"] == 0
+    assert payload["target_met_status_only"] is True
+    assert payload["target_met"] is False
+    assert payload["idempotent_zero_row_runs"] == 48
+    assert any("zero_row_or_unknown_completions" in n for n in payload["notes"])
+
+
+def test_a_null_delta_completion_is_unknown_and_breaks_the_data_bearing_streak() -> None:
+    start = datetime(2026, 11, 5, 0, 0, tzinfo=UTC)
+    end = start + timedelta(hours=4)
+    executions = {7: [_row(start + timedelta(minutes=3), rows_delta=None),
+                      _row(start + timedelta(hours=1, minutes=3), rows_delta=4),
+                      _row(start + timedelta(hours=2, minutes=3), rows_delta=None)]}
+    payload = mod.summarize([_task(7, "3 * * * *")], executions, start, end)[0].to_dict()
+    assert payload["unknown_delta_completed_slots"] == 2
+    assert payload["consecutive_completed_slots"] == 3
+    assert payload["consecutive_slots_with_rows"] == 1
+    # NULL must not be read as a zero-row run: it is a separate, counted unknown.
+    assert payload["idempotent_zero_row_runs"] == 0
+
+
+def test_daily_target_needs_seven_data_bearing_occurrences() -> None:
+    # `0 2 * * *` is enumerated in the scheduler zone (Asia/Shanghai), so a ledger row
+    # at 18:00 UTC is the 02:00 CST slot. Aligning the fixture with UTC instead would
+    # assert against the wrong thing.
+    start = datetime(2026, 10, 29, 18, 0, tzinfo=UTC)
+    end = start + timedelta(days=7, hours=1)
+    rows = [_row(start + timedelta(days=i), rows_delta=9 if i else 0) for i in range(7)]
+    payload = mod.summarize([_task(650, "0 2 * * *")], {650: rows}, start, end)[0].to_dict()
+    assert payload["consecutive_completed_slots"] == 7
+    assert payload["target_met_status_only"] is True
+    assert payload["consecutive_slots_with_rows"] == 6
+    assert payload["target_met"] is False
+
