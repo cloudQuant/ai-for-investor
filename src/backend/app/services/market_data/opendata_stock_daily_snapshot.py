@@ -336,7 +336,10 @@ def _validate_request(
         or request.market not in {"CN-SSE", "CN-SZSE"}
         or request.data_kind != "bars"
         or request.frequency != "1d"
-        or request.adjustment not in {None, "unadjusted"}
+        # The published stock-daily basis is frozen at ``raw`` (= AFI request
+        # vocabulary ``unadjusted``); the caller must name it explicitly.
+        # An undeclared basis is refused, never inferred.
+        or request.adjustment != "unadjusted"
         or request.price_basis not in {None, "close"}
         or request.currency != "CNY"
         or request.unit != "share"

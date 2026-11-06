@@ -39,6 +39,7 @@ def _request(**changes: object) -> MarketDataProviderRequest:
         "end_at": datetime(2026, 1, 4, tzinfo=UTC),
         "required_fields": frozenset({"close"}),
         "provider": "opendata",
+        "adjustment": "unadjusted",
         "route_id": "opendata-stock-daily-v1",
         "family_id": "stock.realtime",
         "family_contract_version": "market-data-family-v1",
@@ -74,20 +75,28 @@ def _page(
     page: object = 1,
     page_size: object = 1000,
     count: object | None = None,
+    adjust: object | None = "none",
 ) -> bytes:
+    data: dict[str, object] = {
+        "domain": "stock_daily",
+        "asset_class": "equity",
+        "layer": "dwd",
+        "columns": ["symbol", "trade_date", "open", "high", "low", "close", "volume", "amount"],
+        "rows": rows,
+        "page": page,
+        "page_size": page_size,
+        "count": len(rows) if count is None else count,
+    }
+    # The reviewed OpenData v1 REST response echoes the applied adjustment
+    # basis per page; the provider refuses pages whose echo disagrees with
+    # the declared request basis. ``adjust=None`` simulates a response that
+    # omits the declaration entirely.
+    if adjust is not None:
+        data["adjust"] = adjust
     payload = {
         "success": True,
         "message": "success",
-        "data": {
-            "domain": "stock_daily",
-            "asset_class": "equity",
-            "layer": "dwd",
-            "columns": ["symbol", "trade_date", "open", "high", "low", "close", "volume", "amount"],
-            "rows": rows,
-            "page": page,
-            "page_size": page_size,
-            "count": len(rows) if count is None else count,
-        },
+        "data": data,
     }
     return json.dumps(payload).encode("utf-8")
 
@@ -137,7 +146,9 @@ class TestRequestTransform:
             seen["path"] = request.url.path
             seen["params"] = dict(request.url.params)
             seen["headers"] = dict(request.headers)
-            return httpx.Response(200, content=_page([_row("2026-01-02")]))
+            return httpx.Response(
+                200, content=_page([_row("2026-01-02")], adjust=request.url.params["adjust"])
+            )
 
         provider = _provider(httpx.MockTransport(handler))
         result = await provider.fetch(_request(adjustment="qfq"))
@@ -157,19 +168,83 @@ class TestRequestTransform:
 
     @pytest.mark.parametrize(
         ("adjustment", "expected"),
-        [("unadjusted", "none"), ("qfq", "qfq"), ("hfq", "hfq"), (None, "none")],
+        [("unadjusted", "none"), ("qfq", "qfq"), ("hfq", "hfq")],
     )
     async def test_adjustment_mapping(self, adjustment: str | None, expected: str) -> None:
         seen: dict[str, str] = {}
 
         async def handler(request: httpx.Request) -> httpx.Response:
             seen.update(dict(request.url.params))
-            return httpx.Response(200, content=_page([_row("2026-01-02")]))
+            return httpx.Response(
+                200, content=_page([_row("2026-01-02")], adjust=expected or "none")
+            )
 
         provider = _provider(httpx.MockTransport(handler))
         await provider.fetch(_request(adjustment=adjustment))
 
         assert seen["adjust"] == expected
+
+    async def test_undeclared_adjustment_is_refused_before_io(self) -> None:
+        """Documented rule: stock daily has an adjustment basis, so a request
+        that omits it is refused instead of being silently served unadjusted."""
+        calls: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            calls.append("called")
+            return httpx.Response(200, content=_page([_row("2026-01-02")]))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request(adjustment=None))
+
+        assert exc.value.code == "OPENDATA_CONTRACT_INVALID"
+        assert exc.value.detail == "PROVIDER_CONTRACT_ADJUSTMENT_UNSUPPORTED"
+        assert calls == []
+
+    async def test_mislabeled_adjustment_echo_is_refused(self) -> None:
+        """(b) store-side mislabel: an unadjusted request answered with pages
+        declared qfq must fail closed rather than be returned."""
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=_page([_row("2026-01-02")], adjust="qfq"))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request(adjustment="unadjusted"))
+
+        assert exc.value.code == "OPENDATA_ADJUSTMENT_BASIS_MISMATCH"
+
+    async def test_adjustment_echo_missing_from_response_is_refused(self) -> None:
+        """A response that never declares its basis cannot be relabelled as
+        whatever the request asked for; it is refused."""
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=_page([_row("2026-01-02")], adjust=None))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request(adjustment="unadjusted"))
+
+        assert exc.value.code == "OPENDATA_ADJUSTMENT_BASIS_MISMATCH"
+
+    async def test_adjustment_basis_flip_across_pages_is_refused(self) -> None:
+        """(b) mixed basis: page 1 honours the request, page 2 flips the echo;
+        the whole fetch is refused instead of returning mixed rows."""
+        calls = 0
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(200, content=_page(_full_page_rows(), adjust="none"))
+            return httpx.Response(200, content=_page([_row("2026-01-02")], adjust="unknown"))
+
+        provider = _provider(httpx.MockTransport(handler))
+        with pytest.raises(OpendataProviderError) as exc:
+            await provider.fetch(_request(adjustment="unadjusted"))
+
+        assert exc.value.code == "OPENDATA_ADJUSTMENT_BASIS_MISMATCH"
+        assert calls == 2
 
     async def test_unsupported_frequency_is_blocked_before_io(self) -> None:
         calls: list[str] = []

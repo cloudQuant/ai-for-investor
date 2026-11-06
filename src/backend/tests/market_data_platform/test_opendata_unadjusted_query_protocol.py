@@ -80,6 +80,7 @@ def _response_body() -> dict[str, Any]:
             "domain": "stock_daily",
             "asset_class": "equity",
             "layer": "dwd",
+            "adjust": "none",
             "columns": [
                 "symbol",
                 "trade_date",
