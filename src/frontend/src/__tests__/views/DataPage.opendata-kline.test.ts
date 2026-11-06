@@ -524,6 +524,61 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(page.text()).toContain('不代表所选股票可用性')
   })
 
+  it('renders the unmeasured domain as UNKNOWN coverage, not as a date', async () => {
+    apiMocks.getOpenDataStockDailyFreshness.mockResolvedValueOnce(stockDailyFreshnessFixture({
+      field: null,
+      latest: null,
+      lag_days: null,
+      status: 'missing',
+    }))
+
+    const page = await mountPage()
+
+    const coverage = page.get('[data-test="opendata-stock-daily-freshness-coverage"]')
+    expect(coverage.text()).toContain('覆盖未知')
+    // Counterfactual: an unmeasured coverage value must not be shown as proven.
+    expect(coverage.text()).not.toContain('覆盖已证实')
+    // A missing report renders no latest business date.
+    expect(page.text()).not.toContain('域内最新业务日期')
+  })
+
+  it('renders a forward SOURCE_LIMITED coverage state without claiming completeness', async () => {
+    apiMocks.getOpenDataStockDailyFreshness.mockResolvedValueOnce(stockDailyFreshnessFixture({
+      coverage_state: 'SOURCE_LIMITED',
+    }))
+
+    const page = await mountPage()
+
+    const coverage = page.get('[data-test="opendata-stock-daily-freshness-coverage"]')
+    expect(coverage.text()).toContain('源受限')
+    expect(coverage.text()).not.toContain('覆盖已证实')
+  })
+
+  it('renders a forward NOT_SUPPORTED coverage state distinctly', async () => {
+    apiMocks.getOpenDataStockDailyFreshness.mockResolvedValueOnce(stockDailyFreshnessFixture({
+      coverage_state: 'NOT_SUPPORTED',
+    }))
+
+    const page = await mountPage()
+
+    expect(page.get('[data-test="opendata-stock-daily-freshness-coverage"]').text())
+      .toContain('不支持')
+  })
+
+  it('labels a failed freshness read as opendata_unavailable, never as coverage', async () => {
+    apiMocks.getOpenDataStockDailyFreshness.mockRejectedValue(
+      new Error('OPENDATA_FRESHNESS_UNAVAILABLE'),
+    )
+
+    const page = await mountPage()
+
+    expect(page.find('[data-test="opendata-stock-daily-freshness-unavailable"]').exists()).toBe(true)
+    const coverage = page.get('[data-test="opendata-stock-daily-freshness-coverage"]')
+    expect(coverage.text()).toContain('OpenData 不可用')
+    expect(coverage.text()).not.toContain('覆盖未知')
+    expect(page.text()).not.toContain('域内最新业务日期')
+  })
+
   it('keeps freshness request failures explicit and never falls back to local coverage', async () => {
     apiMocks.getOpenDataStockDailyFreshness.mockRejectedValueOnce(
       new Error('FRESHNESS_ERROR_SENTINEL'),
@@ -696,7 +751,9 @@ describe('DataPage OpenData direct daily chart', () => {
     expect(display.rangeLabel).toContain(END_DATE)
     expect(display.returnedBarCount).toBe(2)
     expect(display.retrievedAt).toBe('2026-10-02T16:00:00+08:00')
-    expect(display.coverageStatus).toBe('unknown')
+    // The snapshot-only direct read normalizes its wire coverage label to the
+    // canonical UNKNOWN display state; it must never render as a proven range.
+    expect(display.coverageStatus).toBe('UNKNOWN')
     expect(display.sourceAvailableAt).toBe('unknown')
     expect(display.durableReceipt).toBe('not_created')
     expect(display.rows).toHaveLength(2)

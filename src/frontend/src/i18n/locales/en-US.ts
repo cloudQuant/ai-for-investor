@@ -4711,6 +4711,16 @@ export default {
       stale: 'Domain freshness is delayed',
       missing: 'Not measured by intermediary / reason unknown',
     },
+    stockDailyFreshnessCoverage: 'OpenData coverage state',
+    stockDailyFreshnessAsOf: 'Freshness as-of (AFI validation time, not a source observation)',
+    stockDailyFreshnessProvenance: 'Provenance',
+    openDataCoverageState: {
+      PROVEN: 'Coverage proven: the intermediary measured this domain',
+      UNKNOWN: 'Coverage unknown: not measured or reason unknown, never shown as complete',
+      SOURCE_LIMITED: 'Source limited: upstream retention caps the reachable range',
+      NOT_SUPPORTED: 'Not supported: this domain or frequency is out of OpenData scope',
+      opendata_unavailable: 'OpenData unavailable: the route could not be read; no local fallback was used',
+    },
     stockDailyFreshnessRouteNotice: {
       resolving: 'Confirming the stock-data route. Until it is known, no domain freshness request or local coverage read will run.',
       unknown: 'The stock-data route is unknown or its capability declaration is invalid; domain freshness and local coverage reads are stopped.',
