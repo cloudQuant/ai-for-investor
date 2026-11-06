@@ -17,9 +17,6 @@ from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.backtest_enhanced import router as backtest_enhanced_router
 from app.api.brokers import router as brokers_router
-from app.api.data.capability_ledger_admin import (
-    router as market_data_capability_ledger_admin_router,
-)
 from app.api.data.governance import router as data_governance_router
 from app.api.data.topics import router as data_topics_router
 from app.api.data.trust import router as data_trust_router
@@ -103,7 +100,6 @@ api_router.include_router(factor_lib_router)
 api_router.include_router(perf_attribution_router)
 api_router.include_router(brokers_router)
 api_router.include_router(data_governance_router)
-api_router.include_router(market_data_capability_ledger_admin_router)
 api_router.include_router(data_topics_router)
 api_router.include_router(data_trust_router, prefix="/data/trust", tags=["Data Trust"])
 api_router.include_router(news_intelligence_router)
