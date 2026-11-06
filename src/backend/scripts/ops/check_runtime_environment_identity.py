@@ -17,7 +17,9 @@ WHAT IT READS
     ``config/requirements-dev.lock`` and the requirement tables of ``src/backend/pyproject.toml``
     (the comparison source of truth -- parsed, never hand-copied), the Python matrix of
     ``.github/workflows/ci.yml``, the declared collection scheduler timezone in
-    ``src/backend/app/config.py``, the active venv's ``pyvenv.cfg`` plus its own ``site-packages``
+    ``src/backend/app/config.py`` (falling back to the per-section modules under
+    ``src/backend/app/settings/``, where dev 2a547cf65 moved the field defaults), the active
+    venv's ``pyvenv.cfg`` plus its own ``site-packages``
     listing, and this interpreter's ``sys.version`` and loaded module objects.  Environment
     variables are read through one allowlist (``TZ``) plus a scan used only to build a strip-list.
 
@@ -74,6 +76,10 @@ DEFAULT_LOCK_PATH = _REPO_ROOT / "config" / "requirements-dev.lock"
 DEFAULT_PYPROJECT_PATH = _BACKEND_ROOT / "pyproject.toml"
 DEFAULT_CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DEFAULT_APP_CONFIG_PATH = _BACKEND_ROOT / "app" / "config.py"
+#: dev 2a547cf65 (#297, "refactor(config): split Settings into cohesive section mixins") moved
+#: the field defaults out of ``app/config.py`` into per-section modules, so the declared
+#: scheduler timezone is no longer guaranteed to live in the composition module alone.
+DEFAULT_APP_SETTINGS_DIR = _BACKEND_ROOT / "app" / "settings"
 
 PAYLOAD_SCHEMA = "afi-runtime-environment-identity/v1"
 _REFUSAL_EXIT_CODE = 2
@@ -396,6 +402,29 @@ def parse_declared_timezone(text: str) -> str | None:
     """Return the collection scheduler timezone the application declares as its default."""
     match = _TIMEZONE_DEFAULT_RE.search(text)
     return match.group("tz") if match else None
+
+
+def declared_timezone(
+    app_config_text: str | None,
+    section_texts: Sequence[tuple[str, str]],
+) -> tuple[str | None, str | None]:
+    """Return the declared scheduler timezone and the file that declares it.
+
+    The composition module (``app/config.py``) is read first, then the per-section settings
+    modules in stable path order, so the value is still parsed from the application's own
+    declaration after dev 2a547cf65 moved the ``Field`` defaults into ``app/settings/*.py``.
+    Returns ``(None, None)`` when no source declares it; the caller then reports an
+    unprovable expectation instead of assuming ``Asia/Shanghai``.
+    """
+    if app_config_text:
+        declared = parse_declared_timezone(app_config_text)
+        if declared is not None:
+            return declared, str(DEFAULT_APP_CONFIG_PATH)
+    for source, text in section_texts:
+        declared = parse_declared_timezone(text)
+        if declared is not None:
+            return declared, source
+    return None, None
 
 
 def parse_version_tuple(version: str | None) -> tuple[int, ...] | None:
@@ -783,7 +812,9 @@ def check_venv(venv: VenvIsolation) -> dict[str, Any]:
     }
 
 
-def check_timezone(*, expected_tz: str | None, observed: Mapping[str, Any]) -> dict[str, Any]:
+def check_timezone(
+    *, expected_tz: str | None, observed: Mapping[str, Any], source: str | None = None
+) -> dict[str, Any]:
     """Compare the process timezone with the one the application declares for collection.
 
     A POSIX-style ``TZ`` (``CST-8``) carries no zone *name*, so it is recorded but not
@@ -797,7 +828,7 @@ def check_timezone(*, expected_tz: str | None, observed: Mapping[str, Any]) -> d
     return {
         "expected": {
             "declared_collection_timezone": expected_tz,
-            "source": str(DEFAULT_APP_CONFIG_PATH),
+            "source": source if source is not None else str(DEFAULT_APP_SETTINGS_DIR),
         },
         "observed": {**dict(observed), "name_comparable": comparable},
         "reasons": reasons,
@@ -899,6 +930,25 @@ def _read_text(path: Path, unreadable: list[str]) -> str | None:
         return None
 
 
+def read_timezone_section_texts(settings_dir: Path) -> tuple[tuple[str, str], ...]:
+    """Return ``(source, text)`` for each per-section settings module, in stable path order.
+
+    Unreadable modules and a missing directory are skipped rather than refused: the primary
+    source is ``app/config.py``, and this is the fallback plane the field defaults moved to.
+    """
+    try:
+        candidates = sorted(settings_dir.glob("*.py"))
+    except OSError:
+        return ()
+    sections: list[tuple[str, str]] = []
+    for path in candidates:
+        try:
+            sections.append((str(path), path.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    return tuple(sections)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="check_runtime_environment_identity.py",
@@ -925,6 +975,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="module declaring the scheduler timezone",
     )
     parser.add_argument(
+        "--app-settings-dir",
+        type=Path,
+        default=DEFAULT_APP_SETTINGS_DIR,
+        help="per-section settings modules searched when the composition module declares no timezone",
+    )
+    parser.add_argument(
         "--compact", action="store_true", help="emit a single-line JSON payload instead of indented"
     )
     parser.add_argument(
@@ -945,6 +1001,9 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     pyproject_text = _read_text(args.pyproject, unreadable)
     ci_text = _read_text(args.ci_workflow, unreadable)
     config_text = _read_text(args.app_config, unreadable)
+    declared_tz, declared_tz_source = declared_timezone(
+        config_text, read_timezone_section_texts(args.app_settings_dir)
+    )
 
     lock = parse_lock(lock_text or "")
     if lock_text is not None and not lock:
@@ -981,7 +1040,8 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
         ),
         venv_check=check_venv(venv),
         timezone_check=check_timezone(
-            expected_tz=parse_declared_timezone(config_text or ""),
+            expected_tz=declared_tz,
+            source=declared_tz_source,
             observed=observed_timezone(echoed_environment(env)),
         ),
         observations=observations,

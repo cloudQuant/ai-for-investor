@@ -253,7 +253,16 @@ def test_ci_matrix_and_declared_timezone_are_parsed_from_the_repository() -> Non
     config = (_BACKEND_ROOT / "app" / "config.py").read_text(encoding="utf-8")
 
     assert checker.parse_ci_python_matrix(workflow) == ("3.11", "3.12")
-    assert checker.parse_declared_timezone(config) == "Asia/Shanghai"
+    # dev 2a547cf65 ("refactor(config): split Settings into cohesive section mixins", #297)
+    # moved the Field defaults out of app/config.py into app/settings/<section>.py, so the
+    # declared scheduler timezone is now parsed from the section plane, not the composition
+    # module. The auditor reads both planes and names the file that actually declared it.
+    sections = checker.read_timezone_section_texts(checker.DEFAULT_APP_SETTINGS_DIR)
+    assert checker.parse_declared_timezone(config) is None
+    assert checker.declared_timezone(config, sections) == (
+        "Asia/Shanghai",
+        str(checker.DEFAULT_APP_SETTINGS_DIR / "market_data.py"),
+    )
     assert checker.parse_ci_python_matrix("no matrix here") == ()
 
 
