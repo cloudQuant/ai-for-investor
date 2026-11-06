@@ -36,7 +36,11 @@ from app.services.market_data.source_policy import (
 
 UTC = timezone.utc
 _LEDGER_DESCRIPTOR_VERSION = "market-data-capability-ledger-v1"
-_DEFAULT_POLICY_ID = "market-default-v1"
+# Public because the durable admission/evidence writers must resolve exactly the
+# same reviewed policy the reader resolves; a locally re-typed identifier would
+# let a writer attest a route the reader never reads.
+MARKET_DATA_DEFAULT_POLICY_ID = "market-default-v1"
+_DEFAULT_POLICY_ID = MARKET_DATA_DEFAULT_POLICY_ID
 _RESEARCH_CACHE_FILL_PURPOSE = "research_cache_fill"
 
 MARKET_DATA_QUERY_V2_CAPABILITY = "market-data.query-v2"
@@ -257,6 +261,16 @@ class MarketDataCapabilityLedger:
         return MappingProxyType(
             {capability_id: tuple(entries) for capability_id, entries in grouped.items()}
         ), True
+
+
+def ledger_canonical_sha256(payload: Mapping[str, object]) -> str:
+    """Return the ledger's canonical digest for one versioned pre-image.
+
+    The durable attestation writer needs the same digest scheme as the
+    descriptors below so an evidence digest is comparable, reproducible, and
+    never a caller-chosen opaque value.
+    """
+    return _sha256(payload)
 
 
 def rollout_capability_descriptor_sha256(capability_id: str) -> str:
