@@ -96,7 +96,8 @@ src/backend/
 ├── app/schemas/      # 22 Pydantic DTOs
 ├── app/db/           # Repository + factory
 ├── app/middleware/    # 5 middleware modules
-└── app/config.py     # Settings (Pydantic)
+├── app/config.py     # Settings (Pydantic): composes the sections, keeps the import surface
+└── app/settings/     # 10 settings section mixins (one cohesive group per module)
 
 src/frontend/
 ├── src/views/        # 15+ pages
