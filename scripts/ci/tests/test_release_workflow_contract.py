@@ -10,13 +10,13 @@ from pathlib import Path
 
 import yaml
 
+from action_pins import CHECKOUT_PIN, UPLOAD_PIN
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 DOCKER_PUBLISH = WORKFLOWS / "docker-publish.yml"
 PREVIEW = WORKFLOWS / "deploy-preview.yml"
 NIGHTLY = WORKFLOWS / "nightly.yml"
-CHECKOUT_PIN = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
-UPLOAD_PIN = "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
 PINNED_ACTION = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 
 
