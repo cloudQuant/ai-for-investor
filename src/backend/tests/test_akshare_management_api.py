@@ -4159,6 +4159,35 @@ async def test_mark_failed_handles_naive_start_time():
 
 
 @pytest.mark.asyncio
+async def test_mark_failed_persists_row_deltas_when_reported():
+    """A failed run that wrote data must be visible in the ledger columns."""
+    async with async_session_maker() as session:
+        service = AkshareExecutionService(session)
+        execution = await service.create_execution(script_id="stock_zh_a_hist")
+        execution = await service.mark_running(execution)
+
+        failed = await service.mark_failed(execution, "boom", rows_before=1000, rows_after=1370)
+
+        assert failed.status == TaskStatus.FAILED
+        assert failed.rows_before == 1000
+        assert failed.rows_after == 1370
+
+
+@pytest.mark.asyncio
+async def test_mark_failed_without_row_deltas_keeps_counts_null():
+    """NULL means "not observed"; a failed run must never default to 0."""
+    async with async_session_maker() as session:
+        service = AkshareExecutionService(session)
+        execution = await service.create_execution(script_id="stock_zh_a_hist")
+        execution = await service.mark_running(execution)
+
+        failed = await service.mark_failed(execution, "boom")
+
+        assert failed.rows_before is None
+        assert failed.rows_after is None
+
+
+@pytest.mark.asyncio
 async def test_execution_stats_uses_migration_compatible_enum_values():
     status_column = TaskExecution.__table__.c.status
     assert status_column.type.enums == [status.value for status in TaskStatus]

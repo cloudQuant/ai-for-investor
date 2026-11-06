@@ -1693,6 +1693,11 @@ class AkshareScriptService:
             fencing_token=int(execution.id),
             execution_id=str(execution.execution_id),
         )
+        dataframe_table_name: str | None = None
+        legacy_callable_name: str | None = None
+        legacy_table_name: str | None = None
+        dataframe_rows_before: int | None = None
+        legacy_rows_before: int | None = None
         try:
             fence = fence_identity(current_write_fence())
             try:
@@ -1791,5 +1796,27 @@ class AkshareScriptService:
             finally:
                 reset_write_fence(fence_token)
         except Exception as exc:
-            execution = await self.execution_service.mark_failed(execution, str(exc))
+            # A failed run is not an empty run: the killable worker is SIGKILLed
+            # and reaped before this handler runs, so re-reading the target
+            # table observes exactly the rows the run committed.  Where the
+            # table names or pre-run counts were never established nothing is
+            # observable, and the ledger columns stay NULL instead of a guess.
+            if legacy_callable_name is not None and legacy_table_name is not None:
+                failure_rows_before = legacy_rows_before
+                failure_target: str | None = legacy_table_name
+            else:
+                failure_rows_before = dataframe_rows_before
+                failure_target = dataframe_table_name
+            failure_rows_after: int | None = None
+            if failure_target is not None and failure_rows_before is not None:
+                try:
+                    failure_rows_after = await self.data_service.get_row_count(failure_target)
+                except Exception:
+                    failure_rows_after = None
+            execution = await self.execution_service.mark_failed(
+                execution,
+                str(exc),
+                rows_before=failure_rows_before,
+                rows_after=failure_rows_after,
+            )
             raise

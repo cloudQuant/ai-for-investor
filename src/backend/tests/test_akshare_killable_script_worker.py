@@ -401,7 +401,12 @@ async def test_failed_ledger_row_means_the_worker_was_already_dead(
     real_mark_failed = AkshareExecutionService.mark_failed
 
     async def spy_mark_failed(
-        self: AkshareExecutionService, execution: Any, error_message: str, error_trace: Any = None
+        self: AkshareExecutionService,
+        execution: Any,
+        error_message: str,
+        error_trace: Any = None,
+        rows_before: Any = None,
+        rows_after: Any = None,
     ) -> Any:
         committed = _read_rows(rows_path)
         child_pid = int(committed[0]["pid"]) if committed else None
@@ -416,7 +421,14 @@ async def test_failed_ledger_row_means_the_worker_was_already_dead(
                 os.kill(child_pid, 0)
             with pytest.raises(ProcessLookupError):
                 os.killpg(child_pid, 0)
-        recorded = await real_mark_failed(self, execution, error_message, error_trace)
+        recorded = await real_mark_failed(
+            self,
+            execution,
+            error_message,
+            error_trace,
+            rows_before=rows_before,
+            rows_after=rows_after,
+        )
         observed["status"] = str(recorded.status.value)
         observed["end_time_stamped"] = recorded.end_time is not None
         return recorded
@@ -468,6 +480,79 @@ async def test_failed_ledger_row_means_the_worker_was_already_dead(
 
     time.sleep(5.0)
     assert _read_rows(late_path) == []
+
+
+@pytest.mark.asyncio
+async def test_killed_worker_timeout_ledgers_the_rows_it_committed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, worker_start_budget: float
+) -> None:
+    """The failed timeout row must say how much the killed run actually wrote.
+
+    Iteration-204 AC06/AC13 asks, after a killed worker, "did the failed run
+    write data?".  The kill-and-reap guarantee makes the answer observable:
+    by the time the failure handler re-reads the target table no writer is
+    left, so the count it sees is exactly the count the run committed.  Here
+    the child's committed.jsonl stands in for the warehouse table through the
+    same ``get_row_count`` seam the other worker tests already patch.
+    """
+    from app.db.database import async_session_maker
+    from app.models.akshare_mgmt import DataScript, TaskStatus
+    from app.services.akshare.execution import AkshareExecutionService
+
+    rows_path = tmp_path / "committed.jsonl"
+    late_path = tmp_path / "late.jsonl"
+
+    async def fake_get_row_count(self: AkshareDataService, table_name: str) -> int:
+        return len(_read_rows(rows_path))
+
+    monkeypatch.setattr(AkshareDataService, "get_row_count", fake_get_row_count)
+    timeout_s = int(worker_start_budget + 3)
+
+    async with async_session_maker() as session:
+        session.add(
+            DataScript(
+                script_id="worker_timeout_delta_script",
+                script_name="Worker timeout delta script",
+                category="misc",
+                source="local",
+                is_custom=True,
+                is_active=True,
+                target_table="WORKER_TIMEOUT_DELTA_TARGET",
+                module_path=CASES_MODULE,
+                function_name="commit_then_late_write",
+                timeout=timeout_s,
+            )
+        )
+        await session.commit()
+
+        service = AkshareScriptService(session)
+        with pytest.raises(asyncio.TimeoutError, match="Script call timed out after"):
+            await service.run_script(
+                "worker_timeout_delta_script",
+                parameters={
+                    "rows_path": str(rows_path),
+                    "late_path": str(late_path),
+                    "commit_delay": 0.05,
+                    "late_delay": 20.0,
+                    "hold_seconds": 60.0,
+                },
+                timeout_seconds=timeout_s,
+            )
+
+        executions, total = await AkshareExecutionService(session).list_executions(
+            script_id="worker_timeout_delta_script", status="failed"
+        )
+
+        assert total == 1
+        failed = executions[0]
+        assert failed.status is TaskStatus.FAILED
+        assert "timed out" in str(failed.error_message)
+        committed = _read_rows(rows_path)
+        assert len(committed) == 1
+        # Pre-run count was 0; the post-kill re-read saw the one committed row.
+        assert failed.rows_before == 0
+        assert failed.rows_after == len(committed)
+        assert failed.rows_after - failed.rows_before == len(committed)
 
 
 @pytest.mark.asyncio
