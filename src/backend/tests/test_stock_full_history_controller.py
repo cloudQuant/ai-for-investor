@@ -49,6 +49,14 @@ def _load_worker_module() -> Any:
     spec = importlib.util.spec_from_file_location("_recovery_worker_under_test", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # Registered before exec_module, not after.  The worker uses
+    # ``from __future__ import annotations``, so its dataclasses resolve ``X | None``
+    # string annotations through ``sys.modules`` by module name; without the entry the
+    # lookup returns None and collection dies with
+    # ``AttributeError: 'NoneType' object has no attribute '__dict__'`` -- which is exactly
+    # what CI hit on the merge ref, where this file *does* exist and the branch-only path
+    # above was never taken.
+    sys.modules["_recovery_worker_under_test"] = module
     spec.loader.exec_module(module)
     return module
 
