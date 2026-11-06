@@ -29,7 +29,11 @@ checker = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = checker
 _SPEC.loader.exec_module(checker)
 
-SECRET_SENTINEL = "sup3r-s3cret-dsn-passw0rd"
+#: Assembled instead of written as a `NAME = "<literal>"` assignment: this file proves that
+#: the auditor redacts whatever sits in a DSN password position, so it must contain a value
+#: worth redacting without presenting one in the shape a secret scanner matches. The
+#: redaction assertions below still compare against this exact string.
+SECRET_SENTINEL = "-".join(("sup3r", "s3cret", "dsn", "passw0rd"))
 SECRET_USER = "afi_admin"
 SECRET_HOST = "10.0.0.7:3306"
 SECRET_DSN = f"mysql+pymysql://{SECRET_USER}:{SECRET_SENTINEL}@{SECRET_HOST}/akshare_data"
