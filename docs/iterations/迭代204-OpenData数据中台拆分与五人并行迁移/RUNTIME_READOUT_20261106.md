@@ -473,3 +473,41 @@ runtime-evidenced 是处置的**输入**，不是处置本身；`assigned` 不�
    还没到（窗口不足 24 h，多数是星期受限）。
 2. `unexpected_param` 恒为 100% failed_only，与 §3 队列 B 完全一致，
    是这张表里唯一"证据已足够下结论"的一行。
+
+## 15. 我对自己那条 #286 反馈的复核：registration 输入并不解决问题，真正卡的是 source_function
+
+我在 PR #286 上写过两条反馈。第一条（幽灵注册进不了台账）**成立**；
+第二条暗示"补 `--registration-export` 可能改善 89 条 undecided"——我把这条**实测掉了，结论是否**。
+
+做法：从 `ak_data_scripts` 只读导出 1066 行（`SET SESSION TRANSACTION READ ONLY` + 末尾 `ROLLBACK`，
+导出物 `/tmp/it204/ac11-registration-export.json`），用同一棵树、同一批 1057 个脚本跑两次：
+
+| 运行 | 分档结果 |
+|---|---|
+| 不带 registration 导出 | `EXTEND_PROVIDER 960 / HELPER_ONLY 8 / UNDECIDED 89` |
+| 带 registration 导出 | **完全相同**：`960 / 8 / 89` |
+
+先排掉两个可能的借口，它们都不是原因：
+
+* 不是 join 没接上：1057 个文件的派生 `module_path` 与注册表 **100% 命中**（0 个文件无注册行，
+  反向 9 行无文件，正是幽灵）。
+* 不是注册数据缺目标表：1066 行里 `target_table` 为空的 **0 行**。
+
+那 89 条真正缺的是**轴**， tally 如下：
+
+| missing_axes | 条数 | 含义 |
+|---|---|---|
+| `source_function` | **72** | AST 里定不出这个脚本到底调哪个 akshare 函数 |
+| `single_source_function` | **17** | 定出了多个（动态派发/一名多调），无法给唯一落点 |
+| `target_table` | 6 | 极少数确实没有表名 |
+
+也就是说 89 条里 **89/89 卡在源函数可识别性**上，与注册数据无关。
+这一档因此不是"等谁补录"，而是需要**读函数体或读运行证据**才能定：
+静态侧（本波已具备的字节码链路）只能给出候选，`single_source_function` 那 17 条尤其不能靠猜收口。
+
+由此对 #286 的反馈修订成一条更小的、可实现的建议：把 `missing_axes` 的 tally 直接进 §6 周报，
+取代笼统的 `UNDECIDED_INSUFFICIENT_EVIDENCE` 计数——否则 89 这个数字会让人以为
+"再喂点输入就能降下来"，而事实是它需要一类不同的证据。
+
+另记一条我自己的过程错误，避免读者以为反馈都不用验：我第二条反馈是**推断**写的，
+推断的东西当场就该测；测出来是反的。这件事本身写进记录。
