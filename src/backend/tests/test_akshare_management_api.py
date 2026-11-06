@@ -16,7 +16,7 @@ from types import ModuleType, SimpleNamespace
 import pandas as pd
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -271,6 +271,639 @@ async def test_table_preview_returns_empty_state_when_warehouse_unavailable(
     assert [column["name"] for column in schema_data["columns"]] == ["date", "symbol", "close"]
     assert schema_data["data_available"] is False
     assert schema_data["error"] == "Akshare data warehouse is not configured"
+
+
+# ==================== Warehouse table pagination (ordering + totals) ====================
+
+
+@pytest.fixture
+def fresh_total_count_cache(monkeypatch):
+    """Give one test its own total cache so counts are never reused across tests."""
+    import app.services.akshare.table_pagination as pagination
+
+    cache = pagination.TotalCountCache(ttl_seconds=60.0)
+    monkeypatch.setattr(pagination, "_TOTAL_COUNT_CACHE", cache)
+    return cache
+
+
+@pytest.fixture
+def warehouse_statement_spy(warehouse_engine):
+    """Record every SQL statement sent to the warehouse engine."""
+    statements: list[str] = []
+
+    @event.listens_for(warehouse_engine.sync_engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    return statements
+
+
+async def _seed_paged_table(
+    warehouse_engine,
+    table_name: str,
+    keys: list[str],
+    *,
+    keyed: bool = True,
+) -> None:
+    """Create a warehouse table and insert ``keys`` in exactly the given order."""
+    column_spec = "code TEXT NOT NULL PRIMARY KEY" if keyed else "code TEXT"
+    async with warehouse_engine.begin() as conn:
+        await conn.execute(text(f"CREATE TABLE {table_name} ({column_spec}, seq INTEGER)"))
+        for index, key in enumerate(keys, start=1):
+            await conn.execute(
+                text(f"INSERT INTO {table_name} (code, seq) VALUES (:code, :seq)"),
+                {"code": key, "seq": index},
+            )
+
+
+def _page_keys(page) -> list[str]:
+    return [str(row["code"]) for row in page.rows]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_pages_follow_the_reflected_primary_key_order(
+    warehouse_engine,
+    fresh_total_count_cache,
+):
+    """Pages must be ranked by the table's key, not by whatever order the scan gives.
+
+    The fixture is inserted newest-key-first, so an unordered ``LIMIT/OFFSET`` returns
+    insertion order and the first page is not the first key range.
+    """
+    keys = [f"k{index:02d}" for index in range(1, 8)]
+    await _seed_paged_table(warehouse_engine, "pagination_key_order_fixture", list(reversed(keys)))
+
+    service = object.__new__(AkshareDataService)
+    pages = [
+        await service.get_table_rows(
+            "pagination_key_order_fixture",
+            page=page_number,
+            page_size=3,
+        )
+        for page_number in (1, 2, 3)
+    ]
+
+    assert [_page_keys(page) for page in pages] == [
+        ["k01", "k02", "k03"],
+        ["k04", "k05", "k06"],
+        ["k07"],
+    ]
+    collected = [key for page in pages for key in _page_keys(page)]
+    assert sorted(collected) == keys
+    assert len(collected) == len(set(collected))
+    assert [page.total for page in pages] == [7, 7, 7]
+    assert [(page.ordering.strategy, page.ordering.columns) for page in pages] == [
+        ("primary_key", ("code",))
+    ] * 3
+
+
+@pytest.mark.asyncio
+async def test_table_rows_consecutive_pages_stay_a_partition_after_physical_reshuffle(
+    warehouse_engine,
+    fresh_total_count_cache,
+):
+    """Re-inserting rows changes the physical scan order but must not change the pages.
+
+    Without an ``ORDER BY`` the offsets point at different rows after the reshuffle, so
+    the pages stop being a partition: some rows are served twice and some are lost.
+    """
+    keys = [f"k{index:02d}" for index in range(1, 13)]
+    table_name = "pagination_reshuffle_fixture"
+    await _seed_paged_table(warehouse_engine, table_name, keys)
+
+    service = object.__new__(AkshareDataService)
+    first_page = await service.get_table_rows(table_name, page=1, page_size=4)
+
+    async with warehouse_engine.begin() as conn:
+        await conn.execute(text(f"DELETE FROM {table_name} WHERE code IN ('k01', 'k02', 'k03')"))
+        for key in ("k01", "k02", "k03"):
+            await conn.execute(
+                text(f"INSERT INTO {table_name} (code, seq) VALUES (:code, 99)"),
+                {"code": key},
+            )
+
+    later_pages = [
+        await service.get_table_rows(table_name, page=page_number, page_size=4)
+        for page_number in (2, 3, 4)
+    ]
+
+    collected = _page_keys(first_page) + [key for page in later_pages for key in _page_keys(page)]
+    assert sorted(collected) == keys
+    assert len(collected) == len(set(collected)), f"pages duplicated rows: {collected}"
+    assert [_page_keys(page) for page in later_pages] == [
+        ["k05", "k06", "k07", "k08"],
+        ["k09", "k10", "k11", "k12"],
+        [],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_uses_a_not_null_composite_unique_index_when_there_is_no_primary_key(
+    warehouse_engine,
+    fresh_total_count_cache,
+):
+    """A standalone UNIQUE index over NOT NULL columns is a total order as well.
+
+    Dialects disagree about where they report unique keys - MySQL answers in
+    ``get_unique_constraints``, SQLite only in ``get_indexes`` - so both are read.
+    """
+    table_name = "pagination_unique_key_fixture"
+    async with warehouse_engine.begin() as conn:
+        await conn.execute(
+            text(
+                f"CREATE TABLE {table_name} (market TEXT NOT NULL, code TEXT NOT NULL, seq INTEGER)"
+            )
+        )
+        await conn.execute(
+            text(f"CREATE UNIQUE INDEX ux_{table_name} ON {table_name} (market, code)")
+        )
+        for index, key in enumerate(("u5", "u4", "u3", "u2", "u1"), start=1):
+            await conn.execute(
+                text(f"INSERT INTO {table_name} (market, code, seq) VALUES ('S', :code, :seq)"),
+                {"code": key, "seq": index},
+            )
+
+    service = object.__new__(AkshareDataService)
+    pages = [
+        await service.get_table_rows(table_name, page=page_number, page_size=3)
+        for page_number in (1, 2)
+    ]
+
+    assert [(page.ordering.strategy, page.ordering.columns) for page in pages] == [
+        ("unique_key", ("market", "code"))
+    ] * 2
+    assert [_page_keys(page) for page in pages] == [["u1", "u2", "u3"], ["u4", "u5"]]
+    assert [page.total for page in pages] == [5, 5]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_falls_back_to_the_sqlite_rowid_when_no_key_is_declared(
+    warehouse_engine,
+    fresh_total_count_cache,
+):
+    """Level 3 of the ladder: SQLite exposes an implicit unique NOT NULL rowid.
+
+    Paging such a table by rowid is stable *because* rowid is a real key, not because
+    the storage engine happens to scan in insertion order.
+    """
+    table_name = "pagination_rowid_fixture"
+    await _seed_paged_table(warehouse_engine, table_name, ["b", "a", "c"], keyed=False)
+
+    service = object.__new__(AkshareDataService)
+    pages = [
+        await service.get_table_rows(table_name, page=page_number, page_size=2)
+        for page_number in (1, 2)
+    ]
+
+    assert [page.ordering.strategy for page in pages] == ["rowid", "rowid"]
+    assert [_page_keys(page) for page in pages] == [["b", "a"], ["c"]]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_fails_closed_when_no_stable_ordering_key_exists(
+    warehouse_engine,
+    monkeypatch,
+    fresh_total_count_cache,
+):
+    """A table with no key and no selectable row id is refused instead of paged.
+
+    Patching the row-id probe is how a MySQL keyless table looks: MySQL/InnoDB has no
+    selectable hidden row id, so the ladder has nothing left to fall back on.
+    """
+    import app.services.akshare.table_pagination as pagination
+
+    monkeypatch.setattr(pagination, "_sqlite_table_has_rowid", lambda sync_conn, name: False)
+    table_name = "pagination_keyless_fixture"
+    await _seed_paged_table(warehouse_engine, table_name, ["a", "b", "c"], keyed=False)
+
+    service = object.__new__(AkshareDataService)
+    with pytest.raises(pagination.StableOrderingUnavailableError, match="no provable stable"):
+        await service.get_table_rows(table_name, page=1, page_size=2)
+
+
+@pytest.mark.asyncio
+async def test_table_rows_endpoint_fails_closed_without_a_stable_key(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+    monkeypatch,
+    fresh_total_count_cache,
+):
+    import app.services.akshare.table_pagination as pagination
+
+    monkeypatch.setattr(pagination, "_sqlite_table_has_rowid", lambda sync_conn, name: False)
+    await _seed_paged_table(
+        warehouse_engine, "pagination_endpoint_keyless", ["a", "b", "c"], keyed=False
+    )
+
+    async with async_session_maker() as session:
+        session.add(
+            DataTable(
+                id=1301,
+                table_name="pagination_endpoint_keyless",
+                table_comment="keyless",
+                category="stocks",
+                row_count=3,
+                metadata_json={"columns": ["code", "seq"]},
+            )
+        )
+        await session.commit()
+
+    rows_resp = await client.get(
+        "/api/v1/data/tables/1301/data", params={"page": 2, "page_size": 2}, headers=auth_headers
+    )
+
+    assert rows_resp.status_code == 409
+    refusal = rows_resp.json()
+    assert refusal["error"] == "HTTP_409"
+    assert "no provable stable ordering key" in refusal["message"]
+    assert "Add a PRIMARY KEY" in refusal["message"]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_measures_the_total_once_for_consecutive_pages(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+    fresh_total_count_cache,
+    warehouse_statement_spy,
+):
+    """Page 2 must not pay for another full ``COUNT(*)`` on a large table."""
+    table_name = "pagination_total_once_fixture"
+    await _seed_paged_table(
+        warehouse_engine, table_name, [f"t{index:03d}" for index in range(1, 11)]
+    )
+
+    async with async_session_maker() as session:
+        session.add(
+            DataTable(
+                id=1302,
+                table_name=table_name,
+                table_comment="totals",
+                category="stocks",
+                row_count=10,
+                metadata_json={"columns": ["code", "seq"]},
+            )
+        )
+        await session.commit()
+
+    responses = [
+        await client.get(
+            "/api/v1/data/tables/1302/data",
+            params={"page": page_number, "page_size": 4},
+            headers=auth_headers,
+        )
+        for page_number in (1, 2, 3)
+    ]
+    payloads = [response.json() for response in responses]
+
+    assert [payload["total"] for payload in payloads] == [10, 10, 10]
+    assert [payload["total_source"] for payload in payloads] == ["live", "cached", "cached"]
+    ages = [payload["total_age_seconds"] for payload in payloads]
+    assert ages[0] == 0.0
+    assert ages[1] >= 0.0 and ages[2] >= ages[1]
+    count_statements = [sql for sql in warehouse_statement_spy if "COUNT(*)" in sql]
+    assert len(count_statements) == 1
+    page_queries = [sql for sql in warehouse_statement_spy if "ORDER BY" in sql]
+    assert len(page_queries) == 3
+    assert [len(payload["rows"]) for payload in payloads] == [4, 4, 2]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_remeasures_the_total_after_the_cache_expires(
+    warehouse_engine,
+    monkeypatch,
+):
+    """A cached total is only reused inside its TTL, then the exact count re-runs."""
+    import app.services.akshare.table_pagination as pagination
+
+    clock = {"now": 1000.0}
+    cache = pagination.TotalCountCache(ttl_seconds=30.0, clock=lambda: clock["now"])
+    monkeypatch.setattr(pagination, "_TOTAL_COUNT_CACHE", cache)
+
+    table_name = "pagination_ttl_fixture"
+    await _seed_paged_table(warehouse_engine, table_name, [f"p{index}" for index in range(1, 4)])
+    service = object.__new__(AkshareDataService)
+
+    first = await service.get_table_rows(table_name, page=1, page_size=2)
+    clock["now"] += 5.0
+    second = await service.get_table_rows(table_name, page=2, page_size=2)
+    assert (first.total_source, second.total_source) == ("live", "cached")
+    assert second.total_age_seconds == 5.0
+
+    # Rows written by an out-of-process collector become visible on the next re-measure.
+    async with warehouse_engine.begin() as conn:
+        await conn.execute(text(f"INSERT INTO {table_name} (code, seq) VALUES ('p4', 4)"))
+    clock["now"] += 25.0
+    third = await service.get_table_rows(table_name, page=1, page_size=2)
+
+    assert (third.total, third.total_source, third.total_age_seconds) == (4, "live", 0.0)
+    assert second.total == 3
+
+
+@pytest.mark.asyncio
+async def test_persist_dataframe_evicts_the_cached_total(
+    warehouse_engine,
+    monkeypatch,
+    dummy_akshare_module,
+):
+    """A write made through this process must not leave a stale total behind."""
+    import app.services.akshare.table_pagination as pagination
+
+    cache = pagination.TotalCountCache(ttl_seconds=600.0)
+    monkeypatch.setattr(pagination, "_TOTAL_COUNT_CACHE", cache)
+
+    table_name = "pagination_evict_fixture"
+    await _seed_paged_table(warehouse_engine, table_name, [f"e{index}" for index in range(1, 6)])
+    service = object.__new__(AkshareDataService)
+
+    async with async_session_maker() as session:
+        service.db = session
+        session.add(
+            DataTable(
+                id=1305,
+                table_name=table_name,
+                table_comment="evict",
+                category="stocks",
+                row_count=5,
+                metadata_json={"columns": ["code", "seq"]},
+            )
+        )
+        await session.commit()
+
+        first = await service.get_table_rows(table_name, page=1, page_size=2)
+        assert (first.total, first.total_source) == (5, "live")
+
+        script = DataScript(
+            script_id="pagination_evict",
+            script_name="Pagination Evict",
+            target_table="pagination_evict_fixture",
+            category="stocks",
+        )
+        await service.persist_dataframe(
+            script,
+            pd.DataFrame([{"code": "new-1"}, {"code": "new-2"}]),
+            {},
+        )
+
+        second = await service.get_table_rows(table_name, page=1, page_size=2)
+
+    assert len(cache) == 1
+    assert (second.total, second.total_source) == (2, "live")
+
+
+@pytest.mark.asyncio
+async def test_table_rows_endpoint_reports_its_ordering(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+    fresh_total_count_cache,
+):
+    table_name = "pagination_reported_ordering"
+    await _seed_paged_table(warehouse_engine, table_name, ["z", "y", "x"])
+
+    async with async_session_maker() as session:
+        session.add(
+            DataTable(
+                id=1303,
+                table_name=table_name,
+                table_comment="ordering",
+                category="stocks",
+                row_count=3,
+                metadata_json={"columns": ["code", "seq"]},
+            )
+        )
+        await session.commit()
+
+    rows_resp = await client.get(
+        "/api/v1/data/tables/1303/data", params={"page": 1, "page_size": 2}, headers=auth_headers
+    )
+    payload = rows_resp.json()
+
+    assert rows_resp.status_code == 200
+    assert payload["ordering"] == {
+        "strategy": "primary_key",
+        "columns": ["code"],
+        "direction": "asc",
+        "is_total_order": True,
+    }
+    assert payload["total_source"] == "live"
+    assert payload["total_age_seconds"] == 0.0
+    assert [row["code"] for row in payload["rows"]] == ["x", "y"]
+
+
+@pytest.mark.asyncio
+async def test_table_rows_endpoint_still_rejects_oversized_page_size(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+    fresh_total_count_cache,
+):
+    """The documented 422 for an over-maximum ``page_size`` stays; no silent clamp."""
+    table_name = "pagination_page_size_guard"
+    await _seed_paged_table(warehouse_engine, table_name, [f"g{index}" for index in range(1, 4)])
+
+    async with async_session_maker() as session:
+        session.add(
+            DataTable(
+                id=1304,
+                table_name=table_name,
+                table_comment="page size",
+                category="stocks",
+                row_count=3,
+                metadata_json={"columns": ["code", "seq"]},
+            )
+        )
+        await session.commit()
+
+    rows_resp = await client.get(
+        "/api/v1/data/tables/1304/data", params={"page": 1, "page_size": 201}, headers=auth_headers
+    )
+
+    assert rows_resp.status_code == 422
+    payload = rows_resp.json()
+    assert payload["error"] == "VALIDATION_ERROR"
+    assert any(
+        field["type"] == "less_than_equal" and field["field"].endswith("page_size")
+        for field in payload["details"]["fields"]
+    )
+    # The oversized request is refused outright; nothing is clamped and served.
+    assert "rows" not in payload
+
+
+def test_resolve_ordering_uses_the_key_ladder_and_fails_closed_per_dialect():
+    import app.services.akshare.table_pagination as pagination
+
+    not_null = {"id": False, "symbol": False, "data_date": False, "note": True}
+
+    assert pagination.resolve_ordering(
+        table_name="t",
+        dialect_name="mysql",
+        pk_columns=["id"],
+        unique_constraints=[["symbol", "data_date"]],
+        column_nullable=not_null,
+    ) == pagination.TableOrdering("primary_key", ("id",))
+
+    assert pagination.resolve_ordering(
+        table_name="t",
+        dialect_name="mysql",
+        pk_columns=[],
+        unique_constraints=[["symbol", "data_date"], ["note"]],
+        column_nullable=not_null,
+    ) == pagination.TableOrdering("unique_key", ("symbol", "data_date"))
+
+    # A nullable unique column is not a total order, so a MySQL keyless table fails closed.
+    with pytest.raises(pagination.StableOrderingUnavailableError, match="no provable stable"):
+        pagination.resolve_ordering(
+            table_name="t",
+            dialect_name="mysql",
+            pk_columns=[],
+            unique_constraints=[["symbol", "note"]],
+            column_nullable=not_null,
+        )
+
+    # SQLite rowid tables always have one more provable key: the implicit rowid.
+    assert pagination.resolve_ordering(
+        table_name="t",
+        dialect_name="sqlite",
+        pk_columns=[],
+        unique_constraints=[],
+        column_nullable=not_null,
+    ) == pagination.TableOrdering("rowid", ("rowid",))
+
+    # WITHOUT ROWID (no selectable row id) leaves a keyless SQLite table with no
+    # provable total order either, so it fails closed like MySQL does.
+    with pytest.raises(pagination.StableOrderingUnavailableError, match="selectable rowid=False"):
+        pagination.resolve_ordering(
+            table_name="t",
+            dialect_name="sqlite",
+            pk_columns=[],
+            unique_constraints=[],
+            column_nullable=not_null,
+            has_selectable_rowid=False,
+        )
+
+
+def test_resolve_ordering_accepts_native_non_ascii_key_columns():
+    """Warehouse tables use native Chinese column names; they are valid ordering keys."""
+    import app.services.akshare.table_pagination as pagination
+
+    ordering = pagination.resolve_ordering(
+        table_name="STOCK_ZH_A_HIST",
+        dialect_name="mysql",
+        pk_columns=[],
+        unique_constraints=[["日期", "代码"]],
+        column_nullable={"日期": False, "代码": False, "收盘": True},
+    )
+
+    # The index's own column order is kept: that order is what the index sorts by.
+    assert ordering.columns == ("日期", "代码")
+    assert pagination.order_by_clause(ordering) == "ORDER BY `日期` ASC, `代码` ASC"
+
+
+def test_ordering_refusal_names_the_table_and_the_remedy():
+    import app.services.akshare.table_pagination as pagination
+
+    with pytest.raises(pagination.StableOrderingUnavailableError) as excinfo:
+        pagination.resolve_ordering(
+            table_name="fund_nav_snapshot",
+            dialect_name="mysql",
+            pk_columns=[],
+            unique_constraints=[],
+            column_nullable={"nav_date": True, "fund_code": True},
+        )
+
+    message = str(excinfo.value)
+    assert "fund_nav_snapshot" in message
+    assert "PRIMARY KEY=none" in message
+    assert "Add a PRIMARY KEY" in message
+
+
+def test_total_count_cache_is_bounded_and_keyed_by_query_shape():
+    import app.services.akshare.table_pagination as pagination
+
+    clock = {"now": 0.0}
+    cache = pagination.TotalCountCache(ttl_seconds=10.0, max_entries=2, clock=lambda: clock["now"])
+    unfiltered = pagination.TotalCountKey(database="akshare_data", table_name="hist", filters=())
+    filtered = pagination.TotalCountKey(
+        database="akshare_data", table_name="hist", filters=(("symbol", '"000001"'),)
+    )
+
+    cache.put(unfiltered, 100)
+    assert cache.get(filtered) is None, "a filtered total must never reuse the unfiltered one"
+
+    cache.put(filtered, 7)
+    assert cache.get(unfiltered) == (100, 0.0)
+    assert cache.get(filtered) == (7, 0.0)
+
+    clock["now"] = 11.0
+    assert cache.get(filtered) is None
+
+    cache.put(pagination.TotalCountKey(database="akshare_data", table_name="other"), 1)
+    assert len(cache) == 2
+    cache.put(pagination.TotalCountKey(database="akshare_data", table_name="third"), 1)
+    assert len(cache) == 2
+
+    cache.evict_table("other")
+    cache.evict_table("hist")
+    assert len(cache) <= 2
+
+
+@pytest.mark.asyncio
+async def test_list_tables_filter_and_paging_partition_the_filtered_rows(fresh_metadata_tables):
+    """Searching and paging stay consistent: every filtered row appears exactly once.
+
+    The seeded rows share one ``updated_at``, so the search page order only comes out
+    the same on every request because the ordering has a unique tiebreaker.
+    """
+    pages = []
+    async with async_session_maker() as session:
+        service = AkshareDataService(session)
+        for page_number in (1, 2, 3):
+            pages.append(
+                await service.list_tables(search="pagination_meta", page=page_number, page_size=3)
+            )
+
+    names = [table.table_name for items, _ in pages for table in items]
+    assert names == [f"pagination_meta_{index}" for index in range(7, 0, -1)]
+    assert len(names) == 7
+    assert len(set(names)) == 7
+    assert [total for _, total in pages] == [7, 7, 7]
+
+    async with async_session_maker() as session:
+        service = AkshareDataService(session)
+        other_items, other_total = await service.list_tables(
+            search="pagination_meta_absent", page=1, page_size=3
+        )
+
+    assert other_items == []
+    assert other_total == 0
+
+
+@pytest.fixture
+async def fresh_metadata_tables():
+    """Seed seven metadata tables whose ``updated_at`` is deliberately identical."""
+    stamp = datetime(2026, 1, 1)
+    async with async_session_maker() as session:
+        for index in range(1, 8):
+            session.add(
+                DataTable(
+                    id=1400 + index,
+                    table_name=f"pagination_meta_{index}",
+                    table_comment="meta",
+                    category="stocks",
+                    row_count=index,
+                    metadata_json={"columns": []},
+                )
+            )
+        await session.commit()
+        # Raw SQL, so the ORM's ``onupdate`` cannot re-split the timestamps.
+        await session.execute(
+            text("UPDATE ak_data_tables SET updated_at = :stamp WHERE table_name LIKE :pattern"),
+            {"stamp": stamp, "pattern": "pagination_meta_%"},
+        )
+        await session.commit()
+    yield
 
 
 def test_run_script_accepts_json_string_parameters():
