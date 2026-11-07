@@ -60,6 +60,13 @@ Branch naming conventions (based on `dev` unless noted):
 - `release/vX.Y.Z` - Release promotion, based on `dev` → PR to `master` (maintainers)
 - `hotfix/master-*` - Production emergency fix, based on `master` → PR to `master` (maintainers, requires an incident reference and a plan to backport the fix to `dev`)
 
+The prefix is matched literally. `feat/` — the commit-type spelling — is **not** an accepted branch
+prefix for `dev`, so a branch named `feat/whatever` fails the gate with
+`dev accepts feature/*, fix/*, docs/*, refactor/*, or test/* branches`. Renaming a branch does not
+move an open PR's head, so the only repair is to push the same commit under an accepted name and open
+a new PR (see [Field grammar](#field-grammar-the-gate-is-a-full-match-not-a-search) for the other
+declaration-format trap that costs a CI round-trip).
+
 ### 3. Make Your Changes
 
 Follow the coding standards outlined below.
@@ -384,7 +391,8 @@ Brief description of changes and why they are needed.
 
 ## Governance declaration
 - 目标分支: dev（或 master 的 release/hotfix 理由）
-- 风险等级: R0/R1/R2/R3 + 命中路径说明
+- 风险等级: R2
+- 命中路径: `src/backend/app/services/**`
 - 测试证据: 本地/CI 测试输出或链接
 
 ## Test Plan
@@ -396,6 +404,21 @@ How did you verify the change?
 ## Related Issues
 Fixes #123
 ```
+
+#### Field grammar (the gate is a full match, not a search)
+
+`scripts/ci/check_pr_governance.py` reads each declaration field as exactly one value and matches
+`风险等级` against `\b(R[0-3])\b` with `fullmatch`, so the value must be the bare token and nothing
+else on that line:
+
+- `- 风险等级: R2` — accepted.
+- `- 风险等级: R0/R1/R2/R3 + 命中路径说明`, `- 风险等级: R2 —— 命中 src/backend/app/services/**` —
+  rejected with `governance declaration must name R0-R3`, even though the `R2` is present.
+
+Put the path explanation on its own bullet (`- 命中路径: ...`), as in the example above; the gate only
+requires `目标分支`, `风险等级` and `测试证据`, and ignores extra bullets. Duplicate fields inside the
+section are rejected as ambiguous, and values supplied only inside an HTML comment are invisible to
+the gate, so an unfilled template placeholder fails.
 
 ## Code Review Process
 
