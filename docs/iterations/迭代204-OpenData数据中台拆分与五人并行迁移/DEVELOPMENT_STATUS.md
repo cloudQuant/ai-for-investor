@@ -2419,3 +2419,22 @@ stderr 与 stdout 混在一起，取末行会取到它）；以及只报"脏条�
 重新解一次冲突。本波不再声称 #303 有任何进展。
 另一个副作用要说明：#303 的冲突解里包含一份对 `tables.py`/`data.py` 的合并结果，
 它在**那条旧分支**上通过了 96 个测试——那只能证明"那份合并没坏"，不能证明 #303 可用。
+
+补一条 §11 的收尾：这条冲突**不是无解的**，而是卡在分支身份上，且我不替属主做破坏性动作。
+
+* 子代理给出的解是完整的：7 个 hunk 逐一说明取舍（两侧都保留）、`WarehouseTablePage` 增加
+  `adjustment_basis=None`、`resolve_total_count` 增加可选绑定参数、dev 的 4 元组契约被 page 对象取代后
+  它把 dev 的 7 个服务测试改成属性访问（值不变）。验证：ruff 0.16.2 干净、`test_akshare_management_api.py`
+  96 passed/79 skipped、`test_akshare_script_service.py` 101 passed、无冲突标记。**但它在
+  `fix/afi-table-pagination-determinism` 上，而 #303 的头是 `fix/afi-table-pagination-total-order`。**
+* 我尝试在正确分支上重做：从 `origin/fix/afi-table-pagination-total-order` 建 worktree、合 dev，
+  得到的**仍是同两个文件、同样形状的 7 个 hunk**，说明两条分支承载同一补丁、只是基线不同；
+  但这边的 `WarehouseTablePage` 还没有 `adjustment_basis` 字段，data.py 的 3 个 hunk 也要重新按
+  "page 对象 + 调整基准"重建，并且要重写 dev 的 7 个服务测试——这不是合并，是一次等价重构。
+* 两条干净的路，都需要属主点头，我都没有做：
+  (a) **重指 PR**：把 `fix/afi-table-pagination-total-order` 强制更新为已验证的 `a59dca628`（force-push，
+      改写 PR 分支历史）——破坏性，需明确授权；
+  (b) **重做**：在 `...total-order` 上按上面同一套取舍重新解一遍并重写那 7 个测试，再推（无非快进问题）。
+  我倾向 (b)，但它是**非本迭代验收项**的队列工作，本波先记为 OPEN，不占用优先项的时间。
+* 教训已入账：worktree 的分支名与 `head.ref` 不一致，是这次两度误判的直接原因；
+  `git push` 成功只证明某个 ref 动了，不证明 PR 动了——之后一切"已推送"都以 API 的 `head.sha` 为准。
