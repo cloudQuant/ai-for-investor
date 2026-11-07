@@ -137,7 +137,15 @@ class StockZhAHist(AkshareToMySql):
             )
             .sort_values("日期")
         )
-        previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
+        # `preClose` is often absent from the Eastmoney payload. to_numeric(None, errors="coerce")
+        # already returns NaN and every reader below tests only `pd.isna(previous_close)`, so the
+        # explicit None branch keeps the value exactly what the old call produced.
+        raw_pre_close = data.get("preClose")
+        previous_close = (
+            pd.to_numeric(raw_pre_close, errors="coerce")
+            if raw_pre_close is not None
+            else float("nan")
+        )
         changes: list[float | None] = []
         pct_changes: list[float | None] = []
         amplitudes: list[float | None] = []

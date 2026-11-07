@@ -6,6 +6,7 @@ import datetime as dt
 import time
 from collections.abc import Iterable
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -21,6 +22,12 @@ JIN10_HEADERS = {
 
 
 def _date_before(value: object) -> str | None:
+    # to_datetime(errors="coerce") returns NaT (-> None below) for every scalar outside the
+    # scalar overload's accepted set - probed on the pinned pandas: Decimal/bytes/timedelta/
+    # plain objects all coerce to NaT - so routing only the accepted set through the call and
+    # returning None for the rest keeps every old outcome, including None and bool cells.
+    if not isinstance(value, (str, int, float, dt.date, np.datetime64)):
+        return None
     parsed = pd.to_datetime(value, errors="coerce")
     if pd.isna(parsed):
         return None
