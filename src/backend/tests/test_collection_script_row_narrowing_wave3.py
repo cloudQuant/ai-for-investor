@@ -372,8 +372,8 @@ def test_latest_trade_date_no_longer_shadows_the_base(module_name: str, class_na
         def __getitem__(self, index: int) -> object:
             return self._value
 
-    service.execute_sql = lambda sql, fetch_one=False: executed.append(sql) or _Result(
-        date(2026, 11, 6)
+    service.execute_sql = lambda sql, fetch_one=False: (
+        executed.append(sql) or _Result(date(2026, 11, 6))
     )
     assert service._get_latest_trade_date() == date(2026, 11, 6)
     assert "MAX(TRADE_DATE)" in executed[0]
