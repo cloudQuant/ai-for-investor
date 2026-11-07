@@ -95,7 +95,7 @@ def _row(
     return row
 
 
-def _page(rows: list[dict[str, object]]) -> bytes:
+def _page(rows: list[dict[str, object]], *, adjust: str = "qfq") -> bytes:
     return json.dumps(
         {
             "success": True,
@@ -104,6 +104,7 @@ def _page(rows: list[dict[str, object]]) -> bytes:
                 "domain": "stock_daily",
                 "asset_class": "equity",
                 "layer": "dwd",
+                "adjust": adjust,
                 "columns": [
                     "symbol",
                     "trade_date",
@@ -128,6 +129,7 @@ def _provider(
     rows: list[dict[str, object]],
     *,
     status_code: int = 200,
+    adjust: str = "qfq",
     requests: list[httpx.Request] | None = None,
 ) -> OpendataProvider:
     request_log = requests if requests is not None else []
@@ -141,7 +143,7 @@ def _provider(
         if start is None or end is None:
             return httpx.Response(422, json={"detail": "missing date bounds"})
         selected_rows = [row for row in rows if start <= str(row["trade_date"]) <= end]
-        return httpx.Response(200, content=_page(selected_rows))
+        return httpx.Response(200, content=_page(selected_rows, adjust=adjust))
 
     return OpendataProvider(
         client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
@@ -439,11 +441,12 @@ async def direct_historical_dependencies(
 ) -> Any:
     provider_requests: list[httpx.Request] = []
     source_row_options = dict(getattr(request, "param", {}))
+    page_adjust = source_row_options.pop("adjust", "qfq")
     include_change = bool(source_row_options.pop("include_change", True))
     source_row = _row("2026-09-07", include_change=include_change)
     source_row["volume"] = 10_000  # OpenData stock_daily contract is share-based.
     source_row.update(source_row_options)
-    provider = _provider([source_row], requests=provider_requests)
+    provider = _provider([source_row], requests=provider_requests, adjust=page_adjust)
     store = _Store()
     service = _service(provider, store)
     db = _Db()
@@ -797,6 +800,42 @@ async def test_realtime_historical_opendata_provider_error_does_not_fallback(
     assert response.json()["details"] == {"code": "OPENDATA_PROVIDER_UNAVAILABLE"}
     assert resolver.calls == [("stock", "600000", "daily")]
     assert provider_requests == []
+    assert store.fact_reads == 0
+    assert store.fact_writes == 0
+    assert legacy_service.get_historical_data.await_count == 0
+
+
+@pytest.mark.parametrize(
+    "direct_historical_dependencies",
+    [{"adjust": "none"}],
+    indirect=True,
+)
+@pytest.mark.asyncio
+async def test_realtime_historical_opendata_refuses_mislabeled_adjustment_basis(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    direct_historical_dependencies: Any,
+) -> None:
+    """AC03: a qfq request answered with pages declaring another basis must be
+    a real error status, not a 200 carrying unlabelled/mixed-basis rows."""
+    context, store, _resolver, _authorizer, provider_requests, legacy_service = (
+        direct_historical_dependencies
+    )
+    response = await client.get(
+        "/api/v1/realtime/ticks/historical",
+        headers=auth_headers,
+        params={
+            "broker_id": "opendata",
+            "symbol": "600000",
+            "start_date": "2026-09-07",
+            "end_date": "2026-09-07",
+            "frequency": "1d",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["details"] == {"code": "OPENDATA_ADJUSTMENT_BASIS_MISMATCH"}
+    assert provider_requests[0].url.params["adjust"] == "qfq"
     assert store.fact_reads == 0
     assert store.fact_writes == 0
     assert legacy_service.get_historical_data.await_count == 0

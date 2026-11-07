@@ -807,6 +807,48 @@ def test_governance_target_allows_a_single_template_compatible_branch_explanatio
         assert result["ok"] is True
 
 
+def test_risk_level_is_a_bare_token_and_the_path_goes_on_its_own_bullet() -> None:
+    """The gate fullmatches the risk value, so prose on the same line is not a declaration.
+
+    CONTRIBUTING.md used to instruct ``风险等级: R0/R1/R2/R3 + 命中路径说明``, which is exactly the
+    shape that fails; the accepted shape keeps the token alone and moves the paths down a bullet.
+    """
+    checker = _load_checker()
+
+    prose = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=_body(target="dev", risk="R2 —— 命中 `src/backend/app/services/**`"),
+    )
+    result = _evaluate(
+        checker,
+        prose,
+        [_review("maintainer", "APPROVED", "2026-08-24T00:01:00Z")],
+        ["src/backend/app/services/market_data.py"],
+    )
+    assert result["ok"] is False
+    assert any("must name R0-R3" in issue for issue in result["issues"])
+
+    split = _pr(
+        base="dev",
+        head="feature/market-screen",
+        body=(
+            "## Governance declaration\n\n"
+            "- **目标分支**: dev\n"
+            "- **风险等级**: R2\n"
+            "- **命中路径**: `src/backend/app/services/**`\n"
+            "- **测试证据**: pytest scripts/ci/tests/test_check_pr_governance.py -q passed\n"
+        ),
+    )
+    result = _evaluate(
+        checker,
+        split,
+        [_review("maintainer", "APPROVED", "2026-08-24T00:01:00Z")],
+        ["src/backend/app/services/market_data.py"],
+    )
+    assert result["ok"] is True
+
+
 def test_common_fields_are_bound_to_governance_section_not_preamble_decoys() -> None:
     checker = _load_checker()
     body = """\

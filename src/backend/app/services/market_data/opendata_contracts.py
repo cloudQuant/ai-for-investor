@@ -172,9 +172,14 @@ _STOCK_MAPPED_FIELDS = frozenset(
 def opendata_adjustment(request: MarketDataProviderRequest) -> str:
     """把中台复权语义映射为 opendata ``adjust`` 参数值，绝不猜测新基准。
 
-    ``None`` 与 ``unadjusted`` 均映射为 ``none``。
+    唯一 documented 映射：``unadjusted`` → ``none``、``qfq`` → ``qfq``、
+    ``hfq`` → ``hfq``（与 OpenData v1 REST ``adjust`` 枚举一致）。
+    stock_daily 数据集存在复权基准，请求必须显式声明；省略基准
+    (``None``) 不再默默按 ``unadjusted`` 处理，而是 fail-closed 拒绝。
     """
-    adjustment = request.adjustment or "unadjusted"
+    if request.adjustment is None:
+        raise ProviderContractError("PROVIDER_CONTRACT_ADJUSTMENT_UNSUPPORTED")
+    adjustment = request.adjustment
     try:
         return _ADJUSTMENT_MAP[adjustment]
     except KeyError as exc:

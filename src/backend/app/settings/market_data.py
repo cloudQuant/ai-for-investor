@@ -215,6 +215,17 @@ class MarketDataSettingsMixin:
         description="Maximum concurrent akshare scheduler-triggered tasks",
     )
 
+    # The API process arming the AkShare APScheduler is the only thing scheduling
+    # collection today, so the default keeps that behaviour. Use "forbid" only where a
+    # dedicated collector unit owns scheduling; any other value fails closed.
+    AKSHARE_SCHEDULER_API_FALLBACK: str = Field(
+        default="allow",
+        description=(
+            "Akshare scheduler arming from the API process: allow or forbid; "
+            "an unrecognised value is treated as forbid"
+        ),
+    )
+
     AKSHARE_SCRIPT_ROOT: str = Field(
         default="app/data_fetch/scripts", description="Root directory for akshare scripts"
     )

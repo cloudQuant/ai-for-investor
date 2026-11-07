@@ -37,4 +37,12 @@ regexes = [
   # Common weak defaults referenced by the production secret-guard validator
   # (app/config.py _DEFAULT_PASSWORDS) — these are checked *against*, not used.
   '''admin123''',
+  # Deterministic claim-key hash recovered into version control by the iteration-204
+  # ghost-script restoration (scripts/ops/cfets_daytime_managed_acceptance.py).
+  # PROTECTED_NATURAL_CLAIM_KEY identifies the preserved natural 2026-10-20 10:10
+  # Asia/Shanghai CFETS slot so the managed acceptance run cannot overwrite it; it is a
+  # sha256-shaped identifier over (task, period), carries no entropy of its own and
+  # authenticates nothing. Allowlisted by exact value, not by path, so a *real* secret
+  # added to that file still fails the gate.
+  '''b533a93fa88aed507429773146ae6af449f157ef8c2a09191a9d3d911f5f028c''',
 ]
