@@ -19,7 +19,7 @@ PREVIOUS_REVISION = "20260910_market_data_capability_ledger"
 REVISION = "20260911_market_data_deferred_publications"
 PRE_OPTIMIZATION_HEAD_REVISION = "20260911_market_data_b2_completeness_evidence"
 INTEGRATED_HEAD_REVISION = "20261012_optimization_objective_direction"
-CURRENT_HEAD_REVISION = "20261101_stock_analysis_report_evidence_vector"
+CURRENT_HEAD_REVISION = "20261106_akshare_run_coordinator_claims"
 TABLE = "md_publication_release_holds"
 UTC = timezone.utc
 NOW = datetime(2026, 9, 11, 12, tzinfo=UTC)

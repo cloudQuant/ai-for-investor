@@ -59,6 +59,7 @@ from app.models.akshare_mgmt import (
     ScheduledTask,
     TaskExecution,
 )
+from app.models.akshare_scheduler import AkshareSchedulerControl, AkshareTaskRunClaim
 from app.models.alerts import Alert, AlertNotification, AlertRule
 from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
 from app.models.asset_research import (
@@ -187,6 +188,8 @@ __all__ = [
     "Account",
     "AICallLog",
     "AITradingLog",
+    "AkshareSchedulerControl",
+    "AkshareTaskRunClaim",
     "AssetAnalysisExport",
     "AssetAnalysisReport",
     "AssetAnalysisTask",

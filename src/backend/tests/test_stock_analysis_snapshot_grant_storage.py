@@ -15,6 +15,7 @@ import pytest
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event, func, inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
@@ -45,8 +46,12 @@ _STOCK_DAILY_MIGRATION_PATH = (
 )
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _PRE_GRANT_REVISION = "20261017_legacy_paper_import_cutover"
+_GRANT_REVISION = "20261030_stock_analysis_snapshot_grants"
 _STOCK_DAILY_REVISION = "20261031_stock_daily_snapshot_grants"
 _REPORT_EVIDENCE_REVISION = "20261101_stock_analysis_report_evidence_vector"
+#: Chain head once the run-coordinator revision exists.  Pinned together with its parent
+#: below, so re-pointing this constant cannot silently drop the grant/evidence ordering.
+_CURRENT_HEAD = "20261106_akshare_run_coordinator_claims"
 _STOCK_DAILY_DATASET = "cn-equity-stock-daily"
 _STOCK_DAILY_SOURCE = "akshare.daily"
 _TABLES = (
@@ -1273,7 +1278,25 @@ def test_grant_revision_chain_round_trips_on_empty_sqlite_database(tmp_path) -> 
         with engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == _REPORT_EVIDENCE_REVISION
+                == _CURRENT_HEAD
             )
+        # The head constant above is only meaningful if the chain actually walks
+        # grants -> stock-daily -> evidence -> coordinator.  Pin the whole path, and
+        # note Alembic stops *before* the lower bound, so the pre-grant revision is
+        # deliberately not part of the walk.
+        config = Config(str(_BACKEND_ROOT / "alembic.ini"))
+        config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
+        walk = [
+            rev.revision
+            for rev in ScriptDirectory.from_config(config).iterate_revisions(
+                _CURRENT_HEAD, _PRE_GRANT_REVISION
+            )
+        ]
+        assert walk == [
+            _CURRENT_HEAD,
+            _REPORT_EVIDENCE_REVISION,
+            _STOCK_DAILY_REVISION,
+            _GRANT_REVISION,
+        ]
     finally:
         engine.dispose()
