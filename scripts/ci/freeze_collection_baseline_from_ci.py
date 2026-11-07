@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
 
 API = "https://api.github.com"
-HELPER = "/tmp/it204/gh.sh"
 JOB_NAME = "Backend - Mypy Ratchet (collection scripts, advisory)"
 READING_RE = re.compile(
     r"mypy_ratchet\[collection\]:[^-\n]*-\s*errors=(\d+)\s+checked=(\d+)\s+\((mypy [^)]*)\)"
@@ -30,27 +30,57 @@ READING_RE = re.compile(
 ADVISORY_RE = re.compile(r"advisory, no baseline yet")
 
 
-def gh_get(path: str, params: str = ""):
-    """Fetch JSON through the token helper. No token is ever returned or printed."""
-    url = f"{API}{path}{params}"
-    r = subprocess.run(
-        ["bash", HELPER, url], capture_output=True, text=True, timeout=180
+def _token() -> str | None:
+    """CI exports GITHUB_TOKEN; a maintainer shell keeps it in ~/.git-credentials."""
+    for name in ("GITHUB_TOKEN", "GH_TOKEN"):
+        value = os.environ.get(name)
+        if value:
+            return value
+    path = os.path.expanduser("~/.git-credentials")
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                match = re.match(r"https://[^:@/]+:([^@]+)@github\.com", line.strip())
+                if match:
+                    return match.group(1)
+    return None
+
+
+def _fetch(url: str, follow: bool = False, timeout: int = 180) -> str:
+    """curl with the token passed through the environment, never argv or stdout."""
+    token = _token()
+    script = 'curl -s --max-time "$GH_TIMEOUT" ${GH_FOLLOW:+-L}'
+    if token:
+        script += ' -H "Authorization: Bearer $GITHUB_TOKEN"'
+    script += ' -H "Accept: application/vnd.github+json" "$GH_URL"'
+    env = {**os.environ, "GH_URL": url, "GH_TIMEOUT": str(timeout)}
+    if follow:
+        env["GH_FOLLOW"] = "1"
+    if token:
+        env["GITHUB_TOKEN"] = token
+    proc = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=timeout + 60,
+        env=env,
+        check=False,
     )
+    if proc.returncode != 0:
+        raise SystemExit(f"GitHub request failed for {url}: {proc.stderr[:160]}")
+    return proc.stdout
+
+
+def gh_get(path: str, params: str = "") -> object:
+    raw = _fetch(f"{API}{path}{params}")
     try:
-        return json.loads(r.stdout)
+        return json.loads(raw)
     except Exception:  # noqa: BLE001
-        raise SystemExit(
-            f"GitHub request failed for {path}: {(r.stderr or r.stdout)[:120]}"
-        )
+        raise SystemExit(f"GitHub request failed for {path}: {raw[:120]}")
 
 
 def gh_raw(url: str) -> str:
-    r = subprocess.run(
-        ["bash", HELPER, "-L", url], capture_output=True, text=True, timeout=300
-    )
-    if r.returncode != 0:
-        raise SystemExit(f"log fetch failed: {r.stderr[:160]}")
-    return r.stdout
+    return _fetch(url, follow=True, timeout=300)
 
 
 def resolve_ref(repo: str, ref: str) -> str:
