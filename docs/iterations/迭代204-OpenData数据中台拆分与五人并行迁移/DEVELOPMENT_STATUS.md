@@ -3141,3 +3141,301 @@ test_collection_script_entry_points.py` = **100 passed / 26.20s**，与 pandas 2
 （仍要说清边界：这只覆盖那三个文件里 100 个用例的范围，不等于整个后端套件在 pandas 3 下绿——
 那要等 CI 自己跑。）镜像构建脚本一并入库：`evidence/2026-11-06-wave29/build_ci_env_mirror.py`；
 CI 环境逐条错误清单：同目录 `collection_plane_detail_CIenv_dev_0a4c5ab31.txt`。
+### Wave 30（2026-11-07）：把 #306 部署上去，才发现"部署成功"本身要先跑迁移
+
+#### 1. 部署：#306 已合入，但"更新代码 + 重启"会让服务起不来（exit 3），原因不是 #306
+
+上一波记录过"部署了但没重启"。这一波真的重启了，于是撞上一个此前没人踩过的形状：
+
+* 主工作树快进到 dev `eaf03cb56`（含 #306 的 UTC 时钟、#305/#308 的采集平面、#310 的治理声明文档），
+  `systemctl --user restart ai-for-investor.service`。
+* 结果：**6 次 `status=3/NOTIMPLEMENTED` 崩溃循环**，每 ~10 秒一次。`/docs` 全程 000。
+* 日志里没有 traceback，只有启动走到了 `app.startup.database:register` 的
+  `DB_AUTO_CREATE_SCHEMA=false: Verifying database migration revision...`，然后 **1 秒内**
+  `lifespan:170` 直接 shutdown——即"迁移版本核对失败 → 主动退出"，不是导入错误、不是代码异常。
+* 实测对照：代码 `alembic heads` = **`20261106_akshare_run_coordinator_claims`**（#289 昨晚合入的新迁移），
+  库 `alembic current` = **`20261101_stock_analysis_report_evidence_vector`**。差一个 revision。
+* 处置：先确认该迁移是**纯增量**（`op.create_table` + `create_index`，`drop_table` 只在 downgrade 里），
+  再 `alembic upgrade head`（库内写入，属主已授权"生产写与补采"），随后 systemd 下一次自动重启即恢复：
+  `active`、`/docs` **200**、`ExecMainStartTimestamp=2026-11-08 01:22:14 CST`。
+
+**这条要进 AC12 的判断面**：一个"只更新代码不跑迁移"的部署会让 API 完全不可用，而失败形态是
+一行 `status=3`，没有 traceback。把"部署定义"写成"代码 + 迁移 + 重启"三件套，是这台机器上可证的；
+反过来，"代码已在 dev 上绿"绝不等于"生产可用"。同时说明我上一波的
+"部署态跑的是旧代码"已作废——现在跑的就是 dev `eaf03cb56`。
+
+#### 2. 时钟迁移：416 条 `last_execution_at` + 1048 条 `next_execution_at` 一次校正，写后归零
+
+在**代码已部署且采集器已重启之后**才跑 `normalize_scheduler_clock.py`（脚本自己把这条顺序写在输出里）：
+
+* dry-run：`last_execution_at` shift **416** / already-utc **613** / no-execution 0 / stale-column **19** / unclassified 0；
+  `next_execution_at` shift candidates **1048**。
+* `--apply`：shifted last **416**、shifted next **1048**；before-image 1048 行写入
+  `/tmp/ac11-clock-before-20261107T172321Z.json`，已复制到
+  `~/afi204-evidence/2026-11-07-deploy/` 存档。
+* **写后重分类就是证明**：`shift` **0** / already-utc **1029** / stale-column **19** / unclassified 0。
+  那 19 条不是时钟问题（列比最新执行还旧，是"列未被维护"的另一个缺陷），脚本按设计不碰它们。
+* 416 比上一波读到的 214 大，是因为上一波之后旧代码又持续写了 ~17 小时——这个计数只会随旧写者运行而增长，
+  引用必须带时刻；这也解释了为什么"先部署再迁移"的顺序不可颠倒。
+
+#### 3. 部署后的写者验证：`last_execution_at` 不再比真实执行晚 8 小时
+
+重启后新产生的执行行（只读比对）：
+
+| task | `last_execution_at` | 该任务最新 `ak_task_executions.created_at` | 差 |
+|---|---|---|---|
+| 521 | 2026-11-07 17:30:00 | 2026-11-07 17:30:00 | **0.0 min** |
+| 667 | 2026-11-07 17:28:02 | 2026-11-07 17:28:00 | **0.0 min** |
+| 531 | 2026-11-07 17:24:30 | 2026-11-07 17:24:24 | **0.1 min** |
+
+同一个连接里 `NOW()=2026-11-08 01:31:13` 而 `UTC_TIMESTAMP()=2026-11-07 17:31:13`，
+确认库会话时区是 CST 而列里存的是 UTC。**#306 的双写时钟缺陷在新行上已经消失**；
+旧行的偏移由 §2 的迁移补齐。这一格此前只能写"修复待部署"，现在可以写"已部署并实测"。
+
+#### 4. AC13 的判定窗口到了：停用后的幽灵任务确实又跑了 48 次，然后随部署停止
+
+上一波把可判窗口定在 2026-11-07 00:00–01:43 UTC。读数（只读）：
+
+* 停用时刻 `2026-11-06 13:47:56` 之后，`No callable entrypoint found for script …` 仍有 **48 次**：
+  `fund_monetary_income_history` 26（00:35–01:43）、`forex_hist_sina` 18（前一日 22:30–01:42）、
+  `fund_reviewed_unit_nav_history` 4（00:45–00:51）。而 `is_active=1` 的 armed 数全程是 **1048**。
+* 这**逐字证实**了 #306 修的那条机理：`reload_active_tasks` 只遍历 active、从不注销已失效 job，
+  所以把行置 `is_active=0` 之后，**仍在运行的调度器会继续按旧注册触发**，直到进程重启。
+* 因此"停用 50 个幽灵任务"这一动作的效果边界是**进程生命周期**，不是事务提交时刻。
+  部署+重启后这些 slug 不再出现在注册里；**下一个可判点是今晚 22:00 UTC**（CST 06:00）的槽位——
+  若届时 0 次执行，则 AC13 这一半从"未生效"翻为"已生效（且原因已定位）"；本波不预判。
+* 顺带把"停用是有代价的"再钉一次：这 50 个任务的失败是幽灵注册唯一可见信号，停用后该信号消失，
+  可见性净降；这条此前已登记，现在有了具体时间线。
+
+#### 5. 队列：五支合入，两支因 ruff 版本漂移被打回，一支已重基
+
+* 已合入 dev：**#305**（机械族）、**#306**（UTC 时钟 + 注销失效 job）、**#308**（逐站点按 DDL 收窄）、
+  **#309**（AC11 运行证据仪器）、**#310**（治理声明文档 + 钉形状的测试）、**#311**（89 行分诊）。
+* **#308 的合入带出一条经验**：它是叠在 #305 之上的，而 #305 先以 squash 合入，于是 #308 变 `dirty`；
+  本地 `merge origin/dev` 后 8 个文件 `UU`，逐个取 `--ours`（我们这一侧是 #308+#305 的超集），
+  再实测平面 **7/1108（CI 环境）** 未回退、96 个平面测试通过、ruff 干净，才推送并重绑自审。
+* **#313/#314 的失败不是代码问题，是格式化工具版本**：CI 在 `ci.yml:397` 硬装
+  **`ruff==0.16.2`**，而 `config/requirements-dev.lock:431` 钉的是 **`ruff==0.15.13`**。
+  两个版本 `ruff format` 的输出不同，所以"本地 format 干净 → CI format 不过"会稳定复现。
+  本波按 CI 的版本（0.16.2）重排并推送，两 PR 各自重跑；**仓库层面这两处 pin 应当对齐**，
+  否则任何人本地按 lock 格式化都会被打回。这一条已记入债务表，修法（改 lock 还是改 workflow）属属主。
+* #314 随后又因为 #308 合入而 `dirty`，同样用 `merge origin/dev` + 8 个冲突取 ours 处理，
+  重测 **CI 环境 7/1108**、96 tests、ruff 干净后推送，head `306a9259a4`，自审已重绑到该 sha。
+
+#### 6. 本波没有改写的判定
+
+AC12 仍不是"通过"：本波只证明"代码+迁移+重启"三件套能让服务按 dev 的代码跑起来，
+并把时钟写入侧从"待部署"推进到"已部署并实测"；AC12 要的部署可复现性与"迁移随代码走"的机制
+（比如启动时明确拒绝而非静默 exit、或把迁移纳入部署脚本）还没有落地，仍按 PARTIAL 记。
+AC13 的"停用是否生效"要等今晚 22:00 UTC 的槽位；AC05/AC10/AC14 不因本波改变。
+
+#### 7. 把"已部署"写成可复跑的四问四答，并如实承认当前落后一个文档提交
+
+上文的部署结论现在有一个只读仪器兜底：`evidence/2026-11-07-wave30/deploy_state_verification.py`
+（`git rev-parse` + `alembic heads/current` + 只读 SELECT），17:41:14Z 输出：
+
+| 问题 | 读数 | 含义 |
+|---|---|---|
+| 运行的是哪个提交 | `eaf03cb56253`，分支 `dev` | — |
+| 它就是分支尖吗 | **`deployed_head_is_branch_tip: false`**（dev 尖 `97fd87801e12`） | 部署后 #311 的文档提交又进了 dev，所以运行树比 dev 落后一个**纯文档**提交。写"部署的就是 dev"会不准确，故如实标 false |
+| 迁移对齐了吗 | `heads=20261106_akshare_run_coordinator_claims`、`current=20261106_akshare_run_coordinator_claims` | 两侧同名，启动的硬门槛满足 |
+| 工作树干净吗 | 唯一条目 `?? var/` | 只有已知的未跟踪运行产物，无源码改动 |
+| 时钟写对了吗 | `active_tasks_with_clock_skew_over_60min: 0` | 近期跑过的 active 任务里没有超过 60 分钟的偏差 |
+| 停用生效了吗 | `ghost_entrypoint_failures_since_window: 0`、`armed_tasks: 1048` | 观测窗内 0 次（定论仍等 22:00 UTC 槽位） |
+
+仪器第一版有两个自己的缺陷，都已修：把 `alembic current` 的 `INFO` 行当成了 revision（因为
+stderr 与 stdout 混在一起，取末行会取到它）；以及只报"脏条目数量"而不报内容、也不报
+"运行提交 vs 分支尖"。这两个都属于"看起来在报事实、实际在报噪声"，和本波反复遇到的是同一类问题。
+
+#### 8. `last_execution_at` 的语义是"最后一次**成功**"，不是"最后一次尝试"——并顺手抓到一个 1 秒的假阳性
+
+§2 的迁移把 19 条并列成 `stale-column` 并注明"列未被维护、不是时钟偏移"。本波把这条查到底，
+结论成立，但**数字和我第一版的判断都错了**，两处都被工具纠正：
+
+* 全库"`last_execution_at` 早于该任务最新 `created_at`"的行是 **72 条**（不是 19；迁移之后又跑了十几个小时，
+  且迁移只看 armed 任务、这里看全表）。
+* 按"最新一次执行的 status"分类（全 72 行精确统计）：**71 条的最新执行是 `failed`**，**1 条是 `completed`**。
+* 那唯一的 completed 例外是 id=387（`Auto: Fund Codes`，已停用，最后活动 2026-07-03）：
+  `last_execution_at = 19:09:15`、`created_at = 19:09:16`、而同一次执行的 `end_time = 19:09:15`——
+  **同一次运行里"记录创建时间"比"完成时间"晚 1 秒**，于是"最新执行时间 > last_execution_at"恒真。
+  **这不是漏写，是我的比较口径把完成时刻和创建时刻混用了。** 判"落后"应与最新一次**成功**执行的
+  `end_time` 比，或加秒级阈值。仪器里我把 ≤2 秒的落后一律标成 `artefact_within_one_second`，
+  于是 id=953（最新一次是 failed、只比上次成功晚 1 秒）也被标上——那个标记的意思是"落后量微不足道"，
+  不是"漏写"，两件事不能混。
+* 代码侧对应：`execution.py:85` 只在 **`mark_completed`** 里写 `last_execution_at = end_time`；
+  `mark_failed` 不写。`scheduler.py:183` 的写在 `run_script` 正常返回之后，失败路径走不到。
+* **部署后实测（两类各一例，17:22Z 之后）**：`task 902` 17:40 completed → `last_exec=17:40`（同秒）；
+  `task 386` 17:39 failed（`triggered_by=scheduler`）→ `last_exec` **仍是 `2026-10-31 17:39`**。
+  新代码保持"只在成功时前进"。
+
+结论与用法约束：
+1. `last_execution_at` = **last success**。把它当"最后一次运行"或"调度器存活"的证据都是错的；
+   尝试与存活只能读 `ak_task_executions`（本波 §3、§4 用的都是后者）。
+2. §2 迁移里那 19 条不是时钟缺陷，是"自上次成功以来一直在失败"，迁移不动它们是对的。
+   但**判"落后"的口径要修**：用 `created_at` 比会引入 1 秒假阳性（本例已证），
+   应与最新成功执行的 `end_time` 比。
+3. AC13/AC14 里"某任务多久没跑"不能拿这一列算：一个每周任务失败 10 次，这一列只显示 10 周前。
+   #306 统一的是**时钟**，没有统一这一列的**语义**；语义现在被实测钉成"成功"。
+
+#### 9. AC11 的签字件已经做好，只剩一个名字
+
+`assigned` 仍是 **0/1057**，但"还差什么"现在具体到一个字段。用 §25 的 6 条非空源验证记录生成
+`--review-file`：每个文件一行，`disposition` 取工具自己的提案（`REUSE_PROVIDER`）、
+`file_sha256` 取工具当场重算的 sha、`decision=approve` 都填好，**只留 `reviewer` 与 `reviewed_at_utc` 空缺**。
+
+* 产出在仓库外（按 §23 的规矩）：`~/afi204-evidence/2026-11-07-ac11-review/`
+  —— `review-file.reuse-6.unsigned.json`、README（含一条可直接执行的属主命令）、以及空白名跑出来的台账。
+* **签核门是活的**：拿这份空名文件回灌工具，6 条全部 `review_missing_reviewer_name`，
+  没有一条被误接受。这一步的意义是排除"签字通路坏了"这一种解释——不是证明已分派。
+* 签字后的预期是 `assigned 6/1057`，其余 1051 条不动；上限仍受 OD 侧 9 个函数名约束（最多 8）。
+* 我没有替属主签名，也没有把这份文件放进仓库：它是签字件，不是账。
+
+#### 10. AC11 的分子在 26 小时内从 168 翻到 312——同一条仪器、同一个 `--since`，只是采集真的在跑
+
+用**已合入的** #309 仪器在 `.wt-afi-ac11ev` 上复读（16:48Z，`--since 2026-11-05T14:00:00+00:00`）：
+
+| 口径 | 15:36Z（wave 29） | 17:48Z（本波） | 变化 |
+|---|---|---|---|
+| `AC11_RUNTIME_EVIDENCED` | 168 | **312** | +144 |
+| `completed_and_grew` | 168 | 312 | — |
+| `completed_no_delta` | 40 | 108 | 完成但目标表未增长 |
+| `failed_only` | 13 | 20 | — |
+| `not_run` | 827 | **608** | −219 |
+
+四类仍满足 312+108+20+608 = **1048**，分母没变。这条读数本身不是新发现，它的意义在**方向与速率**：
+采集恢复后 26 小时里，"有证据"的脚本从 16% 升到 **29.8%**，而未跑过的从 79% 降到 58%。
+也就是说 AC11 的分子是**活的**，随时间单调上升；任何引用都必须带 as-of，否则两天后就是错的。
+
+同时要压住一个误读：`completed_no_delta` 涨到 108 **不等于**这 108 个在空转。它只说明目标表行数没增加
+（幂等、或该任务当期无新数据），是不是空转要看逐表对账——本波没有做，不写成结论。
+另：`not_run 608` 是 AC05/AC14 现在最该盯的数——采集活着，但 1048 个 armed 里仍有 58% 一次没跑过。
+
+#### 11. 一次差点记账的错：我在"另一个同名分支"上解完了 #303 的冲突
+
+为了让 #303 能合，我在 `.wt-afi-paging` 里把 dev 合进去、解掉 7 个冲突、跑过测试（96 passed / 79 skipped、
+0 markers），本地提交 `a59dca628`。然后两次以为"已推送"——两次都被外证否掉：
+
+* 第一次 `git push origin HEAD` 报 **`* [new branch]`**，说明远端**没有**这个分支名。
+* 第二次 API 查 `pulls/303` 的 `head.label` 是 **`cloudQuant:fix/afi-table-pagination-total-order`**，
+  而我本地分支叫 `fix/afi-table-pagination-determinism`。
+* 继续核对：本地 `HEAD^{tree}=8b51291731`，PR 头的 tree=`23859701c6`，**不是同一条线**；
+  用正确分支名再推被 **non-fast-forward** 拒绝。
+
+结论：**我的 worktree 是一条同名但不同的旧分支，7 个冲突是在它上面解的，对 #303 无效。**
+我做错的两件事：(1) 建 worktree 时只看"分支在哪个目录"，没有核对 `head.ref` 与 `head.sha`；
+(2) 推送后先看 git 的 stdout（"done"/"up-to-date"）就准备记账，而不是先查 API 的 PR head 是否变化。
+第二件更严重——`git push` 的静默成功只说明"某个 ref 更新了"，不说明"PR 动了"。
+
+处置：删掉我误建的远端分支 `fix/afi-table-pagination-determinism`（204，已删）；
+#303 **保持 dirty**，未合、未推送、未重做。要修只能从 `origin/fix/afi-table-pagination-total-order`
+重新解一次冲突。本波不再声称 #303 有任何进展。
+另一个副作用要说明：#303 的冲突解里包含一份对 `tables.py`/`data.py` 的合并结果，
+它在**那条旧分支**上通过了 96 个测试——那只能证明"那份合并没坏"，不能证明 #303 可用。
+
+补一条 §11 的收尾：这条冲突**不是无解的**，而是卡在分支身份上，且我不替属主做破坏性动作。
+
+* 子代理给出的解是完整的：7 个 hunk 逐一说明取舍（两侧都保留）、`WarehouseTablePage` 增加
+  `adjustment_basis=None`、`resolve_total_count` 增加可选绑定参数、dev 的 4 元组契约被 page 对象取代后
+  它把 dev 的 7 个服务测试改成属性访问（值不变）。验证：ruff 0.16.2 干净、`test_akshare_management_api.py`
+  96 passed/79 skipped、`test_akshare_script_service.py` 101 passed、无冲突标记。**但它在
+  `fix/afi-table-pagination-determinism` 上，而 #303 的头是 `fix/afi-table-pagination-total-order`。**
+* 我尝试在正确分支上重做：从 `origin/fix/afi-table-pagination-total-order` 建 worktree、合 dev，
+  得到的**仍是同两个文件、同样形状的 7 个 hunk**，说明两条分支承载同一补丁、只是基线不同；
+  但这边的 `WarehouseTablePage` 还没有 `adjustment_basis` 字段，data.py 的 3 个 hunk 也要重新按
+  "page 对象 + 调整基准"重建，并且要重写 dev 的 7 个服务测试——这不是合并，是一次等价重构。
+* 两条干净的路，都需要属主点头，我都没有做：
+  (a) **重指 PR**：把 `fix/afi-table-pagination-total-order` 强制更新为已验证的 `a59dca628`（force-push，
+      改写 PR 分支历史）——破坏性，需明确授权；
+  (b) **重做**：在 `...total-order` 上按上面同一套取舍重新解一遍并重写那 7 个测试，再推（无非快进问题）。
+  我倾向 (b)，但它是**非本迭代验收项**的队列工作，本波先记为 OPEN，不占用优先项的时间。
+* 教训已入账：worktree 的分支名与 `head.ref` 不一致，是这次两度误判的直接原因；
+  `git push` 成功只证明某个 ref 动了，不证明 PR 动了——之后一切"已推送"都以 API 的 `head.sha` 为准。
+
+### Wave 31（2026-11-07）：合并列车跑完，采集平面落到 2，"停用"被证明止不住幽灵任务
+
+#### 1. 采集脚本类型平面：CI 读数 2/1108，基线由 CI 自己的一行冻结
+
+合并顺序与平面读数（同一 CI 镜像环境、空缓存；67 与 7 为此前逐点实测，2 为本波复测）：dev `3325626f96` = 67
+→ #314 `96741b8af8` = 7 → #319 `74e2a0570a` = **2**。`#308`（按 DDL 逐站点收窄行读取）与 `#316`（crypto 尾部优先）不改变计数，
+只改行为。
+
+- 最后 2 条逐行归因：`futures/monthly/dce_delivery_data.py:5` 与
+  `futures/weekly/daily_market_data.py:7`，均为 `dateutil.relativedelta` 的 `import-untyped`。
+  清掉它们只需把 `types-python-dateutil` 加入 `config/requirements-dev.lock`，属**属主依赖决定**，
+  不是代码缺口；在决定之前基线就是 2。
+- 基线不再由笔记本读数生成。`scripts/ci/freeze_collection_baseline_from_ci.py`（#318）从 dev
+  `74e2a0570a` 的作业日志里取出原文
+  `mypy_ratchet[collection]: advisory, no baseline yet - errors=2 checked=1108 (mypy 1.20.2 (compiled: yes))`
+  写进 `scripts/ci/mypy_collection_baseline.json`（run 42408819629 / job 128516708461 均记录在
+  `provenance`）。装回树上再跑 `mypy_ratchet --scope collection` 得
+  `errors=2 baseline=2 delta=+0 checked=1108`（exit 0）。
+- 过程中修掉工具自身三个缺陷，均已进 #318：HTTP helper 指向写工具那台机器的 `/tmp` 路径（改为
+  `GITHUB_TOKEN`/`~/.git-credentials`，令牌走子进程环境）；`READING_RE` 在第一个右括号截断，
+  记下的版本是 `mypy 1.20.2 (compiled: yes`，而 ratchet 逐字比较该字段——**会让每一个由此冻结的
+  基线永远版本不匹配**；默认输出路径写成 `config/`，而 ratchet 读的是脚本同目录的
+  `scripts/ci/`——写在错的路径等于"看起来冻结了、其实永远 advisory"。
+
+#### 2. AC13：停用本身没有止住幽灵任务，判定要等 #306 部署后的槽位
+
+只读仪器（`evidence/2026-11-07-wave31/ac13_verdict.py`，`SET SESSION TRANSACTION READ ONLY`）：
+
+- 队列 A 的 50 个任务 **50/50 仍是 `is_active=0`**；
+- 但停用（11-06T13:47:56Z）之后**仍执行 48 次**，落 46 个任务，全部 `failed`：11-06 22:30–22:45Z 41 行、
+  11-07 00:35–01:43Z 31 行（1095/1096 各 2 次）；
+- 01:43Z 之后没有新执行**不是修复证据**：它们是固定 CST 槽位，下一批是 11-07 22:30Z 与 11-08 00:35Z；
+- 时钟基准经证据确认（最新 scheduler 行 19:03，同刻 `UTC_TIMESTAMP()`=19:04:27，`NOW()`=11-08 03:04 CST）。
+
+结论：**AC13 不变（NOT-PROVEN），但缺口从"是否仍触发"变成"#306 是否生效"**。#306 已合入并在
+19:26:47Z 的部署中继续生效（该次重启是为 #316）。22:30Z / 00:35Z 两个槽位之后才能判。
+
+#### 3. AC11：318/1048 @ 19:02Z，静态族不变，`assigned` 仍为 0
+
+同一仪器、同一 `--since`，普查按当前 armed 集重跑：`AC11_RUNTIME_EVIDENCED = 318 / 1048`
+（上次可比 168/1048）。四分类 `318 + 109 + 20 + 601 = 1048`。静态族仍是
+`binds 155 / accepts_var_kwargs 886 / unexpected_param 7`（7 条全是 `_ingest_mode`）。
+这是处置的**输入**：`assigned` 仍为 0，须属主对 6 条 REUSE_PROVIDER 逐行填 `reviewer` /
+`reviewed_at_utc` 后用 `--registration-export` 重跑。
+
+#### 4. `Backend - Unit Tests` 间歇红的根因：pytest-timeout 的线程法会 `os._exit(1)`
+
+症状：`[gwN] node down: Not properly terminated` + `worker 'gwN' crashed while running
+...test_ai_strategy_research_task_api_runs_generated_goal_full_pipeline`，无 traceback，今天在
+#308/#313 等不同 PR、不同 worker 上重复出现。用仓库自己的 `pytest.ini` 对睡眠测试做 A/B
+（`-n 1 -o timeout=2`）：`thread` 给出与 CI **逐字相同**的 "worker crashed"；`signal` 给出带卡住帧的
+`Failed: Timeout (>2.0s)`。同一测试本机 `-n 1`、无覆盖率、无争用需 **19.73s**，旧上限 30s。
+#321 改为 `timeout_method = signal`、上限 60s，新配置下该测试原样通过（19.73s）。
+它把"查不出原因的崩溃"变成"能归因的超时"，但没有消除间歇本身——若下次仍出现 `node down`
+而无 `Timeout` 失败，机制就是 SIGKILL/OOM，这条补充正是该 PR 的价值。
+
+#### 5. AC01：锚已可复现，重锚 902 行；运行资产面是"永远起不来"而不是"未入库代码在跑"
+
+- dev `74e2a0570a` 上跑 #313 的 `refresh_script_migration_inventory.py`：之前
+  `content_drift=891, ghost=9, in_sync=166`、0 unexplained、gate 166/166；`--emit` 重写 **902** 行后
+  `in_sync=1057, ghost=9`、**0 unexplained**、gate **1057/1057 PASS**（PR #322，含三份 JSON）。
+- 运行资产面用新仪器重测（`unit_runtime_asset_audit.py`）：10 个 unit 中 **8 个指向的脚本在磁盘上
+  不存在**（7 个唯一路径），**0 个 unit 执行"在磁盘但不在任何 ref"的源码**；其中
+  `etf-nav-backfill@` 处于 `activating`，**`NRestarts=7895`**。所以 AC01 这一半的缺陷是可用性，
+  不是"未评审代码在跑"；关法只有入库那 7 个脚本或改指向/停用 8 个 unit，都是属主/运维决定。
+
+#### 6. OpenData 记账面：AC-5|07 的过期工件已被正规重跑取代
+
+对 OD `dev` `c02b136ab5` 发 `sync_acceptance_ratchet=true` 的 dispatch（run **42404291048**，
+completed/success 19:35:50Z）。工件 8 条、全部 `ledger_state: proven`，**`AC-1|08` 在**，
+**`AC-5|07` 不在**——wave 29 拒绝入账的那条 24 小时滚动过期不再进入棘轮。实际键集是
+7 钉 + `AC-1|08`（含 `AC-1|10`、`AC-5|03`），与"6 钉 + AC-1|08"的预估不同；记录以实测键集为准。
+
+#### 7. AC14：换掉"背填优先"的部署已就位，前像在案
+
+task 1049（唯一可每小时的 armed 任务）在 11-06T19:00Z..11-07T19:08Z 的 25 次运行中 **24 次
+≥599s 超时**、0 成功、0 行增长。19:26:47Z 把 dev 快进到 `f9a6210624`（含 #316）并重启
+（`ExecMainStartTimestamp=2026-11-08 03:26:47 CST`，`/docs` 200，alembic 已在 head）。
+
+部署后的**第一个槽位 20:03Z 完成：25 秒、`completed`、写入 +46 行**（1,715,064 → 1,715,110），
+无错误——这是该任务自 2026-11-05 00:03 以来第一次成功。但这只是"不再一上来就超时"，
+AC14 是自然周期项，后像要按连续槽位累计；**判定仍为 NOT-PROVEN**，证据在
+`evidence/2026-11-07-wave31/AC14_AFTER_FIRST_SLOT.md`。
+
+#### 8. 本波明确不做的事
+
+不替属主签 disposition；不把本机读数当基线（基线只取 CI 那一行）；不在采集面 PR 未合时冻结 AC01 锚；
+不把"停用后 01:43Z 没有新执行"写成 AC13 已修复；不把 PR 合并、测试通过或仪器产出当成 AC 判定闭合。

@@ -8,6 +8,7 @@ Stock Industry Pe Ratio Cninfo
 
 import hashlib
 from datetime import datetime, timedelta
+from typing import cast
 
 import pandas as pd
 
@@ -150,7 +151,12 @@ class StockIndustryPeRatioCninfo(AkshareToMySql):
                 self.require_cursor().execute(f"SHOW COLUMNS FROM `{self.table_name}`")
                 columns = [row[0] for row in self.require_cursor().fetchall() or []]
                 self.require_cursor().execute(f"SELECT COUNT(*) FROM `{self.table_name}`")
-                row_count = int((self.require_cursor().fetchone() or [0])[0] or 0)
+                # Type evidence: COUNT(*) is BIGINT and the connector decodes it to int - the same
+                # reading providers/akshare_provider.py::get_table_row_count (`-> int`) applies to
+                # this query, and common/monthly/trading_days.py narrowed that same read with
+                # cast(int, ...). `cast` is compile-time identity, so `or 0` and int() see the
+                # unchanged value.
+                row_count = int(cast(int, (self.require_cursor().fetchone() or [0])[0]) or 0)
                 expected = {"R_ID", "TRADE_DATE", "INDUSTRY_CATEGORY", "INDUSTRY_CODE"}
                 if row_count == 0 and not expected.issubset(set(columns)):
                     self.require_cursor().execute(f"DROP TABLE `{self.table_name}`")

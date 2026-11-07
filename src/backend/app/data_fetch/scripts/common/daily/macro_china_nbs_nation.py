@@ -92,7 +92,19 @@ def _normalise_queries(kwargs: dict) -> list[dict]:
         normalised = []
         for item in queries:
             query = dict(item)
-            preset = preset_by_path.get((query.get("kind"), query.get("path")))
+            kind = query.get("kind")
+            path = query.get("path")
+            # preset_by_path's keys come from the str "kind"/"path" literals in
+            # DEFAULT_NATION_QUERIES, so a lookup whose pair is not a pair of strings was
+            # always a miss; the guard skips exactly the lookups that returned None before.
+            # One documented difference: an *unhashable* pair (e.g. a list kind) used to raise
+            # TypeError out of fetch_data at this line, and now follows the same guaranteed-miss
+            # passthrough that every hashable non-match already produced.
+            preset = (
+                preset_by_path.get((kind, path))
+                if isinstance(kind, str) and isinstance(path, str)
+                else None
+            )
             if preset:
                 merged = dict(preset)
                 merged.update(query)
@@ -102,7 +114,14 @@ def _normalise_queries(kwargs: dict) -> list[dict]:
 
     if {"kind", "path"}.issubset(kwargs):
         query = dict(kwargs)
-        preset = preset_by_path.get((query.get("kind"), query.get("path")))
+        kind = query.get("kind")
+        path = query.get("path")
+        # Same guard as the loop above: non-str kind/path could never hit preset_by_path.
+        preset = (
+            preset_by_path.get((kind, path))
+            if isinstance(kind, str) and isinstance(path, str)
+            else None
+        )
         if preset:
             merged = dict(preset)
             merged.update(query)

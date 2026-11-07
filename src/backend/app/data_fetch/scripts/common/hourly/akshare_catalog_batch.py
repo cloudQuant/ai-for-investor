@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from app.data_fetch.scripts.common.daily.akshare_catalog_endpoint import run_endpoint
 from app.utils.akshare_catalog_utils import (
@@ -14,6 +14,23 @@ from app.utils.akshare_catalog_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _CatalogStats(TypedDict):
+    """The run() counters as they are actually stored.
+
+    The dict literal mixed `int` counters with the `catalog_source` string, so mypy inferred
+    ``dict[str, object]`` and every `stats[...] += 1` became `object + int`. Naming the shape keeps
+    the counters integers and the source string a string; at runtime a TypedDict *is* a plain dict,
+    so the returned payload and its key order are byte-for-byte what they were.
+    """
+
+    selected: int
+    ok: int
+    failed: int
+    rows: int
+    catalog_source: str
+    call_timeout: int
 
 
 def _catalog_path_candidates() -> list[Path]:
@@ -105,7 +122,7 @@ def run(
             all_endpoints, batch_size=effective_batch_size, batch_index=idx
         )
 
-    stats = {
+    stats: _CatalogStats = {
         "selected": len(selected),
         "ok": 0,
         "failed": 0,

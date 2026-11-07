@@ -91,7 +91,18 @@ class AkshareExecutionService:
         execution: TaskExecution,
         error_message: str,
         error_trace: str | None = None,
+        rows_before: int | None = None,
+        rows_after: int | None = None,
     ) -> TaskExecution:
+        """Record a failed run, including any row deltas the caller observed.
+
+        ``rows_before``/``rows_after`` carry the same meaning as in
+        :meth:`mark_completed`: a failed run can still have committed warehouse
+        rows, and the ledger must be able to say so.  A caller that cannot
+        observe the counts (e.g. the worker was SIGKILLed before anything could
+        be re-read) leaves them ``None`` so the columns stay NULL rather than
+        recording a fabricated zero.
+        """
         end_time = self._utcnow_naive()
         execution_row: Any = execution
         execution_row.status = TaskStatus.FAILED
@@ -99,6 +110,8 @@ class AkshareExecutionService:
         execution_row.duration = self._duration_seconds(execution.start_time, end_time)
         execution_row.error_message = error_message
         execution_row.error_trace = error_trace
+        execution_row.rows_before = rows_before
+        execution_row.rows_after = rows_after
         await self.db.commit()
         await self.db.refresh(execution)
         return execution

@@ -36,7 +36,7 @@ class StockHotRankEm(AkshareToMySql):
     @staticmethod
     def fetch_rank(page_size: int = 100) -> pd.DataFrame:
         rank_url = "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"
-        payload = {
+        payload: dict[str, str | int] = {
             "appId": "appId01",
             "globalId": "786e4c21-70dc-435a-93bb-38",
             "marketType": "",

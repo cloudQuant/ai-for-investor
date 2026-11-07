@@ -1,5 +1,6 @@
 import time
 from datetime import datetime, timedelta
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -93,7 +94,10 @@ class FuturesDailyMarket(AkshareToMySql):
                 row[4]
                 for row in sorted(
                     self.require_cursor().fetchall(),
-                    key=lambda item: item[3],
+                    # SHOW INDEX column 4 is Seq_in_index, an integer in the MySQL resultset, so
+                    # the connector decodes it as int; cast is compile-time identity and sorted()
+                    # still receives the same values it did before.
+                    key=lambda item: cast(int, item[3]),
                 )
             ]
             if columns == ["MARKET", "SYMBOL", "TRADE_DATE"]:
@@ -261,7 +265,10 @@ class FuturesDailyMarket(AkshareToMySql):
         frames: list[pd.DataFrame] = []
         for symbol in self.DCE_SINA_MAIN_SYMBOLS:
             try:
-                kwargs = {"symbol": symbol}
+                # Value types follow the code below: symbol iterates the all-str
+                # DCE_SINA_MAIN_SYMBOLS constant, and `_call_timeout: int | None` is only
+                # inserted under a non-None guard, so the dict holds str plus an optional int.
+                kwargs: dict[str, str | int] = {"symbol": symbol}
                 if _call_timeout is not None:
                     kwargs["_call_timeout"] = _call_timeout
                 symbol_df = self.fetch_ak_data("futures_zh_daily_sina", **kwargs)

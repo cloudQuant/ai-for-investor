@@ -39,9 +39,12 @@ def _get_sys_spot_futures_dict(session: requests.Session) -> dict[str, str]:
     result: dict[str, str] = {}
     for item in item_container.find_all("li"):
         link = item.find("a")
-        if link is None or not link.get("href"):
+        if link is None:
             continue
-        result[link.get_text().strip()] = link["href"]
+        href = link.get("href")
+        if not isinstance(href, str) or not href:
+            continue
+        result[link.get_text().strip()] = href
     return result
 
 
