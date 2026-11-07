@@ -3350,3 +3350,88 @@ stderr 与 stdout 混在一起，取末行会取到它）；以及只报"脏条�
   我倾向 (b)，但它是**非本迭代验收项**的队列工作，本波先记为 OPEN，不占用优先项的时间。
 * 教训已入账：worktree 的分支名与 `head.ref` 不一致，是这次两度误判的直接原因；
   `git push` 成功只证明某个 ref 动了，不证明 PR 动了——之后一切"已推送"都以 API 的 `head.sha` 为准。
+
+### Wave 31（2026-11-07）：合并列车跑完，采集平面落到 2，"停用"被证明止不住幽灵任务
+
+#### 1. 采集脚本类型平面：CI 读数 2/1108，基线由 CI 自己的一行冻结
+
+合并顺序与平面读数（同一 CI 镜像环境、空缓存复测）：dev `3325626f96` = 67 → #314 `96741b8af8` = 7
+→ #319 `74e2a0570a` = **2**。`#308`（按 DDL 逐站点收窄行读取）与 `#316`（crypto 尾部优先）不改变计数，
+只改行为。
+
+- 最后 2 条逐行归因：`futures/monthly/dce_delivery_data.py:5` 与
+  `futures/weekly/daily_market_data.py:7`，均为 `dateutil.relativedelta` 的 `import-untyped`。
+  清掉它们只需把 `types-python-dateutil` 加入 `config/requirements-dev.lock`，属**属主依赖决定**，
+  不是代码缺口；在决定之前基线就是 2。
+- 基线不再由笔记本读数生成。`scripts/ci/freeze_collection_baseline_from_ci.py`（#318）从 dev
+  `74e2a0570a` 的作业日志里取出原文
+  `mypy_ratchet[collection]: advisory, no baseline yet - errors=2 checked=1108 (mypy 1.20.2 (compiled: yes))`
+  写进 `scripts/ci/mypy_collection_baseline.json`（run 42408819629 / job 128516708461 均记录在
+  `provenance`）。装回树上再跑 `mypy_ratchet --scope collection` 得
+  `errors=2 baseline=2 delta=+0 checked=1108`（exit 0）。
+- 过程中修掉工具自身三个缺陷，均已进 #318：HTTP helper 指向写工具那台机器的 `/tmp` 路径（改为
+  `GITHUB_TOKEN`/`~/.git-credentials`，令牌走子进程环境）；`READING_RE` 在第一个右括号截断，
+  记下的版本是 `mypy 1.20.2 (compiled: yes`，而 ratchet 逐字比较该字段——**会让每一个由此冻结的
+  基线永远版本不匹配**；默认输出路径写成 `config/`，而 ratchet 读的是脚本同目录的
+  `scripts/ci/`——写在错的路径等于"看起来冻结了、其实永远 advisory"。
+
+#### 2. AC13：停用本身没有止住幽灵任务，判定要等 #306 部署后的槽位
+
+只读仪器（`evidence/2026-11-07-wave31/ac13_verdict.py`，`SET SESSION TRANSACTION READ ONLY`）：
+
+- 队列 A 的 50 个任务 **50/50 仍是 `is_active=0`**；
+- 但停用（11-06T13:47:56Z）之后**仍执行 48 次**，落 46 个任务，全部 `failed`：11-06 22:30–22:45Z 41 行、
+  11-07 00:35–01:43Z 31 行（1095/1096 各 2 次）；
+- 01:43Z 之后没有新执行**不是修复证据**：它们是固定 CST 槽位，下一批是 11-07 22:30Z 与 11-08 00:35Z；
+- 时钟基准经证据确认（最新 scheduler 行 19:03，同刻 `UTC_TIMESTAMP()`=19:04:27，`NOW()`=11-08 03:04 CST）。
+
+结论：**AC13 不变（NOT-PROVEN），但缺口从"是否仍触发"变成"#306 是否生效"**。#306 已合入并在
+19:26:47Z 的部署中继续生效（该次重启是为 #316）。22:30Z / 00:35Z 两个槽位之后才能判。
+
+#### 3. AC11：318/1048 @ 19:02Z，静态族不变，`assigned` 仍为 0
+
+同一仪器、同一 `--since`，普查按当前 armed 集重跑：`AC11_RUNTIME_EVIDENCED = 318 / 1048`
+（上次可比 168/1048）。四分类 `318 + 109 + 20 + 601 = 1048`。静态族仍是
+`binds 155 / accepts_var_kwargs 886 / unexpected_param 7`（7 条全是 `_ingest_mode`）。
+这是处置的**输入**：`assigned` 仍为 0，须属主对 6 条 REUSE_PROVIDER 逐行填 `reviewer` /
+`reviewed_at_utc` 后用 `--registration-export` 重跑。
+
+#### 4. `Backend - Unit Tests` 间歇红的根因：pytest-timeout 的线程法会 `os._exit(1)`
+
+症状：`[gwN] node down: Not properly terminated` + `worker 'gwN' crashed while running
+...test_ai_strategy_research_task_api_runs_generated_goal_full_pipeline`，无 traceback，今天在
+#308/#313 等不同 PR、不同 worker 上重复出现。用仓库自己的 `pytest.ini` 对睡眠测试做 A/B
+（`-n 1 -o timeout=2`）：`thread` 给出与 CI **逐字相同**的 "worker crashed"；`signal` 给出带卡住帧的
+`Failed: Timeout (>2.0s)`。同一测试本机 `-n 1`、无覆盖率、无争用需 **19.73s**，旧上限 30s。
+#321 改为 `timeout_method = signal`、上限 60s，新配置下该测试原样通过（19.73s）。
+它把"查不出原因的崩溃"变成"能归因的超时"，但没有消除间歇本身——若下次仍出现 `node down`
+而无 `Timeout` 失败，机制就是 SIGKILL/OOM，这条补充正是该 PR 的价值。
+
+#### 5. AC01：锚已可复现，重锚 902 行；运行资产面是"永远起不来"而不是"未入库代码在跑"
+
+- dev `74e2a0570a` 上跑 #313 的 `refresh_script_migration_inventory.py`：之前
+  `content_drift=891, ghost=9, in_sync=166`、0 unexplained、gate 166/166；`--emit` 重写 **902** 行后
+  `in_sync=1057, ghost=9`、**0 unexplained**、gate **1057/1057 PASS**（PR #322，含三份 JSON）。
+- 运行资产面用新仪器重测（`unit_runtime_asset_audit.py`）：10 个 unit 中 **8 个指向的脚本在磁盘上
+  不存在**（7 个唯一路径），**0 个 unit 执行"在磁盘但不在任何 ref"的源码**；其中
+  `etf-nav-backfill@` 处于 `activating`，**`NRestarts=7895`**。所以 AC01 这一半的缺陷是可用性，
+  不是"未评审代码在跑"；关法只有入库那 7 个脚本或改指向/停用 8 个 unit，都是属主/运维决定。
+
+#### 6. OpenData 记账面：AC-5|07 的过期工件已被正规重跑取代
+
+对 OD `dev` `c02b136ab5` 发 `sync_acceptance_ratchet=true` 的 dispatch（run **42404291048**，
+completed/success 19:35:50Z）。工件 8 条、全部 `ledger_state: proven`，**`AC-1|08` 在**，
+**`AC-5|07` 不在**——wave 29 拒绝入账的那条 24 小时滚动过期不再进入棘轮。实际键集是
+7 钉 + `AC-1|08`（含 `AC-1|10`、`AC-5|03`），与"6 钉 + AC-1|08"的预估不同；记录以实测键集为准。
+
+#### 7. AC14：换掉"背填优先"的部署已就位，前像在案
+
+task 1049（唯一可每小时的 armed 任务）在 11-06T19:00Z..11-07T19:08Z 的 25 次运行中 **24 次
+≥599s 超时**、0 成功、0 行增长。19:26:47Z 把 dev 快进到 `f9a6210624`（含 #316）并重启
+（`ExecMainStartTimestamp=2026-11-08 03:26:47 CST`，`/docs` 200，alembic 已在 head）。
+下一次槽位 20:03Z 起才可测后像；那之前 AC14 仍是 NOT-PROVEN。
+
+#### 8. 本波明确不做的事
+
+不替属主签 disposition；不把本机读数当基线（基线只取 CI 那一行）；不在采集面 PR 未合时冻结 AC01 锚；
+不把"停用后 01:43Z 没有新执行"写成 AC13 已修复；不把 PR 合并、测试通过或仪器产出当成 AC 判定闭合。
