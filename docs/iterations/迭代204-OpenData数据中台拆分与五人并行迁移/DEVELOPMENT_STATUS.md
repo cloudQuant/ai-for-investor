@@ -2215,3 +2215,16 @@ index 93 / fund 87 / futures 64 / option 46 / bond 41 / fx 20 / crypto 5）与�
 monthly 21 / **unspecified 5**）都记在审计文档里供分派直接取用——注意族与频率本身也仍未人工确认，不是已知输入。
 静态形状与类型面互相印证：`entrypoint_fetch_data` 885 个类里 831 个的 `main()` 调用不存在的 `run`（#270 已修），
 `entrypoint_run` 162 个自带入口。
+
+### Wave 27（2026-11-05）：运行时不是「慢」，是不存在——把它从字节码里认回来
+
+这一波没有推进任何验收行，但把「验收面为什么一直读不到绿」这件事第一次量清楚了：**dev 上的代码从来没有在这台机器上跑起来过**。全部读数见 `RUNTIME_REPAIR_20261105.md`，此处只记结论与身份。
+
+1. **崩溃循环**：`ai-for-investor.service` 在 21:43 读到 `NRestarts=1457`，当天 20 次 `Application startup failed`。原因不是负载也不是依赖，是 `expected heads ['20261101_stock_analysis_report_evidence_vector'], found ['20261019_akshare_enum_values']`。
+2. **库状态无法由仓库重建**：那个 found 的 revision 在仓库里不存在，`alembic current` 与 `alembic stamp` 都报 `Can't locate revision`。它的身份只能从 `__pycache__` 的两个 pyc 里读出来（`1a2ef06c542b2…` 与 `514fdcff185a1…`）：`20261017_legacy_paper_import_cutover → 20261019_akshare_scheduler_claims → 20261019_akshare_enum_values`，前者建 `ak_task_run_claims`/`ak_scheduler_control`，后者归一化 5 个 `(表,列,允许值)` 且 downgrade 主动拒绝。**dev 的模型已不再引用这两张表**（`alembic check` 报成 `remove_table`），所以不需要重建迁移，需要记录的是「本机库带着一段仓库复现不出来的历史」。
+3. **九天全量失败的真正成因是运行身份漂移**：4,279 条 `failed` 的错误文本 `AKShare script worker exited with code 1 without a result` 在 `dev`、`origin/master`、`docs/iteration-204-wave26` 三个 ref 里都 `grep` 不到——产生这些执行的进程跑的既不是 dev 也不是任何分支的代码。`error_trace`/`result` 长度全为 0，所以当时无人能归因。这一条本身就是 AC01 要的运行入口证据。
+4. **修复**：先备份（`ai_for_investor_pre_upgrade_20261105T2148.sql.gz`，135,093,875 B，`gzip -t` 通过，867 条 CREATE/INSERT，`sha256 5bca70ab417e04b1…`），再判明 tracked 待补链只有 `20261030/20261031/20261101` 三个纯新增对象、与幽灵迁移作用面无重叠，然后 `alembic stamp --purge 20261017_legacy_paper_import_cutover` → `alembic upgrade head` → 重启。`current == heads == 20261101_…` 单 head，`/docs` **200**，`NRestarts=0`。冷启动约 70 秒（嵌入模型加载），期间 8000 端口 refused 是正常现象，不是回归。
+5. **采集回来了，是计数不是形容词**：13:57:03→14:10 UTC 共 10 条执行，**9 completed / 0 failed / 1 running**；写入量逐条读回 `+5,371`（`stock_esg_msci_sina`）、`+29`、`+15`，两条为 0（幂等）。对照 §1 的九天 4,279/0。顺带钉下一条会反复坑人的事实：**`ak_task_executions.created_at` 是 UTC**（同连接 `NOW()=22:04:32` / `UTC_TIMESTAMP()=14:04:32` / `MAX(created_at)=14:03`）。
+6. **恢复运行时资产只恢复能证明的那一个**：worker 从留档原样取回（`sha256 8715a285f2c38ef7…`，`--plan` 只读 `source_or_database_calls: 0`，ruff check/format 通过），它调度的 **5 个控制器 `git log --all --diff-filter=A` 逐个实测 added-in-any-ref = 0**：crypto 有两份 proposal 快照，stock/etf/bond/cffex 四条本机一份都没有，只有它们写出的 progress JSONL 证明曾经存在。把一个写数仓的脚本按「大概是这份」放回运行时是猜测，所以 #273 只含 worker；装好后 `--apply` 变成具名失败关闭（`run_id 20261105T140002Z-6a51aa6b97a0`，`required runtime inputs missing: …crypto_full_history_recovery.py`，`write_possible: false`，`source_failure_recorded: false`）。重建 / 停用 / 只恢复 crypto，交属主。
+7. **本波并行开的开发流**：#272 `feat/afi-frontend-coverage-states`（204-E03-03/E05-02，前端覆盖状态不再折叠；本机 `vue-tsc` 干净、`--max-warnings 0` 干净、6 个受影响测试文件 **137 passed** 由集成人自己复跑得到）。另三条在跑：OpenData `204-A04-04` post-commit visibility seal（A05-04/06/07 的前置，全仓此前根本不存在该概念）、AFI `204-E04-01/02/03` 研究工件绑定 publication、#270 分支上的采集脚本类型平面剩余 226 条（`Database.cursor` 联合类型 88 + 整数索引形状 39 两处共享层）。
+8. **平面**：以上全部落在 CODE/OFFLINE 与**本机 DEPLOYMENT 观测**。AC14 的小时数钟从 2026-11-05 14:03 UTC 才开始累计，48 次连续小时的最早可能完成点是 2026-11-07 14:03 UTC；AC05/AC13/AC17/AC18 零进展。按属主指示 1,098 个 armed 任务已全量放行真实源，因此源侧配额与跨进程预算（AC13）立刻成为活问题，不是以后再说——`scheduler.py:106/132` 会武装每一条 `is_active`，而 2026-10-25 台账记的是 1,103 行里 69 条 active。

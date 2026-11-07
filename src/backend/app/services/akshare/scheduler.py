@@ -13,12 +13,35 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.database import async_session_maker
 from app.models.akshare_mgmt import ScheduledTask, ScheduleType, TriggeredBy
+from app.services.akshare.clock import to_naive_utc, utcnow_naive
 from app.services.akshare.script import AkshareScriptService
 
 if TYPE_CHECKING:
     from app.models.akshare_mgmt import TaskExecution
 
 settings = get_settings()
+
+_JOB_ID_PREFIX = "ak_task_"
+
+
+def _job_id(task_id: int) -> str:
+    return f"{_JOB_ID_PREFIX}{task_id}"
+
+
+def _inactive_job_task_ids(armed_ids: list[int], job_ids: list[str]) -> list[int]:
+    """Registered akshare job ids whose task is no longer in the armed set."""
+    armed = set(armed_ids)
+    stale: list[int] = []
+    for job_id in job_ids:
+        if not job_id.startswith(_JOB_ID_PREFIX):
+            continue
+        try:
+            task_id = int(job_id[len(_JOB_ID_PREFIX) :])
+        except ValueError:
+            continue
+        if task_id not in armed:
+            stale.append(task_id)
+    return stale
 
 
 class AkshareScheduler:
@@ -102,7 +125,7 @@ class AkshareScheduler:
             task = await session.get(ScheduledTask, task_id)
             if task is None:
                 return
-            job_id = f"ak_task_{task.id}"
+            job_id = _job_id(task.id)
             if not task.is_active:
                 if scheduler.get_job(job_id):
                     scheduler.remove_job(job_id)
@@ -117,12 +140,12 @@ class AkshareScheduler:
                 kwargs={"task_id": task.id},
                 name=task.name,
             )
-            task.next_execution_at = getattr(job, "next_run_time", None)
+            task.next_execution_at = to_naive_utc(getattr(job, "next_run_time", None))
             await session.commit()
 
     async def remove_task(self, task_id: int) -> None:
         scheduler = self._ensure_scheduler()
-        job_id = f"ak_task_{task_id}"
+        job_id = _job_id(task_id)
         if scheduler.get_job(job_id):
             scheduler.remove_job(job_id)
 
@@ -134,6 +157,12 @@ class AkshareScheduler:
             task_ids = [row[0] for row in result.all()]
         for task_id in task_ids:
             await self.add_or_update_task(task_id)
+        # A task deactivated after its job was registered keeps firing unless it is dropped here:
+        # add_or_update_task only ever visits active ids, so the stale job would outlive the flag.
+        scheduler = self._ensure_scheduler()
+        stale = _inactive_job_task_ids(task_ids, [str(job.id) for job in scheduler.get_jobs()])
+        for job_task_id in stale:
+            await self.add_or_update_task(job_task_id)
 
     async def run_task_now(self, task_id: int, operator_id: str | None = None) -> TaskExecution:
         async with async_session_maker() as session:
@@ -150,8 +179,10 @@ class AkshareScheduler:
                 timeout_seconds=task.timeout,
             )
             scheduler = self._ensure_scheduler()
-            job = scheduler.get_job(f"ak_task_{task.id}")
-            task.last_execution_at = datetime.now()
-            task.next_execution_at = getattr(job, "next_run_time", None) if job else None
+            job = scheduler.get_job(_job_id(task.id))
+            task.last_execution_at = utcnow_naive()
+            task.next_execution_at = (
+                to_naive_utc(getattr(job, "next_run_time", None)) if job else None
+            )
             await session.commit()
             return execution

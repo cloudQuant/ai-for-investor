@@ -488,4 +488,54 @@ describe('router', () => {
     await router.isReady()
     expect(router.currentRoute.value.name).toBe('TradingWorkspaceList')
   })
+
+  it('resolves unmatched deep paths through the terminal catch-all', async () => {
+    mockAuthStore(true)
+    const resolved = router.resolve('/some/removed/deep/path')
+    expect(resolved.matched.length).toBeGreaterThan(0)
+    expect(resolved.matched[resolved.matched.length - 1].path).toBe('/:pathMatch(.*)*')
+
+    await router.push('/some/removed/deep/path')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('DataMarket')
+    expect(router.currentRoute.value.path).toBe('/data/market')
+  })
+
+  it.each(['/portfolio-audit/2026', '/settings/notifications'])(
+    'resolves the stale bookmark %s instead of leaving zero matched components',
+    async (path) => {
+      mockAuthStore(true)
+      await router.push(path)
+      await router.isReady()
+      expect(router.currentRoute.value.matched.length).toBeGreaterThan(0)
+      expect(router.currentRoute.value.name).toBe('DataMarket')
+    },
+  )
+
+  it('does not let the catch-all swallow real routes', async () => {
+    mockAuthStore(true)
+
+    await router.push('/settings')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('Settings')
+    expect(router.currentRoute.value.matched.length).toBeGreaterThan(0)
+
+    await router.push('/data/tables/1292')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('DataTableDetail')
+    expect(router.currentRoute.value.params.id).toBe('1292')
+
+    await router.push(APP_PATHS.research.workspace(42))
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('ResearchWorkspaceDetail')
+    expect(router.currentRoute.value.params.id).toBe('42')
+  })
+
+  it('sends unauthenticated users through Login with the original redirect query', async () => {
+    mockAuthStore(false)
+    await router.push('/legacy/removed/page')
+    await router.isReady()
+    expect(router.currentRoute.value.name).toBe('Login')
+    expect(router.currentRoute.value.query.redirect).toBe('/data/market')
+  })
 })
