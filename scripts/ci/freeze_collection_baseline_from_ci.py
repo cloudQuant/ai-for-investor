@@ -205,7 +205,11 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--job-name", default=JOB_NAME)
     ap.add_argument("--scope", default="collection")
-    ap.add_argument("--out", default="config/mypy_collection_baseline.json")
+    ap.add_argument(
+        "--out",
+        default="scripts/ci/mypy_collection_baseline.json",
+        help="where mypy_ratchet.py looks for the baseline (beside the script, not config/)",
+    )
     ap.add_argument(
         "--write",
         action="store_true",
