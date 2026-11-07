@@ -2228,3 +2228,109 @@ monthly 21 / **unspecified 5**）都记在审计文档里供分派直接取用�
 6. **恢复运行时资产只恢复能证明的那一个**：worker 从留档原样取回（`sha256 8715a285f2c38ef7…`，`--plan` 只读 `source_or_database_calls: 0`，ruff check/format 通过），它调度的 **5 个控制器 `git log --all --diff-filter=A` 逐个实测 added-in-any-ref = 0**：crypto 有两份 proposal 快照，stock/etf/bond/cffex 四条本机一份都没有，只有它们写出的 progress JSONL 证明曾经存在。把一个写数仓的脚本按「大概是这份」放回运行时是猜测，所以 #273 只含 worker；装好后 `--apply` 变成具名失败关闭（`run_id 20261105T140002Z-6a51aa6b97a0`，`required runtime inputs missing: …crypto_full_history_recovery.py`，`write_possible: false`，`source_failure_recorded: false`）。重建 / 停用 / 只恢复 crypto，交属主。
 7. **本波并行开的开发流**：#272 `feat/afi-frontend-coverage-states`（204-E03-03/E05-02，前端覆盖状态不再折叠；本机 `vue-tsc` 干净、`--max-warnings 0` 干净、6 个受影响测试文件 **137 passed** 由集成人自己复跑得到）。另三条在跑：OpenData `204-A04-04` post-commit visibility seal（A05-04/06/07 的前置，全仓此前根本不存在该概念）、AFI `204-E04-01/02/03` 研究工件绑定 publication、#270 分支上的采集脚本类型平面剩余 226 条（`Database.cursor` 联合类型 88 + 整数索引形状 39 两处共享层）。
 8. **平面**：以上全部落在 CODE/OFFLINE 与**本机 DEPLOYMENT 观测**。AC14 的小时数钟从 2026-11-05 14:03 UTC 才开始累计，48 次连续小时的最早可能完成点是 2026-11-07 14:03 UTC；AC05/AC13/AC17/AC18 零进展。按属主指示 1,098 个 armed 任务已全量放行真实源，因此源侧配额与跨进程预算（AC13）立刻成为活问题，不是以后再说——`scheduler.py:106/132` 会武装每一条 `is_active`，而 2026-10-25 台账记的是 1,103 行里 69 条 active。
+
+### Wave 30（2026-11-07）：把 #306 部署上去，才发现"部署成功"本身要先跑迁移
+
+#### 1. 部署：#306 已合入，但"更新代码 + 重启"会让服务起不来（exit 3），原因不是 #306
+
+上一波记录过"部署了但没重启"。这一波真的重启了，于是撞上一个此前没人踩过的形状：
+
+* 主工作树快进到 dev `eaf03cb56`（含 #306 的 UTC 时钟、#305/#308 的采集平面、#310 的治理声明文档），
+  `systemctl --user restart ai-for-investor.service`。
+* 结果：**6 次 `status=3/NOTIMPLEMENTED` 崩溃循环**，每 ~10 秒一次。`/docs` 全程 000。
+* 日志里没有 traceback，只有启动走到了 `app.startup.database:register` 的
+  `DB_AUTO_CREATE_SCHEMA=false: Verifying database migration revision...`，然后 **1 秒内**
+  `lifespan:170` 直接 shutdown——即"迁移版本核对失败 → 主动退出"，不是导入错误、不是代码异常。
+* 实测对照：代码 `alembic heads` = **`20261106_akshare_run_coordinator_claims`**（#289 昨晚合入的新迁移），
+  库 `alembic current` = **`20261101_stock_analysis_report_evidence_vector`**。差一个 revision。
+* 处置：先确认该迁移是**纯增量**（`op.create_table` + `create_index`，`drop_table` 只在 downgrade 里），
+  再 `alembic upgrade head`（库内写入，属主已授权"生产写与补采"），随后 systemd 下一次自动重启即恢复：
+  `active`、`/docs` **200**、`ExecMainStartTimestamp=2026-11-08 01:22:14 CST`。
+
+**这条要进 AC12 的判断面**：一个"只更新代码不跑迁移"的部署会让 API 完全不可用，而失败形态是
+一行 `status=3`，没有 traceback。把"部署定义"写成"代码 + 迁移 + 重启"三件套，是这台机器上可证的；
+反过来，"代码已在 dev 上绿"绝不等于"生产可用"。同时说明我上一波的
+"部署态跑的是旧代码"已作废——现在跑的就是 dev `eaf03cb56`。
+
+#### 2. 时钟迁移：416 条 `last_execution_at` + 1048 条 `next_execution_at` 一次校正，写后归零
+
+在**代码已部署且采集器已重启之后**才跑 `normalize_scheduler_clock.py`（脚本自己把这条顺序写在输出里）：
+
+* dry-run：`last_execution_at` shift **416** / already-utc **613** / no-execution 0 / stale-column **19** / unclassified 0；
+  `next_execution_at` shift candidates **1048**。
+* `--apply`：shifted last **416**、shifted next **1048**；before-image 1048 行写入
+  `/tmp/ac11-clock-before-20261107T172321Z.json`，已复制到
+  `~/afi204-evidence/2026-11-07-deploy/` 存档。
+* **写后重分类就是证明**：`shift` **0** / already-utc **1029** / stale-column **19** / unclassified 0。
+  那 19 条不是时钟问题（列比最新执行还旧，是"列未被维护"的另一个缺陷），脚本按设计不碰它们。
+* 416 比上一波读到的 214 大，是因为上一波之后旧代码又持续写了 ~17 小时——这个计数只会随旧写者运行而增长，
+  引用必须带时刻；这也解释了为什么"先部署再迁移"的顺序不可颠倒。
+
+#### 3. 部署后的写者验证：`last_execution_at` 不再比真实执行晚 8 小时
+
+重启后新产生的执行行（只读比对）：
+
+| task | `last_execution_at` | 该任务最新 `ak_task_executions.created_at` | 差 |
+|---|---|---|---|
+| 521 | 2026-11-07 17:30:00 | 2026-11-07 17:30:00 | **0.0 min** |
+| 667 | 2026-11-07 17:28:02 | 2026-11-07 17:28:00 | **0.0 min** |
+| 531 | 2026-11-07 17:24:30 | 2026-11-07 17:24:24 | **0.1 min** |
+
+同一个连接里 `NOW()=2026-11-08 01:31:13` 而 `UTC_TIMESTAMP()=2026-11-07 17:31:13`，
+确认库会话时区是 CST 而列里存的是 UTC。**#306 的双写时钟缺陷在新行上已经消失**；
+旧行的偏移由 §2 的迁移补齐。这一格此前只能写"修复待部署"，现在可以写"已部署并实测"。
+
+#### 4. AC13 的判定窗口到了：停用后的幽灵任务确实又跑了 48 次，然后随部署停止
+
+上一波把可判窗口定在 2026-11-07 00:00–01:43 UTC。读数（只读）：
+
+* 停用时刻 `2026-11-06 13:47:56` 之后，`No callable entrypoint found for script …` 仍有 **48 次**：
+  `fund_monetary_income_history` 26（00:35–01:43）、`forex_hist_sina` 18（前一日 22:30–01:42）、
+  `fund_reviewed_unit_nav_history` 4（00:45–00:51）。而 `is_active=1` 的 armed 数全程是 **1048**。
+* 这**逐字证实**了 #306 修的那条机理：`reload_active_tasks` 只遍历 active、从不注销已失效 job，
+  所以把行置 `is_active=0` 之后，**仍在运行的调度器会继续按旧注册触发**，直到进程重启。
+* 因此"停用 50 个幽灵任务"这一动作的效果边界是**进程生命周期**，不是事务提交时刻。
+  部署+重启后这些 slug 不再出现在注册里；**下一个可判点是今晚 22:00 UTC**（CST 06:00）的槽位——
+  若届时 0 次执行，则 AC13 这一半从"未生效"翻为"已生效（且原因已定位）"；本波不预判。
+* 顺带把"停用是有代价的"再钉一次：这 50 个任务的失败是幽灵注册唯一可见信号，停用后该信号消失，
+  可见性净降；这条此前已登记，现在有了具体时间线。
+
+#### 5. 队列：五支合入，两支因 ruff 版本漂移被打回，一支已重基
+
+* 已合入 dev：**#305**（机械族）、**#306**（UTC 时钟 + 注销失效 job）、**#308**（逐站点按 DDL 收窄）、
+  **#309**（AC11 运行证据仪器）、**#310**（治理声明文档 + 钉形状的测试）、**#311**（89 行分诊）。
+* **#308 的合入带出一条经验**：它是叠在 #305 之上的，而 #305 先以 squash 合入，于是 #308 变 `dirty`；
+  本地 `merge origin/dev` 后 8 个文件 `UU`，逐个取 `--ours`（我们这一侧是 #308+#305 的超集），
+  再实测平面 **7/1108（CI 环境）** 未回退、96 个平面测试通过、ruff 干净，才推送并重绑自审。
+* **#313/#314 的失败不是代码问题，是格式化工具版本**：CI 在 `ci.yml:397` 硬装
+  **`ruff==0.16.2`**，而 `config/requirements-dev.lock:431` 钉的是 **`ruff==0.15.13`**。
+  两个版本 `ruff format` 的输出不同，所以"本地 format 干净 → CI format 不过"会稳定复现。
+  本波按 CI 的版本（0.16.2）重排并推送，两 PR 各自重跑；**仓库层面这两处 pin 应当对齐**，
+  否则任何人本地按 lock 格式化都会被打回。这一条已记入债务表，修法（改 lock 还是改 workflow）属属主。
+* #314 随后又因为 #308 合入而 `dirty`，同样用 `merge origin/dev` + 8 个冲突取 ours 处理，
+  重测 **CI 环境 7/1108**、96 tests、ruff 干净后推送，head `306a9259a4`，自审已重绑到该 sha。
+
+#### 6. 本波没有改写的判定
+
+AC12 仍不是"通过"：本波只证明"代码+迁移+重启"三件套能让服务按 dev 的代码跑起来，
+并把时钟写入侧从"待部署"推进到"已部署并实测"；AC12 要的部署可复现性与"迁移随代码走"的机制
+（比如启动时明确拒绝而非静默 exit、或把迁移纳入部署脚本）还没有落地，仍按 PARTIAL 记。
+AC13 的"停用是否生效"要等今晚 22:00 UTC 的槽位；AC05/AC10/AC14 不因本波改变。
+
+#### 7. 把"已部署"写成可复跑的四问四答，并如实承认当前落后一个文档提交
+
+上文的部署结论现在有一个只读仪器兜底：`evidence/2026-11-07-wave30/deploy_state_verification.py`
+（`git rev-parse` + `alembic heads/current` + 只读 SELECT），17:41:14Z 输出：
+
+| 问题 | 读数 | 含义 |
+|---|---|---|
+| 运行的是哪个提交 | `eaf03cb56253`，分支 `dev` | — |
+| 它就是分支尖吗 | **`deployed_head_is_branch_tip: false`**（dev 尖 `97fd87801e12`） | 部署后 #311 的文档提交又进了 dev，所以运行树比 dev 落后一个**纯文档**提交。写"部署的就是 dev"会不准确，故如实标 false |
+| 迁移对齐了吗 | `heads=20261106_akshare_run_coordinator_claims`、`current=20261106_akshare_run_coordinator_claims` | 两侧同名，启动的硬门槛满足 |
+| 工作树干净吗 | 唯一条目 `?? var/` | 只有已知的未跟踪运行产物，无源码改动 |
+| 时钟写对了吗 | `active_tasks_with_clock_skew_over_60min: 0` | 近期跑过的 active 任务里没有超过 60 分钟的偏差 |
+| 停用生效了吗 | `ghost_entrypoint_failures_since_window: 0`、`armed_tasks: 1048` | 观测窗内 0 次（定论仍等 22:00 UTC 槽位） |
+
+仪器第一版有两个自己的缺陷，都已修：把 `alembic current` 的 `INFO` 行当成了 revision（因为
+stderr 与 stdout 混在一起，取末行会取到它）；以及只报"脏条目数量"而不报内容、也不报
+"运行提交 vs 分支尖"。这两个都属于"看起来在报事实、实际在报噪声"，和本波反复遇到的是同一类问题。
