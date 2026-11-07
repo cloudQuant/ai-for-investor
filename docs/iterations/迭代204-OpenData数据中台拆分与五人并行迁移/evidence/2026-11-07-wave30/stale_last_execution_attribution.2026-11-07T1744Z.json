@@ -1,0 +1,494 @@
+{
+  "read_at_utc": "2026-11-07T17:44:37Z",
+  "laging_tasks": 40,
+  "all_newest_are_failed": false,
+  "tasks": [
+    {
+      "task_id": 387,
+      "name": "Auto:  Fund Codes",
+      "is_active": 0,
+      "cron": "55 12 * * sat",
+      "last_execution_at": "2026-07-03 19:09:15",
+      "newest_execution": "2026-07-03 19:09:16",
+      "lag_hours": 0.0,
+      "newest_status": "completed"
+    },
+    {
+      "task_id": 516,
+      "name": "Auto: Dce Delivery Data",
+      "is_active": 1,
+      "cron": "57 21 6 * *",
+      "last_execution_at": "2026-10-26 07:00:09",
+      "newest_execution": "2026-11-06 13:57:00",
+      "lag_hours": 270.9,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 384,
+      "name": "Auto: Video Tv",
+      "is_active": 1,
+      "cron": "34 4 * * fri",
+      "last_execution_at": "2026-10-29 20:34:00",
+      "newest_execution": "2026-11-05 20:34:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 66,
+      "name": "Auto: Business Value Artist",
+      "is_active": 1,
+      "cron": "38 4 * * fri",
+      "last_execution_at": "2026-10-29 20:38:00",
+      "newest_execution": "2026-11-05 20:38:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 557,
+      "name": "Auto: Futures Warehouse Receipt Dce",
+      "is_active": 1,
+      "cron": "9 7 * * sat",
+      "last_execution_at": "2026-10-30 23:09:00",
+      "newest_execution": "2026-11-06 23:09:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 589,
+      "name": "Auto: A Share News Sentiment Index",
+      "is_active": 1,
+      "cron": "34 8 * * sat",
+      "last_execution_at": "2026-10-31 00:34:00",
+      "newest_execution": "2026-11-07 00:34:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 526,
+      "name": "Auto: Futures Contract Info Shfe",
+      "is_active": 1,
+      "cron": "6 11 * * sat",
+      "last_execution_at": "2026-10-31 03:06:00",
+      "newest_execution": "2026-11-07 03:06:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 517,
+      "name": "Auto: Dce Delivery Match",
+      "is_active": 1,
+      "cron": "22 17 * * sat",
+      "last_execution_at": "2026-10-31 09:22:00",
+      "newest_execution": "2026-11-07 09:22:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 390,
+      "name": "Auto: Etf Minute Hist Em",
+      "is_active": 1,
+      "cron": "44 20 * * sat",
+      "last_execution_at": "2026-10-31 12:44:00",
+      "newest_execution": "2026-11-07 12:44:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 518,
+      "name": "Auto: Foreign Futures History Em",
+      "is_active": 1,
+      "cron": "1 22 * * sat",
+      "last_execution_at": "2026-10-31 14:01:00",
+      "newest_execution": "2026-11-07 14:01:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 386,
+      "name": "Auto: Xincaifu Rank",
+      "is_active": 1,
+      "cron": "39 1 * * sun",
+      "last_execution_at": "2026-10-31 17:39:00",
+      "newest_execution": "2026-11-07 17:39:00",
+      "lag_hours": 168.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 953,
+      "name": "Auto: Stock Sector Fund Flow Hist",
+      "is_active": 1,
+      "cron": "6 13 * * sun",
+      "last_execution_at": "2026-11-01 05:06:00",
+      "newest_execution": "2026-11-01 05:06:01",
+      "lag_hours": 0.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1055,
+      "name": "Iteration203 Reviewed unit NAV 158042 da",
+      "is_active": 0,
+      "cron": "47 8 * * *",
+      "last_execution_at": "2026-11-04 00:47:00",
+      "newest_execution": "2026-11-07 00:47:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1056,
+      "name": "Iteration203 Reviewed unit NAV 159100 da",
+      "is_active": 0,
+      "cron": "49 8 * * *",
+      "last_execution_at": "2026-11-04 00:49:00",
+      "newest_execution": "2026-11-07 00:49:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1057,
+      "name": "Iteration203 Reviewed unit NAV 513310 da",
+      "is_active": 0,
+      "cron": "51 8 * * *",
+      "last_execution_at": "2026-11-04 00:51:00",
+      "newest_execution": "2026-11-07 00:51:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1058,
+      "name": "Iteration203 F10 monetary income 159001 ",
+      "is_active": 0,
+      "cron": "55 8 * * *",
+      "last_execution_at": "2026-11-04 00:55:00",
+      "newest_execution": "2026-11-07 00:55:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1059,
+      "name": "Iteration203 F10 monetary income 159003 ",
+      "is_active": 0,
+      "cron": "57 8 * * *",
+      "last_execution_at": "2026-11-04 00:57:00",
+      "newest_execution": "2026-11-07 00:57:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1060,
+      "name": "Iteration203 F10 monetary income 159005 ",
+      "is_active": 0,
+      "cron": "59 8 * * *",
+      "last_execution_at": "2026-11-04 00:59:00",
+      "newest_execution": "2026-11-07 00:59:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1061,
+      "name": "Iteration203 F10 monetary income 511600 ",
+      "is_active": 0,
+      "cron": "1 9 * * *",
+      "last_execution_at": "2026-11-04 01:01:00",
+      "newest_execution": "2026-11-07 01:01:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1062,
+      "name": "Iteration203 F10 monetary income 511620 ",
+      "is_active": 0,
+      "cron": "3 9 * * *",
+      "last_execution_at": "2026-11-04 01:03:00",
+      "newest_execution": "2026-11-07 01:03:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1063,
+      "name": "Iteration203 F10 monetary income 511650 ",
+      "is_active": 0,
+      "cron": "5 9 * * *",
+      "last_execution_at": "2026-11-04 01:05:00",
+      "newest_execution": "2026-11-07 01:05:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1064,
+      "name": "Iteration203 F10 monetary income 511670 ",
+      "is_active": 0,
+      "cron": "7 9 * * *",
+      "last_execution_at": "2026-11-04 01:07:00",
+      "newest_execution": "2026-11-07 01:07:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1065,
+      "name": "Iteration203 F10 monetary income 511690 ",
+      "is_active": 0,
+      "cron": "9 9 * * *",
+      "last_execution_at": "2026-11-04 01:09:00",
+      "newest_execution": "2026-11-07 01:09:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1066,
+      "name": "Iteration203 F10 monetary income 511770 ",
+      "is_active": 0,
+      "cron": "11 9 * * *",
+      "last_execution_at": "2026-11-04 01:11:00",
+      "newest_execution": "2026-11-07 01:11:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1067,
+      "name": "Iteration203 F10 monetary income 511800 ",
+      "is_active": 0,
+      "cron": "13 9 * * *",
+      "last_execution_at": "2026-11-04 01:13:00",
+      "newest_execution": "2026-11-07 01:13:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1068,
+      "name": "Iteration203 F10 monetary income 511810 ",
+      "is_active": 0,
+      "cron": "15 9 * * *",
+      "last_execution_at": "2026-11-04 01:15:00",
+      "newest_execution": "2026-11-07 01:15:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1069,
+      "name": "Iteration203 F10 monetary income 511820 ",
+      "is_active": 0,
+      "cron": "17 9 * * *",
+      "last_execution_at": "2026-11-04 01:17:00",
+      "newest_execution": "2026-11-07 01:17:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1070,
+      "name": "Iteration203 F10 monetary income 511830 ",
+      "is_active": 0,
+      "cron": "19 9 * * *",
+      "last_execution_at": "2026-11-04 01:19:00",
+      "newest_execution": "2026-11-07 01:19:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1071,
+      "name": "Iteration203 F10 monetary income 511850 ",
+      "is_active": 0,
+      "cron": "21 9 * * *",
+      "last_execution_at": "2026-11-04 01:21:00",
+      "newest_execution": "2026-11-07 01:21:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1072,
+      "name": "Iteration203 F10 monetary income 511860 ",
+      "is_active": 0,
+      "cron": "23 9 * * *",
+      "last_execution_at": "2026-11-04 01:23:00",
+      "newest_execution": "2026-11-07 01:23:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1073,
+      "name": "Iteration203 F10 monetary income 511900 ",
+      "is_active": 0,
+      "cron": "25 9 * * *",
+      "last_execution_at": "2026-11-04 01:25:00",
+      "newest_execution": "2026-11-07 01:25:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1074,
+      "name": "Iteration203 F10 monetary income 511910 ",
+      "is_active": 0,
+      "cron": "27 9 * * *",
+      "last_execution_at": "2026-11-04 01:27:00",
+      "newest_execution": "2026-11-07 01:27:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1075,
+      "name": "Iteration203 F10 monetary income 511920 ",
+      "is_active": 0,
+      "cron": "29 9 * * *",
+      "last_execution_at": "2026-11-04 01:29:00",
+      "newest_execution": "2026-11-07 01:29:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1076,
+      "name": "Iteration203 F10 monetary income 511930 ",
+      "is_active": 0,
+      "cron": "31 9 * * *",
+      "last_execution_at": "2026-11-04 01:31:00",
+      "newest_execution": "2026-11-07 01:31:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1077,
+      "name": "Iteration203 F10 monetary income 511950 ",
+      "is_active": 0,
+      "cron": "33 9 * * *",
+      "last_execution_at": "2026-11-04 01:33:00",
+      "newest_execution": "2026-11-07 01:33:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1078,
+      "name": "Iteration203 F10 monetary income 511960 ",
+      "is_active": 0,
+      "cron": "35 9 * * *",
+      "last_execution_at": "2026-11-04 01:35:00",
+      "newest_execution": "2026-11-07 01:35:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1079,
+      "name": "Iteration203 F10 monetary income 511970 ",
+      "is_active": 0,
+      "cron": "37 9 * * *",
+      "last_execution_at": "2026-11-04 01:37:00",
+      "newest_execution": "2026-11-07 01:37:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1080,
+      "name": "Iteration203 F10 monetary income 511980 ",
+      "is_active": 0,
+      "cron": "39 9 * * *",
+      "last_execution_at": "2026-11-04 01:39:00",
+      "newest_execution": "2026-11-07 01:39:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1081,
+      "name": "Iteration203 F10 monetary income 511990 ",
+      "is_active": 0,
+      "cron": "41 9 * * *",
+      "last_execution_at": "2026-11-04 01:41:00",
+      "newest_execution": "2026-11-07 01:41:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    },
+    {
+      "task_id": 1083,
+      "name": "Iteration203 F10 monetary income 511700 ",
+      "is_active": 0,
+      "cron": "43 9 * * *",
+      "last_execution_at": "2026-11-04 01:43:00",
+      "newest_execution": "2026-11-07 01:43:00",
+      "lag_hours": 72.0,
+      "newest_status": "failed"
+    }
+  ],
+  "recent_runs_and_whether_the_column_moved": [
+    {
+      "task_id": 902,
+      "execution_at": "2026-11-07 17:40:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:40:00",
+      "column_advanced": true
+    },
+    {
+      "task_id": 386,
+      "execution_at": "2026-11-07 17:39:00",
+      "status": "failed",
+      "last_execution_at": "2026-10-31 17:39:00",
+      "column_advanced": false
+    },
+    {
+      "task_id": 200,
+      "execution_at": "2026-11-07 17:33:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:33:00",
+      "column_advanced": true
+    },
+    {
+      "task_id": 521,
+      "execution_at": "2026-11-07 17:30:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:30:00",
+      "column_advanced": true
+    },
+    {
+      "task_id": 667,
+      "execution_at": "2026-11-07 17:28:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:28:02",
+      "column_advanced": true
+    },
+    {
+      "task_id": 531,
+      "execution_at": "2026-11-07 17:24:24",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:24:30",
+      "column_advanced": true
+    },
+    {
+      "task_id": 201,
+      "execution_at": "2026-11-07 17:14:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:14:02",
+      "column_advanced": true
+    },
+    {
+      "task_id": 422,
+      "execution_at": "2026-11-07 17:11:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:11:00",
+      "column_advanced": true
+    },
+    {
+      "task_id": 458,
+      "execution_at": "2026-11-07 17:04:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:06:18",
+      "column_advanced": true
+    },
+    {
+      "task_id": 1049,
+      "execution_at": "2026-11-07 17:03:00",
+      "status": "failed",
+      "last_execution_at": "2026-11-05 00:03:00",
+      "column_advanced": false
+    },
+    {
+      "task_id": 564,
+      "execution_at": "2026-11-07 16:58:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 17:00:10",
+      "column_advanced": true
+    },
+    {
+      "task_id": 412,
+      "execution_at": "2026-11-07 16:57:00",
+      "status": "completed",
+      "last_execution_at": "2026-11-07 16:57:01",
+      "column_advanced": true
+    }
+  ],
+  "meaning": "`last_execution_at` is the last SUCCESSFUL run, not the last attempt: it is written only in mark_completed. A task that keeps failing keeps an old value while its executions keep arriving, so this column must never be read as liveness; use ak_task_executions for attempts and for AC13/AC14 'how long since it ran'."
+}
