@@ -6,6 +6,8 @@ Futures Hist Em
 频率: daily
 """
 
+from typing import Any
+
 import akshare.futures.futures_hist_em as futures_hist_module
 import pandas as pd
 from akshare.utils.request import request_with_retry as request_eastmoney
@@ -114,8 +116,8 @@ class FuturesHistEm(AkshareToMySql):
             .sort_values("时间")
         )
         previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
-        changes = []
-        pct_changes = []
+        changes: list[Any] = []
+        pct_changes: list[Any] = []
         for _, row in grouped.iterrows():
             close = row["收盘"]
             if pd.isna(previous_close) or previous_close == 0:

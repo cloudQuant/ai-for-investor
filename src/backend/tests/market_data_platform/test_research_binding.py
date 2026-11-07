@@ -21,6 +21,7 @@ from app.models.data_governance import DgProvider
 from app.models.market_data_platform import (
     SOURCE_AUTHORIZATION_STATE_VERIFIED,
     ImmutableMarketDataRecordError,
+    MdPublication,
     MdResearchDataBinding,
     MdResearchDataBindingConsumer,
     MdResearchDataBindingRevocation,
@@ -47,7 +48,10 @@ from app.services.market_data.coverage import (
     QueryIdentity,
 )
 from app.services.market_data.identity import ResolvedMarketDataIdentity
-from app.services.market_data.publication import MarketDataVisibilityAnchor
+from app.services.market_data.publication import (
+    PUBLICATION_SOURCE_SNAPSHOT,
+    MarketDataVisibilityAnchor,
+)
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.query_service import MarketDataQueryExecution
 from app.services.market_data.research_binding import (
@@ -56,6 +60,9 @@ from app.services.market_data.research_binding import (
     _canonical_sha256,
     _strict_research_bars_family_id,
     build_market_data_research_binding_service,
+    market_data_binding_content_sha256,
+    market_data_binding_contract_sha256,
+    market_data_binding_publication_pins,
 )
 from app.services.market_data.store import LocalObservationRevision
 
@@ -74,6 +81,14 @@ _SEALED_SOURCE_SNAPSHOT_IDS = (
 _SHA256_A = "a" * 64
 _SHA256_B = "b" * 64
 _SHA256_C = "c" * 64
+# The shared in-memory database accumulates publication receipts across test
+# modules, so the fixture reserves two clearly separated high sequences and the
+# fake replay anchor sits above them.  The visibility instant must stay inside
+# the binding's frozen anchor: a receipt sealed after the cutoff would leak a
+# later publication into a point-in-time replay, which the binding refuses.
+_SEALED_PUBLICATION_SEQUENCES = (9_999_990, 9_999_991)
+_BINDING_ANCHOR_MAX_SEQUENCE = 10_000_000
+_SEALED_PUBLICATION_VISIBLE_AT = datetime(2026, 1, 6, 6, tzinfo=UTC)
 
 
 class _ContractResolver:
@@ -223,7 +238,7 @@ async def _user(*, username: str) -> User:
 
 
 async def _seed_sealed_source_evidence(db: Any) -> None:
-    """Persist the source-snapshot/registry chain used by the local fake."""
+    """Persist the source-snapshot/publication/registry chain used by the local fake."""
     provider = await db.get(DgProvider, _SEALED_PROVIDER_ID)
     if provider is None:
         db.add(
@@ -285,6 +300,47 @@ async def _seed_sealed_source_evidence(db: Any) -> None:
                 retrieved_at=NOW,
             )
         )
+    await _seal_source_snapshot_publications(db)
+
+
+async def _seal_source_snapshot_publications(db: Any) -> None:
+    """Seal one post-commit publication receipt per contributing source snapshot.
+
+    A research binding refuses to describe a snapshot without a sealed
+    publication, so the shared fixture must carry the same receipt the production
+    publication manager appends after the snapshot's first commit.
+    """
+    await db.flush()
+    sealed_ids = set(
+        (
+            await db.scalars(
+                select(MdPublication.entity_id).where(
+                    MdPublication.entity_type == PUBLICATION_SOURCE_SNAPSHOT,
+                    MdPublication.entity_id.in_(_SEALED_SOURCE_SNAPSHOT_IDS),
+                )
+            )
+        ).all()
+    )
+    missing = [
+        source_snapshot_id
+        for source_snapshot_id in _SEALED_SOURCE_SNAPSHOT_IDS
+        if source_snapshot_id not in sealed_ids
+    ]
+    if not missing:
+        return
+    for entity_id in missing:
+        offset = _SEALED_SOURCE_SNAPSHOT_IDS.index(entity_id)
+        db.add(
+            MdPublication(
+                entity_type=PUBLICATION_SOURCE_SNAPSHOT,
+                entity_id=entity_id,
+                entity_sha256=_SHA256_B,
+                published_at=_SEALED_PUBLICATION_VISIBLE_AT,
+                visibility_sequence=_SEALED_PUBLICATION_SEQUENCES[offset],
+                created_at=NOW,
+            )
+        )
+    await db.flush()
 
 
 async def _attach_research_unit(
@@ -623,7 +679,8 @@ def _execution_for(
         )
     expected_keys = tuple(EventKey(event_at) for event_at in event_times)
     anchor = MarketDataVisibilityAnchor(
-        visible_at=request.knowledge_cutoff or NOW, max_visibility_sequence=3
+        visible_at=request.knowledge_cutoff or NOW,
+        max_visibility_sequence=_BINDING_ANCHOR_MAX_SEQUENCE,
     )
     return MarketDataQueryExecution(
         context=context,
@@ -1040,6 +1097,13 @@ async def test_runtime_replay_rejects_injected_crypto_snapshot_family_before_que
                 "query_fingerprint": _canonical_sha256({"test": "injected-crypto-realtime-family"}),
             }
         )
+        # The pinned publication contract must stay internally consistent with the
+        # tampered semantics; otherwise the sealed manifest itself is refused (see
+        # the dedicated pinned-contract test) and the replay gate is never reached.
+        dataset = material["publications"]["datasets"][0]
+        assert isinstance(dataset, dict)
+        dataset["family_id"] = "crypto.realtime"
+        dataset["contract_sha256"] = market_data_binding_contract_sha256(dataset)
         injected_binding_hash = _canonical_sha256(material)
         injected_manifest["binding_hash"] = injected_binding_hash
         injected_manifest_sha256 = _canonical_sha256(injected_manifest)
@@ -1570,3 +1634,326 @@ def test_research_binding_migration_preserves_exact_identifier_collation() -> No
         )
         ddl = str(sa.schema.CreateTable(table).compile(dialect=dialect))
         assert expected_collation in ddl
+
+
+async def _bind_research_request(
+    db: Any,
+    tmp_path: Path,
+    *,
+    user: User,
+    intent_id: str,
+) -> tuple[MarketDataResearchBindingService, AIStrategyResearchRunRequest]:
+    """Bind one strict research request against the sealed shared fixture."""
+    service = MarketDataResearchBindingService(
+        db,
+        _LocalOnlyQueryService(),
+        _ContractResolver(),
+        MarketDataAccessAuthorizer(db, clock=lambda: NOW),
+        tmp_path,
+        binding_signing_key=SIGNING_KEY,
+        clock=lambda: NOW,
+    )
+    bound = await service.bind_request(
+        user_id=user.id,
+        request=_request(),
+        intent_id=intent_id,
+    )
+    return service, bound
+
+
+def _publication_dataset(material: dict[str, Any]) -> dict[str, Any]:
+    datasets = material["publications"]["datasets"]
+    assert isinstance(datasets, list) and len(datasets) == 1
+    dataset = datasets[0]
+    assert isinstance(dataset, dict)
+    return dataset
+
+
+async def _tamper_binding_manifest(
+    db: Any,
+    *,
+    binding_id: str,
+    unit_id: str,
+    mutate,
+) -> str:
+    """Apply one raw-SQL manifest edit and re-point the unit token at the new hash."""
+    binding = await db.get(MdResearchDataBinding, binding_id)
+    assert binding is not None
+    tampered = deepcopy(binding.manifest_json)
+    mutate(tampered["material"])
+    tampered_hash = _canonical_sha256(tampered["material"])
+    tampered["binding_hash"] = tampered_hash
+    unit = await db.get(StrategyUnit, unit_id)
+    assert unit is not None
+    await db.execute(
+        update(MdResearchDataBinding)
+        .where(MdResearchDataBinding.id == binding_id)
+        .values(
+            binding_hash=tampered_hash,
+            manifest_json=tampered,
+            manifest_sha256=_canonical_sha256(tampered),
+        )
+    )
+    await db.execute(
+        update(StrategyUnit)
+        .where(StrategyUnit.id == unit_id)
+        .values(
+            data_config={
+                **dict(unit.data_config or {}),
+                "market_data_binding_hash": tampered_hash,
+            }
+        )
+    )
+    await db.commit()
+    return tampered_hash
+
+
+async def _reseal_publications(db: Any, *, values: dict[str, Any]) -> None:
+    """Apply one raw SQL mutation to the fixture's sealed publication receipts."""
+    await db.execute(
+        update(MdPublication)
+        .where(
+            MdPublication.entity_type == PUBLICATION_SOURCE_SNAPSHOT,
+            MdPublication.entity_id.in_(_SEALED_SOURCE_SNAPSHOT_IDS),
+        )
+        .values(**values)
+    )
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_bind_request_pins_publication_and_replay_identity(tmp_path: Path) -> None:
+    """Each sealed snapshot is pinned to one publication, and a rebind replays identically."""
+    user = await _user(username="binding-publication-pin")
+    async with async_session_maker() as db:
+        service, bound = await _bind_research_request(
+            db, tmp_path, user=user, intent_id="ai-research-publication-pin"
+        )
+        repeated = await service.bind_request(
+            user_id=user.id,
+            request=_request(),
+            intent_id="ai-research-publication-pin",
+        )
+        binding = await db.get(
+            MdResearchDataBinding,
+            str(bound.data_config["market_data_binding_id"]),
+        )
+    assert binding is not None
+    assert repeated.data_config == bound.data_config
+    manifest = dict(binding.manifest_json)
+    material = dict(manifest["material"])
+    section = material["publications"]
+    assert section["schema_version"] == "market-data-research-publication-binding-v1"
+    assert section["entity_type"] == PUBLICATION_SOURCE_SNAPSHOT
+    dataset = _publication_dataset(material)
+    receipts = dataset["publications"]
+    assert [item["source_snapshot_id"] for item in receipts] == list(_SEALED_SOURCE_SNAPSHOT_IDS)
+    assert [item["visibility_sequence"] for item in receipts] == list(_SEALED_PUBLICATION_SEQUENCES)
+    assert all(item["entity_sha256"] == _SHA256_B for item in receipts)
+    assert all(receipt["publication_id"] for receipt in receipts)
+    assert dataset["window_start"] == "2026-01-05T00:00:00.000000Z"
+    assert dataset["window_end"] == "2026-01-07T00:00:00.000000Z"
+    assert dataset["knowledge_cutoff"] == "2026-01-07T00:00:00.000000Z"
+    assert dataset["filters"] == {
+        "asset_type": "stock",
+        "symbol": "600000",
+        "timeframe": "1d",
+        "timeframe_n": 1,
+    }
+    assert dataset["mode"] == "local_only"
+    assert dataset["consistency"] == "strict"
+    assert dataset["purpose"] == "backtest"
+    assert dataset["required_fields"] == ["close"]
+    assert dataset["adjustment"] == "qfq"
+    assert dataset["currency"] == "CNY"
+    # Both pinned hashes are recomputable from the sealed vector, never invented.
+    assert dataset["contract_sha256"] == market_data_binding_contract_sha256(dataset)
+    artifact = (
+        tmp_path / "bindings" / str(bound.data_config["market_data_binding_hash"]) / "data.csv"
+    )
+    assert dataset["content_sha256"] == market_data_binding_content_sha256(
+        csv_content=artifact.read_bytes(),
+        observation_evidence=material["observations"],
+    )
+    pins = market_data_binding_publication_pins(manifest)
+    assert pins[0]["dataset_code"] == binding.dataset_code
+    assert [dict(receipt) for receipt in pins[0]["publications"]] == receipts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mutation", "expected_code"),
+    (
+        ("missing", "MARKET_DATA_BINDING_PUBLICATION_INCOMPLETE"),
+        ("unsealed", "MARKET_DATA_BINDING_PUBLICATION_UNSEALED"),
+        ("future_visibility", "MARKET_DATA_BINDING_PUBLICATION_OUT_OF_ANCHOR"),
+        ("content_drift", "MARKET_DATA_BINDING_PUBLICATION_CONTENT_MISMATCH"),
+    ),
+)
+async def test_bind_request_refuses_incomplete_publication_reference(
+    tmp_path: Path,
+    mutation: str,
+    expected_code: str,
+) -> None:
+    """A binding refuses rather than guessing when a publication reference is unusable."""
+    user = await _user(username=f"binding-publication-{mutation}")
+    async with async_session_maker() as db:
+        if mutation == "missing":
+            await db.execute(
+                delete(MdPublication).where(
+                    MdPublication.entity_type == PUBLICATION_SOURCE_SNAPSHOT,
+                    MdPublication.entity_id.in_(_SEALED_SOURCE_SNAPSHOT_IDS),
+                )
+            )
+            await db.commit()
+        elif mutation == "unsealed":
+            await _reseal_publications(
+                db,
+                values={"published_at": None, "visibility_sequence": None},
+            )
+        elif mutation == "future_visibility":
+            await _reseal_publications(db, values={"published_at": NOW})
+        else:
+            await _reseal_publications(db, values={"entity_sha256": _SHA256_A})
+
+        with pytest.raises(MarketDataResearchBindingError) as refused:
+            await _bind_research_request(
+                db, tmp_path, user=user, intent_id=f"ai-research-publication-{mutation}"
+            )
+    assert refused.value.code == expected_code
+
+
+@pytest.mark.asyncio
+async def test_runtime_replay_refuses_stale_publication_reference(tmp_path: Path) -> None:
+    """A resealed publication cannot silently substitute a different vector."""
+    user = await _user(username="binding-publication-stale")
+    async with async_session_maker() as db:
+        service, bound = await _bind_research_request(
+            db, tmp_path, user=user, intent_id="ai-research-publication-stale"
+        )
+        workspace_id, unit_id = await _attach_research_unit(
+            db=db,
+            service=service,
+            user=user,
+            bound=bound,
+        )
+        resolve_kwargs = {
+            "user_id": user.id,
+            "binding_id": str(bound.data_config["market_data_binding_id"]),
+            "binding_hash": str(bound.data_config["market_data_binding_hash"]),
+            "signature": str(bound.data_config["market_data_binding_signature"]),
+            "workspace_id": workspace_id,
+            "unit_id": unit_id,
+            "intent_id": str(bound.data_config["market_data_binding_intent_id"]),
+        }
+        runtime = await service.resolve_runtime_binding(**resolve_kwargs)
+        assert runtime.publication_pins
+        await db.execute(
+            update(MdPublication)
+            .where(MdPublication.entity_id == _SEALED_SOURCE_SNAPSHOT_IDS[0])
+            .values(visibility_sequence=7_777_777)
+        )
+        await db.commit()
+
+        with pytest.raises(MarketDataResearchBindingError) as stale:
+            await service.resolve_runtime_binding(**resolve_kwargs)
+    assert stale.value.code == "MARKET_DATA_BINDING_PUBLICATION_STALE"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value", "expected_code"),
+    (
+        (
+            "family_id",
+            "crypto.realtime",
+            "MARKET_DATA_BINDING_PUBLICATION_CONTRACT_MISMATCH",
+        ),
+        ("content_sha256", _SHA256_A, "MARKET_DATA_BINDING_REPLAY_CONTENT_MISMATCH"),
+    ),
+)
+async def test_runtime_replay_refuses_pinned_publication_drift(
+    tmp_path: Path,
+    field: str,
+    value: str,
+    expected_code: str,
+) -> None:
+    """Rehashing a manifest cannot move a pinned contract axis or content identity."""
+    user = await _user(username=f"binding-publication-drift-{field}")
+    intent_id = f"ai-research-publication-drift-{field}"
+    async with async_session_maker() as db:
+        service, bound = await _bind_research_request(db, tmp_path, user=user, intent_id=intent_id)
+        workspace_id, unit_id = await _attach_research_unit(
+            db=db,
+            service=service,
+            user=user,
+            bound=bound,
+        )
+
+        def mutate(material: dict[str, Any]) -> None:
+            _publication_dataset(material)[field] = value
+
+        tampered_hash = await _tamper_binding_manifest(
+            db,
+            binding_id=str(bound.data_config["market_data_binding_id"]),
+            unit_id=unit_id,
+            mutate=mutate,
+        )
+
+        with pytest.raises(MarketDataResearchBindingError) as drift:
+            await service.resolve_runtime_binding(
+                user_id=user.id,
+                binding_id=str(bound.data_config["market_data_binding_id"]),
+                binding_hash=tampered_hash,
+                signature=str(bound.data_config["market_data_binding_signature"]),
+                workspace_id=workspace_id,
+                unit_id=unit_id,
+                intent_id=str(bound.data_config["market_data_binding_intent_id"]),
+            )
+    assert drift.value.code == expected_code
+
+
+def test_publication_content_digest_refives_drift() -> None:
+    """The record-set digest is deterministic and refuses shape/provenance drift."""
+    csv_content = (
+        b"datetime,open,high,low,close,volume,openinterest\n"
+        b"2026-01-05T00:00:00.000000Z,10,11,9.5,10.5,1000,12\n"
+    )
+    observation = {
+        "revision_id": "00000000-0000-0000-0000-000000000001",
+        "source_snapshot_id": _SEALED_SOURCE_SNAPSHOT_IDS[0],
+        "event_at": "2026-01-05T00:00:00.000000Z",
+        "available_at": "2026-01-05T01:00:00.000000Z",
+        "visibility_sequence": 1,
+        "revision_number": 1,
+    }
+    digest = market_data_binding_content_sha256(
+        csv_content=csv_content,
+        observation_evidence=[observation],
+    )
+    assert digest == market_data_binding_content_sha256(
+        csv_content=csv_content,
+        observation_evidence=[dict(observation)],
+    )
+    with pytest.raises(MarketDataResearchBindingError) as rows:
+        market_data_binding_content_sha256(csv_content=csv_content, observation_evidence=[])
+    assert rows.value.code == "MARKET_DATA_BINDING_CONTENT_ROWS_MISMATCH"
+    with pytest.raises(MarketDataResearchBindingError) as columns:
+        market_data_binding_content_sha256(
+            csv_content=csv_content.replace(b"datetime", b"time", 1),
+            observation_evidence=[observation],
+        )
+    assert columns.value.code == "MARKET_DATA_BINDING_CONTENT_COLUMNS_INVALID"
+    with pytest.raises(MarketDataResearchBindingError) as provenance:
+        market_data_binding_content_sha256(
+            csv_content=csv_content,
+            observation_evidence=[{**observation, "extra": "tampered"}],
+        )
+    assert provenance.value.code == "MARKET_DATA_BINDING_CONTENT_PROVENANCE_INVALID"
+
+
+def test_publication_pins_refuse_a_missing_reference() -> None:
+    """Consumers cannot read pins out of a binding that carries no publication."""
+    with pytest.raises(MarketDataResearchBindingError) as refused:
+        market_data_binding_publication_pins({"material": {"schema_version": "v"}})
+    assert refused.value.code == "MARKET_DATA_BINDING_PUBLICATION_INVALID"

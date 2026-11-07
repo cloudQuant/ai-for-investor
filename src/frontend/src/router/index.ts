@@ -531,6 +531,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/SettingsPage.vue'),
         meta: { requiresAdmin: true },
       },
+      {
+        // Terminal catch-all: must stay the last child so it cannot shadow any route above.
+        // Unmatched or stale bookmarks resolve to the public market view instead of leaving
+        // the router with zero matched components. `params: {}` keeps the unmatched path
+        // segments out of the target route, which declares no params.
+        path: ':pathMatch(.*)*',
+        redirect: { name: 'DataMarket', params: {} },
+      },
     ]
   },
 ]

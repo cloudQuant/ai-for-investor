@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.data.deps import get_current_db_user
 from app.db.database import get_db
-from app.services.akshare.data import AkshareDataService
+from app.services.akshare.data import AdjustmentBasisError, AkshareDataService
 from app.services.akshare.table_pagination import StableOrderingUnavailableError
 
 router = APIRouter()
@@ -125,6 +125,14 @@ async def get_table_rows(
     table_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    adjustment: str | None = Query(
+        None,
+        max_length=64,
+        description=(
+            "Optional adjustment basis filter (e.g. qfq). Applies to rows and total. "
+            "Without it the page keeps every basis and reports the mixing in adjustment_basis."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: typing.Any = Depends(get_current_db_user),
 ) -> typing.Any:
@@ -137,6 +145,7 @@ async def get_table_rows(
             table.table_name,
             page=page,
             page_size=page_size,
+            adjustment=adjustment,
         )
         data_available = True
         error = None
@@ -145,6 +154,13 @@ async def get_table_rows(
         # Silently unordered rows would be worse than an explicit refusal.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except AdjustmentBasisError as exc:
+        # Structured rejection: the global HTTPException handler renders the
+        # {"error","message","request_id","path"} envelope for this 400.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
     except (RuntimeError, ValueError, SQLAlchemyError) as exc:
@@ -156,6 +172,7 @@ async def get_table_rows(
         total_age_seconds: float | None = None
         data_available = False
         error = _warehouse_error_message(exc)
+        basis_meta = None
     else:
         columns = page_result.columns
         rows = page_result.rows
@@ -163,7 +180,8 @@ async def get_table_rows(
         ordering = page_result.ordering.as_response()
         total_source = page_result.total_source
         total_age_seconds = page_result.total_age_seconds
-    return {
+        basis_meta = page_result.adjustment_basis
+    payload: dict[str, typing.Any] = {
         "table_name": table.table_name,
         "columns": columns,
         "rows": rows,
@@ -180,3 +198,6 @@ async def get_table_rows(
         "data_available": data_available,
         "error": error,
     }
+    if basis_meta is not None:
+        payload["adjustment_basis"] = basis_meta
+    return payload

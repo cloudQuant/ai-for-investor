@@ -2,6 +2,7 @@ import json
 import re
 import time
 from datetime import datetime, timedelta
+from typing import Any
 
 import pandas as pd
 import requests
@@ -81,7 +82,7 @@ class FuturesStockWeeklyShfe(AkshareToMySql):
         data_json = json.loads(match.group(1))
         records = sorted(data_json.get("list") or [], key=lambda item: item.get("date") or "")
         rows = []
-        previous_datas = {}
+        previous_datas: dict[str, Any] = {}
         for record in records:
             date_raw = str(record.get("date") or "")
             report_date = pd.to_datetime(date_raw, format="%Y%m%d", errors="coerce")

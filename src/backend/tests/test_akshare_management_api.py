@@ -23,7 +23,7 @@ from sqlalchemy.pool import StaticPool
 from app.config import get_settings
 from app.db.database import async_session_maker, create_default_admin
 from app.models.akshare_mgmt import DataScript, DataTable, TaskExecution, TaskStatus, TriggeredBy
-from app.services.akshare.data import AkshareDataService
+from app.services.akshare.data import AdjustmentBasisError, AkshareDataService
 from app.services.akshare.execution import AkshareExecutionService
 from app.services.akshare.script import AkshareScriptService
 
@@ -5048,3 +5048,405 @@ class TestAkshareManagementApi:
         execution_resp = await client.get("/api/v1/data/executions", headers=auth_headers)
         assert execution_resp.status_code == 200
         assert execution_resp.json()["total"] == 1
+
+
+async def _register_warehouse_table(
+    warehouse_engine,
+    *,
+    table_id: int,
+    table_name: str,
+    ddl: str,
+    inserts: list[str],
+) -> None:
+    async with warehouse_engine.begin() as conn:
+        await conn.execute(text(f"CREATE TABLE {table_name} ({ddl})"))
+        for statement in inserts:
+            await conn.execute(text(statement))
+
+    async with async_session_maker() as session:
+        session.add(
+            DataTable(
+                id=table_id,
+                table_name=table_name,
+                table_comment="basis test",
+                category="stocks",
+                script_id="stock_zh_a_hist",
+                row_count=len(inserts),
+                last_update_status="success",
+                metadata_json={"columns": ["date", "close"]},
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_table_rows_without_adjustment_column_keeps_response_shape(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+):
+    await _register_warehouse_table(
+        warehouse_engine,
+        table_id=901,
+        table_name="basis_shape_no_column",
+        ddl="date TEXT, close REAL",
+        inserts=["INSERT INTO basis_shape_no_column VALUES ('2024-01-02', 1.0)"],
+    )
+
+    resp = await client.get("/api/v1/data/tables/901/data", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data) == {
+        "table_name",
+        "columns",
+        "rows",
+        "page",
+        "page_size",
+        "total",
+        # Deterministic paging reports the total's provenance and the key it used.
+        "total_source",
+        "total_age_seconds",
+        "ordering",
+        "data_available",
+        "error",
+    }
+    # Without an adjustment column there is no basis block to report.
+    assert "adjustment_basis" not in data
+
+    # A filter against a table without an adjustment column is rejected,
+    # never silently ignored.
+    bad = await client.get(
+        "/api/v1/data/tables/901/data", params={"adjustment": "qfq"}, headers=auth_headers
+    )
+    assert bad.status_code == 400
+    assert bad.json()["error"] == "HTTP_400"
+
+
+@pytest.mark.asyncio
+async def test_table_rows_single_basis_reports_mixed_false(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+):
+    await _register_warehouse_table(
+        warehouse_engine,
+        table_id=902,
+        table_name="basis_single",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[
+            "INSERT INTO basis_single VALUES ('2024-01-02', 1.0, 'qfq')",
+            "INSERT INTO basis_single VALUES ('2024-01-03', 1.1, 'qfq')",
+        ],
+    )
+
+    resp = await client.get("/api/v1/data/tables/902/data", headers=auth_headers)
+    assert resp.status_code == 200
+    basis = resp.json()["adjustment_basis"]
+    assert basis["observed_bases"] == ["qfq"]
+    assert basis["mixed_adjustment_basis"] is False
+    assert basis["filter"] is None
+
+
+@pytest.mark.asyncio
+async def test_table_rows_mixed_basis_visible_and_not_hidden(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+):
+    await _register_warehouse_table(
+        warehouse_engine,
+        table_id=903,
+        table_name="basis_mixed",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[
+            "INSERT INTO basis_mixed VALUES ('2024-01-02', 1.0, 'qfq')",
+            "INSERT INTO basis_mixed VALUES ('2024-01-03', 1.1, 'qfq')",
+            "INSERT INTO basis_mixed VALUES ('2024-01-04', 1.2, 'qfq')",
+            "INSERT INTO basis_mixed VALUES ('2024-01-02', 9.9, 'unknown')",
+            "INSERT INTO basis_mixed VALUES ('2024-01-03', 9.8, 'unknown')",
+        ],
+    )
+
+    resp = await client.get("/api/v1/data/tables/903/data", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    basis = data["adjustment_basis"]
+    assert basis["observed_bases"] == ["qfq", "unknown"]
+    assert basis["mixed_adjustment_basis"] is True
+    # Default browsing keeps every row visible: nothing dropped or hidden.
+    assert data["total"] == 5
+    assert len(data["rows"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_table_rows_adjustment_filter_applies_to_rows_and_total(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+):
+    await _register_warehouse_table(
+        warehouse_engine,
+        table_id=904,
+        table_name="basis_filtered",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[
+            "INSERT INTO basis_filtered VALUES ('2024-01-02', 1.0, 'qfq')",
+            "INSERT INTO basis_filtered VALUES ('2024-01-03', 1.1, 'qfq')",
+            "INSERT INTO basis_filtered VALUES ('2024-01-04', 1.2, 'qfq')",
+            "INSERT INTO basis_filtered VALUES ('2024-01-02', 9.9, 'unknown')",
+            "INSERT INTO basis_filtered VALUES ('2024-01-03', 9.8, 'unknown')",
+        ],
+    )
+
+    resp = await client.get(
+        "/api/v1/data/tables/904/data", params={"adjustment": "qfq"}, headers=auth_headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 3
+    assert {row["adjustment"] for row in data["rows"]} == {"qfq"}
+    assert data["adjustment_basis"]["filter"] == "qfq"
+
+    unknown_resp = await client.get(
+        "/api/v1/data/tables/904/data", params={"adjustment": "unknown"}, headers=auth_headers
+    )
+    assert unknown_resp.status_code == 200
+    assert unknown_resp.json()["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_table_rows_invalid_adjustment_is_rejected_structured(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    warehouse_engine,
+):
+    await _register_warehouse_table(
+        warehouse_engine,
+        table_id=905,
+        table_name="basis_reject",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=["INSERT INTO basis_reject VALUES ('2024-01-02', 1.0, 'qfq')"],
+    )
+
+    # Unknown basis for this table.
+    unknown = await client.get(
+        "/api/v1/data/tables/905/data",
+        params={"adjustment": "hfq"},
+        headers=auth_headers,
+    )
+    assert unknown.status_code == 400
+    body = unknown.json()
+    assert {"error", "message", "request_id", "path"} <= set(body)
+    assert "hfq" in body["message"]
+
+    # Malformed basis values are rejected, never treated as "no filter".
+    for malformed in ("qfq;drop", ""):
+        bad = await client.get(
+            "/api/v1/data/tables/905/data",
+            params={"adjustment": malformed},
+            headers=auth_headers,
+        )
+        assert bad.status_code == 400
+        assert {"error", "message", "request_id", "path"} <= set(bad.json())
+
+
+async def _create_warehouse_physical_table(
+    warehouse_engine,
+    *,
+    table_name: str,
+    ddl: str,
+    inserts: list[tuple[str, dict[str, object]]],
+) -> None:
+    """Create one physical warehouse table and load it with literal rows."""
+    async with warehouse_engine.begin() as conn:
+        await conn.execute(text(f"CREATE TABLE {table_name} ({ddl})"))
+        for statement, parameters in inserts:
+            await conn.execute(text(statement), parameters)
+
+
+@pytest.mark.asyncio
+async def test_service_basis_meta_reports_every_observed_basis_without_filter(
+    warehouse_engine,
+):
+    """Unfiltered reads must expose the mixing, never collapse it to one basis."""
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_mixed",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[
+            ("INSERT INTO svc_basis_mixed VALUES ('2024-01-02', 1.0, 'qfq')", {}),
+            ("INSERT INTO svc_basis_mixed VALUES ('2024-01-03', 1.1, 'qfq')", {}),
+            ("INSERT INTO svc_basis_mixed VALUES ('2024-01-02', 9.9, 'unknown')", {}),
+        ],
+    )
+    service = AkshareDataService(None)
+
+    page = await service.get_table_rows("svc_basis_mixed")
+
+    assert page.columns == ["date", "close", "adjustment"]
+    assert page.total == 3
+    assert len(page.rows) == 3
+    assert page.adjustment_basis == {
+        "filter": None,
+        "observed_bases": ["qfq", "unknown"],
+        "mixed_adjustment_basis": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_service_basis_meta_marks_single_basis_tables_not_mixed(warehouse_engine):
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_single",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[("INSERT INTO svc_basis_single VALUES ('2024-01-02', 1.0, 'qfq')", {})],
+    )
+    service = AkshareDataService(None)
+
+    page = await service.get_table_rows("svc_basis_single")
+
+    assert page.total == 1
+    assert page.adjustment_basis["observed_bases"] == ["qfq"]
+    assert page.adjustment_basis["mixed_adjustment_basis"] is False
+
+
+@pytest.mark.asyncio
+async def test_service_basis_null_values_are_not_reported_as_observed_bases(
+    warehouse_engine,
+):
+    """A NULL adjustment is not a basis: it must not appear in observed_bases."""
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_null",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[
+            ("INSERT INTO svc_basis_null VALUES ('2024-01-02', 1.0, 'qfq')", {}),
+            ("INSERT INTO svc_basis_null VALUES ('2024-01-03', 1.1, NULL)", {}),
+        ],
+    )
+    service = AkshareDataService(None)
+
+    page = await service.get_table_rows("svc_basis_null")
+
+    assert page.total == 2
+    assert page.adjustment_basis["observed_bases"] == ["qfq"]
+    assert page.adjustment_basis["mixed_adjustment_basis"] is False
+
+
+@pytest.mark.asyncio
+async def test_service_adjustment_filter_narrows_rows_and_total(warehouse_engine):
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_filtered",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[
+            ("INSERT INTO svc_basis_filtered VALUES ('2024-01-02', 1.0, 'qfq')", {}),
+            ("INSERT INTO svc_basis_filtered VALUES ('2024-01-03', 1.1, 'qfq')", {}),
+            ("INSERT INTO svc_basis_filtered VALUES ('2024-01-04', 1.2, 'qfq')", {}),
+            ("INSERT INTO svc_basis_filtered VALUES ('2024-01-02', 9.9, 'unknown')", {}),
+        ],
+    )
+    service = AkshareDataService(None)
+
+    page = await service.get_table_rows("svc_basis_filtered", adjustment="qfq")
+
+    assert page.total == 3
+    assert {row["adjustment"] for row in page.rows} == {"qfq"}
+    assert page.adjustment_basis["filter"] == "qfq"
+    # The echoed filter does not hide the other basis that exists in the table.
+    assert page.adjustment_basis["observed_bases"] == ["qfq", "unknown"]
+
+
+@pytest.mark.asyncio
+async def test_service_unknown_basis_is_rejected_with_observed_bases(warehouse_engine):
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_reject",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[("INSERT INTO svc_basis_reject VALUES ('2024-01-02', 1.0, 'qfq')", {})],
+    )
+    service = AkshareDataService(None)
+
+    with pytest.raises(AdjustmentBasisError) as excinfo:
+        await service.get_table_rows("svc_basis_reject", adjustment="hfq")
+
+    assert "hfq" in str(excinfo.value)
+    assert "svc_basis_reject" in str(excinfo.value)
+    assert "['qfq']" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_service_malformed_basis_is_rejected_before_any_read(warehouse_engine):
+    """Injection-shaped values are refused, never interpolated into SQL."""
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_inject",
+        ddl="date TEXT, close REAL, adjustment TEXT",
+        inserts=[("INSERT INTO svc_basis_inject VALUES ('2024-01-02', 1.0, 'qfq')", {})],
+    )
+    service = AkshareDataService(None)
+
+    for malformed in ("qfq;drop", "qfq'", "", "a" * 33):
+        with pytest.raises(AdjustmentBasisError):
+            await service.get_table_rows("svc_basis_inject", adjustment=malformed)
+
+    # The refused reads left the table untouched.
+    page = await service.get_table_rows("svc_basis_inject")
+    assert page.total == 1
+
+
+@pytest.mark.asyncio
+async def test_service_basis_filter_on_table_without_column_is_rejected(warehouse_engine):
+    """Filtering a column-less table is an error, not a silently ignored filter."""
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_nocol",
+        ddl="date TEXT, close REAL",
+        inserts=[("INSERT INTO svc_basis_nocol VALUES ('2024-01-02', 1.0)", {})],
+    )
+    service = AkshareDataService(None)
+
+    page = await service.get_table_rows("svc_basis_nocol")
+    assert page.columns == ["date", "close"]
+    assert page.total == 1
+    # No adjustment column means no basis block: the response shape stays as before.
+    assert page.adjustment_basis is None
+
+    with pytest.raises(AdjustmentBasisError):
+        await service.get_table_rows("svc_basis_nocol", adjustment="qfq")
+
+
+@pytest.mark.asyncio
+async def test_service_compact_warehouse_table_keeps_page_contract(warehouse_engine):
+    """Compact (_akshare_row/_akshare_payload) tables still expand and report meta.
+
+    This is the second return path of ``get_table_rows``; the page object must stay
+    correct there too, with ``None`` basis metadata because a compact table carries
+    no ``adjustment`` column.
+    """
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_compact",
+        ddl="_akshare_row INTEGER, _akshare_payload TEXT",
+        inserts=[
+            (
+                "INSERT INTO svc_basis_compact VALUES (:row_no, :payload)",
+                {"row_no": 1, "payload": '{"date": "2024-01-02", "close": 1.0}'},
+            ),
+            (
+                "INSERT INTO svc_basis_compact VALUES (:row_no, :payload)",
+                {"row_no": 2, "payload": '{"date": "2024-01-03", "close": 1.1}'},
+            ),
+        ],
+    )
+    service = AkshareDataService(None)
+
+    page = await service.get_table_rows("svc_basis_compact")
+
+    assert page.total == 2
+    assert page.columns == ["date", "close"]
+    assert page.rows == [
+        {"date": "2024-01-02", "close": 1.0},
+        {"date": "2024-01-03", "close": 1.1},
+    ]
+    assert page.adjustment_basis is None

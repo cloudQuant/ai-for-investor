@@ -261,18 +261,23 @@ async def resolve_total_count(
     count_sql: str,
     cache: TotalCountCache,
     key: TotalCountKey,
+    params: Mapping[str, Any] | None = None,
 ) -> tuple[int, str, float]:
     """Return ``(total, source, age_seconds)`` for one query shape.
 
     ``source`` is ``"live"`` when the exact ``COUNT(*)`` ran for this request and
     ``"cached"`` when the value came from the bounded cache, so a stale total is
     never presented as an authoritative one.
+
+    ``params`` binds the predicate of a filtered count.  It is never interpolated
+    into ``count_sql``; the caller must also fold the same predicate into ``key``
+    (see :class:`TotalCountKey`) so a filtered total cannot be reused unfiltered.
     """
     cached = cache.get(key)
     if cached is not None:
         total, age_seconds = cached
         return total, "cached", age_seconds
-    result = await conn.execute(text(count_sql))
+    result = await conn.execute(text(count_sql), params or {})
     total = int(result.scalar() or 0)
     cache.put(key, total)
     return total, "live", 0.0
@@ -391,3 +396,6 @@ class WarehouseTablePage:
     total_source: str
     total_age_seconds: float
     ordering: TableOrdering
+    # ``None`` when the physical table has no ``adjustment`` column, so tables
+    # without that column keep the exact pre-existing response shape.
+    adjustment_basis: dict[str, Any] | None = None

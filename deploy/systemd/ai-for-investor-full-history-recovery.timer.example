@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically run one bounded market-history recovery batch
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=15s
+Unit=ai-for-investor-full-history-recovery.service
+
+[Install]
+WantedBy=timers.target

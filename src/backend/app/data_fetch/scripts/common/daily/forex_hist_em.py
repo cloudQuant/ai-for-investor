@@ -6,6 +6,8 @@ Forex Hist Em
 频率: daily
 """
 
+from typing import Any
+
 import pandas as pd
 from akshare.forex.forex_em import symbol_market_map
 from akshare.utils.request import request_with_retry as request_eastmoney
@@ -103,7 +105,7 @@ class ForexHistEm(AkshareToMySql):
             .sort_values("日期")
         )
         previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
-        amplitudes = []
+        amplitudes: list[Any] = []
         for _, row in grouped.iterrows():
             if pd.isna(previous_close) or previous_close == 0:
                 amplitudes.append(None)

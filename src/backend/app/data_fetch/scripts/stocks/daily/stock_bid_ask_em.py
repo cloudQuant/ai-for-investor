@@ -54,27 +54,39 @@ class StockBidAskEm(AkshareToMySql):
         }
         response = request_eastmoney(url, params=params, timeout=20)
         data = response.json().get("data") or {}
+        # Bind each volume field once so the `is not None` check narrows the value that is
+        # actually multiplied (calling .get() twice left mypy unable to connect the guard).
+        sell_5_vol = data.get("f32")
+        sell_4_vol = data.get("f34")
+        sell_3_vol = data.get("f36")
+        sell_2_vol = data.get("f38")
+        sell_1_vol = data.get("f40")
+        buy_1_vol = data.get("f20")
+        buy_2_vol = data.get("f18")
+        buy_3_vol = data.get("f16")
+        buy_4_vol = data.get("f14")
+        buy_5_vol = data.get("f12")
         tick_dict = {
             "sell_5": data.get("f31"),
-            "sell_5_vol": data.get("f32") * 100 if data.get("f32") is not None else None,
+            "sell_5_vol": sell_5_vol * 100 if sell_5_vol is not None else None,
             "sell_4": data.get("f33"),
-            "sell_4_vol": data.get("f34") * 100 if data.get("f34") is not None else None,
+            "sell_4_vol": sell_4_vol * 100 if sell_4_vol is not None else None,
             "sell_3": data.get("f35"),
-            "sell_3_vol": data.get("f36") * 100 if data.get("f36") is not None else None,
+            "sell_3_vol": sell_3_vol * 100 if sell_3_vol is not None else None,
             "sell_2": data.get("f37"),
-            "sell_2_vol": data.get("f38") * 100 if data.get("f38") is not None else None,
+            "sell_2_vol": sell_2_vol * 100 if sell_2_vol is not None else None,
             "sell_1": data.get("f39"),
-            "sell_1_vol": data.get("f40") * 100 if data.get("f40") is not None else None,
+            "sell_1_vol": sell_1_vol * 100 if sell_1_vol is not None else None,
             "buy_1": data.get("f19"),
-            "buy_1_vol": data.get("f20") * 100 if data.get("f20") is not None else None,
+            "buy_1_vol": buy_1_vol * 100 if buy_1_vol is not None else None,
             "buy_2": data.get("f17"),
-            "buy_2_vol": data.get("f18") * 100 if data.get("f18") is not None else None,
+            "buy_2_vol": buy_2_vol * 100 if buy_2_vol is not None else None,
             "buy_3": data.get("f15"),
-            "buy_3_vol": data.get("f16") * 100 if data.get("f16") is not None else None,
+            "buy_3_vol": buy_3_vol * 100 if buy_3_vol is not None else None,
             "buy_4": data.get("f13"),
-            "buy_4_vol": data.get("f14") * 100 if data.get("f14") is not None else None,
+            "buy_4_vol": buy_4_vol * 100 if buy_4_vol is not None else None,
             "buy_5": data.get("f11"),
-            "buy_5_vol": data.get("f12") * 100 if data.get("f12") is not None else None,
+            "buy_5_vol": buy_5_vol * 100 if buy_5_vol is not None else None,
             "最新": data.get("f43"),
             "均价": data.get("f71"),
             "涨幅": data.get("f170"),

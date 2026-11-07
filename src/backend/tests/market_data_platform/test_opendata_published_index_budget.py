@@ -63,6 +63,7 @@ def _snapshot(record_count: int) -> dict[str, Any]:
     return {
         "dataset_id": _DATASET_ID,
         "publication_id": _PUBLICATION_ID,
+        "adjustment_basis": "not_applicable",
         "contract_sha256": _CONTRACT_SHA256,
         "snapshot_id": _SNAPSHOT_ID,
         "window": {"start": _START, "end": _END, "end_exclusive": True},
