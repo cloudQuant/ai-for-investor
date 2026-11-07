@@ -2397,3 +2397,25 @@ stderr 与 stdout 混在一起，取末行会取到它）；以及只报"脏条�
 同时要压住一个误读：`completed_no_delta` 涨到 108 **不等于**这 108 个在空转。它只说明目标表行数没增加
 （幂等、或该任务当期无新数据），是不是空转要看逐表对账——本波没有做，不写成结论。
 另：`not_run 608` 是 AC05/AC14 现在最该盯的数——采集活着，但 1048 个 armed 里仍有 58% 一次没跑过。
+
+#### 11. 一次差点记账的错：我在"另一个同名分支"上解完了 #303 的冲突
+
+为了让 #303 能合，我在 `.wt-afi-paging` 里把 dev 合进去、解掉 7 个冲突、跑过测试（96 passed / 79 skipped、
+0 markers），本地提交 `a59dca628`。然后两次以为"已推送"——两次都被外证否掉：
+
+* 第一次 `git push origin HEAD` 报 **`* [new branch]`**，说明远端**没有**这个分支名。
+* 第二次 API 查 `pulls/303` 的 `head.label` 是 **`cloudQuant:fix/afi-table-pagination-total-order`**，
+  而我本地分支叫 `fix/afi-table-pagination-determinism`。
+* 继续核对：本地 `HEAD^{tree}=8b51291731`，PR 头的 tree=`23859701c6`，**不是同一条线**；
+  用正确分支名再推被 **non-fast-forward** 拒绝。
+
+结论：**我的 worktree 是一条同名但不同的旧分支，7 个冲突是在它上面解的，对 #303 无效。**
+我做错的两件事：(1) 建 worktree 时只看"分支在哪个目录"，没有核对 `head.ref` 与 `head.sha`；
+(2) 推送后先看 git 的 stdout（"done"/"up-to-date"）就准备记账，而不是先查 API 的 PR head 是否变化。
+第二件更严重——`git push` 的静默成功只说明"某个 ref 更新了"，不说明"PR 动了"。
+
+处置：删掉我误建的远端分支 `fix/afi-table-pagination-determinism`（204，已删）；
+#303 **保持 dirty**，未合、未推送、未重做。要修只能从 `origin/fix/afi-table-pagination-total-order`
+重新解一次冲突。本波不再声称 #303 有任何进展。
+另一个副作用要说明：#303 的冲突解里包含一份对 `tables.py`/`data.py` 的合并结果，
+它在**那条旧分支**上通过了 96 个测试——那只能证明"那份合并没坏"，不能证明 #303 可用。
