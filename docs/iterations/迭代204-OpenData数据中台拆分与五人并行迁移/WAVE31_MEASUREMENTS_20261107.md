@@ -12,8 +12,9 @@
   `mypy_ratchet[collection]: advisory, no baseline yet - errors=7 checked=1108`。
   这是**本机对 CI 环境的复现读数**，不是基线；基线必须取 CI 作业自己打印的那一行
   （工具 `scripts/ci/freeze_collection_baseline_from_ci.py`，PR #318）。
-- 复核这条链：dev `3325626f96` = 67 → `#314` 后 = 7；`#319` 预计 = 2；最后 2 条是
-  `python-dateutil` 缺 stub（加 `types-python-dateutil` 到 lock 即 0，属主决定）。
+- 这条链逐点实测过：dev `3325626f96` = 67 → `#314` 后 = **7**（7 为本次复测）；
+  `#319` 预计 = 2；最后 2 条是 `python-dateutil` 缺 stub（加 `types-python-dateutil` 到 lock
+  即 0，属主决定）。
 
 ## 2. AC11 分子：318/1048 @ 2026-11-07T19:02Z
 
