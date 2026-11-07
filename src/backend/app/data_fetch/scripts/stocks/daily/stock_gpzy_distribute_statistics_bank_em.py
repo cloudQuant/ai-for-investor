@@ -121,7 +121,13 @@ class StockGpzyDistributeStatisticsBankEm(AkshareToMySql):
             "WARNING_STATE_3_RATE": "warning_state_3_rate",
         }
         for source_col, target_col in numeric_map.items():
-            result[target_col] = pd.to_numeric(df.get(source_col), errors="coerce")
+            # df.get returns None for an absent column and to_numeric(None, errors="coerce") is
+            # already NaN, which the broadcast assignment below produces either way; the None
+            # branch is the same scalar, made visible to the type checker.
+            column = df.get(source_col)
+            result[target_col] = (
+                pd.to_numeric(column, errors="coerce") if column is not None else float("nan")
+            )
 
         result["source_report"] = REPORT_NAME
         result["data_source"] = "东方财富"

@@ -1,4 +1,5 @@
 import time
+from typing import cast
 
 import pandas as pd
 
@@ -60,7 +61,12 @@ class FuturesDeliveryMatchDce(AkshareToMySql):
             self.connect_db()
             query = f"SELECT DISTINCT REFERENCE_NAME FROM {trading_rules_table} WHERE EXCHANGE = '大商所' AND REFERENCE_CODE NOT LIKE '%期权%'"  # nosec B608
             self.require_cursor().execute(query)
-            dce_symbols = [row[0] for row in self.require_cursor().fetchall()]
+            # DDL evidence: FUTURES_TRADING_RULES.REFERENCE_NAME is `VARCHAR(100) NOT NULL`
+            # (scripts/futures/weekly/trading_rules.py), so every value of this DISTINCT read is a
+            # non-null string. The connector row is typed as the whole MySQL value union, which is
+            # why `.lower()` and the f-strings below were untyped; `cast` is compile-time only, so
+            # the fetched value is passed through untouched.
+            dce_symbols = [cast(str, row[0]) for row in self.require_cursor().fetchall()]
             self.disconnect_db()
 
             if not dce_symbols:

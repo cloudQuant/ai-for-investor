@@ -1,4 +1,5 @@
 import logging
+from datetime import date as _DateCls
 from datetime import datetime
 
 import akshare as ak
@@ -66,7 +67,7 @@ class FundRatingSh(AkshareToMySql):
                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='上海证券基金评级数据表(天天基金)';
                             """
 
-    def parse_fee_rate(self, fee_str: str) -> float:
+    def parse_fee_rate(self, fee_str: str) -> float | None:
         """
         解析手续费率字符串，转换为小数
 
@@ -74,7 +75,7 @@ class FundRatingSh(AkshareToMySql):
             fee_str: 手续费率字符串，如'0.15%'
 
         Returns:
-            float: 手续费率小数
+            float | None: 手续费率小数；空值/无法解析时为 None（实现的两个 return None 分支）
         """
         if not fee_str or pd.isna(fee_str):
             return None
@@ -85,7 +86,7 @@ class FundRatingSh(AkshareToMySql):
         except (ValueError, AttributeError):
             return None
 
-    def parse_date(self, date_str: str) -> tuple:
+    def parse_date(self, date_str: str) -> _DateCls | None:
         """
         解析日期字符串，返回日期对象
 
@@ -93,7 +94,7 @@ class FundRatingSh(AkshareToMySql):
             date_str: 日期字符串，格式如'2023-06-30'
 
         Returns:
-            date: 日期对象
+            date: 日期对象；None 表示无法解析（实现的 except 分支）
         """
         try:
             import datetime as dt_mod

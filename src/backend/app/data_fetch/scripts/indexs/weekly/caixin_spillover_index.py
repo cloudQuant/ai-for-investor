@@ -74,7 +74,7 @@ class CaixinSpilloverIndex(AkshareToMySql):
 
             # if not update_all:
             #     # Get the latest date from database
-            #     latest_date = self.get_latest_date()
+            #     latest_date = self._get_latest_trade_date()
             #     if latest_date:
             #         self.logger.info(f"Latest date in database: {latest_date}")
 
@@ -102,7 +102,7 @@ class CaixinSpilloverIndex(AkshareToMySql):
             self.logger.error(f"Error in run: {str(e)}", exc_info=True)
             return False
 
-    def get_latest_date(self):
+    def _get_latest_trade_date(self):
         """Get the latest trade date from database"""
         try:
             sql = f"SELECT MAX(TRADE_DATE) as latest_date FROM {self.table_name}"  # nosec B608

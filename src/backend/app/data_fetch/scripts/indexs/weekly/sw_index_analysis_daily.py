@@ -186,7 +186,12 @@ class SWIndexAnalysisDaily(AkshareToMySql):
             explicit_start_date = self._normalize_date_arg(start_date)
             symbol_list = self.valid_symbols if symbol is None else [symbol]
             jobs = []
-            default_start_date = None
+            # Same floor constant `_get_default_start_date()` returns for an empty table, and the
+            # only value the loop below can read when it is not overwritten: `default_start_date`
+            # is only used when `explicit_start_date` is None and `update_all` is False, which is
+            # exactly the branch that assigns it. Seeding it with the str floor instead of None is
+            # what lets `resolved_start_date > requested_end_date` be a str/str comparison.
+            default_start_date: str = "20050104"
             if not explicit_start_date and not update_all:
                 default_start_date = self._get_default_start_date()
                 if lookback_days is not None:

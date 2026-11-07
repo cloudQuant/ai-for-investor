@@ -90,7 +90,12 @@ class FundPortfolioHoldEm(AkshareToMySql):
             self.logger.warning(f"解析季度字符串失败: {quarter_str}, 错误: {e}")
             return None, None, None
 
-    def fetch_portfolio_hold_data(self, fund_code: str, year: str | None = None) -> pd.DataFrame:
+    # Type evidence: run() below declares `fund_code: str | None = None` and forwards it here
+    # unmodified - a None fund_code is an existing reachable input, so the parameter type must
+    # say so. The body only interpolates it into logs and passes it to akshare's symbol kwarg.
+    def fetch_portfolio_hold_data(
+        self, fund_code: str | None, year: str | None = None
+    ) -> pd.DataFrame:
         """
         获取基金持仓数据
 
