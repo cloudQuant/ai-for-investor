@@ -1,0 +1,621 @@
+{
+  "generated_at_utc": "2026-11-07T18:59:57.266753Z",
+  "deactivated_at_utc": "2026-11-06T13:47:56Z",
+  "elapsed_hours": 29.2,
+  "cohort_size": 50,
+  "still_inactive": 50,
+  "executions_before": {
+    "rows": 798,
+    "tasks_with_any": 50,
+    "by_status": {
+      "completed": 323,
+      "failed": 475
+    },
+    "first": "2026-10-20 00:35:00",
+    "last": "2026-11-06 11:45:00"
+  },
+  "executions_after": {
+    "rows": 48,
+    "tasks_with_any": 46,
+    "by_status": {
+      "failed": 48
+    },
+    "rows_detail": [
+      {
+        "task_id": "1053",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:35:00",
+        "last_at": "2026-11-07 00:35:00"
+      },
+      {
+        "task_id": "1054",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:45:00",
+        "last_at": "2026-11-07 00:45:00"
+      },
+      {
+        "task_id": "1055",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:47:00",
+        "last_at": "2026-11-07 00:47:00"
+      },
+      {
+        "task_id": "1056",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:49:00",
+        "last_at": "2026-11-07 00:49:00"
+      },
+      {
+        "task_id": "1057",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:51:00",
+        "last_at": "2026-11-07 00:51:00"
+      },
+      {
+        "task_id": "1058",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:55:00",
+        "last_at": "2026-11-07 00:55:00"
+      },
+      {
+        "task_id": "1059",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:57:00",
+        "last_at": "2026-11-07 00:57:00"
+      },
+      {
+        "task_id": "1060",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 00:59:00",
+        "last_at": "2026-11-07 00:59:00"
+      },
+      {
+        "task_id": "1061",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:01:00",
+        "last_at": "2026-11-07 01:01:00"
+      },
+      {
+        "task_id": "1062",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:03:00",
+        "last_at": "2026-11-07 01:03:00"
+      },
+      {
+        "task_id": "1063",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:05:00",
+        "last_at": "2026-11-07 01:05:00"
+      },
+      {
+        "task_id": "1064",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:07:00",
+        "last_at": "2026-11-07 01:07:00"
+      },
+      {
+        "task_id": "1065",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:09:00",
+        "last_at": "2026-11-07 01:09:00"
+      },
+      {
+        "task_id": "1066",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:11:00",
+        "last_at": "2026-11-07 01:11:00"
+      },
+      {
+        "task_id": "1067",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:13:00",
+        "last_at": "2026-11-07 01:13:00"
+      },
+      {
+        "task_id": "1068",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:15:00",
+        "last_at": "2026-11-07 01:15:00"
+      },
+      {
+        "task_id": "1069",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:17:00",
+        "last_at": "2026-11-07 01:17:00"
+      },
+      {
+        "task_id": "1070",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:19:00",
+        "last_at": "2026-11-07 01:19:00"
+      },
+      {
+        "task_id": "1071",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:21:00",
+        "last_at": "2026-11-07 01:21:00"
+      },
+      {
+        "task_id": "1072",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:23:00",
+        "last_at": "2026-11-07 01:23:00"
+      },
+      {
+        "task_id": "1073",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:25:00",
+        "last_at": "2026-11-07 01:25:00"
+      },
+      {
+        "task_id": "1074",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:27:00",
+        "last_at": "2026-11-07 01:27:00"
+      },
+      {
+        "task_id": "1075",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:29:00",
+        "last_at": "2026-11-07 01:29:00"
+      },
+      {
+        "task_id": "1076",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:31:00",
+        "last_at": "2026-11-07 01:31:00"
+      },
+      {
+        "task_id": "1077",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:33:00",
+        "last_at": "2026-11-07 01:33:00"
+      },
+      {
+        "task_id": "1078",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:35:00",
+        "last_at": "2026-11-07 01:35:00"
+      },
+      {
+        "task_id": "1079",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:37:00",
+        "last_at": "2026-11-07 01:37:00"
+      },
+      {
+        "task_id": "1080",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:39:00",
+        "last_at": "2026-11-07 01:39:00"
+      },
+      {
+        "task_id": "1081",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:41:00",
+        "last_at": "2026-11-07 01:41:00"
+      },
+      {
+        "task_id": "1083",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-07 01:43:00",
+        "last_at": "2026-11-07 01:43:00"
+      },
+      {
+        "task_id": "1084",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:30:00",
+        "last_at": "2026-11-06 22:30:00"
+      },
+      {
+        "task_id": "1085",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:31:00",
+        "last_at": "2026-11-06 22:31:00"
+      },
+      {
+        "task_id": "1086",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:32:00",
+        "last_at": "2026-11-06 22:32:00"
+      },
+      {
+        "task_id": "1087",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:33:00",
+        "last_at": "2026-11-06 22:33:00"
+      },
+      {
+        "task_id": "1088",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:34:00",
+        "last_at": "2026-11-06 22:34:00"
+      },
+      {
+        "task_id": "1089",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:35:00",
+        "last_at": "2026-11-06 22:35:00"
+      },
+      {
+        "task_id": "1090",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:36:00",
+        "last_at": "2026-11-06 22:36:00"
+      },
+      {
+        "task_id": "1091",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:37:00",
+        "last_at": "2026-11-06 22:37:00"
+      },
+      {
+        "task_id": "1092",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:38:00",
+        "last_at": "2026-11-06 22:38:00"
+      },
+      {
+        "task_id": "1093",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:39:00",
+        "last_at": "2026-11-06 22:39:00"
+      },
+      {
+        "task_id": "1094",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:40:00",
+        "last_at": "2026-11-06 22:40:00"
+      },
+      {
+        "task_id": "1095",
+        "status": "failed",
+        "n": "2",
+        "first_at": "2026-11-06 22:41:00",
+        "last_at": "2026-11-07 01:41:00"
+      },
+      {
+        "task_id": "1096",
+        "status": "failed",
+        "n": "2",
+        "first_at": "2026-11-06 22:42:00",
+        "last_at": "2026-11-07 01:42:00"
+      },
+      {
+        "task_id": "1097",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:43:00",
+        "last_at": "2026-11-06 22:43:00"
+      },
+      {
+        "task_id": "1098",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:44:00",
+        "last_at": "2026-11-06 22:44:00"
+      },
+      {
+        "task_id": "1099",
+        "status": "failed",
+        "n": "1",
+        "first_at": "2026-11-06 22:45:00",
+        "last_at": "2026-11-06 22:45:00"
+      }
+    ]
+  },
+  "newest_execution_ever": "2026-11-07 01:43:00",
+  "slots_crossed_since_deactivation": {
+    "total": 49,
+    "tasks_with_at_least_one": 48,
+    "non_literal_cron": [
+      {
+        "id": 1095,
+        "cron": "41 6,9 * * tue-sat",
+        "slots": null,
+        "why": "non-literal"
+      },
+      {
+        "id": 1096,
+        "cron": "42 6,9 * * tue-sat",
+        "slots": null,
+        "why": "non-literal"
+      }
+    ],
+    "per_task": [
+      {
+        "id": 1050,
+        "cron": "50 15 * * mon-fri",
+        "slots": 2
+      },
+      {
+        "id": 1053,
+        "cron": "35 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1054,
+        "cron": "45 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1055,
+        "cron": "47 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1056,
+        "cron": "49 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1057,
+        "cron": "51 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1058,
+        "cron": "55 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1059,
+        "cron": "57 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1060,
+        "cron": "59 8 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1061,
+        "cron": "1 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1062,
+        "cron": "3 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1063,
+        "cron": "5 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1064,
+        "cron": "7 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1065,
+        "cron": "9 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1066,
+        "cron": "11 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1067,
+        "cron": "13 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1068,
+        "cron": "15 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1069,
+        "cron": "17 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1070,
+        "cron": "19 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1071,
+        "cron": "21 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1072,
+        "cron": "23 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1073,
+        "cron": "25 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1074,
+        "cron": "27 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1075,
+        "cron": "29 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1076,
+        "cron": "31 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1077,
+        "cron": "33 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1078,
+        "cron": "35 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1079,
+        "cron": "37 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1080,
+        "cron": "39 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1081,
+        "cron": "41 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1082,
+        "cron": "5 19 * * mon-fri",
+        "slots": 1
+      },
+      {
+        "id": 1083,
+        "cron": "43 9 * * *",
+        "slots": 1
+      },
+      {
+        "id": 1084,
+        "cron": "30 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1085,
+        "cron": "31 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1086,
+        "cron": "32 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1087,
+        "cron": "33 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1088,
+        "cron": "34 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1089,
+        "cron": "35 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1090,
+        "cron": "36 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1091,
+        "cron": "37 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1092,
+        "cron": "38 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1093,
+        "cron": "39 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1094,
+        "cron": "40 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1095,
+        "cron": "41 6,9 * * tue-sat",
+        "slots": null,
+        "why": "non-literal"
+      },
+      {
+        "id": 1096,
+        "cron": "42 6,9 * * tue-sat",
+        "slots": null,
+        "why": "non-literal"
+      },
+      {
+        "id": 1097,
+        "cron": "43 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1098,
+        "cron": "44 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1099,
+        "cron": "45 6 * * tue-sat",
+        "slots": 1
+      },
+      {
+        "id": 1100,
+        "cron": "25 19 * * mon-fri",
+        "slots": 1
+      },
+      {
+        "id": 1103,
+        "cron": "45 19 * * mon-fri",
+        "slots": 1
+      }
+    ]
+  }
+}
