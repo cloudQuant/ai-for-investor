@@ -45,7 +45,7 @@ class MacroChinaUrbanUnemployment(AkshareToMySql):
         self.source_url = (
             "https://data.stats.gov.cn/dg/website/publicrelease/web/external/stream/esData"
         )
-        self.payload = {
+        self.payload: dict[str, str | list[str] | list[dict[str, str]]] = {
             "cid": "ee3b7046b390415b9b7745e3d16f6052",
             "indicatorIds": [
                 "3888eac6062945a79c8a27e5f13d4953",
