@@ -259,7 +259,9 @@ def last_touching_commit(repo_root: str, source_path: str) -> dict[str, str] | N
     return {"commit": short_sha, "date": date, "subject": subject}
 
 
-def blob_matches_commit(repo_root: str, commit: str, source_path: str, expected: str) -> bool | None:
+def blob_matches_commit(
+    repo_root: str, commit: str, source_path: str, expected: str
+) -> bool | None:
     """True/False when the path is resolvable at ``commit``, None when it is absent."""
     result = subprocess.run(
         ["git", "-C", repo_root, "show", f"{commit}:{source_path}"],
@@ -310,9 +312,7 @@ def classify_anchors(
         if status != STATUS_MATCHED:
             anchor.attribution = last_touching_commit(repo_root, source_path)
             if anchor.attribution is not None:
-                anchor.kind = (
-                    KIND_PATH_DELETED if status == STATUS_MISSING else KIND_CONTENT_DRIFT
-                )
+                anchor.kind = KIND_PATH_DELETED if status == STATUS_MISSING else KIND_CONTENT_DRIFT
             elif status == STATUS_MISSING and path_history_count(repo_root, source_path) == 0:
                 # The path never existed in this repository: a ghost registration, explained by
                 # the wave-29 producer-binding finding rather than by any commit here.
@@ -415,9 +415,7 @@ def derive_markers(source: str) -> DerivedMarkers:
 
     module_functions = {node.name for node in _functions_in(tree.body)}
     class_nodes = [node for node in tree.body if isinstance(node, ast.ClassDef)]
-    member_functions = {
-        node.name for cls in class_nodes for node in _functions_in(cls.body)
-    }
+    member_functions = {node.name for cls in class_nodes for node in _functions_in(cls.body)}
     entrypoint_names = module_functions | member_functions
 
     flags: list[str] = []
@@ -448,13 +446,13 @@ def parse_recorded_markers(static_role: str, notes: str) -> RecordedMarkers:
     head, separator, tail = notes.partition(NOTES_TAIL_SEP)
     if not head.startswith(MARKER_PREFIX):
         return RecordedMarkers(static_role, [], [], "", notes if not separator else tail)
-    marker = head[len(MARKER_PREFIX):]
+    marker = head[len(MARKER_PREFIX) :]
     flags: list[str] = []
     classes: list[str] = []
     if marker != MARKER_ABSENT and CLASSES_KEY in marker:
         # Either "<flags>,classes=A,B" or, when no flag fired, the bare "classes=A".
         if marker.startswith(CLASSES_KEY):
-            flag_part, class_part = "", marker[len(CLASSES_KEY):]
+            flag_part, class_part = "", marker[len(CLASSES_KEY) :]
         else:
             flag_part, _, class_part = marker.partition(f",{CLASSES_KEY}")
         flags = [token for token in flag_part.split(",") if token]
@@ -510,7 +508,9 @@ def faithfulness_gate(
         if derived.parse_error is not None:
             differences["parse_error"] = derived.parse_error
         if differences:
-            result.failures.append({"row_number": result.checked, "source_path": source_path, **differences})
+            result.failures.append(
+                {"row_number": result.checked, "source_path": source_path, **differences}
+            )
         else:
             result.reproduced += 1
     return result, report
@@ -665,7 +665,9 @@ def regenerate(
 # --------------------------------------------------------------------------------------
 
 
-def render_check_text(report: AnchorReport, gate: GateResult, groups: list[dict[str, object]]) -> str:
+def render_check_text(
+    report: AnchorReport, gate: GateResult, groups: list[dict[str, object]]
+) -> str:
     counts = report.counts
     lines = [
         f"inventory: {report.inventory_path}",
@@ -687,7 +689,9 @@ def render_check_text(report: AnchorReport, gate: GateResult, groups: list[dict[
         )
     unexplained = unexplained_rows(report)
     lines.append("")
-    lines.append("explanation kinds: " + ", ".join(f"{k}={v}" for k, v in sorted(report.kinds.items())))
+    lines.append(
+        "explanation kinds: " + ", ".join(f"{k}={v}" for k, v in sorted(report.kinds.items()))
+    )
     lines.append(f"invariant: {len(unexplained)} unexplained row(s) -- expected 0")
     lines.append(
         f"derivation gate: {gate.reproduced}/{gate.checked} anchor-matched rows reproduced "
@@ -823,7 +827,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  {failure}", file=sys.stderr)
         return 1
     if not args.out:
-        print("REFUSING to emit: --out is required; the committed CSV is never rewritten here", file=sys.stderr)
+        print(
+            "REFUSING to emit: --out is required; the committed CSV is never rewritten here",
+            file=sys.stderr,
+        )
         return 2
     if os.path.abspath(args.out) == os.path.abspath(inventory_path):
         print(
@@ -842,13 +849,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_inventory(args.out, header, emitted, bom, line_terminator)
 
     counts = diff["counts"]
-    print("faithfulness gate: PASS "
-          f"({gate.reproduced}/{gate.checked} anchor-matched rows reproduced)")
-    print(f"regenerated CSV written to: {args.out} (NOT the committed inventory)")
     print(
-        "emit stats: "
-        + ", ".join(f"{key}={value}" for key, value in sorted(stats.items()))
+        f"faithfulness gate: PASS ({gate.reproduced}/{gate.checked} anchor-matched rows reproduced)"
     )
+    print(f"regenerated CSV written to: {args.out} (NOT the committed inventory)")
+    print("emit stats: " + ", ".join(f"{key}={value}" for key, value in sorted(stats.items())))
     print("")
     print("marker diff over rows currently drifting from their anchor:")
     print(
@@ -889,7 +894,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             if "classes" in entry:
                 bits.append(f"classes {entry['classes']}")
             prov = entry.get("anchor_matched_at_snapshot_commit")
-            bits.append(f"anchor@snapshot={'match' if prov else ('stale' if prov is False else 'unknown')}")
+            bits.append(
+                f"anchor@snapshot={'match' if prov else ('stale' if prov is False else 'unknown')}"
+            )
             print(f"    {entry['source_path']}  ({entry['status']})  {' | '.join(bits)}")
     else:
         print("  no derived marker changes -- the drift is purely content-level")

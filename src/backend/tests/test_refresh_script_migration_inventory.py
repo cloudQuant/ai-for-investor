@@ -126,7 +126,9 @@ def _write_inventory(path: Path, rows: Sequence[Sequence[str]]) -> None:
 def git_tree(tmp_path: Path) -> Path:
     """A throwaway repository with identity configured and one empty commit."""
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"], check=True
+    )
     subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
     return tmp_path
 
@@ -136,7 +138,9 @@ def _commit_all(root: Path, message: str) -> str:
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", message], check=True)
     return subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
 
 
@@ -147,10 +151,22 @@ def _place(root: Path, rel: str, content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-def _row(rel: str, sha: str, static_role: str, flags: Sequence[str], classes: Sequence[str]) -> list[str]:
-    return [rel, sha, "bond", "daily", static_role, "shared_akshare_to_mysql",
-            "PENDING_PROVIDER_MAPPING", "待数据契约与目标映射", "待盘点/待映射", "B",
-            _marker(static_role, flags, classes)]
+def _row(
+    rel: str, sha: str, static_role: str, flags: Sequence[str], classes: Sequence[str]
+) -> list[str]:
+    return [
+        rel,
+        sha,
+        "bond",
+        "daily",
+        static_role,
+        "shared_akshare_to_mysql",
+        "PENDING_PROVIDER_MAPPING",
+        "待数据契约与目标映射",
+        "待盘点/待映射",
+        "B",
+        _marker(static_role, flags, classes),
+    ]
 
 
 # --------------------------------------------------------------------------------------
@@ -162,14 +178,23 @@ class TestDeriveMarkers:
     @pytest.mark.parametrize(
         "source, expected_role, expected_flags, expected_classes",
         [
-            (_FETCH_SRC, inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"]),
+            (
+                _FETCH_SRC,
+                inv.ROLE_FETCH_DATA,
+                ["fetch_data", "module_main", "__main___guard"],
+                ["BondSampleFetcher"],
+            ),
             (_RUN_SRC, inv.ROLE_RUN, ["run", "__main___guard"], ["SinaSampleSource"]),
             (_HELPER_SRC, inv.ROLE_HELPER, [], []),
             (_CLASSES_ONLY_SRC, inv.ROLE_HELPER, [], ["ReleaseDateDecision", "SampleCollector"]),
         ],
     )
     def test_roles_and_flags(
-        self, source: str, expected_role: str, expected_flags: list[str], expected_classes: list[str]
+        self,
+        source: str,
+        expected_role: str,
+        expected_flags: list[str],
+        expected_classes: list[str],
     ) -> None:
         derived = inv.derive_markers(source)
         assert derived.static_role == expected_role
@@ -211,14 +236,20 @@ class TestMarkerGrammar:
     @pytest.mark.parametrize(
         "flags, classes, expected",
         [
-            (["fetch_data", "module_main", "__main___guard"], ["BondBuyBackHistEm"],
-             "fetch_data,module_main,__main___guard,classes=BondBuyBackHistEm"),
+            (
+                ["fetch_data", "module_main", "__main___guard"],
+                ["BondBuyBackHistEm"],
+                "fetch_data,module_main,__main___guard,classes=BondBuyBackHistEm",
+            ),
             ([], ["EndataYienClient"], "classes=EndataYienClient"),
             (["run"], [], "run"),
             (["module_main"], [], "module_main"),
             ([], [], inv.MARKER_ABSENT),
-            (["module_main", "fetch_data", "__main___guard"], ["A"],
-             "fetch_data,module_main,__main___guard,classes=A"),
+            (
+                ["module_main", "fetch_data", "__main___guard"],
+                ["A"],
+                "fetch_data,module_main,__main___guard,classes=A",
+            ),
             (["run"], ["A", "B"], "run,classes=A,B"),
         ],
     )
@@ -233,7 +264,10 @@ class TestMarkerGrammar:
             (["run"], []),
             (["module_main"], []),
             ([], []),
-            (["fetch_data", "run", "module_main", "__main___guard"], ["SourceUnavailableError", "FxSpotQuote"]),
+            (
+                ["fetch_data", "run", "module_main", "__main___guard"],
+                ["SourceUnavailableError", "FxSpotQuote"],
+            ),
         ],
     )
     def test_render_parse_roundtrip(self, flags: list[str], classes: list[str]) -> None:
@@ -266,10 +300,25 @@ class TestClassifyAnchors:
         _place(root, "pkg/bad.py", _RUN_SRC)
 
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [
-            _row("pkg/good.py", good_sha, inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"]),
-            _row("pkg/bad.py", bad_sha, inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"]),
-        ])
+        _write_inventory(
+            inventory,
+            [
+                _row(
+                    "pkg/good.py",
+                    good_sha,
+                    inv.ROLE_FETCH_DATA,
+                    ["fetch_data", "module_main", "__main___guard"],
+                    ["BondSampleFetcher"],
+                ),
+                _row(
+                    "pkg/bad.py",
+                    bad_sha,
+                    inv.ROLE_FETCH_DATA,
+                    ["fetch_data", "module_main", "__main___guard"],
+                    ["BondSampleFetcher"],
+                ),
+            ],
+        )
 
         report = inv.classify_anchors(str(root), str(inventory))
         assert report.counts == {"matched": 1, "mismatched": 1, "missing": 0, "total": 2}
@@ -293,7 +342,10 @@ class TestClassifyAnchors:
         removal = _commit_all(root, "fix: remove the script")
 
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [_row("pkg/gone.py", sha, inv.ROLE_FETCH_DATA, ["fetch_data"], ["BondSampleFetcher"])])
+        _write_inventory(
+            inventory,
+            [_row("pkg/gone.py", sha, inv.ROLE_FETCH_DATA, ["fetch_data"], ["BondSampleFetcher"])],
+        )
 
         report = inv.classify_anchors(str(root), str(inventory))
         assert report.counts["missing"] == 1
@@ -309,7 +361,9 @@ class TestClassifyAnchors:
         _commit_all(root, "feat: baseline")
 
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [_row("pkg/never_existed.py", "0" * 64, inv.ROLE_RUN, ["run"], [])])
+        _write_inventory(
+            inventory, [_row("pkg/never_existed.py", "0" * 64, inv.ROLE_RUN, ["run"], [])]
+        )
 
         report = inv.classify_anchors(str(root), str(inventory))
         anchor = report.by_status(inv.STATUS_MISSING)[0]
@@ -329,7 +383,9 @@ class TestClassifyAnchors:
 
         inventory = root / "inv.csv"
         digest = hashlib.sha256(_FETCH_SRC.encode("utf-8")).hexdigest()
-        _write_inventory(inventory, [_row("pkg/ghost.py", "f" * 64, inv.ROLE_FETCH_DATA, ["fetch_data"], ["A"])])
+        _write_inventory(
+            inventory, [_row("pkg/ghost.py", "f" * 64, inv.ROLE_FETCH_DATA, ["fetch_data"], ["A"])]
+        )
 
         report = inv.classify_anchors(str(root), str(inventory))
         assert report.by_status(inv.STATUS_MISMATCHED)[0].kind == inv.KIND_UNEXPLAINED
@@ -345,10 +401,21 @@ class TestClassifyAnchors:
         _commit_all(root, "fix: annotate the script")
 
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [
-            _row("pkg/a.py", sha, inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"]),
-            _row("pkg/a.py", "a" * 64, inv.ROLE_FETCH_DATA, ["fetch_data"], ["BondSampleFetcher"]),
-        ])
+        _write_inventory(
+            inventory,
+            [
+                _row(
+                    "pkg/a.py",
+                    sha,
+                    inv.ROLE_FETCH_DATA,
+                    ["fetch_data", "module_main", "__main___guard"],
+                    ["BondSampleFetcher"],
+                ),
+                _row(
+                    "pkg/a.py", "a" * 64, inv.ROLE_FETCH_DATA, ["fetch_data"], ["BondSampleFetcher"]
+                ),
+            ],
+        )
         report = inv.classify_anchors(str(root), str(inventory), snapshot_commit=snapshot)
         matches = [anchor.snapshot_match for anchor in report.rows]
         assert matches == [True, False]
@@ -374,9 +441,18 @@ class TestFaithfulnessGate:
         _commit_all(root, "feat: add a")
 
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [
-            _row("pkg/a.py", sha, inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"]),
-        ])
+        _write_inventory(
+            inventory,
+            [
+                _row(
+                    "pkg/a.py",
+                    sha,
+                    inv.ROLE_FETCH_DATA,
+                    ["fetch_data", "module_main", "__main___guard"],
+                    ["BondSampleFetcher"],
+                ),
+            ],
+        )
         gate, _ = inv.faithfulness_gate(str(root), str(inventory))
         assert gate.passed is True
         assert (gate.checked, gate.reproduced) == (1, 1)
@@ -407,9 +483,18 @@ class TestFaithfulnessGate:
         sha = _place(root, "pkg/a.py", _FETCH_SRC)
         _commit_all(root, "feat: add a")
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [
-            _row("pkg/a.py", sha, inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"]),
-        ])
+        _write_inventory(
+            inventory,
+            [
+                _row(
+                    "pkg/a.py",
+                    sha,
+                    inv.ROLE_FETCH_DATA,
+                    ["fetch_data", "module_main", "__main___guard"],
+                    ["BondSampleFetcher"],
+                ),
+            ],
+        )
         assert inv.main(["--repo-root", str(root), "--inventory", str(inventory), "--check"]) == 0
 
     def test_cli_check_exits_nonzero_on_unexplained_row(self, git_tree: Path) -> None:
@@ -426,11 +511,24 @@ class TestFaithfulnessGate:
         sha = _place(root, "pkg/a.py", _FETCH_SRC)
         _commit_all(root, "feat: add a")
         inventory = root / "inv.csv"
-        _write_inventory(inventory, [_row("pkg/a.py", sha, inv.ROLE_RUN, ["run"], ["BondSampleFetcher"])])
+        _write_inventory(
+            inventory, [_row("pkg/a.py", sha, inv.ROLE_RUN, ["run"], ["BondSampleFetcher"])]
+        )
         out = root / "regen.csv"
-        assert inv.main([
-            "--repo-root", str(root), "--inventory", str(inventory), "--emit", "--out", str(out),
-        ]) == 1
+        assert (
+            inv.main(
+                [
+                    "--repo-root",
+                    str(root),
+                    "--inventory",
+                    str(inventory),
+                    "--emit",
+                    "--out",
+                    str(out),
+                ]
+            )
+            == 1
+        )
         assert not out.exists()
         assert inv.read_inventory(str(inventory))[1][0][1] == sha  # committed file untouched
 
@@ -451,17 +549,48 @@ class TestEmission:
         _place(root, "pkg/a.py", _RUN_SRC)  # drift the content after the anchor was recorded
 
         inventory = root / "inv.csv"
-        original_notes = _marker(inv.ROLE_FETCH_DATA, ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"])
+        original_notes = _marker(
+            inv.ROLE_FETCH_DATA,
+            ["fetch_data", "module_main", "__main___guard"],
+            ["BondSampleFetcher"],
+        )
         row = [
-            "pkg/a.py", old_sha, "bond", "daily", inv.ROLE_FETCH_DATA, "shared_akshare_to_mysql",
-            "PENDING_PROVIDER_MAPPING", "待数据契约与目标映射", "待盘点/待映射", "B", original_notes,
+            "pkg/a.py",
+            old_sha,
+            "bond",
+            "daily",
+            inv.ROLE_FETCH_DATA,
+            "shared_akshare_to_mysql",
+            "PENDING_PROVIDER_MAPPING",
+            "待数据契约与目标映射",
+            "待盘点/待映射",
+            "B",
+            original_notes,
         ]
-        ref_row = _row("pkg/ref.py", ref_sha, inv.ROLE_FETCH_DATA,
-                       ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"])
+        ref_row = _row(
+            "pkg/ref.py",
+            ref_sha,
+            inv.ROLE_FETCH_DATA,
+            ["fetch_data", "module_main", "__main___guard"],
+            ["BondSampleFetcher"],
+        )
         inv.write_inventory(str(inventory), HEADER, [row, ref_row], b"\xef\xbb\xbf", "\n")
 
         out = root / "regen.csv"
-        assert inv.main(["--repo-root", str(root), "--inventory", str(inventory), "--emit", "--out", str(out)]) == 0
+        assert (
+            inv.main(
+                [
+                    "--repo-root",
+                    str(root),
+                    "--inventory",
+                    str(inventory),
+                    "--emit",
+                    "--out",
+                    str(out),
+                ]
+            )
+            == 0
+        )
 
         raw = out.read_bytes()
         assert raw.startswith(b"\xef\xbb\xbf")
@@ -476,7 +605,10 @@ class TestEmission:
         for index, name in enumerate(HEADER):
             if name not in ("source_sha256", "static_role", "notes"):
                 assert emitted[index] == row[index], name
-        assert emitted[HEADER.index("source_sha256")] == hashlib.sha256(_RUN_SRC.encode("utf-8")).hexdigest()
+        assert (
+            emitted[HEADER.index("source_sha256")]
+            == hashlib.sha256(_RUN_SRC.encode("utf-8")).hexdigest()
+        )
         assert emitted[HEADER.index("static_role")] == inv.ROLE_RUN
         assert emitted[HEADER.index("notes")].partition("；")[2] == NOTES_TAIL
         # The in-sync row is reproduced exactly.
@@ -487,13 +619,29 @@ class TestEmission:
         sha = _place(root, "pkg/a.py", _FETCH_SRC)
         _commit_all(root, "feat: add a")
         inventory = root / "inv.csv"
-        row = _row("pkg/a.py", sha, inv.ROLE_FETCH_DATA,
-                   ["fetch_data", "module_main", "__main___guard"], ["BondSampleFetcher"])
+        row = _row(
+            "pkg/a.py",
+            sha,
+            inv.ROLE_FETCH_DATA,
+            ["fetch_data", "module_main", "__main___guard"],
+            ["BondSampleFetcher"],
+        )
         inv.write_inventory(str(inventory), HEADER, [row], b"\xef\xbb\xbf", "\n")
         before = inventory.read_bytes()
-        assert inv.main([
-            "--repo-root", str(root), "--inventory", str(inventory), "--emit", "--out", str(inventory),
-        ]) == 2
+        assert (
+            inv.main(
+                [
+                    "--repo-root",
+                    str(root),
+                    "--inventory",
+                    str(inventory),
+                    "--emit",
+                    "--out",
+                    str(inventory),
+                ]
+            )
+            == 2
+        )
         assert inventory.read_bytes() == before
 
     def test_ghost_rows_are_left_untouched(self, git_tree: Path) -> None:
@@ -581,8 +729,12 @@ class TestRealInventoryFaithfulness:
         the exception set stays exactly those four rows and does not grow.
         """
         snapshot = os.environ.get("INVENTORY_SNAPSHOT_COMMIT", "29afaeb47")
-        if subprocess.run(["git", "-C", str(_REPO_ROOT), "cat-file", "-e", snapshot],
-                          capture_output=True).returncode != 0:
+        if (
+            subprocess.run(
+                ["git", "-C", str(_REPO_ROOT), "cat-file", "-e", snapshot], capture_output=True
+            ).returncode
+            != 0
+        ):
             pytest.skip(f"snapshot commit {snapshot} is not reachable here")
 
         header, rows, _, _ = inv.read_inventory(str(INVENTORY_PATH))
@@ -607,7 +759,9 @@ class TestRealInventoryFaithfulness:
                 columns.get(row, "static_role"), columns.get(row, "notes")
             )
             if (derived.static_role, derived.flags, derived.classes) != (
-                recorded.static_role, recorded.flags, recorded.classes
+                recorded.static_role,
+                recorded.flags,
+                recorded.classes,
             ):
                 stale.append(source_path)
 
