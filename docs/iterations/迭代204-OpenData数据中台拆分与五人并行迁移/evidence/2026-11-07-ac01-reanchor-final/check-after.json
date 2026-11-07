@@ -1,0 +1,125 @@
+{
+  "inventory_path": "/home/yun/Documents/.wt-afi-ac01rc/docs/iterations/迭代204-OpenData数据中台拆分与五人并行迁移/script_migration_inventory.csv",
+  "repo_root": "/home/yun/Documents/.wt-afi-ac01rc",
+  "head_commit": "74e2a0570",
+  "counts": {
+    "matched": 1057,
+    "mismatched": 0,
+    "missing": 9,
+    "total": 1066
+  },
+  "kinds": {
+    "in_sync": 1057,
+    "ghost_registration": 9
+  },
+  "attribution_groups": [
+    {
+      "commit": "GHOST(no commit ever touched the path)",
+      "date": "",
+      "subject": "",
+      "kind": "ghost_registration",
+      "mismatched": 0,
+      "missing": 9,
+      "never_recorded": 0
+    }
+  ],
+  "unexplained_rows": [],
+  "derivation_gate": {
+    "checked": 1057,
+    "reproduced": 1057,
+    "failures": [],
+    "passed": true
+  },
+  "mismatch_detail": [
+    {
+      "row_number": 29,
+      "source_path": "src/backend/app/data_fetch/scripts/bonds/daily/yield_release_policy.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "8364df777f94a7f6c7052a437c11439291d9ac5f24bc2bd86322386797c0b911",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 83,
+      "source_path": "src/backend/app/data_fetch/scripts/common/daily/forex_hist_sina.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "0257a10ce39d731f9a90dc17b695ed6fc00507515a6ca8511368704abe5abed6",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 444,
+      "source_path": "src/backend/app/data_fetch/scripts/funds/hourly/etf_realtime_quote_sina.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "2cf147c361b6c8fbb0808f589e49e67f62b612e449ae79ba83c67c11596f0445",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 485,
+      "source_path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_monetary_income_history.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "a10b40add47c3cd2c8ccfc490ffb71349a964791e88b589e6af004dcab9b27e5",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 499,
+      "source_path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_reviewed_unit_nav_history.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "190180d062efb40d2ef91e016e5459bb5018137234503dd060fcd91f1bbc6a50",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 556,
+      "source_path": "src/backend/app/data_fetch/scripts/futures/release_policy.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "7844c6e60da1c594525058ae5e039224ed4726c781e08f8d0b6de04ee9ead43e",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 684,
+      "source_path": "src/backend/app/data_fetch/scripts/options/daily/cffex_option_daily_history.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "d9725e98d24e32f96c8d7394704efcac4ca5382153b55a4c60782d4c4f9c9044",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 685,
+      "source_path": "src/backend/app/data_fetch/scripts/options/daily/commodity_option_daily_history.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "aef85da51e26903267a92d4cfc947136965534e065e9b6f7b4c1061a6df62f7d",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    },
+    {
+      "row_number": 686,
+      "source_path": "src/backend/app/data_fetch/scripts/options/daily/etf_option_daily_history.py",
+      "status": "missing",
+      "kind": "ghost_registration",
+      "recorded_sha256": "332bc018dbe87d67026e7cdd408b70b7677a0616d127cc426d334953401c2253",
+      "observed_sha256": null,
+      "last_touch": null,
+      "matched_at_snapshot_commit": null
+    }
+  ]
+}
