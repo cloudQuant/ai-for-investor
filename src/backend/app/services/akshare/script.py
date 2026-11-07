@@ -4,11 +4,9 @@ Service for akshare data scripts.
 
 from __future__ import annotations
 
-import asyncio
 import importlib
 import inspect
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
-from app.data_fetch.utils.akshare_network_proxy import configure_akshare_network_proxy
 from app.models.akshare_mgmt import (
     DataInterface,
     DataScript,
@@ -27,46 +24,21 @@ from app.models.akshare_mgmt import (
     TaskExecution,
     TriggeredBy,
 )
+from app.services.akshare import script_worker_runtime
 from app.services.akshare.data import AkshareDataService
 from app.services.akshare.execution import AkshareExecutionService
+from app.services.akshare.write_fence import (
+    committed_mysql_writes,
+    committed_row_count,
+    current_write_fence,
+    fence_identity,
+    reset_write_fence,
+    set_write_fence,
+)
 
 settings = get_settings()
 
-_SCRIPT_MIN_TIMEOUT_SECONDS: dict[str, float] = {
-    "macro_bank_english_interest_rate": 90.0,
-    "macro_china_agricultural_product": 150.0,
-    "macro_china_bdti_index": 150.0,
-    "macro_china_bond_public": 150.0,
-    "macro_china_cpi_yearly": 150.0,
-    "macro_china_exports_yoy": 150.0,
-    "macro_china_insurance": 420.0,
-    "macro_china_retail_price_index": 240.0,
-    "macro_china_society_traffic_volume": 240.0,
-    "macro_cons_gold": 240.0,
-    "macro_cons_opec_month": 180.0,
-    "macro_cons_silver": 180.0,
-    "macro_euro_cpi_yoy": 120.0,
-    "macro_euro_ppi_mom": 120.0,
-    "macro_global_sox_index": 240.0,
-    "etf_fund_hist_em": 600.0,
-    "macro_shipping_bdi": 120.0,
-    "macro_shipping_bpi": 120.0,
-    "macro_usa_api_crude_stock": 120.0,
-    "macro_usa_cb_consumer_confidence": 120.0,
-    "macro_usa_core_cpi_monthly": 150.0,
-    "macro_usa_core_pce_price": 120.0,
-    "macro_usa_cpi_monthly": 150.0,
-    "macro_usa_eia_crude_rate": 150.0,
-    "macro_usa_exist_home_sales": 120.0,
-    "macro_usa_house_starts": 120.0,
-    "macro_usa_industrial_production": 120.0,
-    "macro_usa_initial_jobless": 180.0,
-    "macro_usa_ism_pmi": 120.0,
-    "macro_usa_michigan_consumer_sentiment": 120.0,
-    "macro_usa_new_home_sales": 120.0,
-    "macro_usa_nfib_small_business": 150.0,
-    "macro_usa_personal_spending": 120.0,
-}
+
 _ALLOW_EMPTY_TARGET_TABLE_SCRIPT_IDS = {
     "akshare_catalog_endpoint",
     "akshare_catalog_batch",
@@ -75,6 +47,15 @@ _ALLOW_EMPTY_TARGET_TABLE_SCRIPT_IDS = {
 
 class AkshareScriptService:
     """CRUD, scan and execution service for akshare scripts."""
+
+    # The killable child-process supervisor lives in ``script_worker_runtime`` (the parent
+    # side of ``script_worker.py``, the child entrypoint).  These aliases keep the service
+    # call sites - and the tests that pin the kill/reap, budget and write-fence contract -
+    # pointed at that single implementation rather than at a copy of it.
+    _callable_descriptor = staticmethod(script_worker_runtime._callable_descriptor)
+    _execute_callable_in_worker = staticmethod(script_worker_runtime._execute_callable_in_worker)
+    _script_timeout_seconds = staticmethod(script_worker_runtime._script_timeout_seconds)
+    _execute_callable = staticmethod(script_worker_runtime._execute_callable)
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -467,51 +448,24 @@ class AkshareScriptService:
         rows_before: int | None,
         rows_after: int | None,
         result: Any,
+        committed_rows: int | None = None,
     ) -> None:
+        """Gate a run that left its target table empty.
+
+        ``committed_rows`` carries the write receipts reported by the killable
+        child worker for this exact target table.  The child commits on its own
+        connection, so a legacy writer that really wrote must not be judged
+        empty by a table-metadata read that has not caught up.
+        """
         if int(rows_before or 0) > 0 or int(rows_after or 0) > 0:
+            return
+        if int(committed_rows or 0) > 0:
             return
         if script_id in _ALLOW_EMPTY_TARGET_TABLE_SCRIPT_IDS:
             return
         target = table_name or script_id
         detail = "returned no data" if cls._result_is_empty_marker(result) else "left no rows"
         raise RuntimeError(f"Script {script_id} {detail} and target table {target} is empty")
-
-    @staticmethod
-    def _script_timeout_seconds(
-        script: DataScript | None = None,
-        timeout_seconds: int | float | None = None,
-    ) -> float:
-        script_id = script.script_id if script is not None else None
-        min_timeout = (
-            _SCRIPT_MIN_TIMEOUT_SECONDS.get(script_id, 0.0) if script_id is not None else 0.0
-        )
-        if timeout_seconds is not None and float(timeout_seconds) > 0:
-            return max(float(timeout_seconds), min_timeout)
-        script_timeout = script.timeout if script is not None else None
-        if script_timeout is not None and float(script_timeout) > 0:
-            return max(float(script_timeout), min_timeout)
-        raw_timeout = (
-            os.getenv("AKSHARE_SCRIPT_TIMEOUT") or os.getenv("AKSHARE_CALL_TIMEOUT") or "60"
-        )
-        try:
-            return max(float(raw_timeout), min_timeout)
-        except ValueError:
-            return max(60.0, min_timeout)
-
-    @staticmethod
-    async def _execute_callable(callable_obj: Any, params: dict[str, Any], timeout_s: float) -> Any:
-        configure_akshare_network_proxy()
-        if inspect.iscoroutinefunction(callable_obj):
-            awaitable = callable_obj(**params)
-        else:
-            awaitable = asyncio.to_thread(callable_obj, **params)
-
-        try:
-            return await asyncio.wait_for(awaitable, timeout=timeout_s)
-        except asyncio.TimeoutError as exc:
-            raise asyncio.TimeoutError(
-                f"Script call timed out after {timeout_s:g} seconds"
-            ) from exc
 
     @staticmethod
     def _normalize_parameters(parameters: Any) -> dict[str, Any]:
@@ -1733,49 +1687,39 @@ class AkshareScriptService:
         )
         await self.execution_service.mark_running(execution)
 
+        fence_token = set_write_fence(
+            claim_key=f"akshare_script:{script.script_id}",
+            owner_id=str(execution.execution_id),
+            fencing_token=int(execution.id),
+            execution_id=str(execution.execution_id),
+        )
+        dataframe_table_name: str | None = None
+        legacy_callable_name: str | None = None
+        legacy_table_name: str | None = None
+        dataframe_rows_before: int | None = None
+        legacy_rows_before: int | None = None
         try:
-            callable_obj = await self._resolve_callable(script)
-            dataframe_table_name = self.data_service.build_table_name(script, params)
-            legacy_callable_name = self._legacy_callable_table_name(callable_obj)
-            legacy_table_name = legacy_callable_name or self._legacy_table_name(script)
-            dataframe_rows_before = await self.data_service.get_row_count(dataframe_table_name)
-            legacy_rows_before = (
-                await self.data_service.get_row_count(legacy_table_name)
-                if legacy_table_name and legacy_table_name != dataframe_table_name
-                else dataframe_rows_before
-            )
-            result = await self._execute_callable(
-                callable_obj,
-                params,
-                self._script_timeout_seconds(script, timeout_seconds=timeout_seconds),
-            )
-
-            if legacy_callable_name is not None and legacy_table_name is not None:
-                table = await self.data_service.sync_existing_table_metadata(
-                    script,
-                    legacy_table_name,
+            fence = fence_identity(current_write_fence())
+            try:
+                callable_obj = await self._resolve_callable(script)
+                dataframe_table_name = self.data_service.build_table_name(script, params)
+                legacy_callable_name = self._legacy_callable_table_name(callable_obj)
+                legacy_table_name = legacy_callable_name or self._legacy_table_name(script)
+                dataframe_rows_before = await self.data_service.get_row_count(dataframe_table_name)
+                legacy_rows_before = (
+                    await self.data_service.get_row_count(legacy_table_name)
+                    if legacy_table_name and legacy_table_name != dataframe_table_name
+                    else dataframe_rows_before
+                )
+                result = await self._execute_callable(
+                    callable_obj,
                     params,
+                    self._script_timeout_seconds(script, timeout_seconds=timeout_seconds),
+                    fence=fence,
                 )
-                rows_before = legacy_rows_before
-                rows_after = table.row_count
-                summary = {
-                    "table_name": table.table_name,
-                    "row_count": table.row_count,
-                    "columns": table.metadata_json.get("columns", []),
-                }
-                self._raise_if_empty_completion(
-                    script_id=script.script_id,
-                    table_name=table.table_name,
-                    rows_before=rows_before,
-                    rows_after=rows_after,
-                    result=result,
-                )
-            else:
-                try:
-                    dataframe = self._coerce_to_dataframe(result)
-                except TypeError:
-                    if legacy_table_name is None:
-                        raise
+                committed_writes = committed_mysql_writes()
+
+                if legacy_callable_name is not None and legacy_table_name is not None:
                     table = await self.data_service.sync_existing_table_metadata(
                         script,
                         legacy_table_name,
@@ -1787,6 +1731,7 @@ class AkshareScriptService:
                         "table_name": table.table_name,
                         "row_count": table.row_count,
                         "columns": table.metadata_json.get("columns", []),
+                        "committed_writes": committed_writes,
                     }
                     self._raise_if_empty_completion(
                         script_id=script.script_id,
@@ -1794,30 +1739,84 @@ class AkshareScriptService:
                         rows_before=rows_before,
                         rows_after=rows_after,
                         result=result,
+                        committed_rows=committed_row_count(table.table_name),
                     )
                 else:
-                    table = await self.data_service.persist_dataframe(script, dataframe, params)
-                    rows_before = dataframe_rows_before
-                    rows_after = table.row_count
-                    summary = {
-                        "table_name": table.table_name,
-                        "row_count": table.row_count,
-                        "columns": list(dataframe.columns),
-                    }
-                    self._raise_if_empty_completion(
-                        script_id=script.script_id,
-                        table_name=table.table_name,
-                        rows_before=rows_before,
-                        rows_after=rows_after,
-                        result=result,
-                    )
-            execution = await self.execution_service.mark_completed(
-                execution,
-                result=summary,
-                rows_before=rows_before,
-                rows_after=rows_after,
-            )
-            return execution
+                    try:
+                        dataframe = self._coerce_to_dataframe(result)
+                    except TypeError:
+                        if legacy_table_name is None:
+                            raise
+                        table = await self.data_service.sync_existing_table_metadata(
+                            script,
+                            legacy_table_name,
+                            params,
+                        )
+                        rows_before = legacy_rows_before
+                        rows_after = table.row_count
+                        summary = {
+                            "table_name": table.table_name,
+                            "row_count": table.row_count,
+                            "columns": table.metadata_json.get("columns", []),
+                            "committed_writes": committed_writes,
+                        }
+                        self._raise_if_empty_completion(
+                            script_id=script.script_id,
+                            table_name=table.table_name,
+                            rows_before=rows_before,
+                            rows_after=rows_after,
+                            result=result,
+                            committed_rows=committed_row_count(table.table_name),
+                        )
+                    else:
+                        table = await self.data_service.persist_dataframe(script, dataframe, params)
+                        rows_before = dataframe_rows_before
+                        rows_after = table.row_count
+                        summary = {
+                            "table_name": table.table_name,
+                            "row_count": table.row_count,
+                            "columns": list(dataframe.columns),
+                            "committed_writes": committed_writes,
+                        }
+                        self._raise_if_empty_completion(
+                            script_id=script.script_id,
+                            table_name=table.table_name,
+                            rows_before=rows_before,
+                            rows_after=rows_after,
+                            result=result,
+                            committed_rows=committed_row_count(table.table_name),
+                        )
+                execution = await self.execution_service.mark_completed(
+                    execution,
+                    result=summary,
+                    rows_before=rows_before,
+                    rows_after=rows_after,
+                )
+                return execution
+            finally:
+                reset_write_fence(fence_token)
         except Exception as exc:
-            execution = await self.execution_service.mark_failed(execution, str(exc))
+            # A failed run is not an empty run: the killable worker is SIGKILLed
+            # and reaped before this handler runs, so re-reading the target
+            # table observes exactly the rows the run committed.  Where the
+            # table names or pre-run counts were never established nothing is
+            # observable, and the ledger columns stay NULL instead of a guess.
+            if legacy_callable_name is not None and legacy_table_name is not None:
+                failure_rows_before = legacy_rows_before
+                failure_target: str | None = legacy_table_name
+            else:
+                failure_rows_before = dataframe_rows_before
+                failure_target = dataframe_table_name
+            failure_rows_after: int | None = None
+            if failure_target is not None and failure_rows_before is not None:
+                try:
+                    failure_rows_after = await self.data_service.get_row_count(failure_target)
+                except Exception:
+                    failure_rows_after = None
+            execution = await self.execution_service.mark_failed(
+                execution,
+                str(exc),
+                rows_before=failure_rows_before,
+                rows_after=failure_rows_after,
+            )
             raise
