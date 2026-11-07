@@ -1,0 +1,376 @@
+{
+  "generated_at_utc": "2026-11-07T19:07:44Z",
+  "repo_root": "/home/yun/Documents/ai-for-investor",
+  "units_audited": 10,
+  "units_with_missing_on_disk": 8,
+  "units_executing_unversioned_source": 0,
+  "units": [
+    {
+      "unit_file": "ai-for-investor-dce-browser-capture.service",
+      "queried_units": [
+        "ai-for-investor-dce-browser-capture.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sat 2026-11-07 19:36:21 CST",
+        "ActiveState": "failed",
+        "SubState": "failed",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_browser_capture.sh",
+          "repo_relative": "src/backend/scripts/ops/run_dce_browser_capture.sh",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_browser_capture.sh"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_browser_capture.sh"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-dce-option-daily.service",
+      "queried_units": [
+        "ai-for-investor-dce-option-daily.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sat 2026-11-07 20:06:56 CST",
+        "ActiveState": "failed",
+        "SubState": "failed",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh",
+          "repo_relative": "src/backend/scripts/ops/run_dce_option_recovery.sh",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-dce-option-recovery.service",
+      "queried_units": [
+        "ai-for-investor-dce-option-recovery.service"
+      ],
+      "state": {
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "",
+        "ActiveState": "inactive",
+        "SubState": "dead",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh",
+          "repo_relative": "src/backend/scripts/ops/run_dce_option_recovery.sh",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-etf-nav-backfill@.service",
+      "queried_units": [
+        "ai-for-investor-etf-nav-backfill@0.service",
+        "ai-for-investor-etf-nav-backfill@1.service",
+        "ai-for-investor-etf-nav-backfill@2.service",
+        "ai-for-investor-etf-nav-backfill@3.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "7895",
+        "ExecMainStartTimestamp": "Sun 2026-11-08 03:07:34 CST",
+        "ActiveState": "activating",
+        "SubState": "auto-restart",
+        "UnitFileState": "enabled"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh",
+          "repo_relative": "src/backend/scripts/ops/run_etf_nav_shard.sh",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-frontend.service",
+      "queried_units": [
+        "ai-for-investor-frontend.service"
+      ],
+      "state": {
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Thu 2026-11-05 08:47:32 CST",
+        "ActiveState": "active",
+        "SubState": "running",
+        "UnitFileState": "enabled"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/frontend/node_modules/vite/bin/vite.js",
+          "repo_relative": "src/frontend/node_modules/vite/bin/vite.js",
+          "exists_on_disk": true,
+          "source_asset": false,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false,
+          "sha256": "8498a58e0d311572c409038515df0e5d707bdc6ab5927153f487e36ef1c9052c"
+        }
+      ],
+      "targets_missing_on_disk": [],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-full-history-recovery.service",
+      "queried_units": [
+        "ai-for-investor-full-history-recovery.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sun 2026-11-08 03:07:03 CST",
+        "ActiveState": "failed",
+        "SubState": "failed",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python",
+          "repo_relative": "src/backend/.venv/bin/python",
+          "exists_on_disk": true,
+          "source_asset": false,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false,
+          "sha256": "077590d6244c49592ad5e76ea8bf1122dc41600923cb7bcc971b83021622cc94"
+        },
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_with_core_environment.py",
+          "repo_relative": "src/backend/scripts/ops/run_with_core_environment.py",
+          "exists_on_disk": true,
+          "source_asset": true,
+          "in_head": true,
+          "in_dev": true,
+          "in_any_ref": true,
+          "sha256": "afedff8e2a41790884b70640293c85f2a14ef4a3f4d7b1a28cbbf0334b241c3c"
+        },
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_full_history_recovery_worker.py",
+          "repo_relative": "src/backend/scripts/ops/run_full_history_recovery_worker.py",
+          "exists_on_disk": true,
+          "source_asset": true,
+          "in_head": true,
+          "in_dev": true,
+          "in_any_ref": true,
+          "sha256": "8715a285f2c38ef7d78b44de120ce23b7d3b2dab3d9ed9c4ded678b74b404f83"
+        }
+      ],
+      "targets_missing_on_disk": [],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-option-history.service",
+      "queried_units": [
+        "ai-for-investor-option-history.service"
+      ],
+      "state": {
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "",
+        "ActiveState": "inactive",
+        "SubState": "dead",
+        "UnitFileState": "disabled"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_option_history_loop.sh",
+          "repo_relative": "src/backend/scripts/ops/run_option_history_loop.sh",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_option_history_loop.sh"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_option_history_loop.sh"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-policy-expiry-watchdog.service",
+      "queried_units": [
+        "ai-for-investor-policy-expiry-watchdog.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sun 2026-11-08 03:00:00 CST",
+        "ActiveState": "failed",
+        "SubState": "failed",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python",
+          "repo_relative": "src/backend/.venv/bin/python",
+          "exists_on_disk": true,
+          "source_asset": false,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false,
+          "sha256": "077590d6244c49592ad5e76ea8bf1122dc41600923cb7bcc971b83021622cc94"
+        },
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/policy_expiry_watchdog.py",
+          "repo_relative": "src/backend/scripts/ops/policy_expiry_watchdog.py",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/policy_expiry_watchdog.py"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/policy_expiry_watchdog.py"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-stock-amount-daily.service",
+      "queried_units": [
+        "ai-for-investor-stock-amount-daily.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sat 2026-11-07 04:03:56 CST",
+        "ActiveState": "failed",
+        "SubState": "failed",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python",
+          "repo_relative": "src/backend/.venv/bin/python",
+          "exists_on_disk": true,
+          "source_asset": false,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false,
+          "sha256": "077590d6244c49592ad5e76ea8bf1122dc41600923cb7bcc971b83021622cc94"
+        },
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/backfill_stock_amount_sina.py",
+          "repo_relative": "src/backend/scripts/ops/backfill_stock_amount_sina.py",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/backfill_stock_amount_sina.py"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/backfill_stock_amount_sina.py"
+      ],
+      "targets_in_ref_but_not_dev": []
+    },
+    {
+      "unit_file": "ai-for-investor-stock-tail-daily.service",
+      "queried_units": [
+        "ai-for-investor-stock-tail-daily.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sat 2026-11-07 21:10:06 CST",
+        "ActiveState": "failed",
+        "SubState": "failed",
+        "UnitFileState": "static"
+      },
+      "targets": [
+        {
+          "path": "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_stock_tail_slices.sh",
+          "repo_relative": "src/backend/scripts/ops/run_stock_tail_slices.sh",
+          "exists_on_disk": false,
+          "source_asset": true,
+          "in_head": false,
+          "in_dev": false,
+          "in_any_ref": false
+        }
+      ],
+      "targets_missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_stock_tail_slices.sh"
+      ],
+      "unversioned_source_on_disk": [],
+      "source_assets_not_in_any_ref": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_stock_tail_slices.sh"
+      ],
+      "targets_in_ref_but_not_dev": []
+    }
+  ]
+}
