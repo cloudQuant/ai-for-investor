@@ -86,7 +86,27 @@ emit / check-after 三份 JSON）：
   （run `42404291048`，19:03:03Z 入队）。预期工件为 6 钉 + `AC-1|08`，且不再出现 `AC-5|07`。
   工件到手前不写任何入账结论。
 
-## 7. 本波明确不做的事
+## 7. AC01 运行资产面：8 个 unit、7 个不存在的脚本、0 个未入库源码
+
+新仪器 `evidence/2026-11-07-wave31/unit_runtime_asset_audit.py`（只读）对 10 个
+`ai-for-investor-*` user unit 的 `ExecStart` 目标逐条回答三个问题：在磁盘上？在 `origin/dev`？
+在**任何** ref？结果：
+
+- **8 个 unit 指向的脚本在磁盘上不存在**，合计 **7 个唯一路径**
+  （`run_dce_browser_capture.sh`、`run_dce_option_recovery.sh`、`run_etf_nav_shard.sh`、
+  `run_option_history_loop.sh`、`policy_expiry_watchdog.py`、`backfill_stock_amount_sina.py`、
+  `run_stock_tail_slices.sh`）。
+- **0 个 unit 实际执行"在磁盘但不在任何 ref"的源码**。这纠正了 wave 29 表述可能带来的
+  误读：本机没有"未评审代码在跑"，真实缺陷是**可用性**——8 个 unit 永远起不来。
+- 其中 `ai-for-investor-etf-nav-backfill@.service` 处于 `activating`，
+  **`NRestarts=7895`**，`RestartSec=30`，即每 30 秒重试一次、已重试近 8 千次。
+- `.venv/bin/python` 与 `node_modules/vite/bin/vite.js` 是解释器/打包产物路径，不计入
+  "未入库源码"；把它们算进去会把结论夸大成 10 个 unit，是不成立的。
+
+关闭方式只有两条：把 7 个脚本入库，或把 8 个 unit 改指向/停用。两者都是属主/运维决定；
+这些文件无法从任何 ref 重建，凭空补写等于发明行为而不是恢复。
+
+## 8. 本波明确不做的事
 
 不替属主签 disposition；不把本机读数当基线；不在仍有采集面 PR 未合时冻结 AC01 锚；
 不把"01:43Z 之后没有新执行"写成 AC13 已修复；不把 PR 合并或测试通过当作 AC 判定闭合。
