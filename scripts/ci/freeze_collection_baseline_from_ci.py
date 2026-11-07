@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 API = "https://api.github.com"
 JOB_NAME = "Backend - Mypy Ratchet (collection scripts, advisory)"
 READING_RE = re.compile(
-    r"mypy_ratchet\[collection\]:[^-\n]*-\s*errors=(\d+)\s+checked=(\d+)\s+\((mypy [^)]*)\)"
+    r"mypy_ratchet\[collection\]:[^-\n]*-\s*errors=(\d+)\s+checked=(\d+)\s+\((mypy .*)\)\s*$"
 )
 ADVISORY_RE = re.compile(r"advisory, no baseline yet")
 

@@ -35,7 +35,7 @@ def test_parses_the_line_ci_actually_prints() -> None:
     assert len(readings) == 1
     assert readings[0]["errors"] == 101
     assert readings[0]["scope_files"] == 1108
-    assert readings[0]["mypy_version"] == "mypy 1.20.2 (compiled: yes"
+    assert readings[0]["mypy_version"] == "mypy 1.20.2 (compiled: yes)"
     assert readings[0]["advisory"] is True
 
 
