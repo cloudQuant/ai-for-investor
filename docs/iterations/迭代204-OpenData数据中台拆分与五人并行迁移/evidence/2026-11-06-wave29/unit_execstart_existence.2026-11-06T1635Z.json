@@ -1,0 +1,183 @@
+{
+  "generated_at_utc": "2026-11-06T16:36:02Z",
+  "repo_root": "/home/yun/Documents/ai-for-investor",
+  "units_with_missing_exec_targets": 8,
+  "units_still_on_a_live_timer": 5,
+  "max_restarts_observed": 4738,
+  "loaded_units_matching_prefix": 17,
+  "missing_targets_also_absent_from_git": 8,
+  "units": [
+    {
+      "unit": "ai-for-investor-dce-browser-capture.service",
+      "queried_units": [
+        "ai-for-investor-dce-browser-capture.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Fri 2026-11-06 19:37:34 CST",
+        "ActiveState": "failed",
+        "UnitFileState": "static"
+      },
+      "timer_next_elapse": "Sat 2026-11-07",
+      "exec_targets_total": 1,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_browser_capture.sh"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/run_dce_browser_capture.sh": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-dce-option-daily.service",
+      "queried_units": [
+        "ai-for-investor-dce-option-daily.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Fri 2026-11-06 20:05:48 CST",
+        "ActiveState": "failed",
+        "UnitFileState": "static"
+      },
+      "timer_next_elapse": "Sat 2026-11-07",
+      "exec_targets_total": 1,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/run_dce_option_recovery.sh": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-dce-option-recovery.service",
+      "queried_units": [
+        "ai-for-investor-dce-option-recovery.service"
+      ],
+      "state": {
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "",
+        "ActiveState": "inactive",
+        "UnitFileState": "static"
+      },
+      "timer_next_elapse": null,
+      "exec_targets_total": 1,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/run_dce_option_recovery.sh": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-etf-nav-backfill@.service",
+      "queried_units": [
+        "ai-for-investor-etf-nav-backfill@0.service",
+        "ai-for-investor-etf-nav-backfill@1.service",
+        "ai-for-investor-etf-nav-backfill@2.service",
+        "ai-for-investor-etf-nav-backfill@3.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "4738",
+        "ExecMainStartTimestamp": "Sat 2026-11-07 00:36:01 CST",
+        "ActiveState": "activating",
+        "UnitFileState": "enabled"
+      },
+      "timer_next_elapse": null,
+      "exec_targets_total": 1,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/run_etf_nav_shard.sh": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-option-history.service",
+      "queried_units": [
+        "ai-for-investor-option-history.service"
+      ],
+      "state": {
+        "Result": "success",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "",
+        "ActiveState": "inactive",
+        "UnitFileState": "disabled"
+      },
+      "timer_next_elapse": null,
+      "exec_targets_total": 1,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_option_history_loop.sh"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/run_option_history_loop.sh": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-policy-expiry-watchdog.service",
+      "queried_units": [
+        "ai-for-investor-policy-expiry-watchdog.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Sat 2026-11-07 00:00:06 CST",
+        "ActiveState": "failed",
+        "UnitFileState": "static"
+      },
+      "timer_next_elapse": "Sat 2026-11-07",
+      "exec_targets_total": 2,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/policy_expiry_watchdog.py"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/policy_expiry_watchdog.py": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-stock-amount-daily.service",
+      "queried_units": [
+        "ai-for-investor-stock-amount-daily.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Fri 2026-11-06 04:03:25 CST",
+        "ActiveState": "failed",
+        "UnitFileState": "static"
+      },
+      "timer_next_elapse": "Sat 2026-11-07",
+      "exec_targets_total": 2,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/backfill_stock_amount_sina.py"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/backfill_stock_amount_sina.py": false
+      }
+    },
+    {
+      "unit": "ai-for-investor-stock-tail-daily.service",
+      "queried_units": [
+        "ai-for-investor-stock-tail-daily.service"
+      ],
+      "state": {
+        "Result": "exit-code",
+        "NRestarts": "0",
+        "ExecMainStartTimestamp": "Fri 2026-11-06 21:10:19 CST",
+        "ActiveState": "failed",
+        "UnitFileState": "static"
+      },
+      "timer_next_elapse": "Sat 2026-11-07",
+      "exec_targets_total": 1,
+      "missing_on_disk": [
+        "/home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_stock_tail_slices.sh"
+      ],
+      "missing_path_in_git_index": {
+        "src/backend/scripts/ops/run_stock_tail_slices.sh": false
+      }
+    }
+  ],
+  "meaning": "A target missing from both disk and the git index cannot be run or rebuilt from this repository. A live timer on such a unit keeps producing failure counters and no data, so AC05 cannot treat these lanes as running."
+}

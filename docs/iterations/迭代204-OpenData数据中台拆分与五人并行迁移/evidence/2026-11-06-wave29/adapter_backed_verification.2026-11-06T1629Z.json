@@ -1,0 +1,105 @@
+{
+  "verified": [
+    {
+      "source_function": "bond_zh_hs_cov_daily",
+      "verified_at_utc": "2026-11-06T16:29:14Z",
+      "akshare_version": "1.18.64",
+      "params": {},
+      "rows_observed": 4806,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "option_sse_daily_sina",
+      "verified_at_utc": "2026-11-06T16:29:17Z",
+      "akshare_version": "1.18.64",
+      "params": {},
+      "rows_observed": 23,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "futures_zh_daily_sina",
+      "verified_at_utc": "2026-11-06T16:29:18Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "AU2402"
+      },
+      "rows_observed": 260,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "stock_financial_analysis_indicator_em",
+      "verified_at_utc": "2026-11-06T16:29:22Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "301389.SZ"
+      },
+      "rows_observed": 26,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "stock_financial_report_sina",
+      "verified_at_utc": "2026-11-06T16:29:23Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "stock": "sh600600",
+        "symbol": "利润表"
+      },
+      "rows_observed": 118,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "stock_history_dividend_detail",
+      "verified_at_utc": "2026-11-06T16:29:25Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "000002",
+        "indicator": "分红"
+      },
+      "rows_observed": 36,
+      "evidence": "live akshare call from this machine, non-empty"
+    }
+  ],
+  "not_verified": [
+    {
+      "source_function": "fund_etf_hist_em",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "159915",
+        "period": "daily",
+        "start_date": "20240101",
+        "end_date": "20240201",
+        "adjust": ""
+      },
+      "observed_at_utc": "2026-11-06T16:29:15Z",
+      "signature": "(symbol: str = '159707', period: str = 'daily', start_date: str = '19700101', end_date: str = '20500101', adjust: str = '') -> pandas.core.frame.DataFrame",
+      "status": "call_failed:RuntimeError",
+      "error": "Eastmoney ETF history endpoint request failed: https://push2his.eastmoney.com/api/qt/stock/kline/get",
+      "secs": 0.96
+    },
+    {
+      "source_function": "index_zh_a_hist",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "000300",
+        "period": "daily",
+        "start_date": "20240101",
+        "end_date": "20240201"
+      },
+      "observed_at_utc": "2026-11-06T16:29:19Z",
+      "signature": "(symbol: str = '000859', period: str = 'daily', start_date: str = '19700101', end_date: str = '22220101') -> pandas.core.frame.DataFrame",
+      "rows": 0,
+      "cols": [
+        "日期",
+        "开盘",
+        "收盘",
+        "最高",
+        "最低",
+        "成交量",
+        "成交额",
+        "振幅"
+      ],
+      "secs": 1.55,
+      "status": "empty_frame_so_not_a_verification"
+    }
+  ]
+}

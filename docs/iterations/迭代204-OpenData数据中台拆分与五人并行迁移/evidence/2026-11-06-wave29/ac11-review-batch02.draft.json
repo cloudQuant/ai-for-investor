@@ -1,0 +1,267 @@
+{
+ "status": "DRAFT-UNSIGNED",
+ "generated_at_utc": "2026-11-06T14:36:11+00:00",
+ "tool": "build_ac11_review_batch02.py (this script), reading assign_script_dispositions.py output",
+ "meaning": "An assignment requires a named human reviewer, decision=approve, and disposition equal to the proposal, for this exact file sha256. Reviewer/decision/disposition fields here are intentionally blank.",
+ "blocking_caveat": "891 of 1057 ledger rows have inventory_sha_matches_current=no, and 23 of those disagree with no attributable commit, which shows the inventory CSV was generated against a dirty tree. Signing is therefore evidence about today's tree, not about the CSV's recorded hashes; the CSV must be re-frozen from a clean tree before these signatures are cited as AC01 baseline evidence.",
+ "entries": [
+  {
+   "script_id": "bond_zh_hs_cov_daily",
+   "path": "src/backend/app/data_fetch/scripts/bonds/daily/bond_zh_hs_cov_daily.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "e1e2d567da696933b609b911f7960cb6d406b7deaadf0e2ee9907ab5c78d6c7c",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "daily_market_data",
+   "path": "src/backend/app/data_fetch/scripts/futures/weekly/daily_market_data.py",
+   "proposed_disposition": "UNDECIDED_INSUFFICIENT_EVIDENCE",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "1d4084cb0ee3fd4772e2d6217016bfa8904d4862d33180df1186df1f2035f495",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "fund_etf_hist_em",
+   "path": "src/backend/app/data_fetch/scripts/funds/daily/fund_etf_hist_em.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "206e245afdf9ed632e7c75d61ff0d0442b442e377f68b79c31cbe19744909571",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "futures_zh_daily_sina",
+   "path": "src/backend/app/data_fetch/scripts/futures/daily/futures_zh_daily_sina.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "5c738fe5086ac730a2763b720275af8e06bd1106003b4a9da6aa84495abc6f6c",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "index_constituent_weights_csindex",
+   "path": "src/backend/app/data_fetch/scripts/indexs/weekly/index_constituent_weights_csindex.py",
+   "proposed_disposition": "UNDECIDED_INSUFFICIENT_EVIDENCE",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "7ac2e7d8078917708a3a92f1b2f2c24d445a9616aa9b2f0025bb98b59450ef09",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": true,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "index_zh_a_hist",
+   "path": "src/backend/app/data_fetch/scripts/indexs/daily/index_zh_a_hist.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "bcb9258aa9c2f1ff92717c435e061fed173b3cce8f416e01a3fb2823a51389cc",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "option_sse_daily_sina",
+   "path": "src/backend/app/data_fetch/scripts/funds/daily/option_sse_daily_sina.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "5b4bf3c67eb27380957edc11aeacaca0f4a04c520476cde744f7794f153c9abc",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "stock_financial_analysis_indicator_em",
+   "path": "src/backend/app/data_fetch/scripts/stocks/daily/stock_financial_analysis_indicator_em.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "f24141362df0980b73c576bfa8dbf43f0a10574e2d7de71b0b5f8153585549e9",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "stock_financial_report_sina",
+   "path": "src/backend/app/data_fetch/scripts/stocks/daily/stock_financial_report_sina.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "2bca3bb2699f32a58b407651af6f8d3548387ff47eacec80f5cee422834bfb72",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "stock_history_dividend_detail",
+   "path": "src/backend/app/data_fetch/scripts/stocks/weekly/stock_history_dividend_detail.py",
+   "proposed_disposition": "EXTEND_PROVIDER",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "2b7cd7ba2b39ad7a1411a777658bcf88d57499bf058fc6fd8a84b674cfca3c86",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "stock_zh_a_hist",
+   "path": "src/backend/app/data_fetch/scripts/stocks/daily/stock_zh_a_hist.py",
+   "proposed_disposition": "UNDECIDED_INSUFFICIENT_EVIDENCE",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "29ea009b0ec61da7ab477d0b121242b8a87a7f00c801cbe55e6a1a6b0fb38c08",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "owner evidence: catalog REGISTERED_FETCHER_MATCH + OpenData provider model file read"
+  },
+  {
+   "script_id": "_amac_limited",
+   "path": "src/backend/app/data_fetch/scripts/common/_amac_limited.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "ef8de4e5653fa6f9dc5fd1ad007424d21c8148a1a2c34d44da16184c425b1a96",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "_endata_yien",
+   "path": "src/backend/app/data_fetch/scripts/common/_endata_yien.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "cd45d95a5a9121f12a4c78a82478570547d3b3d109f01a1c3fc801701c0e236c",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "currency_fallback",
+   "path": "src/backend/app/data_fetch/scripts/common/currency_fallback.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "f7fbd9091a5a4a6259b0a91385050c028695966bebfef764b9636f8cacbdd9ec",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "_jin10_macro",
+   "path": "src/backend/app/data_fetch/scripts/common/daily/_jin10_macro.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "1f847e940fa113b36c41109125aa32462b22853ea35362bc33896792f8a3545e",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "_sina_macro",
+   "path": "src/backend/app/data_fetch/scripts/common/daily/_sina_macro.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "1d482644301537260eae343a1b44f520abf3918073eef1f5e20b656ad74cfd68",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "dict_result",
+   "path": "src/backend/app/data_fetch/scripts/common/dict_result.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "c483f79cc9106a88dc07d4d2a30e9e889706dd8d48518f9e7e585ce848598c97",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "_dict_result",
+   "path": "src/backend/app/data_fetch/scripts/futures/weekly/_dict_result.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "ce3018d4ede4d6f47ac4f66e22027b7775c28ba6c3b3aa5c47a0ea658e2443dd",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  },
+  {
+   "script_id": "_gdfx_limited",
+   "path": "src/backend/app/data_fetch/scripts/stocks/daily/_gdfx_limited.py",
+   "proposed_disposition": "HELPER_ONLY",
+   "reviewer": "",
+   "decision": "",
+   "disposition": "",
+   "file_sha256": "0df21bfb259a393993d43d611032e7bbc8f6acdde4d2497a5ff8e3b9f5c0d27d",
+   "recomputed_matches_ledger": true,
+   "inventory_sha_matches_current": false,
+   "batch_evidence": "inventory static_role=helper_review_only (no task should exist)"
+  }
+ ],
+ "skipped": [
+  [
+   "cffex_option_daily_history",
+   "not in the 1057-script ledger"
+  ],
+  [
+   "commodity_option_daily_history",
+   "not in the 1057-script ledger"
+  ],
+  [
+   "etf_option_daily_history",
+   "not in the 1057-script ledger"
+  ],
+  [
+   "etf_realtime_quote_sina",
+   "not in the 1057-script ledger"
+  ],
+  [
+   "forex_hist_sina",
+   "not in the 1057-script ledger"
+  ],
+  [
+   "fund_monetary_income_history",
+   "not in the 1057-script ledger"
+  ],
+  [
+   "fund_reviewed_unit_nav_history",
+   "not in the 1057-script ledger"
+  ]
+ ]
+}
