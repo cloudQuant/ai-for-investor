@@ -1,0 +1,21 @@
+{
+  "_comment": "mypy ratchet baseline for scope 'collection'. Every value below is CI's own reading from the job named in `provenance` -- not a local run. The environment matters: this plane's count differs between CI's pinned dependency set and a laptop venv, so a locally generated number must never be written here.",
+  "scope": "collection",
+  "target": "app/data_fetch/scripts",
+  "config": "config/mypy_collection.ini",
+  "baseline_errors": 2,
+  "scope_files": 1108,
+  "mypy_version": "mypy 1.20.2 (compiled: yes)",
+  "baseline_date": "2026-11-07",
+  "provenance": {
+    "repository": "cloudQuant/ai-for-investor",
+    "head_sha": "74e2a0570aa8e88f09ebfab74c73d90fe2f51b88",
+    "run_id": 42408819629,
+    "run_url": "https://github.com/cloudQuant/ai-for-investor/actions/runs/42408819629",
+    "job_id": 128516708461,
+    "job_url": "https://github.com/cloudQuant/ai-for-investor/actions/runs/42408819629/job/128516708461",
+    "job_name": "Backend - Mypy Ratchet (collection scripts, advisory)",
+    "reading_line": "mypy_ratchet[collection]: advisory, no baseline yet - errors=2 checked=1108 (mypy 1.20.2 (compiled: yes))",
+    "fetched_at_utc": "2026-11-07T20:34:17Z"
+  }
+}
