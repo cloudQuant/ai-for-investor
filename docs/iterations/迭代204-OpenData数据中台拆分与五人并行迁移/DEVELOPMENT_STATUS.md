@@ -2228,3 +2228,916 @@ monthly 21 / **unspecified 5**）都记在审计文档里供分派直接取用�
 6. **恢复运行时资产只恢复能证明的那一个**：worker 从留档原样取回（`sha256 8715a285f2c38ef7…`，`--plan` 只读 `source_or_database_calls: 0`，ruff check/format 通过），它调度的 **5 个控制器 `git log --all --diff-filter=A` 逐个实测 added-in-any-ref = 0**：crypto 有两份 proposal 快照，stock/etf/bond/cffex 四条本机一份都没有，只有它们写出的 progress JSONL 证明曾经存在。把一个写数仓的脚本按「大概是这份」放回运行时是猜测，所以 #273 只含 worker；装好后 `--apply` 变成具名失败关闭（`run_id 20261105T140002Z-6a51aa6b97a0`，`required runtime inputs missing: …crypto_full_history_recovery.py`，`write_possible: false`，`source_failure_recorded: false`）。重建 / 停用 / 只恢复 crypto，交属主。
 7. **本波并行开的开发流**：#272 `feat/afi-frontend-coverage-states`（204-E03-03/E05-02，前端覆盖状态不再折叠；本机 `vue-tsc` 干净、`--max-warnings 0` 干净、6 个受影响测试文件 **137 passed** 由集成人自己复跑得到）。另三条在跑：OpenData `204-A04-04` post-commit visibility seal（A05-04/06/07 的前置，全仓此前根本不存在该概念）、AFI `204-E04-01/02/03` 研究工件绑定 publication、#270 分支上的采集脚本类型平面剩余 226 条（`Database.cursor` 联合类型 88 + 整数索引形状 39 两处共享层）。
 8. **平面**：以上全部落在 CODE/OFFLINE 与**本机 DEPLOYMENT 观测**。AC14 的小时数钟从 2026-11-05 14:03 UTC 才开始累计，48 次连续小时的最早可能完成点是 2026-11-07 14:03 UTC；AC05/AC13/AC17/AC18 零进展。按属主指示 1,098 个 armed 任务已全量放行真实源，因此源侧配额与跨进程预算（AC13）立刻成为活问题，不是以后再说——`scheduler.py:106/132` 会武装每一条 `is_active`，而 2026-10-25 台账记的是 1,103 行里 69 条 active。
+
+### Wave 29（2026-11-06）：队列被一个作业卡住九小时，拆开后暴露运行资产平面与调度器双写时钟
+
+本轮起点不是新需求，而是接手时的实际状态：本地 `dev` 落后远端 3 个提交，wave 27/28 的记录
+仍停在未合并的 PR 里（dev 上的 `DEVELOPMENT_STATUS.md` 最后一个标题是 Wave 26），
+而 `dev` 头 `25fd1b4ab` 上 **只有一个作业红**：`Security - Secret Scan (177 §D)`。
+22 个开放 PR 里 18 个的 `mergeable_state` 只是因为这一条红而不稳定。平面：以下第 1、2 条是
+CI 门禁债务面，第 3-6 条是 CODE/OFFLINE，第 7-9 条是 DEPLOYMENT/NATURAL_CYCLE 的本机运行态。
+
+#### 1. 解阻塞：#304 是唯一的红，且它的红来自一个未合并分支上的提交（CI 实测）
+
+`ci.yml:811-905` 的 full-history 扫描用 `fetch-depth: 0`，因此**所有 ref** 的历史都在扫描范围内。
+真凶是 `fix/afi-runtime-environment-identity`（PR #301）分支上提交 `7e3b8a444107` 里
+`src/backend/tests/test_runtime_environment_identity.py:32` 的合成字面量
+`SECRET_SENTINEL = "sup3r-s3cret-dsn-passw0rd"`；`blocking_ready=true` 使它变成硬门。
+证据链不是推断：CI 工件 `gitleaks-report.sarif`（artifact 13484184756，job 127764998791）
+只有 **1 条 result**，正是这条；#304 的 PR 作业 42165197171 自身 success；
+`scripts/ci/check_gitleaks_history_baseline.py` 在应用前后分别给出 accepted=280 → 281 且两侧各自单独应用会红
+（`count is 280, baseline requires 281` 与反向）。本机无法复现扫描本身：gitleaks 下载不通
+（只有 `api.github.com` 可达），且该 commit 不在本地对象库里。
+
+合入 #304 后 dev 头 `0a4c5ab31` 的 secret scan 作业 **success**（run 42224170243 逐作业读回）。
+两条必须一起记的残留：(a) 该指纹登记的是一个**测试占位串**，#304 正文自陈"未做属主裁定"，
+只是沿用 cfets 先例；(b) 它 SHA-scoped 到一个未合并提交——分支被删则 `.gitleaksignore` 条目成为
+死账，分支被 rebase 且新提交仍带字面量则会再触发门禁。PR #301 本身在跑，两条都要在合并它时再看一次。
+
+#### 2. 集成税：同一族三行文件让 14 个 PR 同时变 dirty，以及为什么它必然复发
+
+合 #304 之后，`mergeable_state=dirty` 从 1 个（#293）变成 14 个。机制是可复核的：
+几乎每个分支都往 `.gitleaksignore` 追加**同一个** cfets 指纹块、往
+`scripts/ci/gitleaks_history_baseline.json` 追加同一个 exception 对象并各自动 `accepted_fingerprints`。
+dev 的两个 blob 因此是各分支的**严格超集**，去重后的并集恒等于 dev 版本
+（每个 rebase 后 `git diff origin/dev -- .gitleaksignore scripts/ci/gitleaks_history_baseline.json` 为空）。
+15 个分支（13 个由并行代理、2 个由本代理：#274/#278）以 merge 而非 rebase 并入 dev——
+因为已有作者自审是绑定在旧 head 上的，force-push 会把它们变成孤儿；随后按新 40 位 head 重投自审。
+每个分支推送前都跑 `check_gitleaks_history_baseline.py`（全部 `passed (accepted=281, unresolved=0, blocking_ready=true)`）
+与冲突标记扫描。这一说法我另外用 API 的 blob sha 独立复核过，而不是只看代理的汇报：
+`/.gitleaksignore` 与 `scripts/ci/gitleaks_history_baseline.json` 在 15 条分支（13 支集成 + #274/#278）上
+与 dev 的 blob **全部逐支相同**（dev blob `1104263cf352…` / `c72a0cfae526…`），不匹配数 0。
+
+结构性结论，与"本轮已做完的事"分开记：只要"每个 PR 各自重记全局指纹台账"这个形状不变，
+每次合并就会把其余 PR 全部打回 dirty。可选项是把指纹改成按 PR 追加的独立文件、
+或让 `accepted_fingerprints` 由 `.gitleaksignore` 行数导出而非手填；两者都动门禁语义，
+属属主裁定，本波不动。
+
+#### 3. 采集脚本类型平面：advisory 面第一次有了可复跑的读数，机械族被真实修掉 34 条
+
+CI 的测量形状是 `src/backend` 下 `python ../../scripts/ci/mypy_ratchet.py --scope collection --advisory`
+（`ci.yml:594-596`），内部执行 `mypy --config-file config/mypy_collection.ini app/data_fetch/scripts`。
+本机 `.venv` 的 mypy 1.14.1 在 `app/config.py:71` 直接 INTERNAL ERROR，必须用 lock 钉的
+**1.20.2**（`config/requirements-dev.lock`）才与 CI 同口径。
+
+* 我在 dev `0a4c5ab31` 实测 **159 errors / checked 1108 files**（`mypy_ratchet[collection]: advisory, no baseline yet - errors=159`）。
+  这条推翻了 wave 26 的 226：#275 之后 `union-attr` 88→9、`index` 39→1、`assignment` 30+→7。
+* **PR #305**（`fix/afi-collection-plane-mechanical`）修机械族与两个真缺陷：
+  `var-annotated` 15→0、`valid-type` 5→0、`dict-item` 1→0、`index` 1→0、`operator` 23→13，
+  我在它的 head 上独立复跑同一命令，得 **125 errors / checked 1108**——平面未缩小，
+  且没有任何一族变多。它不含 `# type: ignore`、不动 `mypy_collection.ini`、不加基线文件，
+  因此不触 `baseline_update_guard.py`。
+  其中两处按 wave 26 的定义是**真 bug 而非类型噪声**：`funds/weekly/fund_detail_info.py`
+  把一个名字先绑成 `set(...)` 再当序列下标取（`entrypoint` 之外的第二类"字典按整数下标"抄写形态），
+  以及 `stocks/daily/stock_bid_ask_em.py` 对同一个 `data.get("f32")` 调两次使收窄失效。
+* 属主 2026-11-06 裁定：剩余 `operator`/`union-attr`/`str-bytes-safe` **按站点依据 DDL 收窄**，
+  不做 DB 层访问器、也不带着它们冻结基线。**该裁定已落地为 PR #308**（head `0be658dad`）：
+  同一命令实测 **125 → 95**，`operator` 13→0、`union-attr` 9→0、`str-bytes-safe` 7→0，
+  `checked 1108` 未变，`call-overload` 23→22、`arg-type` 10→9，
+  `import-untyped` 40 / `return-value` 15 / `assignment` 6 / `override` 3 未动，无任一族增加；
+  类型形状与入口测试 32 passed。两处仍是真缺陷而非类型噪声：
+  `re.match` 被调用两次（守卫一次、body 一次）使 body 得不到收窄，
+  以及 `akshare_catalog_batch.run()` 的计数 dict 混了 int 与 str——后者的修法是给它命名形状
+  （TypedDict）而不是 cast，因为 cast 会把真实的类型混合藏起来，而 TypedDict 运行时就是普通 dict，
+  负载与键序不变。至此采集平面从 dev 的 159 走到 **95（-64）**。
+* `import-untyped` 40 我没有"顺手加 stub"，而是把代价量出来了：只装 `types-requests`
+  时 collection 159→119（且逐族差分证明其它一族没变），但 **blocking 的 app scope 从基线 0 变 +6**，
+  门禁会红；补上 `types-PyMySQL` 后 app 降到 +3、collection 仍 119。剩余 3 条是真实类型问题
+  （`strategy_target_approvals.py:1065` redundant-cast、`approved_target_authority.py:329` arg-type、
+  `akshare/data.py:202` Series[Timestamp] 对 TimestampSeries）。所以这是一笔需要先修 3 个 app 侧真错、
+  且与开放 PR #302 在 `data.py` 上重叠的独立工作，不是免费项。测量后环境已还原（复测回 159）。
+* 平面仍必须是 advisory：基线只能由 CI 自己的读数经评审式 `--update` 冻结，
+  所以"代码修复 PR"与"基线冻结 PR"是两个 PR，本文件所有 159/125 都只作笔记本引用。
+
+#### 4. 运行态普查第一次给出 AC11 的真实分母，并按属主裁定执行了一次生产写
+
+用已合并的 #284 普查工具（`scripts/task_param_audit.py`，只读）在本树跑全量 armed 面：
+`binds 155 / accepts_var_kwargs 886 / script_file_absent 50 / unexpected_param 7`，
+`ak_data_scripts` 1066 行（active 1051）中 9 行 `module_path` 在树中不存在，接口表 0 行。
+把它与修复后执行记录交叉，得到 AC11 迄今第一个可辩护的分子：
+**运行态已证明"能绑定且写入行"= 143 / 1098**（放宽为"完成即可"= 180），
+`script_file_absent` 50 与 `unexpected_param` 7 在修复后 **100% 失败**。
+
+属主裁定"停用幽灵任务"→ 对队列 A 的 50 个任务执行 `is_active=0`（before-image
+`/tmp/it204/ac11-queue-a-before-20261106T134756Z.json`，13:47:56 UTC，armed 1098→1048）。
+三条边界一起记，否则这条读数会被误用：
+
+1. **停用尚未可判为生效。** 观测窗内那 50 个任务 0 次执行，但它们的 cron 落在 CST 06/08/09/15/19 时，
+   窗内一个槽位都没到；代码侧 `_run_task_job → run_task_now` 不回查 `is_active`
+   （`scheduler.py:95/138`），`reload_active_tasks` 只遍历 active 集合、从不注销已转 inactive 的 job
+   （`scheduler.py:129`），而运行进程是 11-05 以全量 armed 启动的。
+   首个可判观测点在 11-07 约 00:35 UTC。
+2. 这 50 个任务的失败是幽灵注册**唯一的可见信号**，停用后可见性净下降。
+3. 更糟的是：9 个无文件注册对应的**目标表对象根本不存在**（`information_schema` 计数 0），
+   其中 `release_policy`/`yield_release_policy` 从未有过任务。
+   所以 AC05/AC10 对这些数据集必须继续写"未覆盖"，而不是"覆盖为空"。
+
+同时修正 wave 26 的两条口径：`INVENTORY_AUDIT_20261105.md` 的分频分布是 **CSV 声明值**，
+与 armed cron 不一致（自称 daily 的 694 个任务里 690 个实际是星期受限；
+`ak_data_scripts.frequency` 对全部 armed 任务的值都是 `manual`，不携带信息）；
+且 CSV 的 9 个 `source_sha256` 在 AFI 全仓 3099 个 tracked `.py` 的 sha256 集合中 0 命中——
+`static_role` 只能读源码得到，故 CSV 生成自一棵**带未提交文件的工作树**，
+台账与 DB 注册同源，不能互为印证。
+
+#### 5. 新缺陷：`ak_scheduled_tasks` 的两个时间列被两个写入者用两种钟写（数据+代码双向证据）
+
+`AkshareExecutionService._utcnow_naive()` 写 naive UTC，`AkshareScheduler.run_task_now`
+随后用 `datetime.now()`（本机 Asia/Shanghai）覆盖同一列 `last_execution_at`；
+`next_execution_at` 直接取 APScheduler 的 `job.next_run_time`（触发器在
+`AKSHARE_SCHEDULER_TIMEZONE` 上），落进 naive 列即墙上时间。
+
+实测由本波新增仪器 `evidence/2026-11-06-wave29/scheduler_clock_duality.py` 产出
+（只读，`--env` 取 backend `.env`，输出 JSON 同目录），16:14:50Z 读 **1048 armed**：
+`shifted-by-tz-offset` **214**、`agrees-within-1h` **821**、`older-than-any-execution` **13**、无执行行 0。
+单小时 cron 的任务共 **964** 个，`next_execution_at` 落在 cron 墙钟小时的 **964/964（全中）**，
+而 `last_execution_at` 只有 **135/964**。
+**我此前写的是"53/53 与 2/53"**——那是按"daily 形状"窄筛手动跑的一次数；仪器把母体换成"小时字段为定值的全部任务"
+后，方向不变、比例同为极端（next 全中 / last 一成多），但绝对数应以仪器为准，旧写法作废并在此留痕。
+214 vs 上一轮的 192 也不是矛盾：采集自 2026-11-05 14:02 UTC 恢复后每条完成都在被本地钟覆盖，
+这条计数随运行单调增长，引用必须带读数时刻。
+一次自打脸值得记：仪器第一版用 `datetime.now()` 打时间戳并标成 UTC，跑出来是
+`2026-11-07T00:14:33Z`（本机 CST），**恰好就是本节描述的那个缺陷**；改为
+`datetime.now(timezone.utc)` 后才是 16:14:50Z。这个错误反而说明该缺陷会自然发生在任何忘记时区的代码里。
+
+后果：任何跨列比较差 8 小时。wave 28 修的是 AC14 **仪器比较侧**（#282），本波发现的是**写入侧本身**；
+两者不是同一件事，不能因为"§282 已修 tz"就把这条当已闭合。修复在 **PR #306**
+（含 `reload_active_tasks` 注销失效 job，使第 4 节的停用真正生效）；
+存量校正在 `scripts/ops/normalize_scheduler_clock.py`，**按分类逐行 shift，
+偏移不落在 +7~9h 签名里的行一律不动并单列报告**，且必须在代码部署+采集器重启之后执行，
+否则仍在跑的调度器会把墙上时间写回去。本波只跑了 dry-run 并保留其分布读数。
+
+#### 6. AC01 另一半第一次被刷新：进程跑的是旧代码，10 个 sidecar 里 8 个因宿主文件失败
+
+14:05–14:07 UTC 只读复测（`systemctl --user show`、`journalctl --user`、`git`、`pip list`、`SELECT`）：
+
+* `ai-for-investor.service` 主进程启动于 11-05 22:44:45 CST，NRestarts=0，启动时 HEAD 为
+  `9f573d34d3d0`，工作树现在 `0a4c5ab3` —— **部署了但没重启**，中间 7 个提交不在运行进程里。
+  因此本波所有运行态读数描述的是旧代码行为，而任何"修复已在生产生效"的说法在重启前都不成立。
+* 10 个 sidecar 单元中 **8 个确定性失败**，原因同族：systemd 依赖的宿主文件不存在于任何 git ref
+  （`crypto_full_history_recovery.py`、`bond_convertible_history_controller.py`、
+  `backfill_stock_amount_sina.py`、`run_stock_tail_slices.sh`、`run_dce_option_recovery.sh`、
+  `run_dce_browser_capture.sh`、`policy_expiry_watchdog.py`、`run_etf_nav_shard.sh`、
+  `run_option_history_loop.sh`）；`etf-nav-backfill@0-3` **此刻正在 30 s 周期的崩溃循环**里。
+  这说明 AC01 的清单若只按 `git ls-files` 取 1108 的分母，对运行资产平面是盲的。
+* `full-history-recovery` 在 exit 2 的同时记 `cursor_advanced: true`——失败仍推进游标，
+  是一条独立的可观测性/幂等缺陷。
+* 今日消费面：272 completed / 65 failed / 1 running，109 个目标表有正行增量（+128,336 行），
+  `ak_data_tables` 155/1061 今日更新；**892/1044** 个 armed 任务的目标表今日无成功写入，
+  但多数是周/月形状未轮到，因此**不可**读成"892 个数据集缺数"。
+* `md_capability_ledger_entries` 仍为 **0 行**，无生产写入者——wave 28 认定的
+  AC02/AC03/AC09/AC18 真实阻塞点未变。
+
+#### 7. AC14：小时目标在结构上只能由一个任务产出，而它一次都没成功
+
+按 cron 逐字段展开（列表/区间/步长/星期/day-of-month）：能每小时触发的 armed 任务只有 **1 个**
+（`id=1049 crypto_hourly_market`，`3 * * * *`），它在 23.5 h 窗口内应得 24 个槽位、
+24 次全部 600 s 超时、completed 0。停用后的形状分布是 weekly 941 / sub-daily 83 / 月度 21 / **daily 只有 2**；从停用前的 daily 32 掉到 2 正是那 50 个被停用任务造成的（-30 daily、-18 weekly、-2 sub-daily）。本波第一版分类漏看 `day-of-month`，把 21 个月度形状算成 `daily 23`，纠正过程记在 `RUNTIME_READOUT_20261106.md` §4，错误本身也保留。
+所以"48 次小时自然运行"这一格不是单纯等时间，先把 1049 的超时或任务形状定下来才有意义。
+
+与 wave 28 §1.2 的 `hourly 仍 103` **口径不一致，此处不改写对方的数**：本机的 1 是
+把 cron 展开成触发集合后 `小时字段 == '*'` 的任务数，103 是 #282 仪器自己的分档。
+AC14 判据需要把"小时面"的定义写死，否则这一格可以永远各说各话——这是一条属主/判据决定，
+不是代码问题。
+
+#### 8. OpenData 侧：账本 6 钉、两个 PR 合入、test-cov 是间歇红且我的初判方向反了
+
+* `docs/quality/acceptance-gate-ratchet.json` 现为 **6 钉**（AC-5|03、AC-11|04、AC-16|05、AC-16|06、
+  AC-17|03、AC-17|06）；wave 26 期待的 7→6 已落地在 `1815e2a2`（PR #195），工件为 run 41936345046
+  的 `acceptance-gate-ratchet`（artifact 13376730203）。README/登记表两侧正文均含
+  「不构成任何投资建议」。
+* 我合入 **#196**（visibility seal）与 **#200**（AC-15 durable layers 实测），二者 mergeable_state=clean。
+* dev 头 `f1a82bca` 的红在 `make gate` 的 `test-cov` 成员，报
+  `sqlalchemy.exc.TimeoutError: QueuePool limit of size 1 overflow 0 reached, timeout 0.05`。
+  **我先交下来的归因是错的**：我说它是 #197 运维页引入的连接泄漏。实测 `git diff 28607e18..f1a82bca`
+  是 12 个文件、全在 `frontend/`、0 Python、0 测试——#197 没有创建任何 engine/route。
+  真因是潜伏竞态：`reviewed_worker.py:249` 的 worker Engine 固定 `pool_size=1, max_overflow=0,
+  pool_timeout=0.05`，且 `_verify_pool_wait_bound`（`:862-878`）把放宽它判为产品违规；
+  测试在主线程驱动 ledger 的同时 `run_once` 每 250 ms 心跳占用那唯一槽位，
+  一次 >50 ms 的心跳写就让测试自己的 checkout 饿死。CI 在 35,488 条里撞中一次。
+  **它是间歇的，不是常驻红**：合入 #196/#200 之后 OD dev 作业 42224189357（`02fb79a2f`，14:29:03Z）
+  两个作业全 success，其中 `quality gate` 跑满 18 个成员，test-cov 在没有 #201 的情况下自己变绿。
+  因此 #201 的正确定位是加固潜伏竞态，把它写成修复了常驻红是不准确的。
+  **PR #201** 按"只修测试、不动产品不变量"处理：给取消者一条自己的 `NullPool` 直连 Engine，
+  池参数一字未动，并加了三条守卫（占满槽位时第二次 checkout 必须以原错误失败、
+  槽位被占时驱动仍能读+取消、事件级证明不泄漏），配 12 次重复加压全绿。
+  两条残留被明确记录而未修：生产取消路径仍与 worker 共享那一格 Engine（竞态→可重试 503），
+  `test_reviewed_worker.py::test_child_exception_text_...` 用同一 0.05 s 界、加压下也红过一次。
+* AC-1|08：#198 把判据改成"条款链接必须真的落到页面"后一测即 gap（35 源 16 条只指站点根），
+  账本仍写 proven，于是 `acceptance-probe-check` 红。按属主裁定，我发了
+  `sync_acceptance_ratchet=true` 的 dispatch 作业（run 42228207697 @ `4d50d4a8e`）取工件，
+  **记钉必须由该工件产生**；补 URL 才是真修，但 16 条链接内容属源站事实，臆造即伪造。
+
+#### 9. 本波对接的影响
+
+本轮把三件事变成事实：CI 队列的可判状态（不再被一个历史扫描笼统挡着）、
+AC11 的第一个证据化分子、AC01 运行资产平面的首次刷新。它同时新增两条未闭合缺陷
+（调度器双写时钟、systemd 依赖的宿主文件不在任何 ref）。
+按 `SUBAGENT_TASKS.md:257` 的收口条件，任何 PR 合并、任何笔记本读数、任何 `--sync-ratchet`
+入账都不构成验收面闭合；本轮没有任何一格 AC 判定被改写为"通过"。
+
+#### 10. 本波草稿被独立事实核查后改掉的八处（保留错误本身）
+
+一个专职核查代理把本节与 `RUNTIME_READOUT_20261106.md` 的每条数值都用原始命令重跑了一遍。
+它推翻或收紧了八处，全部就地改正，且**不抹掉错误**，因为下一波需要知道错在哪一类：
+
+1. **7 个数据型幽灵的目标表不是不存在，而是有约 2,400 万行存量数据**（最大
+   `OPTION_COMMODITY_DAILY_HISTORY` 22,093,150 行）。我只查了元数据库 `ai_for_investor`，
+   没查 `AKSHARE_DATA_DATABASE_URL` 指向的 `akshare_data`。正确表述是"存量有、生产者无"，
+   既不是"已覆盖"也不是我写过的"表不存在"。新鲜度当时**未测**（业务日期列名按常见猜测 7 表全未命中）；
+   **随后同一波内测到了**（见下面 §12 与 §13 的更新：业务日到 2026-10-26/10-23，
+   且生产者被**双向绑定**，所以"写入者无法绑定"这句也在同一波内被推翻，纠正记录同样保留）。
+2. `crypto_hourly_market`(1049) 并非"从未成功"，它在 2026-10-19~10-27 累计 completed 178 次；
+   准确说法是"自那次全量失败起点之后一次也没成过"。
+3. 宿主缺失文件是 **12 个**（7 个 ops + 5 个控制器/回填脚本），受影响 sidecar 是 **9 个**，
+   且那 9 个 ops 路径**全部**不在 git 索引里（我先前写"至少 10 个""其中 8 个不在索引"都不准确）。
+4. 时钟交叉验证的 53/53 与 2/53 出自一个未固定的 daily 口径，按任何明确定义都复现不出 53；
+   可复现的版本是 23/23 与 2/23。
+5. 普查、AC11 分子（143/180）都是停用前 armed=1098 的读数；停用后同树复跑
+   `script_file_absent` 变 0、分子变 155/1048 与 193/1048。引用必须带时间戳。
+6. 目标表零写入的分母是 1044 而不是 1048：4 个 armed 任务的脚本行没有可用 `target_table`。
+7. #304 那条"该 commit 不在本地对象库里"已不成立（PR ref 使其可见）；本机不可复现的只有 gitleaks 二进制下载。
+8. "3099 个 tracked .py" 混淆了文件数与摘要数：3169 个文件、去重后 3099 个不同 sha256。
+
+核查同时**确认**了没有问题的部分：dev 唯一红作业及 #304 的两文件范围、
+SARIF 只 1 条 result、collection 159→125 与逐族不增、`.coveragerc` 排除、
+6 钉账本与免责正文两处齐全、OD 红作业是 `quality gate`/test-cov 且 `git diff 28607e18..f1a82bca` 全在 `frontend/`。
+
+#### 11. AC14 仪器 #282 被专门审了一遍：没有我犯的那个 bug，但 wave 28 的一个数字与它矛盾
+
+我在 §4 犯的那类错误（展开 cron 时漏看 `day-of-month`）值得确认是否也在正式仪器里，
+所以逐行审了 #282 的 `src/backend/scripts/ops/report_iteration204_acceptance_window.py`。结论：
+
+* **没有该缺陷。** `expected_slots` 展开五个字段并按日匹配（:267-268、:282-284）。
+  可跑验证：`15 10 5 * *` 判为 monthly，在不含 5 号的窗口里得 **0 槽位**，含 5 号时恰得一个；
+  不认识月/季受限形状时返回 None 并记 `slot_check: unavailable`，不猜。
+* 字段解析支持 `*`、`*/N`、单值、逗号列表、`lo-hi`，其余拒绝（:211-239、:270-273）。
+* 时区与"未到期"处理正确：槽位按 `Asia/Shanghai` 枚举再转 UTC，有反事实测试钉住；
+  零槽位记 `no_expected_slot_in_window` 而不是算失败。它的 21 项测试在本机全过。
+* 它的 hourly 定义是"小时字段展开为全部 24 个值"，因此该桶**不可能**装 103 个任务。
+
+由此产生一条对记录本身的要求：wave 28 §1.2 写"#282 修后 `hourly 仍 103`"，
+而以 #282 自己的分类器不可能得到 103（本机按 armed cron 展开，小时字段为 `*` 的只有 1 个任务，
+即 id 1049）。这不是谁数错了，而是**两个工具的 hourly 定义不同却被写进同一句话**。
+本波不改写 wave 28 原文，只声明二者不可互换，并要求 AC14 判据把"小时面"的定义写死。
+
+#### 12. 采集平面在本波结束时的四档读数，以及幽灵表的新鲜度与生产者绑定
+
+| 度量点 | 命令（与 CI 同口径） | 读数 |
+|---|---|---|
+| dev `0a4c5ab31` | `mypy_ratchet.py --scope collection --advisory`，mypy 1.20.2 | **159** errors / checked 1108 |
+| #305 head `bce164cb4` | 同上 | **125**（机械族 + 2 个真缺陷） |
+| #308 head `0be658dad` | 同上 | **95**（按 DDL 逐站点收窄；operator/union-attr/str-bytes-safe 归零） |
+| stub 对照实验（只测，不改仓） | 同上 | collection 119，但 app scope 基线 0→+6；补 `types-PyMySQL` 后 +3。测毕已还原并复测回 159 |
+
+剩余 95 条：`import-untyped` 40、`call-overload` 22、`return-value` 15、`arg-type` 9、
+`assignment` 6、`override` 3。平面仍必须是 advisory：基线只能由 CI 自己的读数经评审式
+`--update` 冻结成第二个 PR（`baseline_update_guard.py` 禁止同一 PR 既改代码又抬基线）。
+
+幽灵注册对应的 7 张表，本波最终测到（`akshare_data`，日历取该库 `TRADING_DAYS` 8797 行）：
+
+| 表 | 行数 | 业务日列 | 业务新鲜度 | 物理写入止 | 生产者 |
+|---|---|---|---|---|---|
+| `OPTION_COMMODITY_DAILY_HISTORY` | 22,093,150 | TRADE_DATE | 2026-10-26 | 2026-10-26 20:07 | BOUND |
+| `OPTION_CFFEX_DAILY_HISTORY` | 858,096 | TRADE_DATE | 2026-10-26 | 2026-10-26 23:39 | BOUND |
+| `OPTION_ETF_DAILY_HISTORY` | 854,174 | TRADE_DATE | 2026-10-23 | 2026-10-23 19:45 | BOUND |
+| `FUND_MONETARY_INCOME_HISTORY` | 91,419 | VALUE_DATE | 2026-10-26 | 2026-10-27 08:55 | BOUND |
+| `FOREX_SINA_DAILY_HISTORY` | 37,327 | TRADE_DATE | 2026-10-26 | 2026-10-26 22:45 | BOUND |
+| `ETF_REALTIME_QUOTE_EM` | 13,156 | QUOTE_DATE/OBSERVED_AT | 2026-10-26（仅 8 个业务日，滚动快照） | 2026-10-26 15:50 | BOUND |
+| `FUND_REVIEWED_UNIT_NAV_HISTORY` | 4,491 | VALUE_DATE | 2026-10-26 | 2026-10-27 08:45→08:51 | BOUND |
+
+绑定方式是两条独立链路交叉：每个注册 slug 在 `ak_task_executions` 里**最后一次 completed**
+与对应表的物理写入秒级吻合（执行行 UTC、`OBSERVED_AT` +08，换算后一致）；
+磁盘残留 `__pycache__/<slug>.cpython-313.pyc` 的 `co_filename` 逐字等于注册的 `module_path`，
+常量池里恰只有其目标表名，七个 sha256 已记录、副本存于
+`/home/yun/afi204-evidence/2026-11-06-ghost-code-plane/pyc/`。
+表级对 `TRADING_DAYS` 的缺口为 0~12（`ETF_REALTIME_QUOTE_EM` 的 305/312 是快照表形状使然，不是欠覆盖）。
+
+仍然不可知、因此不许被当成闭合的三件事：`.py` 源文本不在任何 ref（`log_bin=ON` 但无
+`REPLICATION CLIENT`，`SHOW BINARY LOGS` 报 1227，无法给删除定日）；谁删的、为什么删，
+`var/reports`、`var/backups`、`afi204-evidence` 三处均无记录；逐标的内部缺口需要源原生日历，本机没有。
+
+#### 13. 治理声明的文档在教一个必然被拒的写法（本地复现 + CI 实测）
+
+* 形状是被测出来的，不是读码猜的。`scripts/ci/check_pr_governance.py:70` 的
+  `_RISK_RE = re.compile(r"\b(R[0-3])\b")` 在 `:197` 用 **`fullmatch`** 取值，七种写法的实测结果：
+  `- 风险等级: R2` 通过、`- **风险等级**: R2` 通过、`` - 风险等级: `R2` `` 通过、
+  `- 风险等级: R2 —— 命中 x/**` **不通过**、`R0/R1/R2/R3 + 命中路径说明` **不通过**、
+  另起一条 `- 命中路径:` bullet **不影响**（gate 只要求目标分支/风险等级/测试证据三键）、
+  只写在 HTML 注释里的值 **不可见**（因此未填的模板占位符必然失败）。
+* `CONTRIBUTING.md:387` 教的正是第二种不通过的写法。代价：#306 变红
+  （`Governance Gate=failure`，run 42229971310 / job 127933073661，步骤 4
+  "Evaluate trusted governance policy"），#307、#308 只是还没轮到 gate。
+* 第二条陷阱：dev 的分支契约**字面**匹配 `feature/*|fix/*|docs/*|refactor/*|test/*`，
+  `feat/`（commit type 的拼法）不在其中；而 GitHub 不能改开放 PR 的 head 分支，
+  所以唯一修复是把同一个 commit 推到合规分支名重开。#307（head `e31e22937f8d59a915dcd63e74a59f7fe9471f56`）
+  因此关闭，同 sha 以 `feature/afi-ac11-runtime-evidence` 重开为 **#309**，内容与提交零变化。
+* 方法固化成 `/tmp/it204/gov_pre.py`：用 dev 上的**可信 checker** 在真实 PR 元数据上跑整队列。
+  26 个开放 PR 里 gate 失败 3 个——#262（dependabot，迭代204 之外）、#307、#308——
+  全部在 CI 轮到它们之前改掉。这条预检本身把三次"红一次再修"换成一次批量修。
+* **#310** 修文档并把这个形状钉成可执行契约（`test_risk_level_is_a_bare_token_and_the_path_goes_on_its_own_bullet`，
+  该文件 59 passed）。`.github/PULL_REQUEST_TEMPLATE.md` 有同一个问题但**故意不在 #310 里**：
+  risk map 判它 **R3**（`scripts/ci/tests/test_governance_contract.py:213-233` 把该文件列进 R3 集），
+  属主级变更，单独记进债务表。改文档而不是改策略：严格 fullmatch 是有意设计
+  （`test_html_comment_decoys_cannot_supply_risk_or_test_evidence` 就是为它写的）。
+
+#### 14. 我自己的合并闸门有一条会把 PR 永久判死的缺陷
+
+* 机制：`/commits/{sha}/check-runs` 在同一 sha 上**累积**历次 rerun 的记录。#198 的 head
+  `4d50d4a8ec` 返回 6 条：最新的 run 42228207697 `quality gate` + `secret scan` 均 success，
+  而旧 run 42155237562 / 42155243723 的 `quality gate=failure` 仍留在列表里。
+  任何"每条 check 都绿才合"的逻辑，只要不按 `(app, name)` 取最新一条，就会把这个 PR 永久判红。
+* 修法：按 `(app.name, name)` 取最大 `id` 之后再判 pending/red。改后 #198 立刻判 READY，
+  已 squash 合入 dev = `34be0a1b9c`；同一修法下 #306 的 gate 失败记录在我改完 PR body 后
+  从 red 列表消失（pending 16、red 空）。
+* 影响面自评：这条缺陷只会**少合**，不会**错合**——保守方向的 bug。但它在账面上的效果是
+  把"CI 排队"伪装成"CI 红"，而我差点按后者去写 wave 29 的结论。仪器错的时候，
+  错的方向决定了它是被忽略还是被相信。
+
+#### 15. OD AC-5|07 的真因不是树漂移，是"记账作业不重算证据"
+
+* 先否证我自己上一轮的假设：绑定树**没动**。`source_sha256 0499005a…829def` 与 325/325
+  个文件哈希在 `02fb79a2` 上全部仍验证通过。`measure_ac5_07` 只报两条事实不合格、
+  `security_issue_count=2`，码子恰为 `scan-stale` / `triage-stale`，出处是
+  `scripts/quality/ported_security_evidence.py:33` 的 `MAX_EVIDENCE_AGE = timedelta(hours=24)`
+  与 `_validate_freshness:154-175`，而工件 `generated_at` 是 2026-11-04T05:30:42Z。
+* 重建（bandit 1.9.4、干净 venv、`make security-bundle-rebuild`）：
+  **1048 findings / 31 HIGH / 241 files / 15 rules**，`scanner_exit=1`、`errors=0`、
+  `identities_matched=1048/1048`、`carried_prior_rows=1048`——**没有一条是新发现**，
+  因此不需要写任何新处置，没有 `nosec`、没有抑制、没有改代码。重建后
+  `VERDICT AC-5|07: proven`（issue=0），CI dev run 42224189357 的 gate.log 独立佐证
+  （`built:true … identities_matched:1048` 后紧跟 `proven`）。
+* 结构缺陷在记账面：`.github/workflows/ci.yml:260-264` 的 `sync_acceptance_ratchet` 分支
+  **只跑 `--sync-ratchet`**（成员 gate 是 `!= 'true'`，正好排除了 rebuild），
+  于是"钉住证据的作业"从不重算证据，只会把 24 小时前的读数再钉一遍。
+  OD **#202**（head `631866305ea392d8dd1cfc4b6216476400a1563e`）把 rebuild 移到记账步骤之前，
+  加 3 条接线测试（变异验证：删掉 / 内联 / 遮蔽这一行，三条全红），
+  并在 `akshare-reference-allowlist.json` 重钉 ci.yml 摘要；
+  **不提交任何 bundle 字节**——提交会把一次读数重新计时，
+  并使台账注记里的 `scan_sha256 da976114…` 与 python 3.11.8 字面量失真。
+* 因此上一轮"AC-5|07 多出 8 个意外钉"的读法必须降级：那 8 钉里含过期读数，不可原样入账。
+  #202 合入后的属主侧动作是在 dev 上再 dispatch 一次 `sync_acceptance_ratchet=true`，
+  预期工件应为 **6 钉 + AC-1|08，且不再出现 AC-5|07**；
+  AC-1|08 的记钉只做在那份新工件到手之后，不预判、不用本机读数替代。
+
+#### 16. 一条新的、当场可证的 CI 债务：`scripts/ci/tests` 根本不在 CI 里
+
+* `ci.yml` 从这个目录只跑 `test_check_deps_sync.py`（:76）和 5 个 `.mjs`（:1044-1048）；
+  **228 个 Python 契约测试没有任何作业执行**。
+* 后果实测：dev `0a4c5ab31` 上 `python -m pytest scripts/ci/tests -q` = **5 failed, 223 passed**，
+  五条同族——workflow 里的 `actions/checkout` 等 pin 早已升到 v7.0.1（`3d3c42e5aac5…`），
+  契约测试仍写死 `11bd71901bbe…`。这类测试的意义正是"pin 变了必须有人重新确认"，
+  但因为没人跑它，确认从未发生，漂移不可见。
+* 处置分两步，且分开计费：R1 只改测试期望（按上游 tag↔SHA 证据重钉这 5 条，
+  并补一条"workflow 的 pin 不在接受集内即红"的测试），**不弱化任何断言**；
+  把该目录接进 CI 是 R3（动 workflow），留给属主，作为 #202 之后的一条独立变更。
+* 对照实验证明这 5 条与本波其它改动无关：同一命令在 dev 与在 #310 分支上，
+  FAILED 列表 `comm -13` 双向为空（0 introduced / 0 fixed）。
+
+#### 17. 本波的 PR 台账（截至 2026-11-06 15:20Z，合并只按"全部 check 完成且成功 + mergeable + 自审绑定 head"三条件）
+
+| PR | 仓库 | head | 状态 | 备注 |
+|---|---|---|---|---|
+| #198 | opendata | `4d50d4a8ec` | **MERGED** → `34be0a1b9c` | 条款链接必须落到真实页面（AC-1\|08 前置） |
+| #201 | opendata | `f1cdbea4de` | **MERGED** → `0754b995d7` | ledger canceller 用独立 Engine |
+| #202 | opendata | `631866305ea3` | 排队 | AC-5\|07：记账前先重算证据 |
+| #306 | ai-for-investor | `a3840261a4` | 待合（无红，pending 16） | 声明改裸 `R2` 后 gate 通过 |
+| #307 | ai-for-investor | `e31e22937f8d` | **CLOSED → #309** | 分支名 `feat/` 不合 dev 契约 |
+| #308 | ai-for-investor | `0be658dad8` | 排队 | 声明格式修复（预检抓到，未浪费一轮 CI） |
+| #309 | ai-for-investor | `e31e22937f8d` | 新建 | 取代 #307，内容与提交零变化 |
+| #310 | ai-for-investor | `d748890ebe` | 新建 | CONTRIBUTING 声明语法 + 钉住它的测试 |
+| #311 | ai-for-investor | `f761f0d5d3` | 新建（叠 #286） | 89 行 UNDECIDED 的 `source_function` 分诊 |
+| #312 | ai-for-investor | `0b4671a93a` | 新建 | `scripts/ci/tests` 的 5 枚 stale action pin 重钉 + 3 条漂移哨兵 |
+
+本波结束时**仍在跑、因此不作为结果入账**的两件事：采集平面 tranche 3
+（55 条可修残余项，40 条 `import-untyped` 按属主裁定保留），以及采集运行态自 2026-10-27 00:55
+起 100% 失败的根因定位。已在本波内闭合到可记账的：89 行分诊（#311）与 5 枚 pin 重钉（#312，
+本机独立复验 231 passed / 0 failed）。队列深度是本机的约束而不是结论：
+AFI 排队 57、并发 runner 5——所以本波把所有"能在本机证明的事"都写成了账，
+把"只能等 CI 的事"如实留在等待列里，没有一格被改写成通过。
+
+#### 18. 89 行 UNDECIDED 的 `source_function`：我上一轮对 #286 的反馈被自己修正了一次
+
+* 上一轮我给出的反馈是"#286 的抽取器看不见间接调用，所以 89 行停在 UNDECIDED"。
+  本轮把这条反馈本身当作待证假设处理，结论是**部分成立、处方开错了**：
+  `assign_script_dispositions.py:209-256` 的 `parse_script()` 确实只认
+  `X.fetch_ak_data("literal")` / `ak.<attr>` / `getattr(m,"literal")` / `self.table_name = <literal>`，
+  但用一层严格更深的 AST 走查去补，**72 行里新增 0 个** `source_function` ——
+  因为这些文件里根本不存在可从调用点抵达的 akshare 标识符：它们是手写内联的
+  `requests` / `pd.read_csv` 重实现，或把活交给 `_jin10_macro.py` / `_sina_macro.py` / `_endata_yien.py`。
+  正确的处方因此是"换输入"，不是"修遍历"。真正的工具缺口只有两条：
+  常量折叠能补回 6 条 `target_table` 里的 2 条（`TARGET_TABLE = "CRYPTO_DAILY_MARKET"` /
+  `"CRYPTO_HOURLY_MARKET"`），以及 `from akshare… import` 的名字从未被跟随。
+  17 条 `single_source_function` 从来不是盲区。
+* 各方法产量（这是本轮唯一有用的新数）：深 AST 0/72 + 2/6 表名；
+  bytecode 覆盖 89/89、`co_filename` 89/89、**新名 0 个**（4 个表面命中是局部 def/字符串的
+  `co_names` 伪影，所以幽灵表那次的 pyc 先例**不可复用**——源码在版本控制里且缓存与之一致）；
+  注册表导出 0 个名字（`function_name` 恒为入口、89 行 `description` 全空，只作断言用）；
+  **端点/参数/列切片签名对照**（对本地 akshare 树、helper 展平） uniquely named **37 条**
+  ——qvix 靠 `k.csv` 加逐字相同的 `.iloc[:, […]]` 切片，jin10 靠 `category`/`attr_id`/`symbol` 三元组；
+  人工判读 12 单命中 + 3 helper + 2 动态 + 11 其它。
+* 分类落定：`RESOLVED_SINGLE 49 · RESOLVED_MULTI 17 · NO_AKSHARE_CALL 3 · DYNAMIC_UNRESOLVABLE 2 · OTHER 18`。
+  静态可判的上界是 **71**（55 强证据 + 16 条改名推断，值得单独做一次廉价验证记录）；
+  **18 条需要 `--source-verification-export`**（9 条 `movie_boxoffice_*` 卡在源端点漂移：
+  AFI 抓 `ys.endata.cn/enlib-api`，akshare 仍调 `www.endata.com.cn/API/GetData`，
+  这是 EXTEND_PROVIDER 与 REPLACE_SOURCE 的分岔，不是同名映射）；
+  **4 条需要属主裁定**（2 条 NBS 浏览器按运行时 `indicator_ids` 键控，2 条 catalog runner 的
+  `endpoints_flat.json` 不在版本控制里）。没有编造任何一个 `verified_at_utc`。
+* 顺带两条值得留档的意外：`funds/weekly/__pycache__/option_hist_dce.cpython-313.pyc` 里
+  **没有** tracked 源码所调用的 `option_commodity_contract_sina` / `_table_sina`（编译产物与
+  受控源码漂移，只标注不采信）；`common/daily/print.py` 自己的注释写着
+  "Scanner-generated placeholder; akshare has no callable named print" —— HELPER_ONLY。
+* 交付：`docs/iterations/…/UNDECIDED_89_SOURCE_FUNCTION_TRIAGE_20261106.md`，
+  以 **#311** 叠在 `feature/afi-ac11-dispositions`（#286）上，
+  head `f761f0d5d3d7`，绑定自审；结论同时作为评论发到 #286
+  （`…/pull/286#issuecomment-6688330567`）。#286 的 head 未被追加提交。
+
+#### 19. 采集运行态：9 天全量失败的根因是 DEPLOYMENT，而且失败信息在已提交代码里根本不存在
+
+子代理做根因定位、我独立复核并改写了它的结论。先给可复跑的事实。
+
+* **失败窗口的边界（只读 SELECT，15:29–15:30 UTC）**：`error_message = 'AKShare script worker exited
+  with code 1 without a result'` 共 **4281 行、1081 个任务**，`MIN(created_at)=2026-10-27 00:57`、
+  `MAX(created_at)=2026-11-05 00:45`。这不是一个状态，是一个**已闭合的区间**。
+* 机理（子代理四条腿证据）：调度器父进程派生 `python -m app.services.akshare.script_worker`，
+  而该模块只以未提交文件形式存在于当时的树里；2026-10-27 08:56 CST 一次工作树回退把它删掉，
+  父进程（2026-10-25 06:20 启动、未重启）继续派生 → `No module named …`、**exit 1**、无回执。
+  佐证：`__pycache__/script_worker.cpython-313.pyc`（10-25 06:16）在没有任何 `.py`、
+  也没有任何 git 历史的情况下存活；日志里那段故障引用的
+  `scheduler.py:362/508/697` 与 `script.py:2536/1140/1119` **在 157 行的已提交 scheduler.py
+  和 1823 行的已提交 script.py 里都不存在**；用该 unit 自己的解释器复现
+  `.venv/bin/python -m app.services.akshare.script_worker` → exit 1（不是 2，
+  `-m` 的模块缺失正是 1，与台账逐字吻合），且什么都不执行因此不写库。
+* **我改写的一条**：子代理把恢复归因于「22:44:45 CST 重启到已提交代码」。顺序不干净——
+  重启后的第一条 completed 在 **2026-11-05 14:02 UTC**，而 stable start 是
+  `ExecMainStartTimestamp=Thu 2026-11-05 22:44:45 CST`（=14:44:45 UTC，NRestarts=0 至今）。
+  在此之前该 unit 正在崩溃循环（journal 21:30:28→21:32:12 CST 的 restart counter 1434→1437）。
+  故障与恢复之间 00:46–14:01 UTC 全库只有 **3 行**执行（13:57:03–13:58:02）。
+  因此可证的是「树在崩溃循环窗口内被放回已提交代码」，**不可证**的是那一次 start 本身。
+* **最要紧的一条，是子代理没看到的**：`grep -rn "AKShare script worker" src/backend --include=*.py`
+  在已提交代码里 **0 命中**，而已提交路径 `app/services/akshare/script.py:502 _execute_callable`
+  是**进程内**执行，不派生子进程。也就是说——**那条把九天全量失败写进台账的消息，
+  无法由任何 ref 里的代码产生**。它属于部署态里一份与版本控制分叉的执行路径。
+  这解释了为什么"恢复"不需要任何代码修复：换回已提交路径，同一批任务就成功了。
+  结论因此改写 AC 面：**采集能跑不是待修项；待修的是部署溯源与可观测性**——
+  一个进程可以带着不在版本控制里的代码运行 41 天，而台账只显示一句状态词。
+* 恢复后的真实分布（≥2026-11-05 14:00 UTC）：**completed 474 / failed 99，208 个任务至少成功一次**；
+  近 24h 为 438 completed / 96 failed。失败第一次呈现出**可归因的分类**，且与 #284 普查的预测对得上：
+  `No callable entrypoint found for script …` 共 51 行 = 已停用幽灵队列那 7 个 slug
+  （`fund_monetary_income_history` 26、`forex_hist_sina` 18、`fund_reviewed_unit_nav_history` 4、
+  `etf_realtime_quote_sina`/`cffex_option_daily_history`/`commodity_option_daily_history`/
+  `etf_option_daily_history` 各 1）；`_ingest_mode` 意外参数 **5 行 = 普查预测的 5 个
+  daily_market_data 任务**；另有 `Script call timed out after 600 seconds` 26 行（1 个任务）、
+  `returned no data and target table … is empty`（`spot_quotations_sge`、`futures_to_spot_dce`）。
+* **停用是否生效，仍然不可判**，但我把可判点从"约 00:35 UTC"收紧了：
+  13:47:56 UTC 停用之后幽灵 slug 的执行数是 0，**这不是证据**——它们的 cron 槽在 CST 08:00–09:43
+  （=11-06 00:00–01:43 UTC，今天首条正是 `00:35:00`）与 CST 15:00/19:00，
+  停用发生在这些槽之后。首个可判窗口是 **2026-11-07 00:00–01:43 UTC**（以及 07:00/11:00 UTC）。
+  #306 记录的机理（`reload_active_tasks` 只遍历 active、从不注销已失效 job）预测：**在 #306 部署前它们仍会触发**。
+* **运行面大小第一次有了下界**：armed 现 1048，其中 **827 个自恢复以来一次都没执行过**。
+  所以任何 AC05/AC10/AC14 的覆盖陈述，此刻最多只能建立在 221 个已跑过的任务上。
+  同时把上一轮那条作废规则限定清楚：「晚于 2026-10-27 00:55 的 freshness 陈述一律作废」仍然成立，
+  但**从 2026-11-05 14:02 UTC 起写入的行是活数据**，可据以重新取证。
+* 我自己两处旧陈述在此作废：(1) 「该 recovery worker 文件从未进过任何分支」——它今天已提交，
+  `c16f00515` = PR **#273**，在 `origin/dev` 上，且 `src/backend/scripts/ops/run_full_history_recovery_worker.py`
+  现在是被跟踪文件。(2) 上面那条「100% 失败」被写成了一种状态而不是一个区间。
+  recovery unit 本身**仍在每分钟失败，但现在是诚实的失败**：
+  `required runtime inputs missing: …/bond_convertible_history_controller.py`、`write_possible=false`,
+  因为五条控制器腿全在未合入的 #283（`feature/afi-recovery-controllers` @ `0654231d70`）上——
+  同一 provenance 缺陷类的"半落地"形态。#280（`fix/afi-killable-script-worker` @ `7ae5f29d81`）
+  处理的是超时脚本在 run 结束后继续写库，属另一条腿。
+* 待办（都不由本机闭合）：把服务钉到显式部署 checkout 并在脏树时拒绝启动（DEPLOYMENT，
+  动 unit/CI 即 R3）；把子进程 stderr 与 traceback 落进 `mark_failed`（CODE，
+  现在 4281 行故障的 `error_trace` 全空）；#280/#283/#306 落地后重跑
+  `normalize_scheduler_clock.py --apply`。**本轮没有因为"采集恢复了"而把任何一格 AC 改判为通过。**
+
+#### 20. 15:36 UTC 的一次整体复测：分子、分母与"停用的脚印"互相咬合
+
+采集恢复之后，我把三件仪器在同一时刻重跑了一遍，结果是它们互为交叉验证：
+
+* **#284 普查**（`scripts/task_param_audit.py`，只读会话，15:36Z）：`armed_tasks 1098→1048`、
+  `tasks_audited 1048`、**`script_file_absent` 从 50 归零**、`binds` 仍 155、`unexpected_param` 仍 7
+  （5× `daily_market_data` + 1× `etf_fund_hist_em` + 1× `stock_zh_index_daily`，全是 `_ingest_mode`）。
+  也就是说，属主"停用幽灵任务"那条裁定在普查里留下了一个**只可能由它产生**的脚印——
+  50 条不可绑定项里没有一条是被"修好"的，它们是被移出 armed 的。
+  同时暴露一个新计数 `safe_default_injected_scripts=337`：886 个 `accepts_var_kwargs`
+  里唯一可静态判定的子集，**尚未**被纳入 AC11 分子定义（纳入会虚增，先不用）。
+* **AC11 分子**（#309 的 `scripts/ops/ac11_runtime_evidence.py`，`--since 2026-11-05T14:00:00+00:00`）：
+  **168/1048**，序列 143/1098 → 155/1098 → 161/1048 → 168/1048 单调上升；
+  四分类 `completed_and_grew 168 + completed_no_delta 40 + failed_only 13 + not_run 827 = 1048`。
+  其中 827 与 §19 里由另一条独立 SQL 测得的"armed 自恢复以来一次未跑"**逐字相同**——
+  两条链路没有共享代码，这个一致性是本次读数可信度的主要来源。
+* **总体口径声明**：分母从 1098 变 1048 是运行态事实变化，不是我把口径改松了；
+  任何引用 168/1048 的地方必须同时带 as-of 与所读总体，否则与旧的 /1098 读数不可比。
+
+`not_run 827` 是本波给 AC05/AC14 的最重要一句：采集已经活着，但**它只跑到了 1048 个任务里的 221 个**。
+在 #306 部署、cron 自然铺满之前，任何"全历史覆盖"或"自然周期已续期"的陈述都不成立。
+
+#### 21. 把 AC01 的 hash 锚从一个"未解释项"变成一条有界的 provenance 缺陷（新仪器，44/1057）
+
+上一轮我写下"CSV 的 hash 锚已失效，需从干净树重生成（891/1057 不匹配）"。本轮先否证它、再把它做过头的地方收回来，
+最后得到一个此前没人测过、也无法靠读码得到的数：**不匹配不是一种情况，是三种。**
+
+* 仪器：`evidence/2026-11-06-wave29/inventory_anchor_provenance.py`（只读；逐行比较当前字节，
+  不等时再扫 `git log --all -- <path>` 的全部历史版本，直到命中锚值）。
+  输出 `inventory_anchor_provenance.2026-11-06T1545Z.json`。
+* 四桶实测（1066 行）：**match 166 / drifted 847 / never_versioned 44 / missing_file 9**。
+* **drifted 847 是可解释、可再生的**：每条锚都命中一个真实 commit，且高度集中——
+  `f669d8131`（2026-04-15 "chore(dev): snapshot current workspace changes"）699 条、
+  `d001052bc`（2026-06-25）93 条、`1dbd991d7`（2026-07-18）32 条、`73324f83b` 14 条、
+  `0b8ad7111` 5 条，另有 6 条单例。也就是说 CSV 的内容基线主要是 4–7 月的树，
+  而 `7e46588c8`（#270）一次性改动了其中绝大多数——这与 §上一轮 的"891 条按最后触碰提交归因"完全一致。
+* **never_versioned 44 才是真正的新发现**：这 44 行的 `source_sha256` **在 `--all` 的任何 commit 里都不存在**。
+  我另外排除了"哈希输入被规范化"这一替代解释——对样本逐一测过
+  raw / 通用换行 / 补末尾换行 / 去所有 `\r` / `splitlines()` 重join 五种变换，**全部不命中**，
+  且这些文件本身没有 CRLF。因此唯一剩下的解释就是 #286 那条草稿里我原本只是"假设"的话：
+  **CSV 是在一棵脏工作树上生成的**，而这 44 行永远无法由版本控制重放。
+  44 行的构成（按"最后触碰它的提交"）：`7e46588c8`(#270) 15、`1dbd991d7` 13、`3e9f4a76e`(#275) 6、
+  `d001052bc` 5、`b1ddf66fa` 2、`f669d8131`/`0b8ad7111`/`73324f83b` 各 1；
+  按 `asset_family`：other 12、stock 10、fund 5、fx 4、futures 4、bond 3、crypto 2、option 2、index 2。
+  **我原本想写成"集中在共享 helper（`_jin10_macro`/`currency_fallback`/`dict_result` 等）"，
+  实测后撤回**：它们横跨九个资产族、八个最后触碰提交，形状是"盘点当天有一批未提交改动"，
+  不是"某一类文件被特殊处理"。把成因说窄比把数数错更难查，所以这里只留分布，不留故事。
+* 因此 AC01 判据里"无未解释项"这句，现在的正确写法是：
+  **未解释项已从"整列锚不可信"收窄为"44/1057 行的锚无 provenance"**，且这 44 行是**有界、已命名、可逐条复核**的。
+  重生成仍然是必须的，但它现在有两层含义：对 847 行是"更新读数"，对 44 行是"第一次真正建立锚"。
+* 对 AC11 签核的影响（重要，避免我上一条把风险说重了）：`assign_script_dispositions.py` 的
+  `review_file_sha256` 比对的是**工具当场重算的 `item.sha256`**，不是 CSV 里那列。
+  所以这 44 行**不削弱**签字语义——签字说的是今天的文件，不是 10 月的那列数；
+  需要修的只是别再把 CSV 的锚当作历史基线引用。#311 的 89 行分诊同理不受影响。
+
+#### 22. 采集平面第三刀把 55 条可修族清零（95→40），以及一次"仪器少报 35 条"的自我拦截（PR #314）
+
+子代理提交并推送后我去复核，**先撞到一个假读数，再决定信哪个**：
+
+* 同一 head（`f40a6e1da`）、同一 `config/mypy_collection.ini`、同一 venv（mypy 1.20.2 +
+  pandas-stubs 2.3.0.250703 + types-pytz，**无 types-requests**），
+  在复用 `.mypy_cache` 的 worktree 里读成 **5 errors**；把 `--cache-dir` 指到空目录后读成 **40 errors**。
+  原因可归：我早些时候做过 `types-requests` 装/卸的对照实验（159→119），缓存是在装有 stub 的窗口里写下的；
+  卸载之后 mypy 仍回放缓存里"已解析到 stub"的结论，于是把 35 条 `import-untyped` 报没了。
+  **方向很重要：这次误差是往好的方向偏**，如果我相信它，就会把"40 条残留"写成"5 条"，
+  并让属主裁掉一个根本不存在的 stub 决定。因此本波之后所有 mypy 数字必须声明缓存状态。
+* 用全新缓存双端复测，得到可比的一对数：base `0be658dad`（= dev + #305 + #308）**95 errors / 73 files**，
+  head `f40a6e1da` **40 errors / 40 files**，`checked` 两端恒为 **1108**——
+  检查面没缩，所以这不是"少查文件"换来的下降。55 条可修族
+  （`call-overload 22 / return-value 15 / arg-type 9 / assignment 6 / override 3`）**全部清零**，
+  残留 40 条逐条都是 `[import-untyped]`，与属主"stub 不在本波动"的裁定一致。
+* 完整性我逐项查过而不是听汇报：diff 里 `# type: ignore` **0 处**；`config/`、`scripts/ci/` **未改**；
+  改动只落在 `app/data_fetch/scripts/**`（41 文件 937+/89-）与一个新测试文件；
+  `cast(` 新增 5 处，其中 `cast(mysql.connector.MySQLConnection, …)` 的模块在该文件第 8 行本就 import、
+  且 `mysql-connector-python>=8.0.0` 是声明依赖（lock 里 9.7.0）——不是凭空指定的类型。
+* 三类改动**确实动运行时**，PR 里单独声明并逐类钉测（不是静默的"打字工作"）：
+  None 分支 ternary（依赖被钉住的 pandas `None→NaN/NaT` 契约，之前把 `None` 喂给强转会广播 NaN 列）、
+  `save_data()` 外包 `bool(...)`（docstring 是 `-> bool`，兄弟文件早就这么写，消费方一律 `if success:`；
+  测试钉 True/False 同一性而非 truthiness）、以及三个零参 `get_latest_date` 死覆写改名
+  `_get_latest_trade_date`，从而让继承来的方法恢复按文档签名可调用。
+  其余为纯标注/cast，用源码 census 钉。`pytest tests/test_collection_script_row_narrowing_wave3.py -q` **68 passed**，
+  新文件里 24 个测试函数；`ruff check` 全过，`ruff format --check` 1123 files already formatted。
+* **交叉验证来自另一个子任务**：#313（迁移清单锚仪器）独立复算出与我 §21 完全相同的
+  **166 / 847 / 44 / 9** 四桶，并且给出更强的一条——从每个文件在 `29afaeb47`（CSV 生成提交）
+  的内容重导派生列，可复现 **1053/1057** 行；只有 4 行的 marker 变化，且这 4 行全在
+  "锚从未匹配任何 blob" 的 44 行里，**847 条真正轮坏的行的派生列一字不变**。
+  这从另一个方向证实了 #270 确实只是标注性改动，而不是我此前只能声称的"看起来是"。
+  那 4 行 `classes=` 里的类名（`SourceUnavailableError` 等）在仓库历史的任何 `.py` 里都不存在，
+  只存在于 CSV 自己的 notes 里——盘点文件的既有缺陷，不是我的推导分歧。
+* 平面**仍是 advisory**：#314 不产 baseline；基线冻结必须由 CI 自身读数经评审式 `--update` 单独成 PR
+  （这是 `baseline_update_guard.py` 的存在理由，也是本波反复把"代码修复 PR"与"基线冻结 PR"分开的原因）。
+  因此"95→40"在 CI 上被自己的读数确认之前，只是笔记本证据。
+
+#### 23. AC11 的 `assigned=0` 现在被证明是"差一个签名"，不是"差一条通路"（scratch 端到端验证，零入账）
+
+`assigned` 一直是 0，而 #286 的权限设计是"提案由工具做，分派必须由具名人类逐文件 hash 签字"。
+0 有两种可能：签名还没来，或者签字这条路根本走不通。本波把后者排除掉了。
+
+* 批次 `AC11-proof-01`（`--limit 40 --script-listing filesystem`，方法入库为
+  `evidence/2026-11-06-wave29/ac11_assign_gate_proof.py`，**输出只落在 `--work-dir`（默认
+  `/tmp/it204/ac11-proof/`），一个字节都不提交**）：工具自己产出 40 条提案
+  （`EXTEND_PROVIDER 39 / HELPER_ONLY 1`），`assigned: 0`、`proposed (unreviewed): 40`、
+  `UNDECIDED_INSUFFICIENT_EVIDENCE: 0`、`reconciliation problems: none`。
+* **拒空名**：把 `reviewer` 留空、其余字段（`decision=approve`、`disposition` 与提案逐字相等、
+  `file_sha256` 与工具当场重算的 sha 相等）全部填好再跑 → 40 条状态一律
+  `review_missing_reviewer_name`。这道门是真的，不是装饰。
+* **认签名**：仅把 `reviewer` 改成 `PROOF-NOT-A-HUMAN`（**故意用一个非人名标记，使这份输出永远不能被
+  当作"有人批准过"的证据**）→ `assigned: 40`、`proposed: 0`、§6 口径的
+  `assigned ratio 40/1057`，`decided_by` 写成
+  `assign_script_dispositions/1 proposed; assigned by PROOF-NOT-A-HUMAN at 2026-11-06T16:02:00Z`。
+* **逐文件绑定生效**：只把其中一行的 `file_sha256` 改成 64 个 0 →
+  `assigned 39 / review_stale_for_sha256 1`。也就是说签名不能整批盖章后复用，
+  文件一动就退回未分派——这正是 §6 要求"逐文件 hash 签字"的语义。
+* 顺带得到 AC01 锚数字的**第三个独立来源**：这份工具自己打印
+  `inventory sha agreement: {'no': 891, 'yes': 166}`，与 §21 的 166/847/44/9 拆分以及 #313 的复算
+  三处一致。三个互不共享代码的仪器给出同一对数，是本节唯一值得一提的强度来源。
+
+结论的准确写法：**AC11 的分派缺的是属主的一个名字与时间戳，不是工程**。
+所以本波把"待属主"从模糊状态改写成一条可执行动作——对 `AC11-proof-01` 这批 40 条（或任意批次）
+填 `reviewer` + `reviewed_at_utc` 后重跑 `--review-file`，`assigned` 就会离开 0。
+我不替属主签这个名；这份 scratch 证明也不进账、不进仓，只用于排除"通路坏了"这一种解释。
+
+#### 24. 队列长度的一个自找原因：OD 同一个 commit 跑两遍全量 gate，而修法被 digest 钉住卡住（新债，已定位到行）
+
+本波一直被"CI 排队"约束，我去量了这个约束有多少是自己造成的。
+
+* **计数**由 `evidence/2026-11-06-wave29/ci_duplicate_run_audit.py` 产出（16:16:32Z 复跑逐字一致，
+  输出同目录 `.txt`）：OD **476 个不同 head_sha 中 56 个同时存在 `push` 与 `pull_request` 两种 run**；
+  把两侧都限定为 completed 再配一次，得到 **55 对**——即 55 个 commit 在 OD 上把同一套作业跑了两遍。
+  对照组很干净：**AFI 229 个 sha 里这样的重复是 0**。
+* **根因在两行配置里**（不是 runner 故障）：`opendata/.github/workflows/ci.yml:4-7` 的
+  `push.branches` 包含 `[dev, master, "feature/**", "fix/**", "docs/**", "refactor/**", "test/**"]`，
+  同时 `pull_request.branches: [dev, master]`。于是推一个 PR 分支会起一次 push run，
+  开放的 PR 又起一次 pr run。`ci.yml:22-24` 确实有 `concurrency: group: ci-${{ github.ref }}` +
+  `cancel-in-progress: true`，**但两个事件的 ref 不同**（`refs/heads/fix/…` vs `refs/pull/N/merge`），
+  所以按 ref 分组的并发控制天然合不掉这两条——这是一条"看着有防重复、实际防不住"的典型形状。
+  AFI 的 `pr-check.yml:3-4` 只 `on: pull_request`，因此没有这个问题。
+* **代价只能用"run 数"表述**（仪器里同一句已注明）：我试过把这个换算成 CI 分钟数，`/actions/runs/{id}` 的
+  `run_duration_ms`、`timing` 以及逐 job 的 `run_duration_ms` 在本 org 的 API 返回里**全部为 null**（实测若干
+  completed run），所以**本机无法证明分钟数**。写"浪费 X 分钟"会是编的；写"55 对重复 run"是证的。
+  按 OD 的 `make gate` 是 18 个成员、池子只有约 3 个并发 runner 来定性：重复的是整条 gate，不是轻量作业。
+* **修法被一处 provenance 钉住，这点必须写清**：`docs/quality/akshare-reference-allowlist.json`
+  把 `.github/workflows/ci.yml` 登记为一个 allowlist entry，字段里有
+  `sha256: abe808c1ab6d4f9488999664b14bf86b3ec103753c1fd0ad0b1262243f9f9f3f`，
+  而 `scripts/quality/acceptance_item_probe.py:1252` 读的就是这份清单。
+  我当场比对过：**当前 `sha256sum .github/workflows/ci.yml` 恰等于这个 pin**，说明钉是活的、准确的。
+  因此任何触发条件改动都会移动该 sha256，必须同步重登记 entry（含 `reviewer`/`reviewed_date` 的人工注记），
+  否则 AC-17|05 的重放面判定会红。这不是"顺手改一行"的修复。
+* 两个候选形状，都属 **R3**（动 workflow + 动 provenance 清单），交属主定：
+  （a）把 `feature/** fix/** docs/** refactor/** test/**` 从 `push.branches` 摘掉，只在 dev/master 保留 push 触发；
+  （b）保留双触发，但把 concurrency group 改成按 sha 键（`ci-${{ github.event.pull_request.head.sha || github.sha }}`），
+  让同一 commit 的两条 run 互相取消。
+  (a) 会失去"PR 之前先给一次反馈"的用途；(b) 保留用途但把 `cancel-in-progress` 变成跨事件生效。
+  我倾向 (b)，因为它的取舍更少；但这属主的调用，本波不擅自改 workflow。
+
+#### 25. 那 9 条 `movie_boxoffice_*` 的分岔，本波用一次真实源运行把它从"待验证"变成"有输入"（新仪器，含对照）
+
+#311 的分诊说：这 9 条卡在源端点漂移，"一次真实源运行就能在 EXTEND_PROVIDER 与 REPLACE_SOURCE 之间定夺"。
+我跑了那次运行，并且先把"0 行"这条最容易骗人的证据做了对照——**akshare 的包装函数在请求失败时
+同样返回空 DataFrame**，所以 0 行既可能是"源没数据"，也可能是"这台机器够不着源"。不区分这两种就下结论，
+是本轮最可能犯的错误。
+
+仪器：`evidence/2026-11-06-wave29/source_egress_probe.py`（只读，输出同目录
+`source_egress_probe.2026-11-06T1622Z.json`），16:22:19Z：
+
+* **出口能力对照（必须先有）**：`ak.stock_zh_index_daily('sh000001')` → **8758 行**、
+  `ak.macro_china_ppi()` → **249 行**。这台机器能出网，因此后面的空结果**不能**推给网络。
+* **上游侧（akshare 用的路径）**：`movie_boxoffice_daily / _cinema_daily / _cinema_weekly / _weekly / _monthly`
+  在 `20240219 / 20250101 / 20260105 / 20261104` 四个日期上**全部 0 行**（20 次观测无一例外）；
+  `movie_boxoffice_first_week` 在本机安装的 akshare **1.18.64 里根本不存在**。
+  另测 akshare 老上游 `www.endata.com.cn/API/GetData/` 的 POST → **HTTP 405 Not Allowed**（nginx 拒）。
+  405 与"函数返回空"是两条独立观测，**因果链是合理推断而非实测**：我没有证明该函数就走这个 URL。
+* **AFI 自己那侧**：直接实例化树内 `common/_endata_yien.EndataYienClient` 调它的方法——
+  `now_date()` → **`2026-11-06`**、`latest_completed_day()` → **`2026-11-05`**、
+  `date_data` 返回 **12 键** dict（`table0…table11`）。即 **AFI 用的 `ys.endata.cn` 路径是活的**。
+  一条反例也要记：我先用裸 POST 打 `getCommon_DateList.do`，拿到 **200 且 0 字节**（3/3），
+  差点据此写"AFI 这条路也死了"；差别就在有没有带 helper 的参数。**空响应不等于空数据源**，同一条原则两侧都适用。
+* 因此这 9 条现在的准确状态是：**决策输入已到位**——"复用 akshare 作为 provider"在实测意义上不可达，
+  可用的是 AFI 自带的取数路径。但**我没有替属主把 disposition 改掉**：#286 的分类由输入与 review 决定，
+  而 `assigned` 仍须具名签字。本波只把这条从"要跑一次"推到"跑过了，结果在此"。
+
+顺带一条对**其它**行的硬约束（它限制了 AC10 与余下 18 条在本机可证的范围）：
+
+* `push2.eastmoney.com` 与 `82.push2.eastmoney.com` 各 3 次尝试**全部 ConnectionError
+  （RemoteDisconnected）**，而 `datacenter-web.eastmoney.com` 与 `data.eastmoney.com`
+  三次都 200。所以这不是网络抖动，是**按主机**的不可达。
+  含义：依赖 push2 行情面的 `*_em` 脚本**在本机做不出真实源逐字段对照**——任何这类"已对照"的陈述
+  在这台机器上不可产生，必须换主机或换出口。这与 §24 的"某些量本机测不出"是同一种诚实，
+  不是进度问题。
+
+#### 26. 同一仪器顺手把其余待定名与一类失败归因也测了：两个函数在本版本 akshare 里不存在，DCE 那条是源侧空
+
+把 §25 的仪器加了 `--names` 再跑一次（`source_egress_probe.2026-11-06T1625Z.json`，16:25Z，出口对照同批仍是活的），
+几条原来只写作"需真实源验证"的行现在有了观测：
+
+* `cost_living`、`shfe_stock_weekly`：在 akshare **1.18.64 里根本不存在**（`ABSENT_IN_INSTALLED_AKSHARE`）。
+  这不是"数据取不到"，而是"没有可复用的上游函数"——#311 原来把 `cost_living` 记作
+  "name absent from the upstream export set"，现在在**本机安装的版本**上得到了直接印证。
+* `macro_china_nbs_nation(kind, path, period)` / `macro_china_nbs_region(kind, path, indicator, region, period)`：
+  无参调用直接 TypeError 报缺 2 / 3 个必填参数。这把 #311 里"通用浏览器、数据集由运行时
+  `indicator_ids` 选定"的判断从描述变成**签名级证据**：它们不是某个数据集的入口函数，
+  因此"一条脚本 ↔ 一个 akshare 函数"的映射模型对这两行本身就不成立，属主裁的是映射模型的例外处理，不是选哪个函数。
+* `futures_to_spot_dce(date=…)`：20240219 / 20250101 / 20260105 / 20261104 **四个日期全 0 行**；
+  `option_hist_dce(symbol, trade_date)` 无参也是 0 行。
+  这条有额外价值：§19 的恢复后失败清单里有一类
+  `Script futures_to_spot_dce returned no data and target table futures_to_spot_dce is empty`（4 行 1 任务），
+  当时只能说"脚本没拿到数据"。**现在能进一步说：上游同名函数在同一批日期上也是空的**，
+  所以这不是 AFI 侧代码坏，而是源侧对该标的/日期无供给——即 §5 词汇里的 SOURCE_LIMITED 形态。
+  仍需注意别把这条推远：0 行是四日期样本，不是"该函数永久无数据"；且 DCE 系列是否受
+  push2 那类主机不可达影响，本轮未测（`datacenter-web`/`data.eastmoney` 可达，DCE 域名未测）。
+* 由此 AC11 的 89 行状态可以准确地重述为：静态可判 **71**；9 条 boxoffice 已有 §25 的决策输入；
+  2 条在 akshare 里不存在（`cost_living`、`shfe_stock_weekly`）；
+  2 条 NBS 有签名级证据说明映射模型不适用；其余仍是"需要 `--source-verification-export` 或属主裁定"，
+  没有因为这几条测好了就把整格往上抬。
+
+#### 27. AC11 第一次有了 `REUSE_PROVIDER`：0 → 6 行，每行都有一次非空的真实源调用背书（含两处"够不着"的诚实边界）
+
+这是本波对"脚本半区处置分派"最实在的一次推进，而且起点是一个我自己差点写错的数。
+
+* **先纠正我自己的读法**：第一次统计"有多少行的 `source_function` 被 OD 已注册 fetcher 引用"时，
+  我把 ledger 里的 `evidence` 当成 list 遍历，得到 **0**，据此几乎要写"REUSE_PROVIDER 在本 iteration 不可达"。
+  实际 `evidence` 是**字符串**，逐字符迭代让所有子串匹配都失败了。重做后正确值是 **8 行**。
+  这条留在这里是因为它的形状很典型：**一个解析 bug 会伪装成一个实质结论**，
+  而"0 个"这种干净的答案尤其值得先怀疑自己的代码。
+* 全树普查（`--limit 0`，1057 行）现在的准确分桶是：
+  `EXTEND_PROVIDER 954 / UNDECIDED_INSUFFICIENT_EVIDENCE 89 / REUSE_PROVIDER 6 / HELPER_ONLY 8`，
+  `assigned` 仍 **0/1057**，`reconciliation problems: none`；
+  族分布 other 317 / stock 384 / index 93 / fund 87 / bond 41 / option 46 / futures 64 / fx 20 / crypto 5，
+  归属 owner:B 604 / owner:C 445 / review 8。同一输出再次打印
+  `inventory sha agreement: no 891 / yes 166`，与 §21、#313 三处一致。
+* **6 行的来路**：仪器 `evidence/…/verify_adapter_backed_functions.py` 只打那 8 个
+  "被 OD fetcher 引用"的上游函数，参数取自 `inspect.signature`（**前一轮我有两个调用是因为
+  自己传错参数而失败**——`option_sse_daily_sina` 我按 `date=` 传、它其实收 `symbol`；
+  `stock_financial_analysis_indicator_em` 我传裸 `600519`、它要 `301389.SZ` 这种带市场后缀的形式；
+  修正后两者分别得 23 行与 26 行，所以那两条不是"源不可用"而是"我用错了"，这个区分必须留下）。
+  最终 **6 个非空**：`bond_zh_hs_cov_daily` 4806、`futures_zh_daily_sina` 260、
+  `stock_financial_report_sina` 118、`stock_history_dividend_detail` 36、
+  `option_sse_daily_sina` 23、`stock_financial_analysis_indicator_em` 26。
+* **只有非空才算验证**——0 行或异常的记录故意不进 export，
+  否则记录的含义就从"这条数据真的能取到"变成"我们试过"，等于用分子去掩盖失败。
+  剩下 2 行的失败原因还做了主机级归因，不笼统写成"源无数据"：
+  `fund_etf_hist_em` 抛 RuntimeError 并**直接点名** `https://push2his.eastmoney.com/...`，
+  同批直连该主机 3/3 `ConnectionError`；`index_zh_a_hist` 在两组参数下返回 0 行，
+  而它走的正是同一家族的行情主机。所以这 2 行的准确状态是**本机不可验证**，不是"源侧为空"。
+* 把 6 条记录喂回 `--source-verification-export` 后，工具给出
+  `EXTEND_PROVIDER 954 / REUSE_PROVIDER 6 / HELPER_ONLY 8 / UNDECIDED 89`，
+  逐行 diff 恰好是**那 6 个文件** `EXTEND_PROVIDER → REUSE_PROVIDER`，其余一字未动——
+  这是本迭代里第一次有行的 disposition 拿到真实源证据支撑，也是唯一一次由"记录"驱动的迁移。
+* **它不构成任何闭合**：`assigned` 依然 0，§6 的分子仍须具名属主逐文件 hash 签字；
+  REUSE_PROVIDER 只是提案。而且上限写死在这里——OD 的 akshare 侧只有 10 个 provider 模型、
+  引用 9 个函数名，对 1057 行里 961 个 distinct `source_function`，
+  所以即使把这 8 行全验证完，`REUSE_PROVIDER` 的理论上限也就是 8（其中 2 行本机够不着）。
+  这不是进度慢，是 §AC01 那条"接收侧能力是 12 个函数对 1057 个脚本"的直接后果。
+
+#### 28. 运行资产平面从"未入库"升级为"无处可取"：8 个 unit 的 ExecStart 目标既不在磁盘也不在任何 ref，其中 5 个仍在定时触发，一个已重启 4,738 次
+
+这条比上一轮的"9 条无文件注册"更硬，因为方向相反：那一轮说的是"注册了但文件不在树里"，
+这一轮说的是"systemd 正在按计划反复执行一个**这台机器上根本不存在、git 里也从来没有**的文件"。
+
+仪器：`evidence/2026-11-06-wave29/unit_execstart_existence.py`（只读：`systemctl show` /
+`list-timers` / `list-units` + `os.path.exists` + `git ls-files --error-unmatch`），
+输出同目录 `unit_execstart_existence.2026-11-06T1635Z.json`。16:36Z 读数：
+
+| 单元 | ActiveState | NRestarts | 是否仍有活定时器 |
+|---|---|---|---|
+| `dce-browser-capture` | failed | 0 | **是**（下次 Sat 11-07 19:36 CST） |
+| `dce-option-daily` | failed | 0 | **是**（Sat 11-07 20:06 CST） |
+| `dce-option-recovery` | inactive | 0 | 否 |
+| `etf-nav-backfill@`（实例） | activating | **4,738** | 模板常驻 auto-restart |
+| `option-history` | inactive（enabled=disabled） | 0 | 否 |
+| `policy-expiry-watchdog` | failed | 0 | **是**（Sat 11-07 01:00 CST） |
+| `stock-amount-daily` | failed | 0 | **是**（Sat 11-07 04:03 CST） |
+| `stock-tail-daily` | failed | 0 | **是**（Sat 11-07 21:10 CST） |
+
+汇总：**8 个单元的 ExecStart 目标全部缺失**，且**8 个目标路径全部不在 git 索引**（不只是不在工作树），
+**5 个仍挂在活定时器上**按点触发，`etf-nav-backfill@0` 的重启计数**还在往上走**
+（我第一次手工查是 4,733，仪器这次读到 4,738——它每 30 秒失败一次，这个数本身就是一个持续噪声源）。
+
+这条对验收的准确含义，以及我特意**不**推出的结论：
+
+* **AC01**：判据要的是"运行资产可枚举"。此前我把这一面写成"live unit 指向的文件不在工作树"，
+  语气像是"文件在宿主上、只是没提交"。实测是更糟的一种：**磁盘上也没有**，
+  所以它连"从本机恢复"的路径都没有，只能从别处找回或重写。
+  `#283` 之后 9 条里入库 2 条的说法同时作废——按这份新仪器，8 个 unit 目标一个都不在索引里。
+* **AC05 / AC12（补采与恢复面）**：这 5 条定时线覆盖的正是 DCE 期权恢复、ETF 净值分片回补、
+  股票成交额回补、股票尾段切片、保单到期看门狗。它们**看起来是开着的**（enabled + timer 在跑），
+  实际从未成功过。所以"全历史恢复在推进"这句话在这些线上不成立，
+  而且成立的是 §19 的同一机理的另一种形态：**运行态与版本控制脱钩**。
+* 我**没有**据此得出"这些任务的数据因此缺失了多少"——那需要逐表逐标的对账，
+  本机既没有这些脚本的源码、也没有源原生日历，属于不可由本机闭合的部分。
+* 我**没有**动任何一个 unit：停 / disable / mask 都是改变共享运行态，属主授权覆盖的是
+  生产写与补采，不含关停服务。处置建议只有两条，都需要属主点头：
+  (1) 找回这 8 个文件的来源并入库（配合 #285 的 ExecStart 目标审计）；
+  (2) 若确认已废弃，就停掉对应 timer 并把 unit 从宿主移除，
+  否则它们会一直以"enabled 但永远失败"的形态污染 AC01 的运行资产计数与 AC12 的部署判读。
+
+#### 29. 那 8 个缺失目标的可恢复性分界：2 个有字节码、5 个彻底没有，而"有字节码"不等于"能恢复源码"
+
+§28 停在"磁盘和索引里都没有"。这条只回答属主真正要的那个问题：**那还要不要找回来**。
+方法（`evidence/2026-11-06-wave29/find_missing_runtime_assets.py`，只读 `find`，
+覆盖 `~/Documents` / `~/afi204-evidence` / `~/.config/systemd` / `/var/tmp` / `/tmp`）：
+7 个不同目标里 ——
+
+* **5 个 `.sh`**（`run_dce_browser_capture.sh`、`run_dce_option_recovery.sh`、`run_etf_nav_shard.sh`、
+  `run_option_history_loop.sh`、`run_stock_tail_slices.sh`）**在这台机器上任何地方都不存在**。
+  shell 脚本也不会有字节码。这一类是**真没了**：要么从别的宿主/备份取，要么按 §28 的处置 (2) 连 timer 一起退役。
+* **2 个 `.py`** 有 `cpython-313.pyc`：`backfill_stock_amount_sina`、`policy_expiry_watchdog`
+  （且同一份字节码已作为取证副本存在 `~/afi204-evidence/2026-11-06-ghost-code-plane/pyc/ops/`）。
+  用 `marshal` 直接读 code object 能看到相当完整的骨架：前者的模块 docstring
+  （"Backfill raw A-share turnover from Sina into an amount sidecar table"）、12 个顶层函数名
+  （`_fetch_sina_kline_amounts`、`_normalize_amount_frame`、`_sequence_sha256` 等）、
+  连 DDL 与源标识字面量都在（`STOCK_ZH_A_HIST_AMOUNT`、`akshare.stock_zh_a_daily`、
+  `sina.klc_kl.js#amount`）；后者给出 `PolicySnapshot`、`load_server_policy_catalog`、
+  `chinabond-2026-reviewed-v1`、`Asia/Shanghai` 等。
+* **但这里必须把话说窄，不能滑成"可以恢复"**：
+  (1) `.pyc` 里没有注释、没有原始排版，且 **Python 3.13 的字节码目前没有可用的反编译器**
+  （本机 `uncompyle6`/`decompyle3` 一类根本没装，它们本来也只支持到 3.8 代际）；
+  (2) 所以能拿回的是**规格与结构**，不是**源码**。据此起草一份 `.py` 是**重新实现**，
+  必须在 provenance 上标成"由字节码重建的新实现"，不能写成"找回了原文件"——
+  这正是 §19/§28 那类"运行态与版本控制脱钩"最容易被我二次制造出来的地方：
+  如果我把重建文件当作原文件提交，AC12 的"部署的就是仓库里的"会重新变成假话。
+  一个佐证细节：两份字节码的 `co_filename` 一个是绝对路径、一个是相对路径
+  （`src/backend/scripts/ops/policy_expiry_watchdog.py`），
+  与 §28 里 unit 用相对 `ExecStart` + `WorkingDirectory` 的写法互相印证——
+  这两份代码本来就跑在两种路径解析下。
+* 因此给属主的判断面收窄成三件可做的事，我一件都不替你做：
+  (a) 若存在别的宿主/备份，`.sh` 5 个只有这条路；
+  (b) 若选择按字节码重建 2 个 `.py`，需要接受"实现而非恢复"的标注，并为它们补测试再入库；
+  (c) 若都不做，就停 timer + 移除 unit，让 AC01 的运行资产计数变成"明确已废弃"，
+      而不是"看起来 enabled"。
+  本波没有创建任何重建文件，也没有改动任何 unit。
+
+#### 30. #285 合入后，同一件事被第二个实现复核：7 个缺失目标逐字相同，而 `gitignored` 那 6 条不该追
+
+`check_service_runtime_assets.py`（835 行，#285 于 16:38:37Z 合入 dev `1bab6a956b`）与我的
+`unit_execstart_existence.py` 是**两份独立实现**。在 16:39Z 对它跑一次本机只读审计：
+
+* 汇总行：`unit_files_scanned=19 units_audited=16 units_without_exec=6 green_units=5
+  units_with_findings=11 missing_file=11 ok=3 outside_repo=4 gitignored=6`。
+* **`missing_file` 去重后恰是 §28/§29 那 7 个目标**（5 个 `.sh` + `policy_expiry_watchdog.py` +
+  `backfill_stock_amount_sina.py`），每条都注 "absent and in no branch index"。
+  两个实现、两套解析路径（我按 `os.path.exists` + `git ls-files`，它按自己的 scope 判定），
+  给出同一集合——这条因此不再是"我的工具说什么"。
+* 它还补了一条我没测的 systemd 侧证据：**`ExecMainStatus=203`**（"无法 exec"），
+  与 §19 里我区分过的 203/2 语义一致——文件根本不存在，所以连解释器都没起来，
+  不是脚本自己退出 1。这条把"这些单元从未成功过"从推断升级为 systemd 的直接读数。
+* **`gitignored=6` 与 `outside_repo=4` 不是债**，别去追：逐条看是
+  `src/backend/.venv/bin/python`（4 处）、`node` / `vite.js` / `hermes-agent/venv/bin/python` /
+  `/usr/bin/node` / `openclaw/dist/index.js` 这类解释器与外部宿主路径，
+  外加一份生成物 `var/reports/iteration203/policy-expiry-watchdog/service-current.json`。
+  venv 与 node_modules 按设计就不该入库。我把这条写下来是因为这类"工具报了 11 个 findings"
+  很容易被读成"11 个都要修"，而真正的问题集合仍是 7。
+* `ok=3` 里出现 `run_full_history_recovery_worker.py` 与 `run_with_core_environment.py`——
+  即 §19 那个曾以未提交形态存在的 worker 现在确实被跟踪，与前文的更正一致。
+
+**这个新工具本身的状态要写准。** 它**没有**被接进任何 workflow：我在合并后的 dev 上对
+`ci.yml`、`pr-check.yml`、`nightly.yml`、`Makefile` 全文 grep `check_service_runtime_assets`，
+**0 命中**；#285 只加了脚本 + 一份测试（835 + 672 行）。而且它默认退出码 0，
+只有带 `--fail-on-findings` 才会红。这里不能套用 §16 的"没进 CI 就是债"：
+它审计的是**这台宿主的 systemd 单元**，CI runner 上没有这些单元，接到 CI 里天然测不到东西。
+正确的处置面是宿主侧：把它挂进宿主的周期性运维检查（或加一个只读 timer），
+并用 `--fail-on-findings` 使结果可门控。§28 那三个处置选项因此不变，
+只是现在"发现"这一环已经不再依赖我手搓仪器。
+
+#### 31. 采集平面的真实刻度是 CI 的那一把：101 → 37 → 7，而本机一路用的 159/125/95/40 是另一个环境的读数
+
+本波我反复说"CI 同命令"，命令确实同一条（`mypy_ratchet.py --scope collection --advisory`，mypy 1.20.2），
+**但环境不是同一个**。这一条是本轮对类型平面最重要的一次自我更正，而且它同时纠正属主裁定的前提。
+
+* **CI 侧读数（先拿到权威刻度）**：dev `0a4c5ab31` 的 push run 42224170243 里
+  `Backend - Mypy Ratchet (collection scripts, advisory)` 作业日志原文是
+  `advisory, no baseline yet - errors=101 checked=1108 (mypy 1.20.2 (compiled: yes))`。
+  我的笔记本在同一 commit 上跑同一条命令得到的是 **159**。
+* **差异的原因在依赖集里，不在代码里**。CI 装的是 `config/requirements-dev.lock`：
+  Python **3.11**、pandas **3.0.3**、numpy 1.26.4、akshare 1.18.97、
+  `types-pytz` / `types-pymysql`，**没有 pandas-stubs**（pandas 3 自带类型）。
+  我这把尺子是 Python 3.13、pandas **2.3.3 + pandas-stubs 2.3.0.250703**、numpy 2.1.3、
+  akshare 1.18.64（可编辑安装）、无 types-pymysql。
+  差别直接落在本波主修的族上：`to_datetime` 重载、`TimestampSeries` 这些形状，
+  pandas 2+stubs 与 pandas 3 自述类型给出的签名根本不是一套东西。
+* **我建了 CI 的镜像环境并先证明它等于 CI**：`/tmp/it204/venv-ci`（Python 3.11.15 +
+  全量 dev.lock + `pip install --no-deps -e .`），逐包核对
+  mypy 1.20.2 / pandas 3.0.3 / numpy 1.26.4 / akshare 1.18.97 / types-pytz 2026.x /
+  types-pymysql 1.2.x / **pandas-stubs ABSENT**。在它上面跑 dev `0a4c5ab31`：**errors=101, checked=1108**
+  ——与 CI 逐字相同，镜像成立后我才用它测别的。
+* **CI 刻度下的真实链条**：
+  | 树 | CI 环境 | 本波笔记本环境 |
+  |---|---|---|
+  | dev `0a4c5ab31` | **101** | 159 |
+  | + #305 + #308（`0be658dad`） | **37** | 95 |
+  | + tranche 3（`f40a6e1da`，即 #314） | **7** | 40 |
+  两端都保持 `checked=1108`，所以不是缩小检查面换来的下降。
+* **两处必须承认的认知反转**：
+  (1) 我说"残留 40 条全是 `import-untyped`（requests stub）"，在 CI 环境里**根本不存在这个族**——
+  dev 的 101 里 `import-untyped` 只有 **2** 条，而且是 `dateutil.relativedelta` 不是 requests。
+  那 40 条是我这把带 pandas-stubs/无 types-requests 的尺子造出来的读数。
+  属主"不为 stub 动 types-requests"的裁定本身仍然成立（它同时解释了 app 面 0→+6 的代价），
+  但**引用它时不能再说"CI 上会看到 40 条"**，因为 CI 看不到。
+  (2) 更糟的方向：**我的环境把 4 条真实错误藏起来了**。
+  `stock_hot_up_em / stock_hot_rank_em / stock_hk_hot_rank_em` 第 46 行与
+  `macro_china_urban_unemployment` 第 88 行的
+  `Argument "json" to "post" has incompatible type …; expected "JsonType" [arg-type]`
+  在 CI 环境里从 dev 起就一直存在（我逐条比对确认**先于本波三刀存在**，不是 tranche 引入的回归），
+  而我这把尺子因为 requests 是未类型化的 `Any`，压根不报。
+  也就是说：一个环境把不存在的错误报给我，另一个把我该看的错误藏起来——两次我都只信了自己这一把。
+* **dev 的 101 在 CI 环境里的族分布**（我此前从未按 CI 环境分过族）：
+  `operator 23 / var-annotated 15 / return-value 15 / arg-type 14 / union-attr 9 / str-bytes-safe 7 /
+  valid-type 5 / assignment 5 / override 3 / import-untyped 2 / index 1 / dict-item 1 / call-overload 1`。
+  其中 `var-annotated 15` 与 `valid-type 5` 这两个族在本波任何记录里**从未出现过**——
+  它们只在 CI 环境可见。这条直接说明：之前"剩余债务就是那 55 条"的说法是环境错位的，
+  真实剩余面应以这 13 个族为准重排。
+* **tranche 3 之后的 7 条残留**（CI 环境，逐条）：4 条上面已说明的 `JsonType` arg-type、
+  2 条 `dateutil.relativedelta` 缺 stub（`types-python-dateutil` 不在 lock 里，属依赖决定而非代码债）、
+  1 条 `assignment: str | AttributeValueList`。**没有一条是本波引入的**。
+* **对基线冻结（本波未做的那一步）的直接影响**：将来冻结
+  `config/mypy_collection_baseline.json` 时，唯一合法的数字是 **CI 作业自己打印的那一个**
+  （今天 dev 是 101，#314 合入后应读 7），
+  而不是笔记本在带 stub 的 pandas 2 环境里得到的任何一个数。
+  这把 §22 里"基线只能由 CI 自身读数冻结"的抽象规则变成了一个具体可核对的数：
+  **如果哪个 PR 声称基线是 40，它一定是拿我这把尺子量的，那就错了。**
+
+补一条同批验证，因为它决定这三刀能不能就这么合：把三刀的测试放进 **CI 的环境**
+（`/tmp/it204/venv-ci`，Python 3.11 + pandas 3.0.3 + akshare 1.18.97 + 无 pandas-stubs）里跑，
+`test_collection_script_row_narrowing_wave3.py + test_collection_script_type_shapes.py +
+test_collection_script_entry_points.py` = **100 passed / 26.20s**，与 pandas 2.3 环境下的 100 passed 一致。
+这点原本不保证：tranche 3 的行为等价性论证里，None 分支 ternary 依赖的正是
+"被钉住的 pandas 会把 `None` 强转成 NaN/NaT"这条库契约，而 pandas 2→3 恰好是最可能改这条的跨度。
+实测两侧同结果，因此 #305/#308/#314 的形状钉不是只在我这把尺子下成立。
+（仍要说清边界：这只覆盖那三个文件里 100 个用例的范围，不等于整个后端套件在 pandas 3 下绿——
+那要等 CI 自己跑。）镜像构建脚本一并入库：`evidence/2026-11-06-wave29/build_ci_env_mirror.py`；
+CI 环境逐条错误清单：同目录 `collection_plane_detail_CIenv_dev_0a4c5ab31.txt`。
