@@ -1,0 +1,16 @@
+{
+  "read_at_utc": "2026-11-06T16:14:50Z",
+  "tz_offset_hours": 8,
+  "armed_tasks": 1048,
+  "last_execution_at_vs_newest_created_at": {
+    "shifted-by-tz-offset": 214,
+    "agrees-within-1h": 821,
+    "older-than-any-execution": 13
+  },
+  "single_hour_cron_tasks": {
+    "n": 964,
+    "next_execution_at_in_cron_hour": 964,
+    "last_execution_at_in_cron_hour": 135
+  },
+  "note": "Buckets A describe the deployed writer at read time. `shifted-by-tz-offset` is the defect; PR #306 removes it for new rows, and scripts/ops/normalize_scheduler_clock.py is the separate存量 correction. Do not compare this output across deploys."
+}

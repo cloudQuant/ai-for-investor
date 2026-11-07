@@ -1,0 +1,243 @@
+{
+  "rows": 1066,
+  "buckets": {
+    "drifted": 847,
+    "never_versioned": 44,
+    "missing_file": 9,
+    "match": 166
+  },
+  "drifted_anchor_commit_counts": {
+    "f669d8131": 699,
+    "d001052bc": 93,
+    "1dbd991d7": 32,
+    "73324f83b": 14,
+    "0b8ad7111": 5,
+    "c720a261c": 1,
+    "87f85964f": 1,
+    "610cd7287": 1,
+    "f2c2154ac": 1
+  },
+  "never_versioned_rows": [
+    {
+      "path": "bonds/daily/bond_china_yield.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "bond"
+    },
+    {
+      "path": "bonds/daily/bond_zh_hs_cov_daily.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "bond"
+    },
+    {
+      "path": "bonds/hourly/bond_zh_hs_cov_spot.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "bond"
+    },
+    {
+      "path": "common/_amac_limited.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/_endata_yien.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/currency_fallback.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "fx"
+    },
+    {
+      "path": "common/daily/_jin10_macro.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/daily/_sina_macro.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/daily/akshare_catalog_endpoint.py",
+      "last_touching_commit": "f669d813175a59274d046a75708261e3cdd5c768|2026-04-15",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/daily/currency_boc_safe.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "fx"
+    },
+    {
+      "path": "common/daily/forex_hist_em.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "fx"
+    },
+    {
+      "path": "common/daily/macro_china_swap_rate.py",
+      "last_touching_commit": "0b8ad71112b236b186d50b3e1531201fce6d188e|2026-07-05",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/daily/print.py",
+      "last_touching_commit": "d001052bca0a6cbc2c575ee41c3037168970d604|2026-06-25",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/dict_result.py",
+      "last_touching_commit": "d001052bca0a6cbc2c575ee41c3037168970d604|2026-06-25",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/hourly/akshare_catalog_batch.py",
+      "last_touching_commit": "73324f83bddcc88c97623c44346b1dfd30e95365|2026-06-21",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/hourly/fx_spot_quote.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "fx"
+    },
+    {
+      "path": "common/monthly/trading_days.py",
+      "last_touching_commit": "3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0|2026-11-06",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/scalar_result.py",
+      "last_touching_commit": "d001052bca0a6cbc2c575ee41c3037168970d604|2026-06-25",
+      "asset_family": "other"
+    },
+    {
+      "path": "common/weekly/get_dce_rank_table.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "other"
+    },
+    {
+      "path": "cryptos/daily/crypto_daily_market.py",
+      "last_touching_commit": "b1ddf66fae925543a07d4972b766375cd6e65cf6|2026-10-19",
+      "asset_family": "crypto"
+    },
+    {
+      "path": "cryptos/hourly/crypto_hourly_market.py",
+      "last_touching_commit": "b1ddf66fae925543a07d4972b766375cd6e65cf6|2026-10-19",
+      "asset_family": "crypto"
+    },
+    {
+      "path": "funds/daily/fund_etf_hist_sina.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "fund"
+    },
+    {
+      "path": "funds/daily/option_current_em.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "option"
+    },
+    {
+      "path": "funds/hourly/fund_etf_spot_ths.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "fund"
+    },
+    {
+      "path": "funds/weekly/_fund_codes.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "fund"
+    },
+    {
+      "path": "funds/weekly/etf_fund_hist_em.py",
+      "last_touching_commit": "3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0|2026-11-06",
+      "asset_family": "fund"
+    },
+    {
+      "path": "funds/weekly/financial_fund_hist_em.py",
+      "last_touching_commit": "3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0|2026-11-06",
+      "asset_family": "fund"
+    },
+    {
+      "path": "funds/weekly/option_hist_dce.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "option"
+    },
+    {
+      "path": "futures/weekly/_dict_result.py",
+      "last_touching_commit": "d001052bca0a6cbc2c575ee41c3037168970d604|2026-06-25",
+      "asset_family": "futures"
+    },
+    {
+      "path": "futures/weekly/daily_market_data.py",
+      "last_touching_commit": "3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0|2026-11-06",
+      "asset_family": "futures"
+    },
+    {
+      "path": "futures/weekly/futures_dce_position_rank.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "futures"
+    },
+    {
+      "path": "futures/weekly/futures_warehouse_receipt_dce.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "futures"
+    },
+    {
+      "path": "indexs/weekly/stock_zh_index_daily.py",
+      "last_touching_commit": "d001052bca0a6cbc2c575ee41c3037168970d604|2026-06-25",
+      "asset_family": "index"
+    },
+    {
+      "path": "indexs/weekly/stock_zh_index_daily_em.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "index"
+    },
+    {
+      "path": "stocks/daily/_gdfx_limited.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/daily/stock_board_industry_min_em.py",
+      "last_touching_commit": "3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0|2026-11-06",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/daily/stock_zh_a_hist.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/daily/stock_zh_a_hist_tx.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/daily/stock_zh_a_tick_163.py",
+      "last_touching_commit": "1dbd991d7f20c841caa34f85f1d5b09476ec440c|2026-07-18",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/hourly/stock_zh_a_spot.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/hourly/stock_zh_a_spot_em.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/weekly/stock_industry_pe_ratio_cninfo.py",
+      "last_touching_commit": "3e9f4a76e5a33a9493597d0e0fc4f77da87c6db0|2026-11-06",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/weekly/stock_info_a_code_name.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "stock"
+    },
+    {
+      "path": "stocks/weekly/stock_info_bj_name_code.py",
+      "last_touching_commit": "7e46588c8626992af0649134019ddb8a7db37264|2026-11-05",
+      "asset_family": "stock"
+    }
+  ],
+  "meaning": "never_versioned anchors cannot be reproduced from any ref, so the AC01 baseline for those rows has no provenance; drifted anchors are re-derivable from history."
+}

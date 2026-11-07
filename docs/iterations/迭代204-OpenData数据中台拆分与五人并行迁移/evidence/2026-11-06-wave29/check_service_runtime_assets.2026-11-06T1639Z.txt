@@ -1,0 +1,78 @@
+systemd runtime asset audit (read-only; environment values are not read or printed)
+unit_dir=/home/yun/.config/systemd/user scope=/home/yun/Documents/ai-for-investor/.git systemctl=available
+counts: unit_files_scanned=19 units_audited=16 units_without_exec=6 green_units=5 units_with_findings=11 missing_file=11 ok=3 outside_repo=4 gitignored=6
+
+[FLAG] ai-for-investor-dce-browser-capture.service (ai-for-investor-dce-browser-capture.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_browser_capture.sh
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_browser_capture.sh  absent and in no branch index
+       status: ActiveState=failed Result=exit-code ExecMainStatus=203
+[FLAG] ai-for-investor-dce-option-daily.service (ai-for-investor-dce-option-daily.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh tail
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh  absent and in no branch index
+       status: ActiveState=failed Result=exit-code ExecMainStatus=203
+[FLAG] ai-for-investor-dce-option-recovery.service (ai-for-investor-dce-option-recovery.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh full
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_dce_option_recovery.sh  absent and in no branch index
+       status: ActiveState=inactive Result=success ExecMainStatus=0
+[FLAG] ai-for-investor-etf-nav-backfill@0.service (ai-for-investor-etf-nav-backfill@.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh %i 4
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh  absent and in no branch index
+       status: ActiveState=activating Result=exit-code ExecMainStatus=203
+[FLAG] ai-for-investor-etf-nav-backfill@1.service (ai-for-investor-etf-nav-backfill@.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh %i 4
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh  absent and in no branch index
+       status: ActiveState=activating Result=exit-code ExecMainStatus=203
+[FLAG] ai-for-investor-etf-nav-backfill@2.service (ai-for-investor-etf-nav-backfill@.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh %i 4
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh  absent and in no branch index
+       status: ActiveState=activating Result=exit-code ExecMainStatus=203
+[FLAG] ai-for-investor-etf-nav-backfill@3.service (ai-for-investor-etf-nav-backfill@.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh %i 4
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_etf_nav_shard.sh  absent and in no branch index
+       status: ActiveState=activating Result=exit-code ExecMainStatus=203
+[ok  ] ai-for-investor-frontend.service (ai-for-investor-frontend.service)
+     ExecStart: %h/.nvm/versions/node/v24.17.0/bin/node %h/Documents/ai-for-investor/src/frontend/node_modules/vite/bin/vite.js --host 127.0.0.1 --port 3000 --strictPort
+       gitignored             /home/yun/Documents/ai-for-investor/src/frontend/node_modules/vite/bin/vite.js
+       outside_repo           /home/yun/.nvm/versions/node/v24.17.0/bin/node
+       status: ActiveState=active Result=success ExecMainStatus=0
+[ok  ] ai-for-investor-full-history-recovery.service (ai-for-investor-full-history-recovery.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/.venv/bin/python %h/Documents/ai-for-investor/src/backend/scripts/ops/run_with_core_environment.py %h/Documents/ai-for-investor/src/backend/.venv/bin/python %h/Documents/ai-for-investor/src/backend/scripts/ops/run_full_history_recovery_worker.py --apply --assets stock crypto bond etf option
+       ok                     exists=yes tracked=yes /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_with_core_environment.py
+       ok                     exists=yes tracked=yes /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_full_history_recovery_worker.py
+       gitignored             /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
+       status: ActiveState=failed Result=exit-code ExecMainStatus=2
+[FLAG] ai-for-investor-option-history.service (ai-for-investor-option-history.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/scripts/ops/run_option_history_loop.sh
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_option_history_loop.sh  absent and in no branch index
+       status: ActiveState=inactive Result=success ExecMainStatus=0
+[FLAG] ai-for-investor-policy-expiry-watchdog.service (ai-for-investor-policy-expiry-watchdog.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/.venv/bin/python %h/Documents/ai-for-investor/src/backend/scripts/ops/policy_expiry_watchdog.py --output %h/Documents/ai-for-investor/var/reports/iteration203/policy-expiry-watchdog/service-current.json
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/policy_expiry_watchdog.py  absent and in no branch index
+       gitignored             /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
+       gitignored             /home/yun/Documents/ai-for-investor/var/reports/iteration203/policy-expiry-watchdog/service-current.json
+       status: ActiveState=failed Result=exit-code ExecMainStatus=2
+[FLAG] ai-for-investor-stock-amount-daily.service (ai-for-investor-stock-amount-daily.service)
+     ExecStart: /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python scripts/ops/backfill_stock_amount_sina.py --max-minutes 300 --sleep-seconds 0.25
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/backfill_stock_amount_sina.py  absent and in no branch index
+       gitignored             /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
+       status: ActiveState=failed Result=exit-code ExecMainStatus=2
+[FLAG] ai-for-investor-stock-tail-daily.service (ai-for-investor-stock-tail-daily.service)
+     ExecStart: /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_stock_tail_slices.sh
+       missing_file           exists=no tracked=no /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_stock_tail_slices.sh  absent and in no branch index
+       status: ActiveState=failed Result=exit-code ExecMainStatus=203
+[ok  ] ai-for-investor.service (ai-for-investor.service)
+     ExecStart: %h/Documents/ai-for-investor/src/backend/.venv/bin/python %h/Documents/ai-for-investor/src/backend/scripts/ops/run_with_core_environment.py %h/Documents/ai-for-investor/src/backend/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --access-log --log-level info
+       ok                     exists=yes tracked=yes /home/yun/Documents/ai-for-investor/src/backend/scripts/ops/run_with_core_environment.py
+       gitignored             /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
+       status: ActiveState=active Result=success ExecMainStatus=0
+[ok  ] hermes-gateway.service (hermes-gateway.service)
+     ExecStart: /home/yun/.hermes/hermes-agent/venv/bin/python -m hermes_cli.main gateway run
+       outside_repo           /home/yun/.hermes/hermes-agent/venv/bin/python
+       status: ActiveState=active Result=success ExecMainStatus=0
+[ok  ] openclaw-gateway.service (openclaw-gateway.service)
+     ExecStart: "/usr/bin/node" "/home/yun/openclaw/dist/index.js" gateway --port 18789
+       outside_repo           /usr/bin/node
+       outside_repo           /home/yun/openclaw/dist/index.js
+       status: ActiveState=inactive Result=success ExecMainStatus=0
+
+non-green units: ai-for-investor-dce-browser-capture.service, ai-for-investor-dce-option-daily.service, ai-for-investor-dce-option-recovery.service, ai-for-investor-etf-nav-backfill@0.service, ai-for-investor-etf-nav-backfill@1.service, ai-for-investor-etf-nav-backfill@2.service, ai-for-investor-etf-nav-backfill@3.service, ai-for-investor-option-history.service, ai-for-investor-policy-expiry-watchdog.service, ai-for-investor-stock-amount-daily.service, ai-for-investor-stock-tail-daily.service

@@ -198,3 +198,53 @@ make gate
 **F. 另一处让整批点红的仪器项，以及一次属主裁定。** 阻塞式全历史密钥扫描 `Security - Secret Scan (177 §D)` 只报 1 条命中，而它足以把 #299 之外全部开着的 PR 的该腿点红：该扫描覆盖的是被取回的所有 ref 上的历史，命中提交 `4db6a7e5f` 只在 **#287 的未合入分支**上，dev 本身是干净的（`GET /contents/{path}?ref=dev` 返回 404）。命中项为 `src/backend/scripts/ops/cfets_daytime_managed_acceptance.py:53` 的 `PROTECTED_NATURAL_CLAIM_KEY`，`generic-api-key` 按形状（64 位十六进制）匹配。判定「是不是凭据」用的是读回而非猜测：该值正是 `ak_task_run_claims` 里一条既存行的主键 `claim_key`（`task_id=101`、`period_key=cron:2026-10-20T02:10:00Z`、`status=completed`、`created_at=2026-10-20 02:10`），且该表 29,126 个 `claim_key` 全部为 64 位十六进制；脚本只用它做 `session.get(AkshareTaskRunClaim, ...)`，不参与任何认证。因此它不是凭据，而是随行恢复回来的记录型常量（该文件本身是从迭代203 部署备份取回的）。属主在三个可选项里选了**按精确指纹入账**（`.gitleaksignore` 一条 + `scripts/ci/gitleaks_history_baseline.json` 同提交更新：accepted 279→280、`unresolved_findings` 仍为 0、`blocking_ready` 仍为 true，`python scripts/ci/check_gitleaks_history_baseline.py` 通过），而不是文档里记载的紧急开关 `SECRET_SCAN_HISTORY_BLOCKING`，也不是带红合入；未改写任何历史，未放宽任何规则或阈值，门禁对其余一切发现保持阻塞。该两项变更已并入 #299，故其余分支需要同样携带这三个文件才能转绿——原因与 C 段相同：`pull_request` 作业执行的是 PR head 里的工作流与忽略表，不是 dev 上的版本。另记一次我自己写错的取证习惯，供后续属主参考：向 `.gitleaksignore` 这种安全清单加条目时应**追加**，我第一版顺手做了全表排序，产生 119 行噪声差异，会掩盖真正的一行改动，已回退重做。
 
 **验收矩阵状态：本节没有把 §1 的 AC01–AC18 任何一行改为通过。** 具体重申：A 只是本机 DEPLOYMENT 存活读数，不构成 AC05/AC10/AC14 的覆盖率或自然周期判定；B 明确 AC06 的「跨库 outbox 可恢复」为 ABSENT，其余保持已支撑的 DEV_DONE；C 是仪器修正，不改任何验收；E 的 AC-1|08 翻格属未决属主事项，本矩阵相应格维持原判。
+
+## 2026-11-06 wave 29 运行态与验收面复核（不改写任何 AC 判定）
+
+复核人：本轮代理；方法：只读 SQL + 本仓已合并仪器 + CI 作业读数。
+本节只回答一件事：**每一格现在能被什么证据推进，以及本波是否改写了判定。**
+答案是：没有任何一格被改写成通过；AC01 的缺口从"没做过"收窄成三条具体项，
+而采集运行态被证明是**部署面**的问题，不是代码面的问题。
+
+| AC | 本波新增/纠正的证据 | 判定是否变化 |
+|---|---|---|
+| AC01 | 七面清单首次全部刷新，含判据第一句要求的**两仓冻结 hash 与未提交差异 hash**（62 个工作树，5 个带未提交改动）；OD 重叠面量化为 **10 个 akshare provider 模型 / 12 个函数名**对 AFI 1057 脚本。迁移清单 hash 锚的缺口本轮**全部归因**：1066 行中 166 匹配 / 891 不匹配 / 9 无文件，且用新仪器 `inventory_anchor_provenance.py`（只读扫 `git log --all`）把它拆成四桶：**match 166 / drifted 847 / never_versioned 44 / missing_file 9**。drifted 847 全部命中真实 commit（`f669d8131` 2026-04-15 快照 699 条、`d001052bc` 93、`1dbd991d7` 32、`73324f83b` 14、`0b8ad7111` 5、单例 6），即 CSV 基线主要是 4–7 月的树、被 `7e46588c8`（#270）一次性改动，可再生可解释；**never_versioned 44 行的锚在 `--all` 里不存在任何 commit**，五种哈希规范化变换逐一测过全不命中、文件本身无 CRLF，故"CSV 生成于脏树"由假设升级为证实，这 44 行跨 8 个提交与 9 个资产族、不是某类文件的系统性问题（我一度写成"集中在共享 helper"，实测后撤回）。对 AC11 签核无影响：工具比的是当场重算的 `item.sha256` 而非 CSV 那列 | 不变（PARTIAL）。剩余具体缺口收窄为：`.py` 源文本缺失（binlog 因 1227 无权限不可枚举）、逐标的内部缺口需源原生日历；hash 锚重生成必须在采集 PR 落地后才执行，否则立刻再失效（重生成仪器与"166 行保真性闸门"另成 PR，未合入前不称闭合） |
+| AC05 | 7 张幽灵表的业务新鲜度实测：6 张到 2026-10-26、1 张到 10-23；表级对 `TRADING_DAYS` 缺口 0~12。新增一个更硬的分母事实：**1048 armed 里 827 个自采集恢复以来一次都没执行过**，此刻能谈覆盖的任务面只有 221 个 | 不变（NOT-PROVEN）。生产者已绑定但源码缺失，覆盖无法重生产；827 未跑使「全历史」不具备陈述资格 |
+| AC10 | 同上，新鲜度不再"未测"；"源响应逐字段对照"需要真实源运行，而真实源运行**自 2026-11-05 14:02 UTC 起已恢复**（475 completed / 99 failed，208 个任务至少成功一次） | 不变（NOT-PROVEN / NOT_RUN）。恢复只使"能取新证据"成立，不等于"已取到" |
+| AC11 | 分子仪器化（PR #309，取代 #307）：`AC11_RUNTIME_EVIDENCED` 序列 **143/1098（13:32Z）→ 155/1098（14:18Z）→ 161/1048（14:50Z）→ 168/1048（15:36Z）**，四分类 `168+40+13+827=1048`，其中 827 与另一条独立 SQL 测得的"armed 未执行"逐字相同；族矩阵齐出；89 条 undecided 的卡点实测为 `source_function` 72 + `single_source_function` 17 + `target_table` 6，**与注册数据无关**（带/不带 `--registration-export` 结果逐字相同）。本轮同时否证我自己给 #286 的处方：更深 AST 走查对 72 行**新增 0 个**名字；静态可判上界 **71**（55 强 + 16 改名推断），18 条需 `--source-verification-export`，4 条需属主裁定（#311） | 不变（PARTIAL）。`assigned` 仍 0，且按 #286 的权限设计只能由具名属主逐文件 hash 签字 |
+| AC12 | 部署态本轮被改写成更强的一条：把九天全量失败写进台账的那条消息在已提交代码里 grep **0 命中**，已提交路径 `app/services/akshare/script.py:502 _execute_callable` 是进程内执行、不派生子进程，故障日志引用的 `scheduler.py:362/508/697` 与 `script.py:2536/1140/1119` 也不存在（scheduler.py 全文 157 行）。unit 于 11-05 21:30–21:32 CST 崩溃循环（restart counter 1434→1437），`ExecMainStartTimestamp=11-05 22:44:45 CST` 起 NRestarts=0；恢复后首条 completed 在 14:02 UTC，**早于**该 start，故可证的是"崩溃循环窗口内树被放回已提交代码"，不可证的是那次 start 本身 | 不变（PARTIAL）。缺陷类未闭合：进程可以带着不在版本控制里的代码运行并全量失败，而台账只剩一句状态词。待办：unit 钉 checkout + 脏树拒启（R3）、`mark_failed` 落 traceback 与子进程 stderr（CODE，4281 行 `error_trace` 全空） |
+| AC13 | 队列 A 的 50 个任务停用后**是否仍触发尚未可判**：观测窗内 0 次执行，但它们的 cron 槽位一个都没到；代码侧 `run_task_now` 不回查 `is_active`、`reload_active_tasks` 从不注销失效 job | 不变（NOT-PROVEN）。首个可判窗口收紧为 **2026-11-07 00:00–01:43 UTC**（CST 08:00–09:43；11-06 首条幽灵执行恰为 `00:35:00` UTC），其次 07:00/11:00 UTC。停用后至今幽灵执行数为 0，**这不构成证据**——它们的槽位在停用之前已走完；#306 的机理预测在其部署前它们仍会触发 |
+| AC14 | 只有 **1 个** armed 任务能每小时触发（id 1049 `3 * * * *`），窗口内 24 槽位全 600s 超时、0 成功；恢复后 `Script call timed out after 600 seconds` 仍占 26 行（同一任务）；它此前累计 completed 178 次（纠正我"从未成功"的过头话）。#282 仪器经审查**没有** cron 字段展开缺陷，其 hourly 定义是"小时字段展开为 24 值"；827 个任务未跑使自然周期续期最多只能覆盖 221 个 | 不变（NOT-PROVEN，时间累计型）。新增一条判据要求：AC14 必须写死"小时面"定义，否则与 wave 28 的 `hourly 103` 口径不可对话 |
+| AC16 | 书签 catch-all（#292）等页面项在队列中 | 不变（PARTIAL） |
+| AC18 | OD 侧能力面数字即 AC18 联调的真实上限；#296 仪器在队列 | 不变（NOT-PROVEN） |
+
+CI 门禁债务面的状态变化（与 AC 判定无关，按 `SUBAGENT_TASKS.md:257` 的口径二者不得混用）：
+
+* AFI `dev` 唯一红 `Security - Secret Scan (177 §D)` 已由 #304 解除，
+  dev `0a4c5ab31` 该作业 success、E2E 工作流 success，其余成员在跑。
+* 队列集成：15 条分支带 dev 合并提交重推，`.gitleaksignore` 与
+  `scripts/ci/gitleaks_history_baseline.json` 的 blob sha 与 dev **逐支相同**（我用 API 独立复核）。
+* **治理声明的文档与门禁不一致**（本轮定位并修）：`check_pr_governance.py:70/197` 对 `风险等级` 做
+  `\b(R[0-3])\b` **fullmatch**，而 `CONTRIBUTING.md:387` 教的写法必然被拒；另 `feat/` 不在 dev 接受的
+  分支前缀里，而开放 PR 无法改 head 分支。代价：#306 现场红、#307 必须重开为 #309。
+  修法：#310 改文档 + 一条钉住该形状的用例；整队列预检（用 dev 上的可信 checker 跑真实 PR 元数据）
+  把"红一次再修"换成批量先修。
+* `scripts/ci/tests` 的 228 个 Python 契约测试**没有任何 CI 作业执行**（`ci.yml` 只跑
+  `test_check_deps_sync.py` 与 5 个 `.mjs`），因此 5 条 stale action-pin 断言长期无人看见地红着。
+  #312 按上游 tag↔SHA 逐枚重钉，并把 3 条漂移哨兵放进 CI 真正会跑的那个文件
+  （本机独立复验 231 passed / 0 failed）；把整目录接进 CI 仍是 R3，留给属主。
+* 我的合并闸门自身修掉一条会把 PR 永久判死的缺陷：`/commits/{sha}/check-runs` 在同一 sha 上累积
+  rerun 记录，必须按 `(app, name)` 取最新一条。修后 OD #198 立刻判 READY 并合入 `34be0a1b9c`
+  ——它此前被两条早已转绿的旧失败记录压着。
+* AFI `Backend - Unit Tests (py3.11)` 在 #286 上是 **xdist worker 崩溃**而非断言失败
+  （`1 failed, 9048 passed`，同 sha 同套件的 py3.12 为 success）；GitHub 在 run 仍有 queued job 时
+  拒绝重跑（403 `This workflow is already running`），故挂了等待式重跑器。结构性处置属 R3。
+* OD `dev` 现全绿（run 42224189357 两作业 success）；`test-cov` 那条是**间歇红**，
+  #201 记作加固而非修复，已合入 `0754b995d7`。
+* OD `AC-5|07` 的真相是 **24 小时滚动到期**（`MAX_EVIDENCE_AGE = timedelta(hours=24)`），
+  源码树哈希与上一轮相同，所以它不是新缺口；因此 `--sync-ratchet` 工件里的第 8 条钉子**不逐字入账**，
+  改走 PR #202 正规重跑后再取只含 AC-1|08 的工件。
+
+本波明确不做的事：不替属主签 disposition；不伪造 16 条条款 URL；不臆造 9 个缺失源文件的内容；
+不在笔记本读数上冻结基线；不把 PR 合并、测试通过或仪器产出一个数字当作 AC 判定闭合；
+不因为“采集恢复了”就把 AC05/AC10/AC14 中任何一格改判为通过。

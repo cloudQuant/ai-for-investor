@@ -1,0 +1,63 @@
+{
+  "records": [
+    {
+      "source_function": "bond_zh_hs_cov_daily",
+      "verified_at_utc": "2026-11-06T16:29:14Z",
+      "akshare_version": "1.18.64",
+      "params": {},
+      "rows_observed": 4806,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "option_sse_daily_sina",
+      "verified_at_utc": "2026-11-06T16:29:17Z",
+      "akshare_version": "1.18.64",
+      "params": {},
+      "rows_observed": 23,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "futures_zh_daily_sina",
+      "verified_at_utc": "2026-11-06T16:29:18Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "AU2402"
+      },
+      "rows_observed": 260,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "stock_financial_analysis_indicator_em",
+      "verified_at_utc": "2026-11-06T16:29:22Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "301389.SZ"
+      },
+      "rows_observed": 26,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "stock_financial_report_sina",
+      "verified_at_utc": "2026-11-06T16:29:23Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "stock": "sh600600",
+        "symbol": "利润表"
+      },
+      "rows_observed": 118,
+      "evidence": "live akshare call from this machine, non-empty"
+    },
+    {
+      "source_function": "stock_history_dividend_detail",
+      "verified_at_utc": "2026-11-06T16:29:25Z",
+      "akshare_version": "1.18.64",
+      "params": {
+        "symbol": "000002",
+        "indicator": "分红"
+      },
+      "rows_observed": 36,
+      "evidence": "live akshare call from this machine, non-empty"
+    }
+  ],
+  "meaning": "each record is one real call that returned rows; REUSE_PROVIDER in #286 reads only source_function + verified_at_utc, the extra fields are so an auditor can see what was actually observed"
+}
