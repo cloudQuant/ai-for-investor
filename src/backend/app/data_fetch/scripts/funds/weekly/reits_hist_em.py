@@ -1,5 +1,6 @@
 import argparse
 import logging
+from typing import Any
 
 import akshare as ak
 import pandas as pd
@@ -96,7 +97,7 @@ class ReitsHistEm(AkshareToMySql):
                 .sort_values("trade_date")
             )
             previous_close = pd.to_numeric(data.get("preClose"), errors="coerce")
-            amplitudes = []
+            amplitudes: list[Any] = []
             for _, row in grouped.iterrows():
                 if pd.isna(previous_close) or previous_close == 0:
                     amplitudes.append(None)
