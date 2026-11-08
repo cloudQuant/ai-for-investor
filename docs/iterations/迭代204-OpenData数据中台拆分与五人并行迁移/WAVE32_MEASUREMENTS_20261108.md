@@ -129,3 +129,54 @@ OK: 130 个条目级判定在门禁里跑了一遍（1317.7 s）；…六面全�
 - 本机不可闭合的旧项不变：#257 集成税形状、#268 OD 重复触发、#269 源主机不可达、
   #266/#267 测量环境、#277 部署三件套机制、#260 的 7 个脚本、AC11 属主签字、
   AC13 单写者实现与七连测、#303 分支决定、#262 dependabot。
+
+## 5. AFI 侧两条 accrual 的新读数（2026-11-08，只读）
+
+两条都是同一个可复跑仪器在同一参数下的新读数，不是新判据。**都不构成任何 AC 判定闭合。**
+
+### 5.1 AC11 运行时证据分子：318 → **417/1048**
+
+```
+python3 src/backend/scripts/task_param_audit.py --out-dir /tmp/it204/param-audit-1108 --env-file src/backend/.env
+python3 src/backend/scripts/ops/ac11_runtime_evidence.py \
+  --census /tmp/it204/param-audit-1108/task_param_bind_audit.json \
+  --out-dir /tmp/it204/ac11-1108 --since 2026-11-05T14:00:00+00:00
+```
+
+普查 `tasks_audited=1048`、`registered_script_rows_audited=1066`、
+`registered_script_rows_without_file=9`（0.79 s 跑完，session read-only）。读数
+`as_of_utc = 2026-11-08T14:46:49+00:00`，`census_generated_at_utc = 2026-11-08T14:46:41+00:00`：
+
+| outcome | 数量 |
+|---|---|
+| `completed_and_grew`（= 分子） | **417** |
+| `completed_no_delta` | 139 |
+| `failed_only` | 27 |
+| `not_run` | 465 |
+| 合计 | 1048 |
+
+逐静态族：`accepts_var_kwargs 356 + 77 + 11 + 442`；`binds 61 + 62 + 9 + 23`；
+`unexpected_param 0 + 0 + 7 + 0`——那 7 行仍然只有失败执行，与行 265 的"7 行全 MISMATCH"一致。
+自 2026-11-07T19:02Z 的 318 以来 +99，全部来自采集器继续跑，不来自任何新裁定。
+
+`assigned` 仍是属主的签字，仪器自己就拒绝替人算：报告里
+`assigned.value = "not computed here"`，并写明
+`runtime_evidenced != assigned: no human sign-off is implied by a growing run`。
+AC11 的 6 行 `REUSE_PROVIDER` 签字面（`reviewer` + `reviewed_at_utc`）没有变化。
+
+### 5.2 AC14 小时链：**19/48** 连续 completed，无断点
+
+`evidence/2026-11-08-wave32/ac14_hourly_chain.py`（只读，`SET SESSION TRANSACTION READ ONLY`），
+锚在 #316 部署瞬间 `2026-11-07T19:26:47Z`，task 1049 `3 * * * *`：
+
+```
+db clock: utc=2026-11-08 14:45:43  local=2026-11-08 22:45:43
+executions since deploy: 19      （11-07 20Z … 11-08 14Z，每小时一个槽位）
+consecutive completed hourly slots from 11-07 20Z onward = 19 (target 48, 18.8 h available)
+first non-completed slot: none so far
+```
+
+19 个槽位全部 `completed`，0 个失败、0 个缺行。距 48 还差 29 个自然小时；按当前速率约 11-09
+晚间到齐，但这条只能到时候再说，不能现在预告。表里第 299 行（"小时加密线 task 1049"）上一读数记的是
+部署后连续 **10** 个槽位，本节把它推进为连续 **19** 个——**同一个"没有断点"的陈述，长度变了，
+性质没变：既不是 AC14 判定，也不因为数变大就自动变成判定**。

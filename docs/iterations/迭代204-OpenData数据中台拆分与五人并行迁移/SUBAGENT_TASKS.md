@@ -316,3 +316,17 @@ dispatch→checkpoint 之间，recovery 臂改用数据库时间确定性过期�
 仍然 OPEN、且本机不可闭合（保持诚实登记）：#257 合并集成税形状、#268 OD 重复触发、#269 源主机不可达、
 #266/#267 测量环境危害、#277 部署机制、#260 的 7 个脚本、AC11 的属主签字、AC13 单写者实现与七连测、
 #303 的分支决定、#262 的 dependabot 主版本升级。
+
+### CI 门禁债务状态对账（2026-11-08T14:50Z，wave 32）
+
+只对上表之后的新读数；历史行不动，状态变化写在下面。**不改任何 AC 结论。**
+完整证据与仪器见 [WAVE32_MEASUREMENTS_20261108.md](WAVE32_MEASUREMENTS_20261108.md)。
+
+| 行 | 新状态 | 证据（可复核） |
+|---|---|---|
+| dev 头 CI 健康（本轮起因） | **DONE（一条红已归因并修法入账，#331）** | `7c8f6f2f12f` run 42472229710 唯一红是作业 128705525478（14 s exit 2，日志只有 `curl: (56) Connection died` + `tar: Error is not recoverable`，无 gitleaks 命中），前一步已打印 `accepted=281, unresolved=0`；原样 rerun 作业 128754894980 后整 run `completed success`。此前 20 个 dev CI run 该成员首尝试 19/19。修法：下载落盘再解包（`--fail --retry 5 --retry-all-errors --output`）+ `gitleaks_version` 变成判据 + `scripts/ci/tests/test_gitleaks_install_step.py` 6 条；loopback 执行 workflow 原文三形态见 `evidence/2026-11-08-wave32/gitleaks_install_step_simulation.json`（旧形状截断流 exit 2 / 新形状 exit 0 且服务器记 2 次请求；恒 500 新形状 exit 22 且 tar 未调用）。 |
+| AC11 运行时证据分子 | IN PROGRESS，分子 **417/1048** @ 2026-11-08T14:46:49Z | 同一仪器同一 `--since 2026-11-05T14:00:00+00:00`，普查现跑（0.79 s，`tasks_audited=1048 / script_rows=1066 / rows_without_file=9`）：`completed_and_grew 417 + completed_no_delta 139 + failed_only 27 + not_run 465 = 1048`；逐族 `var_kwargs 356/77/11/442`、`binds 61/62/9/23`、`unexpected_param 0/0/7/0`（那 7 行仍只有失败执行）。自 318 以来 +99 全部来自采集器继续跑。`assigned` 仍不是仪器能算的：报告写 `assigned.value="not computed here"`、`runtime_evidenced != assigned`。6 行 `REUSE_PROVIDER` 签字面不变。 |
+| 小时加密线（task 1049）/ AC14 accrual | IN PROGRESS，连续 **19** 个 completed 槽位（0 断点）@ 2026-11-08T14:45:43Z | `evidence/2026-11-08-wave32/ac14_hourly_chain.py`（只读 + `SET SESSION TRANSACTION READ ONLY`），锚 #316 部署瞬间 `2026-11-07T19:26:47Z`，task 1049 `3 * * * *`：部署后执行 19 条，11-07 20Z…11-08 14Z 每小时一槽全 `completed`，`first non-completed slot: none so far`。目标 48 → 仍 NOT_RUN 判定；上一读数是连续 10。 |
+| OpenData AC-17\|08 自指面 | **DONE（改判，见上表第 246 行）** | #188 diff 只删 `AC-17\|08` 的 `stale-proof` 钉（sha `ca500c6f…`）；dispatch run 42404291048（`SYNC_ACCEPTANCE_RATCHET: true`，头 `c02b136ab5`）打印 `judge 存量 0 条、stale-proof 5 条、deferred 3 条`，其后 `git diff -- …acceptance-gate-ratchet.json` **输出为空**，工件与 `origin/dev` 文件 sha256 相同（`9e57cf7e…`）；主干 `gate-log`（run 42396841706，工件 13585551963）里 `tests/test_shell_audit_self_reference.py` **35 条 distinct 全 PASSED、0 FAILED**。 |
+| OpenData `quality gate` 偶发红 | **DONE（改判，见上表第 249 行）** | #194（`051824bd38`，2026-11-05T00:07:35Z）之后 7 个产 `gate-log` 的主干 run 逐个取工件数签名：`invalid literal for int` **0/7**、`not properly terminated` **0/7**。三条红全部指名别的腿：42093628720 与 42241328622 红在 `acceptance-probe-check`（棘轮如实报新增存量 `AC-5\|07`、`AC-1\|08`），42160349563 红在 `test-cov` 的 sqlalchemy Timeout（留在第 242 行那族，未被本轮任何改动触及）。 |
+| OD 主干"跑没跑"该从哪里读 | **DONE（一次自我误读被复核推翻）** | 只看 Actions console 会得出"OD 主干不跑 pytest、#188 反例只在笔记本跑过"——错：dispatch run 只执行 `make security-bundle-rebuild` + `--sync-ratchet`（22 步里没有 test 腿，console 里 `passed` 出现 0 次），而 dev push run 把完整输出写进 `gate.log` 工件、console 只打印 `grep -aE '^===== gate:|^Required test coverage|^TOTAL|passed.*[0-9]+s$|Test failed'` 的尾巴。工件里 78,673 行，test-cov 全量 `35620 passed, 243 skipped, 11 subtests passed in 1154.93s`，`===== gate: PASSED =====`。规则：OD 侧一个作业是否执行只从工件判。 |
