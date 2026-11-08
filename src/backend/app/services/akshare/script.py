@@ -26,7 +26,7 @@ from app.models.akshare_mgmt import (
 )
 from app.services.akshare import script_worker_runtime
 from app.services.akshare.data import AkshareDataService
-from app.services.akshare.execution import AkshareExecutionService
+from app.services.akshare.execution import AkshareExecutionService, failure_frame_trace
 from app.services.akshare.write_fence import (
     committed_mysql_writes,
     committed_row_count,
@@ -1816,6 +1816,7 @@ class AkshareScriptService:
             execution = await self.execution_service.mark_failed(
                 execution,
                 str(exc),
+                error_trace=failure_frame_trace(exc),
                 rows_before=failure_rows_before,
                 rows_after=failure_rows_after,
             )

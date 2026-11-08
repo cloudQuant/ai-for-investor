@@ -414,6 +414,7 @@ async def test_failed_ledger_row_means_the_worker_was_already_dead(
         observed["committed_before_failure"] = len(committed)
         observed["late_rows_at_failure"] = _read_rows(late_path)
         observed["error_message"] = error_message
+        observed["error_trace"] = error_trace
         if child_pid is not None:
             # Raises if the process still exists (live or zombie): at end_time
             # the whole group must be gone, not merely cancelled.
@@ -477,6 +478,8 @@ async def test_failed_ledger_row_means_the_worker_was_already_dead(
     assert observed["status"] == "failed"
     assert observed["end_time_stamped"] is True
     assert "timed out" in str(observed["error_message"])
+    # The ledger must say where the run died; the message alone cannot.
+    assert observed["error_trace"] and " in " in str(observed["error_trace"])
 
     time.sleep(5.0)
     assert _read_rows(late_path) == []
