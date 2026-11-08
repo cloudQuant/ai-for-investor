@@ -244,7 +244,7 @@ OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查d
 
 | OpenData AC-17\|08 反空壳抽审（定义抄写面） | DONE 至 0，但**格子仍未入账**（#184 `ba1e41b8`、#186 `2fe6988a`） | 46 → 19 → **0**。读数只认脚本自己的 `shell_count[...]` 摘要行：该脚本在摘要之前还会为反例打印若干 `HIT`，用 grep 数 HIT 会多数（实测 12/1/1/1 对真值 11/0/0/0）。每一处替换都要求「产品回归能变红」：上限改判边界（4,000 通过 / 4,001 第 1 次请求即 `FMP_PROVIDER_LIMIT_VIOLATION`；3,650 可 / 3,651 拒；16 MiB 可 / +1 拒），身份串改判注册表解析，凭据环境变量名改判真正发出的 `Authorization` 头；五处反例在 /tmp 副本里改产物字节确实变红。**没有**删/跳过/xfail/降断言 |
 | OpenData AC-17\|08 自指面（判据本身） | IN PROGRESS（#188） | 旧判据扫整条 assert，既把 11 条「builder 造输入 + 写死期望」误点成自指，又漏掉 `expected = helper(...)` 与只经属性链触到生产两种**危险方向**。改为逐操作数判定 + 提升「生产自证期望」为默认判别式（首版读 45 条被否，因为把 `ddl.Column(...)`/`model_json_schema`/`pytest.approx(x*0.8)` 一并误伤）；新抓到并诚实重写 5 处（`test_c85_runner:160/161` 冻结 pipeline id、`test_run_ledger_database_clock:235` 黄金 µs、`test_sina_fzb_fanout_journal:972/975-977` 双方言黄金、`test_ths_csi500_sample_composition:732` 用测试自取的 `os.stat` 证据）。反例测试 35 passed，四面面名未改（族哈希按 cell id + 面名，不因计数失效）；**入账必须等 CI 的 `--sync-ratchet`** |
-| AFI `Backend - Unit Tests` 偶发红一条 | OPEN（非本轮引入） | `test_ai_research_holdout_worker.py::test_cross_worker_crash_after_checkpoint_recovers_without_redispatch` 在一次 py3.11 xdist 全量里红、同 run py3.12 绿、重跑绿；本机 13 passed。根因读清：唯一 PASSED 通路是 `holdout_worker.py:359-385` 接受 `HOLDOUT_FINALIZE_LEASE_EXPIRED/_STALE` 后就地 observed-recovery 结算，条件是 1 秒租约在「派发 CAS→checkpoint 提交」这段 ~20 ms 内到期，需约 50 倍膨胀；纯加负载不可复现，注入 `_StallAfterResultJournal(1.05)` 逐次复现。修法是解耦两臂并用数据库时间**确定性地**令租约过期，不是加大超时；同族脆弱性见 `tests/asset_research/test_task_runner.py:407-410`。**同时暴露一条属主决定**：丢租约的 worker 可否自己结算（有 DB 时间 CAS + generation 双栅栏，不会二次结算） |
+| AFI `Backend - Unit Tests` 偶发红一条 | **DONE（#267 `47767a2b2` 已合入）** | `test_ai_research_holdout_worker.py::test_cross_worker_crash_after_checkpoint_recovers_without_redispatch` 在一次 py3.11 xdist 全量里红、同 run py3.12 绿、重跑绿；本机 13 passed。根因读清：唯一 PASSED 通路是 `holdout_worker.py:359-385` 接受 `HOLDOUT_FINALIZE_LEASE_EXPIRED/_STALE` 后就地 observed-recovery 结算，条件是 1 秒租约在「派发 CAS→checkpoint 提交」这段 ~20 ms 内到期，需约 50 倍膨胀；纯加负载不可复现，注入 `_StallAfterResultJournal(1.05)` 逐次复现。修法是解耦两臂并用数据库时间**确定性地**令租约过期，不是加大超时；同族脆弱性见 `tests/asset_research/test_task_runner.py:407-410`。**同时暴露一条属主决定**：丢租约的 worker 可否自己结算（有 DB 时间 CAS + generation 双栅栏，不会二次结算） |
 
 | OpenData `quality gate` 偶发红一条的真实位置 | IN PROGRESS（#194） | #189 只改了三个**进程内** marker 发布点；红来自 `_write_test_worker()` **生成的子脚本源码**——五种模式仍写 `open(marker,'w')`（截断在前、写入在后，被抢占的子进程留下「存在但为空」的 marker，父进程 `int(read_text())` 报 `ValueError: invalid literal for int() with base 10: ''`，作业 `41855342867`/job `126662332027`）。守卫按 open 的**操作数**判定而非变量名，因为 `before_command` 模式 open 的是烤进源码的绝对路径；pre/post 实测 pre-fix 五处全部截断 marker 且 0 处 rename，post-fix 全部只截断 `.partial` 且 5/5 rename |
 | OpenData AC-16\|08 README 免责字面 | 已修，待 CI 重钉（#195） | 属主裁定「两句都保留」。本机 `--item 'AC-16\|08'` 实测 `disclaimer_body_ok: no → yes`、VERDICT `gap → proven`。账本必须由 dispatch 作业 `41936345046` 的 `--sync-ratchet` 工件出，不得手改哈希 |
@@ -305,6 +305,13 @@ OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查d
 （含本轮新增的冻结工具与锚工具测试）都不跑；而整套在本机 **238 passed in 1.10s**（CI 镜像 venv）。
 所以这是**覆盖面缺口，不是坏测试**：补一个 `pytest scripts/ci/tests` 步骤即可，属 workflow 改动（R3），
 留在属主手里。
+
+补一条同日复核：上表第 247 行（`test_cross_worker_crash_after_checkpoint_recovers_without_redispatch`
+偶发红）的状态也过期了。该测试的修复就是 **#267 `47767a2b2`**（"make the checkpoint-crash recovery test
+independent of runner speed"）——两臂已按该行要求改写：crash 臂用生产默认 300s 租约使过期不可能落在
+dispatch→checkpoint 之间，recovery 臂改用数据库时间确定性过期而不是 `asyncio.sleep(1.1)`。本机复跑
+**1 passed in 2.03s**。仍开放的只是该行附带暴露的**设计问题**（丢租约的 worker 能否自己结算），
+那是属主裁定，不是这条 flake。
 
 仍然 OPEN、且本机不可闭合（保持诚实登记）：#257 合并集成税形状、#268 OD 重复触发、#269 源主机不可达、
 #266/#267 测量环境危害、#277 部署机制、#260 的 7 个脚本、AC11 的属主签字、AC13 单写者实现与七连测、
