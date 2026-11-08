@@ -15,6 +15,26 @@ from app.models.akshare_mgmt import ScheduledTask, TaskExecution, TaskStatus, Tr
 from app.services.akshare.clock import utcnow_naive
 
 
+def failure_frame_trace(exc: BaseException, *, limit: int = 24) -> str:
+    """Where the exception was raised and through which frames, without locals or messages.
+
+    A traceback's text carries whatever the raising code put in it -- DSNs, tokens,
+    request payloads -- so the ledger stores the frame chain instead: it answers
+    "where did it die" without copying values that must not be persisted.
+    """
+    lines: list[str] = []
+    tb = exc.__traceback__
+    seen = 0
+    while tb is not None and seen < limit:
+        code = tb.tb_frame.f_code
+        lines.append(f"{code.co_filename}:{tb.tb_lineno} in {code.co_name}")
+        tb = tb.tb_next
+        seen += 1
+    if tb is not None:
+        lines.append(f"... truncated after {limit} frames")
+    return "\n".join(lines)
+
+
 class AkshareExecutionService:
     """Service for creating and querying akshare execution records."""
 
