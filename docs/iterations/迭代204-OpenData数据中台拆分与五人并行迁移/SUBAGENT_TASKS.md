@@ -300,6 +300,12 @@ OpenData PR #132 在限定隔离范围有487项通过、1项既有OpenAPI检查d
 | 采集平面 `import-untyped` 40（stub 决定） | 数字更新为 **2**，其余不变 | 40 是 pandas-2+stubs 尺子的读数；CI 环境里该族只有 2 条 dateutil。#305/#308/#314/#319 之后 CI 读 2，属主"不为 stub 动 types-requests"的裁定与该数字无关 |
 | AFI "部署"三件套 | 仍 OPEN（机制），但本日两次部署均留 provenance | 19:26:47Z（#316）与 03:29:01Z（`03efa57002`）：HEAD、alembic current/heads、`ExecMainStartTimestamp`、`/docs` 与 `NRestarts` 都记在 wave 31 证据里。缺的仍是"脏树拒启 + unit 钉到显式 checkout" |
 
+另补一条实测（2026-11-08）：「`scripts/ci/tests` 不在任何 CI 作业里」这一行，当前实况是
+**12 个 Python 测试文件里只有 `test_check_deps_sync.py` 被 CI 跑到**（`ci.yml:76`），其余 11 个
+（含本轮新增的冻结工具与锚工具测试）都不跑；而整套在本机 **238 passed in 1.10s**（CI 镜像 venv）。
+所以这是**覆盖面缺口，不是坏测试**：补一个 `pytest scripts/ci/tests` 步骤即可，属 workflow 改动（R3），
+留在属主手里。
+
 仍然 OPEN、且本机不可闭合（保持诚实登记）：#257 合并集成税形状、#268 OD 重复触发、#269 源主机不可达、
 #266/#267 测量环境危害、#277 部署机制、#260 的 7 个脚本、AC11 的属主签字、AC13 单写者实现与七连测、
 #303 的分支决定、#262 的 dependabot 主版本升级。
