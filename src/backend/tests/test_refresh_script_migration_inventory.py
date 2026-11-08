@@ -721,12 +721,14 @@ class TestRealInventoryFaithfulness:
         assert sum(report.kinds.values()) == report.counts["total"]
 
     def test_derived_columns_agree_with_generation_commit_apart_from_known_stale_rows(self) -> None:
-        """The four stale rows are measured, not assumed away.
+        """The stale-row set is measured, not assumed away.
 
-        Deriving from the commit the CSV was generated from reproduces the recorded columns for
-        all but four rows; those four record ``classes=`` symbols that exist in no ``.py`` file in
-        this repository's history, so they were already stale when written. This test locks in that
-        the exception set stays exactly those four rows and does not grow.
+        The recorded columns now come from the re-anchored CSV (tree ``74e2a0570a``): deriving them
+        from the generation commit ``29afaeb47`` reproduces every row except ``akshare_catalog_batch.py``,
+        which gained the class ``_CatalogStats`` in between. Before the re-anchor the CSV carried four
+        ``classes=`` values that existed in no ``.py`` file in this repository's history; those rows are
+        gone because the recorded columns no longer come from that derivation. This test locks the
+        exception set so a future re-anchor cannot silently widen it.
         """
         snapshot = os.environ.get("INVENTORY_SNAPSHOT_COMMIT", "29afaeb47")
         if (
@@ -766,9 +768,4 @@ class TestRealInventoryFaithfulness:
                 stale.append(source_path)
 
         assert checked == 1057
-        assert sorted(Path(path).name for path in stale) == [
-            "forex_hist_em.py",
-            "fx_spot_quote.py",
-            "stock_zh_index_daily.py",
-            "stock_zh_index_daily_em.py",
-        ]
+        assert sorted(Path(path).name for path in stale) == ["akshare_catalog_batch.py"]
