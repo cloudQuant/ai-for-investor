@@ -1,0 +1,82 @@
+{
+  "task_id": 1049,
+  "since": "2026-11-07T19:26:47Z",
+  "task": {
+    "id": "1049",
+    "name": "Iteration203 crypto_hourly_market",
+    "is_active": "1",
+    "schedule_expression": "3 * * * *",
+    "timeout": "600",
+    "last_execution_at": "2026-11-08 01:03:20",
+    "next_execution_at": "2026-11-08 02:03:00"
+  },
+  "timeout_runs_duration_ge_599": 0,
+  "by_status": [
+    {
+      "status": "completed",
+      "min_s": "18.0",
+      "max_s": "31.0",
+      "avg_s": "24.166666666666668",
+      "first_at": "2026-11-07 20:03:00",
+      "last_at": "2026-11-08 01:03:00",
+      "n": 6,
+      "grew": 6
+    }
+  ],
+  "recent": [
+    {
+      "start_time": "2026-11-08 01:03:00",
+      "end_time": "2026-11-08 01:03:20",
+      "duration": "20.0",
+      "status": "completed",
+      "rows_before": "1715230",
+      "rows_after": "1715260",
+      "err": ""
+    },
+    {
+      "start_time": "2026-11-08 00:03:00",
+      "end_time": "2026-11-08 00:03:18",
+      "duration": "18.0",
+      "status": "completed",
+      "rows_before": "1715200",
+      "rows_after": "1715230",
+      "err": ""
+    },
+    {
+      "start_time": "2026-11-07 23:03:00",
+      "end_time": "2026-11-07 23:03:31",
+      "duration": "31.0",
+      "status": "completed",
+      "rows_before": "1715170",
+      "rows_after": "1715200",
+      "err": ""
+    },
+    {
+      "start_time": "2026-11-07 22:03:00",
+      "end_time": "2026-11-07 22:03:25",
+      "duration": "25.0",
+      "status": "completed",
+      "rows_before": "1715140",
+      "rows_after": "1715170",
+      "err": ""
+    },
+    {
+      "start_time": "2026-11-07 21:03:00",
+      "end_time": "2026-11-07 21:03:26",
+      "duration": "26.0",
+      "status": "completed",
+      "rows_before": "1715110",
+      "rows_after": "1715140",
+      "err": ""
+    },
+    {
+      "start_time": "2026-11-07 20:03:00",
+      "end_time": "2026-11-07 20:03:25",
+      "duration": "25.0",
+      "status": "completed",
+      "rows_before": "1715064",
+      "rows_after": "1715110",
+      "err": ""
+    }
+  ]
+}
