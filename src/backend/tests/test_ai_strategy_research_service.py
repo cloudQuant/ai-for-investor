@@ -101,6 +101,11 @@ from app.services.strategy.core import _runtime_metadata_from_copilot_request
 from app.services.workspace_service import WorkspaceService
 from app.utils.security import decode_access_token
 
+# These pipeline tests drive real sandbox-strategy validation; under coverage and four-way xdist
+# the validator bootstrap alone can take 15s, so several legitimately exceed the suite's 60s
+# ceiling. The timeout stays enforced — this module just gets headroom instead of a silent kill.
+pytestmark = pytest.mark.timeout(180)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
