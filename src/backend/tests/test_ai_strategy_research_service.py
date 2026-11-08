@@ -14240,7 +14240,13 @@ async def test_ai_strategy_research_task_api_runs_generated_goal_full_pipeline(
         )
 
         payload = None
-        for _ in range(30):
+        # A fixed iteration count is a wall-clock claim in disguise: 30 polls with a 10 ms
+        # sleep is 0.3 s of budget, and a loaded runner that needs 0.31 s fails on
+        # "running" != "completed". Poll against a deadline instead, so the assertion
+        # states the pipeline's outcome rather than the machine's speed.
+        loop_time = asyncio.get_running_loop().time
+        deadline = loop_time() + 60.0
+        while loop_time() < deadline:
             status_response = await client.get(
                 f"/api/v1/strategy/ai-research/tasks/{task_id}",
                 headers=auth_headers,
@@ -14249,7 +14255,7 @@ async def test_ai_strategy_research_task_api_runs_generated_goal_full_pipeline(
             payload = status_response.json()
             if payload["status"] == "completed":
                 break
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.02)
 
         assert payload is not None
         assert payload["status"] == "completed"
