@@ -5,11 +5,10 @@ accepted. Entries are added only after re-verifying the SHA against the action's
 upstream tag refs (``GET /repos/<owner>/<repo>/git/refs/tags``) so a bump to an
 unreviewed commit cannot slip through any contract test.
 
-This module stays stdlib-only so it is importable from
-``scripts/ci/tests/test_check_deps_sync.py``, which is currently the only
-``scripts/ci/tests`` file the GitHub Actions CI (``.github/workflows/ci.yml``)
-executes. Keeping the drift guard here means the next unreviewed pin bump trips a
-test that actually runs.
+This module stays stdlib-only so it is importable from every
+``scripts/ci/tests`` module. The ``Check - Deps Sync`` job runs the whole directory
+(``python -m pytest -q scripts/ci/tests``), so the drift guard here trips in CI on
+the next unreviewed pin bump.
 """
 
 from __future__ import annotations
