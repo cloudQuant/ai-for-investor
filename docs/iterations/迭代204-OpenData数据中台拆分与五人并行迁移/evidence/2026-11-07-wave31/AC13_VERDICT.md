@@ -27,3 +27,15 @@ PR #306 (merged) fixes exactly that; it was deployed at 2026-11-07T17:22:14Z (`a
 `ak_task_executions.created_at`/`start_time` are UTC: the newest `triggered_by='scheduler'`
 row reads 2026-11-07 19:03 while `UTC_TIMESTAMP()` was 19:04:27 (DB `NOW()` was 11-08 03:04 CST).
 A CST reading would have put the newest row 8 hours in the future.
+
+## Post-deploy check, 2026-11-07T22:45:52Z (after the 22:30Z slot)
+
+`ac13-postdeploy-20261107T224552Z.json`:
+
+- executions after deactivation: **48** — identical to the 18:59Z reading;
+- newest execution ever: **2026-11-07 01:43:00** — unchanged;
+- the 22:30:00Z–22:45:00Z slots that produced **41 executions** under the old code produced **zero**.
+
+So the #306 mechanism (do not register deactivated jobs; drop them on reload) holds for the first
+cron family. The second family's slots are 2026-11-08T00:35Z–01:43Z; that batch is the remaining
+half of the check.

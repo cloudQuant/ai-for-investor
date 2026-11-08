@@ -1,0 +1,46 @@
+{
+  "task_id": 1049,
+  "since": "2026-11-07T19:26:47Z",
+  "task": {
+    "id": "1049",
+    "name": "Iteration203 crypto_hourly_market",
+    "is_active": "1",
+    "schedule_expression": "3 * * * *",
+    "timeout": "600",
+    "last_execution_at": "2026-11-07 21:03:26",
+    "next_execution_at": "2026-11-07 22:03:00"
+  },
+  "timeout_runs_duration_ge_599": 0,
+  "by_status": [
+    {
+      "status": "completed",
+      "min_s": "25.0",
+      "max_s": "26.0",
+      "avg_s": "25.5",
+      "first_at": "2026-11-07 20:03:00",
+      "last_at": "2026-11-07 21:03:00",
+      "n": 2,
+      "grew": 2
+    }
+  ],
+  "recent": [
+    {
+      "start_time": "2026-11-07 21:03:00",
+      "end_time": "2026-11-07 21:03:26",
+      "duration": "26.0",
+      "status": "completed",
+      "rows_before": "1715110",
+      "rows_after": "1715140",
+      "err": ""
+    },
+    {
+      "start_time": "2026-11-07 20:03:00",
+      "end_time": "2026-11-07 20:03:25",
+      "duration": "25.0",
+      "status": "completed",
+      "rows_before": "1715064",
+      "rows_after": "1715110",
+      "err": ""
+    }
+  ]
+}
