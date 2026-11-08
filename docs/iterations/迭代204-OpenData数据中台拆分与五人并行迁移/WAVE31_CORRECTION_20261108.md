@@ -55,3 +55,17 @@ Wave 31 正文与附录把"停用后是否仍触发"写成 "AC13 判定"。**AC1
 说明 60s 在四路 xdist + 覆盖率下是**争用越界**，不是死锁。处置：给该模块
 `pytestmark = pytest.mark.timeout(180)`（全局仍 60s），并在 PR 里写明这是"给出上限内的余量"，
 不是移除超时。是否要在 CI 上进一步降低争用（例如把该模块串行化），留给后续 CI 债务决策。
+
+## 5. 采集平面棘轮已在 CI 上生效（不是本机读数）
+
+dev `dcf60f8a2e`（基线文件合入后的第一个 dev 推送）的采集作业打印：
+
+```
+mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108
+```
+
+run `42427667093` / job `128569391629`（completed success）。这是 **CI 自己**在带基线文件的树上
+跑出来的对照行，证明三件事同时成立：基线路径被 ratchet 真正读到（`scripts/ci/`）、
+`mypy_version` 字段与 `mypy --version` 逐字一致（否则会因版本不匹配直接退出）、
+平面文件数没有缩（`checked=1108`）。采集平面从此有下限；最后 2 条仍是 dateutil stub，
+清到 0 需要属主把 `types-python-dateutil` 加进 lock。
