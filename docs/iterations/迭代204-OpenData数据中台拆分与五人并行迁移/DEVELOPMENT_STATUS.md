@@ -3447,7 +3447,7 @@ AC14 是自然周期项，后像要按连续槽位累计；**判定仍为 NOT-PR
 1. **dev `7c8f6f2f12f` 的 CI 是红的**，run `42472229710` 27 个作业里唯一失败的是
    `Security - Secret Scan (177 §D)`（作业 `128705525478`，14 s exit 2）。日志没有 gitleaks 命中，
    只有 `curl: (56) Connection died` + `tar: Error is not recoverable`；原样 rerun（作业
-   `128754894980`）不改任何东西就转绿。此前 20 个 dev CI run 该成员 19/19 首尝试通过。
+   `128754894980`）不改任何东西就转绿。最近 20 个 dev CI run 里该成员的最新 attempt 19 个为绿，第 20 个即本头（其最新 attempt 是那次 rerun）；仪器读的是最新 attempt，故不写成"首尝试 19/19"。
    修法在 **#331**：下载先落盘（`--fail --retry 5 --retry-all-errors --output`）再解包，
    并把 `gitleaks_history_baseline.json` 里 `gitleaks_version` 从装饰字段变成判据
    （workflow 必须恰好钉一个版本且等于审计版本）。三种故障形态由

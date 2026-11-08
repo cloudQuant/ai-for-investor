@@ -24,9 +24,13 @@ tar: Error is not recoverable: exiting now
 仓库里其它 26 个作业（py3.11/3.12 单测、四个 mypy ratchet 子集、前端五成员、集成、E2E）全绿。
 原样 rerun 那一个作业（attempt 2，作业 `128754894980`）不改任何东西就 `completed success`。
 
-分母（不是轶事）：截至该头之前 20 个 dev `CI - Quality Checks` run，该成员在它记录的 attempt 上
-**19/19 success**；第 20 个就是本头。整体 conclusion 为 failure 的
-`801a4efa143 / f9a62106247 / 96741b8af8b / 3325626f969` 四个 run 红在别的作业，不在这里。
+分母（不是轶事）：仪器对最近 20 个 dev `CI - Quality Checks` run 逐个取
+`Security - Secret Scan (177 §D)` 的**最新 attempt**，19 个为 success，第 20 个就是本头——它的最新
+attempt 也是 success，但那是 rerun（`128754894980`），首尝试 `128705525478` 失败。
+因此这句话能撑住的是"这 19 个 run 记录在案的是绿"，**不能**据此断言它们从未失败过：要断言
+"首尝试"必须逐 run 取 attempt 列表，本轮没有做，所以不这么写。
+整体 conclusion 为 failure 的 `801a4efa143 / f9a62106247 / 96741b8af8b / 3325626f969` 四个 run，
+该成员同样绿——红在别的作业。
 
 处置 = PR #331（下载先落盘再解包 + `--fail --retry` + `gitleaks_version` 第一次变成判据 +
 `scripts/ci/tests/test_gitleaks_install_step.py` 6 条回归 + loopback 执行 workflow 原文的仪器）。
