@@ -3439,3 +3439,34 @@ AC14 是自然周期项，后像要按连续槽位累计；**判定仍为 NOT-PR
 
 不替属主签 disposition；不把本机读数当基线（基线只取 CI 那一行）；不在采集面 PR 未合时冻结 AC01 锚；
 不把"停用后 01:43Z 没有新执行"写成 AC13 已修复；不把 PR 合并、测试通过或仪器产出当成 AC 判定闭合。
+
+### Wave 32（2026-11-08）：dev 头红了一次，红的原因是"工具没下来"而不是"扫到东西"
+
+完整读数与仪器见 [WAVE32_MEASUREMENTS_20261108.md](WAVE32_MEASUREMENTS_20261108.md)。
+
+1. **dev `7c8f6f2f12f` 的 CI 是红的**，run `42472229710` 27 个作业里唯一失败的是
+   `Security - Secret Scan (177 §D)`（作业 `128705525478`，14 s exit 2）。日志没有 gitleaks 命中，
+   只有 `curl: (56) Connection died` + `tar: Error is not recoverable`；原样 rerun（作业
+   `128754894980`）不改任何东西就转绿。此前 20 个 dev CI run 该成员 19/19 首尝试通过。
+   修法在 **#331**：下载先落盘（`--fail --retry 5 --retry-all-errors --output`）再解包，
+   并把 `gitleaks_history_baseline.json` 里 `gitleaks_version` 从装饰字段变成判据
+   （workflow 必须恰好钉一个版本且等于审计版本）。三种故障形态由
+   `evidence/2026-11-08-wave32/gitleaks_install_step_sim.py` 直接执行 workflow 原文测得：
+   截断流下旧形状 exit 2、新形状 exit 0（服务器记 2 次请求）；恒 500 下新形状 exit 22 且 `tar`
+   未被调用。回归测试 6 条进 `scripts/ci/tests`，整套本机 **244 passed**。
+2. **OpenData 两行 `IN PROGRESS` 改成 `DONE`，证据全部来自 CI 工件**：行 246（AC-17|08 判据）——
+   #188 的 diff 只删 `AC-17|08` 那一块 `stale-proof` 钉，dispatch run `42404291048` 的
+   `--sync-ratchet` 重算后 `git diff` 为空、工件与 `origin/dev` 文件 sha256 相同，且主干
+   `gate-log` 里 `tests/test_shell_audit_self_reference.py` **35 条反例全部 PASSED**；
+   行 249（marker 偶发红）——#194 之后 7 个产 `gate-log` 的主干 run 里
+   `invalid literal for int` 复发 **0**，三条红分别指名 `acceptance-probe-check`（两次，
+   都是棘轮如实报"新增存量"`AC-5|07`、`AC-1|08`）与 `test-cov` 的 sqlalchemy Timeout。
+3. **本轮推翻的一次自我误读**：只看 Actions console 会得出"OD 主干不跑 pytest、#188 的反例只在
+   笔记本上跑过"。错——dispatch run 本来只跑 `security-bundle-rebuild`，而 dev push run 把完整
+   输出写进 `gate.log` 工件、console 只打印过滤尾巴。结论按验收协议固化：**OD 侧"跑没跑"只能从
+   工件判，不能从 console 判**。本节所有 OD 数字都取自工件（`13585551963`、`13587683079`）。
+
+#### 本波不做的事
+
+不替属主裁定 `#303`/`#262`/采集脚本 7 个未入库文件；不把 rerun 转绿写成"门禁本来就绿"；
+不在本机复现 gitleaks 扫描本身（`github.com` 不可达）；不因两行 OD 状态改判而声称任何 AC 前进。
