@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-08T14:25:21Z",
+  "generated_at_utc": "2026-11-08T14:27:41Z",
   "workflow_under_test": ".github/workflows/ci.yml",
   "before_ref": "7c8f6f2f12f9ac325a6a1608f340b4ea8c8a7b92",
   "shell": "bash -eo pipefail (the runner's default for run steps)",

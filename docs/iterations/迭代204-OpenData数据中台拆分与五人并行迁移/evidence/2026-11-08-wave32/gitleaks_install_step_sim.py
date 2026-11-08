@@ -32,7 +32,9 @@ def build_archive(path: pathlib.Path, version: str) -> None:
     staging = path.parent / "staging"
     staging.mkdir(parents=True, exist_ok=True)
     binary = staging / "gitleaks"
-    binary.write_text(f'#!/bin/sh\necho "gitleaks version {version}"\n', encoding="utf-8")
+    binary.write_text(
+        f'#!/bin/sh\necho "gitleaks version {version}"\n', encoding="utf-8"
+    )
     binary.chmod(0o755)
     with tarfile.open(path, "w:gz") as handle:
         handle.add(binary, arcname="gitleaks")
@@ -146,7 +148,9 @@ def main() -> int:
         required=True,
         help="git ref whose ci.yml still holds the pre-fix step",
     )
-    ap.add_argument("--repo", default=".", help="git repository to read --before-ref from")
+    ap.add_argument(
+        "--repo", default=".", help="git repository to read --before-ref from"
+    )
     ap.add_argument("--root", default="/tmp/it204/gitleaks-sim")
     args = ap.parse_args()
 

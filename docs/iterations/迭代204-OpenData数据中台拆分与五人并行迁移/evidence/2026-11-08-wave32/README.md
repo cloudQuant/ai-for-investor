@@ -47,7 +47,7 @@ retry behaviour is observable rather than asserted.
 | case | before fix | after fix |
 | --- | --- | --- |
 | clean | exit 0, binary reports `gitleaks version 8.30.1` | identical |
-| first response truncated mid-body | exit 2, `tar: Error is not recoverable` (the CI signature) | exit 0 after 2 requests, `curl: (18) end of response with 578 bytes missing` stays in the log |
+| first response truncated mid-body | exit 2, `tar: Error is not recoverable` (the CI step's last line) | exit 0 after 2 requests, `curl: (18) end of response with 578 bytes missing` stays in the log |
 | release host answers 500 every time | exit 2, `gzip: stdin: not in gzip format` | exit 22, `curl: (22) The requested URL returned error: 500` after 6 requests, `tar` never invoked |
 
 The fixed step therefore (a) survives a transient release-host failure, and
