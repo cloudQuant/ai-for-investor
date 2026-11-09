@@ -1421,19 +1421,22 @@ async def _managed_repair(
     from app.services.akshare.script import AkshareScriptService
 
     claim_key, period_key, identity = _claim_identity(snapshot, source_timeout_seconds)
+    # Claim identity and digests are execution provenance, not upstream function
+    # parameters; `_` prefixes keep them in the execution record while the
+    # script executor strips them before calling the data function.
     parameters: dict[str, Any] = {
         **identity["parameters"],
         "source": source,
-        "claim_key": claim_key,
-        "period_key": period_key,
-        "source_identity": SOURCE_IDENTITY,
-        "raw_content_sha256": snapshot.raw_content_sha256,
-        "normalized_ledger_sha256": snapshot.normalized_ledger_sha256,
-        "first_source_date": snapshot.first_source_date,
-        "last_source_date": snapshot.last_source_date,
+        "_claim_key": claim_key,
+        "_period_key": period_key,
+        "_source_identity": SOURCE_IDENTITY,
+        "_raw_content_sha256": snapshot.raw_content_sha256,
+        "_normalized_ledger_sha256": snapshot.normalized_ledger_sha256,
+        "_first_source_date": snapshot.first_source_date,
+        "_last_source_date": snapshot.last_source_date,
     }
     if dispatch_receipt is not None:
-        parameters["dispatch_receipt"] = dict(dispatch_receipt)
+        parameters["_dispatch_receipt"] = dict(dispatch_receipt)
     async with async_session_maker() as session:
         service = AkshareScriptService(session)
         return await service.run_script(
