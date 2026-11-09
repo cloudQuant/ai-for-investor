@@ -228,3 +228,17 @@ same tail-gap shape seen before the series fix and needs one symbol traced end-t
 vs the script's effective parameters vs committed rows) — registered open, not explained away.
 Pre-fix batches for contrast: 13:07Z 10 backfill_failed; 13:35Z and 13:43Z 9 each with
 `post_write_sequence_mismatch`; from 13:52Z the verified rate is 515 verified vs 5 tail-gap failures.
+
+## 21. Residual stock tail gap — reruns extend, execution history over-claims
+
+All five symbols from §20 were rerun standalone through the same script against `akshare_data`:
+000862 6345→6355, 000910 6533→6543, 000911 6503→6513, 000912 6146→6156, 001229 1020→1030;
+each gained exactly the ten sessions 10-27..11-09 and now ends at 2026-11-09. So the data plane and the
+script can write the tail.
+
+The earlier executions are the open question: execution 34498 (17:43Z, symbol 001229, window
+20220808-20261109) reports `committed_writes=[{row_count: 1030, table_name: STOCK_ZH_A_HIST}]`, yet no
+row for that symbol has `created_at` inside 17:40-17:50Z. In other words the receipt claims a commit
+that did not persist. That is the same shape as the bond zero-row chain but at the receipt layer, and it
+is registered **open** — the next step is to run one such symbol through the child-worker path with DB
+credential logging to see whether the child's connection differs from the in-process path.
