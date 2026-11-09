@@ -146,3 +146,14 @@ are source-side (Eastmoney proxy absent, DCE/macro endpoints empty, >150 s endpo
 stays explicit: these executions were manually triggered through the production service; scheduler
 cadence is evidenced separately by the timer batches.
 Artifacts: `/tmp/it204/ac11_cumulative{5..13}/`; per-tranche JSON in `/tmp/it204/ac11_notrun_batch{,2..8}.json`.
+
+## 15. Scheduler cadence since the 12:39Z restart
+
+Direct DB reading (`ai_for_investor.ak_task_executions`, read-only):
+- scheduler-triggered: **491 executions across 475 distinct tasks** since 2026-11-09 12:39Z
+- manual-triggered: 620 executions in the same window (the manual AC11 tranches)
+- hourly: 12Z 7, 13Z 33, 14Z 28, 15Z 27, 16Z 180, 17Z 216
+
+The 16Z/17Z jump follows the write-chain fixes: overdue tasks finally completed instead of failing at
+the first private parameter. This is the scheduler-side counterpart to the manual AC11 coverage and
+keeps the two kinds of evidence separate.
