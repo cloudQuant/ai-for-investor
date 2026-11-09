@@ -284,6 +284,53 @@ OpenData 里 **`.py` 脚本是惰性参考物**，不被任何 loader 发现；�
 | D7 | 22 个无任务目录项、9 幽灵注册、7 运行时幽灵的去留 | B6 |
 | D8 | 长尾（not_run 428 + no_delta 148）是否接受「暂不迁移」并登记 | 验收口径 |
 
+### 7.1 D5（单写者接线）的可执行方案：一处调用点，一个开关
+
+AC13 的实现已在 dev（`run_coordinator.py` 601 行 + `write_fence.py` + 迁移 + 19 个测试），
+缺的是生产路径上的接线。接线点是一处，不是一处架构改造：
+
+现在 `services/akshare/script.py:1690` 这样开围栏：
+
+```python
+fence_token = set_write_fence(
+    claim_key=f"akshare_script:{script.script_id}",
+    owner_id=str(execution.execution_id),
+    fencing_token=int(execution.id),      # <-- 每次执行的局部序号
+    execution_id=str(execution.execution_id),
+)
+```
+
+`fencing_token` 取的是**执行行 id**，不是 claim 的单调令牌——所以晚到的旧 worker 不会被令牌挡住，
+这正是「单写者」缺的那一跳。接上 coordinator 之后形状是：
+
+```python
+if settings.akshare_run_coordinator_enabled:
+    outcome = await coordinator.try_claim(
+        claim_key=f"akshare_script:{script.script_id}",
+        owner_id=str(execution.execution_id),
+        task_id=task_id, script_id=script.script_id, source=source,
+        period_key=period_key, parameter_hash=parameter_hash,
+        parameters=parameters, max_attempts=...,
+    )
+    if outcome.state != "claimed":
+        # 不跑，按冲突/未到期结算这次执行行，并写清 reason
+        ...
+    await coordinator.set_execution_id(outcome.lease, str(execution.execution_id))
+    fence_token = set_write_fence(..., fencing_token=outcome.lease.fencing_token, ...)
+else:
+    ...现有路径...
+```
+
+并在同一函数的收尾处按结果调用 `complete` / `fail` / `cancel`，外加一个用
+`recoverable_claims()` 的回收循环。`RunLease.fencing_token` 才是随 claim 单调递增的令牌
+（`run_coordinator.py:59-68, 93-138`）。
+
+**为什么这需要属主裁定而不是直接写**：开关的默认值决定生产行为；29,126 条历史 claim 行
+（迁移已建表）在开关打开时会被 `try_claim` 视作已有占用还是历史噪声，取决于滚动策略；
+以及 `period_key` / `parameter_hash` 的取值口径（`cron:<UTC ISO>` vs `day:<Shanghai date>`，
+见 `try_claim` docstring）会直接改变哪些手动运行被允许。这三件都不是代码能替属主定的。
+**代码量可估**：1 个调用点 + 3 个收尾调用 + 1 个回收循环 + 1 个设置项 + 测试，属于 S 级改动。
+
 ---
 
 ## 8. 本计划不声称的事
