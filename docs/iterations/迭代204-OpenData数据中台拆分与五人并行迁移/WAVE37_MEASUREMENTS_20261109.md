@@ -80,9 +80,9 @@ scheduled then.
 
 ## 8. Late readings (same day, 16:27Z)
 
-- AC11 numerator continued to rise as converted tasks ran: 513 (15:55Z) → 516 (16:00Z) → 521 (16:18Z)
-  → the figure in §8 of this update file's commit message; see the artifact below for the exact
-  final reading.
+- AC11 numerator continued to rise as converted tasks ran: 513 (15:55Z) → 516 (16:00Z) → 521
+  (16:18Z) → **522/1048 (16:27Z, completed_no_delta 162, failed_only 21, not_run 343)**; artifact
+  `/tmp/it204/ac11_cumulative5/ac11_runtime_evidence.json`, same `--since` window.
 - `etf_minute_hist_em` (task 390) completed with a 150-second timeout (45 s was too short); two other
   endpoints (`macro_china_nbs_region`, `foreign_futures_history_em`) still time out at 150 s and stay
   source-side failures.
