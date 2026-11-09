@@ -235,6 +235,29 @@ inotify/句柄资源耗尽（`No space left on device`）→ 直到 `13:57Z` 才
 **357 个「还没轮到」+ 68 个「被一次 13 小时停机漏掉一个周频槽位」**。
 同时它也是一次**从未被登记的服务可用性事故**——本迭代的部署记录里没有它。
 
+
+### 3.4 「7 行 `unexpected_param`」到底是哪七个：3 个脚本、一组脚本没实现的新参数
+
+先说口径，避免把两个数字当成矛盾：普查的 `unexpected_param:_ingest_mode` **7 行指的是「任务参数里含这个不被
+签名接受的键」的 7 个任务**，不是 7 个运行时都先报 `_ingest_mode`。逐个列出（census 2026-11-09T05:30Z）：
+
+| task | script | 不被签名接受的键 | 入口签名 |
+|---|---|---|---|
+| 514 / 1051 / 1052 / 1101 / 1102 | `daily_market_data` | `_ingest_mode`, `calendar_review_by_market`, `overlap_days`, `trading_days_by_market` | `futures/weekly/daily_market_data.py:324` |
+| 389 | `etf_fund_hist_em` | `_ingest_mode`, `sleep_seconds`, `source` | `funds/weekly/etf_fund_hist_em.py:259` |
+| 650 | `stock_zh_index_daily` | `_ingest_mode`, `end_date`, `source_timeout_seconds`, `start_date` | `indexs/weekly/stock_zh_index_daily.py:113` |
+
+**所以这不是「剥掉一个多余的 `_ingest_mode`」那么简单**：3 个脚本各自缺一组参数，而且其中
+`start_date`/`end_date`、`overlap_days`、`source` 这些**会改变取数窗口或数据源**。三种修法的影响因此不同：
+
+- **(a) 让脚本接受这些参数**：等于实现它们，是**行为变更/扩范围**（可能拉更多历史、换源），需要按产品变更对待；
+- **(b) 分派边界过滤未知键**：一次修好 7 个任务，但会**静默丢弃** `start_date`/`source` 这类有语义的配置，
+  让任务按脚本的默认行为跑——数据窗口可能变窄而无人知道；
+- **(c) 清理这 7 行的任务参数**：可回滚、可审计，但同样放弃了这些配置所表达的意图。
+
+**结论**：这 7 行不是「修个名字」级别的缺陷，而是**参数契约与脚本实现之间的代际差**。
+选 (a) 还是 (b)/(c) 会改变采集覆盖范围，属主必须定；本轮只登记事实与影响，未改任何一侧。
+
 ## 4. AC14：33/48，无断点
 
 `evidence/2026-11-08-wave32/ac14_hourly_chain.py`，读数 `2026-11-09T05:02Z`：
