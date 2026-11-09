@@ -196,6 +196,43 @@ stock-tail-daily —— 它们会在重启后继续重试并继续失败（watch
 
 **本轮不实施**：让 5 个休眠任务开始写数据是行为变更，且 (a)/(b) 的取舍会影响全部 1048 个任务，需属主定。
 
+
+### 3.3 `not_run` 的深层成因：2026-11-05 一次 13 小时的调度器停机
+
+先把两个桶分开（`not_run` 425 个，2026-11-09T05:30Z 读数）：
+
+| 判据 | 数量 |
+|---|---|
+| **还没到点**（周频，上次执行在 7 天内，且期间没有到期槽位） | **357** |
+| **确实漏了 1 个槽位**（按 cron 到期日逐个对，全部首次漏在 `2026-11-05`） | **68** |
+
+（这里我先算错过一次：把 Shanghai 求值的 cron 当成 UTC，凭空得到「408 个漏槽」。修正时区后是 68。
+教训与 §5.2 同源——**调度器按 Asia/Shanghai 求值，执行记录是 UTC**。）
+
+**68 个的首次漏跑日期如此整齐，指向一次系统事件。** 查执行表：
+
+- `2026-11-05` 全天执行 **224** 条，而 11-04 是 538、11-06 是 478；
+- 按 UTC 小时看，**`01:00–12:59` 之间一条执行都没有**（11-04 则每小时都有）；
+- 精确边界：最后一条 `2026-11-05 00:45:00Z`，下一条 `2026-11-05 13:57:03Z` → **13 小时 12 分零执行**；
+- 断档前最后 5 条全是 `triggered_by=scheduler` 且 **failed**。
+
+**服务日志给出原因**（CST）：
+
+```
+08:45:17 Stopping ai-for-investor.service …
+08:47:32 -- Boot a3de2b3bb94d… --  Started ai-for-investor.service
+08:47:44 Main process exited, code=exited, status=3/NOTIMPLEMENTED   (restart counter 1)
+… 连续 5 次 status=3/NOTIMPLEMENTED …
+08:49:22 Failed to add control inotify watch descriptor …: No space left on device
+```
+
+即：**一次升级把服务停掉 → 新 boot 上启动即 `status=3/NOTIMPLEMENTED` 崩溃循环 → 第 5 次重启时
+inotify/句柄资源耗尽（`No space left on device`）→ 直到 `13:57Z` 才恢复**。
+
+**这条改变对 AC11 的读法**：`not_run` 不是 425 个「没在跑」的数据集，而是
+**357 个「还没轮到」+ 68 个「被一次 13 小时停机漏掉一个周频槽位」**。
+同时它也是一次**从未被登记的服务可用性事故**——本迭代的部署记录里没有它。
+
 ## 4. AC14：33/48，无断点
 
 `evidence/2026-11-08-wave32/ac14_hourly_chain.py`，读数 `2026-11-09T05:02Z`：
