@@ -157,3 +157,19 @@ Direct DB reading (`ai_for_investor.ak_task_executions`, read-only):
 The 16Z/17Z jump follows the write-chain fixes: overdue tasks finally completed instead of failing at
 the first private parameter. This is the scheduler-side counterpart to the manual AC11 coverage and
 keeps the two kinds of evidence separate.
+
+## 16. Correction to §9–§11, §14 and §15 — manual tranches were tagged as scheduler
+
+The manual AC11 tranches called `run_script(..., triggered_by=TriggeredBy.SCHEDULER)`, so their
+executions are indistinguishable from real scheduler runs in `ak_task_executions`. Consequences:
+
+- §15's "scheduler-triggered 491 executions / 475 distinct tasks" **cannot be attributed to the
+  scheduler**; those rows include the manual tranches.
+- The AC11 numerator (813/1048) is unaffected as a *capability* reading (the executions are real and
+  the tables grew), but it is **not** scheduler-cadence evidence. The §9–§11, §14 caveats stand:
+  manually triggered, attribution labelled.
+- `--triggered-by scheduler` on the instrument now reproduces 813 as well, which is exactly the
+  contamination — the filter is correct but the historical rows carry the wrong trigger value.
+  No rows were rewritten; execution history stays append-only.
+- Future manual runs must pass `TriggeredBy.MANUAL`. The instrument change adding `--triggered-by`
+  is on a branch, not yet merged.
