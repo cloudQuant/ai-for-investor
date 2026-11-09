@@ -869,6 +869,35 @@ def test_overview_reader_aggregates_unattributable_rows_and_provenance() -> None
     assert "WHERE symbol IS NULL" in executed
 
 
+def test_parameterless_select_keeps_literal_percent_formats() -> None:
+    """pymysql interpolates whenever args is not None, so () breaks a literal '%d'."""
+    connection = RecordingConnection(columns=_WAREHOUSE_COLUMNS, rows=[])
+    sql = (
+        "SELECT SUM(CASE WHEN `date` <> DATE_FORMAT(data_date, '%Y-%m-%d') "
+        "THEN 1 ELSE 0 END) AS rows_where_data_date_differs "
+        "FROM BOND_ZH_HS_COV_DAILY WHERE symbol IS NULL"
+    )
+
+    with controller.MySQLConvertibleReader(connection) as reader:
+        reader._execute(sql)
+
+    assert connection.executed == [(sql, None)]
+    with pytest.raises(TypeError, match="not enough arguments for format string"):
+        sql % ()
+
+
+def test_overview_business_date_probe_passes_no_args_to_the_driver() -> None:
+    connection = RecordingConnection(columns=_WAREHOUSE_COLUMNS, rows=[])
+
+    with controller.MySQLConvertibleReader(connection) as reader:
+        reader.read_convertible_history_overview()
+
+    probes = [item for item in connection.executed if "DATE_FORMAT(data_date" in item[0]]
+    assert probes, "the overview must probe business-date drift"
+    assert all(parameters is None for _, parameters in probes)
+    assert all("%Y-%m-%d" in sql for sql, _ in probes)
+
+
 def test_reader_refuses_any_statement_that_is_not_a_select() -> None:
     reader = controller.MySQLConvertibleReader(RecordingConnection(columns={"symbol"}, rows=[]))
 
@@ -898,7 +927,7 @@ class RecordingConnection:
     def __init__(self, *, columns: set[str], rows: list[dict[str, Any]]) -> None:
         self.columns = columns
         self.rows = rows
-        self.executed: list[tuple[str, tuple[Any, ...]]] = []
+        self.executed: list[tuple[str, tuple[Any, ...] | None]] = []
 
     def cursor(self) -> RecordingCursor:
         return RecordingCursor(self)
@@ -918,7 +947,7 @@ class RecordingCursor:
     def __exit__(self, *_exc: object) -> None:
         return None
 
-    def execute(self, sql: str, parameters: tuple[Any, ...] = ()) -> None:
+    def execute(self, sql: str, parameters: tuple[Any, ...] | None = ()) -> None:
         self.connection.executed.append((sql, parameters))
         if "INFORMATION_SCHEMA.COLUMNS" in sql:
             self._result = [{"column_name": name} for name in sorted(self.connection.columns)]

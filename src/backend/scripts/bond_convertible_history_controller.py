@@ -1038,7 +1038,10 @@ class MySQLConvertibleReader:
         ):
             raise ValueError("convertible history controller permits SELECT statements only")
         with self.connection.cursor() as cursor:
-            cursor.execute(sql, tuple(parameters))
+            # pymysql %-formats the statement whenever args is not None, even for an
+            # empty tuple, so a literal DATE_FORMAT '%Y-%m-%d' raises "not enough
+            # arguments for format string". Parameterless statements must pass None.
+            cursor.execute(sql, tuple(parameters) if parameters else None)
             return list(cursor.fetchall())
 
     def _table_columns(self, table: str) -> set[str]:
