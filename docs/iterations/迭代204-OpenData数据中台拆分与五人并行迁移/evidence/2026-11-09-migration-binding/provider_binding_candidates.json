@@ -1,0 +1,75 @@
+{
+  "endpoints_total": 974,
+  "endpoints_bound_to_a_model": 10,
+  "endpoints_unbound": 964,
+  "provider_models_total": 319,
+  "provider_models_by_source": {
+    "fmp": 69,
+    "fred": 40,
+    "sec": 24,
+    "federal_reserve": 20,
+    "intrinio": 18,
+    "yfinance": 16,
+    "imf": 11,
+    "oecd": 11,
+    "ths": 11,
+    "akshare": 10,
+    "finviz": 9,
+    "nasdaq": 9,
+    "cboe": 8,
+    "congress_gov": 8,
+    "econdb": 7,
+    "ecb": 6,
+    "famafrench": 6,
+    "government_us": 6,
+    "tiingo": 6,
+    "tradier": 5,
+    "alpha_vantage": 3,
+    "benzinga": 3,
+    "seeking_alpha": 3,
+    "bls": 2,
+    "cftc": 2,
+    "eia": 2,
+    "finra": 2,
+    "biztoc": 1,
+    "multpl": 1
+  },
+  "buckets": {
+    "fits_existing_akshare_family": 661,
+    "needs_new_model": 299,
+    "multi_family": 4
+  },
+  "unbound_by_family": {
+    "stock": 368,
+    "other": 278,
+    "index": 77,
+    "fund": 74,
+    "futures": 56,
+    "option": 46,
+    "bond": 40,
+    "fx": 18,
+    "crypto": 3
+  },
+  "family_to_existing_domains": {
+    "bond": [
+      "bond_daily"
+    ],
+    "fund": [
+      "fund_etf_daily"
+    ],
+    "futures": [
+      "futures_daily"
+    ],
+    "index": [
+      "index_daily",
+      "index_constituent"
+    ],
+    "option": [
+      "option_daily"
+    ],
+    "stock": [
+      "stock_daily",
+      "stock_action"
+    ]
+  }
+}

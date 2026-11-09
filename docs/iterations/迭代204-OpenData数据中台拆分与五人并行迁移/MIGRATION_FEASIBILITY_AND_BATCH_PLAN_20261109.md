@@ -292,3 +292,8 @@ OpenData 里 **`.py` 脚本是惰性参考物**，不被任何 loader 发现；�
 - 不把「目录里 READY_FOR_ADAPTER 1 条」当成已迁移（目录 notice 自己否定了这一点）。
 - 不把「provider 测试通过」当成 parity 通过；parity 必须是同窗口、同业务键、行级对照。
 - 不把本机读数当 CI 基线：本机环境身份仪器自判 `allowed=false`（py3.13.5、system-site-packages、14 个依赖在 venv 外）。
+
+**可复跑**：`evidence/2026-11-09-migration-binding/provider_binding_candidates.py`
+（默认只输出汇总；`--include-rows` 输出 964 行逐条分类），其输出
+`evidence/2026-11-09-migration-binding/provider_binding_candidates.json` 记录了本节 661/299/4
+与 10/319 的全部来源。任何复核者都可以用同一条命令重算，不需要相信这段文字。
