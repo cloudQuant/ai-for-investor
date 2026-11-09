@@ -285,6 +285,27 @@ mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108
 另外记一条方法教训：跨 schema 的验证必须先打印 `DATABASE()` 再下结论，否则会把「连错库」写成「表不存在」。
 
 
+
+### 5.3 采集平面最后 2 条：加一个 stub 依赖就归零（实测）
+
+镜像 venv（mypy 1.20.2，与 CI 一致）里**临时**安装 `types-python-dateutil` 后，同一条命令读出：
+
+```
+mypy_ratchet[collection]: errors=0 baseline=2 delta=-2 checked=1108
+mypy_ratchet[collection]: errors dropped by 2. Ratchet down by running `--update` …
+```
+
+把它卸掉后立刻回到 `errors=2 baseline=2 delta=+0 checked=1108`。**一装一卸只差这一个包**，
+所以「采集平面 2 → 0」的全部剩余成本是：
+
+1. 把 `types-python-dateutil` 加进 `config/requirements-dev.lock`（并确保 CI 的 lint 作业装上它）；
+2. 跑一次 `mypy_ratchet.py --scope collection --update` 把基线降到 0；
+3. 重新冻结基线文件（现在那份是 `errors=2 checked=1108`）。
+
+**本轮不改 lock**：新增依赖是属主决定（依赖面），且它会改变 CI 的安装集合。这里只给出实测影响。
+另请注意：这 2 条是 `dateutil.relativedelta` 的 `import-untyped`，属于**缺 stub**，不是类型错误本身；
+所以「类型平面归零」不等于「采集脚本都过了类型检查」，两者不能混为一谈。
+
 ## 6. 迁移计划（#335）：B0.0 的答案
 
 - 974 个端点只有 **10** 个带 `target_models`；964 个未绑定，全部 `runtime_verification: NOT_RUN`。
