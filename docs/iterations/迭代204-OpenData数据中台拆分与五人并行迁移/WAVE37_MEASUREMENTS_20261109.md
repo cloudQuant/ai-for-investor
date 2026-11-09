@@ -77,3 +77,16 @@ scheduled then.
 - `fix/afi-bond-epoch-date-normalisation` → PR #341 head `dd5197393` (pushed).
 - #341's Alembic check is red; the same upgrade failure reproduces on dev locally, so the red is
   not attributable to the PR without its CI log.
+
+## 8. Late readings (same day, 16:27Z)
+
+- AC11 numerator continued to rise as converted tasks ran: 513 (15:55Z) → 516 (16:00Z) → 521 (16:18Z)
+  → the figure in §8 of this update file's commit message; see the artifact below for the exact
+  final reading.
+- `etf_minute_hist_em` (task 390) completed with a 150-second timeout (45 s was too short); two other
+  endpoints (`macro_china_nbs_region`, `foreign_futures_history_em`) still time out at 150 s and stay
+  source-side failures.
+- AC14: 45/48 consecutive hourly slots at 16:22Z; 48th completes just after 19:00Z, reading scheduled
+  at 19:06Z.
+- Bond timer batch 16:09Z: 5/5 `verified_source_sequence`, `history_completeness=not_certified`
+  (listing boundary unknown) — reconciled, not certified.
