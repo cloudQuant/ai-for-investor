@@ -1100,3 +1100,35 @@ def test_argparse_rejects_a_non_positive_batch_bound(tmp_path: Path) -> None:
         controller.parse_args(
             ["--source-timeout-seconds", "-1", "--report", str(tmp_path / "r.json")]
         )
+
+
+def test_real_warehouse_adapter_reads_a_pandas_frame_without_truthiness_error() -> None:
+    """Exercise the real adapter, not the protocol fake.
+
+    ``universe()`` used ``list(getattr(frame, "columns", []) or [])``; pandas
+    returns an ``Index`` there and ``Index or []`` raises
+    ``ValueError: The truth value of a Index is ambiguous``. The protocol fake
+    never runs this code, which is why it shipped.
+    """
+
+    import pandas as pd
+
+    class FakeDb:
+        def table_exists(self, table: str) -> bool:
+            return True
+
+        def get_data_by_columns(self, table: str, columns: list[str]) -> Any:
+            return pd.DataFrame({columns[0]: ["000001", "600000"], "extra": ["a", "b"]})
+
+        def get_latest_date(self, table: str, column: str) -> str:
+            return "2026-11-08"
+
+    adapter = object.__new__(controller.WarehouseDailyAdapter)
+    adapter._db = FakeDb()
+
+    symbols, inventory, status, reasons = adapter.universe()
+
+    assert symbols == ["000001", "600000"]
+    assert status == "current"
+    assert reasons == []
+    assert inventory["STOCK_INFO_A_CODE_NAME"]["source_row_count"] == 2

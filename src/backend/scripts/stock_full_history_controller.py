@@ -1072,7 +1072,9 @@ class WarehouseDailyAdapter:
                 inventory[table] = entry
                 continue
             frame = self._db.get_data_by_columns(table, list(columns))
-            available = list(getattr(frame, "columns", []) or [])
+            # pandas returns a Index here; `Index or []` raises "truth value ... is ambiguous".
+            frame_columns = getattr(frame, "columns", None)
+            available = list(frame_columns) if frame_columns is not None else []
             counts: dict[str, int] = {}
             values: list[str] = []
             for column in columns:
