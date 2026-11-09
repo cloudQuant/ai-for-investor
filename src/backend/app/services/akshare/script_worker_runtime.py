@@ -358,6 +358,9 @@ async def _execute_callable_in_worker(
         shutil.rmtree(receipt_dir, ignore_errors=True)
 
 
+_CONTROL_PARAMETER_KEYS = frozenset({"claim_key", "owner_id", "fencing_token", "execution_id"})
+
+
 async def _execute_callable_in_thread(
     callable_obj: Any, params: dict[str, Any], timeout_s: float
 ) -> Any:
@@ -388,10 +391,15 @@ async def _execute_callable(
     legacy thread path, which cannot be killed and is therefore only used
     when there is no describable entrypoint.
     """
-    # ``_``-prefixed keys are dispatch/control metadata (``_ingest_mode``,
-    # ``_recovery_scope_hash``, ...). Entrypoints forward ``**kwargs`` to the
-    # upstream data function, which rejects them, so they never reach the script.
-    script_params = {key: value for key, value in params.items() if not str(key).startswith("_")}
+    # ``_``-prefixed keys are dispatch metadata (``_ingest_mode``,
+    # ``_recovery_scope_hash``, ...) and the fence identity travels beside the
+    # call. Entrypoints forward ``**kwargs`` upstream, which rejects both, so
+    # neither may reach the script.
+    script_params = {
+        key: value
+        for key, value in params.items()
+        if not str(key).startswith("_") and key not in _CONTROL_PARAMETER_KEYS
+    }
     descriptor = _callable_descriptor(callable_obj)
     if descriptor is not None:
         return await _execute_callable_in_worker(
