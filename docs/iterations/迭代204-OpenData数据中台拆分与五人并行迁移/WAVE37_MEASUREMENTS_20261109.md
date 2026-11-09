@@ -131,3 +131,18 @@ Fifty more `not_run` tasks: 49 COMPLETED and grew, 1 source-empty. Numerator **6
 Day sequence: 443 → 513 → 516 → 521 → 522 → 535 → 557 → 601 → 644 → **682** (17:16Z).
 Artifact: `/tmp/it204/ac11_cumulative10/ac11_runtime_evidence.json`. Same attribution caveat:
 manually triggered executions prove binding and writing, not scheduler cadence.
+
+## 14. AC11 full coverage reached (17:42Z)
+
+Tranches 5–8 exercised every remaining `not_run` task through the managed service with its stored
+parameters: 49/50, 50/50, 49/50 and 47/48 completed and grew; the six non-completions are source-empty
+endpoints, not script defects. Final reading, same `--since 2026-11-05T14:00:00+00:00`:
+
+**completed_and_grew 813 · completed_no_delta 205 · failed_only 30 · not_run 0 = 1048**
+
+Day sequence: 443 → 513 → 516 → 521 → 522 → 535 → 557 → 601 → 644 → 682 → 728 → 771 → **813**.
+Every armed task has now been exercised at least once inside the window; the residual 30 failed_only
+are source-side (Eastmoney proxy absent, DCE/macro endpoints empty, >150 s endpoints). Attribution
+stays explicit: these executions were manually triggered through the production service; scheduler
+cadence is evidenced separately by the timer batches.
+Artifacts: `/tmp/it204/ac11_cumulative{5..13}/`; per-tranche JSON in `/tmp/it204/ac11_notrun_batch{,2..8}.json`.
