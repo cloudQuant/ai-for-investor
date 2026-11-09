@@ -63,17 +63,26 @@ OUTCOME_FAILED_ONLY = "failed_only"
 OUTCOME_NOT_RUN = "not_run"
 OUTCOMES = (OUTCOME_GREW, OUTCOME_NO_DELTA, OUTCOME_FAILED_ONLY, OUTCOME_NOT_RUN)
 
-_EXECUTIONS_SQL = (
-    "SELECT task_id AS task_id, "
-    "COUNT(*) AS total_executions, "
-    "SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_executions, "
-    "SUM(CASE WHEN status = 'completed' AND rows_after > rows_before THEN 1 ELSE 0 END) "
-    "AS grew_executions, "
-    "MAX(created_at) AS last_created_at "
-    "FROM ak_task_executions "
-    "WHERE created_at >= :window_start AND task_id IS NOT NULL "
-    "GROUP BY task_id"
-)
+
+def _executions_sql(triggered_by: str | None) -> str:
+    """Build the aggregate query, optionally restricted to one trigger source.
+
+    ``triggered_by`` separates scheduler-cadence evidence from manually
+    triggered executions; the ratio must always name which one it measured.
+    """
+    sql = (
+        "SELECT task_id AS task_id, "
+        "COUNT(*) AS total_executions, "
+        "SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_executions, "
+        "SUM(CASE WHEN status = 'completed' AND rows_after > rows_before THEN 1 ELSE 0 END) "
+        "AS grew_executions, "
+        "MAX(created_at) AS last_created_at "
+        "FROM ak_task_executions "
+        "WHERE created_at >= :window_start AND task_id IS NOT NULL "
+    )
+    if triggered_by:
+        sql += "AND triggered_by = :triggered_by "
+    return sql + "GROUP BY task_id"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -90,6 +99,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=BACKEND_DIR / ".env",
         help="path to the running app's .env (read for DATABASE_URL only)",
+    )
+    parser.add_argument(
+        "--triggered-by",
+        choices=("scheduler", "manual", "api"),
+        default=None,
+        help=(
+            "restrict evidence to one trigger source; pass scheduler to measure scheduler "
+            "cadence, manual to measure hand-exercised scripts (default: every source)"
+        ),
     )
     parser.add_argument(
         "--since",
@@ -309,9 +327,13 @@ def human_summary(report: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-async def load_executions(url: str, window_start: datetime) -> tuple[dict[int, Any], str, str]:
+async def load_executions(
+    url: str, window_start: datetime, triggered_by: str | None = None
+) -> tuple[dict[int, Any], str, str]:
     # MySQL has no timezone-aware DATETIME; bind the naive-UTC form of the window start.
-    params = {"window_start": _to_naive_utc(window_start)}
+    params: dict[str, Any] = {"window_start": _to_naive_utc(window_start)}
+    if triggered_by:
+        params["triggered_by"] = triggered_by
     engine = create_async_engine(url, pool_pre_ping=True)
     try:
         async with engine.connect() as conn:
@@ -321,7 +343,7 @@ async def load_executions(url: str, window_start: datetime) -> tuple[dict[int, A
                 readonly = True
             except Exception:  # dialect without a read-only session pragma
                 pass
-            result = (await conn.execute(text(_EXECUTIONS_SQL), params)).mappings()
+            result = (await conn.execute(text(_executions_sql(triggered_by)), params)).mappings()
             stats = {int(row["task_id"]): dict(row) for row in result.all()}
             parsed_url = str(url).split("://", 1)[-1].split("@", 1)[-1].split("?", 1)[0]
             host_db = parsed_url.rsplit("/", 1)[-1] if "/" in parsed_url else parsed_url
@@ -339,7 +361,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     census = load_census(args.census)  # refuses (SystemExit, non-zero) before any DB touch
     window_start = parse_utc(args.since)
     url = database_url_from_env(args.env_file)
-    stats, database_label, read_only_mode = asyncio.run(load_executions(url, window_start))
+    stats, database_label, read_only_mode = asyncio.run(
+        load_executions(url, window_start, args.triggered_by)
+    )
     rows = classify_census(census["tasks"], stats, window_start=window_start)
     report = build_report(
         census,
@@ -348,6 +372,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         database_label=database_label,
         read_only_mode=read_only_mode,
     )
+    if args.triggered_by:
+        scope = report.setdefault("scope", {})
+        if isinstance(scope, dict):
+            scope["triggered_by"] = args.triggered_by
+        report.setdefault("caveats", []).append(
+            f"evidence restricted to triggered_by={args.triggered_by}"
+        )
     args.out_dir.mkdir(parents=True, exist_ok=True)
     json_path = args.out_dir / "ac11_runtime_evidence.json"
     summary_path = args.out_dir / "ac11_runtime_evidence.md"
