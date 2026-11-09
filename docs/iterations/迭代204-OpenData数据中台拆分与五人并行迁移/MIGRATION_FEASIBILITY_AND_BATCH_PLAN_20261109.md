@@ -137,6 +137,42 @@ python3 src/backend/scripts/ops/assign_script_dispositions.py \
 (b) 明确标为「无匹配 model，需新建」。
 两类都可复查；**只有到这一步之后，「954 EXTEND」才能被换算成真实的人月**，在那之前任何工期估计都不可信。
 
+## 2.6 B0.0 的实测答案：661 可挂到 8 个已有 akshare 家族，299 必须新建
+
+先纠正一个容易误读的前提：OpenData 的 319 个 `opendata_provider_models` **绝大多数不是 akshare**——
+按 `source` 统计：fmp 69、fred 40、sec 24、federal_reserve 20、intrinio 18、yfinance 16、imf 11、oecd 11、
+ths 11、**akshare 10**、finviz 9、nasdaq 9、cboe 8、congress_gov 8、econdb 7 …。
+也就是说：**这个 provider 库是为别的数据商建的，不是为 AFI 的 akshare 资产建的**。
+akshare 家族只有 10 个 model、11 个源函数。
+
+对 964 个未绑定端点，用 catalog 的 `files[].calls` 反查「哪个 AFI 脚本调用了这个端点函数」，
+再用处置台账的 `asset_family` 归类：
+
+| 归到哪个家族 | 端点数 | 该家族是否已有 akshare model |
+|---|---|---|
+| stock | **368** | 有（`stock_daily` / `stock_action` 两个 model） |
+| index | **77** | 有（`index_daily` / `index_constituent`） |
+| fund | **74** | 有（`fund_etf_daily`） |
+| futures | **56** | 有（`futures_daily`） |
+| option | **46** | 有（`option_daily`） |
+| bond | **40** | 有（`bond_daily`） |
+| other | **278** | **无** |
+| fx | **18** | **无** |
+| crypto | **3** | **无** |
+| 多族 | 4 | — |
+| 无调用者 | 0 | — |
+
+**合计 661 个可挂到 8 个已有 akshare 家族模板，299 个落在没有 model 的族（other/fx/crypto），4 个多族。**
+
+这条把工作量从「877 个 provider」改写成一个可执行的形状：
+**8 个家族 fetcher × 每个内部多个源函数/参数组合（661）+ 约 299 个新 model（other/fx/crypto）**。
+8 个模板已经存在于 `opendata/data/providers/akshare/models/*.py`，所以 B1 的试点应当**优先落在有模板的家族**
+（`bond_zh_hs_spot`、`fx_spot_quote` 中的 fx 属无模板族，需要另选一个 futures/index 的样本做对照）。
+
+**必须说明的局限**：这 661 是**按家族做的启发式归类**，不是已完成的绑定——`asset_family` 来自处置台账，
+domain 归属需要人工复核；但复核的对象是 **8 个桶**，不是 964 个逐条判断。这正是 B0.0 要产出的东西：
+一张「端点 → 家族 → 候选 model」的候选表，加每个桶的抽样复核记录。
+
 ---
 
 ## 3. 已存在的切换机件（可直接用，不必重造）
