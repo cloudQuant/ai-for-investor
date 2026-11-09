@@ -242,3 +242,15 @@ row for that symbol has `created_at` inside 17:40-17:50Z. In other words the rec
 that did not persist. That is the same shape as the bond zero-row chain but at the receipt layer, and it
 is registered **open** — the next step is to run one such symbol through the child-worker path with DB
 credential logging to see whether the child's connection differs from the in-process path.
+
+## 22. Receipt over-claim — rowcount attempt refuted
+
+§21 recorded execution 34498 claiming `committed_writes=[{row_count: 1030}]` while no row for 001229
+persisted. I tried making `save_data` return the server's affected rows via `cursor.rowcount`; a direct
+probe refutes that route: for an `INSERT IGNORE` batch whose rows are **all duplicates**, MySQL reports
+`cursor.rowcount = 1` per ignored row (measured on this host, rolled back). `rowcount` therefore cannot
+separate "inserted" from "matched but skipped", and the change was reverted; its branch was deleted.
+
+The receipt remains an upper bound. An exact receipt needs either a pre/post `COUNT(*)` delta under the
+active fence claim, or a keys-based existence count before insert. Registered OPEN with that as the
+next step; the current field name (`row_count`) must not be read as "rows persisted".
