@@ -184,3 +184,19 @@ consecutive completed hourly slots = **48/48**, first non-completed slot: none.
 This closes the hourly leg of AC14's natural-cycle target. The daily (2), weekly (1) and sub-daily (1)
 legs were last measured at their window maxima in wave 34 and must be re-read with the same window
 before AC14 is declared fully met; today's reading covers the hourly leg only.
+
+## 18. AC14 per-cadence audit (19:09Z) — hourly met, daily still accruing
+
+Direct DB readings (read-only) over the last 14 days, per representative task:
+
+| cadence | task | cron | completed runs | due runs since repair | verdict |
+| --- | --- | --- | --- | --- | --- |
+| hourly | 1049 crypto_hourly_market | `3 * * * *` | **48** | 48 since 11-07 20Z | **target 48 met** |
+| daily | 11 ChinaBond curve | `20 19 * * *` | 4 | 4 since 11-06 (every day) | target 7 needs 3 more days |
+| daily | 1048 crypto_daily_market | `10 8 * * *` | 4 | 4 since 11-06 (every day) | same |
+| weekly(-weekday) | 33 bond_zh_hs_cov_daily pilot | `10 18 * * mon-fri` | 2 | 2 (Fri 11-06, Mon 11-09; weekend not due) | target 2 met |
+| sub-daily | 101 Fx Spot Quote | `10 10-23 * * mon-fri` | 30 | 30 | target 1 met |
+
+So AC14 is **not fully met**: the hourly, weekly and sub-daily legs are met; the daily leg has run
+every due day since the write-chain repair (4/4) but the 7-cycle target is time-limited and cannot be
+claimed before 2026-11-12/13. This is accrual arithmetic, not a collector failure.
