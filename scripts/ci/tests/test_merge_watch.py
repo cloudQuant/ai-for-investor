@@ -164,3 +164,17 @@ def test_the_token_prefers_the_environment_and_never_comes_from_argv(
     monkeypatch.delenv("GITHUB_TOKEN")
     monkeypatch.delenv("GH_TOKEN", raising=False)
     assert watcher._token() is None
+
+
+def test_an_empty_check_list_means_no_gate_yet_not_all_green() -> None:
+    """Pinned after this watcher merged a brand-new PR with zero registered checks."""
+
+    watcher = _load_watcher()
+    reasons = watcher.blocking_reasons(
+        check_runs=[],
+        reviews=[_review(HEAD)],
+        head_sha=HEAD,
+        mergeable=True,
+    )
+
+    assert "no-check-runs" in reasons
