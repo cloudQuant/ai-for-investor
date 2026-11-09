@@ -439,19 +439,11 @@ class AkshareProvider:
         try:
             start_time = datetime.now()
             processed = 0
-            affected = 0
 
             for i in range(0, total_rows, self.batch_size):
                 batch = values[i : i + self.batch_size]
                 self._execute_batch(insert_sql, batch)
                 processed += len(batch)
-                # ``rowcount`` is what the server actually applied; with INSERT
-                # IGNORE a duplicate-heavy batch reports zero, while the batch
-                # length would over-claim a commit that never persisted.
-                reported = getattr(getattr(self, "cursor", None), "rowcount", None)
-                if not isinstance(reported, int) or reported < 0:
-                    reported = len(batch)
-                affected += min(reported, len(batch))
 
                 if (i + self.batch_size) % (self.batch_size * 10) == 0 or (
                     i + self.batch_size
@@ -461,11 +453,10 @@ class AkshareProvider:
 
             elapsed_seconds = (datetime.now() - start_time).total_seconds()
             self.logger.info(
-                f"成功保存 {affected} 行数据到 {table_name}"
-                f"（提交 {total_rows} 行），耗时 {elapsed_seconds:.2f}s"
+                f"成功保存 {total_rows} 行数据到 {table_name}，耗时 {elapsed_seconds:.2f}s"
             )
 
-            return affected
+            return total_rows
 
         except Exception as exc:
             self.logger.error(f"保存数据到 {table_name} 失败: {exc!s}")
