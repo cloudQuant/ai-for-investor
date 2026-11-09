@@ -139,3 +139,27 @@ app.settings.{ai_assistant, ai_research_v2, application, asset_research,
 2. `overlap_days` / `trading_days_by_market` / `calendar_review_by_market`：**先定义语义**（属主或产品），
    再按定义实现；
 3. `start_date`/`end_date`/`source`/`source_timeout_seconds`/`sleep_seconds`：可直接按现有代码的同义逻辑实现。
+
+## 9. etf / option 的 `attention_required` 不是坏，是**安全闸**
+
+ETF 腿那次运行的 stderr 只有一行：
+
+```
+no source adapters selected: pass --fixture-dir for an offline run or --allow-live-sources for the NOT_RUN live path
+```
+
+也就是说：控制器**在缺少 `--allow-live-sources` 时拒绝走 live 源**（这是刻意的安全设计，避免恢复循环
+默认去打真实源）。而恢复 worker 的调用里**从不传这个 flag**（在 `run_full_history_recovery_worker.py`
+里 grep `allow-live-sources` / `allow_live` 均为 0 命中），所以 etf（以及同类的 option）每轮都产出
+`0 outcomes` + `attention_required`。
+
+**因此五资产的准确表述**（部署后）：
+
+| 资产 | 状态 | 性质 |
+|---|---|---|
+| crypto | completed | 正常干活 |
+| bond | attention（5/5 `post_write_mismatch`） | 能写但写后校验不一致 |
+| **etf / option** | attention（0 outcomes） | **被 `--allow-live-sources` 闸住，属策略选择，不是缺陷** |
+| stock | invalid_or_missing_cli_report | pandas Index 崩溃（#338 待部署） |
+
+**这是一项属主策略**：是否让 etf/option 走 live 恢复（以及是否让 worker 传该 flag），不是代码能替属主决定的。
