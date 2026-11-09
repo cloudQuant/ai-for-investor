@@ -3188,3 +3188,34 @@ def test_bond_daily_script_consumes_source_instead_of_forwarding_it(monkeypatch)
     assert seen["upstream_kwargs"] == {"symbol": "sz127038"}
     assert seen["saved"]["source"].tolist() == ["sina"]
     assert result["data_date"].tolist() == [pd.Timestamp("2026-11-09").date()]
+
+
+def test_stored_parameters_outside_the_entrypoint_signature_are_dropped() -> None:
+    """Scheduled tasks keep legacy keys the entrypoint never declared."""
+
+    import asyncio
+    from typing import Any
+
+    from app.services.akshare import script_worker_runtime as runtime
+
+    seen: dict[str, Any] = {}
+
+    def entrypoint(symbol: str, start_date: str | None = None) -> str:
+        seen.update({"symbol": symbol, "start_date": start_date})
+        return "ok"
+
+    original_descriptor = runtime._callable_descriptor
+    runtime._callable_descriptor = lambda _callable: None
+    try:
+        result = asyncio.run(
+            runtime._execute_callable(
+                entrypoint,
+                {"symbol": "sz123282", "start_date": "20261109", "overlap_days": 5},
+                5,
+            )
+        )
+    finally:
+        runtime._callable_descriptor = original_descriptor
+
+    assert result == "ok"
+    assert seen == {"symbol": "sz123282", "start_date": "20261109"}
