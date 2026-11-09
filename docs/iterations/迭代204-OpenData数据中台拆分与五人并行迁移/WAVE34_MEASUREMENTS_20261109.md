@@ -193,21 +193,30 @@ mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108
 （探针本身也踩过一次坑并已修正：第一版副本没带 `pyproject.toml`，两版都退回默认配置，
 `format` 一下改了 836/1868 个文件——那个数字无效，不能拿来当结论。）
 
-### 5.2 更正：债券腿的第二个阻断是「表不存在」，不是格式化
+### 5.2 同一件事我连错两次：债券表其实存在，但本机无法完成端到端验证
 
-PR #333 修的是 `cursor.execute(sql, tuple())` 在 pymysql 里被 `%` 插值的问题——这一层是真的、可复现的
-（无库条件下 `"SELECT DATE_FORMAT(d, '%Y-%m-%d')" % ()` 直接 `TypeError`），并用 38 个测试钉住了契约。
-但**它不是债券腿唯一的阻断**：
+这一节替换我先前的两个草稿，两个都错，错的根源相同：**探针的前提（连哪个 DSN）没有先验证就下结论**。
 
-- 只读实测：`ai_for_investor` 库共 **171 张表**，名字匹配 `%BOND%` / `%COV%` / `%CONVERT%` 的是 **0 张**；
-  `BOND_ZH_HS_COV_DAILY` **不存在**。
-- 我用真实只读连接调用了修复后的 `read_convertible_history_overview()`：返回 0 行、无异常。
-  **但这不能当作「DATE_FORMAT 那句被成功执行」的证据**——表不存在时该方法走的是退化路径，
-  那条 SQL 根本没有发到服务器。我先写成「生产路径不再抛错」，随即被这条表检查推翻，现更正。
+1. 草稿一：「修复后的生产路径在真实库上不再抛错」。我连的是**应用 DSN**（`ai_for_investor`），
+   表不在那个 schema 里，方法走了退化路径（返回 0 行、无异常），`DATE_FORMAT` 那句 SQL **根本没发出**。
+   所以这条「验证」无效。
+2. 草稿二：「第二个阻断是表不存在」。同样错。`information_schema` 全库检索显示：
+   `BOND_ZH_HS_COV_DAILY` 在 **`akshare_data`** 里（`TABLE_ROWS≈773,949`），
+   `BOND_ZH_HS_COV_SPOT` 也在（`≈2,873`）；而控制器解析出的 `DB_CONFIG['database'] = 'akshare_data'`
+   （经解析配置确认，未打印任何凭据）。**表和库都是对的。**
 
-**含义**：部署 #333 之后，`full-history-recovery` 在债券腿上仍会失败，只是错误形态从
-`not enough arguments for format string` 变成「没有目标表／退化报告」。**判定该 unit 修好的标准只能是
-一次成功运行，不能是某个错误消失。** 这与本轮 §2.4 的读数一致：它在 05:11:06Z 又失败了一次。
+**最终可核实的陈述**：
+
+- `%` 插值缺陷是真的、已修（#333），并有 38 个测试钉住契约；
+- 采集脚本 `bonds/daily/bond_zh_hs_cov_daily.py` 建的就是 `BOND_ZH_HS_COV_DAILY`，
+  任务 33（`10 18 * * mon-fri`，armed）历史 15 次执行里 8 次 completed / 7 次 failed，最近成功 2026-11-06 10:10；
+- **本机无法完成端到端只读验证**：`DB_CONFIG` 的 `root` 用户经 TCP 被拒
+  （`(1698, "Access denied for user 'root'@'localhost'")`），我没有 `akshare_data` 的可用凭据。
+  所以「部署后债券腿会转绿」仍是**未验证**。
+
+**判定标准不变**：该 unit 是否修好，只能由**一次成功运行**判定，不能由某个错误消失判定。
+另外记一条方法教训：跨 schema 的验证必须先打印 `DATABASE()` 再下结论，否则会把「连错库」写成「表不存在」。
+
 
 ## 6. 迁移计划（#335）：B0.0 的答案
 
