@@ -3106,3 +3106,40 @@ def test_long_minute_fund_defaults_do_not_override_explicit_codes():
     )
 
     assert params["max_codes"] == 3
+
+
+def test_control_parameters_are_not_forwarded_to_script_entrypoints() -> None:
+    """`_`-prefixed dispatch metadata must not reach the data function.
+
+    Controllers pass `_ingest_mode` / `_recovery_*` alongside business
+    parameters. Entrypoints forward `**kwargs` to the upstream service, which
+    rejects the private keys; the exception is swallowed inside the script, so
+    the execution reported success while persisting zero rows.
+    """
+
+    import asyncio
+    from typing import Any
+
+    from app.services.akshare import script_worker_runtime as runtime
+
+    seen: dict[str, Any] = {}
+
+    def fake_entrypoint(**kwargs: Any) -> str:
+        seen.update(kwargs)
+        return "ok"
+
+    original_descriptor = runtime._callable_descriptor
+    runtime._callable_descriptor = lambda _callable: None
+    try:
+        result = asyncio.run(
+            runtime._execute_callable(
+                fake_entrypoint,
+                {"symbol": "sz123282", "_ingest_mode": "backfill", "_recovery_scope_hash": "h"},
+                5,
+            )
+        )
+    finally:
+        runtime._callable_descriptor = original_descriptor
+
+    assert result == "ok"
+    assert seen == {"symbol": "sz123282"}

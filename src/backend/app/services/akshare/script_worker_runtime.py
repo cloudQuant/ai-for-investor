@@ -388,12 +388,16 @@ async def _execute_callable(
     legacy thread path, which cannot be killed and is therefore only used
     when there is no describable entrypoint.
     """
+    # ``_``-prefixed keys are dispatch/control metadata (``_ingest_mode``,
+    # ``_recovery_scope_hash``, ...). Entrypoints forward ``**kwargs`` to the
+    # upstream data function, which rejects them, so they never reach the script.
+    script_params = {key: value for key, value in params.items() if not str(key).startswith("_")}
     descriptor = _callable_descriptor(callable_obj)
     if descriptor is not None:
         return await _execute_callable_in_worker(
             descriptor,
-            params,
+            script_params,
             timeout_s,
             fence=fence,
         )
-    return await _execute_callable_in_thread(callable_obj, params, timeout_s)
+    return await _execute_callable_in_thread(callable_obj, script_params, timeout_s)
