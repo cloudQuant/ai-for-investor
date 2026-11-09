@@ -1132,3 +1132,71 @@ def test_real_warehouse_adapter_reads_a_pandas_frame_without_truthiness_error() 
     assert status == "current"
     assert reasons == []
     assert inventory["STOCK_INFO_A_CODE_NAME"]["source_row_count"] == 2
+
+
+def test_warehouse_bars_are_scoped_to_the_written_source_and_adjustment() -> None:
+    """Read one observation series, not every source sharing a date.
+
+    ``STOCK_ZH_A_HIST`` holds the legacy pipeline's rows (``legacy_unknown`` /
+    ``unknown``) beside this controller's ``tencent`` / ``qfq`` rows. Selecting
+    by symbol alone therefore returned two rows per business date, which the
+    post-write comparison reported as duplicate date keys and turned every
+    successful write into ``post_write_sequence_mismatch``.
+    """
+
+    captured: dict[str, Any] = {}
+
+    class FakeDb:
+        def query_data(self, sql: str, params: tuple[Any, ...]) -> list[tuple[Any, ...]]:
+            captured["sql"] = sql
+            captured["params"] = params
+            return [("2026-11-09", 11.78, 11.89, 11.91, 11.76)]
+
+    adapter = object.__new__(controller.WarehouseDailyAdapter)
+    adapter._db = FakeDb()
+
+    bars = adapter.bars("000001")
+
+    assert captured["params"] == ("000001", controller.SOURCE_NAME, controller.ADJUSTMENT)
+    assert "source = %s" in captured["sql"]
+    assert "adjustment = %s" in captured["sql"]
+    assert [(bar.date_key, bar.close) for bar in bars] == [("2026-11-09", 11.89)]
+
+
+def test_managed_writer_reads_the_execution_status_value(monkeypatch: Any) -> None:
+    """A completed enum must reach the controller as ``completed``.
+
+    ``str(TaskStatus.COMPLETED)`` is ``"TaskStatus.COMPLETED"``; comparing that
+    with ``"completed"`` classified every written, matching batch as
+    ``backfill_failed``.
+    """
+
+    from types import SimpleNamespace
+
+    from app.models.akshare_mgmt import TaskStatus
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+    class FakeScriptService:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def run_script(self, *args: Any, **kwargs: Any) -> Any:
+            return SimpleNamespace(id=7, status=TaskStatus.COMPLETED, error_message=None)
+
+    monkeypatch.setattr("app.db.database.async_session_maker", lambda: FakeSession())
+    monkeypatch.setattr("app.services.akshare.script.AkshareScriptService", FakeScriptService)
+
+    writer = controller.ManagedScriptWriterAdapter()
+    bar = controller.DailyBar(date_key="2026-11-09", open=11.78, close=11.89, high=11.91, low=11.76)
+
+    receipt = writer.write("000001", bars=[bar], scope={"scope_hash": "h", "period_key": "p"})
+
+    assert receipt.status == "completed"
+    assert receipt.execution_id == 7
+    assert receipt.error is None

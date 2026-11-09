@@ -208,8 +208,10 @@ class StockZhAHist(AkshareToMySql):
                 source = "auto"
 
             # Fetch data from AkShare
+            source_used = "eastmoney"
             if source == "tencent":
                 df = self._fetch_daily_from_tencent(**kwargs)
+                source_used = "tencent"
             else:
                 try:
                     df = self.fetch_ak_data("stock_zh_a_hist", **kwargs)
@@ -223,6 +225,8 @@ class StockZhAHist(AkshareToMySql):
                 symbol = str(kwargs.get("symbol") or "000001")
                 if source in {"auto", "tencent"}:
                     df = self._fetch_daily_from_tencent(**kwargs)
+                    if df is not None and not df.empty:
+                        source_used = "tencent"
                 if df is None or df.empty:
                     df = self._fetch_daily_from_trends(
                         symbol=symbol,
@@ -248,16 +252,22 @@ class StockZhAHist(AkshareToMySql):
                     df["symbol"] = str(kwargs["symbol"])
             if "name" not in df.columns and kwargs.get("symbol") is not None:
                 df["name"] = str(kwargs["symbol"])
+            # A business date can carry several observation series (source and
+            # adjustment basis are part of the table's unique key). Stamping both
+            # keeps this run's series distinct from rows the legacy pipeline wrote
+            # with its column defaults instead of overwriting them.
+            df["source"] = source_used
+            df["adjustment"] = str(kwargs.get("adjust") or "qfq")
 
-            # Save to database. STOCK_ZH_A_HIST is keyed by (symbol, data_date);
-            # deleting by data_date alone would remove the same day's rows for
-            # other symbols during batch backfills.
+            # Save to database. STOCK_ZH_A_HIST is keyed by
+            # (symbol, data_date, adjustment); deleting by data_date alone would
+            # remove the same day's rows for other symbols during batch backfills.
             self.create_table_if_not_exists(self.table_name, self.create_table_sql)
             self.save_data(
                 df,
                 self.table_name,
                 on_duplicate_update=True,
-                unique_keys=["symbol", "data_date"],
+                unique_keys=["symbol", "data_date", "adjustment"],
             )
 
             return df
