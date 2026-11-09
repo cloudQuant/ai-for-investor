@@ -1105,8 +1105,8 @@ class WarehouseDailyAdapter:
     def bars(self, symbol: str) -> list[DailyBar]:
         rows = self._db.query_data(
             "SELECT data_date, `开盘`, `收盘`, `最高`, `最低` FROM STOCK_ZH_A_HIST"
-            " WHERE symbol = %s",
-            (symbol,),
+            " WHERE symbol = %s AND source = %s AND adjustment = %s",
+            (symbol, SOURCE_NAME, ADJUSTMENT),
         )
         if not rows:
             return []
