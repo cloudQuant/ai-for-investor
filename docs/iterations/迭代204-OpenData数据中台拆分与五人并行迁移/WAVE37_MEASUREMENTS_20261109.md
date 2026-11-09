@@ -100,3 +100,11 @@ same `--since 2026-11-05T14:00:00+00:00`.
 Attribution: these are **manually triggered** executions, not scheduler-cadence evidence. They prove
 the scripts bind and write through the production service; they do not prove the scheduler fired them.
 Artifact: `/tmp/it204/ac11_cumulative6/ac11_runtime_evidence.json`.
+
+## 10. AC11 second manual-exercise tranche (16:39Z)
+
+Another 25 `not_run` tasks exercised the same way: 24 COMPLETED and grew, 1 source-empty
+(`energy_carbon_eu`). Numerator **557/1048** (completed_no_delta 169, failed_only 24, not_run 298),
+same `--since` window. Same attribution caveat as §9: manually triggered executions prove the scripts
+bind and write; scheduler cadence is proven separately by the timer runs.
+Artifact: `/tmp/it204/ac11_cumulative7/ac11_runtime_evidence.json`.
