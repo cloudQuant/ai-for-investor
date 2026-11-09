@@ -113,3 +113,29 @@ app.settings.{ai_assistant, ai_research_v2, application, asset_research,
 **因此「#333 修好债券腿」要分两层说**：崩溃（`TypeError`）已经消失并可复现地证实；
 但这条腿仍未产出可信结果，因为下一步卡在 `post_write_mismatch`。判定该 unit 健康的标准依旧是一次
 **没有 mismatch 的成功运行**，而不是「不再抛异常」。
+
+## 8. 对「实现这些参数」这条决定的一个反证：`_ingest_mode` 不是脚本参数
+
+属主 2026-11-09 对 7 个任务的参数代差选择了「实现这些参数」。按这个决定动手之前，我查了每个键的来历：
+
+| 键 | 全历史（`git log --all -S`） | 现状 |
+|---|---|---|
+| `_ingest_mode` | **有**：出现在 `run_full_history_recovery_worker.py`、bond/cffex/crypto 各控制器与 cfets 验收脚本 | **派发层标记**：worker 在 `:1688` 校验 dispatch 的 `parameters["_ingest_mode"] == "backfill"`；控制器构造调用时写 `"backfill"` 或 `"live"` |
+| `calendar_review_by_market` | **无任何提交** | 只存在于任务参数 JSON |
+| `trading_days_by_market` | **无任何提交** | 同上 |
+| `overlap_days` | **无任何提交** | 同上 |
+| `start_date` / `end_date` / `source` / `source_timeout_seconds` / `sleep_seconds` | 各自在脚本里有同义实现或近义参数 | 脚本级参数，语义可从现有代码读出 |
+
+**含义**：至少 `_ingest_mode` 不该「在脚本里实现」——它是**派发层的元数据**（worker 拿它区分 backfill 与 live），
+把它实现进 `FuturesDailyMarket.run()` 反而会把一个调度概念塞进采集脚本。正确的分层应是：
+**派发边界消费/剥离派发元数据，脚本只接脚本参数**。
+
+而 `calendar_review_by_market`、`trading_days_by_market`、`overlap_days` 三个键**在任何提交里都没有定义**，
+无法从代码反推语义——它们要么来自未入库的一次性实验配置，要么是为尚未落地的接口预留的。
+对这三个键「实现」等于**由实现者发明语义**，这会改变取数窗口且无从验证。
+
+**因此建议把「实现」拆成两半**（需要属主确认，本轮不动代码）：
+1. `_ingest_mode`：在派发边界消费，不传给脚本（并加一条测试禁止它出现在脚本 kwargs 里）；
+2. `overlap_days` / `trading_days_by_market` / `calendar_review_by_market`：**先定义语义**（属主或产品），
+   再按定义实现；
+3. `start_date`/`end_date`/`source`/`source_timeout_seconds`/`sleep_seconds`：可直接按现有代码的同义逻辑实现。
