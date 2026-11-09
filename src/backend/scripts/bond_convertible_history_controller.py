@@ -222,8 +222,40 @@ def _as_day(value: Any) -> str | None:
         return value.date().isoformat()
     if isinstance(value, date):
         return value.isoformat()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _epoch_or_compact_day(int(value))
     text = str(value).strip()
+    if text.isdigit():
+        normalised = _epoch_or_compact_day(int(text))
+        if normalised is not None:
+            return normalised
     return text[:10] if text else None
+
+
+def _epoch_or_compact_day(number: int) -> str | None:
+    """Normalise the two numeric encodings the vendors use to ``YYYY-MM-DD``.
+
+    AKShare's convertible-bond series returns epoch seconds (10 digits), while a
+    compaction-style feed uses ``YYYYMMDD``. Truncating either one to ten
+    characters yields a key that can never equal a stored date, which is what
+    made every comparison report the whole series as source-only.
+    """
+
+    # Vendors mix second, millisecond, microsecond and nanosecond epochs; the
+    # magnitude decides the unit, and an unnormalised value overflows
+    # ``fromtimestamp`` ("year 52960 is out of range") instead of comparing.
+    if number >= 10**17:
+        number //= 10**9
+    elif number >= 10**14:
+        number //= 10**6
+    elif number >= 10**11:
+        number //= 10**3
+    if number >= 10**9:
+        return datetime.fromtimestamp(number, tz=timezone.utc).date().isoformat()
+    if len(str(number)) == 8:
+        text = str(number)
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return None
 
 
 def _price(value: Any) -> float | None:
