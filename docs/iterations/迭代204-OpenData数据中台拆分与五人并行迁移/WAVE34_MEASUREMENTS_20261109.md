@@ -143,6 +143,31 @@ mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108
 本机不再只能引用 CI 那一行，而是能用同一条命令复现它。**仍未证明**的是「带旧 cache 会少报」的
 具体触发路径（那需要构造一个跨树污染的 cache），故该行只登记到「已给出可复现的正确姿势」。
 
+### 5.1 row 276（ruff 版本分裂）的实测：当前树上两版互认
+
+分歧为真：CI 硬装 `ruff==0.16.2`（`ci.yml:397`），而 `config/requirements-dev.lock:431` 钉 `ruff==0.15.13`。
+
+在 lint 作业的作用域 `src/backend` 上分别跑：
+
+| 版本 | `format --check` | `check` |
+|---|---|---|
+| 0.16.2 | 2663 files already formatted | All checks passed |
+| 0.15.13 | 2648 files already formatted | All checks passed |
+
+再做双向交叉验证（把 `app/` 与仓库的 `pyproject.toml` 一起复制到 /tmp，1872 个 `.py`）：
+
+- 用 **0.15.13 格式化**后让 **0.16.2 检查** → `1873 files already formatted`（0 处要改）；
+- 用 **0.16.2 格式化**后让 **0.15.13 检查** → `1872 files already formatted`（0 处要改）；
+- 两版 `ruff check` 都 `All checks passed`。
+
+**结论**：row 276 那句「两个版本的 `ruff format` 输出不同，因此本地按 lock 格式化干净 → CI 红」
+**在当前树上不成立**——两个方向的格式互认，没有任何一处会被另一版改掉。所以处置可以是纯版本对齐
+（lock 与 CI 钉同一版），不需要一次全树格式化迁移。**但这只是「今天这棵树」的实测**：
+一旦出现某个新版独有的构造，互认未必继续成立，所以对齐仍然值得做。
+
+（探针本身也踩过一次坑并已修正：第一版副本没带 `pyproject.toml`，两版都退回默认配置，
+`format` 一下改了 836/1868 个文件——那个数字无效，不能拿来当结论。）
+
 ## 6. 迁移计划（#335）：B0.0 的答案
 
 - 974 个端点只有 **10** 个带 `target_models`；964 个未绑定，全部 `runtime_verification: NOT_RUN`。
