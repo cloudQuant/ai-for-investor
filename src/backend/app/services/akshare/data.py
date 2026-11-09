@@ -15,6 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.akshare_data_database import _get_akshare_data_engine
 from app.models.akshare_mgmt import DataScript, DataTable
+from app.services.akshare.table_pagination import (
+    TotalCountKey,
+    WarehouseTablePage,
+    get_total_count_cache,
+    order_by_clause,
+    reflect_table_ordering,
+    resolve_total_count,
+)
 
 _VALID_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _MYSQL_COMPACT_TABLE_COLUMN_THRESHOLD = 250
@@ -413,6 +421,10 @@ class AkshareDataService:
 
             async with _get_akshare_data_engine().begin() as conn:
                 await conn.run_sync(replace_table)
+            # The rows were just replaced, so any cached total for this table is
+            # now wrong; drop it so the next page re-measures instead of serving a
+            # count that no longer describes the table.
+            get_total_count_cache().evict_table(table_name)
 
         return await self._upsert_table_metadata(
             script=script,
@@ -445,7 +457,10 @@ class AkshareDataService:
 
         total = int((await self.db.execute(count_stmt)).scalar() or 0)
         stmt = (
-            stmt.order_by(DataTable.updated_at.desc())
+            # ``updated_at`` alone ties for rows written in the same tick, and a
+            # tied ORDER BY is not a total order: MySQL could then serve one metadata
+            # row on two pages and skip another.  ``id`` breaks every tie.
+            stmt.order_by(DataTable.updated_at.desc(), DataTable.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -503,26 +518,47 @@ class AkshareDataService:
         page: int = 1,
         page_size: int = 50,
         adjustment: str | None = None,
-    ) -> tuple[list[str], list[dict[str, Any]], int, dict[str, Any] | None]:
-        """Preview rows from a warehouse table with optional adjustment-basis filtering.
+    ) -> WarehouseTablePage:
+        """Preview one page of rows from a warehouse table.
 
-        Returns ``(columns, rows, total, adjustment_basis_meta)``. The metadata
-        block is ``None`` unless the physical table actually has an
-        ``adjustment`` column, so tables without that column keep the exact
-        pre-existing response shape. When the column exists the block reports
-        the echoed filter, the observed distinct bases and whether the table
-        mixes more than one basis; nothing is silently dropped or hidden.
+        Ordering is a total order derived from the table's own key constraints (see
+        :mod:`app.services.akshare.table_pagination`); a table for which no such
+        order is provable raises ``StableOrderingUnavailableError`` instead of
+        serving unordered pages.  The exact ``COUNT(*)`` is measured once per
+        (database, table, filter) shape and reused inside the cache TTL, so walking
+        the pages of a large table no longer pays a full count per request.  The
+        response says which of the two happened through ``total_source``.
+
+        ``adjustment`` optionally narrows rows and ``total`` to one basis, and the
+        resulting ``adjustment_basis`` block reports the echoed filter, the
+        observed distinct bases and whether the table mixes more than one; nothing
+        is silently dropped or hidden.  That block is ``None`` unless the physical
+        table actually has an ``adjustment`` column, so tables without that column
+        keep the exact pre-existing response shape.  A malformed or unknown basis
+        raises ``AdjustmentBasisError`` rather than serving an unfiltered page.
         """
-        if _get_akshare_data_engine() is None:
+        engine = _get_akshare_data_engine()
+        if engine is None:
             raise RuntimeError("AKSHARE_DATA_DATABASE_URL is not configured")
 
         quoted_name = self._quote_identifier(table_name)
         offset = (page - 1) * page_size
-
         if adjustment is not None and not _VALID_ADJUSTMENT_VALUE.match(adjustment):
             raise AdjustmentBasisError(f"Invalid adjustment basis: {adjustment!r}")
 
-        async with _get_akshare_data_engine().connect() as conn:
+        # The basis filter is part of the count's query shape: a filtered total can
+        # never be reused for an unfiltered page (or for another basis).
+        filters: tuple[tuple[str, str], ...] = (
+            ((_ADJUSTMENT_COLUMN, adjustment),) if adjustment is not None else ()
+        )
+        cache_key = TotalCountKey(
+            database=str(engine.url.database or ""),
+            table_name=table_name,
+            filters=filters,
+        )
+        async with engine.connect() as conn:
+            ordering = await conn.run_sync(reflect_table_ordering, table_name)
+            order_sql = order_by_clause(ordering)
             column_names = await conn.run_sync(
                 lambda sync_conn: [
                     column["name"] for column in inspect(sync_conn).get_columns(table_name)
@@ -531,8 +567,7 @@ class AkshareDataService:
             has_adjustment = _ADJUSTMENT_COLUMN in column_names
 
             where_clause = ""
-            count_params: dict[str, Any] = {}
-            row_params: dict[str, Any] = {"limit": page_size, "offset": offset}
+            filter_params: dict[str, Any] = {}
             if adjustment is not None:
                 if not has_adjustment:
                     raise AdjustmentBasisError(
@@ -555,17 +590,21 @@ class AkshareDataService:
                         f"{table_name}; observed bases: {observed}"
                     )
                 where_clause = f" WHERE {_ADJUSTMENT_COLUMN} = :adjustment"
-                count_params["adjustment"] = adjustment
-                row_params["adjustment"] = adjustment
+                filter_params["adjustment"] = adjustment
 
-            total_result = await conn.execute(
-                text(f"SELECT COUNT(*) FROM {quoted_name}{where_clause}"),
-                count_params,
+            total, total_source, total_age_seconds = await resolve_total_count(
+                conn,
+                count_sql=f"SELECT COUNT(*) FROM {quoted_name}{where_clause}",
+                cache=get_total_count_cache(),
+                key=cache_key,
+                params=filter_params,
             )
-            total = int(total_result.scalar() or 0)
             result = await conn.execute(
-                text(f"SELECT * FROM {quoted_name}{where_clause} LIMIT :limit OFFSET :offset"),
-                row_params,
+                text(
+                    f"SELECT * FROM {quoted_name}{where_clause} {order_sql} "
+                    "LIMIT :limit OFFSET :offset"
+                ),
+                {"limit": page_size, "offset": offset, **filter_params},
             )
             mappings = result.mappings().all()
 
@@ -586,7 +625,23 @@ class AkshareDataService:
                 if row.get(_COMPACT_PAYLOAD_COLUMN)
             ]
             columns = list(expanded_rows[0].keys()) if expanded_rows else []
-            return columns, expanded_rows, total, basis_meta
+            return WarehouseTablePage(
+                columns=columns,
+                rows=expanded_rows,
+                total=total,
+                total_source=total_source,
+                total_age_seconds=total_age_seconds,
+                ordering=ordering,
+                adjustment_basis=basis_meta,
+            )
 
         columns = list(rows[0].keys()) if rows else []
-        return columns, rows, total, basis_meta
+        return WarehouseTablePage(
+            columns=columns,
+            rows=rows,
+            total=total,
+            total_source=total_source,
+            total_age_seconds=total_age_seconds,
+            ordering=ordering,
+            adjustment_basis=basis_meta,
+        )

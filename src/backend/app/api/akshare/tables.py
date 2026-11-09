@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.data.deps import get_current_db_user
 from app.db.database import get_db
 from app.services.akshare.data import AdjustmentBasisError, AkshareDataService
+from app.services.akshare.table_pagination import StableOrderingUnavailableError
 
 router = APIRouter()
 
@@ -140,7 +141,7 @@ async def get_table_rows(
     if table is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
     try:
-        columns, rows, total, basis_meta = await service.get_table_rows(
+        page_result = await service.get_table_rows(
             table.table_name,
             page=page,
             page_size=page_size,
@@ -148,6 +149,13 @@ async def get_table_rows(
         )
         data_available = True
         error = None
+    except StableOrderingUnavailableError as exc:
+        # Fail closed: the table has no provable total order, so no page is served.
+        # Silently unordered rows would be worse than an explicit refusal.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except AdjustmentBasisError as exc:
         # Structured rejection: the global HTTPException handler renders the
         # {"error","message","request_id","path"} envelope for this 400.
@@ -157,11 +165,22 @@ async def get_table_rows(
         ) from exc
     except (RuntimeError, ValueError, SQLAlchemyError) as exc:
         columns = _column_names_from_metadata(table.metadata_json)
-        rows = []
-        total = 0
+        rows: list[dict[str, typing.Any]] = []
+        total: int | None = 0
+        ordering: dict[str, typing.Any] | None = None
+        total_source: str | None = None
+        total_age_seconds: float | None = None
         data_available = False
         error = _warehouse_error_message(exc)
         basis_meta = None
+    else:
+        columns = page_result.columns
+        rows = page_result.rows
+        total = page_result.total
+        ordering = page_result.ordering.as_response()
+        total_source = page_result.total_source
+        total_age_seconds = page_result.total_age_seconds
+        basis_meta = page_result.adjustment_basis
     payload: dict[str, typing.Any] = {
         "table_name": table.table_name,
         "columns": columns,
@@ -169,6 +188,13 @@ async def get_table_rows(
         "page": page,
         "page_size": page_size,
         "total": total,
+        # ``total_source`` is "live" when COUNT(*) ran for this request and "cached"
+        # when the exact total was reused inside the cache TTL; ``total_age_seconds``
+        # is how old a cached total was when it was read.
+        "total_source": total_source,
+        "total_age_seconds": total_age_seconds,
+        # The key the rows were paged by, so a caller can see the ordering is total.
+        "ordering": ordering,
         "data_available": data_available,
         "error": error,
     }
