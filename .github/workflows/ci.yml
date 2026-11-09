@@ -829,8 +829,14 @@ jobs:
       - name: Install gitleaks
         run: |
           GITLEAKS_VERSION=8.30.1
-          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | tar -xz -C /tmp gitleaks
+          # Piping the stream straight into tar made a truncated download exit as
+          # "tar: Error is not recoverable" with zero findings, i.e. a red gate
+          # that looks like a leak. Download to a file, retry, then unpack.
+          curl --fail --silent --show-error --location \
+            --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 \
+            --output /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
 
