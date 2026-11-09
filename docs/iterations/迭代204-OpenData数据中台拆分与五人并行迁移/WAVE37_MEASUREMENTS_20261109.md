@@ -214,3 +214,17 @@ Every bond batch after 15:00Z, from the run directories:
 That is a clean production before/after for the epoch comparison fix, on the integration checkout.
 Stock over the same interval: 385 `scheduled_verified`, 10 `backfill_failed`, 5 `verification_failed`,
 against 210,714 budget deferrals (per-symbol deferrals are counted per batch, not failures).
+
+## 20. Stock production timeline and residual tail gaps
+
+Timer stock batches between 13:07Z and 19:04Z: after the combined checkout took effect (13:52Z), every
+batch reports 10 `scheduled_verified` except five symbol-level `verification_failed` outcomes:
+000862 (16:26Z), 000910/000911/000912 (16:47Z), 001229 (17:43Z).
+
+Inspected 001229: source 1030 date keys vs warehouse 1020, `source_only_count=10`,
+`warehouse_duplicate_date_count=0`, `ohlc_value_change_count=0`. So the mismatch is a **10-day tail gap**
+(the newest sessions did not land), not an OHLC value difference and not duplicate rows. This is the
+same tail-gap shape seen before the series fix and needs one symbol traced end-to-end (source window
+vs the script's effective parameters vs committed rows) — registered open, not explained away.
+Pre-fix batches for contrast: 13:07Z 10 backfill_failed; 13:35Z and 13:43Z 9 each with
+`post_write_sequence_mismatch`; from 13:52Z the verified rate is 515 verified vs 5 tail-gap failures.
