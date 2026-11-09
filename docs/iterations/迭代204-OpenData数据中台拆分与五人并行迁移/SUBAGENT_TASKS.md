@@ -313,6 +313,26 @@ dispatch→checkpoint 之间，recovery 臂改用数据库时间确定性过期�
 **1 passed in 2.03s**。仍开放的只是该行附带暴露的**设计问题**（丢租约的 worker 能否自己结算），
 那是属主裁定，不是这条 flake。
 
+### CI 门禁债务状态对账（2026-11-09T05:20Z，wave 34）
+
+只登记**已合入**或**已有可复跑仪器**的项；未合入的在飞 PR 标注为「在审」。**不改任何 AC 结论。**
+
+| 行 | 新状态 | 证据（可复核） |
+|---|---|---|
+| `Security - Secret Scan` 可归因性 | **DONE（已合入并实测生效）** | PR #331 → dev `6d7e7735`；dev 上该作业 `128977241889` **40 秒成功**（04:17:56→04:18:36）；修法为下载落盘 + `--fail --retry` + `gitleaks_version` 成为判据。 |
+| 分页全序（#303 一系） | **DONE（#332 合入，`de0802469`）** | a59dca628 与 dev `merge-tree` 干净；受影响测试 96 passed / 79 skipped；#303 已关闭并留指向说明（未 force-push）。 |
+| 债券控制器 `%` 插值缺陷 | **DONE（#333 合入，`eeebf5f21d`）** | 38 个测试钉住契约；无库复现 `"…%Y-%m-%d" % ()` → `TypeError`。**注意**：这不等于 `full-history-recovery` 转绿——该 unit 在 05:11:06Z 仍失败，且修法尚未部署（部署树 `ce97f53f5`）。 |
+| `Backend - Unit Tests (py3.12)` 沙箱 bootstrap 抖动 | **DONE（#334 合入，`3be018da`）** | 根因是 spawn 子进程导入 backtrader/numpy/pandas 撞上 15 s 硬超时，被产品误判为「策略代码缺陷」→ 多一次 repair；诊断以 CPU 抢占天然复现同一条 `Strategy validator bootstrap timed out after 15 seconds`，并用注入复现 `assert 2 == 1`。修法是该测试改用本文件已有的 validator stub（2.23s，注入下 0 次调用仍通过）；该提交只改 1 个测试文件，对 1066 条被锚路径命中 0，AC01 锚读数在 `3be018da` 继续成立。 |
+| `merge_watch.py` 仍是会话工具 | **在审（#336）** | 已入库 `scripts/dev/merge_watch.py`，默认 dry-run；8 条测试；`scripts/ci/tests` 246 passed；对真实仓库只读 dry run 输出 `#333/#334/#335 WAIT pending=…`。 |
+| 本机 mypy 测量危害（266/267） | **规避式已验证可复现** | 镜像 venv（`mypy 1.20.2`）+ 空 `MYPY_CACHE_DIR` → `mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108`，与 CI 冻结基线逐字相同。仍属环境项：本机解释器 3.13 + 系统站点包，环境身份仪器自判 `allowed=false`。 |
+| ruff 版本分裂（276） | **已量化，仍待属主择一侧** | CI 装 `0.16.2`（`ci.yml:397`）、lock 钉 `0.15.13`（`requirements-dev.lock:431`）；当前树上两版互认（0.15.13 的产物 0.16.2 接受，反向亦然，各 0 处改动），故是 pin 卫生而非格式化迁移。 |
+| AC11 运行时证据分子 | IN PROGRESS，**443/1048** @ `2026-11-09T03:01:29Z` | 同仪器同 `--since`：`443 + 148 + 29 + 428 = 1048`；`assigned` 仍不由仪器计算。 |
+| AC11 处置台账 | IN PROGRESS，**954 / 6 / 8 / 89，assigned 0** | `assign_script_dispositions.py --limit 0`，两个 export 都给了仍是 89 UNDECIDED；其中 **68 个在 catalog 里没有任何 akshare 调用记录**（缺记录，不是缺复核）。签名包 6 行哈希 6/6 仍匹配，`reviewer`/`reviewed_at_utc` 未填。 |
+| AC13 单写者 | **改判：实现已在 dev，缺接线** | #289 `c7ba5abb2` 含 coordinator 601 行 + write_fence + 迁移 + 19 测试（本机 **19 passed**）；`AkshareRunCoordinator` 在 `app/` 里**零引用**。接线是「一个调用点 + 一个开关」的 S 级改动，三处参数需属主定（见迁移计划 §7.1）。 |
+| AC14 小时链 | IN PROGRESS，**33/48** 无断点 @ `2026-11-09T05:02Z` | task 1049 cron `3 * * * *`，锚 #316 部署 `2026-11-07T19:26:47Z`；第 48 槽约 `2026-11-09T19:05Z`。仍未达标。 |
+| 迁移可行性与分批 | **已交付（#335 在审）** | B0.0 实测：974 端点仅 10 个有 `target_models`；319 model 里仅 10 个是 akshare；964 个未绑定端点中 **661 可挂 8 个已有家族、299 需新建**（可复跑仪器入库）。 |
+| `etf-nav-backfill@0–3` | **已按属主批准停用** | before `NRestarts=11738`、`activating/auto-restart`；after `inactive/disabled`、计数归零；after-image 见 [WAVE34_MEASUREMENTS_20261109.md](WAVE34_MEASUREMENTS_20261109.md) §2.4。 |
+
 仍然 OPEN、且本机不可闭合（保持诚实登记）：#257 合并集成税形状、#268 OD 重复触发、#269 源主机不可达、
 #266/#267 测量环境危害、#277 部署机制、#260 的 7 个脚本、AC11 的属主签字、AC13 单写者实现与七连测、
 #303 的分支决定、#262 的 dependabot 主版本升级。
