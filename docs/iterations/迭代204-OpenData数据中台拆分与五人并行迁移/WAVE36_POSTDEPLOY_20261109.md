@@ -93,3 +93,23 @@ app.settings.{ai_assistant, ai_research_v2, application, asset_research,
 
 **含义**：把 1057 个脚本搬进 OpenData 之前，必须先把这 21 个模块（或替身/解耦版本）一起搬过去。
 这不是「拷两个文件」，但仍然是一份**有限且可枚举**的清单——比逐脚本改造小两个数量级。
+
+## 7. 部署后 full-history-recovery 的五资产轮转实况（10:13–10:24Z）
+
+轮转顺序 `stock → crypto → bond → etf → option`，每分钟一个资产。最近 12 次运行：
+
+| 资产 | 状态 | 说明 |
+|---|---|---|
+| **stock** | `invalid_or_missing_cli_report`（"expected CLI report was not created"） | **仍是 pandas Index 崩溃**——#338 的修复尚未部署 |
+| **crypto** | **completed** | 部署前每分钟失败，部署后稳定完成 |
+| **bond** | `attention_required` | **不再崩**：#333 的 `%` 修复生效；报告写出 290 KB |
+| **etf** | `attention_required` | 同上（报告产出，worker 判需关注） |
+| **option** | `attention_required` | 同上 |
+
+**bond 的具体原因**：`bond-report.json` 有 5 条 outcomes，**5/5 都是 `post_write_mismatch`**
+（`mode: managed_bounded_convertible_history_reconciliation`）。也就是说：控制器已经能连接、抓取、写入，
+但**写后校验发现自己写进去的内容与校验读回的不一致**——这是数据一致性缺陷，与 #333 修的格式化异常是两件事。
+
+**因此「#333 修好债券腿」要分两层说**：崩溃（`TypeError`）已经消失并可复现地证实；
+但这条腿仍未产出可信结果，因为下一步卡在 `post_write_mismatch`。判定该 unit 健康的标准依旧是一次
+**没有 mismatch 的成功运行**，而不是「不再抛异常」。
