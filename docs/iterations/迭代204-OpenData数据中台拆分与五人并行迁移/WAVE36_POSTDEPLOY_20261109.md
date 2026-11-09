@@ -67,3 +67,29 @@
 包内助手只有十来个（最多 `common.daily._jin10_macro` 15 次）；第三方只有 `akshare`(28)、`bs4`(4)、`dateutil`(2) 等少量。
 **因此「先全量搬运」的物理成本很低**：拷贝 1057 个文件 + 两个基础设施模块 + 十来个助手 + 机械的 import 重写，
 不需要动 1000 多个脚本的逻辑。真正的工作量在搬运之后的 provider 化与验证（见迁移计划 B0–B6）。
+
+## 6. 搬运的真正边界：不是 2 个模块，是 21 个
+
+脚本层只 import 两个入口（`akshare_to_mysql`、`db_config`），但这两个入口的**传递闭包是 21 个 `app.*` 模块**：
+
+```
+app.ai_provider_registry
+app.config / app.config_parsing
+app.data_fetch.configs.db_config
+app.data_fetch.core.database / app.data_fetch.core.mysql_base
+app.data_fetch.providers.akshare_to_mysql
+app.data_fetch.utils.akshare_network_proxy / common_utils
+app.services.market_data.openbb_runtime
+app.settings.{ai_assistant, ai_research_v2, application, asset_research,
+              broker_accounts, database, market_data, operations, paths,
+              security_auth, service_deployments}
+```
+
+两处耦合值得单独记：
+
+- **`app.settings.market_data → app.services.market_data.openbb_runtime`**：设置包反向依赖服务层，
+  意味着「先搬两个文件」在依赖上并不成立；
+- `app.settings.ai_assistant → app.ai_provider_registry`：同类。
+
+**含义**：把 1057 个脚本搬进 OpenData 之前，必须先把这 21 个模块（或替身/解耦版本）一起搬过去。
+这不是「拷两个文件」，但仍然是一份**有限且可枚举**的清单——比逐脚本改造小两个数量级。
