@@ -109,6 +109,34 @@ python3 src/backend/scripts/ops/assign_script_dispositions.py \
 **因此 B1/B2/B3 的分批不能只看目录状态**：954 个 EXTEND 里有多少是同一 provider 家族的多变体，决定了脚手架的复用率；
 这需要在动工前先做一次「族归并」统计（同一 `target_models` 下的脚本数），否则会把同一家族的重复工作量乘 954 次。
 
+## 2.5 真正的第一道缺口：provider model ↔ source function 的绑定几乎为空
+
+对 `docs/afi204-migration-catalog.json`（origin/dev 版本）逐条统计：
+
+| 事实 | 读数 |
+|---|---|
+| `provider_endpoint_catalog` 端点 | 974 |
+| 带非空 `target_models` 的端点 | **10**（9 REQUIRES_MANUAL + 1 READY_FOR_ADAPTER） |
+| `target_models` 为空的端点 | **964**（870 MISSING_PROVIDER + 94 REQUIRES_MANUAL） |
+| 这 964 个的 `runtime_verification` | **NOT_RUN 964/964** |
+| `opendata_provider_models` | 319 |
+| 其中带非空 `source_functions` 的 | **12**（**307 个为空**） |
+| 全库不同 `source_functions` 函数名 | **13** |
+| 964 个未绑定端点中，按函数名能匹配到现有 model 的 | **0** |
+
+**这条改变了对工作量的理解。** 不是「有 877/954 个 provider 要写」，而是**先要建立 model↔source 的绑定元数据**：
+现有 319 个 model 里 307 个连「我负责哪些源函数」都没声明，所以「按家族归并、复用脚手架」这件事**现在做不了**，
+任何按家族分批的计划都缺少输入。
+
+**可自动化的前置（建议作为 B0.0，先于 B1）**：catalog 的 `files` 条目自带每个脚本的 `calls` 与 `source_imports`，
+端点条目自带 `function`、`observed_argument_names`、`compatible_query_fields`；三者合起来足以**机械生成
+「端点 → 源函数 → 候选 model」的绑定候选表**。这一步不需要 877 次人工判断，只需要一次数据工程 + 人工复核抽样。
+
+**B0.0 的验收**：产出候选绑定表，每个端点必须落到两类之一并计数——
+(a) 绑定到一个已声明 model（并给出该 model 的 `module_path`）；
+(b) 明确标为「无匹配 model，需新建」。
+两类都可复查；**只有到这一步之后，「954 EXTEND」才能被换算成真实的人月**，在那之前任何工期估计都不可信。
+
 ---
 
 ## 3. 已存在的切换机件（可直接用，不必重造）
