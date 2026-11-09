@@ -74,6 +74,43 @@ REQUIRES_MANUAL → 72 grew / 53 not_run / 35 no_delta / 7 failed / 22 无任务
 
 ---
 
+## 2.4 AC11 处置台账：迁移主体的真实规模（2026-11-09 新读数）
+
+处置分派仪器 `src/backend/scripts/ops/assign_script_dispositions.py` 本机复跑（提议，不是指派）：
+
+```
+python3 src/backend/scripts/ops/assign_script_dispositions.py \
+  --out-dir /tmp/it204/ac11-disp-1109 --limit 0 --as-of-utc 2026-11-09T04:50:00Z \
+  --registration-export /tmp/it204/ac11-registration-export.json \
+  --source-verification-export /tmp/it204/sv/source_verification_export.json
+```
+
+| 项 | 读数 |
+|---|---|
+| 受跟踪非 `__init__` 脚本 | **1057** |
+| 台账行 | 1057（每脚本一行） |
+| **已指派 `assigned`** | **0** |
+| 提议（未评审） | 1057 |
+| `EXTEND_PROVIDER` | **954** |
+| `HELPER_ONLY` | 8 |
+| `REUSE_PROVIDER` | **6** |
+| `UNDECIDED_INSUFFICIENT_EVIDENCE` | **89** |
+| 库存 sha 一致 | 1057/1057 |
+| 对账问题 | none |
+| 库存有行但盘上无文件 | 9 |
+
+属主/族分布：`owner:B 604 / owner:C 445 / owner:review 8`；族 `stock 384 / other 317 / index 93 / fund 87 / futures 64 / option 46 / bond 41 / fx 20 / crypto 5`。
+
+**这组数字决定了迁移的形状**：迁移主体是 **954 个「扩展现有 provider 家族」**，不是 954 个从零写起；
+真正能「复用已有 provider」的只有 **6 个**；89 个连证据都不足（在已提供 source-verification export 的情况下仍是 89——说明该出口本身还没覆盖它们，不是靠再审一遍就能降）。
+这与目录口径的 `MISSING_PROVIDER 877` **不是同一把尺子**：目录问「有没有 provider」，处置问「要不要扩/复/只当 helper」，
+两者不应被强行对平。**assigned 仍为 0：提议不是指派，签字仍属属主。**
+
+**因此 B1/B2/B3 的分批不能只看目录状态**：954 个 EXTEND 里有多少是同一 provider 家族的多变体，决定了脚手架的复用率；
+这需要在动工前先做一次「族归并」统计（同一 `target_models` 下的脚本数），否则会把同一家族的重复工作量乘 954 次。
+
+---
+
 ## 3. 已存在的切换机件（可直接用，不必重造）
 
 | 机件 | 位置 | 状态 |
