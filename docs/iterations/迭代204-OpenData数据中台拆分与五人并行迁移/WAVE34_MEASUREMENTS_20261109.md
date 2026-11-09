@@ -88,6 +88,31 @@ stock-tail-daily —— 它们会在重启后继续重试并继续失败（watch
 `etf-nav-backfill@` 与 `option-history` 已 disabled，`dce-option-recovery` 无 timer。
 **本轮未改动这五个 unit**：处置属 D7 裁定。
 
+### 2.4 停用四个 shard 之后的运行资产面 after-image（2026-11-09T05:11:55Z）
+
+仪器：`evidence/2026-11-07-wave31/unit_runtime_asset_audit.py`，输出 `/tmp/it204/ac01_runtime_1109.json`。
+**10 个 unit / 8 个仍有 missing-on-disk 目标 / 0 个未入库运行源码**（后者仍是空真）。
+
+| unit | Active | UnitFile | 最近启动 | 说明 |
+|---|---|---|---|---|
+| `etf-nav-backfill@` | （模板，state 空） | — | — | 四个实例已 inactive/disabled，`NRestarts` 归零 → **崩溃循环停止** |
+| `policy-expiry-watchdog` | failed | static | **2026-11-09 13:00:06 CST**（05:00Z） | timer 每小时触发，continue failing |
+| `stock-amount-daily` | failed | static | 2026-11-09 04:00:45 CST（11-08 20:00Z） | timer enabled |
+| `stock-tail-daily` | failed | static | 2026-11-08 21:11:10 CST | timer enabled |
+| `dce-browser-capture` | failed | static | 2026-11-08 19:35:37 CST | timer enabled |
+| `dce-option-daily` | failed | static | 2026-11-08 20:06:53 CST | timer enabled |
+| `option-history` | inactive | **disabled** | — | 已被 task 1082 取代 |
+| `dce-option-recovery` | inactive | static | — | 一次性任务，无 timer |
+| `full-history-recovery` | failed | static | **2026-11-09 13:11:06 CST**（05:11Z） | 目标全在盘上（missing 0），失败原因正是 §2.2/PR #333 修的债券 SQL |
+| `frontend` | active | enabled | 2026-11-05 08:47:32 CST | 不在 AC01 缺脚本类内 |
+
+**两条结论**：
+
+1. 停用四个 shard **只消除了那 4 个崩溃循环**，没有改变另外 5 个 timer 继续失败的事实；这 5 个还在 fire。
+2. `full-history-recovery` 在测量前 49 秒（05:11:06Z）刚失败过一次——它的两个目标都在盘上且在 dev 里，
+   所以它不是「缺脚本」类；它的失败正是 **PR #333 修的债券 SQL**。但**部署树仍是 `ce97f53f5`，不含 #333**，
+   因此修法在部署之前不会生效，timer（每 2 分钟）会继续失败。**部署是服务状态变更，本轮未做。**
+
 ## 3. AC11：运行时与处置台账的两把尺子
 
 - 运行时证据（同一仪器、同一 `--since 2026-11-05T14:00:00+00:00`）：**443/1048** @ `2026-11-09T03:01:29Z`；
