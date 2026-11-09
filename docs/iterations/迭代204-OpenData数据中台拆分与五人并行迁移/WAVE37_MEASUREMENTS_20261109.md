@@ -123,3 +123,11 @@ Fifty more `not_run` tasks: 49 COMPLETED and grew, 1 source-empty (`video_variet
 Numerator **644/1048** (completed_no_delta 179, failed_only 27, not_run 198), same window.
 Day sequence now 443 → 513 → 516 → 521 → 522 → 535 → 557 → 601 → **644**.
 Artifact: `/tmp/it204/ac11_cumulative9/ac11_runtime_evidence.json`. Same attribution caveat.
+
+## 13. AC11 fifth manual-exercise tranche (17:16Z)
+
+Fifty more `not_run` tasks: 49 COMPLETED and grew, 1 source-empty. Numerator **682/1048**
+(completed_no_delta 190, failed_only 28, not_run 148), same window.
+Day sequence: 443 → 513 → 516 → 521 → 522 → 535 → 557 → 601 → 644 → **682** (17:16Z).
+Artifact: `/tmp/it204/ac11_cumulative10/ac11_runtime_evidence.json`. Same attribution caveat:
+manually triggered executions prove binding and writing, not scheduler cadence.
