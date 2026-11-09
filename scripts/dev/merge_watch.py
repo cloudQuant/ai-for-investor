@@ -105,6 +105,11 @@ def blocking_reasons(
     """Return every reason this PR must not be merged right now; empty means safe."""
     reasons: list[str] = []
     current = latest_check_runs(check_runs)
+    # An empty list is "no gate registered yet", not "all gates passed". On 2026-11-09 this
+    # watcher merged a docs PR zero seconds after it was created because GitHub had not yet
+    # registered any check run for the new head.
+    if not current:
+        return ["no-check-runs"] + reasons
     pending = [run["name"] for run in current if run.get("status") != "completed"]
     red = [
         f"{run['name']}={run.get('conclusion')}"
