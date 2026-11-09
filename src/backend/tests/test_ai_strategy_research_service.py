@@ -3746,7 +3746,18 @@ async def test_research_loop_requires_out_of_sample_validation_window_before_pap
 
 
 @pytest.mark.asyncio
-async def test_research_loop_continues_when_out_of_sample_validation_fails():
+async def test_research_loop_continues_when_out_of_sample_validation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # This test gates on out-of-sample validation, not on sandboxing. The real
+    # spawn validator boots backtrader/numpy/pandas in a child against a hard 15 s
+    # wall clock, so a loaded CI runner can time out and the service then reports
+    # an infra stall as a strategy-code defect, adding a repair call this test
+    # does not expect. Same stub as the cancelled-submission test above.
+    monkeypatch.setattr(
+        "app.utils.sandbox.StrategySandbox.validate_strategy_code",
+        lambda *_args, **_kwargs: "test",
+    )
     workspace_service = FakeWorkspaceService()
     strategy_service = FakeStrategyService(
         workspace_service,
