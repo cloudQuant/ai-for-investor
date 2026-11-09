@@ -262,3 +262,21 @@ Batch 20261109T191314Z reported five `post_write_mismatch`; the very next batch
 its stated window (15:55Z–19:07Z) only; after that window one batch flipped and recovered. The cause was
 not isolated; it is recorded so the consecutive-run claim is not read as covering the whole evening.
 Stock in the same interval: 47 `scheduled_verified`, 3 `verification_failed` (the tail-gap shape of §21).
+
+## 24. Tail-gap hypotheses eliminated (19:26Z)
+
+Three alternative explanations were tested against the database and refuted:
+
+1. **Wrong symbol key** — no STOCK_ZH_A_HIST series exists under 1229 / sz001229 / SZ001229 /
+   001229.SZ, and **no row at all** for any symbol has `created_at` inside the failing 17:40–17:50Z
+   window (001229's two series both end at 1030 rows through 2026-11-09 only after the standalone rerun).
+2. **Writes landing in the legacy database** — `information_schema` shows exactly one copy of
+   STOCK_ZH_A_HIST (in `akshare_data`); neither `backtrader_web` nor `ai_for_investor` has the table.
+3. **Alternate TX collector** — `stock_zh_a_hist_tx.py` writes `STOCK_ZH_A_HIST_TX`, not the table under
+   comparison.
+
+The remaining explanation consistent with every fact is an **unstamped payload** (adjustment defaulting
+to 'unknown') colliding with the 1030-row legacy series on `uk_symbol_date_adjustment`: updates, zero
+inserts, `save_data` returning `len(df)`. That can only be observed from inside the child worker, so the
+next step is a child-side log of the save payload's columns and key values, triggered on the next
+`verification_failed` occurrence.
