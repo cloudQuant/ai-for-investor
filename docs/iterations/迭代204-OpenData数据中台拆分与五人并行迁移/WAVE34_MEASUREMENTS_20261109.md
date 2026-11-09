@@ -146,6 +146,24 @@ stock-tail-daily —— 它们会在重启后继续重试并继续失败（watch
 它们要么需要逐行补证据，要么需要改进 `calls` 的抽取器（当前对动态分发/间接调用不可见）。
 这也解释了为什么给了 `source-verification-export` 之后仍是 89：**缺的是记录，不是复核意愿**。
 
+### 3.2 AC11 `failed_only` 29 行的处置分类（2026-11-09T05:19Z）
+
+从 AC11 报告取出 `outcome=failed_only` 的 29 个任务，逐个读它们最近一次执行的状态与错误：
+
+| 签名族 | 任务数 | 代表 | 判定 |
+|---|---|---|---|
+| `FuturesDailyMarket.run() got an unexpected keyword argument '_ingest_mode'` | **5**（514 / 1051 / 1052 / 1101 / 1102，全部 `daily_market_data`） | 与普查里 `unexpected_param:_ingest_mode` 的 7 行同源 | **参数注入与签名不匹配**；可修，但**必须先确认 `_ingest_mode` 是不是类型平面故意注入的**，不能盲目剥掉 |
+| `… unexpected keyword argument 'source'` / `'end_date'` | 2 | `etf_fund_hist_em`（33 跑 / 19 败）、`stock_zh_index_daily`（31 跑 / 22 败） | 同类签名漂移；这两个失败量大、持续时间长 |
+| `'…' object has no attribute 'require_cursor' / 'require_connection'` | 2 | `FuturesDeliveryMatchDce`、`FuturesContractInfoShfe` | provider 类缺方法，属代码缺陷 |
+| `returned no data and target table … is empty` | 20 | `spot_quotations_sge`（39 跑 / 39 败）、`futures_to_spot_dce`（39 跑 / 38 败）等 | 先判「真无数据（停更/退市）vs 抓取坏」，**不能直接当迁移对象** |
+
+合计 29 个任务、24 个不同签名。三点值得注意：
+
+1. `_ingest_mode` 一族 5 个任务与普查的 7 行完全对得上——**一次签名修复可能清掉 5 个任务**，但前提是搞清
+   这个参数是注入侧多余还是脚本侧缺失，所以本轮只登记、不改。
+2. `returned no data` 占 20/29；其中两个任务跑了 39 次只成功 1 次，属长期空源，不是「今天坏了」。
+3. 这 29 个任务在 AC11 的处置台账里都还没有 `assigned`；它们是 **B4/B6 的输入**（先修/先判定，再谈迁移）。
+
 ## 4. AC14：33/48，无断点
 
 `evidence/2026-11-08-wave32/ac14_hourly_chain.py`，读数 `2026-11-09T05:02Z`：
