@@ -322,6 +322,7 @@ dispatch→checkpoint 之间，recovery 臂改用数据库时间确定性过期�
 | `Security - Secret Scan` 可归因性 | **DONE（已合入并实测生效）** | PR #331 → dev `6d7e7735`；dev 上该作业 `128977241889` **40 秒成功**（04:17:56→04:18:36）；修法为下载落盘 + `--fail --retry` + `gitleaks_version` 成为判据。 |
 | 分页全序（#303 一系） | **DONE（#332 合入，`de0802469`）** | a59dca628 与 dev `merge-tree` 干净；受影响测试 96 passed / 79 skipped；#303 已关闭并留指向说明（未 force-push）。 |
 | 债券控制器 `%` 插值缺陷 | **DONE（#333 合入，`eeebf5f21d`）** | 38 个测试钉住契约；无库复现 `"…%Y-%m-%d" % ()` → `TypeError`。**注意**：这不等于 `full-history-recovery` 转绿——该 unit 在 05:11:06Z 仍失败，且修法尚未部署（部署树 `ce97f53f5`）。 |
+| `Backend - Unit Tests (py3.12)` 沙箱 bootstrap 抖动 | **DONE（#334 合入，`3be018da`）** | 根因是 spawn 子进程导入 backtrader/numpy/pandas 撞上 15 s 硬超时，被产品误判为「策略代码缺陷」→ 多一次 repair；诊断以 CPU 抢占天然复现同一条 `Strategy validator bootstrap timed out after 15 seconds`，并用注入复现 `assert 2 == 1`。修法是该测试改用本文件已有的 validator stub（2.23s，注入下 0 次调用仍通过）；该提交只改 1 个测试文件，对 1066 条被锚路径命中 0，AC01 锚读数在 `3be018da` 继续成立。 |
 | `merge_watch.py` 仍是会话工具 | **在审（#336）** | 已入库 `scripts/dev/merge_watch.py`，默认 dry-run；8 条测试；`scripts/ci/tests` 246 passed；对真实仓库只读 dry run 输出 `#333/#334/#335 WAIT pending=…`。 |
 | 本机 mypy 测量危害（266/267） | **规避式已验证可复现** | 镜像 venv（`mypy 1.20.2`）+ 空 `MYPY_CACHE_DIR` → `mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108`，与 CI 冻结基线逐字相同。仍属环境项：本机解释器 3.13 + 系统站点包，环境身份仪器自判 `allowed=false`。 |
 | ruff 版本分裂（276） | **已量化，仍待属主择一侧** | CI 装 `0.16.2`（`ci.yml:397`）、lock 钉 `0.15.13`（`requirements-dev.lock:431`）；当前树上两版互认（0.15.13 的产物 0.16.2 接受，反向亦然，各 0 处改动），故是 pin 卫生而非格式化迁移。 |
