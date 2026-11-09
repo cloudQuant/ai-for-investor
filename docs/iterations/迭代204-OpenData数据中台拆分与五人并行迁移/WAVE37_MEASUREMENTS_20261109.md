@@ -200,3 +200,17 @@ Direct DB readings (read-only) over the last 14 days, per representative task:
 So AC14 is **not fully met**: the hourly, weekly and sub-daily legs are met; the daily leg has run
 every due day since the write-chain repair (4/4) but the 7-cycle target is time-limited and cannot be
 claimed before 2026-11-12/13. This is accrual arithmetic, not a collector failure.
+
+## 19. Bond production before/after (timer timeline)
+
+Every bond batch after 15:00Z, from the run directories:
+
+- 15:06Z, 15:13Z, 15:20Z, 15:27Z, 15:34Z, 15:41Z, 15:48Z — 7 batches / 35 outcomes, **all
+  `post_write_mismatch`** (the timer still ran code before the #341 epoch normalisation entered the
+  checkout).
+- 15:55Z through 19:07Z — 33 consecutive batches, **165 outcomes, zero mismatches**: every code is
+  `verified_source_sequence` or `verified_unchanged`.
+
+That is a clean production before/after for the epoch comparison fix, on the integration checkout.
+Stock over the same interval: 385 `scheduled_verified`, 10 `backfill_failed`, 5 `verification_failed`,
+against 210,714 budget deferrals (per-symbol deferrals are counted per batch, not failures).
