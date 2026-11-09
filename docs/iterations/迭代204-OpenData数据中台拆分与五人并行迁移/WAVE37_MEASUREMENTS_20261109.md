@@ -254,3 +254,11 @@ separate "inserted" from "matched but skipped", and the change was reverted; its
 The receipt remains an upper bound. An exact receipt needs either a pre/post `COUNT(*)` delta under the
 active fence claim, or a keys-based existence count before insert. Registered OPEN with that as the
 next step; the current field name (`row_count`) must not be read as "rows persisted".
+
+## 23. Bond batch 19:13Z — one transient mismatch, recovered at 19:19Z
+
+Batch 20261109T191314Z reported five `post_write_mismatch`; the very next batch
+(20261109T191907Z) reported five `verified_unchanged`. §19's "33 consecutive clean batches" applies to
+its stated window (15:55Z–19:07Z) only; after that window one batch flipped and recovered. The cause was
+not isolated; it is recorded so the consecutive-run claim is not read as covering the whole evening.
+Stock in the same interval: 47 `scheduled_verified`, 3 `verification_failed` (the tail-gap shape of §21).
