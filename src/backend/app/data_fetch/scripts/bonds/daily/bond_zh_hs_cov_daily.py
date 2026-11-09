@@ -41,6 +41,9 @@ class BondZhHsCovDaily(AkshareToMySql):
             pd.DataFrame: Fetched data
         """
         try:
+            # ``source`` selects the observation series (the table's NOT NULL
+            # source column) and is not a parameter of the upstream function.
+            source = str(kwargs.pop("source", "") or "sina").strip().lower() or "sina"
             # Fetch data from AkShare
             df = self.fetch_ak_data("bond_zh_hs_cov_daily", **kwargs)
 
@@ -66,6 +69,8 @@ class BondZhHsCovDaily(AkshareToMySql):
                 df["symbol"] = requested_symbol
             if "name" not in df.columns:
                 df["name"] = requested_symbol
+            if "source" not in df.columns:
+                df["source"] = source
 
             # Save to database
             self.create_table_if_not_exists(self.table_name, self.create_table_sql)

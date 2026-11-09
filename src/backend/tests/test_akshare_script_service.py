@@ -3143,3 +3143,43 @@ def test_control_parameters_are_not_forwarded_to_script_entrypoints() -> None:
 
     assert result == "ok"
     assert seen == {"symbol": "sz123282"}
+
+
+def test_bond_daily_script_consumes_source_instead_of_forwarding_it(monkeypatch) -> None:
+    """``source`` selects the series; the upstream function does not accept it."""
+
+    from typing import Any
+
+    import pandas as pd
+
+    from app.data_fetch.scripts.bonds.daily.bond_zh_hs_cov_daily import BondZhHsCovDaily
+
+    script = BondZhHsCovDaily()
+    seen: dict[str, Any] = {}
+
+    def fake_fetch(name: str, **kwargs: Any) -> pd.DataFrame:
+        seen["upstream_kwargs"] = kwargs
+        return pd.DataFrame(
+            {
+                "date": ["2026-11-09"],
+                "open": [100.0],
+                "high": [101.0],
+                "low": [99.0],
+                "close": [100.5],
+                "volume": [10],
+            }
+        )
+
+    def fake_save(df: pd.DataFrame, table: str, **kwargs: Any) -> int:
+        seen["saved"] = df.copy()
+        return len(df)
+
+    monkeypatch.setattr(script, "fetch_ak_data", fake_fetch)
+    monkeypatch.setattr(script, "create_table_if_not_exists", lambda *args, **kwargs: None)
+    monkeypatch.setattr(script, "save_data", fake_save)
+
+    result = script.fetch_data(symbol="sz127038", source="sina")
+
+    assert seen["upstream_kwargs"] == {"symbol": "sz127038"}
+    assert seen["saved"]["source"].tolist() == ["sina"]
+    assert result["data_date"].tolist() == [pd.Timestamp("2026-11-09").date()]
