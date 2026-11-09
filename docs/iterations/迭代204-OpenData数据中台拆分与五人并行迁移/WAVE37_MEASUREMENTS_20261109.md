@@ -90,3 +90,13 @@ scheduled then.
   at 19:06Z.
 - Bond timer batch 16:09Z: 5/5 `verified_source_sequence`, `history_completeness=not_certified`
   (listing boundary unknown) — reconciled, not certified.
+
+## 9. AC11 manual-exercise tranche (16:33Z)
+
+Twenty tasks from the `not_run` set were exercised through the managed service with their stored
+parameters (45 s cap): 18 COMPLETED and grew, 2 source-empty (`article_oman_rv`,
+`energy_carbon_domestic`). Numerator **535/1048** (completed_no_delta 167, failed_only 23, not_run 323),
+same `--since 2026-11-05T14:00:00+00:00`.
+Attribution: these are **manually triggered** executions, not scheduler-cadence evidence. They prove
+the scripts bind and write through the production service; they do not prove the scheduler fired them.
+Artifact: `/tmp/it204/ac11_cumulative6/ac11_runtime_evidence.json`.
