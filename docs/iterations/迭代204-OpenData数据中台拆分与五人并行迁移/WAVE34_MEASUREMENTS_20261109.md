@@ -164,6 +164,18 @@ stock-tail-daily —— 它们会在重启后继续重试并继续失败（watch
 2. `returned no data` 占 20/29；其中两个任务跑了 39 次只成功 1 次，属长期空源，不是「今天坏了」。
 3. 这 29 个任务在 AC11 的处置台账里都还没有 `assigned`；它们是 **B4/B6 的输入**（先修/先判定，再谈迁移）。
 
+
+**具体到 `daily_market_data` 这一族**（任务 514 / 1051 / 1101 逐条读参数得到）：
+
+- 任务 `parameters` JSON 里带 `_ingest_mode: "live"`、`overlap_days: 7`、`trading_days_by_market: {...}`；
+- 脚本 `app/data_fetch/scripts/futures/weekly/daily_market_data.py:324` 的签名是
+  `run(self, markets=None, lookback_days=None, max_windows=None, _call_timeout=None)`
+  —— **这三个键一个都不接受**，而调度器按任务参数展开调用，于是 `TypeError`；
+- 三个可选修法：**(a)** 让 `run()` 接受并忽略这三键；**(b)** 在分派边界按目标签名过滤未知键
+  （全局生效，但会静默吞掉拼错的参数，风险更大）；**(c)** 清理这 7 个任务的 `parameters`（数据变更，可回滚）。
+
+**本轮不实施**：让 5 个休眠任务开始写数据是行为变更，且 (a)/(b) 的取舍会影响全部 1048 个任务，需属主定。
+
 ## 4. AC14：33/48，无断点
 
 `evidence/2026-11-08-wave32/ac14_hourly_chain.py`，读数 `2026-11-09T05:02Z`：
