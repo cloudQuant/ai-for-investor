@@ -3134,7 +3134,12 @@ def test_control_parameters_are_not_forwarded_to_script_entrypoints() -> None:
         result = asyncio.run(
             runtime._execute_callable(
                 fake_entrypoint,
-                {"symbol": "sz123282", "_ingest_mode": "backfill", "_recovery_scope_hash": "h"},
+                {
+                    "symbol": "sz123282",
+                    "_ingest_mode": "backfill",
+                    "_recovery_scope_hash": "h",
+                    "claim_key": "bond-convertible-history:v1:x",
+                },
                 5,
             )
         )
