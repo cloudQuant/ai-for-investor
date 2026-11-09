@@ -193,6 +193,22 @@ mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108
 （探针本身也踩过一次坑并已修正：第一版副本没带 `pyproject.toml`，两版都退回默认配置，
 `format` 一下改了 836/1868 个文件——那个数字无效，不能拿来当结论。）
 
+### 5.2 更正：债券腿的第二个阻断是「表不存在」，不是格式化
+
+PR #333 修的是 `cursor.execute(sql, tuple())` 在 pymysql 里被 `%` 插值的问题——这一层是真的、可复现的
+（无库条件下 `"SELECT DATE_FORMAT(d, '%Y-%m-%d')" % ()` 直接 `TypeError`），并用 38 个测试钉住了契约。
+但**它不是债券腿唯一的阻断**：
+
+- 只读实测：`ai_for_investor` 库共 **171 张表**，名字匹配 `%BOND%` / `%COV%` / `%CONVERT%` 的是 **0 张**；
+  `BOND_ZH_HS_COV_DAILY` **不存在**。
+- 我用真实只读连接调用了修复后的 `read_convertible_history_overview()`：返回 0 行、无异常。
+  **但这不能当作「DATE_FORMAT 那句被成功执行」的证据**——表不存在时该方法走的是退化路径，
+  那条 SQL 根本没有发到服务器。我先写成「生产路径不再抛错」，随即被这条表检查推翻，现更正。
+
+**含义**：部署 #333 之后，`full-history-recovery` 在债券腿上仍会失败，只是错误形态从
+`not enough arguments for format string` 变成「没有目标表／退化报告」。**判定该 unit 修好的标准只能是
+一次成功运行，不能是某个错误消失。** 这与本轮 §2.4 的读数一致：它在 05:11:06Z 又失败了一次。
+
 ## 6. 迁移计划（#335）：B0.0 的答案
 
 - 974 个端点只有 **10** 个带 `target_models`；964 个未绑定，全部 `runtime_verification: NOT_RUN`。
