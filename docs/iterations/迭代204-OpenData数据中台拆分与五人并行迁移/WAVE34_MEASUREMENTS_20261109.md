@@ -1,0 +1,143 @@
+# 迭代 204 — Wave 34 实测（2026-11-09）
+
+本轮的主线不是新功能，而是把「已做但没入账」的证据变成可复跑的读数，并把两条长期 OPEN 的行
+（测量环境、合并看守工具）收掉。**不改写任何 AC 判定**；凡未到时间的项写明时间点。
+
+---
+
+## 1. 合并与门禁
+
+| 事项 | 实况 |
+|---|---|
+| #331 密钥扫描门禁修法 | **已合入** `6d7e7735`；dev 上该作业 `128977241889` **40 秒成功**（04:17:56→04:18:36），不再是 14 秒崩在 `curl: (56)` |
+| #332 分页全序（a59dca628） | **已合入** `de0802469`；`merge-tree` 对 dev 干净，受影响测试本机 96 passed / 79 skipped |
+| #303 | **已关闭**并留指向 #332 的说明；未做 force-push；39 绿的历史保留可查 |
+| `etf-nav-backfill@0–3` | 属主批准后 **stop + disable**；before `NRestarts=11738` 且处于 `activating/auto-restart`，after `inactive/disabled`；主服务未受影响（`/docs` 200） |
+
+## 2. AC01：锚无漂移，两个「幽灵」类第一次被问到底
+
+### 2.1 源文件面（在 `7c8f6f2f1` 上重跑）
+
+```
+refresh_script_migration_inventory.py --check --snapshot-commit 29afaeb47
+tree head: 7c8f6f2f1
+anchors: 1057 matched / 0 mismatched / 9 missing (of 1066 rows)
+explanation kinds: ghost_registration=9, in_sync=1057
+invariant: 0 unexplained row(s)
+derivation gate: 1057/1057 anchor-matched rows reproduced (PASS)
+```
+
+此后合入的两个提交对**被锚路径的命中数为 0/0**、对 `src/backend/app/data_fetch/` 的命中数也是 0/0
+（`GET /commits/{sha}` 的 files 列表与 1066 条 inventory `source_path` 求交集）：
+`de08024691` 5 个文件、`6d7e7735591` 10 个文件。**因此该读数在 dev 头 `6d7e773559` 上同样成立。**
+
+### 2.2 7 个运行时幽灵脚本：**从未提交，但字节码还在**
+
+先更正本文初稿里写强的一句话。初稿写「不存在找回原脚本的路径」，那是在**只查了 git 与磁盘源码**之后写的，
+不完整。完整事实是三段：
+
+**(a) 它们从未被提交，且没有源码副本。** 对七个目标名逐条查：AFI `git log --all` 无记录、
+OpenData 仓无记录、`/home/yun/Documents` 下 77 个 worktree 的 `find -name` 无结果、
+`var/backups/iteration204/` 只有升级前的 SQL dump。所以「从历史或备份里 checkout 回来」这条路不存在。
+
+**(b) 但它们曾经真的跑过。** journal 里有成功记录：`etf-nav-backfill@` 跑到 2026-10-27 08:56
+（`processed_codes: 10, source_verified_codes: 10, remaining_seconds: 79.5`）；`dce-option-daily`
+2026-10-26 成功并落了 `10,061,904` 行审计；`stock-amount-daily` 日志止于 `processed 5569 symbols`；
+`stock-tail-daily` 4 片 × 1432 符号、completed 1429 / failed 0。**它们不是从未工作的占位，是丢失的实现。**
+
+**(c) 关键：部分目标的 Python 字节码还活着。** 部署树里现存 4 个 `cpython-313` 的 `.pyc`，
+连它们的**测试字节码**也在：
+
+| 丢失的实现 | 存活的 `.pyc` |
+|---|---|
+| `policy_expiry_watchdog.py` | `scripts/ops/__pycache__/policy_expiry_watchdog.cpython-313.pyc`（38,589 B） |
+| `backfill_stock_amount_sina.py` | `scripts/ops/__pycache__/backfill_stock_amount_sina.cpython-313.pyc`（24,459 B） |
+| `backfill_stock_tail.py`（shard 包装器调用的实现） | `scripts/ops/__pycache__/backfill_stock_tail.cpython-313.pyc`（27,157 B） |
+| `dce_option_history_ingest.py` | `scripts/ops/__pycache__/dce_option_history_ingest.cpython-313.pyc`（27,003 B） |
+| 测试 | `tests/__pycache__/test_policy_expiry_watchdog.*.pyc`、`test_etf_nav_backfill_controller.*.pyc`（151,921 B）、`test_backfill_stock_tail.*.pyc` |
+| 包装器内的控制器 | `scripts/__pycache__/backfill_etf_nav_controller.cpython-313.pyc`（116,280 B）、`audit_futures_daily_dce_browser.*.pyc`、`cffex_option_history_controller.cpython-313.pyc`、`commodity_option_history_controller.cpython-313.pyc` |
+
+用 `marshal.loads` 读这四个 ops 级 pyc，函数名、docstring 与关键常量都可读，例如：
+`policy_expiry_watchdog` 的 `PolicySnapshot / _expiry_from / load_server_policy_catalog`；
+`backfill_stock_amount_sina` 的 `_fetch_sina_kline_amounts`、表名 `STOCK_ZH_A_HIST_AMOUNT`、
+源端点 `akshare.stock_zh_a_daily`；`backfill_stock_tail` 的
+`resolve_window / acquire_lock` 与 `logs/stock_tail_backfill/progress.jsonl`。
+
+**结论（改判）**：这七个 unit 的处置不是「只能从零猜」。
+- `.py` 目标：**先从字节码恢复行为契约（函数边界、常量、参数）**，再决定是否需要逐字还原；
+  本机没有任何反编译器（`pycdc`/`decompyle3`/`uncompyle6` 均不存在），主流工具对 3.13 字节码也没有保证，所以「恢复」不等于「拿到原文」；但函数边界与常量足以让重建有据，而不是从零猜。
+- `.sh` 包装器：没有字节码，但它们的参数（shard 索引/总数、`tail|full`）与动作在 journal 里有实证，
+  且它们调用的控制器 pyc 还在。
+- 这四个 Python 目标与四个控制器 pyc 的存在，应当作为 D7 决策的第一手材料，而不是被忽略。
+
+### 2.3 D7：七个 unit 的逐条决策简报
+
+| unit | ExecStart 指向 | 状态 | 曾经成功？ | 它实际在做什么（证据） | 现有替代 | 可选处置 |
+|---|---|---|---|---|---|---|
+| `etf-nav-backfill@0..3` | `run_etf_nav_shard.sh %i 4` | inactive/disabled（本日属主批准停用），停前 `NRestarts=11738` | 是，至 2026-10-27 08:56 | 以 ~80 s 批次持续回补 ETF 净值；4 个分片各有 ~370 MB checkpoint 与游标 | `scripts/backfill_etf_nav_controller.py` 存在（2026-11-06 重建）但**无 `--shard`**，且 live adapter 全是 `NotRunError` | 恢复包装器（参数有据）／改指向（需先实现 live adapter + shard 模式）／删除（放弃 4 个游标与未探明代码） |
+| `dce-option-daily` | `run_dce_option_recovery.sh tail` | failed，203/EXEC | 是，2026-10-26 | 每日增量抓取并入 `OPTION_COMMODITY_DAILY_HISTORY`，10,061,904 行、70,220 合约 | 无在用任务；`option_hist_dce` 任务 `is_active=0` | 按审计契约重建／改指向（需先启用任务）／删除（失去唯一 DCE 期权通道） |
+| `dce-option-recovery` | `run_dce_option_recovery.sh full` | inactive，从未启动 | 无 journal；但 `full` 审计 2017-03-31..2026-10-22 已完成 | 一次性全量回补 | `full-history-recovery` timer 的 option 轮转**今天跑过**，`attention_required` | 删除（一次性任务已完成）／改指向 worker 的 option 轮转 |
+| `dce-browser-capture` | `run_dce_browser_capture.sh` | failed，203/EXEC（timer 仍 enabled） | 是，2026-10-26（`prepared=1 saved=1 verified=1 rows=250`） | 浏览器绕过 WAF 抓 DCE 日行情 | `scripts/audit_futures_daily_dce_browser.py` 存在（plan/serve/snippet/ingest），无 armed task | 改指向该脚本 + 补一个 serve+browser 启动器／重建（journal 证据不足） |
+| `option-history` | `run_option_history_loop.sh` | inactive/disabled，从未在 systemd 下运行 | 否（`-- No entries --`） | CFFEX 期权历史循环（无行为证据） | armed task 1082 `cffex_option_daily_history`（cron `5 19 * * mon-fri`）+ 控制器 + worker 轮转 | **删除**（已被取代）/改指向控制器 |
+| `policy-expiry-watchdog` | `.venv/bin/python …/policy_expiry_watchdog.py --output …` | failed，每小时 status 2（timer enabled） | 是，最后输出 2026-10-27 08:00 | 只读的 reviewed 日历/策略到期审计，输出 `items[]`（market/policy/`expires_at` 2026-12-31/`manifest_sha256`/`evidence_path`/task_id） | 无 | **重建**（自有输出即契约，且有 pyc）／删除（则 2026-12-31 到期无人监控） |
+| `stock-amount-daily` | `.venv/bin/python …/backfill_stock_amount_sina.py --max-minutes 300 --sleep-seconds 0.25` | failed，status 2（timer enabled） | 是 10-25/26/27，`processed 5569 symbols` | Sina 成交额 sidecar；`progress.jsonl`（schema_version 1）记 000001 1991-04-03..2026-10-20、已写 8,571 | 无（task 1007 只是单标的 qfq 试点） | **重建**（源端点/边界/schema 均有 pyc 与 ledger 证据） |
+| `stock-tail-daily` | `run_stock_tail_slices.sh` | failed，203/EXEC（timer enabled） | 是 10-24/25/26（32 分钟 CPU） | 4 片 × 1432 符号的日增量，completed 1,429 / failed 0 | 无 | **重建**（分片/报表 schema 有据）／删除（失去日增量新鲜度） |
+
+**当前 enabled 的 timer**：dce-browser-capture、dce-option-daily、policy-expiry-watchdog、stock-amount-daily、
+stock-tail-daily —— 它们会在重启后继续重试并继续失败（watchdog 已每小时失败）。这五个是「今天仍会复发」的；
+`etf-nav-backfill@` 与 `option-history` 已 disabled，`dce-option-recovery` 无 timer。
+**本轮未改动这五个 unit**：处置属 D7 裁定。
+
+## 3. AC11：运行时与处置台账的两把尺子
+
+- 运行时证据（同一仪器、同一 `--since 2026-11-05T14:00:00+00:00`）：**443/1048** @ `2026-11-09T03:01:29Z`；
+  `completed_and_grew 443 + completed_no_delta 148 + failed_only 29 + not_run 428`。
+- 处置台账（`assign_script_dispositions.py --limit 0`，两个 export 都给了）：
+  1057 行、**assigned 0**、提议 `EXTEND_PROVIDER 954 / HELPER_ONLY 8 / REUSE_PROVIDER 6 /
+  UNDECIDED_INSUFFICIENT_EVIDENCE 89`；库存 sha 一致 1057/1057；对账问题 0；有行无文件 9。
+- **89 个在给了 `source-verification-export` 之后仍是 89** —— 说明该出口还没覆盖它们，再审一遍不会降。
+- 6 行 `REUSE_PROVIDER` 的签字包 `/home/yun/afi204-evidence/2026-11-07-ac11-review/review-file.reuse-6.unsigned.json`
+  经本人逐个复核：**6/6 的 `file_sha256` 与当前文件仍匹配**，只有 `reviewer`/`reviewed_at_utc` 为空。
+  **未填这两个字段。**
+
+## 4. AC14：33/48，无断点
+
+`evidence/2026-11-08-wave32/ac14_hourly_chain.py`，读数 `2026-11-09T05:02Z`：
+task 1049（cron `3 * * * *`）自部署锚 `2026-11-07T19:26:47Z` 起 33 条执行，
+11-07 20Z … 11-09 04Z 每小时一个 `completed`，连续 **33** 槽、0 失败 0 缺行。
+05Z 的「非完成」只是该小时还没到点（cron 在 :03 触发）。
+**目标 48**：还差 15 个自然小时，第 48 槽约 `2026-11-09T19:05Z`。**不预告、不提前判定。**
+
+## 5. 测量环境：本机终于能复现 CI 的采集平面读数
+
+```
+cd src/backend
+PATH=/tmp/it204/venv-ci/bin:$PATH MYPY_CACHE_DIR=/tmp/it204/mypy-cache-fresh-1109 \
+  python ../../scripts/ci/mypy_ratchet.py --scope collection --advisory
+mypy_ratchet[collection]: errors=2 baseline=2 delta=+0 checked=1108
+```
+
+镜像 venv 的 mypy 是 **1.20.2**（与基线钉的版本一致），cache-dir 指向空目录。读数与 CI 冻结基线
+（dev 作业 `128569391629`）逐字相同。这消解了表里两条「测量危害」行的可执行部分：
+本机不再只能引用 CI 那一行，而是能用同一条命令复现它。**仍未证明**的是「带旧 cache 会少报」的
+具体触发路径（那需要构造一个跨树污染的 cache），故该行只登记到「已给出可复现的正确姿势」。
+
+## 6. 迁移计划（#335）：B0.0 的答案
+
+- 974 个端点只有 **10** 个带 `target_models`；964 个未绑定，全部 `runtime_verification: NOT_RUN`。
+- 319 个 provider model 里**只有 10 个是 akshare**（fmp 69 / fred 40 / sec 24 / …）——
+  **这个库是为别的数据商建的**，不是为 AFI 的 akshare 资产建的。
+- 用 `files[].calls` 反查 + 处置台账 `asset_family`：**661** 个端点可挂到 8 个已有 akshare 家族
+  （stock 368 / index 77 / fund 74 / futures 56 / option 46 / bond 40），**299** 个落在无 model 的族
+  （other 278 / fx 18 / crypto 3），4 个多族，0 个无调用者。
+- 可复跑仪器：`evidence/2026-11-09-migration-binding/provider_binding_candidates.py`
+  （默认出汇总，`--include-rows` 出 964 行）。
+- **D5（AC13 单写者）**已写成具体补丁：`script.py:1690` 现在用 `fencing_token=int(execution.id)`
+  （每次执行的局部序号），应改为 claim 的单调令牌；接线是「一个调用点 + 一个开关」的 S 级改动，
+  三个代码替属主决定不了的参数（开关默认值、29,126 条历史 claim、`period_key`/`parameter_hash` 口径）已点名。
+
+## 7. 本轮明确不做
+
+不重建/不改指向/不删除任何幽灵 unit（D7）；不填 AC11 的签字字段；不把本机读数当 CI 基线；
+不因 AC13 的 19 个离线测试绿就宣称 AC13 闭合（生产接线仍缺）；不因目录里 `READY_FOR_ADAPTER: 1`
+就说任何数据集已迁移。
