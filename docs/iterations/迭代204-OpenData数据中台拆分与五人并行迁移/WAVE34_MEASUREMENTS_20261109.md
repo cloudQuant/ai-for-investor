@@ -100,6 +100,27 @@ stock-tail-daily —— 它们会在重启后继续重试并继续失败（watch
   经本人逐个复核：**6/6 的 `file_sha256` 与当前文件仍匹配**，只有 `reviewer`/`reviewed_at_utc` 为空。
   **未填这两个字段。**
 
+### 3.1 89 个 UNDECIDED 到底缺什么：**不是「再审一遍」，是 68 个没有调用记录**
+
+我一开始的假设是「89 个可能共享同一根缺失轴，修一次元数据就能解一批」。实测把这个假设否掉了。
+
+89 行的 `missing_axes` 确实高度集中：`source_function` 66、`source_function;target_table` 6、
+`single_source_function` 17 —— 表面看是「都缺 source_function」。但把每行路径接回 catalog 的
+`files[].calls` 之后：
+
+| 能不能从 catalog 解出 source function | 行数 |
+|---|---|
+| **没有 akshare 调用记录**（`calls` 里没有 `source_root=akshare` 的条目） | **68** |
+| 有多个 akshare 调用（需要一条消歧规则） | 14 |
+| 恰好一个 akshare 调用 | 7 |
+
+而且那 7 个「恰好一个」也不能直接采信：样本 `funds/hourly/option_minute_em.py` 解出来的是
+`request_with_retry`——一个传输辅助函数，不是源端点。
+
+**结论**：89 个里 **76%（68/89）在 catalog 里根本没有可用的调用记录**，所以不存在「一次元数据修复解一批」；
+它们要么需要逐行补证据，要么需要改进 `calls` 的抽取器（当前对动态分发/间接调用不可见）。
+这也解释了为什么给了 `source-verification-export` 之后仍是 89：**缺的是记录，不是复核意愿**。
+
 ## 4. AC14：33/48，无断点
 
 `evidence/2026-11-08-wave32/ac14_hourly_chain.py`，读数 `2026-11-09T05:02Z`：
