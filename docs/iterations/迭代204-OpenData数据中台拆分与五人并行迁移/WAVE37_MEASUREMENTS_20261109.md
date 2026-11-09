@@ -173,3 +173,14 @@ executions are indistinguishable from real scheduler runs in `ak_task_executions
   No rows were rewritten; execution history stays append-only.
 - Future manual runs must pass `TriggeredBy.MANUAL`. The instrument change adding `--triggered-by`
   is on a branch, not yet merged.
+
+## 17. AC14 deadline reading — hourly leg met (19:06Z)
+
+Deadline job output (`/tmp/it204/ac14_deadline_reading.txt`, measured_at 2026-11-09T19:06:00Z):
+task 1049 `crypto_hourly_market`, armed=1, cron `3 * * * *`; **48 executions since deploy
+2026-11-07T19:26:47Z**, every hourly slot from 11-07 20Z through 11-09 19Z `completed`;
+consecutive completed hourly slots = **48/48**, first non-completed slot: none.
+
+This closes the hourly leg of AC14's natural-cycle target. The daily (2), weekly (1) and sub-daily (1)
+legs were last measured at their window maxima in wave 34 and must be re-read with the same window
+before AC14 is declared fully met; today's reading covers the hourly leg only.
