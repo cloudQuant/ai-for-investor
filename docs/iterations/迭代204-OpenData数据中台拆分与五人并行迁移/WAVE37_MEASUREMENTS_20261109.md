@@ -108,3 +108,11 @@ Another 25 `not_run` tasks exercised the same way: 24 COMPLETED and grew, 1 sour
 same `--since` window. Same attribution caveat as §9: manually triggered executions prove the scripts
 bind and write; scheduler cadence is proven separately by the timer runs.
 Artifact: `/tmp/it204/ac11_cumulative7/ac11_runtime_evidence.json`.
+
+## 11. AC11 third manual-exercise tranche (16:49Z)
+
+Fifty more `not_run` tasks: 48 COMPLETED and grew, 2 source-empty. Numerator **601/1048**
+(completed_no_delta 174, failed_only 26, not_run 247), same `--since` window.
+Day sequence: 443 (03:01Z) → 513 → 516 → 521 → 522 → 535 → 557 → **601** (16:49Z).
+Attribution unchanged: manually triggered executions prove binding and writing, not scheduler cadence.
+Artifact: `/tmp/it204/ac11_cumulative8/ac11_runtime_evidence.json`.
