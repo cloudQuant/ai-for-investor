@@ -241,6 +241,15 @@ def _epoch_or_compact_day(number: int) -> str | None:
     made every comparison report the whole series as source-only.
     """
 
+    # Vendors mix second, millisecond, microsecond and nanosecond epochs; the
+    # magnitude decides the unit, and an unnormalised value overflows
+    # ``fromtimestamp`` ("year 52960 is out of range") instead of comparing.
+    if number >= 10**17:
+        number //= 10**9
+    elif number >= 10**14:
+        number //= 10**6
+    elif number >= 10**11:
+        number //= 10**3
     if number >= 10**9:
         return datetime.fromtimestamp(number, tz=timezone.utc).date().isoformat()
     if len(str(number)) == 8:

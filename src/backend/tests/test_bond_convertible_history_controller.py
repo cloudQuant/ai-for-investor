@@ -1225,3 +1225,14 @@ def test_comparison_matches_an_epoch_source_against_iso_warehouse_rows() -> None
     assert comparison["warehouse_only_count"] == 0
     assert comparison["ohlc_mismatch_count"] == 0
     assert comparison["date_key_and_ohlc_match"] is True
+
+
+def test_epoch_normalisation_accepts_millisecond_and_sub_second_units() -> None:
+    """Vendors mix second/millisecond/microsecond/nanosecond epochs."""
+
+    seconds = 1794182400
+    assert controller._as_day(seconds) == "2026-11-09"
+    assert controller._as_day(seconds * 1000) == "2026-11-09"
+    assert controller._as_day(str(seconds * 1000)) == "2026-11-09"
+    assert controller._as_day(seconds * 10**6) == "2026-11-09"
+    assert controller._as_day(seconds * 10**9) == "2026-11-09"
