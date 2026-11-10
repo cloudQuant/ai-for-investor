@@ -280,3 +280,12 @@ to 'unknown') colliding with the 1030-row legacy series on `uk_symbol_date_adjus
 inserts, `save_data` returning `len(df)`. That can only be observed from inside the child worker, so the
 next step is a child-side log of the save payload's columns and key values, triggered on the next
 `verification_failed` occurrence.
+
+## 25. Overnight reading (2026-11-10 04:02Z)
+
+Same instrument and window: **814 completed_and_grew / 1048** (205 no_delta, 29 failed_only, 0 not_run).
+Overnight timer output since 19:30Z: stock 504 scheduled_verified + 376 verified_match (zero failures);
+bond 405 verified_unchanged + 40 verified_source_sequence (zero mismatches). AC14 hourly chain now 56
+consecutive slots; daily task 1048 at 5 distinct completed days, task 11 at 4 (its 19:20 CST run pending).
+The stock save-payload stderr diagnostic is live on PR #305 (head 0c0f07a80) and fires only when a write
+is attempted, so the next tail-gap failure will carry its series identity in the run log.
