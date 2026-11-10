@@ -262,14 +262,18 @@ class StockZhAHist(AkshareToMySql):
             # Save to database. STOCK_ZH_A_HIST is keyed by
             # (symbol, data_date, adjustment); deleting by data_date alone would
             # remove the same day's rows for other symbols during batch backfills.
-            self.logger.info(
-                "stock save payload symbol=%s rows=%d adjustment=%s source=%s last_date=%s",
-                df["symbol"].iloc[-1],
-                len(df),
-                df["adjustment"].iloc[-1],
-                df["source"].iloc[-1],
-                df["data_date"].iloc[-1],
+            import sys
+
+            sys.stderr.write(
+                "stock save payload symbol={} rows={} adjustment={} source={} last_date={}\n".format(
+                    df["symbol"].iloc[-1],
+                    len(df),
+                    df["adjustment"].iloc[-1],
+                    df["source"].iloc[-1],
+                    df["data_date"].iloc[-1],
+                )
             )
+            sys.stderr.flush()
             self.create_table_if_not_exists(self.table_name, self.create_table_sql)
             self.save_data(
                 df,
