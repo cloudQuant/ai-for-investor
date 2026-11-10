@@ -3106,3 +3106,116 @@ def test_long_minute_fund_defaults_do_not_override_explicit_codes():
     )
 
     assert params["max_codes"] == 3
+
+
+def test_control_parameters_are_not_forwarded_to_script_entrypoints() -> None:
+    """`_`-prefixed dispatch metadata must not reach the data function.
+
+    Controllers pass `_ingest_mode` / `_recovery_*` alongside business
+    parameters. Entrypoints forward `**kwargs` to the upstream service, which
+    rejects the private keys; the exception is swallowed inside the script, so
+    the execution reported success while persisting zero rows.
+    """
+
+    import asyncio
+    from typing import Any
+
+    from app.services.akshare import script_worker_runtime as runtime
+
+    seen: dict[str, Any] = {}
+
+    def fake_entrypoint(**kwargs: Any) -> str:
+        seen.update(kwargs)
+        return "ok"
+
+    original_descriptor = runtime._callable_descriptor
+    runtime._callable_descriptor = lambda _callable: None
+    try:
+        result = asyncio.run(
+            runtime._execute_callable(
+                fake_entrypoint,
+                {
+                    "symbol": "sz123282",
+                    "_ingest_mode": "backfill",
+                    "_recovery_scope_hash": "h",
+                    "claim_key": "bond-convertible-history:v1:x",
+                },
+                5,
+            )
+        )
+    finally:
+        runtime._callable_descriptor = original_descriptor
+
+    assert result == "ok"
+    assert seen == {"symbol": "sz123282"}
+
+
+def test_bond_daily_script_consumes_source_instead_of_forwarding_it(monkeypatch) -> None:
+    """``source`` selects the series; the upstream function does not accept it."""
+
+    from typing import Any
+
+    import pandas as pd
+
+    from app.data_fetch.scripts.bonds.daily.bond_zh_hs_cov_daily import BondZhHsCovDaily
+
+    script = BondZhHsCovDaily()
+    seen: dict[str, Any] = {}
+
+    def fake_fetch(name: str, **kwargs: Any) -> pd.DataFrame:
+        seen["upstream_kwargs"] = kwargs
+        return pd.DataFrame(
+            {
+                "date": ["2026-11-09"],
+                "open": [100.0],
+                "high": [101.0],
+                "low": [99.0],
+                "close": [100.5],
+                "volume": [10],
+            }
+        )
+
+    def fake_save(df: pd.DataFrame, table: str, **kwargs: Any) -> int:
+        seen["saved"] = df.copy()
+        return len(df)
+
+    monkeypatch.setattr(script, "fetch_ak_data", fake_fetch)
+    monkeypatch.setattr(script, "create_table_if_not_exists", lambda *args, **kwargs: None)
+    monkeypatch.setattr(script, "save_data", fake_save)
+
+    result = script.fetch_data(symbol="sz127038", source="sina")
+
+    assert seen["upstream_kwargs"] == {"symbol": "sz127038"}
+    assert seen["saved"]["source"].tolist() == ["sina"]
+    assert result["data_date"].tolist() == [pd.Timestamp("2026-11-09").date()]
+
+
+def test_stored_parameters_outside_the_entrypoint_signature_are_dropped() -> None:
+    """Scheduled tasks keep legacy keys the entrypoint never declared."""
+
+    import asyncio
+    from typing import Any
+
+    from app.services.akshare import script_worker_runtime as runtime
+
+    seen: dict[str, Any] = {}
+
+    def entrypoint(symbol: str, start_date: str | None = None) -> str:
+        seen.update({"symbol": symbol, "start_date": start_date})
+        return "ok"
+
+    original_descriptor = runtime._callable_descriptor
+    runtime._callable_descriptor = lambda _callable: None
+    try:
+        result = asyncio.run(
+            runtime._execute_callable(
+                entrypoint,
+                {"symbol": "sz123282", "start_date": "20261109", "overlap_days": 5},
+                5,
+            )
+        )
+    finally:
+        runtime._callable_descriptor = original_descriptor
+
+    assert result == "ok"
+    assert seen == {"symbol": "sz123282", "start_date": "20261109"}
