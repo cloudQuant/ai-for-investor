@@ -54,7 +54,9 @@ class TestSettingsValidation:
 
     def test_secret_key_validation_default_in_production(self):
         """Test that default secret key is rejected in production."""
-        # Simulate production environment
+        # Simulate production environment.  APP_ENV is the authoritative mode;
+        # DEBUG alone is retained only as a legacy fallback.
+        os.environ["APP_ENV"] = "production"
         os.environ["DEBUG"] = "false"
         os.environ["SECRET_KEY"] = "your-secret-key-change-in-production"
 
@@ -64,6 +66,7 @@ class TestSettingsValidation:
         assert "Default secret key detected" in str(exc_info.value)
 
         # Cleanup
+        del os.environ["APP_ENV"]
         del os.environ["DEBUG"]
         del os.environ["SECRET_KEY"]
 
@@ -76,6 +79,7 @@ class TestSettingsValidation:
 
     def test_jwt_secret_key_validation_default_in_production(self):
         """Test that default JWT secret is rejected in production."""
+        os.environ["APP_ENV"] = "production"
         os.environ["DEBUG"] = "false"
         os.environ["JWT_SECRET_KEY"] = "your-jwt-secret-change-in-production"
 
@@ -85,6 +89,7 @@ class TestSettingsValidation:
         assert "Default secret key detected" in str(exc_info.value)
 
         # Cleanup
+        del os.environ["APP_ENV"]
         del os.environ["DEBUG"]
         del os.environ["JWT_SECRET_KEY"]
 
@@ -93,6 +98,7 @@ class TestSettingsValidation:
         monkeypatch.delenv("DEBUG", raising=False)
         monkeypatch.delenv("SECRET_KEY", raising=False)
         monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+        monkeypatch.setenv("APP_ENV", "production")
         monkeypatch.setenv("ADMIN_PASSWORD", "TestAdmin@12345")
         example = Path(__file__).resolve().parents[1] / ".env.example"
 
@@ -182,6 +188,7 @@ class TestSettingsValidation:
         """Test that wildcard CORS origins are blocked in production."""
         with pytest.raises(ValidationError) as exc_info:
             Settings(
+                APP_ENV="production",
                 DEBUG=False,
                 SECRET_KEY="a" * 32,
                 JWT_SECRET_KEY="b" * 32,
@@ -194,6 +201,7 @@ class TestSettingsValidation:
     def test_production_accepts_explicit_cors_origins(self):
         """Test that explicit CORS origins are accepted in production."""
         settings = Settings(
+            APP_ENV="production",
             DEBUG=False,
             SECRET_KEY="a" * 32,
             JWT_SECRET_KEY="b" * 32,
@@ -249,6 +257,7 @@ class TestSettingsInProduction:
 
     def test_production_requires_secure_secrets(self):
         """Test that production environment enforces secure secrets."""
+        os.environ["APP_ENV"] = "production"
         os.environ["DEBUG"] = "false"
 
         # Should fail with default secret
@@ -265,6 +274,7 @@ class TestSettingsInProduction:
         assert settings.SECRET_KEY == secure_secret
 
         # Cleanup
+        del os.environ["APP_ENV"]
         del os.environ["DEBUG"]
 
     def test_production_with_custom_short_secret_fails(self):

@@ -199,9 +199,12 @@ fi
 
 # 启动后端
 BACKEND_HOST="${HOST:-0.0.0.0}"
-BACKEND_DEBUG="${DEBUG:-true}"
-echo -e "  ${GREEN}启动 FastAPI 服务 (端口 ${BACKEND_PORT}, 地址 ${BACKEND_HOST})...${NC}"
-BACKEND_PID=$(start_background "$BACKEND_LOG" env DEBUG="$BACKEND_DEBUG" HOST="$BACKEND_HOST" "$PYTHON_BIN" -m uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT")
+# Never default DEBUG to true: production-only guards key off APP_ENV, and a
+# silent DEBUG=true would also change framework error behavior.
+BACKEND_DEBUG="${DEBUG:-false}"
+BACKEND_APP_ENV="${APP_ENV:-development}"
+echo -e "  ${GREEN}启动 FastAPI 服务 (端口 ${BACKEND_PORT}, 地址 ${BACKEND_HOST}, APP_ENV ${BACKEND_APP_ENV})...${NC}"
+BACKEND_PID=$(start_background "$BACKEND_LOG" env DEBUG="$BACKEND_DEBUG" APP_ENV="$BACKEND_APP_ENV" HOST="$BACKEND_HOST" "$PYTHON_BIN" -m uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT")
 echo $BACKEND_PID > "$BACKEND_PID_FILE"
 
 # 等待后端启动并验证应用完成生命周期初始化。

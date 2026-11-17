@@ -21,6 +21,14 @@ class ApplicationSettingsMixin:
     # App settings
     APP_NAME: str = "ai-for-investor"
 
+    # Explicit deployment mode.  Production-only guards must key off this
+    # value, not off DEBUG: an operator can run a non-debug build in staging
+    # or forget to export DEBUG entirely.
+    APP_ENV: str = Field(
+        default="development",
+        description="Deployment mode: development, test, or production",
+    )
+
     DEBUG: bool = Field(default=False, description="Debug mode (must remain False in production)")
 
     SECRET_KEY: str = Field(
@@ -58,6 +66,15 @@ class ApplicationSettingsMixin:
     CORS_ORIGINS: str = Field(
         default="http://localhost:3000", description="Comma-separated list of allowed CORS origins"
     )
+
+    @field_validator("APP_ENV")
+    @classmethod
+    def validate_app_env(cls, v: str) -> str:
+        """Reject unknown deployment modes instead of silently downgrading."""
+        normalized = str(v).strip().lower()
+        if normalized not in {"development", "test", "production"}:
+            raise ValueError(f"APP_ENV must be one of: development, test, production; got: {v!r}")
+        return normalized
 
     @field_validator("PORT")
     @classmethod

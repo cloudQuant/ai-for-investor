@@ -138,7 +138,14 @@ class Database:
     ) -> None:
         self.disconnect_db()
 
-    def _execute_batch(self, insert_sql: str, batch: list[Any]) -> bool:
+    def _execute_batch(self, insert_sql: str, batch: list[Any]) -> int:
+        """Execute one batch and return the number of rows the server applied.
+
+        ``rowcount`` is what the server actually persisted; with ``INSERT
+        IGNORE`` a duplicate-heavy batch can apply fewer rows than it offered.
+        Implementations must return an ``int`` (0 is valid) rather than a bare
+        success flag so callers can report the truth.
+        """
         raise NotImplementedError
 
     def save_data(

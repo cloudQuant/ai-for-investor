@@ -839,11 +839,7 @@ def _assert_principal_kind_values_clean(bind: Any, *, allow_null: bool) -> None:
 
 
 def _assert_checks_exact(bind: Any, *, table_name: str, checks: dict[str, str]) -> None:
-    observed = {
-        str(item["name"]): str(item.get("sqltext") or "")
-        for item in sa.inspect(bind).get_check_constraints(table_name)
-        if item.get("name")
-    }
+    observed = _check_observations(bind, table_name)
     if any(
         name not in observed or not _sql_matches(observed[name], sql)
         for name, sql in checks.items()
@@ -1207,18 +1203,75 @@ def _upgrade_existing_table(
             raise RuntimeError("APPROVAL_AUTHORITY_PARTIAL_BINDING")
         _require_existing_sqlite_foreign_keys(bind, table_name, present, spec_by_name)
 
-    for position, spec in enumerate(specs[len(present) :], start=len(present)):
-        if bind.dialect.name == "sqlite":
-            _add_sqlite_column(
-                table_name,
-                spec,
-                checks=checks if position == len(specs) - 1 else {},
+    if bind.dialect.name == "sqlite":
+        # SQLite cannot add table-level constraints with ALTER TABLE, and
+        # attaching several named CHECKs to one ADD COLUMN corrupts the stored
+        # DDL (SQLite folds them into one quoted constraint name).  Rebuild the
+        # table once so columns, foreign keys and every CHECK are emitted as
+        # separate, correctly named clauses.
+        _upgrade_sqlite_existing_table(
+            bind,
+            table_name=table_name,
+            specs=specs,
+            present=present,
+            checks=checks,
+        )
+        return
+    for spec in specs[len(present) :]:
+        op.add_column(
+            table_name,
+            sa.Column(spec[0], sa.String(length=spec[1]), nullable=True),
+        )
+
+
+def _upgrade_sqlite_existing_table(
+    bind: Any,
+    *,
+    table_name: str,
+    specs: tuple[tuple[str, int, str | None, str | None], ...],
+    present: tuple[str, ...],
+    checks: dict[str, str],
+) -> None:
+    """Rebuild one SQLite table with all declared columns/FKs/CHECKs.
+
+    The rebuild is a no-op when the table already has every column, every
+    foreign key and every expected CHECK, so an interrupted migration can be
+    re-run safely.
+    """
+
+    observed_checks = _check_observations(bind, table_name)
+    checks_complete = all(
+        name in observed_checks and _sql_matches(observed_checks[name], expected)
+        for name, expected in checks.items()
+    )
+    fk_columns = {
+        tuple(item.get("constrained_columns") or ())
+        for item in _observed_foreign_keys(bind, table_name)
+    }
+    fks_complete = all(
+        target is None or constraint_name is None or (name,) in fk_columns
+        for name, _length, target, constraint_name in specs
+    )
+    if len(present) == len(specs) and checks_complete and fks_complete:
+        return
+
+    with op.batch_alter_table(table_name, recreate="always") as batch_op:
+        for name, length, _target, _constraint_name in specs[len(present) :]:
+            batch_op.add_column(sa.Column(name, sa.String(length=length), nullable=True))
+        for name, _length, target, constraint_name in specs:
+            if target is None or constraint_name is None or (name,) in fk_columns:
+                continue
+            batch_op.create_foreign_key(
+                constraint_name,
+                target,
+                [name],
+                ["id"],
+                ondelete="RESTRICT",
             )
-        else:
-            op.add_column(
-                table_name,
-                sa.Column(spec[0], sa.String(length=spec[1]), nullable=True),
-            )
+        for name, expected in checks.items():
+            if checks_complete and name in observed_checks:
+                continue
+            batch_op.create_check_constraint(name, expected)
 
 
 def _assert_legacy_request_state_clean(bind: Any) -> None:
@@ -1720,21 +1773,85 @@ def _ensure_candidate_foreign_keys(bind: Any) -> None:
             )
 
 
-def _ensure_checks(bind: Any, table_name: str, checks: dict[str, str]) -> None:
+def _sqlite_named_checks(bind: Any, table_name: str) -> dict[str, str]:
+    """Return ``CONSTRAINT <name> CHECK (<expr>)`` pairs from sqlite_master.
+
+    SQLAlchemy's SQLite inspector mis-parses several named CHECK constraints
+    emitted by a single ``ALTER TABLE ADD COLUMN``: it folds the first
+    declarations into the name of the last one.  The stored DDL is correct, so
+    the migration validates the source of truth directly instead of trusting
+    the reflected names.
+    """
+
+    row = bind.execute(
+        sa.text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"),
+        {"name": table_name},
+    ).first()
+    if row is None or not row[0]:
+        return {}
+    sql = str(row[0])
+    found: dict[str, str] = {}
+    marker = "CONSTRAINT "
+    cursor = 0
+    while True:
+        start = sql.find(marker, cursor)
+        if start < 0:
+            break
+        rest = sql[start + len(marker) :]
+        match = re.match(r"([A-Za-z0-9_]+)\s+CHECK\s*\(", rest)
+        if match is None:
+            cursor = start + len(marker)
+            continue
+        name = match.group(1)
+        open_paren = start + len(marker) + match.end() - 1
+        depth = 0
+        end = None
+        for position in range(open_paren, len(sql)):
+            char = sql[position]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    end = position
+                    break
+        if end is None:
+            break
+        found[name] = sql[open_paren + 1 : end]
+        cursor = end + 1
+    return found
+
+
+def _check_observations(bind: Any, table_name: str) -> dict[str, str]:
+    """Merge reflected and sqlite_master CHECK observations."""
+
     inspector = sa.inspect(bind)
     observed = {
         str(item["name"]): str(item.get("sqltext") or "")
         for item in inspector.get_check_constraints(table_name)
         if item.get("name")
     }
+    if bind.dialect.name == "sqlite":
+        for name, expression in _sqlite_named_checks(bind, table_name).items():
+            observed.setdefault(name, expression)
+    return observed
+
+
+def _ensure_checks(bind: Any, table_name: str, checks: dict[str, str]) -> None:
+    observed = _check_observations(bind, table_name)
+    missing: dict[str, str] = {}
     for name, expected in checks.items():
         if name in observed:
             if not _sql_matches(observed[name], expected):
                 raise RuntimeError("APPROVAL_AUTHORITY_SCHEMA_CONFLICT")
         elif bind.dialect.name == "sqlite":
-            raise RuntimeError("APPROVAL_AUTHORITY_SCHEMA_CONFLICT")
+            missing[name] = expected
         else:
             op.create_check_constraint(name, table_name, expected)
+    if missing:
+        with op.batch_alter_table(table_name, recreate="always") as batch_op:
+            for name, expected in missing.items():
+                batch_op.create_check_constraint(name, expected)
 
 
 def _grant_schema_state(bind: Any) -> str:

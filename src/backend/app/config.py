@@ -58,7 +58,7 @@ def _coerce_bool(value: object) -> bool | None:
 
 
 def _is_production(debug: object | None = None, *, debug_was_explicit: bool = False) -> bool:
-    """Check if the application should apply production-only safeguards."""
+    """Legacy DEBUG-only check retained for callers that only have a flag."""
     normalized_debug = _coerce_bool(debug)
     if debug_was_explicit and normalized_debug is not None:
         return not normalized_debug
@@ -69,7 +69,18 @@ def _is_production(debug: object | None = None, *, debug_was_explicit: bool = Fa
 
 
 def production_security_mode(settings: "Settings") -> bool:
-    """Return whether production-only runtime security guards apply."""
+    """Return whether production-only runtime security guards apply.
+
+    ``APP_ENV`` is the authoritative deployment mode.  The legacy DEBUG
+    inference remains as a fallback for callers that predate the setting, but
+    a production deployment must never rely on "DEBUG happened to be false".
+    """
+
+    app_env = str(getattr(settings, "APP_ENV", "") or "").strip().lower()
+    if app_env and "APP_ENV" in settings.model_fields_set:
+        return app_env == "production"
+    # Backwards compatibility for callers/tests that only set DEBUG=False and
+    # predate APP_ENV.  An explicit APP_ENV always wins.
     return _is_production(
         settings.DEBUG,
         debug_was_explicit="DEBUG" in settings.model_fields_set,
@@ -200,6 +211,18 @@ class Settings(
 
 # Use simple cache to avoid lru_cache issues in pydantic-settings v2
 _settings: Settings | None = None
+
+
+def reset_settings_cache() -> None:
+    """Drop the cached Settings instance.
+
+    Tests that temporarily replace the process environment need the next
+    ``get_settings()`` call to re-read it instead of returning a singleton
+    built from a developer's ``.env``.
+    """
+
+    global _settings
+    _settings = None
 
 
 def get_settings() -> Settings:

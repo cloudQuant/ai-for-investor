@@ -450,15 +450,17 @@ jobs:
           python -m pip install --upgrade "setuptools==83.0.0"
           pip install -e ".[dev,backtrader,data,redis]"
           pip install pip-audit
-          pip-audit --desc --format json --output pip-audit-report.json 2>&1 || true
-          pip-audit --desc 2>&1 || true
+          # Keep the machine-readable report for triage, but fail the job on a
+          # vulnerability: audit is a gate, not an advisory log.
+          pip-audit --desc --format json --output pip-audit-report.json
+          pip-audit --desc
 
       - name: Frontend - Install dependencies and run npm audit
         working-directory: src/frontend
         run: |
           npm ci
-          npm audit --json > npm-audit-report.json 2>&1 || true
-          npm audit 2>&1 || true
+          npm audit --json > npm-audit-report.json
+          npm audit --audit-level=high
 
       - name: Check for high/critical vulnerabilities and create issues
         env:

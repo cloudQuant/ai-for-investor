@@ -136,6 +136,9 @@ try:
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402, I001
     from tests import test_service_read_order_local_process as _order  # noqa: E402
 
+    # conftest imported app.config earlier with the ordinary test environment;
+    # drop that singleton so the synthetic env installed above is actually read.
+    _app_config.reset_settings_cache()
     assert _app_config.get_settings().JWT_SECRET_KEY == _JWT_SECRET
     assert _app_config.get_settings().DATABASE_URL == "sqlite+aiosqlite://"
     assert _app_config.get_settings().DEBUG is False

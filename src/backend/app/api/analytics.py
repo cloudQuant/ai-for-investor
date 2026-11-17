@@ -32,6 +32,24 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# A long backtest can produce hundreds of thousands of points.  Returning all
+# of them makes the response unbounded and the browser chart unusable.  The
+# caps are deliberately generous; the UI only needs a bounded curve.
+_MAX_SERIES_POINTS = 50_000
+_MAX_TRADE_ROWS = 10_000
+
+
+def _bound_series(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Uniformly downsample a series while preserving its first/last point."""
+
+    if len(items) <= limit:
+        return items
+    if limit <= 2:
+        return [items[0], items[-1]][:limit]
+    step = (len(items) - 1) / (limit - 1)
+    indices = {round(index * step) for index in range(limit)}
+    return [items[index] for index in sorted(indices)]
+
 
 @lru_cache
 def get_analytics_service() -> typing.Any:
@@ -339,11 +357,11 @@ async def get_backtest_data(
         "symbol": result.symbol or "Unknown",
         "start_date": str(result.start_date)[:10] if result.start_date else "",
         "end_date": str(result.end_date)[:10] if result.end_date else "",
-        "equity_curve": equity_curve,
-        "drawdown_curve": drawdown_curve,
-        "trades": trades,
-        "signals": signals,
-        "klines": klines,
+        "equity_curve": _bound_series(equity_curve, _MAX_SERIES_POINTS),
+        "drawdown_curve": _bound_series(drawdown_curve, _MAX_SERIES_POINTS),
+        "trades": trades[:_MAX_TRADE_ROWS],
+        "signals": signals[:_MAX_TRADE_ROWS],
+        "klines": _bound_series(klines, _MAX_SERIES_POINTS),
         "log_indicators": log_indicators,
         "monthly_returns": monthly_returns,
         "created_at": str(result.created_at) if result.created_at else "",

@@ -12,6 +12,7 @@ CLI 脚本（``scripts/backfill_ths_history.py`` / ``scripts/collect_ths_daily.p
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -693,8 +694,15 @@ class ThsHistoryRunner:
                 provider_id=THS_DUMP_PROVIDER_ID,
                 checked_at=datetime.now(_UTC),
             )
-        content = self._downloader.fetch_dump(dump_kind, cache_path=cache_path)
-        bars = parse_daily_k_parquet(content)
+        # The downloader is synchronous (httpx + time.sleep retries) and the
+        # Parquet parse is CPU-bound.  Running them directly inside this async
+        # runner blocks the API event loop for the whole dump.  Offload both to
+        # a worker thread so health/quote requests keep being served while the
+        # scheduler collects.
+        content = await asyncio.to_thread(
+            self._downloader.fetch_dump, dump_kind, cache_path=cache_path
+        )
+        bars = await asyncio.to_thread(parse_daily_k_parquet, content)
         grouped = group_by_symbol(bars)
         symbols = sorted(grouped)
         if skip_existing:

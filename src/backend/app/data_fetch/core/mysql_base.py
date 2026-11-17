@@ -220,12 +220,23 @@ class MysqlBase(Database):
         except mysql.connector.Error as err:
             self.logger.warning(f"自动建表失败 {table_name}: {err}")
 
-    def _execute_batch(self, insert_sql: str, batch: list[list[Any]]) -> bool:
-        """执行批量插入或更新操作"""
+    def _execute_batch(self, insert_sql: str, batch: list[list[Any]]) -> int:
+        """执行批量插入或更新操作，返回服务端实际影响的行数。
+
+        MySQL 的 ``rowcount`` 在 ``INSERT IGNORE`` 下只统计真正插入的行；
+        不能把它替换成 ``len(batch)``，否则重复批次会被回执误报为成功写入。
+        """
         try:
-            self.require_cursor().executemany(insert_sql, batch)
+            cursor = self.require_cursor()
+            cursor.executemany(insert_sql, batch)
             self.require_connection().commit()
-            return True
+            reported = getattr(cursor, "rowcount", -1)
+            if not isinstance(reported, int) or reported < 0:
+                # Some test doubles / drivers do not expose rowcount. Falling
+                # back to the offered length is the only safe compatibility
+                # choice, but real MySQL always reports it.
+                return len(batch)
+            return min(reported, len(batch))
         except mysql.connector.Error as err:
             self.require_connection().rollback()
             self.logger.error(f"批量执行失败: {err}")
@@ -422,10 +433,11 @@ class MysqlBase(Database):
         try:
             start_time = datetime.now()
             processed = 0
+            affected = 0
 
             for i in range(0, total_rows, self.batch_size):
                 batch = values[i : i + self.batch_size]
-                self._execute_batch(insert_sql, batch)
+                affected += self._execute_batch(insert_sql, batch)
                 processed += len(batch)
 
                 if (i + self.batch_size) % (self.batch_size * 10) == 0 or (
@@ -434,17 +446,18 @@ class MysqlBase(Database):
                     elapsed = (datetime.now() - start_time).total_seconds()
                     self.logger.info(
                         f"已处理 {processed}/{total_rows} 行 ({processed / total_rows * 100:.1f}%)，"
-                        f"耗时 {elapsed:.2f}s"
+                        f"服务端实际写入 {affected} 行，耗时 {elapsed:.2f}s"
                     )
 
             end_time = datetime.now()
             elapsed_seconds = (end_time - start_time).total_seconds()
 
             self.logger.info(
-                f"成功保存 {total_rows} 行数据到 {table_name}，耗时 {elapsed_seconds:.2f}s"
+                f"保存完成: 提交 {total_rows} 行，服务端实际写入 {affected} 行 "
+                f"到 {table_name}，耗时 {elapsed_seconds:.2f}s"
             )
 
-            return total_rows
+            return affected
 
         except Exception as e:
             self.logger.error(f"保存数据到 {table_name} 失败: {str(e)}")
