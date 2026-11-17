@@ -10,6 +10,7 @@
 
 | 迭代 | 主题 | 状态 |
 |------|------|------|
+| [迭代205](迭代205-全仓代码审查与质量门禁收口/README.md) | 全仓代码审查与质量门禁收口 | PLANNED；基于 `70b7e3ed5` 的只读审查；P0 数据写入假成功与 SQLite 迁移失败，P1 测试/门禁/MySQL 连接池/THS 阻塞；10 道并行计划见 [IMPLEMENTATION_PLAN](迭代205-全仓代码审查与质量门禁收口/IMPLEMENTATION_PLAN.md) |
 | [迭代204](迭代204-OpenData数据中台拆分与五人并行迁移/README.md) | OpenData数据中台拆分与五人并行迁移 | 两仓 `dev` 已有局部代码/离线交付合入；98个控制任务：8 DEV_DONE、9 IN_PROGRESS、81 PLANNED；迭代204整体未完成，真实源/生产/部署验收仍开放 |
 | [迭代202](迭代202-项目综合审查与可靠性优化/README.md) | 项目综合审查与可靠性优化 | PASS / ACCEPTED_LOCAL；12项本轮缺陷完成，D04/D05及WP03延后至OpenData |
 | [迭代201](迭代201-核心编排器职责拆分/README.md) | 核心编排器职责拆分 | PASS / ACCEPTED_LOCAL；九个工作包完成 |
