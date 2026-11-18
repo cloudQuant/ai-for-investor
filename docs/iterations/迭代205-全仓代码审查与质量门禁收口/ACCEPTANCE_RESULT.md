@@ -56,7 +56,7 @@ EXIT=1
 | WP07 可维护性切片 | **未开始** | 大文件/复杂度切片未在本轮实施；`radon` 基线仍为 64 个 CC≥50、最高 147 |
 | WP08 可观测性 | **未开始** | 空写/连接池/THS 指标与运行手册未实施 |
 | 后端 e2e | **未完成** | `@pytest.mark.e2e` 仍为 0；未新增 4 条 e2e |
-| 全量套件全绿（G04） | **未达成** | 96 failed / 26 errors；既有失败为主，但 `test_ai_trading` 一例需确认是否为本轮回归 |
+| 全量套件全绿（G04） | **未达成** | 96 failed / 26 errors；既有失败为主。`test_ai_trading::test_confirm_trade_success` 已定位为测试依赖本机 MySQL 资产乘数，已改为 hermetic（`7 passed`），不再计入残项 |
 | 生产锁 hash / 依赖审计阻断 | **部分** | nightly 已去掉 `\|\| true`；prod lock 仍未生成 hash；Python 3.13 下 `pip-audit -r` 仍因 backtrader/numpy 解析冲突无法执行，需 CI 3.11/3.12 |
 
 ## 4. 结论与放行建议
@@ -65,7 +65,7 @@ EXIT=1
 - **主要 P1 已关闭**：测试收集 0 error、门禁 fail-closed、连接池/THS/响应边界、生产模式与默认凭据/端口/RSS 加固。
 - **不能宣布全量 PASS**：全量套件仍有 96 failed/26 errors，且 WP07/WP08 与后端 e2e 未完成。
 - 建议状态：**ACCEPTED_LOCAL for P0/P1 scope；iteration overall PARTIAL**。后续 206 应优先：
-  1. `test_ai_trading` 回归 triage（唯一疑似本轮引入的失败）；
+  1. ~~`test_ai_trading` 回归 triage~~（已修复：测试不再依赖本机 MySQL，`7 passed`）；
   2. 既有迁移 check/index 顺序修复；
   3. SDK pin/集成测试固定；
   4. WP07/WP08 与后端 e2e。
