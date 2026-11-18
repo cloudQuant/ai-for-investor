@@ -1248,9 +1248,17 @@ class TestAITradingServiceConfirmation:
     """Test the trade confirmation flow."""
 
     @pytest.fixture
-    def service(self):
+    def service(self, monkeypatch):
         from app.services.ai_trading_service import _pending_trades
 
+        # The confirmation flow is tested with synthetic prices.  Never let a
+        # developer's local futures warehouse inject a real contract
+        # multiplier: that turns the 3,500 notional into 35,000 and changes the
+        # risk outcome from "needs confirmation" to "rejected".
+        monkeypatch.setattr(
+            "app.services.ai_trading_service.query_local_asset_spec",
+            lambda symbol: {},
+        )
         _pending_trades.clear()
         service = AITradingService()
         service.risk_guard = TradingRiskGuard(TradingRiskConfig())
