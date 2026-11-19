@@ -203,7 +203,7 @@ class TestConfigAndLimits:
         assert _API_KEY not in repr(_config())
 
     @pytest.mark.parametrize(
-        "base_url",
+        "origin",
         [
             "",
             "http://example.com",
@@ -213,10 +213,10 @@ class TestConfigAndLimits:
             "https://example.com/#fragment",
         ],
     )
-    def test_rejects_unsafe_or_ambiguous_origin(self, base_url: str) -> None:
+    def test_rejects_unsafe_or_ambiguous_origin(self, origin: str) -> None:
         with pytest.raises(InstrumentReferenceError) as raised:
             InstrumentReferenceConfig(
-                base_url=base_url,
+                base_url=origin,
                 api_key=_API_KEY,
                 dataset_id="fixture.instrument-reference.stock",
                 source_id="fixture.reference",
