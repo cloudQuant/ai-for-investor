@@ -145,6 +145,13 @@ try:
 finally:
     _BaseSettings.__init__ = _ORIGINAL_BASE_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore the original environment mapping
+    # Drop the synthetic settings singleton as well: without this, every later
+    # test in the same worker inherits the service-read DATABASE_URL/JWT and
+    # unrelated suites fail on missing tables.
+    try:
+        _app_config.reset_settings_cache()
+    except NameError:
+        pass
     # The audit hook stays installed for this process, but must be inert for
     # every later test module.  Own tests re-enable it below.
     _ENV_FILE_GUARD_STATE["active"] = False
