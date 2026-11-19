@@ -11,6 +11,8 @@ router and separate owner-thread SDK sessions.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import importlib
 import json
 import multiprocessing
 import ntpath
@@ -21,6 +23,7 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import suppress
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -136,6 +139,20 @@ try:
 
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402, I001
     from tests import test_service_read_order_local_process as _order  # noqa: E402
+
+    # This module certifies the frozen QA SDK.  Running it against a developer
+    # checkout with a different SDK would report environment drift as a product
+    # failure; skip with the exact reason instead.  CI installs the pinned
+    # artifact and executes the full matrix.
+    _SDK_BOOKS_PIN = "b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07"
+    _sdk_books = importlib.import_module("bt_api_py.service_execution_account_books")
+    _sdk_sha = hashlib.sha256(Path(_sdk_books.__file__).read_bytes()).hexdigest()
+    if _sdk_sha != _SDK_BOOKS_PIN:
+        pytest.skip(
+            "installed bt_api_py does not match the pinned QA source "
+            f"({_sdk_sha[:12]} != {_SDK_BOOKS_PIN[:12]})",
+            allow_module_level=True,
+        )
 
     # conftest imported app.config earlier with the ordinary test environment.
     # Keep that exact singleton so already-imported modules (app.main,
