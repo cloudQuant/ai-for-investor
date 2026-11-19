@@ -126,6 +126,7 @@ def _settings_init_without_dotenv(self: Any, *args: Any, **kwargs: Any) -> None:
 
 _BaseSettings.__init__ = _settings_init_without_dotenv
 os.environ = dict(_SYNTHETIC_ENV)  # noqa: B003 - isolate Python settings, preserve native spawn env
+_ORIGINAL_SETTINGS = None
 try:
     import app.config as _app_config  # noqa: E402
 
@@ -136,8 +137,11 @@ try:
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope  # noqa: E402, I001
     from tests import test_service_read_order_local_process as _order  # noqa: E402
 
-    # conftest imported app.config earlier with the ordinary test environment;
-    # drop that singleton so the synthetic env installed above is actually read.
+    # conftest imported app.config earlier with the ordinary test environment.
+    # Keep that exact singleton so already-imported modules (app.main,
+    # app.db.database, the orchestration fixture) keep pointing at it, but
+    # temporarily expose the synthetic settings for the assertions below.
+    _ORIGINAL_SETTINGS = _app_config.get_settings()
     _app_config.reset_settings_cache()
     assert _app_config.get_settings().JWT_SECRET_KEY == _JWT_SECRET
     assert _app_config.get_settings().DATABASE_URL == "sqlite+aiosqlite://"
@@ -145,13 +149,10 @@ try:
 finally:
     _BaseSettings.__init__ = _ORIGINAL_BASE_SETTINGS_INIT
     os.environ = _ORIGINAL_ENV  # noqa: B003 - restore the original environment mapping
-    # Drop the synthetic settings singleton as well: without this, every later
-    # test in the same worker inherits the service-read DATABASE_URL/JWT and
-    # unrelated suites fail on missing tables.
-    try:
-        _app_config.reset_settings_cache()
-    except NameError:
-        pass
+    # Restore the original singleton object instead of leaving a synthetic one
+    # (or None) behind; unrelated suites assert object identity.
+    if _ORIGINAL_SETTINGS is not None:
+        _app_config._settings = _ORIGINAL_SETTINGS
     # The audit hook stays installed for this process, but must be inert for
     # every later test module.  Own tests re-enable it below.
     _ENV_FILE_GUARD_STATE["active"] = False
