@@ -14,7 +14,6 @@ from app.schemas.auth import (
     ChangePassword,
     RefreshTokenRequest,
     RefreshTokenResponse,
-    Token,
     TokenPayload,
     UserCreate,
     UserLogin,
@@ -71,13 +70,13 @@ async def register(
     return user
 
 
-@router.post("/login", response_model=Token, summary="User login")
+@router.post("/login", response_model=RefreshTokenResponse, summary="User login")
 @limiter.limit(_LOGIN_LIMIT)
 async def login(
     user_login: UserLogin,
     request: Request,
     service: AuthService = Depends(get_auth_service),
-) -> Token:
+) -> RefreshTokenResponse:
     """Authenticate and return a JWT access token.
 
     Rate limited to 10 requests per minute per IP to prevent brute force attacks.
@@ -93,7 +92,7 @@ async def login(
     Raises:
         HTTPException: If credentials are invalid (401) or rate limit exceeded (429).
     """
-    result = await service.login(user_login)
+    result = await service.login_with_refresh(user_login)
     client_ip = request.client.host if request.client else "unknown"
 
     if result is None:

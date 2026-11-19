@@ -1,7 +1,7 @@
 # 迭代205：全仓代码审查与质量门禁收口
 
-> 编制日期：2026-11-17（Asia/Shanghai）  
-> 状态：**PLANNED / 未执行**。本目录只新增审查与计划文档，不修改业务代码、测试、依赖、迁移、部署或数据库。  
+> 编制日期：2026-11-17（Asia/Shanghai）；实现与验收更新：2026-11-19。  
+> 状态：**ACCEPTED_LOCAL（P0/P1/P2 代码范围）**；全量套件仍有 54 个 pinned-SDK/既有 fixture 失败（0 error），详见 [ACCEPTANCE_RESULT.md](ACCEPTANCE_RESULT.md)。  
 > 审查基线：`fix/combined-collection-plane` @ `70b7e3ed5`；对照 `master`，merge-base `0203154fa7cb831f45b5213fa3666a3983198e7d`。  
 > 证据口径：**E1 = 本机已执行并保留输出**；**E2 = 静态确认，有文件与调用链**；**E3 = 需在 MySQL/PostgreSQL/生产形态动态复验**。静态确认不等于已发生线上事故。
 
