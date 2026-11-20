@@ -1105,8 +1105,8 @@ class WarehouseDailyAdapter:
     def bars(self, symbol: str) -> list[DailyBar]:
         rows = self._db.query_data(
             "SELECT data_date, `开盘`, `收盘`, `最高`, `最低` FROM STOCK_ZH_A_HIST"
-            " WHERE symbol = %s",
-            (symbol,),
+            " WHERE symbol = %s AND source = %s AND adjustment = %s",
+            (symbol, SOURCE_NAME, ADJUSTMENT),
         )
         if not rows:
             return []
@@ -1175,7 +1175,11 @@ class ManagedScriptWriterAdapter:
                 error=f"{type(exc).__name__}: {str(exc)[:300]}",
                 write_possible=True,
             )
-        status = str(getattr(execution, "status", "") or "").lower()
+        raw_status = getattr(execution, "status", "")
+        # ``str()`` on a str-Enum yields "TaskStatus.COMPLETED", so the receipt
+        # never matched the controller's "completed" comparison and a written,
+        # matching batch was still reported as backfill_failed.
+        status = str(getattr(raw_status, "value", raw_status) or "").lower()
         return WriteReceipt(
             execution_id=getattr(execution, "id", None),
             status="completed" if status == "completed" else status or "unknown",

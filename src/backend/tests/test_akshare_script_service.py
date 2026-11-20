@@ -1745,8 +1745,13 @@ def test_stock_zh_a_hist_upserts_by_symbol_date_without_date_wide_delete(monkeyp
     assert saved["table"] == "STOCK_ZH_A_HIST"
     assert saved["kwargs"] == {
         "on_duplicate_update": True,
-        "unique_keys": ["symbol", "data_date"],
+        "unique_keys": ["symbol", "data_date", "adjustment"],
     }
+    # The row's observation series must be explicit: the table's unique key is
+    # (symbol, data_date, adjustment), and unstamped rows fall back to the
+    # legacy column defaults, which silently collide with the legacy series.
+    assert saved["df"]["source"].tolist() == ["eastmoney", "eastmoney"]
+    assert saved["df"]["adjustment"].tolist() == ["qfq", "qfq"]
 
 
 def test_stock_zh_a_hist_can_fetch_directly_from_tencent(monkeypatch):
