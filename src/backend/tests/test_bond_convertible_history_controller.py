@@ -1201,3 +1201,38 @@ def test_preflight_failure_dispatches_nothing(tmp_path: Path) -> None:
     assert harness.managed_calls == []
     assert report["writes_database"] is False
     assert classify_bond(exit_code, report)[0] == "attention_required"
+
+
+def test_epoch_and_compact_dates_normalise_to_the_stored_key() -> None:
+    """AKShare returns epoch seconds; the warehouse stores YYYY-MM-DD."""
+
+    assert controller._as_day("1629763200") == "2021-08-24"
+    assert controller._as_day(1629763200) == "2021-08-24"
+    assert controller._as_day("20210824") == "2021-08-24"
+    assert controller._as_day("2021-08-24") == "2021-08-24"
+
+
+def test_comparison_matches_an_epoch_source_against_iso_warehouse_rows() -> None:
+    """Before normalisation every date looked source-only, so every run mismatched."""
+
+    common = {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 10.0}
+    source = [{"data_date": "1629763200", **common}]
+    warehouse = [{"data_date": "2021-08-24", **common}]
+
+    comparison = controller.compare_daily_ledgers(source, warehouse)
+
+    assert comparison["source_only_count"] == 0
+    assert comparison["warehouse_only_count"] == 0
+    assert comparison["ohlc_mismatch_count"] == 0
+    assert comparison["date_key_and_ohlc_match"] is True
+
+
+def test_epoch_normalisation_accepts_millisecond_and_sub_second_units() -> None:
+    """Vendors mix second/millisecond/microsecond/nanosecond epochs."""
+
+    seconds = 1794182400
+    assert controller._as_day(seconds) == "2026-11-09"
+    assert controller._as_day(seconds * 1000) == "2026-11-09"
+    assert controller._as_day(str(seconds * 1000)) == "2026-11-09"
+    assert controller._as_day(seconds * 10**6) == "2026-11-09"
+    assert controller._as_day(seconds * 10**9) == "2026-11-09"
