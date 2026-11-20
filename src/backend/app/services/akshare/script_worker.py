@@ -68,8 +68,9 @@ def _install_write_recorder(callable_obj: Any) -> None:
 
     Legacy AkShare scripts write through ``self.save_data(df, table_name)``,
     which commits on its own MySQL connection and returns the number of rows
-    written.  Wrapping it on the resolved instance is the only way to collect
-    committed-write receipts inside the child without editing the writer.
+    the server **actually applied** (not the rows offered).  Wrapping it on the
+    resolved instance is the only way to collect committed-write receipts
+    inside the child without editing the writer.
     """
     instance = getattr(callable_obj, "__self__", None)
     if instance is None or isinstance(instance, type):

@@ -686,6 +686,16 @@ jobs:
           # depend on shared-runner load and are not deterministic unit-test gates.
           pytest --cov=app --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-report=html --cov-fail-under=70 -n auto -m "not performance" -v
 
+      - name: Run backend e2e smoke
+        # Iteration 205: assert the e2e marker is not an empty-green job.
+        run: pytest -q -m e2e tests/e2e
+
+      - name: Check complexity budget
+        # Iteration 205 WP07: freeze the reviewed complexity baseline.
+        run: |
+          python -m pip install radon
+          python ../../scripts/ci/check_complexity_budget.py
+
       - name: Check diff coverage
         if: github.event_name == 'pull_request'
         run: |

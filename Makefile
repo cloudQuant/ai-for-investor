@@ -36,3 +36,7 @@ mypy-ratchet-update:
 .PHONY: bundle-budget
 bundle-budget:
 	@bash scripts/ci/check_bundle_size.sh src/frontend/dist
+
+.PHONY: complexity-budget
+complexity-budget:
+	@python3 scripts/ci/check_complexity_budget.py

@@ -28,6 +28,10 @@ _RSS_REQUEST_HEADERS = {
     "Accept": "application/rss+xml, application/xml, text/xml, */*",
 }
 
+# Upper bound for one feed document.  RSS feeds are small; anything larger is
+# either an error page or an attempt to exhaust memory during XML parsing.
+_MAX_RSS_BYTES = 2 * 1024 * 1024
+
 
 class _NewsSourceInstance(typing.Protocol):
     """Scalar fields exposed by a loaded NewsSourceModel ORM instance."""
@@ -364,6 +368,14 @@ class NewsIntelligenceService:
         *,
         limit: int,
     ) -> list[dict[str, Any]]:
+        # RSS is a semi-trusted input.  The stdlib parser expands internal
+        # entities; reject DTD/ENTITY payloads and cap the document size before
+        # handing it to ElementTree.
+        if len(feed_text) > _MAX_RSS_BYTES:
+            raise ValueError("RSS feed exceeds the maximum accepted size")
+        upper = feed_text[:4096].upper()
+        if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
+            raise ValueError("RSS feeds with DTD/ENTITY declarations are not accepted")
         root = ET.fromstring(feed_text)
         metadata_json = source.metadata_json
         ticker_values: Iterable[object] = ()

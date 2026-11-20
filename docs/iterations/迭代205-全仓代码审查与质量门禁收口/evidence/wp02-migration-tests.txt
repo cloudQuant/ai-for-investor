@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-8.3.4, pluggy-1.5.0
+rootdir: /home/yun/Documents/ai-for-investor/src/backend/tests
+configfile: pytest.ini
+plugins: langsmith-0.4.43, anyio-4.7.0, xdist-3.8.0, requests-mock-1.12.1, mock-3.14.1, metadata-3.1.1, timeout-2.4.0, playwright-0.7.0, html-4.1.1, asyncio-1.0.0, base-url-2.1.0, cov-6.2.1, ordering-0.6, dash-3.2.0, Faker-37.4.0, flask-1.3.0
+timeout: 30.0s
+timeout method: thread
+timeout func_only: False
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 182 items
+
+tests/test_ai_research_approval_migration.py ........................... [ 14%]
+........................................................................ [ 54%]
+.......................................                                  [ 75%]
+tests/market_data_platform/test_research_binding_migrations.py ......... [ 80%]
+.....                                                                    [ 83%]
+tests/market_data_platform/test_multi_record_migration.py ...........    [ 89%]
+tests/market_data_platform/test_multi_record_evidence_migration.py ..... [ 92%]
+..                                                                       [ 93%]
+tests/asset_research/test_migration.py ............                      [100%]
+
+======================= 182 passed in 236.04s (0:03:56) ========================

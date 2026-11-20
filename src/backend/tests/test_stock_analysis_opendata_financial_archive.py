@@ -449,7 +449,7 @@ async def test_remote_https_nonstandard_port_can_be_explicitly_allowlisted() -> 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "base_url",
+    "origin",
     [
         "https://user:password@opendata.example.test",
         "https://opendata.example.test/proxy",
@@ -458,7 +458,7 @@ async def test_remote_https_nonstandard_port_can_be_explicitly_allowlisted() -> 
     ],
 )
 async def test_unsafe_base_url_shapes_are_rejected_before_sending_api_key(
-    base_url: str,
+    origin: str,
 ) -> None:
     sent_requests = 0
 
@@ -469,7 +469,7 @@ async def test_unsafe_base_url_shapes_are_rejected_before_sending_api_key(
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         reader = OpenDataFinancialArchiveReader(
-            OpendataCredentials(_API_KEY, base_url=base_url),
+            OpendataCredentials(_API_KEY, base_url=origin),
             client=client,
             allowed_hosts={"opendata.example.test"},
         )

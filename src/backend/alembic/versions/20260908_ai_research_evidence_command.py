@@ -227,6 +227,106 @@ def _upgrade_offline(bind: Any) -> None:
         op.create_index(index_name, _TABLE, list(columns), unique=unique)
 
 
+def _sqlite_named_checks(bind: Any, table_name: str) -> dict[str, str]:
+    """Read CHECK expressions from sqlite_master.
+
+    SQLAlchemy's SQLite inspector folds the inline FKs and CHECK added by a
+    single ``ALTER TABLE ADD COLUMN`` into one malformed constraint name.  The
+    stored DDL is correct, so the idempotent re-entry path must read it
+    directly instead of trusting the reflected names.
+    """
+
+    row = bind.execute(
+        sa.text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"),
+        {"name": table_name},
+    ).first()
+    if row is None or not row[0]:
+        return {}
+    sql = str(row[0])
+    found: dict[str, str] = {}
+    pattern = re.compile(r"CONSTRAINT\s+([A-Za-z0-9_]+)\s+CHECK\s*\(", re.IGNORECASE)
+    for match in pattern.finditer(sql):
+        open_paren = match.end() - 1
+        depth = 0
+        end = None
+        for position in range(open_paren, len(sql)):
+            char = sql[position]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    end = position
+                    break
+        if end is not None:
+            found[match.group(1)] = sql[open_paren + 1 : end]
+    return found
+
+
+def _upgrade_sqlite_table(
+    bind: Any,
+    inspector: Any,
+    observed_columns: dict[str, Any],
+    missing_columns: tuple[str, ...],
+) -> bool:
+    """Add the graph columns/FKs/CHECK in one SQLite table rebuild.
+
+    Inline ``ALTER TABLE ADD COLUMN ... CONSTRAINT ...`` makes SQLite store the
+    FK and CHECK declarations inside one quoted constraint name; reflection then
+    cannot see ``ck_ai_research_evidence_package_command_graph``.  A single
+    rebuild emits separate named constraints, which keeps both the migration
+    and the ORM/reflection contract exact.
+    """
+
+    observed_checks = _sqlite_named_checks(bind, _TABLE)
+    observed_fks = _observed_foreign_keys(bind, inspector)
+    fk_columns = {tuple(fk.get("constrained_columns") or ()) for fk in observed_fks}
+    # Validate pre-existing graph FKs before the rebuild: batch mode normalises
+    # ON DELETE CASCADE/RESTRICT, which would otherwise hide a weak FK from the
+    # post-rebuild check.
+    for column_name in observed_columns:
+        if column_name not in _COLUMNS:
+            continue
+        target_table = _COLUMNS[column_name][0]
+        matches = [
+            foreign_key
+            for foreign_key in observed_fks
+            if column_name in tuple(foreign_key.get("constrained_columns") or ())
+        ]
+        if not matches:
+            continue
+        if len(matches) != 1:
+            raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
+        foreign_key = matches[0]
+        options = foreign_key.get("options") or {}
+        ondelete = str(options.get("ondelete") or "").upper()
+        if (
+            tuple(foreign_key.get("constrained_columns") or ()) != (column_name,)
+            or foreign_key.get("referred_table") != target_table
+            or tuple(foreign_key.get("referred_columns") or ()) != ("id",)
+            or ondelete not in {"", "RESTRICT", "NO ACTION"}
+        ):
+            raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
+    missing_fks = [column_name for column_name in _COLUMNS if (column_name,) not in fk_columns]
+    if not missing_columns and not missing_fks and _GRAPH_CHECK in observed_checks:
+        return False
+    with op.batch_alter_table(_TABLE, recreate="always") as batch_op:
+        for column_name in missing_columns:
+            batch_op.add_column(sa.Column(column_name, sa.String(length=36), nullable=True))
+        for column_name in missing_fks:
+            target_table, constraint_name = _COLUMNS[column_name]
+            batch_op.create_foreign_key(
+                constraint_name,
+                target_table,
+                [column_name],
+                ["id"],
+                ondelete="RESTRICT",
+            )
+        if _GRAPH_CHECK not in observed_checks:
+            batch_op.create_check_constraint(_GRAPH_CHECK, _GRAPH_CHECK_SQL)
+    return True
+
+
 def _upgrade_online(bind: Any) -> None:
     inspector = sa.inspect(bind)
     observed_columns = {str(column["name"]): column for column in inspector.get_columns(_TABLE)}
@@ -240,12 +340,22 @@ def _upgrade_online(bind: Any) -> None:
         if bind.execute(sa.text(f"SELECT 1 FROM {_TABLE} WHERE {predicate} LIMIT 1")).first():
             raise RuntimeError("EVIDENCE_COMMAND_GRAPH_PARTIAL_DATA")
 
-    for column_name in missing_graph_columns:
-        if bind.dialect.name == "sqlite":
-            _add_sqlite_column(column_name)
-        else:
+    if bind.dialect.name == "sqlite":
+        rebuilt = _upgrade_sqlite_table(bind, inspector, observed_columns, missing_graph_columns)
+        if rebuilt:
+            # ``batch_alter_table(recreate="always")`` drops the table's
+            # triggers.  Reinstall the guards that the upgrade preflight and
+            # the post-upgrade immutable contract rely on.
+            _create_insert_guard(bind)
+            _create_freeze_guard(bind)
+            _create_delete_guard(bind)
+        inspector = sa.inspect(bind)
+    else:
+        for column_name in missing_graph_columns:
             op.add_column(_TABLE, sa.Column(column_name, sa.String(length=36), nullable=True))
 
+    # The preflight reads all four graph columns, so it must run after the
+    # SQLite rebuild / ADD COLUMN step.
     _assert_upgrade_data_clean(bind)
     observed_foreign_keys = _observed_foreign_keys(bind, inspector)
     for column_name, (target_table, constraint_name) in _COLUMNS.items():
@@ -255,36 +365,64 @@ def _upgrade_online(bind: Any) -> None:
             if column_name in tuple(foreign_key.get("constrained_columns") or ())
         ]
         if matching_column:
-            if len(matching_column) != 1 or not _foreign_key_matches(
-                matching_column[0], column_name, target_table
-            ):
+            if len(matching_column) != 1:
+                # A prior partial ALTER TABLE can leave the same logical FK
+                # visible twice after the rebuild.  Accept only identical
+                # column/target pairs; ambiguity or a wrong target still fails.
+                if (
+                    bind.dialect.name == "sqlite"
+                    and column_name in observed_columns
+                    and all(
+                        tuple(foreign_key.get("constrained_columns") or ()) == (column_name,)
+                        and foreign_key.get("referred_table") == target_table
+                        for foreign_key in matching_column
+                    )
+                ):
+                    continue
+                raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
+            if not _foreign_key_matches(matching_column[0], column_name, target_table):
+                # SQLite does not always report ON DELETE for an inline FK
+                # created by a prior partial ALTER TABLE, and its batch
+                # rebuild reports RESTRICT as NO ACTION.  Accept those two
+                # representations for an already-present column; a wrong
+                # target or an explicit CASCADE still fails closed.
+                options = matching_column[0].get("options") or {}
+                ondelete = str(options.get("ondelete") or "").upper()
+                if (
+                    bind.dialect.name == "sqlite"
+                    and column_name in observed_columns
+                    and ondelete in {"", "NO ACTION"}
+                ):
+                    continue
                 raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
             continue
         if any(foreign_key.get("name") == constraint_name for foreign_key in observed_foreign_keys):
             raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
-        if column_name in observed_columns and bind.dialect.name == "sqlite":
+        if bind.dialect.name == "sqlite":
             raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
-        if bind.dialect.name != "sqlite":
-            op.create_foreign_key(
-                constraint_name,
-                _TABLE,
-                target_table,
-                [column_name],
-                ["id"],
-                ondelete="RESTRICT",
-            )
+        op.create_foreign_key(
+            constraint_name,
+            _TABLE,
+            target_table,
+            [column_name],
+            ["id"],
+            ondelete="RESTRICT",
+        )
 
     observed_checks = {
         str(check.get("name")): str(check.get("sqltext") or "")
         for check in inspector.get_check_constraints(_TABLE)
         if check.get("name")
     }
+    if bind.dialect.name == "sqlite":
+        for name, expression in _sqlite_named_checks(bind, _TABLE).items():
+            observed_checks.setdefault(name, expression)
     if _GRAPH_CHECK in observed_checks:
         if not _graph_check_matches(observed_checks[_GRAPH_CHECK]):
             raise RuntimeError("EVIDENCE_COMMAND_GRAPH_CHECK_CONFLICT")
-    elif "terminal_access_audit_id" in observed_columns and bind.dialect.name == "sqlite":
+    elif bind.dialect.name == "sqlite":
         raise RuntimeError("EVIDENCE_COMMAND_GRAPH_CHECK_CONFLICT")
-    elif bind.dialect.name != "sqlite":
+    else:
         op.create_check_constraint(_GRAPH_CHECK, _TABLE, _GRAPH_CHECK_SQL)
 
     observed_indexes = {
@@ -324,24 +462,35 @@ def _downgrade_online(bind: Any) -> None:
         if index_name in observed_indexes:
             op.drop_index(index_name, table_name=_TABLE)
 
-    if bind.dialect.name != "sqlite":
-        observed_checks = {
-            str(check.get("name"))
-            for check in inspector.get_check_constraints(_TABLE)
-            if check.get("name")
-        }
-        if _GRAPH_CHECK in observed_checks:
-            op.drop_constraint(_GRAPH_CHECK, _TABLE, type_="check")
+    if bind.dialect.name == "sqlite":
+        # SQLite cannot drop a column that still appears in an inline FK
+        # definition; rebuild the table without the four graph columns.
+        observed_columns = {str(column["name"]) for column in sa.inspect(bind).get_columns(_TABLE)}
+        with op.batch_alter_table(_TABLE, recreate="always") as batch_op:
+            if _GRAPH_CHECK in _sqlite_named_checks(bind, _TABLE):
+                batch_op.drop_constraint(_GRAPH_CHECK, type_="check")
+            for column_name in reversed(tuple(_COLUMNS)):
+                if column_name in observed_columns:
+                    batch_op.drop_column(column_name)
+        return
 
-        observed_foreign_keys = inspector.get_foreign_keys(_TABLE)
-        for column_name in reversed(tuple(_COLUMNS)):
-            for foreign_key in observed_foreign_keys:
-                if tuple(foreign_key.get("constrained_columns") or ()) != (column_name,):
-                    continue
-                constraint_name = foreign_key.get("name")
-                if not constraint_name:
-                    raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
-                op.drop_constraint(str(constraint_name), _TABLE, type_="foreignkey")
+    observed_checks = {
+        str(check.get("name"))
+        for check in inspector.get_check_constraints(_TABLE)
+        if check.get("name")
+    }
+    if _GRAPH_CHECK in observed_checks:
+        op.drop_constraint(_GRAPH_CHECK, _TABLE, type_="check")
+
+    observed_foreign_keys = inspector.get_foreign_keys(_TABLE)
+    for column_name in reversed(tuple(_COLUMNS)):
+        for foreign_key in observed_foreign_keys:
+            if tuple(foreign_key.get("constrained_columns") or ()) != (column_name,):
+                continue
+            constraint_name = foreign_key.get("name")
+            if not constraint_name:
+                raise RuntimeError("EVIDENCE_COMMAND_GRAPH_FOREIGN_KEY_CONFLICT")
+            op.drop_constraint(str(constraint_name), _TABLE, type_="foreignkey")
 
     observed_columns = {str(column["name"]) for column in inspector.get_columns(_TABLE)}
     for column_name in reversed(tuple(_COLUMNS)):

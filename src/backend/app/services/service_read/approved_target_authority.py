@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -326,7 +326,9 @@ def create_execution_approved_target_resources(
     if any(type(item) is not WireScope for item in protected_scopes):
         raise RuntimeError("APPROVAL_PROTECTED_SCOPE_CONFIG_INVALID")
 
-    bindings = ApprovedTargetOwnerBindingsV1(owner_bindings)
+    bindings = ApprovedTargetOwnerBindingsV1(
+        cast(tuple[ApprovedTargetOwnerBindingV1, ...], owner_bindings)
+    )
     scopes = ProtectedApprovedTargetScopesV1(protected_scopes)
     loop = asyncio.new_event_loop()
     engine = None

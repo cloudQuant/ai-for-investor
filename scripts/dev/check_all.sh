@@ -6,10 +6,12 @@
 #
 # Usage:
 #   bash scripts/dev/check_all.sh
+#   CHECK_ALL_ALLOW_MISSING=1 bash scripts/dev/check_all.sh   # docs-only hosts
 #
 # Exit codes:
 #   0   — all members green
 #   1   — one or more steps failed; stderr names the failing step / member.
+#   2   — a required tool is missing (fail closed; no silent skip).
 #   124 — overall timeout exceeded.
 
 set -uo pipefail
@@ -21,6 +23,22 @@ cd "$REPO_ROOT"
 
 MEMBERS=("src/backend" "src/bt_api_py")
 FRONTEND_MEMBER="src/frontend"
+ALLOW_MISSING="${CHECK_ALL_ALLOW_MISSING:-0}"
+
+require_tool() {
+  local tool="$1"
+  local member="$2"
+  if command -v "$tool" > /dev/null 2>&1; then
+    return 0
+  fi
+  if [ "$ALLOW_MISSING" = "1" ]; then
+    echo "WARN: $tool not in PATH — skipping $member checks (explicitly allowed)" >&2
+    return 1
+  fi
+  echo "::error::required tool '$tool' is not in PATH for $member" >&2
+  echo "Install it or set CHECK_ALL_ALLOW_MISSING=1 for a docs-only run." >&2
+  exit 2
+}
 
 # Best-effort detection of mypy strict scope per member.
 detect_mypy_scope() {
@@ -76,31 +94,23 @@ for member in "${MEMBERS[@]}"; do
     continue
   fi
 
-  if ! command -v ruff > /dev/null 2>&1; then
-    echo "WARN: ruff not in PATH — skipping ruff steps" >&2
-  else
+  if require_tool ruff "$member"; then
     run_step "$member" "ruff check" ruff check .
     run_step "$member" "ruff format --check" ruff format --check .
   fi
 
-  if command -v mypy > /dev/null 2>&1; then
+  if require_tool mypy "$member"; then
     scope=$(detect_mypy_scope "$member")
     run_step "$member" "mypy $scope" mypy "$scope"
-  else
-    echo "WARN: mypy not in PATH — skipping mypy in $member" >&2
   fi
 
-  if command -v pytest > /dev/null 2>&1; then
+  if require_tool pytest "$member"; then
     run_step "$member" 'pytest -m "not e2e"' pytest -m "not e2e" -q
-  else
-    echo "WARN: pytest not in PATH — skipping pytest in $member" >&2
   fi
 done
 
 if [ -d "$REPO_ROOT/$FRONTEND_MEMBER" ]; then
-  if ! command -v npm > /dev/null 2>&1; then
-    echo "WARN: npm not in PATH — skipping frontend checks" >&2
-  else
+  if require_tool npm "$FRONTEND_MEMBER"; then
     if [ ! -d "$REPO_ROOT/$FRONTEND_MEMBER/node_modules" ]; then
       run_step "$FRONTEND_MEMBER" "npm ci" npm ci
     fi

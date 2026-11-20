@@ -191,7 +191,7 @@ class TestConfiguration:
         assert _API_KEY not in repr(client)
 
     @pytest.mark.parametrize(
-        "base_url",
+        "origin",
         [
             "",
             "http://example.test",
@@ -202,9 +202,9 @@ class TestConfiguration:
             "https://example.test:not-a-port",
         ],
     )
-    def test_rejects_ambiguous_or_insecure_origin(self, base_url: str) -> None:
-        credentials = OpendataCredentials(_API_KEY, base_url=base_url or "http://127.0.0.1")
-        if not base_url:
+    def test_rejects_ambiguous_or_insecure_origin(self, origin: str) -> None:
+        credentials = OpendataCredentials(_API_KEY, base_url=origin or "http://127.0.0.1")
+        if not origin:
             credentials.base_url = ""
 
         with pytest.raises(OpendataTemporalIdentityError) as raised:

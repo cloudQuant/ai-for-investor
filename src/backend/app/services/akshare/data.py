@@ -224,8 +224,7 @@ class AkshareDataService:
             if column.lower() in {"date", "trade_date", "datetime", "timestamp"}
         ]
         for column in date_like_columns:
-            parsed = pd.to_datetime(dataframe[column], errors="coerce")
-            parsed = parsed.dropna()
+            parsed: pd.Series = pd.to_datetime(dataframe[column], errors="coerce").dropna()
             if not parsed.empty:
                 return parsed.min().to_pydatetime(), parsed.max().to_pydatetime()
         return None, None

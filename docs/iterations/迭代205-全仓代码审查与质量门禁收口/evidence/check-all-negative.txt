@@ -1,0 +1,2 @@
+::error::required tool 'ruff' is not in PATH for src/backend
+Install it or set CHECK_ALL_ALLOW_MISSING=1 for a docs-only run.

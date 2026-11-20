@@ -1,0 +1,46 @@
+
+> ai-for-investor-frontend@0.1.0 test
+> vitest --run
+
+
+ RUN  v4.1.11 /home/yun/Documents/ai-for-investor/src/frontend
+
+ ❯ src/i18n/__tests__/i18n-index.test.ts (9 tests | 1 failed) 18541ms
+     × prefers a valid persisted locale 10094ms
+ ❯ src/__tests__/components/common/AppLayout.test.ts (25 tests | 1 failed) 16969ms
+       × 应该渲染侧边栏 12459ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/i18n/__tests__/i18n-index.test.ts > getStoredLocale > prefers a valid persisted locale
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/i18n/__tests__/i18n-index.test.ts:40:3
+     38|   beforeEach(() => setBrowserLanguage('en-US'))
+     39|
+     40|   it('prefers a valid persisted locale', async () => {
+       |   ^
+     41|     stubLocalStorage('de-DE')
+     42|     const { getStoredLocale } = await loadModule()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/__tests__/components/common/AppLayout.test.ts > AppLayout > 基础渲染 > 应该渲染侧边栏
+Error: Test timed out in 10000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/__tests__/components/common/AppLayout.test.ts:207:5
+    205|
+    206|   describe('基础渲染', () => {
+    207|     it('应该渲染侧边栏', async () => {
+       |     ^
+    208|       const AppLayout = (await import('@/components/common/AppLayout.v…
+    209|       const wrapper = mount(AppLayout, { global: getGlobalConfig() })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 181 passed (183)
+      Tests  2 failed | 2188 passed (2190)
+   Start at  00:31:00
+   Duration  70.61s (transform 352.41s, setup 131.08s, import 486.05s, tests 164.53s, environment 248.29s)
+

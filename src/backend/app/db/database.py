@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
+import weakref
 from collections.abc import AsyncGenerator
 from typing import cast
 
@@ -12,7 +14,6 @@ from sqlalchemy import Table, event, insert, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 from app.middleware.metrics import record_db_query
@@ -22,10 +23,15 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Lazy engine / session-maker to avoid "Future attached to a different loop"
-# when using MySQL async drivers (asyncmy / aiomysql).
-_engine = None
+# Engine / session-maker caches are keyed by the running event loop.  A pooled
+# MySQL engine is bound to one loop; reusing it from another loop is what made
+# the old code fall back to NullPool and open a fresh TCP/auth connection per
+# session.  Per-loop engines keep pooling without reintroducing
+# "Future attached to a different loop".
+_engine = None  # fallback for callers outside a running loop
 _async_session_maker = None
+_engines: weakref.WeakKeyDictionary[object, object] = weakref.WeakKeyDictionary()
+_session_makers: weakref.WeakKeyDictionary[object, object] = weakref.WeakKeyDictionary()
 
 
 def _register_db_metrics(engine) -> None:
@@ -68,35 +74,69 @@ def _extract_table_name(statement: str) -> str:
     return "unknown"
 
 
+def _create_engine():
+    """Build one async engine with pooling and pre-ping enabled."""
+
+    extra_kwargs: dict[str, object] = {"pool_pre_ping": True}
+    if settings.DATABASE_URL.startswith("mysql"):
+        # A pooled MySQL engine is loop-bound, but each loop now gets its own
+        # engine (see _get_engine).  NullPool made every request pay a fresh
+        # TCP + authentication handshake and hid connection exhaustion.
+        extra_kwargs.update(
+            pool_size=5,
+            max_overflow=10,
+            pool_recycle=1800,
+        )
+    return create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.SQL_ECHO,
+        **extra_kwargs,
+    )
+
+
+def _running_loop():
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
 def _get_engine():
     global _engine
-    if _engine is None:
-        # Use NullPool for MySQL async drivers to prevent connection-pool futures
-        # from being reused across different asyncio Tasks, which causes
-        # "Future attached to a different loop" errors.
-        extra_kwargs: dict[str, object] = {}
-        if settings.DATABASE_URL.startswith("mysql"):
-            extra_kwargs["poolclass"] = NullPool
-        else:
-            extra_kwargs["pool_pre_ping"] = True
-        _engine = create_async_engine(
-            settings.DATABASE_URL,
-            echo=settings.SQL_ECHO,
-            **extra_kwargs,
-        )
-        _register_db_metrics(_engine)
-    return _engine
+    loop = _running_loop()
+    if loop is None:
+        if _engine is None:
+            _engine = _create_engine()
+            _register_db_metrics(_engine)
+        return _engine
+    engine = _engines.get(loop)
+    if engine is None:
+        engine = _create_engine()
+        _engines[loop] = engine
+        _register_db_metrics(engine)
+    return engine
 
 
 def _get_session_maker():
     global _async_session_maker
-    if _async_session_maker is None:
-        _async_session_maker = async_sessionmaker(
+    loop = _running_loop()
+    if loop is None:
+        if _async_session_maker is None:
+            _async_session_maker = async_sessionmaker(
+                _get_engine(),
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+        return _async_session_maker
+    maker = _session_makers.get(loop)
+    if maker is None:
+        maker = async_sessionmaker(
             _get_engine(),
             class_=AsyncSession,
             expire_on_commit=False,
         )
-    return _async_session_maker
+        _session_makers[loop] = maker
+    return maker
 
 
 class _EngineProxy:

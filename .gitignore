@@ -104,6 +104,8 @@ runtime/
 data/manual_gateways.json
 reports/
 var/reports/
+# Runtime database dumps / backups (large binaries, never version-controlled).
+var/backups/
 src/frontend/artifacts/
 data/datas/*/
 tests/e2e/explore_report.json

@@ -214,6 +214,11 @@ def _complete_asset_specs_from_local(
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Upper bound for one portfolio response.  The UI already downsamples, so a
+# hard cap only prevents a multi-year, per-minute history from exhausting
+# memory before that downsample runs.
+_MAX_PAPER_EQUITY_SNAPSHOTS = 200_000
+
 
 def _get_manager() -> LiveTradingManager:
     """Get the live trading manager instance.
@@ -1435,6 +1440,10 @@ async def _paper_equity_points(
                 PaperEquitySnapshot.observed_at,
                 PaperEquitySnapshot.id,
             )
+            # Safety bound: a long-lived paper instance accumulates one row per
+            # minute.  The UI downsamples anyway; loading millions of rows just
+            # to discard them is the actual failure mode.
+            .limit(_MAX_PAPER_EQUITY_SNAPSHOTS)
         )
         snapshots = result.scalars().all()
 

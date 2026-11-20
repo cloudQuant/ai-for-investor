@@ -18,10 +18,9 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, localcontext
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from sqlalchemy import select, update
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1062,7 +1061,7 @@ async def _cas_update(
             .values(**values)
         )
         # UPDATE statements always return a cursor-backed result at runtime.
-        if cast(CursorResult[Any], result).rowcount != 1:
+        if result.rowcount != 1:
             return False
         for name, value in values.items():
             setattr(row, name, value)
