@@ -528,7 +528,7 @@ async def realtime_tick_websocket(
         websocket: The WebSocket connection instance.
         broker_id: The broker ID for which to stream tick data.
     """
-    current_user, accepted_subprotocol = get_websocket_current_user(websocket)
+    current_user, accepted_subprotocol = await get_websocket_current_user(websocket)
     if current_user is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

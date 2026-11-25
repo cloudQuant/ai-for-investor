@@ -7,6 +7,7 @@ import json
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 
@@ -139,10 +140,12 @@ def test_afi09_gateway_health_ws_is_an_authorized_projection_only() -> None:
     app.include_router(gateway_health_ws_router, prefix="/api/v1")
     app.dependency_overrides[get_db] = database_dependency
     original_decoder = auth_dependencies.decode_access_token
+    original_account_check = auth_dependencies._websocket_account_is_active
     auth_dependencies.decode_access_token = lambda token: {
         "sub": token,
         "username": "synthetic-user",
     }
+    auth_dependencies._websocket_account_is_active = AsyncMock(return_value=True)
     try:
 
         async def exercise_asgi() -> None:
@@ -155,7 +158,7 @@ def test_afi09_gateway_health_ws_is_an_authorized_projection_only() -> None:
             )
             accepts = [event for event in events if event["type"] == "websocket.accept"]
             projections = [event for event in events if event["type"] == "websocket.send"]
-            assert len(accepts) == 1
+            assert len(accepts) == 1, events
             assert accepts[0].get("subprotocol") == "access-token"
             assert len(projections) == 2
             first = json.loads(projections[0]["text"])
@@ -183,6 +186,7 @@ def test_afi09_gateway_health_ws_is_an_authorized_projection_only() -> None:
         assert worker.reads == 2
     finally:
         auth_dependencies.decode_access_token = original_decoder
+        auth_dependencies._websocket_account_is_active = original_account_check
         configure_service_read(None)
 
 
@@ -306,7 +310,9 @@ def _assert_gateway_health_ws_rejects_post_frame_authorization_loss(
         }
 
     original_decoder = auth_dependencies.decode_access_token
+    original_account_check = auth_dependencies._websocket_account_is_active
     auth_dependencies.decode_access_token = controlled_decoder
+    auth_dependencies._websocket_account_is_active = AsyncMock(return_value=True)
     try:
 
         async def exercise_asgi() -> list[dict[str, Any]]:
@@ -330,7 +336,7 @@ def _assert_gateway_health_ws_rejects_post_frame_authorization_loss(
         accepts = [event for event in events if event["type"] == "websocket.accept"]
         projections = [event for event in events if event["type"] == "websocket.send"]
         closes = [event for event in events if event.get("type") == "websocket.close"]
-        assert len(accepts) == 1
+        assert len(accepts) == 1, events
         assert accepts[0].get("subprotocol") == "access-token"
         assert len(projections) == 1
         assert len(closes) == 1
@@ -341,6 +347,7 @@ def _assert_gateway_health_ws_rejects_post_frame_authorization_loss(
         assert db.rollback_calls == db.get_calls
     finally:
         auth_dependencies.decode_access_token = original_decoder
+        auth_dependencies._websocket_account_is_active = original_account_check
         configure_service_read(None)
 
 

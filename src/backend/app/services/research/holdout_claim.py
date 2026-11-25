@@ -43,7 +43,7 @@ from app.services.research.dataset_registry import (
 )
 from app.services.research.discovery_search_budget import lock_experiment_epoch
 from app.services.research.holdout_authorization import HoldoutAuthorizationRegistry
-from app.services.research.holdout_request import holdout_request_binding_hash
+from app.services.research.holdout_request import holdout_request_hash_for_snapshots
 from app.services.research.promotion import resolve_server_policy
 from app.utils.invariants import log_suppressed
 
@@ -935,24 +935,11 @@ async def _validate_static_locked_authority(
         raise ValueError("HOLDOUT_CLAIM_SNAPSHOT_BINDING_MISMATCH")
     require_verified_snapshot_integrity(graph.discovery)
     require_verified_snapshot_integrity(graph.sealed)
-    expected_request_hash = holdout_request_binding_hash(
-        user_id=command.user_id,
-        run_id=command.run_id,
-        experiment_epoch_id=command.experiment_epoch_id,
-        candidate_id=command.candidate_id,
-        candidate_hash=command.candidate_hash,
-        freeze_receipt_id=command.freeze_receipt_id,
-        freeze_receipt_fingerprint=command.freeze_receipt_fingerprint,
-        dataset_snapshot_id=command.dataset_snapshot_id,
-        dataset_policy_version=command.dataset_policy_version,
-        sealed_dataset_hash=command.sealed_dataset_hash,
-        sealed_dataset_identity_hash=command.sealed_dataset_identity_hash,
-        policy_version=command.policy_version,
-        evaluator_identity=command.evaluator_identity,
-        evaluator_version=command.evaluator_version,
-        capability_profile_id=command.capability_profile_id,
-        capability_profile_version=command.capability_profile_version,
-        capability_evidence_hash=command.capability_evidence_hash,
+    expected_request_hash = holdout_request_hash_for_snapshots(
+        command,
+        discovery=graph.discovery,
+        sealed=graph.sealed,
+        candidate_frozen_at=graph.candidate.frozen_at,
     )
     if expected_request_hash != command.request_hash:
         raise ValueError("HOLDOUT_CLAIM_REQUEST_HASH_MISMATCH")
@@ -1287,25 +1274,15 @@ def _normalize_state_value(value: object) -> object:
     return value
 
 
-def _command_request_hash_matches(command: ResearchHoldoutEvaluationCommand) -> bool:
-    return command.request_hash == holdout_request_binding_hash(
-        user_id=command.user_id,
-        run_id=command.run_id,
-        experiment_epoch_id=command.experiment_epoch_id,
-        candidate_id=command.candidate_id,
-        candidate_hash=command.candidate_hash,
-        freeze_receipt_id=command.freeze_receipt_id,
-        freeze_receipt_fingerprint=command.freeze_receipt_fingerprint,
-        dataset_snapshot_id=command.dataset_snapshot_id,
-        dataset_policy_version=command.dataset_policy_version,
-        sealed_dataset_hash=command.sealed_dataset_hash,
-        sealed_dataset_identity_hash=command.sealed_dataset_identity_hash,
-        policy_version=command.policy_version,
-        evaluator_identity=command.evaluator_identity,
-        evaluator_version=command.evaluator_version,
-        capability_profile_id=command.capability_profile_id,
-        capability_profile_version=command.capability_profile_version,
-        capability_evidence_hash=command.capability_evidence_hash,
+def _command_request_hash_matches(
+    command: ResearchHoldoutEvaluationCommand,
+    graph: _LockedClaimGraph,
+) -> bool:
+    return command.request_hash == holdout_request_hash_for_snapshots(
+        command,
+        discovery=graph.discovery,
+        sealed=graph.sealed,
+        candidate_frozen_at=graph.candidate.frozen_at,
     )
 
 
@@ -1403,7 +1380,7 @@ def _committed_claim_matches(
         and command.lease_generation == probe.lease_generation
         and _optional_time(command.lease_expires_at) == _as_utc(probe.lease_expires_at)
         and _secret_hash(probe.lease_token) == probe.lease_token_hash
-        and _command_request_hash_matches(command)
+        and _command_request_hash_matches(command, graph)
         and _command_commit_state(command) == probe.command_state
         and _authorization_commit_state(authorization) == probe.authorization_state
         and _evaluation_commit_state(evaluation) == probe.evaluation_state

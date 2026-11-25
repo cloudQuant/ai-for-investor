@@ -59,7 +59,6 @@ from app.api.portfolio.asset_spec_adapter import (
     _row_can_use_local_asset_spec as _row_can_use_local_asset_spec,
 )
 from app.api.portfolio.instance_resolution import (
-    _as_path,
     _coerce_int,
     _coerce_started_day,
     _current_user_id,
@@ -122,6 +121,9 @@ from app.api.portfolio.position_aggregation import (
 )
 from app.api.portfolio.position_aggregation import (
     _snapshot_positions_for_portfolio as _snapshot_positions_for_portfolio,
+)
+from app.api.portfolio.runtime_config import (
+    runtime_config_for_instance as _runtime_config_for_instance,
 )
 from app.db.database import async_session_maker, get_db
 from app.models.workspace import StrategyUnit, Workspace
@@ -242,22 +244,6 @@ def _leverage_from_margin_rate(value: Any) -> float | None:
         safe_float_fn=_safe_float,
         epsilon=EPSILON,
     )
-
-
-def _runtime_config_for_instance(inst: Mapping[str, object]) -> dict[str, Any]:
-    runtime_dir = _as_path(inst.get("runtime_dir"))
-    if runtime_dir is not None:
-        config = load_runtime_config(runtime_dir)
-        if config:
-            return config
-    try:
-        strategy_id = inst["strategy_id"]
-        if not isinstance(strategy_id, str):
-            return {}
-        strategy_dir = Path(get_strategy_dir(strategy_id))
-    except ValueError:
-        return {}
-    return load_runtime_config(strategy_dir)
 
 
 def _source_from_instance(inst: Mapping[str, object]) -> _PortfolioSource:

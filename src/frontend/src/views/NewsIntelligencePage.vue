@@ -212,6 +212,7 @@
       :title="articleContentTitle || t('newsIntel.articleDetailsTitle')"
       width="min(780px, calc(100vw - 32px))"
       class="news-article-content-dialog"
+      @close="closeArticleContent"
     >
       <div
         v-loading="articleContentLoading"
@@ -511,6 +512,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Document, Filter, Link, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { marketIntelApi, type NewsArticleItem } from '@/api/marketIntel'
+import { useNewsArticleContent } from '@/composables/useNewsArticleContent'
 import { formatNewsArticleMeta } from '@/utils/newsArticleFormat'
 import { openSafeExternalUrl } from '@/utils/url'
 
@@ -588,10 +590,15 @@ const filterVisible = ref(false)
 const rssRefreshVisible = ref(false)
 const rssScheduleVisible = ref(false)
 const sourceConfigVisible = ref(false)
-const articleContentVisible = ref(false)
-const articleContentLoading = ref(false)
-const articleContent = ref('')
-const articleContentTitle = ref('')
+const {
+  articleContentVisible,
+  articleContentLoading,
+  articleContent,
+  articleContentTitle,
+  showArticleContent,
+  closeArticleContent,
+  disposeArticleContent,
+} = useNewsArticleContent()
 const rssRefreshMinutes = ref(15)
 const selectedFeedPresetIds = ref<string[]>(defaultFeedPresets.map((preset) => preset.id))
 const configuredSources = ref<NewsFeedPreset[]>([...defaultFeedPresets])
@@ -783,20 +790,6 @@ async function loadArticles() {
   articles.value = response.items
 }
 
-async function showArticleContent(article: NewsArticleItem) {
-  if (!article.id) return
-  articleContentVisible.value = true
-  articleContentLoading.value = true
-  articleContent.value = ''
-  articleContentTitle.value = article.headline
-  try {
-    const response = await marketIntelApi.getArticleContent(article.id)
-    articleContent.value = response.content || response.summary || ''
-  } finally {
-    articleContentLoading.value = false
-  }
-}
-
 function openArticle(article: NewsArticleItem) {
   openSafeExternalUrl(article.url)
 }
@@ -847,7 +840,10 @@ onMounted(() => {
   startRssRefresh()
 })
 
-onUnmounted(stopRssRefresh)
+onUnmounted(() => {
+  stopRssRefresh()
+  disposeArticleContent()
+})
 </script>
 
 <style scoped>

@@ -45,6 +45,24 @@ from app.services.research.holdout_execution_contract import (
     HoldoutExecutionCommand,
     HoldoutExecutionResult,
 )
+from app.services.research.holdout_validation import (
+    lease_token_hash as _lease_token_hash,
+)
+from app.services.research.holdout_validation import (
+    require_generation as _require_generation,
+)
+from app.services.research.holdout_validation import (
+    required_hash as _required_hash,
+)
+from app.services.research.holdout_validation import (
+    required_identity as _required_identity,
+)
+from app.services.research.holdout_validation import (
+    required_time as _required_time,
+)
+from app.services.research.holdout_validation import (
+    safe_reason_code as _safe_reason_code,
+)
 from app.services.research.promotion import (
     CommandPromotionAuthority,
     CommandPromotionMode,
@@ -2142,39 +2160,3 @@ def _require_complete_promotion(
         raise ValueError("HOLDOUT_FINALIZE_PROMOTION_INCOMPLETE")
     if promotion.strict_freeze_receipt_fingerprint != command.freeze_receipt_fingerprint:
         raise ValueError("HOLDOUT_FINALIZE_PROMOTION_INCOMPLETE")
-
-
-def _require_generation(value: int) -> None:
-    if type(value) is not int or value < 1:
-        raise ValueError("HOLDOUT_FINALIZE_LEASE_STALE")
-
-
-def _lease_token_hash(value: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError("HOLDOUT_FINALIZE_LEASE_STALE")
-    return sha256(value.encode()).hexdigest()
-
-
-def _required_time(value: datetime | None) -> datetime:
-    if value is None:
-        raise ValueError("HOLDOUT_FINALIZE_AUTHORITY_INCONSISTENT")
-    return _as_utc(value)
-
-
-def _required_identity(value: str | None) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError("HOLDOUT_FINALIZE_EXECUTION_INVALID")
-    return value
-
-
-def _required_hash(value: str | None) -> str:
-    if not isinstance(value, str) or not _is_sha256(value):
-        raise ValueError("HOLDOUT_FINALIZE_EXECUTION_INVALID")
-    return value
-
-
-def _safe_reason_code(exc: ValueError) -> str:
-    reason = str(exc)
-    if reason.startswith(("HOLDOUT_", "PROMOTION_", "DATASET_")):
-        return reason[:128]
-    return "HOLDOUT_FINALIZE_REJECTED"

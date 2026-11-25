@@ -24,7 +24,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,6 +62,7 @@ from app.services.market_data.multi_record_evidence import (
     assert_b2_completeness_receipt_integrity,
     assert_b2_source_event_manifest_integrity,
 )
+from app.services.market_data.publication_recovery import exclude_active_fenced_receipts
 
 UTC = timezone.utc
 
@@ -416,6 +417,22 @@ class MarketDataPublicationManager:
             )
         )
 
+    async def _exclude_active_fenced_receipts(
+        self,
+        rows: Iterable[MdPublication],
+    ) -> tuple[MdPublication, ...]:
+        materialized = tuple(rows)
+        source_rows = tuple(
+            row for row in materialized if row.entity_type == PUBLICATION_SOURCE_SNAPSHOT
+        )
+        generations = await self._source_receipt_fetch_lease_generations(source_rows)
+        return await exclude_active_fenced_receipts(
+            self._db,
+            materialized,
+            generations,
+            fetch_lease_clock=self._fetch_lease_clock,
+        )
+
     async def recover_pending(
         self,
         *,
@@ -430,10 +447,8 @@ class MarketDataPublicationManager:
         pending receipt is joined to its declared immutable entity and digest
         before it can become visible.  ``dry_run`` validates the same bounded
         candidates and rolls its transaction back without changing visibility.
-        Fetch-fenced source receipts are deliberately excluded: generic
-        recovery has no owner token to renew in the publication transaction,
-        while calendar, master-data and non-fenced source receipts retain the
-        original recovery behavior.
+        Fetch-fenced source receipts are recoverable only after their exact lease
+        is released or expired; active owners keep pending receipts excluded.
         """
         if not isinstance(limit, int) or not 1 <= limit <= 10_000:
             raise ValueError("limit must be between 1 and 10000")
@@ -442,18 +457,6 @@ class MarketDataPublicationManager:
         if self._db.in_transaction():
             raise MarketDataPublicationError("PUBLICATION_REQUIRES_COMMITTED_TRANSACTION")
 
-        fenced_source_receipt = (
-            select(MdSourceSnapshot.id)
-            .where(
-                MdSourceSnapshot.id == MdPublication.entity_id,
-                or_(
-                    MdSourceSnapshot.fetch_lease_key_sha256.is_not(None),
-                    MdSourceSnapshot.fetch_lease_fence_token.is_not(None),
-                ),
-            )
-            .correlate(MdPublication)
-            .exists()
-        )
         release_hold_exists = (
             select(MdPublicationReleaseHold.publication_id)
             .where(MdPublicationReleaseHold.publication_id == MdPublication.id)
@@ -469,10 +472,6 @@ class MarketDataPublicationManager:
                         .where(
                             MdPublication.published_at.is_(None),
                             ~release_hold_exists,
-                            or_(
-                                MdPublication.entity_type != PUBLICATION_SOURCE_SNAPSHOT,
-                                ~fenced_source_receipt,
-                            ),
                         )
                         .order_by(MdPublication.created_at, MdPublication.id)
                         .limit(limit)
@@ -491,12 +490,13 @@ class MarketDataPublicationManager:
             # common publication lock order (receipt, hold, source).
             await self._assert_no_active_release_holds(rows)
             await self._assert_pending_entity_integrity(rows)
-            ids = tuple(row.id for row in rows)
+            recoverable_rows = await self._exclude_active_fenced_receipts(rows)
+            ids = tuple(row.id for row in recoverable_rows)
             if dry_run:
                 await self._db.rollback()
                 return ids
-            if rows:
-                await self._publish_locked_rows(rows, lower_bound=None)
+            if recoverable_rows:
+                await self._publish_locked_rows(recoverable_rows, lower_bound=None)
             await self._db.commit()
             return ids
         except Exception:

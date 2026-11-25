@@ -178,7 +178,7 @@ async def test_realtime_data_websocket_disconnect_on_exception(monkeypatch):
     monkeypatch.setattr(
         api,
         "get_websocket_current_user",
-        lambda _websocket: (SimpleNamespace(sub="user-1"), "access-token"),
+        AsyncMock(return_value=(SimpleNamespace(sub="user-1"), "access-token")),
     )
     monkeypatch.setattr(api.ws_manager, "connect", AsyncMock())
     monkeypatch.setattr(api.ws_manager, "send_to_task", AsyncMock())

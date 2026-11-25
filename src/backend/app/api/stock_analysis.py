@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import typing
 from io import BytesIO
 from urllib.parse import quote
@@ -37,6 +36,7 @@ from app.services.stock_analysis.tasks import (
     StockAnalysisTaskService,
 )
 from app.services.stock_signal.service import StockSignalService
+from app.utils.async_tasks import spawn_tracked_task
 
 router = APIRouter()
 
@@ -183,8 +183,9 @@ async def create_stock_analysis_task(
         ) from exc
     await db.commit()
     await db.refresh(task)
-    asyncio.create_task(
-        StockAnalysisTaskService.run_pending_task(task_id=task.id, user_id=current_user.sub)
+    spawn_tracked_task(
+        StockAnalysisTaskService.run_pending_task(task_id=task.id, user_id=current_user.sub),
+        name=f"stock-analysis:{task.id}",
     )
     return _task_response(task)
 
@@ -229,8 +230,9 @@ async def retry_stock_analysis_task(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task_not_found")
-    asyncio.create_task(
-        StockAnalysisTaskService.run_pending_task(task_id=task.id, user_id=current_user.sub)
+    spawn_tracked_task(
+        StockAnalysisTaskService.run_pending_task(task_id=task.id, user_id=current_user.sub),
+        name=f"stock-analysis:{task.id}",
     )
     return _task_response(task)
 

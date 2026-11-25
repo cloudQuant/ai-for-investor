@@ -554,6 +554,44 @@ describe('BacktestResultPage', () => {
     }))
   })
 
+  it('keeps overfitting submission single-flight on repeated panel clicks', async () => {
+    const { strategyApi } = await import('@/api/strategy')
+    let resolveSubmission!: (value: any) => void
+    vi.mocked(strategyApi.createOverfittingTask).mockReturnValueOnce(
+      new Promise((resolve) => { resolveSubmission = resolve }),
+    )
+    const wrapper = mount(BacktestResultPage, {
+      global: { stubs: { ...elStubs, EquityCurve: true, DrawdownChart: true, TradeRecordsTable: true, TradeSignalChart: true, ReturnHeatmap: true, MetricCard: true, PerformancePanel: true } },
+    })
+    await flushPromises()
+    const button = wrapper.findAll('button').find((item) => item.text().includes('重新检测'))
+    await button?.trigger('click')
+    await button?.trigger('click')
+
+    expect(strategyApi.createOverfittingTask).toHaveBeenCalledTimes(1)
+    resolveSubmission({ task_id: 'ot-single', backtest_id: 't1', status: 'pending', methods: [] })
+    await flushPromises()
+  })
+
+  it('does not start overfitting runtime when submission resolves after unmount', async () => {
+    const { strategyApi } = await import('@/api/strategy')
+    let resolveSubmission!: (value: any) => void
+    vi.mocked(strategyApi.createOverfittingTask).mockReturnValueOnce(
+      new Promise((resolve) => { resolveSubmission = resolve }),
+    )
+    const wrapper = mount(BacktestResultPage, {
+      global: { stubs: { ...elStubs, EquityCurve: true, DrawdownChart: true, TradeRecordsTable: true, TradeSignalChart: true, ReturnHeatmap: true, MetricCard: true, PerformancePanel: true } },
+    })
+    await flushPromises()
+    const button = wrapper.findAll('button').find((item) => item.text().includes('重新检测'))
+    await button?.trigger('click')
+    wrapper.unmount()
+    resolveSubmission({ task_id: 'ot-late', backtest_id: 't1', status: 'pending', methods: [] })
+    await flushPromises()
+
+    expect(strategyApi.getOverfittingTask).not.toHaveBeenCalled()
+  })
+
   it('returns to workspace detail when workspaceId is present', async () => {
     mockRoute.query = { workspaceId: 'ws-1' }
     const wrapper = mount(BacktestResultPage, {

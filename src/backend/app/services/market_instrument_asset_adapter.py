@@ -6,6 +6,12 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import app.services.market_instrument as _market_instrument
+from app.services.market_instrument_pairs import (
+    crypto_pair_code as _crypto_pair_code,
+)
+from app.services.market_instrument_pairs import (
+    fx_pair_legs as _fx_pair_legs,
+)
 
 
 async def _lookup_stock_warehouse(
@@ -596,21 +602,6 @@ async def _lookup_option_warehouse(
 _FX_OFFSHORE_LEG_MAP = {"CNH": "CNY"}
 
 
-def _fx_pair_legs(symbol: str) -> tuple[str, str] | None:
-    """Split an FX pair code into its ``(base, quote)`` currency codes.
-
-    Eastmoney stamps its onshore mid-price codes with a trailing ``C`` (``AUDCNYC`` is
-    澳元人民币中间价 and ``CNYAEDC`` is 人民币阿联酋迪拉姆中间价), so both the 6-character and
-    the 7-character forms reduce to two 3-character legs.
-    """
-    code = symbol.upper()
-    if len(code) == 7 and code.endswith("C"):
-        code = code[:-1]
-    if len(code) != 6 or not code.isalpha():
-        return None
-    return code[:3], code[3:]
-
-
 async def _fx_history_from_boc_safe(
     service: _market_instrument.MarketInstrumentService,
     *,
@@ -771,11 +762,6 @@ async def _lookup_fx_warehouse(
 
 
 _CRYPTO_INTRADAY_PERIODS = frozenset({"1m", "5m", "15m", "30m", "1h", "2h", "4h", "hourly"})
-
-
-def _crypto_pair_code(symbol: str) -> str:
-    """Normalise BTC-USDT / BTC/USDT / btcusdt to the Binance code BTCUSDT."""
-    return "".join(character for character in symbol.upper() if character.isalnum())
 
 
 async def _lookup_crypto_warehouse(

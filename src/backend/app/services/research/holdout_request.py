@@ -39,10 +39,11 @@ from app.services.research.dataset_registry import (
     require_verified_snapshot_integrity,
 )
 from app.services.research.discovery_search_budget import lock_experiment_epoch
+from app.services.research.holdout_isolation import build_holdout_isolation_manifest
 from app.services.research.promotion import resolve_server_policy
 from app.utils.invariants import log_suppressed
 
-_REQUEST_SCHEMA_VERSION = "holdout-evaluation-request-v1"
+_REQUEST_SCHEMA_VERSION = "holdout-evaluation-request-v2"
 _REQUEST_INTENT_SCHEMA_VERSION = "holdout-evaluation-request-intent-v1"
 _INVALID_EXPECTED_HASH_SCHEMA_VERSION = "holdout-evaluation-invalid-expected-hash-v1"
 _AUDIT_PURPOSE = "HOLDOUT_EVALUATION_REQUEST"
@@ -574,6 +575,23 @@ class HoldoutRequestService:
             user_id=user_id,
             dataset_policy_version=epoch.dataset_policy_version,
         )
+        discovery = await session.scalar(
+            select(ResearchDatasetSnapshot)
+            .where(
+                ResearchDatasetSnapshot.id == candidate.dataset_snapshot_id,
+                ResearchDatasetSnapshot.user_id == user_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if discovery is None:
+            raise ValueError("HOLDOUT_ISOLATION_MANIFEST_REQUIRED")
+        require_verified_snapshot_integrity(discovery)
+        isolation = build_holdout_isolation_manifest(
+            discovery=discovery,
+            sealed=sealed,
+            candidate_frozen_at=candidate.frozen_at,
+        )
         try:
             await self._datasets.revalidate_snapshot_in_session(session, snapshot=sealed)
         except ValueError as exc:
@@ -616,6 +634,7 @@ class HoldoutRequestService:
             capability_profile_id=profile.profile_id,
             capability_profile_version=profile.version,
             capability_evidence_hash=profile.evidence_hash,
+            holdout_isolation_manifest_hash=isolation.manifest_hash,
         )
         existing = await _command_by_idempotency_key(
             session,
@@ -835,6 +854,7 @@ def holdout_request_binding_hash(
     capability_profile_id: str,
     capability_profile_version: str,
     capability_evidence_hash: str,
+    holdout_isolation_manifest_hash: str,
 ) -> str:
     """Return the canonical server-owned command binding hash."""
 
@@ -858,7 +878,42 @@ def holdout_request_binding_hash(
             "capability_profile_id": capability_profile_id,
             "capability_profile_version": capability_profile_version,
             "capability_evidence_hash": capability_evidence_hash,
+            "holdout_isolation_manifest_hash": holdout_isolation_manifest_hash,
         }
+    )
+
+
+def holdout_request_hash_for_snapshots(
+    command: ResearchHoldoutEvaluationCommand,
+    *,
+    discovery: ResearchDatasetSnapshot,
+    sealed: ResearchDatasetSnapshot,
+    candidate_frozen_at: datetime | None,
+) -> str:
+    isolation = build_holdout_isolation_manifest(
+        discovery=discovery,
+        sealed=sealed,
+        candidate_frozen_at=candidate_frozen_at,
+    )
+    return holdout_request_binding_hash(
+        user_id=command.user_id,
+        run_id=command.run_id,
+        experiment_epoch_id=command.experiment_epoch_id,
+        candidate_id=command.candidate_id,
+        candidate_hash=command.candidate_hash,
+        freeze_receipt_id=command.freeze_receipt_id,
+        freeze_receipt_fingerprint=command.freeze_receipt_fingerprint,
+        dataset_snapshot_id=command.dataset_snapshot_id,
+        dataset_policy_version=command.dataset_policy_version,
+        sealed_dataset_hash=command.sealed_dataset_hash,
+        sealed_dataset_identity_hash=command.sealed_dataset_identity_hash,
+        policy_version=command.policy_version,
+        evaluator_identity=command.evaluator_identity,
+        evaluator_version=command.evaluator_version,
+        capability_profile_id=command.capability_profile_id,
+        capability_profile_version=command.capability_profile_version,
+        capability_evidence_hash=command.capability_evidence_hash,
+        holdout_isolation_manifest_hash=isolation.manifest_hash,
     )
 
 

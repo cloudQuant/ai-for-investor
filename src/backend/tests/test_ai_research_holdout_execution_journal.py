@@ -287,7 +287,7 @@ async def test_observed_result_is_immutable_and_settlement_is_idempotent(client,
     assert observed.state == "OBSERVED"
     assert observed.result_hash == sha256(result.payload).hexdigest()
     serialized = str(observed.result_json)
-    assert "returns" not in serialized
+    assert '"returns"' not in serialized
     assert str(raw_canary) not in serialized
     settled = await journal.settle(user_id=context["candidate"].user_id, command=command)
     assert settled.state == "SETTLED"

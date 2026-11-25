@@ -206,16 +206,16 @@ async def test_service_and_persisted_resources_use_exact_active_owner_scope(
         # A server-directory entry alone is not an owner grant: it must join to
         # an active persisted user. Explicit service identities and inactive
         # owners are denied before their worker can be called.
-        for token, selector in (
-            (token_missing, "account-missing"),
-            (token_inactive, "account-inactive"),
-            (token_service, "account-service"),
+        for token, selector, expected_status in (
+            (token_missing, "account-missing", 401),
+            (token_inactive, "account-inactive", 401),
+            (token_service, "account-service", 403),
         ):
             denied = await client.get(
                 f"/api/v1/service-read/accounts/{selector}",
                 headers={"Authorization": f"Bearer {token}"},
             )
-            assert denied.status_code == 403, denied.text
+            assert denied.status_code == expected_status, denied.text
         assert workers["inactive"].account_calls == []
         assert workers["service"].account_calls == []
         assert workers["missing"].account_calls == []

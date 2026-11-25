@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import math
 import re
 from datetime import date, timedelta
 from typing import Any
@@ -19,6 +18,21 @@ from app.schemas.stock_analysis import (
 )
 from app.services.market_instrument import MarketInstrumentService
 from app.services.news_intelligence import get_news_intelligence_service
+from app.services.stock_analysis.data_collector_helpers import (
+    has_financial_data as _data_has_financial_data,
+)
+from app.services.stock_analysis.data_collector_helpers import (
+    infer_exchange as _data_infer_exchange,
+)
+from app.services.stock_analysis.data_collector_helpers import (
+    number as _data_number,
+)
+from app.services.stock_analysis.data_collector_helpers import (
+    report_date as _data_report_date,
+)
+from app.services.stock_analysis.data_collector_helpers import (
+    text as _data_text,
+)
 from app.services.stock_analysis.opendata_financial_archive import (
     OpenDataFinancialArchiveError,
     OpenDataFinancialArchiveReader,
@@ -201,6 +215,7 @@ _SINA_LRB_SAFE_REASON_CODES = frozenset(
 class StockAnalysisDataCollector:
     """Collect current-project data used by the stock analysis pipeline."""
 
+    _text = staticmethod(_data_text)
     _BULLISH_NEWS_TERMS = (
         "增长",
         "增持",
@@ -1190,13 +1205,6 @@ class StockAnalysisDataCollector:
             return []
         return [row for row in rows if isinstance(row, dict)]
 
-    @staticmethod
-    def _text(value: Any) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        return text or None
-
     @classmethod
     def _profile_industry(cls, profile: dict[str, Any]) -> str | None:
         value = profile.get("affiliate_industry")
@@ -1228,37 +1236,7 @@ class StockAnalysisDataCollector:
         exchange = cls._infer_exchange(code)
         return f"{code}.{exchange}" if exchange else code
 
-    @staticmethod
-    def _report_date(value: Any) -> str | None:
-        digits = re.sub(r"\D", "", str(value or ""))
-        if len(digits) != 8:
-            return None
-        try:
-            return date(int(digits[:4]), int(digits[4:6]), int(digits[6:])).isoformat()
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _number(value: Any) -> float | None:
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError):
-            return None
-        return numeric if math.isfinite(numeric) else None
-
-    @staticmethod
-    def _has_financial_data(financials: dict[str, Any]) -> bool:
-        return bool(financials.get("annual") or financials.get("quarterly"))
-
-    @staticmethod
-    def _infer_exchange(symbol: str) -> str | None:
-        code = symbol.strip().upper()
-        if "." in code:
-            code = code.split(".", 1)[0]
-        if code.startswith(("6", "9")):
-            return "SH"
-        if code.startswith(("0", "2", "3")):
-            return "SZ"
-        if code.startswith(("4", "8")):
-            return "BJ"
-        return None
+    _report_date = staticmethod(_data_report_date)
+    _number = staticmethod(_data_number)
+    _has_financial_data = staticmethod(_data_has_financial_data)
+    _infer_exchange = staticmethod(_data_infer_exchange)

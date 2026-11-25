@@ -28,6 +28,9 @@ from app.services.workspace.config import (
     _normalize_workspace_type,
     _workspace_settings_dict,
 )
+from app.services.workspace.run_ops_progress import (
+    unit_run_progress as _unit_run_progress,
+)
 from app.services.workspace.units import (
     AIStrategyResearchPaperRuntimeStopError,
     is_server_owned_ai_research_live_handoff_unit,
@@ -171,37 +174,6 @@ def _schedule_paper_runtime_snapshots(user_id: str, units: list[StrategyUnit]) -
             _initialize_paper_runtime_snapshots(user_id, runtime_snapshots),
             name=f"workspace-snapshots:{user_id}",
         )
-
-
-def _task_runtime_info(task: BacktestTask | None) -> dict[str, object]:
-    if task is None:
-        return {}
-    request_data: dict[str, object] = (
-        task.request_data if isinstance(task.request_data, dict) else {}
-    )
-    runtime = request_data.get("_runtime")
-    return runtime if isinstance(runtime, dict) else {}
-
-
-def _unit_run_progress(
-    task: BacktestTask | None,
-    run_status: str,
-) -> tuple[float | None, str | None]:
-    runtime = _task_runtime_info(task)
-    raw_progress = runtime.get("progress")
-    progress = float(raw_progress) if isinstance(raw_progress, (int, float)) else None
-    raw_message = runtime.get("message")
-    message = raw_message if isinstance(raw_message, str) else None
-    if progress is None:
-        if run_status in {"queued", "idle"}:
-            progress = 0.0
-        elif run_status == "running":
-            progress = 10.0
-        elif run_status in {"completed", "failed", "cancelled"}:
-            progress = 100.0
-    if progress is not None:
-        progress = max(0.0, min(progress, 100.0))
-    return progress, message
 
 
 class WorkspaceRunOpsMixin:

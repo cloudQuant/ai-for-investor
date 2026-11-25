@@ -405,64 +405,15 @@ import {
   type StockSignalRecord,
   type StockSignalSummary,
 } from '@/api/stockAnalysis'
+import type {
+  AnalysisModuleOption,
+  ReportDecision,
+  ReportSection,
+  ResearchDepthOption,
+  StockAnalysisReport,
+} from '@/types/stockAnalysisReport'
 
 type TaskStatus = StockAnalysisTask['status']
-
-interface AnalysisModuleOption {
-  value: StockAnalysisModule
-  label: string
-  description: string
-}
-
-interface ResearchDepthOption {
-  value: string
-  label: string
-  description: string
-  time: string
-  modules: StockAnalysisModule[]
-  debateRounds: number
-  riskRounds: number
-  memoryEnabled: boolean
-}
-
-interface ReportMeta {
-  symbol?: string
-  symbol_name?: string
-  market_type?: string
-  analysis_date?: string
-  research_depth?: string
-}
-
-interface ReportDecision {
-  label?: string
-  target_price?: string | number | null
-  confidence_score?: number | null
-  risk_score?: number | null
-  risk_level?: string
-  reasoning?: string
-  signal_action?: string
-  eligibility_status?: string
-  quality_reasons?: string[]
-  feature_version?: string | null
-  decision_policy_version?: string | null
-  model_version?: string | null
-}
-
-interface ReportSection {
-  id: string
-  title: string
-  summary: string
-  findings: string[]
-  score?: number | null
-}
-
-interface StockAnalysisReport {
-  meta?: ReportMeta
-  executive_summary?: string
-  decision?: ReportDecision
-  sections?: ReportSection[]
-  disclaimer?: string
-}
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -561,6 +512,9 @@ const signalHistory = ref<StockSignalRecord[]>([])
 const signalSummary = ref<StockSignalSummary | null>(null)
 const signalEvidenceLoading = ref(false)
 const polling = useStockAnalysisPolling(3000)
+let pageGeneration = 0
+let evidenceGeneration = 0
+let isUnmounted = false
 
 const modelOptions = computed(() =>
   availableModels.value.map((model) => ({
@@ -661,6 +615,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  isUnmounted = true
+  pageGeneration++
+  evidenceGeneration++
   polling.dispose()
 })
 
@@ -722,23 +679,28 @@ async function submitAnalysis() {
     return
   }
 
+  if (submitting.value) return
+  const generation = ++pageGeneration
+  evidenceGeneration++
   polling.invalidatePolling()
   submitting.value = true
   taskNotice.value = ''
   analysisResult.value = null
   try {
     const task = await stockAnalysisApi.createTask(payload)
-    if (polling.isUnmounted()) return
+    if (isUnmounted || generation !== pageGeneration) return
     currentTask.value = task
     taskNotice.value = t('stockAnalysis.taskSubmitted')
     ElMessage.success(t('stockAnalysis.taskSubmitted'))
     if (task.status === 'completed') {
-      await loadResult(task.task_id)
+      await loadResult(task.task_id, generation)
     } else {
       startPolling(task.task_id)
     }
   } catch {
-    ElMessage.error(t('stockAnalysis.submitFailed'))
+    if (!isUnmounted && generation === pageGeneration) {
+      ElMessage.error(t('stockAnalysis.submitFailed'))
+    }
   } finally {
     submitting.value = false
   }
@@ -753,30 +715,38 @@ function stopPolling() {
 }
 
 async function refreshTask(taskId: string, gen = polling.currentGen()) {
+  const generation = pageGeneration
   try {
     const task = await stockAnalysisApi.getTask(taskId)
-    if (!polling.isCurrent(gen)) return
+    if (!polling.isCurrent(gen) || isUnmounted || generation !== pageGeneration || task.task_id !== taskId) return
     currentTask.value = task
     if (task.status === 'completed') {
       polling.invalidatePolling()
-      await loadResult(task.task_id)
-      if (!polling.isUnmounted()) ElMessage.success(t('stockAnalysis.reportReady'))
+      await loadResult(task.task_id, generation)
+      if (!isUnmounted && generation === pageGeneration) ElMessage.success(t('stockAnalysis.reportReady'))
     } else if (task.status === 'failed' || task.status === 'cancelled') {
       polling.invalidatePolling()
       if (task.status === 'failed') ElMessage.error(task.error_message || t('stockAnalysis.taskFailed'))
     }
   } catch {
-    if (gen === polling.currentGen()) {
+    if (!isUnmounted && generation === pageGeneration && gen === polling.currentGen()) {
       polling.invalidatePolling()
       ElMessage.error(t('stockAnalysis.refreshFailed'))
     }
   }
 }
 
-async function loadResult(taskId: string) {
+async function loadResult(taskId: string, generation = pageGeneration) {
   const result = await stockAnalysisApi.getTaskResult(taskId)
+  if (
+    isUnmounted
+    || generation !== pageGeneration
+    || currentTask.value?.task_id !== taskId
+    || result.task_id !== taskId
+  ) return
   analysisResult.value = result
-  await loadSignalEvidence(normalizeSymbol(currentTask.value?.symbol || form.symbol))
+  await loadSignalEvidence(normalizeSymbol(currentTask.value.symbol || form.symbol), generation)
+  if (isUnmounted || generation !== pageGeneration) return
   const firstSection = reportSections.value[0]
   if (firstSection) {
     activeReportTab.value = firstSection.id
@@ -784,9 +754,10 @@ async function loadResult(taskId: string) {
 }
 
 async function loadLatestCompletedResult() {
+  const generation = pageGeneration
   try {
     const latest = await stockAnalysisApi.getLatestResult()
-    if (!latest) return
+    if (!latest || isUnmounted || generation !== pageGeneration || currentTask.value) return
     restoreLatestResult(latest)
   } catch {
     // A missing historical report should not block a new analysis.
@@ -808,35 +779,55 @@ function restoreLatestResult(latest: StockAnalysisLatestResult) {
   void loadSignalEvidence(normalizeSymbol(latest.task.symbol))
 }
 
-async function loadSignalEvidence(symbol: string) {
+async function loadSignalEvidence(symbol: string, generation = pageGeneration) {
   if (!symbol) return
+  const requestGeneration = ++evidenceGeneration
   signalEvidenceLoading.value = true
   try {
     const [history, summary] = await Promise.all([
       stockAnalysisApi.getSignalHistory(symbol),
       stockAnalysisApi.getSignalSummary(symbol),
     ])
+    if (
+      isUnmounted
+      || generation !== pageGeneration
+      || requestGeneration !== evidenceGeneration
+      || normalizeSymbol(form.symbol) !== symbol
+    ) return
     signalHistory.value = history.items ?? []
     signalSummary.value = summary
   } catch {
-    // Signal evidence is additive; a temporary API failure must not block analysis.
-    signalHistory.value = []
-    signalSummary.value = null
+    if (
+      !isUnmounted
+      && generation === pageGeneration
+      && requestGeneration === evidenceGeneration
+      && normalizeSymbol(form.symbol) === symbol
+    ) {
+      signalHistory.value = []
+      signalSummary.value = null
+    }
   } finally {
-    signalEvidenceLoading.value = false
+    if (!isUnmounted && requestGeneration === evidenceGeneration) {
+      signalEvidenceLoading.value = false
+    }
   }
 }
 
 async function cancelTask() {
-  if (!currentTask.value) return
+  const taskId = currentTask.value?.task_id
+  if (!taskId) return
+  const generation = pageGeneration
   cancelling.value = true
   try {
-    const task = await stockAnalysisApi.cancelTask(currentTask.value.task_id)
+    const task = await stockAnalysisApi.cancelTask(taskId)
+    if (isUnmounted || generation !== pageGeneration || currentTask.value?.task_id !== taskId) return
     currentTask.value = task
     stopPolling()
     ElMessage.success(t('stockAnalysis.cancelSuccess'))
   } catch {
-    ElMessage.error(t('stockAnalysis.cancelFailed'))
+    if (!isUnmounted && generation === pageGeneration && currentTask.value?.task_id === taskId) {
+      ElMessage.error(t('stockAnalysis.cancelFailed'))
+    }
   } finally {
     cancelling.value = false
   }

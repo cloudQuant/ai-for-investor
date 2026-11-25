@@ -1,0 +1,25 @@
+# Strict configuration for the current Git-tracked tree and PR commits.
+# Historical scanning keeps .gitleaks.toml plus its audited fingerprint baseline.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Exact placeholder values only; documentation and examples remain scanned"
+
+paths = [
+  '''\.gitleaks\.toml$''',
+  '''\.gitleaks-tracked\.toml$''',
+]
+
+regexes = [
+  '''replace-with-[a-z0-9-]+''',
+  '''your-secret-key-change-in-production''',
+  '''your-jwt-secret-change-in-production''',
+  '''test-secret-key-for-ci-[a-z0-9-]+''',
+  '''test-jwt-secret-key-for-ci-[a-z0-9-]+''',
+  '''e2e-secret-key-with-sufficient-length-123456''',
+  '''e2e-jwt-secret-key-with-sufficient-length-654321''',
+  '''admin123''',
+  '''b533a93fa88aed507429773146ae6af449f157ef8c2a09191a9d3d911f5f028c''',
+]

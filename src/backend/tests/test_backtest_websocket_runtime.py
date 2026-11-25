@@ -6,6 +6,7 @@ Tests for WebSocket authentication, message flow, and terminal state handling.
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi import WebSocket
 
 from app.api.deps import WEBSOCKET_TOKEN_PROTOCOL, get_websocket_current_user
@@ -64,31 +65,37 @@ class TestWebSocketTokenExtraction:
 class TestWebSocketAuthentication:
     """Tests for WebSocket authentication flow."""
 
-    def test_auth_missing_token_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_auth_missing_token_returns_none(self):
         """Test that missing token returns None user."""
         websocket = MagicMock(spec=WebSocket)
         websocket.headers = {}
 
-        user, protocol = get_websocket_current_user(websocket)
+        user, protocol = await get_websocket_current_user(websocket)
         assert user is None
 
-    def test_auth_invalid_token_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_auth_invalid_token_returns_none(self):
         """Test that invalid token returns None user."""
         websocket = MagicMock(spec=WebSocket)
         websocket.headers = {"sec-websocket-protocol": "access-token, invalid-token"}
 
         with patch("app.api.deps.decode_access_token", return_value=None):
-            user, protocol = get_websocket_current_user(websocket)
+            user, protocol = await get_websocket_current_user(websocket)
             assert user is None
 
-    def test_auth_valid_token_returns_user(self):
+    @pytest.mark.asyncio
+    async def test_auth_valid_token_returns_user(self):
         """Test that valid token returns user payload."""
         websocket = MagicMock(spec=WebSocket)
         websocket.headers = {"sec-websocket-protocol": "access-token, valid-jwt"}
 
         mock_payload = {"sub": "user-123", "username": "testuser", "exp": 9999999999}
-        with patch("app.api.deps.decode_access_token", return_value=mock_payload):
-            user, protocol = get_websocket_current_user(websocket)
+        with (
+            patch("app.api.deps.decode_access_token", return_value=mock_payload),
+            patch("app.api.deps._websocket_account_is_active", return_value=True),
+        ):
+            user, protocol = await get_websocket_current_user(websocket)
             assert user is not None
             assert user.sub == "user-123"
 

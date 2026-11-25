@@ -8,8 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import delete, insert, select
 
 from app.api import backtest_enhanced
+from app.db.database import async_session_maker
+from app.models.permission import Role, user_roles
+from app.models.user import User
 from app.schemas.backtest_enhanced import BacktestResponse, BacktestResult, TaskStatus
 
 # Valid backtest request configuration
@@ -22,6 +26,18 @@ VALID_BACKTEST_REQUEST = {
     "commission": 0.001,
     "params": {},
 }
+
+
+@pytest.fixture
+async def auth_headers(auth_user) -> dict:
+    user, headers = auth_user
+    async with async_session_maker() as db:
+        result = await db.execute(select(User.id).where(User.username == user["username"]))
+        user_id = result.scalar_one()
+        await db.execute(delete(user_roles).where(user_roles.c.user_id == user_id))
+        await db.execute(insert(user_roles).values(user_id=user_id, role=Role.PREMIUM.value))
+        await db.commit()
+    return headers
 
 
 @pytest.fixture

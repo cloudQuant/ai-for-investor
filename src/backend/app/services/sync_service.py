@@ -2301,11 +2301,8 @@ class SyncService:
             database, table, table_delta, source_summary, target_summary, source_schema_sql
         )
 
-    def _build_show_create_view_sql(self, database: str, view_name: str) -> str:
-        return sync_schema.build_show_create_view_sql(database, view_name)
-
-    def _normalize_create_view_sql(self, payload: str, view_name: str) -> str:
-        return sync_schema.normalize_create_view_sql(payload, view_name)
+    _build_show_create_view_sql = staticmethod(sync_schema.build_show_create_view_sql)
+    _normalize_create_view_sql = staticmethod(sync_schema.normalize_create_view_sql)
 
     async def _fetch_local_view_create_sql(
         self,

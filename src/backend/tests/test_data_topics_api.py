@@ -1,4 +1,6 @@
 import asyncio
+from collections import defaultdict, deque
+from logging import INFO
 
 import pytest
 from httpx import AsyncClient
@@ -43,6 +45,7 @@ async def test_data_topics_list_refresh_and_stats_require_admin(client: AsyncCli
     monkeypatch.setattr(data_topic_module, "_shared_hub", hub)
 
     _, headers = await register_and_login(client, username="data_topics_user")
+    await hub.request("market:quote:RB2510", force=True)
 
     listed = await client.get("/api/v1/data-topics", headers=headers)
     refreshed = await client.post(
@@ -59,8 +62,7 @@ async def test_data_topics_list_refresh_and_stats_require_admin(client: AsyncCli
     assert listed.json()["items"][0]["subscription_count"] == 1
     assert listed.json()["items"][0]["last_error"] is None
 
-    assert refreshed.status_code == 200
-    assert refreshed.json()["value"]["symbol"] == "RB2510"
+    assert refreshed.status_code == 403
 
     assert stats_non_admin.status_code == 403
     assert stats_admin.status_code == 200
@@ -69,6 +71,46 @@ async def test_data_topics_list_refresh_and_stats_require_admin(client: AsyncCli
     assert stats_admin.json()["subscription_count"] == 1
     assert stats_admin.json()["ws_gateway"]["connection_count"] == 1
     assert stats_admin.json()["ws_gateway"]["subscription_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_user_topic_writes_are_rate_limited_and_audited(
+    client: AsyncClient, monkeypatch, caplog
+):
+    import app.services.data_topic_hub as data_topic_module
+    from app.api.data import topics as topic_api
+
+    hub = data_topic_module.DataTopicHub()
+    monkeypatch.setattr(data_topic_module, "_shared_hub", hub)
+    monkeypatch.setattr(topic_api, "_user_topic_writes", defaultdict(deque))
+    monkeypatch.setattr(topic_api, "_USER_TOPIC_WRITE_LIMIT", 2)
+    monkeypatch.setattr(topic_api.logger, "propagate", True)
+    caplog.set_level(INFO, logger=topic_api.__name__)
+
+    _, headers = await register_and_login(client, username="topic_write_user")
+    user_id = (await client.get("/api/v1/auth/me", headers=headers)).json()["id"]
+    topic = f"user:{user_id}:watchlist"
+    for _ in range(2):
+        response = await client.post(
+            f"/api/v1/data-topics/{topic}/push", headers=headers, json={"value": 1}
+        )
+        assert response.status_code == 200, response.text
+
+    limited = await client.post(
+        f"/api/v1/data-topics/{topic}/push", headers=headers, json={"value": 2}
+    )
+    assert limited.status_code == 429
+    assert int(limited.headers["retry-after"]) >= 1
+    assert f"actor={user_id} action=push topic={topic}" in caplog.text
+
+    _, other_headers = await register_and_login(client, username="topic_write_other")
+    other_id = (await client.get("/api/v1/auth/me", headers=other_headers)).json()["id"]
+    other = await client.post(
+        f"/api/v1/data-topics/user:{other_id}:watchlist/push",
+        headers=other_headers,
+        json={"value": 3},
+    )
+    assert other.status_code == 200, other.text
 
 
 @pytest.mark.asyncio
@@ -97,13 +139,13 @@ async def test_data_topics_list_and_stats_expose_last_refresh_error(
     refreshed = await client.post(
         "/api/v1/data-topics/market:history:RB2510:D1:1d/refresh", headers=headers
     )
+    assert refreshed.status_code == 403
+    await hub.request("market:history:RB2510:D1:1d", force=True)
     listed = await client.get("/api/v1/data-topics", headers=headers)
     stats_admin = await client.get(
         "/api/v1/data-topics/stats", headers=await _get_admin_headers(client)
     )
 
-    assert refreshed.status_code == 200
-    assert refreshed.json()["value"] is None
     assert listed.status_code == 200
     assert listed.json()["items"][0]["last_error"]["code"] == "refresh_timeout"
     assert stats_admin.status_code == 200

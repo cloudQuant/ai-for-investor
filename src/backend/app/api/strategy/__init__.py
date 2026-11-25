@@ -1,15 +1,20 @@
 from fastapi import APIRouter
 
+from app.api.strategy.ai_research_config_profiles import (
+    create_ai_strategy_research_config_profile,
+    delete_ai_strategy_research_config_profile,
+    get_ai_strategy_research_config_profile,
+    get_ai_strategy_research_config_profiles,
+    import_ai_strategy_research_config_profiles,
+    list_ai_strategy_research_config_profiles,
+    update_ai_strategy_research_config_profile,
+)
 from app.api.strategy.base import (
     add_strategy_copilot_draft_to_workspace,
     backtest_strategy_copilot_draft,
-    create_ai_strategy_research_config_profile,
     create_strategy,
-    delete_ai_strategy_research_config_profile,
     delete_strategy,
     generate_strategy_copilot_draft,
-    get_ai_strategy_research_config_profile,
-    get_ai_strategy_research_config_profiles,
     get_ai_strategy_research_service,
     get_strategy,
     get_strategy_service,
@@ -17,11 +22,8 @@ from app.api.strategy.base import (
     get_template_detail,
     get_template_readme,
     get_templates,
-    import_ai_strategy_research_config_profiles,
-    list_ai_strategy_research_config_profiles,
     list_strategies,
     run_ai_strategy_research_loop,
-    update_ai_strategy_research_config_profile,
     update_strategy,
 )
 from app.api.strategy.base import (

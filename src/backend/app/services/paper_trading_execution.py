@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from app.db.database import async_session_maker
 from app.db.sql_repository import SQLRepository
@@ -178,6 +178,8 @@ async def process_order_transactional(
             async with session.begin():
                 dialect_name = session.bind.dialect.name if session.bind is not None else ""
                 use_row_lock = dialect_name != "sqlite"
+                if not use_row_lock:
+                    await session.execute(text("BEGIN IMMEDIATE"))
 
                 acct_stmt = select(Account).where(Account.id == account_id)
                 if use_row_lock:

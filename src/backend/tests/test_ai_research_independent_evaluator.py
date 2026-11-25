@@ -1019,11 +1019,11 @@ async def _context(user_id: str) -> dict[str, object]:
         object_receipt_id=sealed_receipt.receipt_id,
         dataset_policy_version="policy-v1",
         partition_kind="SEALED_HOLDOUT",
-        instrument_manifest={"symbols": ["RB0"]},
-        split_manifest={"start": "2024-01-01", "end": "2024-12-31"},
+        instrument_manifest={"symbols": ["HC0"]},
+        split_manifest={"start": "2027-01-01", "end": "2027-12-31"},
         source_manifest={"provider": "fixture"},
         execution_policy={"fill": "next_bar_open"},
-        point_in_time_cutoff=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        point_in_time_cutoff=datetime(2028, 1, 1, tzinfo=timezone.utc),
         license_tags=["fixture-license"],
     )
     epoch = ResearchExperimentEpoch(

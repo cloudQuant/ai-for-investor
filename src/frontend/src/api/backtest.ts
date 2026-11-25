@@ -24,8 +24,10 @@ export const backtestApi = {
     return api.get<BacktestSummaryResponse>(`${BACKTEST_API_BASE}/${taskId}/summary`)
   },
 
-  async getStatus(taskId: string): Promise<BacktestStatusResponse> {
-    return api.get<BacktestStatusResponse>(`${BACKTEST_API_BASE}/${taskId}/status`)
+  async getStatus(taskId: string, options?: { signal?: AbortSignal }): Promise<BacktestStatusResponse> {
+    return options
+      ? api.get<BacktestStatusResponse>(`${BACKTEST_API_BASE}/${taskId}/status`, options)
+      : api.get<BacktestStatusResponse>(`${BACKTEST_API_BASE}/${taskId}/status`)
   },
 
   async list(limit = 20, offset = 0): Promise<BacktestListResponse> {

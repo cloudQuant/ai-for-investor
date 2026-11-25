@@ -301,14 +301,7 @@ async def test_republishing_a_receipt_whose_entity_digest_drifted_fails_closed()
 async def test_resubmitting_the_identical_provider_batch_keeps_one_visible_fact_per_record() -> (
     None
 ):
-    """An identical provider receipt replayed twice still reads back as one fact.
-
-    The provider-persist path deliberately has no request-level dedupe: each
-    submission is a distinct fetch event and therefore a new immutable source
-    snapshot plus the next revision ordinal for the same business record.  The
-    AC06 requirement is that no *fact* is duplicated for a reader, so this test
-    pins the append-only lineage and the single visible row together.
-    """
+    """An identical provider receipt replay reuses its immutable fact and seal."""
     context = _context()
 
     def fetched() -> object:
@@ -350,10 +343,10 @@ async def test_resubmitting_the_identical_provider_batch_keeps_one_visible_fact_
         next_sequence = await _allocator_next_sequence(db)
         visible = await MarketDataStore(db).read_observations(context, knowledge_cutoff=_at(20))
 
-    assert first.source_snapshot_id != second.source_snapshot_id
-    assert seen_numbers == (1, 2)
-    assert publication_count == 2
-    assert next_sequence == 3
+    assert first.source_snapshot_id == second.source_snapshot_id
+    assert seen_numbers == (1,)
+    assert publication_count == 1
+    assert next_sequence == 2
     assert len(visible) == 1
     assert visible[0].fields["close"] == "10.50"
 

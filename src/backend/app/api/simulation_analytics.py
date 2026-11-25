@@ -23,7 +23,6 @@ from app.services.log_parser_service import (
     parse_data_log,
     parse_trade_log,
 )
-from app.services.strategy_service import get_strategy_dir
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +48,15 @@ async def get_simulation_detail(
     if not inst:
         raise HTTPException(status_code=404, detail="Instance not found")
 
-    try:
-        strategy_dir = get_strategy_dir(inst["strategy_id"])
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    from app.api.simulation import _resolve_instance_base_dir
+
+    inst = mgr.get_instance(instance_id, user_id=current_user.sub)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    strategy_dir = _resolve_instance_base_dir(
+        mgr, instance_id, current_user.sub, require_isolated_runtime=True
+    )
     log_result = parse_all_logs(strategy_dir)
     if not log_result:
         raise HTTPException(status_code=404, detail="No log data available")
@@ -153,7 +157,9 @@ async def get_simulation_kline(
     inst = mgr.get_instance(instance_id, user_id=current_user.sub)
     if not inst:
         raise HTTPException(status_code=404, detail="Instance not found")
-    log_dir = _get_strategy_log_dir(mgr, instance_id, current_user.sub)
+    log_dir = _get_strategy_log_dir(
+        mgr, instance_id, current_user.sub, require_isolated_runtime=True
+    )
 
     kline_data = parse_data_log(log_dir)
     trades_raw = parse_trade_log(log_dir)
@@ -230,14 +236,15 @@ async def get_simulation_monthly_returns(
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> typing.Any:
     """Get monthly returns for a simulation trading instance."""
+    from app.api.simulation import _resolve_instance_base_dir
+
     inst = mgr.get_instance(instance_id, user_id=current_user.sub)
     if not inst:
         raise HTTPException(status_code=404, detail="Instance not found")
-    try:
-        strategy_dir = get_strategy_dir(inst["strategy_id"])
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
 
+    strategy_dir = _resolve_instance_base_dir(
+        mgr, instance_id, current_user.sub, require_isolated_runtime=True
+    )
     log_result = parse_all_logs(strategy_dir)
     if not log_result:
         raise HTTPException(status_code=404, detail="No log data available")

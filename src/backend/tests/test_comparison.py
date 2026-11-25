@@ -17,6 +17,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import AsyncClient
 
+from app.db.database import async_session_maker
+from app.models.user import User
+
+
+async def _ensure_comparison_owner() -> None:
+    async with async_session_maker() as db:
+        db.add(User(id="user1", username="owner", email="owner@example.com", hashed_password="x"))
+        await db.commit()
+
 
 @pytest.mark.asyncio
 class TestComparisonCreate:
@@ -110,6 +119,7 @@ class TestComparisonDetail:
 
     async def test_get_comparison_success(self, client: AsyncClient, auth_headers: dict):
         """Test successful comparison retrieval"""
+        await _ensure_comparison_owner()
         with patch("app.api.comparison.ComparisonService") as mock_service_class:
             from datetime import datetime
 
@@ -359,6 +369,7 @@ class TestComparisonShare:
 
     async def test_share_success(self, client: AsyncClient, auth_headers: dict):
         """Test explicit not-implemented response for sharing"""
+        await _ensure_comparison_owner()
         with patch("app.api.comparison.ComparisonService") as mock_service_class:
             from app.utils.security import create_access_token
 

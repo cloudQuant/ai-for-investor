@@ -415,12 +415,17 @@ const heroStats = computed(() => [
   },
 ])
 
+let submissionGeneration = 0
+let pageMounted = true
+
 async function runBacktest() {
   if (!form.strategy_id) {
     ElMessage.warning(t('backtestPg.msgPickStrategy'))
     return
   }
+  if (loading.value) return
 
+  const generation = ++submissionGeneration
   loading.value = true
   progressInfo.value = { progress: 0, message: t('backtestPg.msgSubmitProgress') }
   try {
@@ -439,10 +444,11 @@ async function runBacktest() {
       params,
     })
 
+    if (!pageMounted || generation !== submissionGeneration) return
     ElMessage.success(t('backtestPg.msgSubmitted'))
-
     startRuntime(response.task_id)
   } catch (e: unknown) {
+    if (!pageMounted || generation !== submissionGeneration) return
     stopRuntime()
     showRequestMessage(e, t('backtestPg.msgSubmitFailed'))
   }
@@ -485,6 +491,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  pageMounted = false
+  submissionGeneration++
+  stopRuntime()
   disposeRuntime()
 })
 

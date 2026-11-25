@@ -45,6 +45,7 @@ class HoldoutWorkerResult:
     status: str
     error_code: str | None
     evidence_package_id: str | None = None
+    package_status: str | None = None
 
 
 class HoldoutEvaluationWorker:
@@ -392,12 +393,20 @@ class HoldoutEvaluationWorker:
         finalized: Any,
     ) -> HoldoutWorkerResult:
         package_id: str | None = None
+        package_status = "NOT_REQUIRED"
+        error_code: str | None = None
         if finalized.evaluation_status == "PASSED":
-            package = await self._evidence.build_for_terminal_command(
-                user_id=user_id,
-                command_id=finalized.command_id,
-            )
-            package_id = package.id
+            package_status = "PENDING"
+            try:
+                package = await self._evidence.build_for_terminal_command(
+                    user_id=user_id,
+                    command_id=finalized.command_id,
+                )
+                package_id = package.id
+                package_status = "READY"
+            except Exception:
+                package_status = "FAILED"
+                error_code = "HOLDOUT_EVIDENCE_PACKAGE_FAILED"
         await self._journal.settle(user_id=user_id, command=command)
         snapshot = command.snapshot
         self._active_lease_tokens.pop(
@@ -407,8 +416,9 @@ class HoldoutEvaluationWorker:
         return HoldoutWorkerResult(
             command_id=finalized.command_id,
             status=finalized.evaluation_status,
-            error_code=None,
+            error_code=error_code,
             evidence_package_id=package_id,
+            package_status=package_status,
         )
 
     async def _reconcile(self, command_id: str) -> HoldoutWorkerResult:
@@ -435,12 +445,20 @@ class HoldoutEvaluationWorker:
         if command is None or command.status != "SUCCEEDED" or evaluation is None:
             raise ValueError("HOLDOUT_WORKER_TERMINAL_INVALID")
         package_id: str | None = None
+        package_status = "NOT_REQUIRED"
+        error_code: str | None = None
         if evaluation.status == "PASSED":
-            package = await self._evidence.build_for_terminal_command(
-                user_id=command.user_id,
-                command_id=command.id,
-            )
-            package_id = package.id
+            package_status = "PENDING"
+            try:
+                package = await self._evidence.build_for_terminal_command(
+                    user_id=command.user_id,
+                    command_id=command.id,
+                )
+                package_id = package.id
+                package_status = "READY"
+            except Exception:
+                package_status = "FAILED"
+                error_code = "HOLDOUT_EVIDENCE_PACKAGE_FAILED"
         execution_command = await self._execution_command_from_journal(command.id)
         if execution_command is not None:
             record = await self._journal.read(command=execution_command, user_id=command.user_id)
@@ -449,8 +467,9 @@ class HoldoutEvaluationWorker:
         return HoldoutWorkerResult(
             command_id=command.id,
             status=evaluation.status,
-            error_code=None,
+            error_code=error_code,
             evidence_package_id=package_id,
+            package_status=package_status,
         )
 
     async def _execution_command(self, command_id: str) -> HoldoutExecutionCommand:

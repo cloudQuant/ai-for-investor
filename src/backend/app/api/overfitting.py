@@ -125,7 +125,7 @@ async def get_overfitting_task(
 
 
 async def websocket_endpoint(websocket: WebSocket, task_id: str) -> typing.Any:
-    current_user, accepted_subprotocol = get_websocket_current_user(websocket)
+    current_user, accepted_subprotocol = await get_websocket_current_user(websocket)
     if current_user is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

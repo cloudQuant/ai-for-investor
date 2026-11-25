@@ -2442,6 +2442,7 @@ async def test_stale_fenced_pending_receipt_stays_hidden_while_recovery_and_curr
         recovered_ids = await MarketDataPublicationManager(
             stale_db,
             clock=lambda: _at(15),
+            fetch_lease_clock=lambda: _at(15),
         ).recover_pending()
         stale_receipt_after_recovery = await stale_db.scalar(
             select(MdPublication)
@@ -2485,6 +2486,25 @@ async def test_stale_fenced_pending_receipt_stays_hidden_while_recovery_and_curr
         current_binding_fence = current_snapshot.fetch_lease_fence_token
         current_receipt_visible = current_receipt.published_at
         current_receipt_sequence = current_receipt.visibility_sequence
+        await current_db.rollback()
+        released = await MarketDataFetchLeaseManager(current_db, clock=lambda: _at(16)).release(
+            current_handle
+        )
+        assert released is True
+        await stale_db.rollback()
+        recovered_after_release = await MarketDataPublicationManager(
+            stale_db,
+            clock=lambda: _at(16),
+            fetch_lease_clock=lambda: _at(16),
+        ).recover_pending()
+        stale_after_release = await stale_db.scalar(
+            select(MdPublication)
+            .where(MdPublication.id == stale_receipt_id)
+            .execution_options(populate_existing=True)
+        )
+        assert stale_after_release is not None
+        stale_released_visible = stale_after_release.published_at
+        stale_released_sequence = stale_after_release.visibility_sequence
 
     assert stale_interrupted.value.code == "OBSERVATION_PUBLICATION_FAILED"
     assert ordinary_interrupted.value.code == "OBSERVATION_PUBLICATION_FAILED"
@@ -2496,6 +2516,9 @@ async def test_stale_fenced_pending_receipt_stays_hidden_while_recovery_and_curr
     assert stale_receipt_sequence_after_recovery is None
     assert ordinary_receipt_id in recovered_ids
     assert stale_receipt_id not in recovered_ids
+    assert stale_receipt_id in recovered_after_release
+    assert stale_released_visible is not None
+    assert stale_released_sequence is not None
     assert current_binding_key == lease_key
     assert current_binding_fence == current_handle.fence_token
     assert current_receipt_visible is not None

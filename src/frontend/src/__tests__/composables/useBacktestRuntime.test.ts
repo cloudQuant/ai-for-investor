@@ -368,6 +368,64 @@ describe('useBacktestRuntime', () => {
     })
   })
 
+  describe('generation fencing', () => {
+    it('ignores task A events after task B starts', async () => {
+      const { runtime, mocks } = build()
+      mocks.fetchResult.mockResolvedValue({ task_id: 'task-b', status: 'completed' } as BacktestResult)
+      runtime.startRuntime('task-a')
+      const wsA = await waitForWs()
+      runtime.startRuntime('task-b')
+      const wsB = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+
+      wsA.emit({ type: 'completed' })
+      await Promise.resolve()
+      expect(mocks.fetchResult).not.toHaveBeenCalled()
+      expect(runtime.currentTaskId.value).toBe('task-b')
+
+      wsB.emit({ type: 'completed' })
+      await vi.waitFor(() => expect(runtime.loading.value).toBe(false))
+      expect(mocks.currentResult.value?.task_id).toBe('task-b')
+    })
+
+    it('does not write a late task A result into task B state', async () => {
+      const { runtime, mocks } = build()
+      let resolveA!: (value: BacktestResult) => void
+      mocks.fetchResult.mockReturnValueOnce(new Promise((resolve) => { resolveA = resolve }))
+      runtime.startRuntime('task-a')
+      const wsA = await waitForWs()
+      wsA.emit({ type: 'completed' })
+      await vi.waitFor(() => expect(mocks.fetchResult).toHaveBeenCalledWith('task-a'))
+
+      runtime.startRuntime('task-b')
+      resolveA({ task_id: 'task-a', status: 'completed' } as BacktestResult)
+      await Promise.resolve()
+
+      expect(mocks.currentResult.value).toBeNull()
+      expect(runtime.currentTaskId.value).toBe('task-b')
+      expect(runtime.loading.value).toBe(true)
+    })
+
+    it('aborts and ignores a late polling response from task A', async () => {
+      const { backtestApi } = await import('@/api/backtest')
+      let resolveA!: (value: BacktestStatusResponse) => void
+      vi.mocked(backtestApi.getStatus).mockReturnValueOnce(new Promise((resolve) => { resolveA = resolve }))
+      const { runtime } = build()
+      runtime.startRuntime('task-a')
+      const wsA = await waitForWs()
+      wsA.triggerError()
+      await vi.waitFor(() => expect(backtestApi.getStatus).toHaveBeenCalled())
+      const signal = vi.mocked(backtestApi.getStatus).mock.calls[0][1]?.signal
+
+      runtime.startRuntime('task-b')
+      expect(signal?.aborted).toBe(true)
+      resolveA({ task_id: 'task-a', status: 'running' })
+      await Promise.resolve()
+
+      expect(runtime.progressInfo.value.progress).toBe(0)
+      expect(runtime.currentTaskId.value).toBe('task-b')
+    })
+  })
+
   describe('WebSocket error and close fallback', () => {
     it('sends heartbeats only while the WebSocket is open', async () => {
       vi.useFakeTimers()
@@ -400,7 +458,10 @@ describe('useBacktestRuntime', () => {
       ws.triggerError()
 
       await vi.waitFor(() => {
-        expect(backtestApi.getStatus).toHaveBeenCalledWith('task-10')
+        expect(backtestApi.getStatus).toHaveBeenCalledWith(
+          'task-10',
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        )
       })
     })
 
@@ -438,7 +499,10 @@ describe('useBacktestRuntime', () => {
       ws.triggerClose(1006)
 
       await vi.waitFor(() => {
-        expect(backtestApi.getStatus).toHaveBeenCalledWith('task-11')
+        expect(backtestApi.getStatus).toHaveBeenCalledWith(
+          'task-11',
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        )
       })
     })
 
@@ -619,7 +683,8 @@ describe('useBacktestRuntime', () => {
       }))
 
       const { runtime } = build()
-      runtime.loading.value = true
+      runtime.startRuntime('task-aborted-request')
+      runtime.closeWebSocket()
       const polling = runtime.pollResult('task-aborted-request')
       await vi.waitFor(() => expect(rejectStatus).toBeTypeOf('function'))
 
@@ -640,7 +705,8 @@ describe('useBacktestRuntime', () => {
       }))
 
       const { runtime } = build()
-      runtime.loading.value = true
+      runtime.startRuntime('task-aborted-sleep')
+      runtime.closeWebSocket()
       const polling = runtime.pollResult('task-aborted-sleep')
       await vi.waitFor(() => expect(resolveStatus).toBeTypeOf('function'))
 

@@ -858,6 +858,54 @@ async def test_later_target_write_reports_the_exact_published_prefix(
     assert counts == (1, 1, 1)
 
 
+def test_overlapping_target_sets_share_one_feed_lease_key() -> None:
+    common = {
+        "trading_date": TRADING_DATE,
+        "provider_id": PROVIDER_ID,
+        "source_authorization_descriptor_hash": "a" * 64,
+        "source_descriptor_sha256": "b" * 64,
+    }
+
+    first = collector_module.cffex_settlement_feed_lease_key(targets=(_target("IF2609"),), **common)
+    overlapping = collector_module.cffex_settlement_feed_lease_key(
+        targets=(_target("IF2609"), _target("IH2609")), **common
+    )
+
+    assert first == overlapping
+
+
+@pytest.mark.asyncio
+async def test_partial_batch_retry_does_not_revise_the_successful_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _FakeCffexSource([_actual_akshare_row("IF2609"), _actual_akshare_row("IH2609")])
+    targets = (_target("IF2609"), _target("IH2609"))
+
+    async with async_session_maker() as db:
+        await _seed_control_plane(db)
+        store = MarketDataStore(db, clock=lambda: LOCAL_RECEIVED_AT)
+        original_persist = store.persist_provider_result
+        persist_attempts = 0
+
+        async def fail_second_target_once(*args: object, **kwargs: object):
+            nonlocal persist_attempts
+            persist_attempts += 1
+            if persist_attempts == 2:
+                raise MarketDataStoreError("OBSERVATION_WRITE_FAILED")
+            return await original_persist(*args, **kwargs)
+
+        monkeypatch.setattr(store, "persist_provider_result", fail_second_target_once)
+        collector = _collector(store=store, source=source, clock=lambda: LOCAL_RECEIVED_AT)
+        with pytest.raises(CffexSettlementCollectorPartialPublishError):
+            await collector.collect(trading_date=TRADING_DATE, targets=targets)
+        report = await collector.collect(trading_date=TRADING_DATE, targets=targets)
+        counts = await _counts(db)
+
+    assert report.published_target_count == 2
+    assert persist_attempts == 4
+    assert counts == (2, 2, 2)
+
+
 @pytest.mark.asyncio
 async def test_cancellation_after_second_publication_reports_two_durable_prefixes(
     monkeypatch: pytest.MonkeyPatch,
@@ -1176,6 +1224,46 @@ async def test_cancellation_during_false_lease_release_keeps_the_durable_prefix(
     assert len(partial_cancel.persisted_fetches) == 1
     assert len(rows) == 1
     assert counts == (1, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_partial_publish_and_release_failure_preserve_both_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _FakeCffexSource([_actual_akshare_row("IF2609"), _actual_akshare_row("IH2609")])
+    targets = (_target("IF2609"), _target("IH2609"))
+
+    async with async_session_maker() as db:
+        await _seed_control_plane(db)
+        store = MarketDataStore(db, clock=lambda: LOCAL_RECEIVED_AT)
+        original_persist = store.persist_provider_result
+        persist_attempts = 0
+
+        async def interrupt_second_target(*args: object, **kwargs: object):
+            nonlocal persist_attempts
+            persist_attempts += 1
+            if persist_attempts == 2:
+                raise MarketDataStoreError("OBSERVATION_WRITE_FAILED")
+            return await original_persist(*args, **kwargs)
+
+        async def fail_release(*_args: object, **_kwargs: object) -> bool:
+            raise MarketDataFetchLeaseError("FETCH_LEASE_RELEASE_CONFLICT")
+
+        lease_manager = store.fetch_lease_manager()
+        monkeypatch.setattr(store, "persist_provider_result", interrupt_second_target)
+        monkeypatch.setattr(store, "fetch_lease_manager", lambda: lease_manager)
+        monkeypatch.setattr(lease_manager, "release", fail_release)
+        with pytest.raises(CffexSettlementCollectorFetchLeaseReleaseError) as failed:
+            await _collector(
+                store=store,
+                source=source,
+                clock=lambda: LOCAL_RECEIVED_AT,
+            ).collect(trading_date=TRADING_DATE, targets=targets)
+
+    assert failed.value.code == "CFFEX_SETTLEMENT_FETCH_LEASE_RELEASE_FAILED"
+    assert isinstance(failed.value.__cause__, CffexSettlementCollectorPartialPublishError)
+    assert failed.value.__cause__.code == "CFFEX_SETTLEMENT_BATCH_PARTIALLY_PUBLISHED"
+    assert len(failed.value.persisted_fetches) == 1
 
 
 @pytest.mark.asyncio

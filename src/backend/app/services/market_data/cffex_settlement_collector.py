@@ -112,9 +112,15 @@ class CffexSettlementCollectorFetchLeaseReleaseError(CffexSettlementCollectorErr
     reconcile, retry, or wait for the lease to expire.
     """
 
-    def __init__(self, persisted_fetches: Sequence[PersistedProviderFetch]) -> None:
+    def __init__(
+        self,
+        persisted_fetches: Sequence[PersistedProviderFetch],
+        *,
+        cleanup_failure: BaseException | None = None,
+    ) -> None:
         super().__init__("CFFEX_SETTLEMENT_FETCH_LEASE_RELEASE_FAILED")
         self.persisted_fetches = tuple(persisted_fetches)
+        self.cleanup_failure = cleanup_failure
 
 
 class CffexSettlementCollectorPartialPublishCancelledError(asyncio.CancelledError):
@@ -563,8 +569,14 @@ class CffexSettlementCollector:
                         persisted_fetches
                     )
             except Exception as exc:
-                release_error = CffexSettlementCollectorFetchLeaseReleaseError(persisted_fetches)
+                release_error = CffexSettlementCollectorFetchLeaseReleaseError(
+                    persisted_fetches, cleanup_failure=exc
+                )
                 release_error.__cause__ = exc
+            if primary_failure is not None and release_error is not None:
+                if isinstance(primary_failure, Exception):
+                    raise release_error from primary_failure
+                primary_failure.__dict__["cleanup_error"] = release_error
             if primary_failure is None and release_error is not None:
                 raise release_error
 
@@ -603,10 +615,10 @@ def cffex_settlement_feed_lease_key(
     """Return the feed-level lease identity for one frozen market-wide batch.
 
     A per-symbol query lease would permit one network request per contract.
-    This key instead binds the explicit trade date, approved source decision,
-    reviewed source descriptor, and complete frozen identity/query map, so
-    independent workers contend for the same all-market request without
-    sharing a stale authorization or source-transport plan.
+    This key binds the explicit trade date, approved source decision, and
+    reviewed source descriptor. Different target subsets for the same market
+    batch therefore contend for one lease instead of issuing overlapping
+    all-market requests.
     """
     target_date = _require_trading_date(trading_date)
     normalized_provider_id = _require_text(provider_id, field_name="provider_id", maximum=255)
@@ -618,19 +630,7 @@ def cffex_settlement_feed_lease_key(
         source_descriptor_sha256,
         code="CFFEX_SETTLEMENT_SOURCE_DESCRIPTOR_INVALID",
     )
-    target_payload: list[dict[str, str]] = []
-    for target in targets:
-        if not isinstance(target, CffexSettlementCollectionTarget):
-            raise CffexSettlementCollectorError("CFFEX_SETTLEMENT_TARGET_INVALID")
-        context = target.context
-        target_payload.append(
-            {
-                "canonical_id": context.query.canonical_id,
-                "provider_symbol": context.identity.identity.display_symbol,
-                "query_fingerprint": context.query.query_fingerprint,
-            }
-        )
-    if not target_payload:
+    if not targets:
         raise CffexSettlementCollectorError("CFFEX_SETTLEMENT_TARGETS_EMPTY")
     payload = {
         "contract_version": CFFEX_SETTLEMENT_COLLECTOR_VERSION,
@@ -638,14 +638,6 @@ def cffex_settlement_feed_lease_key(
         "trading_date": target_date.isoformat(),
         "source_authorization_descriptor_hash": descriptor_hash,
         "source_descriptor_sha256": reviewed_source_descriptor_hash,
-        "targets": sorted(
-            target_payload,
-            key=lambda item: (
-                item["canonical_id"],
-                item["provider_symbol"],
-                item["query_fingerprint"],
-            ),
-        ),
     }
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
 

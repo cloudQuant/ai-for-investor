@@ -234,7 +234,10 @@ describe('useOverfittingRuntime', () => {
     ws.simulateError()
 
     await vi.waitFor(() => {
-      expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith('ot-123')
+      expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith(
+        'ot-123',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
       expect(currentResult.value?.summary).toBe('fallback result')
       expect(runtime.loading.value).toBe(false)
     })
@@ -256,7 +259,10 @@ describe('useOverfittingRuntime', () => {
 
     ws.simulateClose(1006)
     await vi.waitFor(() => {
-      expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith('ot-123')
+      expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith(
+        'ot-123',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
       expect(runtime.loading.value).toBe(false)
     })
   })
@@ -278,6 +284,24 @@ describe('useOverfittingRuntime', () => {
     expect(strategyApi.getOverfittingTask).not.toHaveBeenCalled()
   })
 
+  it('ignores task A events and mismatched task identities after task B starts', async () => {
+    runtime.startRuntime('ot-a')
+    await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    const wsA = MockWebSocket.instances[0]
+    runtime.startRuntime('ot-b')
+    await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(2))
+    const wsB = MockWebSocket.instances[1]
+
+    wsA.simulateMessage({ type: 'completed', task_id: 'ot-a', result: makeResult({ task_id: 'ot-a' }) })
+    wsB.simulateMessage({ type: 'completed', task_id: 'ot-a', result: makeResult({ task_id: 'ot-a' }) })
+    expect(currentResult.value).toBeNull()
+    expect(runtime.currentTaskId.value).toBe('ot-b')
+
+    wsB.simulateMessage({ type: 'completed', task_id: 'ot-b', result: makeResult({ task_id: 'ot-b' }) })
+    expect(currentResult.value?.task_id).toBe('ot-b')
+    expect(runtime.loading.value).toBe(false)
+  })
+
   it('falls back to polling when token is missing', async () => {
     vi.mocked(getAccessToken).mockReturnValue(null)
     vi.mocked(strategyApi.getOverfittingTask).mockResolvedValue(
@@ -288,7 +312,10 @@ describe('useOverfittingRuntime', () => {
     runtime.startRuntime('ot-123')
 
     await vi.waitFor(() => {
-      expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith('ot-123')
+      expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith(
+        'ot-123',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
       expect(currentResult.value?.summary).toBe('轮询完成')
       expect(runtime.loading.value).toBe(false)
     })
@@ -391,7 +418,10 @@ describe('useOverfittingRuntime', () => {
       expect(runtime.loading.value).toBe(false)
     })
 
-    expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith('ot-123')
+    expect(strategyApi.getOverfittingTask).toHaveBeenCalledWith(
+      'ot-123',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
   })
 
   it('stops polling after the bounded retry window', async () => {

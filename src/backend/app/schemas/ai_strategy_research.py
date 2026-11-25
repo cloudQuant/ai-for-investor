@@ -90,10 +90,8 @@ class AIStrategyResearchConfigProfile(BaseModel):
     )
     name: str = Field(..., min_length=1, max_length=120, description="Profile display name")
     description: str = Field("", max_length=500, description="Optional profile notes")
-    config: dict[str, Any] = Field(
-        default_factory=dict,
-        description="AI research form snapshot; frontend converts it to a run request.",
-    )
+    owner_id: str = Field("", max_length=36, description="Owner; empty for bundled global")
+    config: dict[str, Any] = Field(default_factory=dict, description="AI research form snapshot")
     created_at: str | None = Field(None, description="ISO timestamp when the profile was created")
     updated_at: str | None = Field(None, description="ISO timestamp when the profile was updated")
 

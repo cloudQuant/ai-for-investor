@@ -369,6 +369,73 @@ describe('StockAnalysisPage', () => {
     wrapper.unmount()
   })
 
+  it('does not let a late latest report overwrite a newly submitted task', async () => {
+    let resolveLatest!: (value: any) => void
+    mocks.getLatestResult.mockReturnValueOnce(new Promise((resolve) => { resolveLatest = resolve }))
+    mocks.createTask.mockResolvedValueOnce({ ...baseTask, task_id: 'task-new' })
+    const wrapper = mountPage()
+    await flushPromises()
+    const startButton = wrapper.findAll('button').find((b) => b.text().includes('开始智能分析'))
+    await startButton!.trigger('click')
+    await flushPromises()
+
+    resolveLatest({
+      task: { ...baseTask, task_id: 'task-old', status: 'completed', report_id: 'old-report' },
+      report: { meta: { symbol: '000001.SZ' }, sections: [] },
+    })
+    await flushPromises()
+
+    expect((wrapper.vm as any).currentTask.task_id).toBe('task-new')
+    expect((wrapper.vm as any).analysisResult).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('keeps signal history and summary bound to the latest symbol request', async () => {
+    let resolveHistory!: (value: any) => void
+    let resolveSummary!: (value: any) => void
+    mocks.getSignalHistory.mockImplementation((symbol: string) => (
+      symbol === '000001.SZ'
+        ? new Promise((resolve) => { resolveHistory = resolve })
+        : Promise.resolve({ items: [{
+          id: 'signal-b', symbol: '600000.SH', as_of_date: '2026-06-20', source: 'manual',
+          signal_action: 'buy', action_label: '买入', eligibility_status: 'eligible', confidence_score: 0.7,
+        }], next_cursor: null })
+    ))
+    mocks.getSignalSummary.mockImplementation((symbol: string) => (
+      symbol === '000001.SZ'
+        ? new Promise((resolve) => { resolveSummary = resolve })
+        : Promise.resolve({ symbol: '600000.SH', actions: [] })
+    ))
+    const wrapper = mountPage()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.form.symbol = '600000.SH'
+    await vm.loadSignalEvidence('600000.SH')
+    resolveHistory({ items: [{ symbol: '000001.SZ' }], next_cursor: null })
+    resolveSummary({ symbol: '000001.SZ', actions: [] })
+    await flushPromises()
+
+    expect(vm.signalHistory).toEqual([expect.objectContaining({ id: 'signal-b', symbol: '600000.SH' })])
+    expect(vm.signalSummary.symbol).toBe('600000.SH')
+    wrapper.unmount()
+  })
+
+  it('does not start polling when task submission resolves after unmount', async () => {
+    let resolveTask!: (value: any) => void
+    mocks.createTask.mockReturnValueOnce(new Promise((resolve) => { resolveTask = resolve }))
+    const wrapper = mountPage()
+    await flushPromises()
+    const startButton = wrapper.findAll('button').find((b) => b.text().includes('开始智能分析'))
+    await startButton!.trigger('click')
+    wrapper.unmount()
+    resolveTask({ ...baseTask, task_id: 'task-late' })
+    await flushPromises()
+
+    expect(mocks.getTask).not.toHaveBeenCalled()
+    expect(mocks.getTaskResult).not.toHaveBeenCalled()
+  })
+
   it('stops polling cleanly when unmounted', async () => {
     vi.useFakeTimers()
     try {

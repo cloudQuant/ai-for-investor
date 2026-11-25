@@ -902,7 +902,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           gitleaks detect \
-            --config .gitleaks.toml \
+            --config .gitleaks-tracked.toml \
             --log-opts "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
             --report-format sarif \
             --report-path gitleaks-pr-report.sarif \

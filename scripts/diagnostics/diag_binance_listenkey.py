@@ -25,7 +25,10 @@ try:
     from bt_api_py.feeds.http_client import HttpClient
     client = HttpClient(proxies={"https": "", "http": ""})
     url = f"{ed.rest_url}/fapi/v1/listenKey"
-    headers = {"X-MBX-APIKEY": "U7thNsgVBaEjtLvsAH79ibMYvsM25uAch6BgzQvAm204Jl41jLobDPNxkEtKflsB"}
+    api_key = os.environ.get("BINANCE_API_KEY")
+    if not api_key:
+        raise RuntimeError("BINANCE_API_KEY is required")
+    headers = {"X-MBX-APIKEY": api_key}
     r = client.request("POST", url, headers=headers, timeout=10)
     lines.append(f"HttpClient: {r.status_code} {r.text[:200]}")
 except Exception:

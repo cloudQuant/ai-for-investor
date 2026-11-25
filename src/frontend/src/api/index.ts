@@ -359,11 +359,6 @@ api.interceptors.response.use(
       }
     }
 
-    // --- Error Handling ---
-    if (config?.suppressErrorMessage) {
-      return Promise.reject(error)
-    }
-
     const status = error.response?.status
 
     if (
@@ -385,6 +380,10 @@ api.interceptors.response.use(
         config.headers.Authorization = `Bearer ${nextAccessToken}`
         return api.request(config)
       }
+    }
+
+    if (config?.suppressErrorMessage) {
+      return Promise.reject(error)
     }
 
     const data = error.response?.data

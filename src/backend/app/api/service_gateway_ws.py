@@ -34,7 +34,7 @@ async def stream_service_gateway_health(
     owner-backed status.
     """
 
-    current_user, accepted_subprotocol = get_websocket_current_user(websocket)
+    current_user, accepted_subprotocol = await get_websocket_current_user(websocket)
     if type(current_user) is not TokenPayload or accepted_subprotocol != "access-token":
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -62,7 +62,7 @@ async def stream_service_gateway_health(
                 # Re-decode the immutable original handshake token before
                 # every projection. Identity can only come from that token;
                 # WebSocket messages are never accepted as identity input.
-                refreshed_user, refreshed_protocol = get_websocket_current_user(websocket)
+                refreshed_user, refreshed_protocol = await get_websocket_current_user(websocket)
                 if (
                     type(refreshed_user) is not TokenPayload
                     or refreshed_protocol != accepted_subprotocol

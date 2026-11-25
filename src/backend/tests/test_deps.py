@@ -46,7 +46,8 @@ def test_extract_websocket_token_rejects_query_param_fallback():
     assert _extract_websocket_token(websocket) == (None, None)
 
 
-def test_get_websocket_current_user_requires_subprotocol_token(monkeypatch):
+@pytest.mark.asyncio
+async def test_get_websocket_current_user_requires_subprotocol_token(monkeypatch):
     from app.api.deps import get_websocket_current_user
 
     monkeypatch.setattr(
@@ -57,7 +58,7 @@ def test_get_websocket_current_user_requires_subprotocol_token(monkeypatch):
 
     websocket = make_websocket(query_token="legacy-token")
 
-    current_user, accepted_subprotocol = get_websocket_current_user(websocket)
+    current_user, accepted_subprotocol = await get_websocket_current_user(websocket)
 
     assert current_user is None
     assert accepted_subprotocol is None
@@ -98,7 +99,13 @@ async def test_get_current_user_optional_valid_token_returns_payload(monkeypatch
     payload = {"sub": "u1", "username": "test", "exp": 123}
     monkeypatch.setattr("app.api.deps.decode_access_token", lambda _: payload, raising=True)
     creds = SimpleNamespace(credentials="ok")
-    out = await get_current_user_optional(request=make_request(), credentials=creds)
+    from app.db.database import async_session_maker
+    from app.models.user import User
+
+    async with async_session_maker() as db:
+        db.add(User(id="u1", username="test", email="test@example.com", hashed_password="x"))
+        await db.commit()
+        out = await get_current_user_optional(request=make_request(), credentials=creds, db=db)
     assert out.sub == "u1"
     assert out.username == "test"
 
@@ -113,7 +120,13 @@ async def test_get_current_user_sets_user_id_in_request_state(monkeypatch):
 
     request = make_request()
     creds = SimpleNamespace(credentials="ok")
-    result = await get_current_user(request=request, credentials=creds)
+    from app.db.database import async_session_maker
+    from app.models.user import User
+
+    async with async_session_maker() as db:
+        db.add(User(id="user123", username="test", email="test@example.com", hashed_password="x"))
+        await db.commit()
+        result = await get_current_user(request=request, credentials=creds, db=db)
 
     assert hasattr(request.state, "user_id")
     assert request.state.user_id == "user123"
@@ -130,7 +143,15 @@ async def test_get_current_user_optional_sets_user_id_in_request_state(monkeypat
 
     request = make_request()
     creds = SimpleNamespace(credentials="ok")
-    result = await get_current_user_optional(request=request, credentials=creds)
+    from app.db.database import async_session_maker
+    from app.models.user import User
+
+    async with async_session_maker() as db:
+        db.add(
+            User(id="user456", username="test456", email="test456@example.com", hashed_password="x")
+        )
+        await db.commit()
+        result = await get_current_user_optional(request=request, credentials=creds, db=db)
 
     assert hasattr(request.state, "user_id")
     assert request.state.user_id == "user456"

@@ -50,7 +50,7 @@ def get_tracked_tasks() -> set[asyncio.Task[Any]]:
     return _BACKGROUND_TASKS
 
 
-async def cancel_tracked_tasks(tasks: set[asyncio.Task[Any]] | None = None) -> None:
+async def cancel_tracked_tasks(tasks: set[asyncio.Task[Any]] | None = None) -> int:
     """Cancel and await all remaining tracked background tasks."""
     target = tasks if tasks is not None else _BACKGROUND_TASKS
     pending = [task for task in list(target) if not task.done()]
@@ -59,3 +59,4 @@ async def cancel_tracked_tasks(tasks: set[asyncio.Task[Any]] | None = None) -> N
     if pending:
         await asyncio.gather(*pending, return_exceptions=True)
     target.clear()
+    return len(pending)

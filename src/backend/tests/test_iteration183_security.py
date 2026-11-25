@@ -141,7 +141,7 @@ async def test_iteration183_websockets_reject_missing_token(
     module = __import__(module_name, fromlist=[handler_name])
     websocket = MagicMock()
     websocket.close = AsyncMock()
-    monkeypatch.setattr(module, "get_websocket_current_user", lambda _websocket: (None, None))
+    monkeypatch.setattr(module, "get_websocket_current_user", AsyncMock(return_value=(None, None)))
 
     await getattr(module, handler_name)(websocket, *args)
 
@@ -159,7 +159,7 @@ async def test_strategy_version_websocket_rejects_non_owner(monkeypatch):
     monkeypatch.setattr(
         api,
         "get_websocket_current_user",
-        lambda _websocket: (SimpleNamespace(sub="attacker"), "access-token"),
+        AsyncMock(return_value=(SimpleNamespace(sub="attacker"), "access-token")),
     )
     monkeypatch.setattr(api, "get_version_control_service", lambda: service)
 

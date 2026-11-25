@@ -35,6 +35,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.services.monitoring_validation import cancel_count as _cancel_count
+from app.services.monitoring_validation import cancel_text as _cancel_text
 from app.utils.invariants import log_suppressed
 
 _MAX_DEPLOYMENT_BYTES = 262_144
@@ -1468,21 +1470,6 @@ def _decode_persisted_projection(value: Any, command_id: str) -> dict[str, Any] 
     ):
         raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
     return decoded
-
-
-def _cancel_count(value: Any, *, maximum: int) -> int | None:
-    if type(value) is not int or value < 0 or value > maximum:
-        return None
-    return value
-
-
-def _cancel_text(value: Any, *, max_bytes: int) -> bool:
-    if type(value) is not str or not value or value != value.strip():
-        return False
-    try:
-        return len(value.encode("utf-8", errors="strict")) <= max_bytes and value.isprintable()
-    except UnicodeEncodeError:
-        return False
 
 
 def _validate_timestamp(value: float) -> float:

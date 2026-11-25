@@ -30,21 +30,34 @@ class AIStrategyResearchConfigProfileService:
     def __init__(self, config_path: Path | None = None) -> None:
         self.config_path = config_path or _DEFAULT_CONFIG_PATH
 
-    async def list_profiles(self) -> AIStrategyResearchConfigProfileListResponse:
-        """Return all local configuration profiles."""
-        profiles = self._read_profiles()
+    async def list_profiles(
+        self, owner_id: str = ""
+    ) -> AIStrategyResearchConfigProfileListResponse:
+        """Return bundled and caller-owned local configuration profiles."""
+        profiles = [
+            profile
+            for profile in self._read_profiles()
+            if not profile.owner_id or profile.owner_id == owner_id
+        ]
         return AIStrategyResearchConfigProfileListResponse(
             file_path=str(self.config_path),
             total=len(profiles),
             items=profiles,
         )
 
-    async def get_profile(self, profile_id: str) -> AIStrategyResearchConfigProfile | None:
-        """Return one profile by id."""
-        return self._profile_by_id(profile_id)
+    async def get_profile(
+        self, profile_id: str, owner_id: str = ""
+    ) -> AIStrategyResearchConfigProfile | None:
+        """Return one visible profile by id."""
+        profile = self._profile_by_id(profile_id)
+        if profile is None or (profile.owner_id and profile.owner_id != owner_id):
+            return None
+        return profile
 
     async def create_profile(
-        self, data: AIStrategyResearchConfigProfileCreate
+        self,
+        data: AIStrategyResearchConfigProfileCreate,
+        owner_id: str = "",
     ) -> AIStrategyResearchConfigProfile:
         """Create a profile and write the YAML file."""
         profiles = self._read_profiles()
@@ -56,6 +69,7 @@ class AIStrategyResearchConfigProfileService:
             id=profile_id,
             name=data.name.strip(),
             description=(data.description or "").strip(),
+            owner_id=owner_id,
             config=self._yaml_safe_value(data.config),
             created_at=now,
             updated_at=now,
@@ -68,6 +82,9 @@ class AIStrategyResearchConfigProfileService:
         self,
         profile_id: str,
         data: AIStrategyResearchConfigProfileUpdate,
+        owner_id: str = "",
+        *,
+        can_manage_global: bool = False,
     ) -> AIStrategyResearchConfigProfile | None:
         """Update an existing profile and write the YAML file."""
         profiles = self._read_profiles()
@@ -78,6 +95,8 @@ class AIStrategyResearchConfigProfileService:
             if profile.id != profile_id:
                 next_profiles.append(profile)
                 continue
+            if profile.owner_id != owner_id and not (can_manage_global and not profile.owner_id):
+                return None
             payload: dict[str, Any] = {"updated_at": now}
             if data.name is not None:
                 payload["name"] = data.name.strip()
@@ -92,9 +111,20 @@ class AIStrategyResearchConfigProfileService:
         self._write_profiles(next_profiles)
         return updated
 
-    async def delete_profile(self, profile_id: str) -> bool:
+    async def delete_profile(
+        self,
+        profile_id: str,
+        owner_id: str = "",
+        *,
+        can_manage_global: bool = False,
+    ) -> bool:
         """Delete a profile from the local YAML file."""
         profiles = self._read_profiles()
+        target = next((profile for profile in profiles if profile.id == profile_id), None)
+        if target is None:
+            return False
+        if target.owner_id != owner_id and not (can_manage_global and not target.owner_id):
+            return False
         next_profiles = [profile for profile in profiles if profile.id != profile_id]
         if len(next_profiles) == len(profiles):
             return False
@@ -107,6 +137,8 @@ class AIStrategyResearchConfigProfileService:
         *,
         fallback_name: str | None = None,
         fallback_profile_id: str | None = None,
+        owner_id: str = "",
+        can_manage_global: bool = False,
     ) -> AIStrategyResearchConfigProfileImportResponse:
         """Import one or more profiles from YAML text and upsert them."""
         imported_profiles = self._profiles_from_yaml_text(
@@ -119,7 +151,21 @@ class AIStrategyResearchConfigProfileService:
         ordered_ids = [profile.id for profile in existing]
         now = self._now()
         saved: list[AIStrategyResearchConfigProfile] = []
+        saved_ids: set[str] = set()
         for profile in imported_profiles:
+            collision = existing_by_id.get(profile.id)
+            if (
+                collision is not None
+                and collision.owner_id != owner_id
+                and not (can_manage_global and not collision.owner_id)
+            ):
+                profile = profile.model_copy(
+                    update={
+                        "id": self._generate_profile_id(
+                            profile.id, list(existing_by_id.values()), set(saved_ids)
+                        )
+                    }
+                )
             previous = existing_by_id.get(profile.id)
             created_at = (
                 profile.created_at or previous.created_at if previous else profile.created_at
@@ -128,10 +174,12 @@ class AIStrategyResearchConfigProfileService:
                 update={
                     "created_at": created_at or now,
                     "updated_at": now,
+                    "owner_id": owner_id,
                     "config": self._yaml_safe_value(profile.config),
                 }
             )
             existing_by_id[profile.id] = next_profile
+            saved_ids.add(profile.id)
             if profile.id not in ordered_ids:
                 ordered_ids.append(profile.id)
             saved.append(next_profile)

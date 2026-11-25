@@ -211,6 +211,42 @@ describe('NewsIntelligencePage', () => {
     expect(apiMocks.listArticles).toHaveBeenCalled()
   })
 
+  it('does not mix article A content into article B after out-of-order responses', async () => {
+    let resolveA!: (value: any) => void
+    apiMocks.getArticleContent
+      .mockReturnValueOnce(new Promise((resolve) => { resolveA = resolve }))
+      .mockResolvedValueOnce({ id: 'article-b', headline: 'B', content: 'content-b' })
+    const wrapper = mountWithPlugins(NewsIntelligencePage)
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    const requestA = vm.showArticleContent({ id: 'article-a', headline: 'A' })
+    await vm.showArticleContent({ id: 'article-b', headline: 'B' })
+    resolveA({ id: 'article-a', headline: 'A', content: 'content-a' })
+    await requestA
+
+    expect(vm.articleContentTitle).toBe('B')
+    expect(vm.articleContent).toBe('content-b')
+    expect(vm.articleContentLoading).toBe(false)
+  })
+
+  it('drops article content that resolves after the dialog closes', async () => {
+    let resolveContent!: (value: any) => void
+    apiMocks.getArticleContent.mockReturnValueOnce(new Promise((resolve) => { resolveContent = resolve }))
+    const wrapper = mountWithPlugins(NewsIntelligencePage)
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    const request = vm.showArticleContent({ id: 'article-a', headline: 'A' })
+    vm.closeArticleContent()
+    resolveContent({ id: 'article-a', headline: 'A', content: 'late-content' })
+    await request
+
+    expect(vm.articleContentVisible).toBe(false)
+    expect(vm.articleContent).toBe('')
+    expect(vm.articleContentLoading).toBe(false)
+  })
+
   it('blocks non-http/https schemes when opening article links', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     const wrapper = mountWithPlugins(NewsIntelligencePage)

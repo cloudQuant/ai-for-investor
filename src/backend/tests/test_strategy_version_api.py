@@ -16,8 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import AsyncClient
 
-from app.utils.security import create_access_token
-
 # Valid version creation request
 VALID_VERSION_CREATE = {
     "strategy_id": "test_strategy",
@@ -211,7 +209,8 @@ class TestGetStrategyVersion:
         """Test successful get."""
         with patch("app.api.strategy.version.VersionControlService") as mock_service_class:
             mock_service = AsyncMock()
-            mock_version = MagicMock(created_by="owner-id")
+            user_id = (await client.get("/api/v1/auth/me", headers=auth_headers)).json()["id"]
+            mock_version = MagicMock(created_by=user_id)
             mock_service.get_version = AsyncMock(return_value=mock_version)
             mock_service._to_response = MagicMock(
                 return_value={
@@ -232,12 +231,8 @@ class TestGetStrategyVersion:
                 }
             )
             mock_service_class.return_value = mock_service
-            owner_headers = {
-                "Authorization": f"Bearer {create_access_token({'sub': 'owner-id', 'username': 'owner'})}"
-            }
-
             resp = await client.get(
-                "/api/v1/strategy-versions/versions/ver123", headers=owner_headers
+                "/api/v1/strategy-versions/versions/ver123", headers=auth_headers
             )
             assert resp.status_code == 200
 

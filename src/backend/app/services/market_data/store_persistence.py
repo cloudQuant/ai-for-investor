@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+
+class _ExistingProviderFetch(Exception):
+    def __init__(self, receipt: PersistedProviderFetch | DeferredProviderFetch) -> None:
+        super().__init__("OBSERVATION_RECEIPT_ALREADY_PUBLISHED")
+        self.receipt = receipt
+
+
 if TYPE_CHECKING:
     from app.services.market_data.store import (
         Awaitable,
@@ -126,6 +133,16 @@ async def persist_provider_result(
         async with self._db.begin_nested():
             series = await self.get_or_create_series(context)
             series = await self._lock_series_for_revision(series, context)
+            if deferred_intent is None:
+                reused = await _identical_published_receipt(
+                    self,
+                    provider_id=provider.id,
+                    result=result,
+                    validated=validated,
+                    authorization=authorization,
+                )
+                if reused is not None:
+                    raise _ExistingProviderFetch(reused)
             validated_payload = validated.shared_source_payload
             shared_source_payload = (
                 await self._get_or_create_shared_source_payload(validated_payload)
@@ -187,6 +204,10 @@ async def persist_provider_result(
                     source_snapshot_id=source_snapshot.id,
                     intent=deferred_intent,
                 )
+    except _ExistingProviderFetch as existing:
+        if self._db.in_transaction():
+            await self._db.rollback()
+        return existing.receipt
     except MarketDataFetchLeaseError as exc:
         if self._db.in_transaction():
             await self._db.rollback()
@@ -580,6 +601,110 @@ def _make_source_snapshot(
         provenance_json=_json_safe_mapping(provenance, field_name="source provenance"),
         source_observed_at=result.retrieved_at,
         retrieved_at=local_received_at,
+    )
+
+
+async def _identical_published_receipt(
+    self: MarketDataStore,
+    *,
+    provider_id: str,
+    result: ProviderFetchResult,
+    validated: _ValidatedProviderFetch,
+    authorization: _ValidatedSourceAuthorization,
+) -> PersistedProviderFetch | None:
+    from app.services.market_data.store import (
+        PUBLICATION_SOURCE_SNAPSHOT,
+        MarketDataStoreError,
+        MdObservationRevision,
+        MdPublication,
+        MdSourceSnapshot,
+        ObservationQuality,
+        PersistedProviderFetch,
+        _stored_utc,
+        select,
+    )
+
+    snapshots = list(
+        (
+            await self._db.scalars(
+                select(MdSourceSnapshot)
+                .where(
+                    MdSourceSnapshot.provider_id == provider_id,
+                    MdSourceSnapshot.query_fingerprint_sha256 == validated.query_fingerprint_sha256,
+                    MdSourceSnapshot.payload_sha256 == validated.payload_sha256,
+                    MdSourceSnapshot.source_observed_at == result.retrieved_at,
+                    MdSourceSnapshot.source_authorization_state == authorization.state,
+                    MdSourceSnapshot.source_authorization_descriptor_sha256
+                    == authorization.descriptor_sha256,
+                )
+                .order_by(MdSourceSnapshot.created_at.desc(), MdSourceSnapshot.id.desc())
+            )
+        ).all()
+    )
+    if not snapshots:
+        return None
+    expected = {
+        (observation.event_at, observation.semantic_record_key.sha256): observation
+        for observation in validated.observations
+    }
+    matches: list[tuple[MdSourceSnapshot, list[MdObservationRevision]]] = []
+    for snapshot in snapshots:
+        revisions = list(
+            (
+                await self._db.scalars(
+                    select(MdObservationRevision)
+                    .where(MdObservationRevision.source_snapshot_id == snapshot.id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        if len(revisions) != len(expected):
+            continue
+        observed: dict[tuple[datetime, str], MdObservationRevision] = {}
+        for revision in revisions:
+            coordinate = (
+                _stored_utc(revision.event_time, field_name="revision event_time"),
+                revision.semantic_record_key_sha256,
+            )
+            if coordinate in observed:
+                break
+            observed[coordinate] = revision
+        if len(observed) != len(expected):
+            continue
+        if all(
+            observed.get(coordinate) is not None
+            and observed[coordinate].fields_sha256 == observation.fields_sha256
+            and observed[coordinate].quality_status == observation.quality.value
+            for coordinate, observation in expected.items()
+        ):
+            matches.append((snapshot, revisions))
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise MarketDataStoreError("OBSERVATION_RECEIPT_IDENTITY_AMBIGUOUS")
+    snapshot, revisions = matches[0]
+    publication = await self._db.scalar(
+        select(MdPublication).where(
+            MdPublication.entity_type == PUBLICATION_SOURCE_SNAPSHOT,
+            MdPublication.entity_id == snapshot.id,
+        )
+    )
+    if publication is None:
+        raise MarketDataStoreError("OBSERVATION_RECEIPT_REUSE_MISMATCH")
+    if publication.published_at is None:
+        raise MarketDataStoreError("OBSERVATION_PUBLICATION_PENDING")
+    return PersistedProviderFetch(
+        series_id=revisions[0].series_id,
+        source_snapshot_id=snapshot.id,
+        observation_revision_ids=tuple(revision.id for revision in revisions),
+        passing_observation_count=sum(
+            observation.quality is ObservationQuality.PASS for observation in validated.observations
+        ),
+        failed_observation_count=sum(
+            observation.quality is ObservationQuality.FAILED
+            for observation in validated.observations
+        ),
+        received_at=_stored_utc(publication.published_at, field_name="publication timestamp"),
     )
 
 

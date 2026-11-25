@@ -54,6 +54,8 @@ from app.services.market_data.query_cursor import (
     _policy_descriptor_hash,
     _require_text,
 )
+from app.services.market_data.query_errors import provider_error_code as _provider_error_code
+from app.services.market_data.query_persistence import ProviderPersistenceTasks
 from app.services.market_data.query_resolution import (
     MarketDataQueryResolutionError,
     MarketDataQueryResolver,
@@ -303,6 +305,7 @@ class MarketDataQueryService:
             if isinstance(store, MarketDataStore)
             else None
         )
+        self._persistence_tasks = ProviderPersistenceTasks()
 
     def _cursor_signing_key(self) -> bytes:
         """Resolve the configured HMAC key only when pagination needs it.
@@ -1013,7 +1016,8 @@ class MarketDataQueryService:
                         raise MarketDataQueryServiceError("FETCH_LEASE_REQUIRED")
                     local_received_at = _trusted_receipt_time(self._clock)
                     try:
-                        persisted = await self._store.persist_provider_result(
+                        persisted = await self._persistence_tasks.persist(
+                            self._store,
                             fetch_context,
                             result,
                             received_at=local_received_at,
@@ -1762,16 +1766,6 @@ def _historical_status_for(
     if state.coverage.status is CoverageStatus.UNKNOWN_CALENDAR:
         return "unknown_calendar"
     return "HISTORICAL_COVERAGE_UNAVAILABLE"
-
-
-def _provider_error_code(exc: Exception) -> str:
-    candidate = getattr(exc, "code", None)
-    if isinstance(candidate, str):
-        try:
-            return _require_text(candidate, field_name="provider error code", maximum=128)
-        except (TypeError, ValueError):
-            pass
-    return "PROVIDER_FETCH_FAILED"
 
 
 def _utc_now() -> datetime:

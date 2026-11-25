@@ -97,6 +97,7 @@ async def test_simulation_isolates_instance_config_and_logs_from_other_users_and
     tmp_path: Path,
 ) -> None:
     import app.api.simulation as sim_api
+    import app.api.simulation_analytics as analytics_api
     import app.services.live_trading.manager as live_manager_mod
 
     template_root = tmp_path / "strategies"
@@ -121,6 +122,21 @@ async def test_simulation_isolates_instance_config_and_logs_from_other_users_and
     monkeypatch.setattr(live_manager_mod, "_save_instances", lambda data: store.update(data))
     mgr = LiveTradingManager()
     monkeypatch.setattr(sim_api, "_get_manager", lambda: mgr)
+    parsed_paths: list[Path] = []
+
+    def parse_instance_logs(strategy_dir: Path) -> dict:
+        parsed_paths.append(Path(strategy_dir))
+        value = 110000.0 if Path(strategy_dir) == runtime_a else 220000.0
+        return {
+            "equity_dates": ["2026-01-01", "2026-01-31"],
+            "equity_curve": [100000.0, value],
+            "cash_curve": [100000.0, value],
+            "trades": [],
+            "initial_cash": 100000.0,
+            "final_value": value,
+        }
+
+    monkeypatch.setattr(analytics_api, "parse_all_logs", parse_instance_logs)
 
     from app.main import app as fastapi_app
 
@@ -178,6 +194,24 @@ async def test_simulation_isolates_instance_config_and_logs_from_other_users_and
             encoding="utf-8"
         ) == "shared-log\n"
 
+        detail_a = await client.get(f"/api/v1/simulation/{id_a}/detail", headers=headers_a)
+        detail_b = await client.get(f"/api/v1/simulation/{id_b}/detail", headers=headers_b)
+        assert detail_a.status_code == 200, detail_a.text
+        assert detail_b.status_code == 200, detail_b.text
+        assert detail_a.json()["metrics"]["final_assets"] == 110000.0
+        assert detail_b.json()["metrics"]["final_assets"] == 220000.0
+        monthly_a = await client.get(
+            f"/api/v1/simulation/{id_a}/monthly-returns", headers=headers_a
+        )
+        monthly_b = await client.get(
+            f"/api/v1/simulation/{id_b}/monthly-returns", headers=headers_b
+        )
+        assert monthly_a.status_code == 200, monthly_a.text
+        assert monthly_b.status_code == 200, monthly_b.text
+        assert monthly_a.json()["returns"][0]["return_pct"] == 0.1
+        assert monthly_b.json()["returns"][0]["return_pct"] == 1.2
+        assert parsed_paths == [runtime_a, runtime_b, runtime_a, runtime_b]
+
         # Legacy shared-dir instance without runtime_dir must reject non-admin template mutation
         store["legacy-shared"] = {
             "id": "legacy-shared",
@@ -196,6 +230,13 @@ async def test_simulation_isolates_instance_config_and_logs_from_other_users_and
         )
         assert forbid_cfg.status_code == 403
         assert forbid_log.status_code == 403
+        for endpoint in ("detail", "monthly-returns", "kline"):
+            legacy_read = await client.get(
+                f"/api/v1/simulation/legacy-shared/{endpoint}", headers=headers_a
+            )
+            assert legacy_read.status_code == 409
+            assert legacy_read.json()["details"]["code"] == "SIMULATION_ISOLATED_RUNTIME_REQUIRED"
+        assert parsed_paths == [runtime_a, runtime_b, runtime_a, runtime_b]
     finally:
         fastapi_app.dependency_overrides.pop(sim_api._get_manager, None)
 

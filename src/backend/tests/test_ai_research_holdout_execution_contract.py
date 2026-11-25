@@ -80,6 +80,28 @@ def _result_payload(
         "artifact_hash": artifact_hash,
         "artifact_size_bytes": 4096,
     }
+    from app.services.research.holdout_sufficiency import (
+        build_holdout_sufficiency,
+        validate_holdout_sufficiency,
+    )
+
+    sufficiency = build_holdout_sufficiency(
+        candidate_hash=snapshot["candidate_hash"],
+        policy_version=snapshot["policy_version"],
+        artifact_hash=artifact_hash,
+        independent_samples=raw.get("independent_samples", 60),
+        valid_returns=raw.get("valid_returns", 40),
+        trial_count=raw.get("trial_count", 3),
+        fold_count=raw.get("fold_count", 3),
+        span_days=raw.get("span_days", 252),
+        label_mature=raw.get("label_mature", True),
+    )
+    sufficiency_passed = validate_holdout_sufficiency(
+        sufficiency,
+        candidate_hash=snapshot["candidate_hash"],
+        policy_version=snapshot["policy_version"],
+        artifact_hash=artifact_hash,
+    )
     try:
         from app.services.research.statistics import calculate_deflated_sharpe
 
@@ -106,7 +128,7 @@ def _result_payload(
     gate_passes = {
         "CANDIDATE_FROZEN": True,
         "SEALED_HOLDOUT": True,
-        "EVIDENCE_BINDING": True,
+        "EVIDENCE_BINDING": sufficiency_passed,
         "DEFLATED_SHARPE": dsr_probability >= 0.95,
         "MAX_DRAWDOWN": float(safe_metrics["max_drawdown"]) <= 0.2,
         "ROBUSTNESS": float(safe_metrics["robustness_score"]) >= 0.8,
@@ -127,14 +149,16 @@ def _result_payload(
         for code in _GATE_CODES
     ]
     terminal_receipt = {
-        "schema_version": "holdout-terminal-receipt-v1",
+        "schema_version": "holdout-terminal-receipt-v2",
         "policy_version": snapshot["policy_version"],
         "promotion_policy_hash": snapshot["promotion_policy_hash"],
         "input_evidence_hash": _contract_module().holdout_input_evidence_hash(
             command=command,
             artifact_receipt=artifact_receipt,
+            sufficiency=sufficiency,
         ),
         "artifact_receipt": artifact_receipt,
+        "sufficiency": sufficiency,
         "gate_results": gate_results,
         "safe_metrics": safe_metrics,
     }
@@ -150,6 +174,28 @@ def _result_payload(
     }
     payload.update(changes)
     return payload
+
+
+def test_terminal_receipt_requires_sufficiency_evidence() -> None:
+    command = _command()
+    payload = _result_payload(command)
+    del payload["terminal_receipt"]["sufficiency"]
+
+    with pytest.raises(ValueError, match="HOLDOUT_EXECUTION_RESULT_INVALID"):
+        _contract_module().HoldoutExecutionResult.from_mapping(payload, command=command)
+
+
+def test_small_sample_receipt_cannot_pass_evidence_binding() -> None:
+    command = _command()
+    payload = _result_payload(command, measurements={"independent_samples": 2, "valid_returns": 1})
+    result = _contract_module().HoldoutExecutionResult.from_mapping(payload, command=command)
+    evidence_gate = next(
+        gate
+        for gate in result.snapshot["terminal_receipt"]["gate_results"]
+        if gate["code"] == "EVIDENCE_BINDING"
+    )
+
+    assert evidence_gate["status"] == "FAIL"
 
 
 def test_command_is_canonical_and_contains_only_opaque_sealed_references() -> None:
@@ -235,8 +281,8 @@ def test_result_contains_only_aggregate_metrics_and_never_raw_paths() -> None:
     )
 
     serialized = result.payload.decode("utf-8")
-    assert "returns" not in serialized
-    assert "trial_sharpes" not in serialized
+    assert '"returns":' not in serialized
+    assert '"trial_sharpes":' not in serialized
     assert str(raw_canary) not in serialized
     assert result.snapshot["terminal_receipt"]["safe_metrics"]["extreme_path_loss"] == 0.18
 

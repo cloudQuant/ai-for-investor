@@ -244,8 +244,8 @@ async def test_worker_runs_queued_command_to_passed_unique_evidence_package(
     assert evaluation is not None and evaluation.status == "PASSED"
     assert execution is not None and execution.result_json is not None
     serialized_receipt = json.dumps(execution.result_json, sort_keys=True)
-    assert "returns" not in serialized_receipt
-    assert "trial_sharpes" not in serialized_receipt
+    assert '"returns":' not in serialized_receipt
+    assert '"trial_sharpes":' not in serialized_receipt
     assert str(raw_canary) not in serialized_receipt
     assert artifact is not None and artifact.kind == "sealed_holdout_artifact_receipt"
     assert ordinary_content is None
@@ -253,6 +253,32 @@ async def test_worker_runs_queued_command_to_passed_unique_evidence_package(
     policy_hash = evaluation.gate_inputs["promotion_policy_hash"]
     assert package.manifest["material"]["promotion_policy_hash"] == policy_hash
     assert package.approval_binding_hash == content_hash(package.manifest["material"])
+
+
+@pytest.mark.asyncio
+async def test_insufficient_receipt_is_terminal_rejection_not_promotion(
+    client,
+    auth_user,
+) -> None:
+    context, command, runtime = await _queued_context(client, auth_user, "worker-insufficient")
+    measurements = await _trusted_passing_measurements(context, runtime=runtime)
+    measurements.update({"independent_samples": 2, "valid_returns": 1})
+    executor = _Executor(measurements)
+
+    result = (await _worker(context, runtime, executor).run_once(limit=1))[0]
+
+    assert (result.status, result.error_code, result.package_status) == (
+        "REJECTED",
+        None,
+        "NOT_REQUIRED",
+    )
+    async with database.async_session_maker() as session:
+        stored = await session.get(ResearchHoldoutEvaluationCommand, command["id"])
+        evaluation = await session.get(ResearchEvaluation, stored.evaluation_id)
+        assert stored.status == "SUCCEEDED"
+        assert evaluation.status == "REJECTED"
+    assert executor.execute_calls == 1
+    assert await _count(ResearchEvidencePackage) == 0
 
 
 @pytest.mark.asyncio
@@ -574,11 +600,25 @@ async def test_terminal_crash_rebuilds_or_reuses_unique_package_and_settles(
         ),
     )
 
-    assert (await crashed.run_once(limit=1))[0].status == "FAILED"
+    crashed_result = (await crashed.run_once(limit=1))[0]
+    if crash_point == "finalize":
+        assert crashed_result.status == "FAILED"
+    else:
+        assert crashed_result.status == "PASSED"
+        assert crashed_result.error_code == "HOLDOUT_EVIDENCE_PACKAGE_FAILED"
+        assert crashed_result.package_status == "FAILED"
+        async with database.async_session_maker() as session:
+            stored = await session.get(ResearchHoldoutEvaluationCommand, command["id"])
+            evaluation = await session.get(ResearchEvaluation, stored.evaluation_id)
+            assert stored.status == "SUCCEEDED"
+            assert evaluation.status == "PASSED"
+
     recovery = _worker(context, runtime, executor)
     completed = await recovery.run_once(limit=1)
 
-    assert [(item.status, item.error_code) for item in completed] == [("PASSED", None)]
+    assert [(item.status, item.error_code, item.package_status) for item in completed] == [
+        ("PASSED", None, "READY")
+    ]
     assert executor.execute_calls == 1
     assert await _count(ResearchEvidencePackage) == 1
 

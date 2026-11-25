@@ -507,6 +507,7 @@ import type {
 import type { BacktestSummaryResponse } from '@/types'
 import { workspaceApi } from '@/api/workspace'
 import { useOverfittingRuntime } from '@/composables/useOverfittingRuntime'
+import { useOverfittingSubmission } from '@/composables/useOverfittingSubmission'
 import OverfittingPanel from '@/components/backtest/OverfittingPanel.vue'
 import StrategyExplanationCard from '@/components/backtest/StrategyExplanationCard.vue'
 import StrategyScoreCard from '@/components/backtest/StrategyScoreCard.vue'
@@ -581,13 +582,26 @@ const {
 } = useOverfittingRuntime({
   currentResult: overfittingTask,
 })
+const overfittingSubmission = useOverfittingSubmission({
+  startRuntime: startOverfittingRuntime,
+  stopRuntime: stopOverfittingRuntime,
+})
 
 let loadGeneration = 0
 let isUnmounted = false
 
 onMounted(() => { void loadData() })
-onUnmounted(() => { isUnmounted = true; loadGeneration += 1; disposeOverfittingRuntime() })
-watch(taskId, () => { void loadData() })
+onUnmounted(() => {
+  isUnmounted = true
+  loadGeneration += 1
+  overfittingSubmission.dispose()
+  disposeOverfittingRuntime()
+})
+watch(taskId, () => {
+  overfittingSubmission.invalidate()
+  overfittingTask.value = null
+  void loadData()
+})
 watch(activeTab, (tab) => {
   if (!detail.value) return
   if (tab === 'kline') void ensureKlineData()
@@ -924,23 +938,8 @@ async function loadDiagnostics(id = taskId.value, gen = loadGeneration) {
 async function loadOverfitting(
   methods: StrategyOverfittingMethod[] = ['walk_forward', 'out_of_sample', 'monte_carlo'],
 ) {
-  stopOverfittingRuntime()
   overfittingTask.value = null
-  try {
-    const submission = await strategyApi.createOverfittingTask(taskId.value, {
-      methods,
-      walk_forward_train_days: 180,
-      walk_forward_test_days: 60,
-      walk_forward_step_days: 60,
-      walk_forward_max_concurrency: 4,
-      out_of_sample_ratio: 0.3,
-      monte_carlo_iterations: 300,
-    })
-    startOverfittingRuntime(submission.task_id)
-  } catch {
-    stopOverfittingRuntime()
-    overfittingTask.value = null
-  }
+  await overfittingSubmission.submit(taskId.value, methods)
 }
 
 async function runRobustnessValidation() {

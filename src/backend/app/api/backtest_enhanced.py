@@ -29,7 +29,13 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_user, get_websocket_current_user
+from app.api.deps import (
+    RequireDeleteBacktest,
+    RequireExportBacktest,
+    RequireRunBacktest,
+    get_current_user,
+    get_websocket_current_user,
+)
 from app.schemas.backtest import BacktestRequest as ServiceBacktestRequest
 from app.schemas.backtest_enhanced import (
     BacktestCancelledEvent,
@@ -169,7 +175,7 @@ def _build_backtest_runtime_snapshot(
 @router.post("/run", response_model=BacktestResponse, summary="Run backtest")
 async def run_backtest(
     request: BacktestRequest,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireRunBacktest,
     service: BacktestService = Depends(get_backtest_service),
 ) -> typing.Any:
     """Submit a backtest task (enhanced)."""
@@ -242,7 +248,7 @@ async def get_backtest_result_summary(
 async def run_backtest_robustness(
     task_id: str,
     data: RobustnessValidationRequest | None = None,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireRunBacktest,
     service: RobustnessValidationService = Depends(get_robustness_service),
 ) -> typing.Any:
     """Run robustness validation and persist the result."""
@@ -340,7 +346,7 @@ async def cancel_backtest(
 @router.delete("/{task_id}", summary="Delete backtest result", response_model=None)
 async def delete_backtest(
     task_id: str,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireDeleteBacktest,
     service: BacktestService = Depends(get_backtest_service),
 ) -> typing.Any:
     """Delete backtest result."""
@@ -413,7 +419,7 @@ async def get_paginated_trades(
 @router.get("/{task_id}/report/html", summary="Export HTML report", response_model=None)
 async def get_html_report(
     task_id: str,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireExportBacktest,
     backtest_service: BacktestService = Depends(get_backtest_service),
     report_service: ReportService = Depends(get_report_service),
 ) -> typing.Any:
@@ -448,7 +454,7 @@ async def get_html_report(
 @router.get("/{task_id}/report/pdf", summary="Export PDF report", response_model=None)
 async def get_pdf_report(
     task_id: str,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireExportBacktest,
     backtest_service: BacktestService = Depends(get_backtest_service),
     report_service: ReportService = Depends(get_report_service),
 ) -> typing.Any:
@@ -484,7 +490,7 @@ async def get_pdf_report(
 @router.get("/{task_id}/report/excel", summary="Export Excel report", response_model=None)
 async def get_excel_report(
     task_id: str,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireExportBacktest,
     backtest_service: BacktestService = Depends(get_backtest_service),
     report_service: ReportService = Depends(get_report_service),
 ) -> typing.Any:
@@ -538,7 +544,7 @@ async def websocket_endpoint(
           terminal-state catch-up for late subscribers.
     """
 
-    current_user, accepted_subprotocol = get_websocket_current_user(websocket)
+    current_user, accepted_subprotocol = await get_websocket_current_user(websocket)
     if current_user is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

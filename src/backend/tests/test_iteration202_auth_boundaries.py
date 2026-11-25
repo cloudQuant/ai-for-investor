@@ -11,7 +11,9 @@ from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.config import get_settings
+from app.db.database import async_session_maker
 from app.main import app
+from app.models.user import User
 from app.services import param_optimization_service as optimization_service
 from app.utils.security import create_access_token, create_refresh_token
 
@@ -48,6 +50,20 @@ def _request() -> Request:
 
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def _ensure_user(subject: str) -> None:
+    async with async_session_maker() as db:
+        if await db.get(User, subject) is None:
+            db.add(
+                User(
+                    id=subject,
+                    username=subject,
+                    email=f"{subject}@example.invalid",
+                    hashed_password="synthetic-only",
+                )
+            )
+            await db.commit()
 
 
 def _disable_app_lifespan(monkeypatch) -> None:
@@ -137,12 +153,14 @@ def test_backtest_websocket_rejects_non_access_tokens_before_business_lookup(
     get_service.assert_not_called()
 
 
-def test_backtest_websocket_accepts_access_token(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_backtest_websocket_accepts_access_token(monkeypatch) -> None:
     import app.api.backtest_enhanced as backtest_api
 
     _disable_app_lifespan(monkeypatch)
 
     subject = "iteration202-ws-owner"
+    await _ensure_user(subject)
     service = SimpleNamespace(
         get_task_status=AsyncMock(return_value=SimpleNamespace(value="completed")),
         get_result=AsyncMock(return_value=None),
@@ -260,6 +278,7 @@ async def test_optimization_routes_fail_closed_on_user_scoped_database_errors(
         raise RuntimeError("database unavailable")
 
     monkeypatch.setattr(optimization_service, "_run_async", database_unavailable)
+    await _ensure_user("user-b")
     headers = _auth_headers(create_access_token({"sub": "user-b", "username": "user-b"}))
 
     progress = await client.get(f"/api/v1/optimization/progress/{task_id}", headers=headers)
@@ -310,6 +329,8 @@ async def test_optimization_routes_preserve_owner_access_and_reject_foreign_owne
         lambda: manager,
     )
     monkeypatch.setattr(optimization_service, "_run_async", lambda result: result)
+    await _ensure_user("owner-a")
+    await _ensure_user("user-b")
 
     owner_headers = _auth_headers(create_access_token({"sub": "owner-a", "username": "owner-a"}))
     foreign_headers = _auth_headers(create_access_token({"sub": "user-b", "username": "user-b"}))

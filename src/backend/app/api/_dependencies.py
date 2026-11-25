@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.database import get_db
+from app.db.database import async_session_maker, get_db
 from app.models.permission import ROLE_PERMISSIONS, Permission, Role, user_roles
 from app.models.user import User
 from app.schemas.auth import TokenPayload
@@ -29,7 +29,20 @@ def _extract_websocket_token(websocket: WebSocket) -> tuple[str | None, str | No
     return None, None
 
 
-def get_websocket_current_user(websocket: WebSocket) -> tuple[TokenPayload | None, str | None]:
+async def _account_is_active(db: AsyncSession, user_id: str) -> bool:
+    result = await db.execute(select(User.is_active).where(User.id == user_id))
+    is_active = result.scalar_one_or_none()
+    return is_active is True
+
+
+async def _websocket_account_is_active(user_id: str) -> bool:
+    async with async_session_maker() as db:
+        return await _account_is_active(db, user_id)
+
+
+async def get_websocket_current_user(
+    websocket: WebSocket,
+) -> tuple[TokenPayload | None, str | None]:
     token, accepted_subprotocol = _extract_websocket_token(websocket)
     if not token:
         return None, accepted_subprotocol
@@ -38,11 +51,16 @@ def get_websocket_current_user(websocket: WebSocket) -> tuple[TokenPayload | Non
     if payload is None:
         return None, accepted_subprotocol
 
-    return TokenPayload(**payload), accepted_subprotocol
+    current_user = TokenPayload(**payload)
+    if not await _websocket_account_is_active(current_user.sub):
+        return None, accepted_subprotocol
+    return current_user, accepted_subprotocol
 
 
 async def get_current_user(
-    request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(security)
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: AsyncSession = Depends(get_db),
 ) -> TokenPayload:
     """Return the current authenticated user.
 
@@ -73,6 +91,12 @@ async def get_current_user(
         )
 
     current_user = TokenPayload(**payload)
+    if not await _account_is_active(db, current_user.sub):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is unavailable",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     request.state.user_id = current_user.sub
     return current_user
 
@@ -80,6 +104,7 @@ async def get_current_user(
 async def get_current_user_optional(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
+    db: AsyncSession = Depends(get_db),
 ) -> TokenPayload | None:
     """Optionally return the current user (None if not authenticated).
 
@@ -99,6 +124,12 @@ async def get_current_user_optional(
         return None
 
     current_user = TokenPayload(**payload)
+    if not await _account_is_active(db, current_user.sub):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is unavailable",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     request.state.user_id = current_user.sub
     return current_user
 
@@ -140,6 +171,8 @@ async def _effective_role_values(user: TokenPayload, db: AsyncSession) -> list[o
     role_values = _compatibility_role_values(user)
     if role_values is None:
         role_values = await _database_role_values(db, user.sub)
+        if not role_values:
+            role_values = [Role.USER]
     return role_values
 
 
@@ -198,6 +231,7 @@ RequireCreateStrategy = Depends(require_permission(Permission.CREATE_STRATEGY))
 RequireUpdateStrategy = Depends(require_permission(Permission.UPDATE_STRATEGY))
 RequireDeleteStrategy = Depends(require_permission(Permission.DELETE_STRATEGY))
 RequireRunBacktest = Depends(require_permission(Permission.RUN_BACKTEST))
+RequireDeleteBacktest = Depends(require_permission(Permission.DELETE_BACKTEST))
 RequireExportBacktest = Depends(require_permission(Permission.EXPORT_BACKTEST))
 RequireManageUsers = Depends(require_permission(Permission.MANAGE_USERS))
 

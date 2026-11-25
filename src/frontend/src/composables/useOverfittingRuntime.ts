@@ -35,6 +35,12 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let pollingStarted = false
   let pollAbortController: AbortController | null = null
+  let runtimeGeneration = 0
+  let activeTaskId = ''
+
+  function isCurrent(taskId: string, generation: number): boolean {
+    return activeTaskId === taskId && runtimeGeneration === generation
+  }
 
   function createWebSocketProtocols(): string[] {
     const token = getAccessToken()
@@ -92,33 +98,39 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
     }
   }
 
-  function finishWithResult(result: StrategyOverfittingTaskResult) {
+  function finishWithResult(result: StrategyOverfittingTaskResult, taskId: string, generation: number) {
+    if (!isCurrent(taskId, generation) || result.task_id !== taskId) return
     options.currentResult.value = result
     loading.value = false
     currentTaskId.value = ''
+    activeTaskId = ''
     closeWebSocket()
   }
 
-  function finishAsFailed(message: string) {
+  function finishAsFailed(message: string, generation: number) {
+    if (!isCurrent(activeTaskId, generation)) return
     progressInfo.value = {
       progress: progressInfo.value.progress,
       message,
     }
     loading.value = false
     currentTaskId.value = ''
+    activeTaskId = ''
     closeWebSocket()
   }
 
-  function startPollingFallback(taskId: string): void {
-    if (pollingStarted || !loading.value) {
+  function startPollingFallback(taskId: string, generation = runtimeGeneration): void {
+    if (pollingStarted || !loading.value || !isCurrent(taskId, generation)) {
       return
     }
     pollingStarted = true
-    void pollResult(taskId)
+    void pollResult(taskId, generation)
   }
 
   function connectWebSocket(taskId: string): boolean {
     closeWebSocket()
+    const generation = ++runtimeGeneration
+    activeTaskId = taskId
     if (typeof window === 'undefined' || typeof window.WebSocket === 'undefined') {
       return false
     }
@@ -139,9 +151,10 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
     }, 30000)
 
     currentWs.onmessage = async (event) => {
-      if (ws !== currentWs) return
+      if (ws !== currentWs || !isCurrent(taskId, generation)) return
       try {
         const data = parseRuntimeEvent(event.data)
+        if (data?.task_id && data.task_id !== taskId) return
         if (!data || data.type === 'pong' || data.type === 'connected') {
           return
         }
@@ -165,33 +178,37 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
             message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgCompleted'),
           }
           if (data.result) {
-            finishWithResult(data.result)
+            finishWithResult(data.result, taskId, generation)
             return
           }
           const result = await strategyApi.getOverfittingTask(taskId)
-          finishWithResult(result)
+          finishWithResult(result, taskId, generation)
           return
         }
         if (data.type === 'failed') {
-          finishAsFailed(typeof data.error === 'string' ? data.error : (data.message || tt('overfittingRt.msgFailed')))
+          finishAsFailed(
+            typeof data.error === 'string' ? data.error : (data.message || tt('overfittingRt.msgFailed')),
+            generation,
+          )
         }
       } catch (error) {
         finishAsFailed(
           error instanceof Error && error.message
             ? error.message
-            : tt('overfittingRt.msgFailed')
+            : tt('overfittingRt.msgFailed'),
+          generation,
         )
       }
     }
 
     currentWs.onerror = () => {
-      if (ws !== currentWs) return
+      if (ws !== currentWs || !isCurrent(taskId, generation)) return
       closeWebSocket()
-      startPollingFallback(taskId)
+      startPollingFallback(taskId, generation)
     }
 
     currentWs.onclose = (event) => {
-      if (ws !== currentWs) return
+      if (ws !== currentWs || !isCurrent(taskId, generation)) return
       if (!loading.value || event.code === 1000) {
         if (heartbeatTimer) {
           clearInterval(heartbeatTimer)
@@ -200,29 +217,27 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
         return
       }
       closeWebSocket()
-      startPollingFallback(taskId)
+      startPollingFallback(taskId, generation)
     }
 
     return true
   }
 
-  async function pollResult(taskId: string) {
+  async function pollResult(taskId: string, generation = runtimeGeneration) {
     pollAbortController = new AbortController()
     const { signal } = pollAbortController
     let attempts = 0
 
-    while (attempts < POLL_MAX_ATTEMPTS && loading.value && !signal.aborted) {
+    while (attempts < POLL_MAX_ATTEMPTS && loading.value && !signal.aborted && isCurrent(taskId, generation)) {
       try {
-        const result = await strategyApi.getOverfittingTask(taskId)
-        if (signal.aborted) {
-          return
-        }
+        const result = await strategyApi.getOverfittingTask(taskId, { signal })
+        if (!isCurrent(taskId, generation)) return
         if (result.status === 'completed') {
-          finishWithResult(result)
+          finishWithResult(result, taskId, generation)
           return
         }
         if (result.status === 'failed' || result.status === 'cancelled') {
-          finishAsFailed(result.error_message || result.summary || tt('overfittingRt.msgFailed'))
+          finishAsFailed(result.error_message || result.summary || tt('overfittingRt.msgFailed'), generation)
           return
         }
         options.currentResult.value = result
@@ -231,7 +246,7 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
           message: result.summary || tt('overfittingRt.msgFetchingProgress'),
         }
       } catch {
-        if (signal.aborted) {
+        if (signal.aborted || !isCurrent(taskId, generation)) {
           return
         }
       }
@@ -244,8 +259,8 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
       attempts++
     }
 
-    if (loading.value && !signal.aborted) {
-      finishAsFailed(tt('overfittingRt.msgTimeout'))
+    if (loading.value && !signal.aborted && isCurrent(taskId, generation)) {
+      finishAsFailed(tt('overfittingRt.msgTimeout'), generation)
     }
   }
 
@@ -260,12 +275,16 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
   }
 
   function stopRuntime() {
+    runtimeGeneration++
+    activeTaskId = ''
     loading.value = false
     currentTaskId.value = ''
     closeWebSocket()
   }
 
   function disposeRuntime() {
+    runtimeGeneration++
+    activeTaskId = ''
     closeWebSocket()
   }
 

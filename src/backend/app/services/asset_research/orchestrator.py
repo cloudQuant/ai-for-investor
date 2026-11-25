@@ -74,6 +74,7 @@ from app.services.asset_research.data import (
     sanitize_raw_snapshot,
 )
 from app.services.asset_research.decision import apply_publication_gate
+from app.services.asset_research.orchestrator_payload import task_payload as _task_payload
 from app.services.asset_research.outcomes import AssetOutcomeEvaluator
 from app.services.asset_research.plugins.option.costs import parse_option_cost_snapshot
 from app.services.asset_research.promotion import (
@@ -138,32 +139,6 @@ class _FrozenScheduleRun:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _task_payload(
-    task: AssetAnalysisTask, report: AssetAnalysisReport | None = None
-) -> AssetAnalysisTaskResponse:
-    message_map = {
-        "QUEUED": "多资产研究任务已创建",
-        "RUNNING": "正在生成多资产研究报告",
-        "SUCCEEDED": "多资产研究已完成",
-        "FAILED": "多资产研究失败",
-        "CANCELLED": "多资产研究已取消",
-    }
-    return AssetAnalysisTaskResponse(
-        task_id=task.id,
-        status=task.status,
-        asset_type=task.asset_type,
-        canonical_id=task.canonical_id,
-        progress=task.progress,
-        message=message_map.get(task.status),
-        error_code=task.error_code,
-        report_id=report.id if report else None,
-        prediction_id=report.prediction_id if report else None,
-        created_at=task.created_at,
-        started_at=task.started_at,
-        completed_at=task.completed_at,
-    )
 
 
 class AssetResearchOrchestrator:

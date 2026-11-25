@@ -1,5 +1,9 @@
 import asyncio
+import logging
+import math
+import time
 import typing
+from collections import defaultdict, deque
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -9,8 +13,13 @@ from app.api.deps import get_current_user, get_websocket_current_user
 from app.services.data_topic_hub import TopicPolicy, get_shared_data_topic_hub
 from app.services.ws_gateway import get_shared_ws_gateway
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/data-topics", tags=["Data Topics"])
 _PUBLIC_TOPIC_PREFIXES = ("market:",)
+_USER_TOPIC_WRITE_LIMIT = 12
+_USER_TOPIC_WRITE_WINDOW_SECONDS = 60.0
+_user_topic_writes: dict[str, deque[float]] = defaultdict(deque)
 
 
 def _owns_user_topic(topic: str, user_id: str) -> bool:
@@ -33,6 +42,28 @@ def _require_topic_pattern_access(pattern: str, user_id: str) -> None:
     if pattern.startswith(_PUBLIC_TOPIC_PREFIXES) or _owns_user_topic(pattern, user_id):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Topic subscription denied")
+
+
+def _consume_user_topic_write(user_id: str) -> None:
+    now = time.monotonic()
+    window_start = now - _USER_TOPIC_WRITE_WINDOW_SECONDS
+    writes = _user_topic_writes[user_id]
+    while writes and writes[0] <= window_start:
+        writes.popleft()
+    if len(writes) >= _USER_TOPIC_WRITE_LIMIT:
+        retry_after = max(1, math.ceil(writes[0] + _USER_TOPIC_WRITE_WINDOW_SECONDS - now))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="User topic write quota exceeded",
+            headers={"Retry-After": str(retry_after)},
+        )
+    writes.append(now)
+
+
+def _authorize_user_topic_write(topic: str, user_id: str, action: str) -> None:
+    _require_topic_access(topic, user_id, write=True)
+    _consume_user_topic_write(user_id)
+    logger.info("data_topic_write actor=%s action=%s topic=%s", user_id, action, topic)
 
 
 @router.get("", response_model=None)
@@ -73,7 +104,7 @@ async def peek_topic(
 async def refresh_topic(
     topic: str, current_user: typing.Any = Depends(get_current_user)
 ) -> typing.Any:
-    _require_topic_access(topic, current_user.sub)
+    _authorize_user_topic_write(topic, current_user.sub, "refresh")
     value = await get_shared_data_topic_hub().request(topic, force=True)
     return {"topic": topic, "value": value}
 
@@ -82,7 +113,7 @@ async def refresh_topic(
 async def push_topic(
     topic: str, payload: dict, current_user: typing.Any = Depends(get_current_user)
 ) -> typing.Any:
-    _require_topic_access(topic, current_user.sub, write=True)
+    _authorize_user_topic_write(topic, current_user.sub, "push")
     delivered = await get_shared_data_topic_hub().push(topic, payload.get("value"))
     return {"topic": topic, "delivered": delivered}
 
@@ -97,7 +128,7 @@ def _bind_shared_topic_gateway() -> typing.Any:
 async def _stream_topics_websocket(
     websocket: WebSocket, *, topic: str | None = None, pattern: str | None = None
 ) -> None:
-    current_user, accepted_subprotocol = get_websocket_current_user(websocket)
+    current_user, accepted_subprotocol = await get_websocket_current_user(websocket)
     if current_user is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -146,6 +177,11 @@ async def _stream_topics_websocket(
                 continue
 
             if data == "refresh" and topic is not None:
+                try:
+                    _authorize_user_topic_write(topic, current_user.sub, "websocket_refresh")
+                except HTTPException:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
                 value = await hub.request(topic, force=True)
                 await websocket.send_json({"type": "snapshot", "topic": topic, "value": value})
     except WebSocketDisconnect:

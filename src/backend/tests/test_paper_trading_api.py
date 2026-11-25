@@ -691,7 +691,9 @@ async def test_paper_account_websocket_rejects_missing_token(monkeypatch):
     from app.api import paper_trading
 
     websocket = SimpleNamespace(close=AsyncMock())
-    monkeypatch.setattr(paper_trading, "get_websocket_current_user", lambda _ws: (None, None))
+    monkeypatch.setattr(
+        paper_trading, "get_websocket_current_user", AsyncMock(return_value=(None, None))
+    )
 
     await paper_trading.websocket_account_endpoint(websocket, "acct-1")
 
@@ -709,7 +711,7 @@ async def test_paper_account_websocket_rejects_foreign_account(monkeypatch):
     monkeypatch.setattr(
         paper_trading,
         "get_websocket_current_user",
-        lambda _ws: (SimpleNamespace(sub="u1"), "access-token"),
+        AsyncMock(return_value=(SimpleNamespace(sub="u1"), "access-token")),
     )
     monkeypatch.setattr(paper_trading, "PaperTradingService", lambda: service)
 
@@ -745,7 +747,7 @@ async def test_paper_account_websocket_accepts_owner_with_subprotocol(monkeypatc
     monkeypatch.setattr(
         paper_trading,
         "get_websocket_current_user",
-        lambda _ws: (SimpleNamespace(sub="u1"), "access-token"),
+        AsyncMock(return_value=(SimpleNamespace(sub="u1"), "access-token")),
     )
     monkeypatch.setattr(paper_trading, "PaperTradingService", lambda: service)
     monkeypatch.setattr("app.websocket_manager.manager", manager)
@@ -784,7 +786,7 @@ async def test_paper_account_websocket_detects_disconnect_via_receive_text(monke
     monkeypatch.setattr(
         paper_trading,
         "get_websocket_current_user",
-        lambda _ws: (SimpleNamespace(sub="u1"), "access-token"),
+        AsyncMock(return_value=(SimpleNamespace(sub="u1"), "access-token")),
     )
     monkeypatch.setattr(paper_trading, "PaperTradingService", lambda: service)
     monkeypatch.setattr("app.websocket_manager.manager", manager)

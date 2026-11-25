@@ -173,9 +173,11 @@ export const quoteApi = {
     symbol: string,
     timeframe: string = 'M1',
     count: number = 200,
+    options?: { signal?: AbortSignal },
   ): Promise<ChartDataResponse> {
     return request.get('/quote/chart', {
       params: { source, symbol, timeframe, count },
+      ...(options ? { signal: options.signal } : {}),
     })
   },
 }

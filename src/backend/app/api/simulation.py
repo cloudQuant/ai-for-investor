@@ -368,22 +368,41 @@ async def stop_all(
         ) from e
 
 
-def _resolve_instance_base_dir(mgr: LiveTradingManager, instance_id: str, user_id: str) -> Path:
+def _resolve_instance_base_dir(
+    mgr: LiveTradingManager,
+    instance_id: str,
+    user_id: str,
+    *,
+    require_isolated_runtime: bool = False,
+) -> Path:
     inst = mgr.get_instance(instance_id, user_id=user_id)
     if not inst:
         raise HTTPException(status_code=404, detail="Instance not found")
     runtime_dir = str(inst.get("runtime_dir") or "").strip()
     if runtime_dir:
         return Path(runtime_dir).expanduser()
+    if require_isolated_runtime:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "SIMULATION_ISOLATED_RUNTIME_REQUIRED"},
+        )
     try:
         return get_strategy_dir(inst["strategy_id"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-def _get_strategy_log_dir(mgr: LiveTradingManager, instance_id: str, user_id: str) -> Path:
+def _get_strategy_log_dir(
+    mgr: LiveTradingManager,
+    instance_id: str,
+    user_id: str,
+    *,
+    require_isolated_runtime: bool = False,
+) -> Path:
     """Get the latest log directory for a simulation strategy instance."""
-    strategy_dir = _resolve_instance_base_dir(mgr, instance_id, user_id)
+    strategy_dir = _resolve_instance_base_dir(
+        mgr, instance_id, user_id, require_isolated_runtime=require_isolated_runtime
+    )
     log_dir = find_latest_log_dir(strategy_dir)
     if not log_dir:
         raise HTTPException(

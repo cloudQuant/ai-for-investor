@@ -243,7 +243,7 @@ def register_runtime_routes(
     ) -> None:
         if not _app_config.production_security_mode(_app_config.get_settings()):
             return
-        user = await get_current_user(request, credentials)
+        user = await get_current_user(request, credentials, db)
         if not await _user_has_permission(user, Permission.MANAGE_USERS, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

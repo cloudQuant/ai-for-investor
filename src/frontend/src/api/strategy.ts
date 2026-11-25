@@ -670,8 +670,10 @@ export const strategyApi = {
     )
   },
 
-  async getOverfittingTask(taskId: string): Promise<StrategyOverfittingTaskResult> {
-    return api.get<StrategyOverfittingTaskResult>(`/strategy/overfitting/task/${taskId}`)
+  async getOverfittingTask(taskId: string, options?: { signal?: AbortSignal }): Promise<StrategyOverfittingTaskResult> {
+    return options
+      ? api.get<StrategyOverfittingTaskResult>(`/strategy/overfitting/task/${taskId}`, options)
+      : api.get<StrategyOverfittingTaskResult>(`/strategy/overfitting/task/${taskId}`)
   },
 
   async explainStrategy(data: StrategyExplainRequest): Promise<StrategyExplanation> {

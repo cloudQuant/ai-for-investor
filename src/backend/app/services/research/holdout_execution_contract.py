@@ -15,13 +15,14 @@ from hashlib import sha256
 from typing import Any, Protocol
 
 from app.services.research.canonical import canonical_json
+from app.services.research.holdout_sufficiency import validate_holdout_sufficiency
 
 _COMMAND_SCHEMA = "holdout-execution-command-v2"
 _RESULT_SCHEMA = "holdout-execution-result-v2"
 _INSPECTION_SCHEMA = "holdout-execution-inspection-v2"
-_TERMINAL_RECEIPT_SCHEMA = "holdout-terminal-receipt-v1"
+_TERMINAL_RECEIPT_SCHEMA = "holdout-terminal-receipt-v2"
 _ARTIFACT_RECEIPT_SCHEMA = "sealed-holdout-artifact-receipt-v1"
-_INPUT_EVIDENCE_SCHEMA = "holdout-terminal-input-evidence-v1"
+_INPUT_EVIDENCE_SCHEMA = "holdout-terminal-input-evidence-v2"
 _MAX_COMMAND_BYTES = 64 * 1024
 _MAX_RESULT_BYTES = 64 * 1024
 _MAX_IDENTIFIER_BYTES = 512
@@ -83,6 +84,7 @@ _TERMINAL_RECEIPT_KEYS = frozenset(
         "promotion_policy_hash",
         "input_evidence_hash",
         "artifact_receipt",
+        "sufficiency",
         "gate_results",
         "safe_metrics",
     }
@@ -378,6 +380,7 @@ def holdout_input_evidence_hash(
     *,
     command: HoldoutExecutionCommand,
     artifact_receipt: dict[str, Any],
+    sufficiency: dict[str, Any],
 ) -> str:
     """Hash the location-free terminal input without any reversible samples."""
 
@@ -393,6 +396,7 @@ def holdout_input_evidence_hash(
                 "schema_version": _INPUT_EVIDENCE_SCHEMA,
                 "command_hash": command.command_hash,
                 "artifact_receipt": artifact_receipt,
+                "sufficiency": sufficiency,
             }
         )
     ).hexdigest()
@@ -412,9 +416,19 @@ def _validate_terminal_receipt(
         raise _InvalidResult
     artifact_receipt = _exact_mapping(receipt["artifact_receipt"], _ARTIFACT_RECEIPT_KEYS)
     _validate_artifact_receipt(artifact_receipt)
+    sufficiency = receipt["sufficiency"]
+    if type(sufficiency) is not dict:
+        raise _InvalidResult
+    validate_holdout_sufficiency(
+        sufficiency,
+        candidate_hash=command.snapshot["candidate_hash"],
+        policy_version=command.snapshot["policy_version"],
+        artifact_hash=artifact_receipt["artifact_hash"],
+    )
     if receipt["input_evidence_hash"] != holdout_input_evidence_hash(
         command=command,
         artifact_receipt=artifact_receipt,
+        sufficiency=sufficiency,
     ):
         raise _InvalidResult
 

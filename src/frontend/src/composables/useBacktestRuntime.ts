@@ -31,6 +31,12 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let pollingStarted = false
   let pollAbortController: AbortController | null = null
+  let runtimeGeneration = 0
+  let activeTaskId = ''
+
+  function isCurrent(taskId: string, generation: number): boolean {
+    return activeTaskId === taskId && runtimeGeneration === generation
+  }
 
   function createBacktestWebSocketProtocols(): string[] {
     const token = getAccessToken()
@@ -89,43 +95,52 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
     }
   }
 
-  async function finishWithResult(taskId: string) {
+  async function finishWithResult(taskId: string, generation: number) {
     const result = await options.fetchResult(taskId)
-    if (!result) {
+    if (!isCurrent(taskId, generation)) return
+    if (!result || result.task_id !== taskId) {
       throw new Error(tt('backtestRt.msgNoResult'))
     }
     options.currentResult.value = result
     await options.refreshResults()
+    if (!isCurrent(taskId, generation)) return
     loading.value = false
     currentTaskId.value = ''
+    activeTaskId = ''
     closeWebSocket()
     ElMessage.success(tt('backtestRt.msgCompleted'))
   }
 
-  function finishAsFailed(message: string) {
+  function finishAsFailed(message: string, generation: number) {
+    if (!isCurrent(activeTaskId, generation)) return
     loading.value = false
     currentTaskId.value = ''
+    activeTaskId = ''
     closeWebSocket()
     ElMessage.error(tt('backtestRt.msgFailedTpl', { message }))
   }
 
-  function finishAsCancelled() {
+  function finishAsCancelled(generation: number) {
+    if (!isCurrent(activeTaskId, generation)) return
     loading.value = false
     currentTaskId.value = ''
+    activeTaskId = ''
     closeWebSocket()
     ElMessage.warning(tt('backtestRt.msgCancelled'))
   }
 
-  function startPollingFallback(taskId: string): void {
-    if (pollingStarted || !loading.value) {
+  function startPollingFallback(taskId: string, generation = runtimeGeneration): void {
+    if (pollingStarted || !loading.value || !isCurrent(taskId, generation)) {
       return
     }
     pollingStarted = true
-    void pollResult(taskId)
+    void pollResult(taskId, generation)
   }
 
   function connectWebSocket(taskId: string) {
     closeWebSocket()
+    const generation = ++runtimeGeneration
+    activeTaskId = taskId
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/backtest/${taskId}`
     const protocols = createBacktestWebSocketProtocols()
@@ -140,7 +155,7 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
     }, 30000)
 
     currentWs.onmessage = async (event) => {
-      if (ws !== currentWs) return
+      if (ws !== currentWs || !isCurrent(taskId, generation)) return
       try {
         const data = parseRuntimeEvent(event.data)
         if (!data || data.type === 'pong' || data.type === 'connected') {
@@ -165,7 +180,7 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
             progress: typeof data.progress === 'number' ? data.progress : 100,
             message: typeof data.message === 'string' ? data.message : tt('backtestRt.msgCompleted'),
           }
-          await finishWithResult(taskId)
+          await finishWithResult(taskId, generation)
           return
         }
         if (data.type === 'failed') {
@@ -174,56 +189,66 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
             : typeof data.message === 'string'
               ? data.message
               : tt('backtestRt.msgUnknownError')
-          finishAsFailed(message)
+          finishAsFailed(message, generation)
           return
         }
         if (data.type === 'cancelled') {
-          finishAsCancelled()
+          finishAsCancelled(generation)
         }
       } catch (error) {
         finishAsFailed(
           error instanceof Error && error.message
             ? error.message
-            : tt('backtestRt.msgUnknownError')
+            : tt('backtestRt.msgUnknownError'),
+          generation,
         )
       }
     }
 
     currentWs.onerror = () => {
-      if (ws !== currentWs) return
+      if (ws !== currentWs || !isCurrent(taskId, generation)) return
       closeWebSocket()
-      startPollingFallback(taskId)
+      startPollingFallback(taskId, generation)
     }
 
     currentWs.onclose = (event) => {
-      if (ws !== currentWs) return
+      if (ws !== currentWs || !isCurrent(taskId, generation)) return
       const shouldFallback = loading.value && event.code !== 1000
       closeWebSocket()
       if (shouldFallback) {
-        startPollingFallback(taskId)
+        startPollingFallback(taskId, generation)
       }
     }
   }
 
-  async function pollResult(taskId: string) {
+  async function pollResult(taskId: string, generation = runtimeGeneration) {
     pollAbortController = new AbortController()
     const { signal } = pollAbortController
     let attempts = 0
 
-    while (attempts < POLL_MAX_ATTEMPTS && loading.value && !signal.aborted) {
+    while (attempts < POLL_MAX_ATTEMPTS && loading.value && !signal.aborted && isCurrent(taskId, generation)) {
       try {
-        const statusResp = await backtestApi.getStatus(taskId)
+        const statusResp = await backtestApi.getStatus(taskId, { signal })
+        if (!isCurrent(taskId, generation)) return
         if (statusResp.status === 'completed') {
-          await finishWithResult(taskId)
+          try {
+            await finishWithResult(taskId, generation)
+          } catch (error) {
+            finishAsFailed(
+              error instanceof Error && error.message ? error.message : tt('backtestRt.msgUnknownError'),
+              generation,
+            )
+          }
           return
         }
         if (statusResp.status === 'failed') {
           const result = await options.fetchResult(taskId).catch(() => null)
-          finishAsFailed(result?.error_message || tt('backtestRt.msgUnknownError'))
+          if (!isCurrent(taskId, generation)) return
+          finishAsFailed(result?.error_message || tt('backtestRt.msgUnknownError'), generation)
           return
         }
         if (statusResp.status === 'cancelled') {
-          finishAsCancelled()
+          finishAsCancelled(generation)
           return
         }
         progressInfo.value = {
@@ -231,10 +256,11 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
           message: tt('backtestRt.msgFetchingProgress'),
         }
       } catch (e: unknown) {
-        if (signal.aborted) return
+        if (signal.aborted || !isCurrent(taskId, generation)) return
         if (attempts >= POLL_MAX_ATTEMPTS - 1) {
           loading.value = false
           currentTaskId.value = ''
+          activeTaskId = ''
           closeWebSocket()
           ElMessage.error(getErrorMessage(e, tt('backtestRt.msgQueryFailed')))
           return
@@ -244,32 +270,36 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
       try {
         await sleep(getPollingDelayMs(attempts), signal)
       } catch {
-        // Aborted — exit silently
         return
       }
       attempts++
     }
 
-    if (loading.value && !signal.aborted) {
+    if (loading.value && !signal.aborted && isCurrent(taskId, generation)) {
       loading.value = false
       currentTaskId.value = ''
+      activeTaskId = ''
       closeWebSocket()
       ElMessage.warning(tt('backtestRt.msgTimeout'))
     }
   }
 
   async function cancelBacktest() {
-    if (!currentTaskId.value) {
-      return
-    }
+    const taskId = currentTaskId.value
+    if (!taskId) return
+    const generation = runtimeGeneration
     try {
-      await backtestApi.cancel(currentTaskId.value)
+      await backtestApi.cancel(taskId)
+      if (!isCurrent(taskId, generation)) return
       loading.value = false
       currentTaskId.value = ''
+      activeTaskId = ''
       closeWebSocket()
       ElMessage.success(tt('backtestRt.msgCancelDone'))
     } catch (e: unknown) {
-      ElMessage.error(getErrorMessage(e, tt('backtestRt.msgCancelFailed')))
+      if (isCurrent(taskId, generation)) {
+        ElMessage.error(getErrorMessage(e, tt('backtestRt.msgCancelFailed')))
+      }
     }
   }
 
@@ -281,12 +311,16 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
   }
 
   function stopRuntime() {
+    runtimeGeneration++
+    activeTaskId = ''
     loading.value = false
     currentTaskId.value = ''
     closeWebSocket()
   }
 
   function disposeRuntime() {
+    runtimeGeneration++
+    activeTaskId = ''
     closeWebSocket()
   }
 

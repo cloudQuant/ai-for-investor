@@ -145,6 +145,8 @@ export const useQuoteStore = defineStore('quote', () => {
   const chartBars = ref<KlineBar[]>([])
   const chartLoading = ref(false)
   const chartError = ref<string | null>(null)
+  let chartRequestGeneration = 0
+  let chartAbortController: AbortController | null = null
 
   // ---- column config (P1) ----
   const quoteFields = ref<ColumnDef[]>(cloneColumns(buildDefaultColumns()))
@@ -266,6 +268,7 @@ export const useQuoteStore = defineStore('quote', () => {
   }
 
   async function switchSource(source: string) {
+    closeChart()
     // save previous source sort state
     if (activeSource.value) {
       lsSet(`sort_field_${activeSource.value}`, sortField.value)
@@ -536,6 +539,7 @@ export const useQuoteStore = defineStore('quote', () => {
 
   function cleanup() {
     stopAutoRefresh()
+    closeChart()
   }
 
   // ---- chart actions (P1) ----
@@ -548,28 +552,52 @@ export const useQuoteStore = defineStore('quote', () => {
   }
 
   function closeChart() {
+    chartRequestGeneration++
+    chartAbortController?.abort()
+    chartAbortController = null
     chartDrawerVisible.value = false
     chartBars.value = []
     chartError.value = null
+    chartLoading.value = false
   }
 
   async function fetchChartData() {
-    if (!activeSource.value || !chartSymbol.value) return
+    const source = activeSource.value
+    const symbol = chartSymbol.value
+    const timeframe = chartTimeframe.value
+    if (!source || !symbol) return
+    const generation = ++chartRequestGeneration
+    chartAbortController?.abort()
+    const controller = new AbortController()
+    chartAbortController = controller
     chartLoading.value = true
     chartError.value = null
     try {
       const res = await quoteApi.getChartData(
-        activeSource.value,
-        chartSymbol.value,
-        chartTimeframe.value,
+        source,
+        symbol,
+        timeframe,
+        200,
+        { signal: controller.signal },
       )
+      if (
+        generation !== chartRequestGeneration
+        || source !== activeSource.value
+        || symbol !== chartSymbol.value
+        || timeframe !== chartTimeframe.value
+        || !chartDrawerVisible.value
+      ) return
       chartBars.value = res.bars
       chartError.value = res.error_code ?? null
     } catch (e: unknown) {
+      if (generation !== chartRequestGeneration || controller.signal.aborted) return
       chartError.value = e instanceof Error ? e.message : tt('quote.errorChartFailed')
       chartBars.value = []
     } finally {
-      chartLoading.value = false
+      if (generation === chartRequestGeneration) {
+        chartLoading.value = false
+        chartAbortController = null
+      }
     }
   }
 

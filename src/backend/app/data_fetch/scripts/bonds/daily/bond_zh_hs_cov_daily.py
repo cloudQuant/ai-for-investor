@@ -6,6 +6,8 @@ Bond Zh Hs Cov Daily
 频率: daily
 """
 
+from typing import cast
+
 import pandas as pd
 
 from app.data_fetch.configs.db_config import DB_CONFIG
@@ -65,11 +67,11 @@ class BondZhHsCovDaily(AkshareToMySql):
             for row in cursor.fetchall() or []:
                 if not row or len(row) < 5:
                     continue
-                non_unique = int(row[1]) if row[1] is not None else 1
+                non_unique = int(cast(int, row[1])) if row[1] is not None else 1
                 key_name = str(row[2])
                 if non_unique != 0 or key_name.upper() == "PRIMARY":
                     continue
-                seq_in_index = int(row[3]) if row[3] is not None else 0
+                seq_in_index = int(cast(int, row[3])) if row[3] is not None else 0
                 col_name = str(row[4]).lower()
                 unique_indexes.setdefault(key_name, []).append((seq_in_index, col_name))
 

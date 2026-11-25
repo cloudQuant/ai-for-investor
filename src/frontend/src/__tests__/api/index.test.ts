@@ -669,7 +669,7 @@ describe('API module', () => {
 
       try {
         const err1 = {
-          config: { url: '/portfolio/overview', method: 'get', headers: {}, __sessionGeneration: gen, __sessionToken: 'old-access' },
+          config: { url: '/portfolio/overview', method: 'get', headers: {}, suppressErrorMessage: true, __sessionGeneration: gen, __sessionToken: 'old-access' },
           response: { status: 401, data: {} },
         }
         const err2 = {

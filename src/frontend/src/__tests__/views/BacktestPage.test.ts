@@ -260,6 +260,41 @@ describe('BacktestPage', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('提交失败')
   })
 
+  it('does not start a runtime when submission resolves after unmount', async () => {
+    let resolveSubmission!: (value: BacktestResponse) => void
+    mocks.runBacktest.mockReturnValueOnce(new Promise((resolve) => { resolveSubmission = resolve }))
+    const webSocketMock = vi.fn()
+    vi.stubGlobal('WebSocket', webSocketMock)
+    const wrapper = doMount()
+    const vm = wrapper.vm as unknown as BacktestPageVm
+    vm.form.strategy_id = 's1'
+
+    const submission = vm.runBacktest()
+    await vi.waitFor(() => expect(mocks.runBacktest).toHaveBeenCalled())
+    wrapper.unmount()
+    resolveSubmission({ task_id: 'late-task', status: 'pending' })
+    await submission
+
+    expect(webSocketMock).not.toHaveBeenCalled()
+    expect(vm.currentTaskId).toBe('')
+  })
+
+  it('prevents duplicate submissions while one request is in flight', async () => {
+    vi.stubGlobal('WebSocket', vi.fn(function WebSocketMock() {
+      return { readyState: 1, close: vi.fn(), send: vi.fn() }
+    }))
+    let resolveSubmission!: (value: BacktestResponse) => void
+    mocks.runBacktest.mockReturnValueOnce(new Promise((resolve) => { resolveSubmission = resolve }))
+    const vm = getVm()
+    vm.form.strategy_id = 's1'
+
+    const first = vm.runBacktest()
+    const second = vm.runBacktest()
+    expect(mocks.runBacktest).toHaveBeenCalledTimes(1)
+    resolveSubmission({ task_id: 'single-task', status: 'pending' })
+    await Promise.all([first, second])
+  })
+
   it('ignores stale onStrategyChange responses after rapid strategy switching', async () => {
     const vm = getVm()
     await new Promise((r) => setTimeout(r, 0))

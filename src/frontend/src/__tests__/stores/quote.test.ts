@@ -503,12 +503,16 @@ describe('useQuoteStore', () => {
     expect(store.chartDrawerVisible).toBe(true)
     expect(store.chartSymbol).toBe('600000')
     expect(store.chartBars).toEqual(bars)
-    expect(quoteApi.getChartData).toHaveBeenCalledWith('alpha', '600000', 'M5')
+    expect(quoteApi.getChartData).toHaveBeenCalledWith(
+      'alpha', '600000', 'M5', 200, expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(store.chartLoading).toBe(false)
 
     await store.setChartTimeframe('D1')
     expect(localStorage.getItem('btweb_quote_chartTimeframe')).toBe(JSON.stringify('D1'))
-    expect(quoteApi.getChartData).toHaveBeenLastCalledWith('alpha', '600000', 'D1')
+    expect(quoteApi.getChartData).toHaveBeenLastCalledWith(
+      'alpha', '600000', 'D1', 200, expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
 
     vi.mocked(quoteApi.getChartData).mockResolvedValueOnce({
       source: 'alpha', symbol: '600000', timeframe: 'D1', bars: [], total: 0,
@@ -527,6 +531,61 @@ describe('useQuoteStore', () => {
     expect(store.chartDrawerVisible).toBe(false)
     expect(store.chartError).toBeNull()
     expect(store.chartBars).toEqual([])
+  })
+
+  it('keeps only the latest timeframe response', async () => {
+    const store = createStore()
+    store.chartSymbol = '600000'
+    store.chartDrawerVisible = true
+    const daily = deferred<any>()
+    const weeklyBars = [{ date: '2026-10-02', open: 2, high: 4, low: 2, close: 3, volume: 20 }]
+    vi.mocked(quoteApi.getChartData)
+      .mockReturnValueOnce(daily.promise)
+      .mockResolvedValueOnce({ source: 'alpha', symbol: '600000', timeframe: 'W1', bars: weeklyBars, total: 1 })
+
+    const oldRequest = store.fetchChartData()
+    await store.setChartTimeframe('W1')
+    daily.resolve({ source: 'alpha', symbol: '600000', timeframe: 'D1', bars: [], total: 0 })
+    await oldRequest
+
+    expect(store.chartBars).toEqual(weeklyBars)
+    expect(store.chartTimeframe).toBe('W1')
+    expect(store.chartLoading).toBe(false)
+  })
+
+  it('keeps only the latest symbol response', async () => {
+    const store = createStore()
+    const first = deferred<any>()
+    const secondBars = [{ date: '2026-10-02', open: 2, high: 4, low: 2, close: 3, volume: 20 }]
+    vi.mocked(quoteApi.getChartData)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ source: 'alpha', symbol: '000001', timeframe: 'M5', bars: secondBars, total: 1 })
+
+    const oldRequest = store.openChart('600000')
+    await store.openChart('000001')
+    first.resolve({ source: 'alpha', symbol: '600000', timeframe: 'M5', bars: [], total: 0 })
+    await oldRequest
+
+    expect(store.chartSymbol).toBe('000001')
+    expect(store.chartBars).toEqual(secondBars)
+  })
+
+  it('aborts a pending chart response when the drawer closes', async () => {
+    const store = createStore()
+    const pending = deferred<any>()
+    vi.mocked(quoteApi.getChartData).mockReturnValueOnce(pending.promise)
+    const request = store.openChart('600000')
+    await vi.waitFor(() => expect(quoteApi.getChartData).toHaveBeenCalled())
+    const signal = vi.mocked(quoteApi.getChartData).mock.calls[0][4]?.signal
+
+    store.closeChart()
+    pending.resolve({ source: 'alpha', symbol: '600000', timeframe: 'M5', bars: [], total: 0 })
+    await request
+
+    expect(signal?.aborted).toBe(true)
+    expect(store.chartBars).toEqual([])
+    expect(store.chartLoading).toBe(false)
+    expect(store.chartDrawerVisible).toBe(false)
   })
 
   it('skips chart requests for missing source or symbol and reports Error messages', async () => {

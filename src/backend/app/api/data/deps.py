@@ -53,8 +53,9 @@ async def get_current_db_user(
         )
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is disabled",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is unavailable",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     request.state.user_id = user.id

@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
+
+from app.db.database import async_session_maker
 from app.db.sql_repository import SQLRepository
 from app.models.backtest import BacktestTask
 from app.models.overfitting_result import OverfittingResultModel
@@ -23,6 +26,7 @@ from app.services.overfitting.monte_carlo import run_monte_carlo_analysis
 from app.services.overfitting.out_of_sample import run_out_of_sample_analysis
 from app.services.overfitting.parameter_sensitivity import run_parameter_sensitivity_analysis
 from app.services.overfitting.walk_forward import run_walk_forward_analysis
+from app.utils.async_tasks import spawn_tracked_task
 from app.websocket_manager import MessageType
 from app.websocket_manager import manager as ws_manager
 
@@ -65,6 +69,47 @@ class OverfittingService:
         self.repo = SQLRepository(OverfittingResultModel)
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
+    @classmethod
+    async def reconcile_orphaned_tasks(cls) -> int:
+        return await cls._settle_active_tasks(
+            status="failed",
+            summary="过拟合检测服务已重启，任务已停止，请重试。",
+            error_message="Task interrupted because the overfitting service restarted",
+        )
+
+    @classmethod
+    async def interrupt_active_tasks(cls) -> int:
+        return await cls._settle_active_tasks(
+            status="cancelled",
+            summary="过拟合检测已取消。",
+            error_message="Task cancelled due to application shutdown (graceful stop)",
+        )
+
+    @classmethod
+    async def _settle_active_tasks(
+        cls,
+        *,
+        status: str,
+        summary: str,
+        error_message: str,
+    ) -> int:
+        async with async_session_maker() as session:
+            tasks = list(
+                (
+                    await session.scalars(
+                        select(OverfittingResultModel)
+                        .where(OverfittingResultModel.status.in_(("pending", "running")))
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            for task in tasks:
+                task.status = status
+                task.summary = summary
+                task.error_message = error_message
+            await session.commit()
+            return len(tasks)
+
     async def schedule_analysis(
         self,
         *,
@@ -90,7 +135,10 @@ class OverfittingService:
                 methods=[],
             )
         )
-        task = asyncio.create_task(self._run_task(task_id, backtest_result, request))
+        task = spawn_tracked_task(
+            self._run_task(task_id, backtest_result, request),
+            name=f"overfitting:{task_id}",
+        )
         self._tasks[task_id] = task
         task.add_done_callback(lambda _: self._tasks.pop(task_id, None))
         return OverfittingTaskSubmission(

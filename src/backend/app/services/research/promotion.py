@@ -53,6 +53,7 @@ from app.services.research.holdout_execution_contract import (
     HoldoutExecutionCommand,
     HoldoutExecutionResult,
 )
+from app.services.research.holdout_sufficiency import validate_holdout_sufficiency
 from app.services.research.promotion_authority_checks import (
     validate_command_promotion_base,
     validate_evaluator_receipt_chain,
@@ -501,6 +502,12 @@ class PromotionGateEngine:
         safe_metrics = terminal.get("safe_metrics")
         if not isinstance(safe_metrics, dict):
             raise ValueError("PROMOTION_EVALUATOR_RECEIPT_INVALID")
+        sufficiency_passed = validate_holdout_sufficiency(
+            terminal.get("sufficiency"),
+            candidate_hash=candidate.candidate_hash,
+            policy_version=policy.version,
+            artifact_hash=terminal["artifact_receipt"]["artifact_hash"],
+        )
         await _require_safe_receipt_record_authority(
             session,
             candidate=candidate,
@@ -515,6 +522,7 @@ class PromotionGateEngine:
             evaluation=evaluation,
             policy=policy,
             safe_metrics=safe_metrics,
+            sufficiency_passed=sufficiency_passed,
         )
         if outcomes != expected_outcomes:
             raise ValueError("PROMOTION_EVALUATOR_RECEIPT_INVALID")
@@ -935,6 +943,7 @@ async def _recomputed_safe_receipt_outcomes(
     evaluation: ResearchEvaluation,
     policy: PromotionPolicy,
     safe_metrics: Mapping[str, Any],
+    sufficiency_passed: bool,
 ) -> tuple[GateOutcome, ...]:
     """Cross-check every safe evaluator gate against the deployment policy catalog."""
 
@@ -951,7 +960,7 @@ async def _recomputed_safe_receipt_outcomes(
     gate_passes = {
         "CANDIDATE_FROZEN": True,
         "SEALED_HOLDOUT": True,
-        "EVIDENCE_BINDING": True,
+        "EVIDENCE_BINDING": sufficiency_passed,
         "DEFLATED_SHARPE": float(safe_metrics["deflated_sharpe_probability"])
         >= policy.min_deflated_sharpe,
         "MAX_DRAWDOWN": float(safe_metrics["max_drawdown"]) <= policy.max_drawdown,

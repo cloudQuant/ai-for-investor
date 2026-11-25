@@ -9,7 +9,13 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from app.api.deps import get_current_user
+from app.api.deps import (
+    RequireCreateStrategy,
+    RequireDeleteStrategy,
+    RequireUpdateStrategy,
+    get_current_user,
+)
+from app.api.strategy.ai_research_config_profiles import router as config_profiles_router
 from app.schemas.ai_strategy_research import (
     AIStrategyLiveHandoffApprovalRequest,
     AIStrategyLiveHandoffPackage,
@@ -18,12 +24,6 @@ from app.schemas.ai_strategy_research import (
     AIStrategyPaperTradingReview,
     AIStrategyPaperTradingStart,
     AIStrategyPaperTradingStartRequest,
-    AIStrategyResearchConfigProfile,
-    AIStrategyResearchConfigProfileCreate,
-    AIStrategyResearchConfigProfileImportRequest,
-    AIStrategyResearchConfigProfileImportResponse,
-    AIStrategyResearchConfigProfileListResponse,
-    AIStrategyResearchConfigProfileUpdate,
     AIStrategyResearchObjectiveOptimizeRequest,
     AIStrategyResearchObjectiveOptimizeResponse,
     AIStrategyResearchRunContinueRequest,
@@ -56,9 +56,6 @@ from app.schemas.strategy import (
 from app.services.ai_research_provenance import (
     verify_ai_research_run_record,
     verify_ai_research_task_snapshot,
-)
-from app.services.ai_strategy_research_config_profiles import (
-    AIStrategyResearchConfigProfileService,
 )
 from app.services.ai_strategy_research_objective_optimizer import (
     AIStrategyResearchObjectiveOptimizer,
@@ -440,11 +437,6 @@ def _raise_ai_research_request_error(error: Exception) -> None:
 
 
 @lru_cache
-def get_ai_strategy_research_config_profiles() -> typing.Any:
-    return AIStrategyResearchConfigProfileService()
-
-
-@lru_cache
 def get_investment_mandate_service() -> typing.Any:
     return InvestmentMandateService()
 
@@ -462,7 +454,7 @@ def get_ai_strategy_research_version_service() -> typing.Any:
 @router.post("/", response_model=StrategyResponse, summary="Create strategy")
 async def create_strategy(
     strategy: StrategyCreate,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireCreateStrategy,
     service: StrategyService = Depends(get_strategy_service),
 ) -> typing.Any:
     """Create a new strategy.
@@ -705,144 +697,7 @@ async def get_ai_research_mandate(
     return mandate
 
 
-@router.get(
-    "/ai-research/config-profiles",
-    response_model=AIStrategyResearchConfigProfileListResponse,
-    summary="List local AI strategy research configuration profiles",
-)
-async def list_ai_strategy_research_config_profiles(
-    current_user: typing.Any = Depends(get_current_user),
-    service: AIStrategyResearchConfigProfileService = Depends(
-        get_ai_strategy_research_config_profiles
-    ),
-) -> typing.Any:
-    """List reusable AI research form profiles from the local YAML file."""
-    del current_user
-    try:
-        return await service.list_profiles()
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
-@router.post(
-    "/ai-research/config-profiles",
-    response_model=AIStrategyResearchConfigProfile,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a local AI strategy research configuration profile",
-)
-async def create_ai_strategy_research_config_profile(
-    data: AIStrategyResearchConfigProfileCreate,
-    current_user: typing.Any = Depends(get_current_user),
-    service: AIStrategyResearchConfigProfileService = Depends(
-        get_ai_strategy_research_config_profiles
-    ),
-) -> typing.Any:
-    """Create a reusable AI research form profile in the local YAML file."""
-    del current_user
-    try:
-        return await service.create_profile(data)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
-@router.post(
-    "/ai-research/config-profiles/import",
-    response_model=AIStrategyResearchConfigProfileImportResponse,
-    summary="Import AI strategy research configuration profiles from YAML",
-)
-async def import_ai_strategy_research_config_profiles(
-    data: AIStrategyResearchConfigProfileImportRequest,
-    current_user: typing.Any = Depends(get_current_user),
-    service: AIStrategyResearchConfigProfileService = Depends(
-        get_ai_strategy_research_config_profiles
-    ),
-) -> typing.Any:
-    """Import selected YAML content into the local AI research profile file."""
-    del current_user
-    try:
-        return await service.import_profiles(
-            data.raw_yaml,
-            fallback_name=data.name,
-            fallback_profile_id=data.profile_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
-@router.get(
-    "/ai-research/config-profiles/{profile_id}",
-    response_model=AIStrategyResearchConfigProfile,
-    summary="Get a local AI strategy research configuration profile",
-)
-async def get_ai_strategy_research_config_profile(
-    profile_id: str,
-    current_user: typing.Any = Depends(get_current_user),
-    service: AIStrategyResearchConfigProfileService = Depends(
-        get_ai_strategy_research_config_profiles
-    ),
-) -> typing.Any:
-    """Return one reusable AI research form profile."""
-    del current_user
-    try:
-        profile = await service.get_profile(profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if profile is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="AI research config profile not found"
-        )
-    return profile
-
-
-@router.put(
-    "/ai-research/config-profiles/{profile_id}",
-    response_model=AIStrategyResearchConfigProfile,
-    summary="Update a local AI strategy research configuration profile",
-)
-async def update_ai_strategy_research_config_profile(
-    profile_id: str,
-    data: AIStrategyResearchConfigProfileUpdate,
-    current_user: typing.Any = Depends(get_current_user),
-    service: AIStrategyResearchConfigProfileService = Depends(
-        get_ai_strategy_research_config_profiles
-    ),
-) -> typing.Any:
-    """Update a reusable AI research form profile in the local YAML file."""
-    del current_user
-    try:
-        profile = await service.update_profile(profile_id, data)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if profile is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="AI research config profile not found"
-        )
-    return profile
-
-
-@router.delete(
-    "/ai-research/config-profiles/{profile_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a local AI strategy research configuration profile",
-    response_model=None,
-)
-async def delete_ai_strategy_research_config_profile(
-    profile_id: str,
-    current_user: typing.Any = Depends(get_current_user),
-    service: AIStrategyResearchConfigProfileService = Depends(
-        get_ai_strategy_research_config_profiles
-    ),
-) -> typing.Any:
-    """Delete a reusable AI research form profile from the local YAML file."""
-    del current_user
-    try:
-        deleted = await service.delete_profile(profile_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="AI research config profile not found"
-        )
+router.include_router(config_profiles_router)
 
 
 @router.post(
@@ -1460,7 +1315,7 @@ async def get_strategy(
 async def update_strategy(
     strategy_id: str,
     strategy_update: StrategyUpdate,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireUpdateStrategy,
     service: StrategyService = Depends(get_strategy_service),
 ) -> typing.Any:
     """Update a strategy.
@@ -1505,7 +1360,7 @@ async def update_strategy(
 @router.delete("/{strategy_id}", summary="Delete strategy", response_model=None)
 async def delete_strategy(
     strategy_id: str,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = RequireDeleteStrategy,
     service: StrategyService = Depends(get_strategy_service),
 ) -> typing.Any:
     """Delete a strategy.

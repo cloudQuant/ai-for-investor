@@ -321,7 +321,9 @@ describe('QuotePage', () => {
 
     await vm.handleRowClick(store.filteredTicks[0])
     await flushPromises()
-    expect(quoteApiMocks.getChartData).toHaveBeenCalledWith('eastmoney', 'RB2405', 'M5')
+    expect(quoteApiMocks.getChartData).toHaveBeenCalledWith(
+      'eastmoney', 'RB2405', 'M5', 200, expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
 
     echartsInitMock.mockClear()
     chartMocks.setOption.mockClear()
