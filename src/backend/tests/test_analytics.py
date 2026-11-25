@@ -1132,3 +1132,138 @@ class TestAnalyticsMonthlyReturnsWithData:
             # Should handle invalid date gracefully
             assert result is not None
             assert "monthly_returns" in result
+
+
+@pytest.mark.asyncio
+class TestAnalyticsUntruncatedMetricsAndAlignedDownsampling:
+    """OCR-16 regressions: full-series metrics, aligned K-line/indicators, full export."""
+
+    async def test_detail_metrics_and_export_use_untruncated_series(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+    ):
+        import csv
+        import io
+        import json as _json
+
+        from app.api import analytics as analytics_api
+
+        monkeypatch.setattr(analytics_api, "_MAX_SERIES_POINTS", 4)
+        monkeypatch.setattr(analytics_api, "_MAX_TRADE_ROWS", 3)
+
+        mock_result = Mock()
+        mock_result.strategy_id = "test_strategy"
+        mock_result.symbol = "000001.SZ"
+        mock_result.start_date = "2024-01-01"
+        mock_result.end_date = "2024-01-10"
+        mock_result.created_at = "2024-01-10"
+        mock_result.equity_dates = [f"2024-01-0{i}" for i in range(1, 9)]
+        mock_result.equity_curve = [100000 + i * 1000 for i in range(8)]
+        mock_result.drawdown_curve = [0.0] * 8
+        mock_result.trades = [
+            {
+                "datetime": f"2024-01-0{i} 10:00:00",
+                "symbol": "000001.SZ",
+                "direction": "buy",
+                "price": 10.0,
+                "size": 100,
+                "value": 1000.0,
+                "commission": 1.0,
+                "pnl": 500.0 if i % 2 == 0 else -200.0,
+                "pnlcomm": 500.0 if i % 2 == 0 else -200.0,
+                "barlen": 1,
+            }
+            for i in range(1, 7)
+        ]
+
+        from app.services.backtest_service import BacktestService
+
+        with patch.object(BacktestService, "get_result", AsyncMock(return_value=mock_result)):
+            with patch("app.api.analytics._resolve_log_dir", AsyncMock(return_value=None)):
+                detail_resp = await client.get(
+                    "/api/v1/analytics/task-123/detail", headers=auth_headers
+                )
+                assert detail_resp.status_code == 200
+                detail = detail_resp.json()
+                assert detail["metrics"]["trade_count"] == 6
+                assert detail["metrics"]["avg_win"] == 500.0
+                assert detail["metrics"]["avg_loss"] == 200.0
+                assert detail["metrics"]["final_assets"] == 107000.0
+                assert len(detail["equity_curve"]) == 4
+                assert len(detail["trades"]) == 3
+
+                csv_resp = await client.get(
+                    "/api/v1/analytics/task-123/export?format=csv", headers=auth_headers
+                )
+                assert csv_resp.status_code == 200
+                rows = list(csv.DictReader(io.StringIO(csv_resp.text)))
+                assert len(rows) == 6
+
+                json_resp = await client.get(
+                    "/api/v1/analytics/task-123/export?format=json", headers=auth_headers
+                )
+                assert json_resp.status_code == 200
+                exported = _json.loads(json_resp.text)
+                assert len(exported["equity_curve"]) == 8
+                assert len(exported["trades"]) == 6
+
+    async def test_kline_filters_dates_before_downsampling_and_aligns_indicators(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+    ):
+        from app.api import analytics as analytics_api
+
+        monkeypatch.setattr(analytics_api, "_MAX_SERIES_POINTS", 3)
+
+        raw_payload = {
+            "task_id": "task-123",
+            "strategy_name": "s",
+            "symbol": "000001.SZ",
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-10",
+            "equity_curve": [],
+            "drawdown_curve": [],
+            "trades": [],
+            "signals": [
+                {"date": "2024-01-02", "type": "buy", "price": 10.0, "size": 100},
+                {"date": "2024-01-05", "type": "sell", "price": 14.0, "size": 100},
+            ],
+            "klines": [
+                {
+                    "date": f"2024-01-{i:02d}",
+                    "open": float(i),
+                    "high": float(i),
+                    "low": float(i),
+                    "close": float(i * 10),
+                    "volume": i,
+                }
+                for i in range(1, 11)
+            ],
+            "log_indicators": {"custom": [float(i * 100) for i in range(1, 11)]},
+            "monthly_returns": {},
+            "created_at": "2024-01-10",
+        }
+
+        with patch("app.api.analytics.get_backtest_data", AsyncMock(return_value=raw_payload)):
+            # Window of 3 dates fits under limit=3 without being dropped by pre-downsampling
+            resp_window = await client.get(
+                "/api/v1/analytics/task-123/kline?start_date=2024-01-04&end_date=2024-01-06",
+                headers=auth_headers,
+            )
+            assert resp_window.status_code == 200
+            data_win = resp_window.json()
+            assert [k["date"] for k in data_win["klines"]] == [
+                "2024-01-04",
+                "2024-01-05",
+                "2024-01-06",
+            ]
+            assert data_win["indicators"]["custom"] == [400.0, 500.0, 600.0]
+
+            # Larger window downsampled to 3 keeps kline & indicator lengths/values aligned
+            resp_down = await client.get("/api/v1/analytics/task-123/kline", headers=auth_headers)
+            assert resp_down.status_code == 200
+            data_down = resp_down.json()
+            assert len(data_down["klines"]) == 3
+            assert len(data_down["indicators"]["custom"]) == 3
+            for kline, ind_val in zip(
+                data_down["klines"], data_down["indicators"]["custom"], strict=True
+            ):
+                assert ind_val == kline["close"] * 10

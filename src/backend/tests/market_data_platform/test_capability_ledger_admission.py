@@ -746,3 +746,79 @@ async def _seed_verified_receipt() -> str:
         )
         await session.commit()
         return str(snapshot.id)
+
+
+@pytest.mark.asyncio
+async def test_admission_writer_does_not_commit_caller_session_and_attested_supersedes() -> None:
+    """Admission writes use an isolated transaction and operator-attested rows supersede them."""
+    policy = _policy()
+    route = policy.routes[0]
+    registry = MarketDataSourcePolicyRegistry((policy,))
+
+    async with async_session_maker() as caller_session:
+        evaluation = await MarketDataCapabilityLedger(caller_session, clock=lambda: NOW).evaluate(
+            settings=_settings(),
+            source_policies=registry,
+        )
+        caller_commits = 0
+        original_commit = caller_session.commit
+
+        async def _tracking_commit() -> None:
+            nonlocal caller_commits
+            caller_commits += 1
+            await original_commit()
+
+        caller_session.commit = _tracking_commit  # type: ignore[method-assign]
+        try:
+            result = await record_admission_observations(
+                caller_session, evaluation, clock=lambda: NOW
+            )
+        finally:
+            caller_session.commit = original_commit  # type: ignore[method-assign]
+
+        assert caller_commits == 0
+        assert result is not None and result.recorded_count >= 1
+
+    # Add overlapping operator-attested rows for query_v2 and the route capability and verify they
+    # supersede the unattested admission-observation rows without raising CAPABILITY_LEDGER_AMBIGUOUS.
+    route_cap_id = route_capability_id(route.route_id)
+    attested_targets = (
+        (
+            MARKET_DATA_QUERY_V2_CAPABILITY,
+            rollout_capability_descriptor_sha256(MARKET_DATA_QUERY_V2_CAPABILITY),
+        ),
+        (
+            route_cap_id,
+            route_capability_descriptor_sha256(route),
+        ),
+    )
+    async with async_session_maker() as seed_session:
+        for cap_id, descriptor_sha in attested_targets:
+            seed_session.add(
+                MdCapabilityLedgerEntry(
+                    capability_id=cap_id,
+                    revision=99,
+                    descriptor_sha256=descriptor_sha,
+                    evidence_sha256=_sha("operator-attested", cap_id),
+                    declared_capability=True,
+                    installed_capability=True,
+                    verified_capability=True,
+                    verified_at=NOW - timedelta(minutes=10),
+                    verified_until=NOW + timedelta(hours=1),
+                    authorized_capability=True,
+                    authorized_at=NOW - timedelta(minutes=10),
+                    authorized_until=NOW + timedelta(hours=1),
+                    effective_from=NOW - timedelta(minutes=10),
+                    effective_until=NOW + timedelta(hours=1),
+                )
+            )
+        await seed_session.commit()
+
+    async with async_session_maker() as verify_session:
+        evaluated = await MarketDataCapabilityLedger(
+            verify_session, clock=lambda: NOW + timedelta(minutes=1)
+        ).evaluate(
+            settings=_settings(),
+            source_policies=registry,
+        )
+    assert evaluated.route_is_effective(route.route_id) is True

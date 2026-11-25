@@ -204,9 +204,34 @@ def _emit_summary(warnings: list[Warning]) -> None:
             )
 
 
+BLOCKING_CODES = frozenset(
+    {"parse-error", "add-column-not-null-no-default", "drop-column", "drop-table"}
+)
+ACK_PATTERN = re.compile(r"#\s*alembic-safety-ack:\s*([a-z0-9,\s-]+)", re.IGNORECASE)
+
+
+def _acknowledged_codes(path: Path, line_no: int) -> set[str]:
+    """Read inline or header `# alembic-safety-ack: <code>` annotations."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    scoped_lines = list(lines[:20])
+    for idx in range(max(0, line_no - 3), min(len(lines), line_no + 1)):
+        scoped_lines.append(lines[idx])
+    acked: set[str] = set()
+    for text in scoped_lines:
+        if match := ACK_PATTERN.search(text):
+            acked.update(code.strip().lower() for code in match.group(1).split(",") if code.strip())
+    return acked
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--base-ref", default=os.environ.get("BASE_REF", "origin/master"))
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        default=os.environ.get("MIGRATION_SAFETY_STRICT") == "1",
+        help="fail with exit 1 on unacknowledged high-risk operations",
+    )
     args = p.parse_args()
 
     files = _changed_migration_files(args.base_ref)
@@ -216,17 +241,27 @@ def main() -> int:
             warnings.append(m)
         warnings.extend(_check_calls(path))
 
+    blocking_failures: list[Warning] = []
     for w in warnings:
         print(
             f"::warning file={w.file.relative_to(REPO_ROOT)},line={w.line}::"
             f"[{w.code}] {w.message} | suggestion: {w.suggestion}"
         )
+        if w.code == "parse-error":
+            blocking_failures.append(w)
+        elif args.strict and w.code in BLOCKING_CODES:
+            if w.code not in _acknowledged_codes(w.file, w.line):
+                blocking_failures.append(w)
     _emit_summary(warnings)
+    if blocking_failures:
+        print(
+            f"ERROR: {len(blocking_failures)} unacknowledged high-risk migration operation(s) blocked"
+        )
+        return 1
     if not warnings:
         print("OK: no risky migration operations detected on this PR")
     else:
         print(f"WARN: {len(warnings)} risky operation(s) flagged (advisory)")
-    # Always exit 0 — this is an advisory warning channel.
     return 0
 
 

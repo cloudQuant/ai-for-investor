@@ -9,6 +9,7 @@ import typing
 
 from fastapi import APIRouter, Depends
 
+from app.api.data.deps import require_data_admin_user
 from app.api.deps import get_current_user
 from app.services.auto_trading_scheduler import AutoTradingScheduler, get_auto_trading_scheduler
 
@@ -36,7 +37,7 @@ async def get_config(
 @router.put("/config", summary="Update auto-trading configuration", response_model=None)
 async def update_config(
     body: dict,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: typing.Any = Depends(require_data_admin_user),
     sched: AutoTradingScheduler = Depends(_get_scheduler),
 ) -> typing.Any:
     """Update auto-trading configuration.

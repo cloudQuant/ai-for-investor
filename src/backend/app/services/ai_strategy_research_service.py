@@ -5,6 +5,7 @@ from __future__ import annotations
 # Backwards-compatible research service facade; workflow helpers come from ``research``.
 # mypy: disable-error-code=name-defined
 # ruff: noqa: F403, F405
+import inspect
 import re
 import uuid
 
@@ -20,6 +21,21 @@ from app.services.ai_research_provenance import (
     verify_ai_research_live_handoff_unit_anchor,
     verify_ai_research_paper_runtime_metrics_observation,
     verify_ai_research_run_record,
+)
+from app.services.ai_strategy_research_local_improver import (
+    apply_continuation_improvement,
+    build_configuration_invalid_result,
+    improve_after_failed_iteration,
+    prepare_run_initial_draft,
+    run_local_strategy_improvement,
+)
+from app.services.ai_strategy_research_pipeline_helpers import (
+    assemble_iteration_record,
+    finalize_research_run,
+    run_iteration_oos_validation,
+    run_iteration_robustness_validation,
+    run_paper_trading_stage,
+    submit_iteration_backtest,
 )
 from app.services.live_trading.metadata import (
     SERVER_RUNTIME_LAUNCH_ID_FIELD,
@@ -346,171 +362,14 @@ class LocalStrategyImprover:
         user_id: str | None = None,
         request: AIStrategyResearchRunRequest | None = None,
     ) -> StrategyImprovement:
-        improved = draft.model_copy(deep=True)
-        notes: list[str] = []
-        failures = [str(item) for item in quality_gate_failures or []]
-        research_feedback = _dict_payload(metrics.get("research_feedback"))
-        failure_categories = {
-            str(item)
-            for item in [
-                *_string_list(metrics.get("failure_categories")),
-                *_string_list(research_feedback.get("failure_categories")),
-            ]
-            if str(item).strip()
-        }
-        sharpe = _metric_float(metrics, "sharpe_ratio", "sharpe", "sharpeRatio")
-        max_drawdown = _metric_float(metrics, "max_drawdown", "maxDrawdown", default=0.0)
-        total_trades = _metric_int(metrics, "total_trades", "totalTrades", "trades")
-        drawdown_failed = "drawdown" in failure_categories or any(
-            "drawdown" in item.lower() or "回撤" in item for item in failures
-        )
-        out_of_sample_failed = "out_of_sample" in failure_categories
-        robustness_failed = "robustness" in failure_categories
-        execution_cost_failed = "execution_cost" in failure_categories
-        valuation_context_failed = "valuation_context" in failure_categories
-        live_handoff_rejected = "live_handoff_rejected" in failure_categories
-        iteration_progress = _dict_payload(metrics.get("iteration_progress"))
-        progress_status = str(iteration_progress.get("status") or "").strip().lower()
-        regressed = progress_status == "regressed"
-        stalled = progress_status == "stalled"
-        suffix = f" v{iteration + 1}"
-        base_name = re.sub(r"\s+v\d+$", "", improved.name).strip()
-        improved.name = f"{base_name}{suffix}"[:100]
-        improved.description = (
-            f"{improved.description or ''}\n"
-            f"AI research revision {iteration + 1}: previous Sharpe {sharpe:.3f}, "
-            f"target {target_sharpe:.3f}."
-        ).strip()
-        trade_count_failed = (
-            (request is not None and total_trades < max(int(request.min_total_trades), 1))
-            or "trade_count" in failure_categories
-            or any("trade" in item.lower() or "交易" in item for item in failures)
-        )
-        if trade_count_failed and request is not None:
-            rebuilt = build_ai_strategy_draft(request.prompt)
-            improved = _normalize_research_draft(rebuilt, request)
-            improved.name = f"{base_name}{suffix}"[:100]
-            improved.description = (
-                f"{improved.description or ''}\n"
-                f"AI research revision {iteration + 1}: rebuilt after trade-count failure; "
-                f"previous closed trades {total_trades}, target {request.min_total_trades}."
-            ).strip()
-            notes.append(
-                "上一轮缺少闭合交易，本轮重建为带止损、止盈和最长持仓退出的基础模板，"
-                "优先生成可计数的完成交易。"
-            )
-
-        params = improved.params
-        if regressed:
-            notes.append("上一轮自动改稿相对前一轮退化，本轮切换为保守修复。")
-        elif stalled:
-            notes.append("上一轮自动改稿基本停滞，本轮将扩大信号和风控结构调整幅度。")
-        if out_of_sample_failed:
-            notes.append("样本外验证未通过，本轮降低参数敏感度并优先保留稳健信号。")
-        if robustness_failed:
-            notes.append("稳健性验证未通过，本轮降低过拟合和参数敏感性风险。")
-        if execution_cost_failed:
-            notes.append("执行成本或滑点压力偏高，本轮降低换手和无效交易。")
-        if valuation_context_failed:
-            notes.append("资产规格或估值上下文存在风险，本轮保留交易约束并避免扩大杠杆暴露。")
-        if live_handoff_rejected:
-            notes.append("实盘交接人工审批未通过，本轮按审批意见降低上线风险并重新验证。")
-
-        if "risk_pct" in params:
-            current = _param_float(params["risk_pct"], 0.01)
-            risk_scale = (
-                0.65
-                if regressed
-                else 0.7
-                if live_handoff_rejected
-                else 0.75
-                if out_of_sample_failed
-                else 0.8
-            )
-            next_value = max(round(current * risk_scale, 5), 0.001)
-            _set_param_default(params, "risk_pct", next_value)
-            notes.append(f"将单笔风险从 {current:g} 下调到 {next_value:g}")
-
-        if "stop_loss_pct" in params and (max_drawdown < -10 or drawdown_failed):
-            current = _param_float(params["stop_loss_pct"], 0.05)
-            stop_scale = 0.7 if regressed else 0.8
-            next_value = max(round(current * stop_scale, 4), 0.01)
-            _set_param_default(params, "stop_loss_pct", next_value)
-            notes.append(f"最大回撤偏大，止损比例从 {current:g} 收紧到 {next_value:g}")
-
-        if "take_profit_pct" in params and sharpe < target_sharpe:
-            current = _param_float(params["take_profit_pct"], 0.1)
-            take_profit_scale = 1.03 if regressed else 1.15 if stalled else 1.1
-            next_value = round(current * take_profit_scale, 4)
-            _set_param_default(params, "take_profit_pct", next_value)
-            notes.append(f"盈亏比不足，止盈比例从 {current:g} 提高到 {next_value:g}")
-
-        if "atr_stop_multiplier" in params:
-            current = _param_float(params["atr_stop_multiplier"], 2.0)
-            atr_scale = 0.8 if regressed else 0.85 if stalled else 0.9
-            next_value = round(max(current * atr_scale, 1.0), 3)
-            _set_param_default(params, "atr_stop_multiplier", next_value)
-            notes.append(f"ATR 止损倍数从 {current:g} 调整到 {next_value:g}")
-
-        if "fast_period" in params and "slow_period" in params:
-            fast = _param_int(params["fast_period"], 10)
-            slow = _param_int(params["slow_period"], 30)
-            if execution_cost_failed:
-                next_fast = fast + 1
-                next_slow = max(slow + 3, next_fast + 2)
-            elif total_trades < 3:
-                next_fast = max(fast - (2 if stalled else 1), 2)
-                next_slow = max(slow + (4 if stalled else 2), next_fast + 2)
-            elif regressed:
-                next_fast = fast
-                next_slow = max(slow + 1, next_fast + 2)
-            elif stalled:
-                next_fast = max(fast - 1, 2)
-                next_slow = max(slow + 3, next_fast + 2)
-            else:
-                next_fast = fast
-                next_slow = max(slow + 2, next_fast + 2)
-            if next_fast != fast or next_slow != slow:
-                _set_param_default(params, "fast_period", next_fast)
-                _set_param_default(params, "slow_period", next_slow)
-                notes.append(f"调整均线窗口为 fast={next_fast}, slow={next_slow}")
-
-        if "rsi_period" in params and sharpe < target_sharpe:
-            current = _param_int(params["rsi_period"], 14)
-            if total_trades < 3:
-                next_value = max(current - (2 if stalled else 1), 5)
-            else:
-                next_value = current + (2 if regressed or stalled else 1)
-            _set_param_default(params, "rsi_period", next_value)
-            notes.append(f"RSI 周期从 {current} 调整到 {next_value}")
-
-        if failures:
-            notes.append("本轮未通过验收门槛：" + "；".join(failures))
-
-        if not notes:
-            notes.append("上一轮指标未达标，保留策略结构并创建新版本继续验证")
-
-        improved.code = _rewrite_code_param_defaults(improved.code, improved.params)
-        improved.risk_points = list(
-            dict.fromkeys(
-                [
-                    *improved.risk_points,
-                    "该版本由自动投研循环基于上一轮回测指标生成，需要继续做样本外验证。",
-                ]
-            )
-        )
-        improved.next_steps = [
-            "继续回测新版本并比较 Sharpe、回撤和交易次数",
-            "达标后进入 paper 模拟交易并观察实盘风控指标",
-        ]
-        return StrategyImprovement(
-            draft=improved,
-            notes=notes,
-            metadata={
-                "source": "local_rules",
-                "provider": "local",
-                "model_id": None,
-            },
+        """Return a rule-based draft improvement tailored to iteration failure signals."""
+        return run_local_strategy_improvement(
+            draft,
+            iteration=iteration,
+            metrics=metrics,
+            target_sharpe=target_sharpe,
+            quality_gate_failures=quality_gate_failures,
+            request=request,
         )
 
 
@@ -814,271 +673,54 @@ class AIStrategyResearchService:
         )
         configuration_failure = _required_research_configuration_failure(request)
         if configuration_failure:
-            await self._record_pipeline_event(
+            return await build_configuration_invalid_result(
+                self,
                 user_id=user_id,
                 run_id=run_id,
                 request=request,
-                workspace_id=research_workspace.id,
-                stage="configuration_invalid",
-                status="failed",
-                summary="AI投研配置校验未通过。",
-                error=configuration_failure,
-            )
-            await _emit_research_progress(
-                progress_callback,
-                {
-                    "run_id": run_id,
-                    "research_workspace_id": research_workspace.id,
-                    "current_stage": "configuration_invalid",
-                    "progress": 100.0,
-                    "iteration_count": 0,
-                    "max_iterations": request.max_iterations,
-                    "message": configuration_failure,
-                },
-            )
-            completed_at = _utc_iso_now()
-            pipeline = _pipeline_summary(
-                status="configuration_invalid",
-                achieved=False,
-                iteration_count=0,
-                max_iterations=request.max_iterations,
-                out_of_sample_validation=request.out_of_sample_validation,
-                validation_status=None,
-                robustness_validation=request.robustness_validation,
-                robustness_status=None,
-                paper_trading_started=False,
-                paper_trading_error=None,
-                paper_review_status=None,
-                paper_review_ready_for_live=False,
-                workflow_mode=request.workflow_mode,
-                workflow_steps=request.workflow_steps,
-            )
-            response = AIStrategyResearchRunResponse(
-                run_id=run_id,
-                status="configuration_invalid",
-                achieved=False,
-                target_sharpe=request.target_sharpe,
-                started_at=started_at,
-                completed_at=completed_at,
-                best_iteration=None,
-                best_quality_score=0.0,
-                best_quality_gate_evaluations=[],
-                best_diagnostics=_configuration_failure_diagnostics(configuration_failure),
-                best_metrics={},
                 research_workspace=research_workspace,
-                mandate_id=request.mandate_id,
-                iterations=[],
-                best_strategy=None,
-                paper_trading=None,
-                paper_monitoring_plan=[],
-                pipeline=pipeline,
-                promotion_audit=[],
-                next_actions=_run_next_actions(
-                    status="configuration_invalid",
-                    achieved=False,
-                    request=request,
-                    result_iteration=None,
-                    paper_trading=None,
-                    run_failures=[configuration_failure],
-                ),
-                message=configuration_failure,
-            )
-            run_record = _build_research_run_record(
-                run_id=run_id,
-                request=request,
-                response=response,
                 started_at=started_at,
-                completed_at=completed_at,
+                configuration_failure=configuration_failure,
+                progress_callback=progress_callback,
             )
-            run_record = sign_ai_research_run_record(
-                run_record,
-                user_id=user_id,
-                workspace_id=str(research_workspace.id),
-            )
-            response = response.model_copy(update={"promotion_audit": run_record.promotion_audit})
-            research_workspace = await self._persist_research_run_record(
-                user_id,
-                research_workspace,
-                run_record,
-            )
-            return response.model_copy(
-                update={
-                    "research_workspace": research_workspace,
-                    "run_record": run_record,
-                }
-            )
-        initial_draft_notes: list[str] = []
+
         iterations: list[AIStrategyResearchIteration] = []
         best_iteration: AIStrategyResearchIteration | None = None
         selected_iteration: AIStrategyResearchIteration | None = None
         run_failures: list[str] = []
-        if draft is None:
-            await self._record_pipeline_event(
-                user_id=user_id,
-                run_id=run_id,
-                request=request,
-                workspace_id=research_workspace.id,
-                stage="drafting",
-                status="started",
-                summary="开始生成首轮策略草案。",
-            )
-            await _emit_research_progress(
-                progress_callback,
-                {
-                    "current_stage": "drafting",
-                    "progress": 5.0,
-                    "iteration_count": 0,
-                    "max_iterations": request.max_iterations,
-                    "message": "Generating initial strategy draft",
-                },
-            )
-            try:
-                draft_response = await self.strategy_service.generate_copilot_draft(
-                    user_id,
-                    StrategyCopilotDraftRequest(
-                        prompt=_build_research_draft_prompt(request),
-                        knowledge_base_id=request.knowledge_base_id,
-                        thinking_mode=request.thinking_mode,
-                    ),
-                )
-                initial_draft_metadata = _initial_generation_metadata_from_response(
-                    draft_response,
-                    source="ai_initial_draft",
-                    request=request,
-                )
-                draft = _normalize_research_draft(draft_response.strategy_draft, request)
-                draft, initial_draft_notes = _ensure_runnable_initial_draft(draft, request)
-            except asyncio.CancelledError:
-                fallback_draft = _normalize_research_draft(
-                    build_ai_strategy_draft(request.prompt),
-                    request,
-                )
-                await self._persist_cancelled_research_run(
-                    user_id=user_id,
-                    request=request,
-                    research_workspace=research_workspace,
-                    run_id=run_id,
-                    started_at=started_at,
-                    iterations=iterations,
-                    best_iteration=best_iteration,
-                    selected_iteration=selected_iteration,
-                    run_failures=[
-                        *run_failures,
-                        "AI research cancelled while generating initial strategy draft",
-                    ],
-                    draft=fallback_draft,
-                )
-                raise
-            except Exception as exc:
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="drafting",
-                    status="failed",
-                    summary="AI首轮策略草案生成失败，准备使用本地可运行草案继续。",
-                    error=str(exc),
-                )
-                await _emit_research_progress(
-                    progress_callback,
-                    {
-                        "current_stage": "draft_generation_failed",
-                        "progress": 6.0,
-                        "iteration_count": 0,
-                        "max_iterations": request.max_iterations,
-                        "message": f"Initial strategy draft generation failed: {exc}",
-                    },
-                )
-                draft = _normalize_research_draft(build_ai_strategy_draft(request.prompt), request)
-                _validate_strategy_code_draft(draft.code)
-                initial_draft_metadata = {
-                    "source": "local_initial_fallback",
-                    "provider": "local",
-                    "fallback_reason": str(exc),
-                }
-                initial_draft_notes = [
-                    f"AI初始策略生成失败，已使用本地可运行草案继续投研：{exc}",
-                ]
-        else:
-            draft, initial_draft_notes = _ensure_runnable_seed_draft(draft, request)
-            initial_draft_metadata = _seed_generation_metadata(request)
-
-        await self._record_pipeline_event(
+        (
+            draft,
+            pending_improvement_notes,
+            pending_generation_metadata,
+        ) = await prepare_run_initial_draft(
+            self,
             user_id=user_id,
             run_id=run_id,
             request=request,
-            workspace_id=research_workspace.id,
-            stage="drafting",
-            status="completed",
-            summary="首轮策略草案已准备完成。",
-            output_payload={
-                "strategy_name": draft.name,
-                "metadata": initial_draft_metadata,
-                "notes": initial_draft_notes,
-            },
+            research_workspace=research_workspace,
+            started_at=started_at,
+            draft=draft,
+            progress_callback=progress_callback,
         )
-
-        pending_improvement_notes: list[str] = initial_draft_notes
-        pending_generation_metadata: dict[str, Any] = dict(initial_draft_metadata)
-        continuation_failures = _continuation_quality_gate_failures(request.continuation_context)
         validation_window = _out_of_sample_window(request)
-        if continuation_failures:
-            try:
-                improvement = await self._improve_draft(
-                    draft,
-                    iteration=0,
-                    metrics=_continuation_improvement_metrics(
-                        request.continuation_context,
-                        request,
-                    ),
-                    target_sharpe=request.target_sharpe,
-                    quality_gate_failures=continuation_failures,
-                    user_id=user_id,
-                    request=request,
-                )
-            except asyncio.CancelledError:
-                await self._persist_cancelled_research_run(
-                    user_id=user_id,
-                    request=request,
-                    research_workspace=research_workspace,
-                    run_id=run_id,
-                    started_at=started_at,
-                    iterations=iterations,
-                    best_iteration=best_iteration,
-                    selected_iteration=selected_iteration,
-                    run_failures=[
-                        *run_failures,
-                        "AI research cancelled while preparing continuation draft",
-                    ],
-                    draft=draft,
-                )
-                raise
-            draft = _normalize_research_draft(improvement.draft, request)
-            continuation_source = str(request.continuation_context.get("source") or "")
-            if continuation_source == "paper_trading_failed":
-                continuation_note = "基于上一轮模拟交易启动失败原因生成 continuation 改进版。"
-            elif continuation_source == "research_cancelled":
-                continuation_note = "基于上一轮取消前已完成迭代的失败指标生成 continuation 改进版。"
-            elif continuation_source == "research_failure":
-                continuation_note = "基于上一轮投研未达标原因生成 continuation 改进版。"
-            elif continuation_source == "live_handoff_rejected":
-                continuation_note = "基于上一轮实盘交接驳回意见生成 continuation 改进版。"
-            else:
-                continuation_note = "基于上一轮模拟交易复核结果生成 continuation 改进版。"
-            pending_improvement_notes = [
-                continuation_note,
-                *improvement.notes,
-            ]
-            pending_generation_metadata = _strategy_generation_metadata(
-                improvement.metadata,
-                phase="continuation_improvement",
-                iteration=1,
-            )
+        (
+            draft,
+            pending_improvement_notes,
+            pending_generation_metadata,
+        ) = await apply_continuation_improvement(
+            self,
+            user_id=user_id,
+            run_id=run_id,
+            request=request,
+            research_workspace=research_workspace,
+            started_at=started_at,
+            draft=draft,
+            pending_improvement_notes=pending_improvement_notes,
+            pending_generation_metadata=pending_generation_metadata,
+        )
         achieved = False
 
         for iteration in range(1, request.max_iterations + 1):
-            failure_reason: str | None = None
             await self._record_pipeline_event(
                 user_id=user_id,
                 run_id=run_id,
@@ -1132,6 +774,7 @@ class AIStrategyResearchService:
                     draft=draft,
                 )
                 raise
+
             backtest_request = self._build_backtest_request(
                 draft,
                 request,
@@ -1140,140 +783,35 @@ class AIStrategyResearchService:
                 end_date=validation_window.train_end if validation_window else None,
                 group_name_suffix=" 训练样本" if validation_window else "",
             )
-            try:
-                backtest_response = await self.strategy_service.backtest_copilot_draft(
-                    user_id,
-                    research_workspace.id,
-                    backtest_request,
-                )
-                if backtest_response is None:
-                    raise ValueError("Research workspace or generated strategy was not found")
-            except asyncio.CancelledError:
-                await self._persist_cancelled_research_run(
-                    user_id=user_id,
-                    request=request,
-                    research_workspace=research_workspace,
-                    run_id=run_id,
-                    started_at=started_at,
-                    iterations=iterations,
-                    best_iteration=best_iteration,
-                    selected_iteration=selected_iteration,
-                    run_failures=[
-                        *run_failures,
-                        f"AI research cancelled while submitting backtest iteration {iteration}",
-                    ],
-                    draft=draft,
-                )
-                raise
-            except Exception as exc:
-                failure_reason = f"Backtest submission failed before iteration {iteration}: {exc}"
-                run_failures.append(failure_reason)
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="backtest_submission_failed",
-                    status="failed",
-                    iteration=iteration,
-                    summary="回测任务提交失败。",
-                    metrics={
-                        "backtest_submission_failed": True,
-                        "failure_count": len(run_failures),
-                    },
-                    error=failure_reason,
-                )
-                await _emit_research_progress(
-                    progress_callback,
-                    {
-                        "current_stage": "backtest_submission_failed",
-                        "progress": _research_loop_progress(iteration - 1, request.max_iterations),
-                        "current_iteration": iteration,
-                        "iteration_count": len(iterations),
-                        "max_iterations": request.max_iterations,
-                        "current_backtest_task_id": None,
-                        "message": failure_reason,
-                    },
-                )
-                if iteration < request.max_iterations:
-                    await self._record_pipeline_event(
-                        user_id=user_id,
-                        run_id=run_id,
-                        request=request,
-                        workspace_id=research_workspace.id,
-                        stage="optimization_loop",
-                        status="started",
-                        iteration=iteration + 1,
-                        summary=f"根据第 {iteration} 轮提交失败原因准备下一版策略。",
-                        input_payload={"failure_reason": failure_reason},
-                    )
-                    await _emit_research_progress(
-                        progress_callback,
-                        {
-                            "current_stage": "improving",
-                            "progress": min(
-                                _research_loop_progress(iteration, request.max_iterations) + 2.0,
-                                82.0,
-                            ),
-                            "current_iteration": iteration + 1,
-                            "iteration_count": len(iterations),
-                            "max_iterations": request.max_iterations,
-                            "message": f"Improving strategy for iteration {iteration + 1}",
-                        },
-                    )
-                    try:
-                        improvement = await self._improve_draft(
-                            draft,
-                            iteration=iteration,
-                            metrics={
-                                "backtest_submission_failed": True,
-                                "backtest_submission_failure_count": len(run_failures),
-                            },
-                            target_sharpe=request.target_sharpe,
-                            quality_gate_failures=[failure_reason],
-                            user_id=user_id,
-                            request=request,
-                        )
-                    except asyncio.CancelledError:
-                        await self._persist_cancelled_research_run(
-                            user_id=user_id,
-                            request=request,
-                            research_workspace=research_workspace,
-                            run_id=run_id,
-                            started_at=started_at,
-                            iterations=iterations,
-                            best_iteration=best_iteration,
-                            selected_iteration=selected_iteration,
-                            run_failures=run_failures,
-                            draft=draft,
-                        )
-                        raise
-                    draft = _normalize_research_draft(improvement.draft, request)
-                    pending_improvement_notes = [
-                        f"第 {iteration} 轮回测提交失败，已基于失败原因生成下一版策略：{failure_reason}",
-                        *improvement.notes,
-                    ]
-                    pending_generation_metadata = _strategy_generation_metadata(
-                        improvement.metadata,
-                        phase="backtest_submission_repair",
-                        iteration=iteration + 1,
-                    )
-                    await self._record_pipeline_event(
-                        user_id=user_id,
-                        run_id=run_id,
-                        request=request,
-                        workspace_id=research_workspace.id,
-                        stage="optimization_loop",
-                        status="completed",
-                        iteration=iteration + 1,
-                        summary="提交失败修复版策略已生成。",
-                        output_payload={
-                            "notes": pending_improvement_notes,
-                            "metadata": pending_generation_metadata,
-                        },
-                    )
+            (
+                backtest_response,
+                draft,
+                pending_improvement_notes,
+                pending_generation_metadata,
+                should_continue,
+            ) = await submit_iteration_backtest(
+                self,
+                user_id=user_id,
+                run_id=run_id,
+                request=request,
+                research_workspace=research_workspace,
+                started_at=started_at,
+                iteration=iteration,
+                draft=draft,
+                backtest_request=backtest_request,
+                iterations=iterations,
+                best_iteration=best_iteration,
+                selected_iteration=selected_iteration,
+                run_failures=run_failures,
+                pending_improvement_notes=pending_improvement_notes,
+                pending_generation_metadata=pending_generation_metadata,
+                progress_callback=progress_callback,
+            )
+            if backtest_response is None:
+                if should_continue:
                     continue
                 break
+
             await self._record_pipeline_event(
                 user_id=user_id,
                 run_id=run_id,
@@ -1304,7 +842,6 @@ class AIStrategyResearchService:
                     "message": f"Backtest task submitted for iteration {iteration}",
                 },
             )
-
             try:
                 unit_status, failure_reason = await self._wait_for_unit_status(
                     research_workspace.id,
@@ -1336,6 +873,7 @@ class AIStrategyResearchService:
                     run_failures=run_failures,
                 )
                 raise
+
             metrics = dict(unit_status.metrics_snapshot if unit_status else {})
             sharpe = _metric_float(metrics, "sharpe_ratio", "sharpe", "sharpeRatio")
             total_trades = _metric_int(metrics, "total_trades", "totalTrades", "trades")
@@ -1364,351 +902,64 @@ class AIStrategyResearchService:
             if not failure_reason and quality_gate_failures:
                 failure_reason = "; ".join(quality_gate_failures)
 
-            validation_unit: StrategyUnitResponse | None = None
-            validation_run_result: StrategyCopilotRunResult | None = None
-            validation_unit_status: UnitStatusResponse | None = None
-            validation_status: str | None = None
-            validation_metrics: dict[str, Any] = {}
-            validation_gate_evaluations: list[dict[str, Any]] = []
-            validation_failures: list[str] = []
-            validation_failure_reason: str | None = None
-            validation_window_payload = validation_window.as_dict() if validation_window else None
-            robustness_status: str | None = None
-            robustness_result: dict[str, Any] = {}
-            robustness_gate_evaluations: list[dict[str, Any]] = []
-            robustness_failures: list[str] = []
-            robustness_failure_reason: str | None = None
-
-            if passed and request.out_of_sample_validation:
-                if validation_window is None:
-                    validation_status = "skipped"
-                    validation_failure_reason = (
-                        "Out-of-sample validation skipped because start_date/end_date "
-                        "do not define a splittable range"
-                    )
-                    if request.require_out_of_sample_validation:
-                        validation_failures = [validation_failure_reason]
-                        quality_gate_failures = [*quality_gate_failures, validation_failure_reason]
-                        failure_reason = validation_failure_reason
-                        passed = False
-                else:
-                    await self._record_pipeline_event(
-                        user_id=user_id,
-                        run_id=run_id,
-                        request=request,
-                        workspace_id=research_workspace.id,
-                        stage="validating",
-                        status="started",
-                        iteration=iteration,
-                        summary=f"开始第 {iteration} 轮样本外验证。",
-                        input_payload={"validation_window": validation_window_payload},
-                    )
-                    await _emit_research_progress(
-                        progress_callback,
-                        {
-                            "current_stage": "validating",
-                            "progress": min(
-                                _research_loop_progress(iteration, request.max_iterations) + 1.0,
-                                83.0,
-                            ),
-                            "current_iteration": iteration,
-                            "iteration_count": len(iterations),
-                            "max_iterations": request.max_iterations,
-                            "latest_iteration": {
-                                "iteration": iteration,
-                                "validation_window": validation_window_payload,
-                            },
-                            "message": f"Running out-of-sample validation for iteration {iteration}",
-                        },
-                    )
-                    validation_request = self._build_backtest_request(
-                        draft,
-                        request,
-                        user_id=user_id,
-                        start_date=validation_window.validation_start,
-                        end_date=validation_window.validation_end,
-                        group_name_suffix=" 样本外验证",
-                    )
-                    try:
-                        validation_response = await self.strategy_service.backtest_copilot_draft(
-                            user_id,
-                            research_workspace.id,
-                            validation_request,
-                        )
-                        if validation_response is None:
-                            raise ValueError(
-                                "Research workspace or generated validation strategy was not found"
-                            )
-                        validation_unit = validation_response.unit
-                        validation_run_result = validation_response.run_result
-                        await _emit_research_progress(
-                            progress_callback,
-                            {
-                                "current_stage": "validating",
-                                "progress": min(
-                                    _research_loop_progress(iteration, request.max_iterations)
-                                    + 2.0,
-                                    84.0,
-                                ),
-                                "current_iteration": iteration,
-                                "iteration_count": len(iterations),
-                                "max_iterations": request.max_iterations,
-                                "current_backtest_task_id": validation_response.run_result.task_id,
-                                "latest_iteration": {
-                                    "iteration": iteration,
-                                    "validation_window": validation_window_payload,
-                                },
-                                "message": (
-                                    "Out-of-sample validation task submitted "
-                                    f"for iteration {iteration}"
-                                ),
-                            },
-                        )
-                        (
-                            validation_unit_status,
-                            validation_wait_failure,
-                        ) = await self._wait_for_unit_status(
-                            research_workspace.id,
-                            user_id,
-                            validation_response.unit.id,
-                            initial_status=validation_response.unit_status,
-                            timeout_seconds=request.backtest_timeout_seconds,
-                            poll_interval_seconds=request.poll_interval_seconds,
-                        )
-                        validation_metrics = dict(
-                            validation_unit_status.metrics_snapshot
-                            if validation_unit_status
-                            else {}
-                        )
-                        validation_run_status = (
-                            validation_unit_status.run_status if validation_unit_status else None
-                        )
-                        validation_gate_evaluations = _out_of_sample_gate_evaluations(
-                            request,
-                            validation_metrics,
-                            run_status=validation_run_status,
-                        )
-                        validation_failures = _out_of_sample_failures(
-                            request,
-                            validation_metrics,
-                            run_status=validation_run_status,
-                        )
-                        validation_status = "passed" if not validation_failures else "failed"
-                        if validation_wait_failure and validation_run_status != "completed":
-                            validation_failure_reason = validation_wait_failure
-                        if validation_failures:
-                            validation_failure_reason = "; ".join(validation_failures)
-                            quality_gate_failures = [*quality_gate_failures, *validation_failures]
-                            failure_reason = validation_failure_reason
-                            passed = False
-                    except Exception as exc:
-                        validation_status = "failed"
-                        validation_failure_reason = (
-                            f"Out-of-sample validation failed to start: {exc}"
-                        )
-                        validation_failures = [validation_failure_reason]
-                        quality_gate_failures = [*quality_gate_failures, validation_failure_reason]
-                        failure_reason = validation_failure_reason
-                        passed = False
-            if validation_status:
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="validating",
-                    status="completed" if validation_status == "passed" else "failed",
-                    iteration=iteration,
-                    summary=f"第 {iteration} 轮样本外验证{validation_status}。",
-                    output_payload={
-                        "validation_status": validation_status,
-                        "validation_window": validation_window_payload,
-                        "gate_evaluations": validation_gate_evaluations,
-                        "failures": validation_failures,
-                    },
-                    metrics=validation_metrics,
-                    error=validation_failure_reason,
-                )
-            if passed and request.robustness_validation:
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="robustness_validation",
-                    status="started",
-                    iteration=iteration,
-                    summary=f"开始第 {iteration} 轮稳健性验证。",
-                    input_payload={
-                        "backtest_id": backtest_response.run_result.task_id,
-                        "methods": request.robustness_methods,
-                        "min_robustness_score": request.min_robustness_score,
-                    },
-                )
-                await _emit_research_progress(
-                    progress_callback,
-                    {
-                        "current_stage": "robustness_validation",
-                        "progress": min(
-                            _research_loop_progress(iteration, request.max_iterations) + 1.5,
-                            84.5,
-                        ),
-                        "current_iteration": iteration,
-                        "iteration_count": len(iterations),
-                        "max_iterations": request.max_iterations,
-                        "current_backtest_task_id": backtest_response.run_result.task_id,
-                        "latest_iteration": {
-                            "iteration": iteration,
-                            "robustness_status": "running",
-                        },
-                        "message": f"Running robustness validation for iteration {iteration}",
-                    },
-                )
-                robustness_status = "failed"
-                try:
-                    task_id = str(backtest_response.run_result.task_id or "").strip()
-                    if not task_id:
-                        raise ValueError(
-                            "Robustness validation requires a completed backtest task id"
-                        )
-                    robustness = await get_robustness_validation_service().run_for_backtest(
-                        backtest_id=task_id,
-                        user_id=user_id,
-                        request=_robustness_validation_request(request, run_id=run_id),
-                    )
-                    robustness_result = robustness.model_dump(mode="json")
-                    robustness_status = robustness.status
-                    robustness_gate_evaluations = _robustness_gate_payloads(robustness_result)
-                    robustness_failures = _robustness_failures_from_result(
-                        robustness_result,
-                        require_robustness=request.require_robustness_validation,
-                    )
-                    if robustness_failures:
-                        robustness_failure_reason = "; ".join(robustness_failures)
-                        if request.require_robustness_validation:
-                            quality_gate_failures = [
-                                *quality_gate_failures,
-                                *robustness_failures,
-                            ]
-                            failure_reason = robustness_failure_reason
-                            passed = False
-                except Exception as exc:
-                    robustness_failure_reason = f"Robustness validation failed to run: {exc}"
-                    robustness_failures = [robustness_failure_reason]
-                    robustness_result = {"status": "failed", "error_message": str(exc)}
-                    if request.require_robustness_validation:
-                        quality_gate_failures = [
-                            *quality_gate_failures,
-                            robustness_failure_reason,
-                        ]
-                        failure_reason = robustness_failure_reason
-                        passed = False
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="robustness_validation",
-                    status="completed" if not robustness_failures else "failed",
-                    iteration=iteration,
-                    summary=f"第 {iteration} 轮稳健性验证{robustness_status}。",
-                    output_payload={
-                        "robustness_status": robustness_status,
-                        "gate_evaluations": robustness_gate_evaluations,
-                        "failures": robustness_failures,
-                        "result": robustness_result,
-                    },
-                    metrics=dict(robustness_result.get("metrics") or {}),
-                    error=robustness_failure_reason,
-                )
-            previous_iteration = iterations[-1] if iterations else None
-            diagnostics = _iteration_diagnostics(
-                request,
+            (
+                passed,
+                quality_gate_failures,
+                failure_reason,
+                oos_state,
+            ) = await run_iteration_oos_validation(
+                self,
+                user_id=user_id,
+                run_id=run_id,
+                request=request,
+                research_workspace=research_workspace,
                 iteration=iteration,
-                metrics=metrics,
-                run_status=unit_status.run_status if unit_status else None,
+                iterations_count=len(iterations),
+                draft=draft,
+                validation_window=validation_window,
+                passed=passed,
                 quality_gate_failures=quality_gate_failures,
-                quality_gate_evaluations=quality_gate_evaluations,
                 failure_reason=failure_reason,
-                previous_iteration=previous_iteration,
-                quality_score=quality_score,
+                progress_callback=progress_callback,
             )
-            if request.out_of_sample_validation:
-                diagnostics["out_of_sample_validation"] = {
-                    "status": validation_status or "not_required",
-                    "window": validation_window_payload,
-                    "metrics": validation_metrics,
-                    "gate_evaluations": validation_gate_evaluations,
-                    "failures": validation_failures,
-                    "failure_reason": validation_failure_reason,
-                }
-                if validation_failures:
-                    diagnostics["promotion_ready"] = False
-                    diagnostics["summary"] = (
-                        f"第 {iteration} 轮训练样本达标，但样本外验证未通过："
-                        + "；".join(validation_failures)
-                    )
-            if request.robustness_validation:
-                diagnostics["robustness_validation"] = {
-                    "status": robustness_status or "not_required",
-                    "result": robustness_result,
-                    "gate_evaluations": robustness_gate_evaluations,
-                    "failures": robustness_failures,
-                    "failure_reason": robustness_failure_reason,
-                }
-                if robustness_failures:
-                    diagnostics["promotion_ready"] = False
-                    diagnostics["summary"] = (
-                        f"第 {iteration} 轮训练/验证门槛达标，但稳健性验证未通过："
-                        + "；".join(robustness_failures)
-                    )
-            generation_metadata = _strategy_generation_metadata(
-                pending_generation_metadata,
+            (
+                passed,
+                quality_gate_failures,
+                failure_reason,
+                robust_state,
+            ) = await run_iteration_robustness_validation(
+                self,
+                user_id=user_id,
+                run_id=run_id,
+                request=request,
+                research_workspace=research_workspace,
                 iteration=iteration,
+                iterations_count=len(iterations),
+                backtest_task_id=backtest_response.run_result.task_id,
+                passed=passed,
+                quality_gate_failures=quality_gate_failures,
+                failure_reason=failure_reason,
+                progress_callback=progress_callback,
+                robustness_service_factory=get_robustness_validation_service,
             )
-            if generation_metadata:
-                diagnostics["strategy_generation"] = generation_metadata
-            improvement_plan = list(diagnostics.get("improvement_plan") or [])
-
-            item = AIStrategyResearchIteration(
+            item = assemble_iteration_record(
+                request=request,
                 iteration=iteration,
-                strategy=backtest_response.strategy,
-                unit=backtest_response.unit,
-                run_result=backtest_response.run_result,
+                backtest_response=backtest_response,
                 unit_status=unit_status,
                 metrics=metrics,
-                sharpe_ratio=sharpe,
+                sharpe=sharpe,
                 total_trades=total_trades,
-                validation_unit=validation_unit,
-                validation_run_result=validation_run_result,
-                validation_unit_status=validation_unit_status,
-                validation_status=validation_status,
-                validation_window=validation_window_payload,
-                validation_metrics=validation_metrics,
-                validation_gate_evaluations=validation_gate_evaluations,
-                validation_failures=validation_failures,
-                validation_failure_reason=validation_failure_reason,
-                robustness_status=robustness_status,
-                robustness_result=robustness_result,
-                robustness_gate_evaluations=robustness_gate_evaluations,
-                robustness_failures=robustness_failures,
-                robustness_failure_reason=robustness_failure_reason,
                 quality_score=quality_score,
                 quality_gate_evaluations=quality_gate_evaluations,
-                passed=passed,
-                failure_reason=None if passed else failure_reason,
                 quality_gate_failures=quality_gate_failures,
-                diagnostics=diagnostics,
-                improvement_plan=improvement_plan,
-                improvement_notes=pending_improvement_notes,
-                next_actions=_iteration_next_actions(
-                    iteration=iteration,
-                    max_iterations=request.max_iterations,
-                    passed=passed,
-                    run_status=unit_status.run_status if unit_status else None,
-                    quality_gate_failures=quality_gate_failures,
-                    failure_reason=failure_reason,
-                ),
+                passed=passed,
+                failure_reason=failure_reason,
+                previous_iteration=iterations[-1] if iterations else None,
+                pending_generation_metadata=pending_generation_metadata,
+                pending_improvement_notes=pending_improvement_notes,
+                oos_state=oos_state,
+                robust_state=robust_state,
             )
             iterations.append(item)
             await self._record_pipeline_event(
@@ -1724,7 +975,7 @@ class AIStrategyResearchService:
                     "unit_id": item.unit.id,
                     "task_id": item.run_result.task_id,
                     "run_status": unit_status.run_status if unit_status else None,
-                    "robustness_status": robustness_status,
+                    "robustness_status": robust_state["status"],
                     "quality_gate_failures": quality_gate_failures,
                 },
                 metrics=metrics,
@@ -1738,10 +989,10 @@ class AIStrategyResearchService:
                 stage="strategy_review",
                 status="completed",
                 iteration=iteration,
-                summary=str(diagnostics.get("summary") or "策略审查已完成。"),
+                summary=str(item.diagnostics.get("summary") or "策略审查已完成。"),
                 output_payload={
-                    "diagnostics": diagnostics,
-                    "improvement_plan": improvement_plan,
+                    "diagnostics": item.diagnostics,
+                    "improvement_plan": item.improvement_plan,
                     "quality_gate_evaluations": quality_gate_evaluations,
                 },
                 metrics=metrics,
@@ -1772,353 +1023,60 @@ class AIStrategyResearchService:
                 achieved = True
                 selected_iteration = item
                 break
-
             if iteration < request.max_iterations:
-                await self._record_pipeline_event(
+                (
+                    draft,
+                    pending_improvement_notes,
+                    pending_generation_metadata,
+                ) = await improve_after_failed_iteration(
+                    self,
                     user_id=user_id,
                     run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="optimization_loop",
-                    status="started",
-                    iteration=iteration + 1,
-                    summary=f"根据第 {iteration} 轮审查结果准备下一版策略。",
-                    input_payload={
-                        "quality_gate_failures": quality_gate_failures,
-                        "metrics": metrics,
-                    },
-                )
-                await _emit_research_progress(
-                    progress_callback,
-                    {
-                        "current_stage": "improving",
-                        "progress": min(
-                            _research_loop_progress(iteration, request.max_iterations) + 2.0,
-                            82.0,
-                        ),
-                        "current_iteration": iteration + 1,
-                        "iteration_count": len(iterations),
-                        "max_iterations": request.max_iterations,
-                        "latest_iteration": _compact_research_iteration(item),
-                        "message": f"Improving strategy for iteration {iteration + 1}",
-                    },
-                )
-                try:
-                    improvement_base_draft = draft
-                    rollback_note = None
-                    iteration_progress = diagnostics.get("iteration_progress")
-                    progress_status = (
-                        str(iteration_progress.get("status") or "").strip()
-                        if isinstance(iteration_progress, dict)
-                        else ""
-                    )
-                    if (
-                        progress_status == "regressed"
-                        and best_iteration is not None
-                        and best_iteration.iteration != item.iteration
-                    ):
-                        improvement_base_draft = _draft_from_strategy(
-                            best_iteration.strategy,
-                            request,
-                        )
-                        rollback_note = (
-                            f"第 {iteration} 轮自动改稿退化，下一版回退到当前最佳第 "
-                            f"{best_iteration.iteration} 轮策略后继续改进。"
-                        )
-                    improvement = await self._improve_draft(
-                        improvement_base_draft,
-                        iteration=iteration,
-                        metrics=_improvement_metrics(
-                            metrics,
-                            validation_metrics,
-                            iteration_progress=diagnostics.get("iteration_progress"),
-                            diagnostics=diagnostics,
-                        ),
-                        target_sharpe=request.target_sharpe,
-                        quality_gate_failures=quality_gate_failures,
-                        user_id=user_id,
-                        request=request,
-                    )
-                except asyncio.CancelledError:
-                    await self._persist_cancelled_research_run(
-                        user_id=user_id,
-                        request=request,
-                        research_workspace=research_workspace,
-                        run_id=run_id,
-                        started_at=started_at,
-                        iterations=iterations,
-                        best_iteration=best_iteration,
-                        selected_iteration=selected_iteration,
-                        run_failures=run_failures,
-                    )
-                    raise
-                draft = _normalize_research_draft(improvement.draft, request)
-                pending_improvement_notes = (
-                    [rollback_note, *improvement.notes] if rollback_note else improvement.notes
-                )
-                pending_generation_metadata = _strategy_generation_metadata(
-                    improvement.metadata,
-                    phase="quality_gate_improvement",
-                    iteration=iteration + 1,
-                )
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="optimization_loop",
-                    status="completed",
-                    iteration=iteration + 1,
-                    summary=f"第 {iteration + 1} 轮策略改稿已完成。",
-                    output_payload={
-                        "notes": pending_improvement_notes,
-                        "metadata": pending_generation_metadata,
-                    },
-                )
-
-        paper_trading = None
-        paper_trading_error = None
-        result_iteration = selected_iteration or best_iteration
-        if achieved and request.start_paper_trading and result_iteration is not None:
-            await self._record_pipeline_event(
-                user_id=user_id,
-                run_id=run_id,
-                request=request,
-                workspace_id=research_workspace.id,
-                stage="paper_trading",
-                status="started",
-                iteration=result_iteration.iteration,
-                summary="达标策略开始进入模拟交易。",
-            )
-            await _emit_research_progress(
-                progress_callback,
-                {
-                    "current_stage": "paper_trading",
-                    "progress": 88.0,
-                    "iteration_count": len(iterations),
-                    "max_iterations": request.max_iterations,
-                    "latest_iteration": _compact_research_iteration(result_iteration),
-                    "message": "Starting paper trading for achieved strategy",
-                },
-            )
-            try:
-                paper_trading = await self._start_paper_trading(
-                    user_id,
-                    request,
-                    result_iteration,
-                    run_id=run_id,
-                    research_workspace_id=research_workspace.id,
-                )
-                paper_trading_error = _paper_trading_start_error(paper_trading)
-                if paper_trading_error:
-                    await self._record_pipeline_event(
-                        user_id=user_id,
-                        run_id=run_id,
-                        request=request,
-                        workspace_id=research_workspace.id,
-                        stage="paper_trading",
-                        status="failed",
-                        iteration=result_iteration.iteration,
-                        summary="模拟交易启动失败。",
-                        error=paper_trading_error,
-                    )
-                    await _emit_research_progress(
-                        progress_callback,
-                        {
-                            "current_stage": "paper_trading_failed",
-                            "progress": 92.0,
-                            "iteration_count": len(iterations),
-                            "max_iterations": request.max_iterations,
-                            "latest_iteration": _compact_research_iteration(result_iteration),
-                            "message": f"Paper trading start failed: {paper_trading_error}",
-                        },
-                    )
-            except asyncio.CancelledError:
-                await self._persist_cancelled_research_run(
-                    user_id=user_id,
                     request=request,
                     research_workspace=research_workspace,
-                    run_id=run_id,
                     started_at=started_at,
+                    iteration=iteration,
+                    item=item,
+                    draft=draft,
                     iterations=iterations,
                     best_iteration=best_iteration,
                     selected_iteration=selected_iteration,
                     run_failures=run_failures,
-                )
-                raise
-            except Exception as exc:
-                paper_trading_error = str(exc)
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="paper_trading",
-                    status="failed",
-                    iteration=result_iteration.iteration,
-                    summary="模拟交易启动异常。",
-                    error=paper_trading_error,
-                )
-                await _emit_research_progress(
-                    progress_callback,
-                    {
-                        "current_stage": "paper_trading_failed",
-                        "progress": 92.0,
-                        "iteration_count": len(iterations),
-                        "max_iterations": request.max_iterations,
-                        "latest_iteration": _compact_research_iteration(result_iteration),
-                        "message": f"Paper trading start failed: {paper_trading_error}",
-                    },
-                )
-            if paper_trading is not None and not paper_trading_error:
-                await self._record_pipeline_event(
-                    user_id=user_id,
-                    run_id=run_id,
-                    request=request,
-                    workspace_id=research_workspace.id,
-                    stage="paper_trading",
-                    status="completed",
-                    iteration=result_iteration.iteration,
-                    summary="模拟交易已启动。",
-                    output_payload={
-                        "paper_workspace_id": paper_trading.workspace.id,
-                        "paper_unit_id": paper_trading.unit.id,
-                    },
+                    progress_callback=progress_callback,
                 )
 
-        status = "achieved" if achieved else "max_iterations_reached"
-        if (
-            iterations
-            and iterations[-1].unit_status
-            and iterations[-1].unit_status.run_status == "timeout"
-        ):
-            status = "timeout"
-        if not iterations and run_failures and not achieved:
-            status = "backtest_submission_failed"
-        best_metrics = dict(result_iteration.metrics) if result_iteration else {}
-        run_failure_diagnostics = _run_failure_diagnostics(run_failures)
-        fallback_strategy = None
-        if result_iteration is None and run_failures:
-            fallback_strategy = await self._persist_research_draft_strategy(
-                user_id,
-                draft,
-                request,
-                run_id=run_id,
-            )
-        paper_monitoring_plan = (
-            _paper_monitoring_plan(request, result_iteration)
-            if achieved and result_iteration is not None
-            else []
-        )
-        message = _research_completion_message(
-            request=request,
-            achieved=achieved,
-            result_iteration=result_iteration,
-            run_failures=run_failures,
-        )
-        completed_at = _utc_iso_now()
-        next_actions = _run_next_actions(
-            status=status,
-            achieved=achieved,
-            request=request,
-            result_iteration=result_iteration,
-            paper_trading=paper_trading,
-            paper_trading_error=paper_trading_error,
-            run_failures=run_failures,
-        )
-        pipeline = _pipeline_summary(
-            status=status,
-            achieved=achieved,
-            iteration_count=len(iterations),
-            max_iterations=request.max_iterations,
-            out_of_sample_validation=request.out_of_sample_validation,
-            validation_status=result_iteration.validation_status if result_iteration else None,
-            robustness_validation=request.robustness_validation,
-            robustness_status=result_iteration.robustness_status if result_iteration else None,
-            paper_trading_started=bool(paper_trading.started) if paper_trading else False,
-            paper_trading_error=paper_trading_error,
-            paper_review_status=None,
-            paper_review_ready_for_live=False,
-            workflow_mode=request.workflow_mode,
-            workflow_steps=request.workflow_steps,
-        )
-        response = AIStrategyResearchRunResponse(
+        result_iteration = selected_iteration or best_iteration
+        paper_trading, paper_trading_error = await run_paper_trading_stage(
+            self,
+            user_id=user_id,
             run_id=run_id,
-            status=status,
-            achieved=achieved,
-            target_sharpe=request.target_sharpe,
-            started_at=started_at,
-            completed_at=completed_at,
-            best_iteration=result_iteration.iteration if result_iteration else None,
-            best_quality_score=_promotion_quality_score(result_iteration),
-            best_quality_gate_evaluations=_promotion_gate_evaluations(result_iteration)
-            if result_iteration
-            else [],
-            robustness_validation=_iteration_robustness_payload(result_iteration),
-            best_diagnostics=result_iteration.diagnostics
-            if result_iteration
-            else run_failure_diagnostics,
-            best_metrics=best_metrics,
+            request=request,
             research_workspace=research_workspace,
-            mandate_id=request.mandate_id,
-            iterations=iterations,
-            best_strategy=result_iteration.strategy if result_iteration else fallback_strategy,
-            paper_trading=paper_trading,
-            paper_monitoring_plan=paper_monitoring_plan,
-            pipeline=pipeline,
-            promotion_audit=[],
-            next_actions=next_actions,
-            message=message,
-        )
-        run_record = _build_research_run_record(
-            run_id=run_id,
-            request=request,
-            response=response,
             started_at=started_at,
-            completed_at=completed_at,
+            achieved=achieved,
+            result_iteration=result_iteration,
+            iterations=iterations,
+            best_iteration=best_iteration,
+            selected_iteration=selected_iteration,
+            run_failures=run_failures,
+            progress_callback=progress_callback,
         )
-        run_record = _apply_initial_paper_review_to_run_record(
-            run_record,
-            paper_trading=paper_trading,
-            user_id=user_id,
-        )
-        run_record = _apply_initial_live_handoff_to_run_record(run_record)
-        run_record = sign_ai_research_run_record(
-            run_record,
-            user_id=user_id,
-            workspace_id=str(research_workspace.id),
-        )
-        response_updates: dict[str, Any] = {}
-        if run_record.pipeline != response.pipeline:
-            response_updates["pipeline"] = run_record.pipeline
-        if run_record.next_actions != response.next_actions:
-            response_updates["next_actions"] = run_record.next_actions
-        if run_record.promotion_audit != response.promotion_audit:
-            response_updates["promotion_audit"] = run_record.promotion_audit
-        if response_updates:
-            response = response.model_copy(update=response_updates)
-        await self._record_pipeline_event(
+        return await finalize_research_run(
+            self,
             user_id=user_id,
             run_id=run_id,
             request=request,
-            workspace_id=research_workspace.id,
-            stage=status,
-            status="completed" if achieved else "failed",
-            summary=message,
-            output_payload={"pipeline": response.pipeline, "next_actions": response.next_actions},
-            metrics=best_metrics,
-            error=run_failures[-1] if run_failures and not achieved else paper_trading_error,
-        )
-        research_workspace = await self._persist_research_run_record(
-            user_id,
-            research_workspace,
-            run_record,
-        )
-        return response.model_copy(
-            update={
-                "research_workspace": research_workspace,
-                "run_record": run_record,
-            }
+            research_workspace=research_workspace,
+            started_at=started_at,
+            draft=draft,
+            iterations=iterations,
+            result_iteration=result_iteration,
+            achieved=achieved,
+            run_failures=run_failures,
+            paper_trading=paper_trading,
+            paper_trading_error=paper_trading_error,
+            promotion_quality_score_fn=_promotion_quality_score,
+            promotion_gate_evals_fn=_promotion_gate_evaluations,
         )
 
     async def list_run_records(
@@ -2318,6 +1276,51 @@ class AIStrategyResearchService:
             updates["backtest_environment"] = dict(backtest_environment)
         return updates
 
+    async def _cached_units_status(
+        self, workspace_id: str, user_id: str, cache: dict[str, list[Any]] | None
+    ) -> list[Any]:
+        if cache is not None and workspace_id in cache:
+            return cache[workspace_id]
+        statuses = list(await self.workspace_service.get_units_status(workspace_id, user_id) or [])
+        if cache is not None:
+            cache[workspace_id] = statuses
+        return statuses
+
+    async def _resolve_paper_workspace_and_unit(
+        self,
+        user_id: str,
+        record: AIStrategyResearchRunRecord,
+        *,
+        workspace_cache: dict[str, Any] | None = None,
+        unit_cache: dict[tuple[str, str], Any] | None = None,
+    ) -> tuple[Any, Any, str | None]:
+        workspace = None
+        if record.paper_workspace_id:
+            ws_id = record.paper_workspace_id
+            if workspace_cache is not None and ws_id in workspace_cache:
+                workspace = workspace_cache[ws_id]
+            else:
+                workspace = await self.workspace_service.get_workspace(ws_id, user_id)
+                if workspace_cache is not None:
+                    workspace_cache[ws_id] = workspace
+        if workspace is None:
+            return None, None, f"Paper trading workspace {record.paper_workspace_id} was not found"
+        if not record.paper_unit_id:
+            return workspace, None, "Paper trading unit ID is missing"
+        unit_key = (workspace.id, record.paper_unit_id)
+        if unit_cache is not None and unit_key in unit_cache:
+            unit = unit_cache[unit_key]
+        else:
+            raw_unit = await self.workspace_service.get_unit(
+                workspace.id, record.paper_unit_id, user_id
+            )
+            unit = _coerce_strategy_unit_response(raw_unit)
+            if unit_cache is not None:
+                unit_cache[unit_key] = unit
+        if unit is None:
+            return workspace, None, f"Paper trading unit {record.paper_unit_id} was not found"
+        return workspace, unit, None
+
     async def _freshen_run_records_with_paper_state(
         self,
         user_id: str,
@@ -2325,9 +1328,27 @@ class AIStrategyResearchService:
     ) -> tuple[list[AIStrategyResearchRunRecord], set[str]]:
         freshened: list[AIStrategyResearchRunRecord] = []
         changed_run_ids: set[str] = set()
+        units_status_cache: dict[str, list[Any]] = {}
+        workspace_cache: dict[str, Any] = {}
+        unit_cache: dict[tuple[str, str], Any] = {}
+        params = inspect.signature(self._freshen_run_record_with_paper_state).parameters
+        accepts_cache_kwargs = "units_status_cache" in params or any(
+            param.kind is inspect.Parameter.VAR_KEYWORD for param in params.values()
+        )
         for record in records:
-            updated = await self._freshen_run_record_with_latest_backtests(user_id, record)
-            updated = await self._freshen_run_record_with_paper_state(user_id, updated)
+            updated = await self._freshen_run_record_with_latest_backtests(
+                user_id, record, units_status_cache=units_status_cache
+            )
+            if accepts_cache_kwargs:
+                updated = await self._freshen_run_record_with_paper_state(
+                    user_id,
+                    updated,
+                    units_status_cache=units_status_cache,
+                    workspace_cache=workspace_cache,
+                    unit_cache=unit_cache,
+                )
+            else:
+                updated = await self._freshen_run_record_with_paper_state(user_id, updated)
             freshened.append(updated)
             if updated != record:
                 changed_run_ids.add(updated.run_id)
@@ -2337,21 +1358,15 @@ class AIStrategyResearchService:
         self,
         user_id: str,
         record: AIStrategyResearchRunRecord,
+        *,
+        units_status_cache: dict[str, list[Any]] | None = None,
     ) -> AIStrategyResearchRunRecord:
-        """Refresh persisted iteration metrics after a workspace unit is rerun.
-
-        AI research records keep an immutable-looking summary of each iteration,
-        while users can rerun an iteration from its workspace.  Without this
-        reconciliation the page keeps rendering the old task ID and metrics,
-        including an obsolete ``total_trades=0`` after a repaired strategy has
-        produced closed trades.
-        """
+        """Refresh persisted iteration metrics after a workspace unit is rerun."""
         if not record.research_workspace_id or not record.iterations:
             return record
 
-        statuses = await self.workspace_service.get_units_status(
-            record.research_workspace_id,
-            user_id,
+        statuses = await self._cached_units_status(
+            record.research_workspace_id, user_id, units_status_cache
         )
         status_by_unit_id = {
             str(payload.get("id") or "").strip(): payload
@@ -2393,16 +1408,10 @@ class AIStrategyResearchService:
             if metrics:
                 refreshed["metrics"] = metrics
                 refreshed["sharpe_ratio"] = _metric_float(
-                    metrics,
-                    "sharpe_ratio",
-                    "sharpe",
-                    "sharpeRatio",
+                    metrics, "sharpe_ratio", "sharpe", "sharpeRatio"
                 )
                 refreshed["total_trades"] = _metric_int(
-                    metrics,
-                    "total_trades",
-                    "totalTrades",
-                    "trades",
+                    metrics, "total_trades", "totalTrades", "trades"
                 )
 
             refreshed_iterations.append(refreshed)
@@ -2426,10 +1435,7 @@ class AIStrategyResearchService:
             if best_metrics:
                 updates["best_metrics"] = best_metrics
                 updates["best_sharpe"] = _metric_float(
-                    best_metrics,
-                    "sharpe_ratio",
-                    "sharpe",
-                    "sharpeRatio",
+                    best_metrics, "sharpe_ratio", "sharpe", "sharpeRatio"
                 )
         return record.model_copy(update=updates)
 
@@ -2437,80 +1443,30 @@ class AIStrategyResearchService:
         self,
         user_id: str,
         record: AIStrategyResearchRunRecord,
+        *,
+        units_status_cache: dict[str, list[Any]] | None = None,
+        workspace_cache: dict[str, Any] | None = None,
+        unit_cache: dict[tuple[str, str], Any] | None = None,
     ) -> AIStrategyResearchRunRecord:
-        if not _run_record_should_auto_refresh_paper_review(record):
-            if not (
-                record.achieved
-                and record.paper_trading_started
-                and record.paper_workspace_id
-                and _run_record_should_invalidate_missing_paper_target(record)
-            ):
-                return record
-            workspace = await self.workspace_service.get_workspace(
-                record.paper_workspace_id,
-                user_id,
-            )
-            if workspace is None:
-                return _run_record_with_missing_paper_target(
-                    record,
-                    reason=f"Paper trading workspace {record.paper_workspace_id} was not found",
-                )
-            if not record.paper_unit_id:
-                return _run_record_with_missing_paper_target(
-                    record,
-                    reason="Paper trading unit ID is missing",
-                )
-            unit = _coerce_strategy_unit_response(
-                await self.workspace_service.get_unit(
-                    workspace.id,
-                    record.paper_unit_id,
-                    user_id,
-                )
-            )
-            if unit is None:
-                return _run_record_with_missing_paper_target(
-                    record,
-                    reason=f"Paper trading unit {record.paper_unit_id} was not found",
-                )
+        auto_refresh = _run_record_should_auto_refresh_paper_review(record)
+        if not auto_refresh and not (
+            record.achieved
+            and record.paper_trading_started
+            and record.paper_workspace_id
+            and _run_record_should_invalidate_missing_paper_target(record)
+        ):
             return record
 
-        workspace = None
-        unit = None
-        unit_status = None
-        if record.paper_workspace_id:
-            workspace = await self.workspace_service.get_workspace(
-                record.paper_workspace_id,
-                user_id,
-            )
-        if workspace is None:
-            if _run_record_should_invalidate_missing_paper_target(record):
-                return _run_record_with_missing_paper_target(
-                    record,
-                    reason=f"Paper trading workspace {record.paper_workspace_id} was not found",
-                )
-            return record
-        if not record.paper_unit_id:
-            if _run_record_should_invalidate_missing_paper_target(record):
-                return _run_record_with_missing_paper_target(
-                    record,
-                    reason="Paper trading unit ID is missing",
-                )
-            return record
-        unit = _coerce_strategy_unit_response(
-            await self.workspace_service.get_unit(
-                workspace.id,
-                record.paper_unit_id,
-                user_id,
-            )
+        workspace, unit, missing_reason = await self._resolve_paper_workspace_and_unit(
+            user_id, record, workspace_cache=workspace_cache, unit_cache=unit_cache
         )
-        if unit is None:
-            if _run_record_should_invalidate_missing_paper_target(record):
-                return _run_record_with_missing_paper_target(
-                    record,
-                    reason=f"Paper trading unit {record.paper_unit_id} was not found",
-                )
+        if missing_reason is not None:
+            if not auto_refresh or _run_record_should_invalidate_missing_paper_target(record):
+                return _run_record_with_missing_paper_target(record, reason=missing_reason)
             return record
-        statuses = await self.workspace_service.get_units_status(workspace.id, user_id)
+        if not auto_refresh:
+            return record
+        statuses = await self._cached_units_status(workspace.id, user_id, units_status_cache)
         unit_status = _find_unit_status(statuses or [], record.paper_unit_id)
 
         runtime_anchor_trusted = _paper_runtime_evidence_is_trusted(

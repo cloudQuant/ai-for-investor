@@ -194,6 +194,91 @@ async def test_paper_equity_points_keep_only_the_current_runtime_run(monkeypatch
     }
 
 
+@pytest.mark.asyncio
+async def test_paper_equity_points_per_instance_cap_does_not_starve_other_instances_or_drop_recent(
+    monkeypatch,
+):
+    """Per-instance bounding keeps the newest snapshots per instance without starving later IDs."""
+    from datetime import timedelta
+
+    from app.api import portfolio_api
+    from app.api.portfolio import paper_equity
+    from app.db.database import async_session_maker
+    from app.models.paper_runtime import PaperEquitySnapshot
+
+    monkeypatch.setattr(paper_equity, "_MIN_PER_INSTANCE_SNAPSHOTS", 3)
+    monkeypatch.setattr(portfolio_api, "_MAX_PAPER_EQUITY_SNAPSHOTS", 6)
+
+    t0 = datetime(2026, 7, 24, 9, 0)
+    async with async_session_maker() as session:
+        # Instance A has 5 points (exceeds per-instance cap of 3), Instance B has 2 points.
+        for i in range(5):
+            session.add(
+                PaperEquitySnapshot(
+                    id=f"a-{i}",
+                    user_id=_USER.sub,
+                    workspace_id="ws-1",
+                    unit_id="u-a",
+                    instance_id="inst-a",
+                    observed_at=t0 + timedelta(minutes=i),
+                    total_equity=100_000.0 + i * 100.0,
+                    cash=100_000.0 + i * 100.0,
+                    position_value=0.0,
+                    realized_pnl=0.0,
+                    unrealized_pnl=0.0,
+                    source="initial" if i == 0 else "mark_to_market",
+                )
+            )
+        for i in range(2):
+            session.add(
+                PaperEquitySnapshot(
+                    id=f"b-{i}",
+                    user_id=_USER.sub,
+                    workspace_id="ws-1",
+                    unit_id="u-b",
+                    instance_id="inst-b",
+                    observed_at=t0 + timedelta(minutes=i),
+                    total_equity=200_000.0 + i * 50.0,
+                    cash=200_000.0 + i * 50.0,
+                    position_value=0.0,
+                    realized_pnl=0.0,
+                    unrealized_pnl=0.0,
+                    source="initial" if i == 0 else "mark_to_market",
+                )
+            )
+        await session.commit()
+
+    points = await portfolio_api._paper_equity_points(
+        _USER,
+        [
+            portfolio_api._PortfolioSource(
+                id="inst-a",
+                strategy_id="s-a",
+                strategy_name="A",
+                status="running",
+                trading_mode="paper",
+            ),
+            portfolio_api._PortfolioSource(
+                id="inst-b",
+                strategy_id="s-b",
+                strategy_name="B",
+                status="running",
+                trading_mode="paper",
+            ),
+        ],
+    )
+
+    assert [p[0] for p in points["inst-a"]] == [
+        "2026-07-24T09:02:00",
+        "2026-07-24T09:03:00",
+        "2026-07-24T09:04:00",
+    ]
+    assert [p[0] for p in points["inst-b"]] == [
+        "2026-07-24T09:00:00",
+        "2026-07-24T09:01:00",
+    ]
+
+
 def test_trading_day_normalizes_utc_snapshot_time_to_local_portfolio_day():
     """UTC snapshots near midnight must group with the same local trading day."""
     from app.api import portfolio_api

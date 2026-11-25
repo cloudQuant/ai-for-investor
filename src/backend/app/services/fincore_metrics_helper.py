@@ -336,9 +336,13 @@ def calculate_metrics_from_log_data(
 
     # Trade statistics
     total_trades = len(trades)
-    profitable_trades = len([t for t in trades if _trade_pnl(t) > 0])
-    losing_trades = len([t for t in trades if _trade_pnl(t) < 0])
+    win_pnls = [_trade_pnl(t) for t in trades if _trade_pnl(t) > 0]
+    loss_pnls = [abs(_trade_pnl(t)) for t in trades if _trade_pnl(t) < 0]
+    profitable_trades = len(win_pnls)
+    losing_trades = len(loss_pnls)
     break_even_trades = total_trades - profitable_trades - losing_trades
+    total_win_amount = round(sum(win_pnls), 2)
+    total_loss_amount = round(sum(loss_pnls), 2)
     max_consecutive_wins = _max_consecutive(trades, win=True)
     max_consecutive_losses = _max_consecutive(trades, win=False)
     avg_holding_bars = _average_holding_bars(trades)
@@ -357,6 +361,8 @@ def calculate_metrics_from_log_data(
         "profitable_trades": profitable_trades,
         "losing_trades": losing_trades,
         "break_even_trades": break_even_trades,
+        "total_win_amount": total_win_amount,
+        "total_loss_amount": total_loss_amount,
         "avg_holding_bars": avg_holding_bars,
         "avg_holding_period": avg_holding_bars,
         "max_consecutive_wins": max_consecutive_wins,

@@ -466,9 +466,10 @@ class TestDatabaseInitialization:
             ]
         )
         monkeypatch.setattr(
-            "app.db.database._has_table", lambda _bind, table_name: table_name == "ak_data_scripts"
+            "app.db.schema_compatibility._has_table",
+            lambda _bind, table_name: table_name == "ak_data_scripts",
         )
-        monkeypatch.setattr("app.db.database.sa.inspect", lambda _bind: inspector)
+        monkeypatch.setattr("app.db.schema_compatibility.sa.inspect", lambda _bind: inspector)
 
         _ensure_akshare_mgmt_schema_compatibility_sync(bind)
 
@@ -492,9 +493,10 @@ class TestDatabaseInitialization:
             ]
         )
         monkeypatch.setattr(
-            "app.db.database._has_table", lambda _bind, table_name: table_name == "ak_data_scripts"
+            "app.db.schema_compatibility._has_table",
+            lambda _bind, table_name: table_name == "ak_data_scripts",
         )
-        monkeypatch.setattr("app.db.database.sa.inspect", lambda _bind: inspector)
+        monkeypatch.setattr("app.db.schema_compatibility.sa.inspect", lambda _bind: inspector)
 
         _ensure_akshare_mgmt_schema_compatibility_sync(bind)
 
@@ -580,3 +582,60 @@ class TestSQLRepository:
         repo = SQLRepository(User)
         rolled_back = await repo.get_by_field("username", "uow_rollback")
         assert rolled_back is None
+
+
+@pytest.mark.asyncio
+class TestDatabaseLifecycleAndCompatibility:
+    """Tests for OCR-24 engine disposal, shutdown hooks, and PRAGMA restoration."""
+
+    async def test_dispose_current_loop_engine_does_not_create_missing_engine(self, monkeypatch):
+        import app.db.database as database_module
+
+        created = []
+        monkeypatch.setattr(
+            database_module, "_create_engine", lambda: created.append(1) or AsyncMock()
+        )
+        await database_module.dispose_current_loop_engine()
+        assert created == []
+
+    async def test_shutdown_hooks_dispose_db_akshare_and_redis_cache(self, monkeypatch):
+        from fastapi import FastAPI
+
+        import app.db.akshare_data_database as ak_db
+        import app.db.cache as cache_module
+        import app.db.database as database_module
+        from app import startup
+
+        disposed_main = AsyncMock()
+        disposed_ak = AsyncMock()
+        closed_cache = AsyncMock()
+        monkeypatch.setattr(database_module, "dispose_all_engines", disposed_main)
+        monkeypatch.setattr(ak_db, "dispose_akshare_data_engine", disposed_ak)
+        monkeypatch.setattr(cache_module, "close_cache", closed_cache)
+        monkeypatch.setattr(startup.database, "dispose_all_engines", disposed_main)
+        monkeypatch.setattr(startup.database, "dispose_akshare_data_engine", disposed_ak)
+        monkeypatch.setattr(startup.database, "close_cache", closed_cache)
+
+        assert startup.database.shutdown in startup.SHUTDOWN_HOOKS
+        await startup.database.shutdown(FastAPI(), get_settings())
+        assert disposed_main.await_count == 1
+        assert disposed_ak.await_count == 1
+        assert closed_cache.await_count == 1
+
+    async def test_sqlite_rebuild_restores_foreign_keys_even_on_error(self):
+        from app.db.schema_compatibility import _rebuild_sqlite_chat_conversations_with_nullable_kb
+
+        executed: list[str] = []
+
+        class FailingBind:
+            def execute(self, stmt):
+                sql = str(stmt)
+                executed.append(sql)
+                if "DROP TABLE IF EXISTS chat_conversations_new" in sql:
+                    raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            _rebuild_sqlite_chat_conversations_with_nullable_kb(FailingBind())
+
+        assert executed[0] == "PRAGMA foreign_keys=OFF"
+        assert executed[-1] == "PRAGMA foreign_keys=ON"

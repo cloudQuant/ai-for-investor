@@ -610,6 +610,8 @@ class AkshareDataService:
             basis_meta: dict[str, Any] | None = None
             if has_adjustment:
                 observed_bases = await self._sample_observed_bases(conn, quoted_name)
+                if adjustment is not None and adjustment not in observed_bases:
+                    observed_bases = sorted([*observed_bases, adjustment])
                 basis_meta = {
                     "filter": adjustment,
                     "observed_bases": observed_bases,

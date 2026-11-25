@@ -82,26 +82,11 @@ def _merge_optimization_config(
     return config
 
 
-def build_optimization_trial_payload(
-    task_id: str,
-    result_index: int,
-    unit: StrategyUnit,
-    log_result: dict[str, Any],
-    created_at: str,
-    result_entry: dict[str, Any],
-) -> dict[str, Any]:
-    from app.services.workspace_service import _normalize_unit_data_config
-
-    equity_values = [float(v or 0.0) for v in (log_result.get("equity_curve") or [])]
-    equity_dates = [str(v or "") for v in (log_result.get("equity_dates") or [])]
-    cash_values = [float(v or 0.0) for v in (log_result.get("cash_curve") or [])]
-    raw_trades = list(log_result.get("trades") or [])
-    kline = cast(dict[str, Any], log_result.get("kline") or {})
-    kline_dates = [str(v or "") for v in (kline.get("dates") or [])]
-    kline_ohlc = list(kline.get("ohlc") or [])
-    kline_volumes = list(kline.get("volumes") or [])
-    log_indicators = cast(dict[str, list[float | None]], kline.get("indicators") or {})
-
+def _build_trial_curves(
+    equity_dates: list[str],
+    equity_values: list[float],
+    cash_values: list[float],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     equity_curve: list[dict[str, Any]] = []
     drawdown_curve: list[dict[str, Any]] = []
     peak = 0.0
@@ -110,14 +95,13 @@ def build_optimization_trial_payload(
             peak = value
         date = (equity_dates[index] if index < len(equity_dates) else "")[:10]
         cash = cash_values[index] if index < len(cash_values) else value
-        position_value = value - cash
         drawdown = ((value - peak) / peak) if peak > 0 else 0.0
         equity_curve.append(
             {
                 "date": date,
                 "total_assets": round(value, 2),
                 "cash": round(cash, 2),
-                "position_value": round(position_value, 2),
+                "position_value": round(value - cash, 2),
             }
         )
         drawdown_curve.append(
@@ -128,7 +112,15 @@ def build_optimization_trial_payload(
                 "trough": round(value, 2),
             }
         )
+    return equity_curve, drawdown_curve
 
+
+def _build_trial_klines(
+    kline: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    kline_dates = [str(v or "") for v in (kline.get("dates") or [])]
+    kline_ohlc = list(kline.get("ohlc") or [])
+    kline_volumes = list(kline.get("volumes") or [])
     klines: list[dict[str, Any]] = []
     kline_close_map: dict[str, float] = {}
     for index, date in enumerate(kline_dates):
@@ -150,10 +142,17 @@ def build_optimization_trial_payload(
         )
         if normalized_date:
             kline_close_map[normalized_date] = round(close_price, 4)
+    return klines, kline_close_map
 
+
+def _build_trial_trades_and_signals(
+    raw_trades: list[Any],
+    *,
+    symbol: str,
+    kline_close_map: dict[str, float],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     trades: list[dict[str, Any]] = []
     signals: list[dict[str, Any]] = []
-    symbol = str(unit.symbol or unit.symbol_name or unit.strategy_name or "Unknown")
     for index, trade in enumerate(raw_trades):
         trade_data = dict(trade or {})
         pnl = trade_data.get("pnl")
@@ -164,68 +163,91 @@ def build_optimization_trial_payload(
         direction = str(trade_data.get("direction", "buy") or "buy")
         dtopen = str(trade_data.get("dtopen", "") or "")[:10]
         dtclose = str(trade_data.get("dtclose", trade_data.get("datetime", "")) or "")[:10]
-
-        trade_payload = {
-            "id": index + 1,
-            "datetime": str(trade_data.get("datetime", dtclose) or dtclose)[:10],
-            "dtopen": dtopen,
-            "dtclose": dtclose,
-            "symbol": symbol,
-            "direction": direction,
-            "price": open_price,
-            "close_price": trade_data.get("close_price"),
-            "size": size,
-            "value": float(trade_data.get("value", 0) or 0),
-            "commission": float(trade_data.get("commission", 0) or 0),
-            "pnl": pnl,
-            "barlen": trade_data.get("barlen"),
-        }
-        trades.append(trade_payload)
-
+        trades.append(
+            {
+                "id": index + 1,
+                "datetime": str(trade_data.get("datetime", dtclose) or dtclose)[:10],
+                "dtopen": dtopen,
+                "dtclose": dtclose,
+                "symbol": symbol,
+                "direction": direction,
+                "price": open_price,
+                "close_price": trade_data.get("close_price"),
+                "size": size,
+                "value": float(trade_data.get("value", 0) or 0),
+                "commission": float(trade_data.get("commission", 0) or 0),
+                "pnl": pnl,
+                "barlen": trade_data.get("barlen"),
+            }
+        )
         is_long = direction == "buy"
-        if dtopen:
-            signals.append(
-                {
-                    "date": dtopen,
-                    "type": "buy" if is_long else "sell",
-                    "price": kline_close_map.get(dtopen, open_price),
-                    "size": abs(size),
-                }
-            )
-        if dtclose:
-            signals.append(
-                {
-                    "date": dtclose,
-                    "type": "sell" if is_long else "buy",
-                    "price": kline_close_map.get(dtclose, open_price),
-                    "size": abs(size),
-                }
-            )
+        for sig_date, sig_type in (
+            (dtopen, "buy" if is_long else "sell"),
+            (dtclose, "sell" if is_long else "buy"),
+        ):
+            if sig_date:
+                signals.append(
+                    {
+                        "date": sig_date,
+                        "type": sig_type,
+                        "price": kline_close_map.get(sig_date, open_price),
+                        "size": abs(size),
+                    }
+                )
+    return trades, signals
 
+
+def _compute_trial_monthly_returns(
+    equity_dates: list[str], equity_values: list[float]
+) -> dict[tuple[int, int], float]:
     monthly_returns: dict[tuple[int, int], float] = {}
-    if equity_dates and equity_values:
-        month_start_value = equity_values[0]
-        current_month: tuple[int, int] | None = None
-        for date_text, value in zip(equity_dates, equity_values, strict=False):
-            try:
-                dt = datetime.strptime(str(date_text)[:10], "%Y-%m-%d")
-            except ValueError:
-                continue
-            month_key = (dt.year, dt.month)
-            if current_month != month_key:
-                if current_month and month_start_value > 0:
-                    monthly_returns[current_month] = round(
-                        (value - month_start_value) / month_start_value,
-                        6,
-                    )
-                month_start_value = value
-                current_month = month_key
-        if current_month and month_start_value > 0:
-            monthly_returns[current_month] = round(
-                (equity_values[-1] - month_start_value) / month_start_value,
-                6,
-            )
+    if not (equity_dates and equity_values):
+        return monthly_returns
+    month_start_value = equity_values[0]
+    current_month: tuple[int, int] | None = None
+    for date_text, value in zip(equity_dates, equity_values, strict=False):
+        try:
+            dt = datetime.strptime(str(date_text)[:10], "%Y-%m-%d")
+        except ValueError:
+            continue
+        month_key = (dt.year, dt.month)
+        if current_month != month_key:
+            if current_month and month_start_value > 0:
+                monthly_returns[current_month] = round(
+                    (value - month_start_value) / month_start_value, 6
+                )
+            month_start_value = value
+            current_month = month_key
+    if current_month and month_start_value > 0:
+        monthly_returns[current_month] = round(
+            (equity_values[-1] - month_start_value) / month_start_value, 6
+        )
+    return monthly_returns
 
+
+def build_optimization_trial_payload(
+    task_id: str,
+    result_index: int,
+    unit: StrategyUnit,
+    log_result: dict[str, Any],
+    created_at: str,
+    result_entry: dict[str, Any],
+) -> dict[str, Any]:
+    from app.services.workspace_service import _normalize_unit_data_config
+
+    equity_values = [float(v or 0.0) for v in (log_result.get("equity_curve") or [])]
+    equity_dates = [str(v or "") for v in (log_result.get("equity_dates") or [])]
+    cash_values = [float(v or 0.0) for v in (log_result.get("cash_curve") or [])]
+    raw_trades = list(log_result.get("trades") or [])
+    kline = cast(dict[str, Any], log_result.get("kline") or {})
+    log_indicators = cast(dict[str, list[float | None]], kline.get("indicators") or {})
+    equity_curve, drawdown_curve = _build_trial_curves(equity_dates, equity_values, cash_values)
+    klines, kline_close_map = _build_trial_klines(kline)
+    symbol = str(unit.symbol or unit.symbol_name or unit.strategy_name or "Unknown")
+    trades, signals = _build_trial_trades_and_signals(
+        raw_trades, symbol=symbol, kline_close_map=kline_close_map
+    )
+    monthly_returns = _compute_trial_monthly_returns(equity_dates, equity_values)
     data_config = _normalize_unit_data_config(cast("dict[str, Any] | None", unit.data_config))
     start_date = str(data_config.get("start_date") or (equity_dates[0] if equity_dates else ""))[
         :10
@@ -233,7 +255,6 @@ def build_optimization_trial_payload(
     end_date = str(data_config.get("end_date") or (equity_dates[-1] if equity_dates else ""))[:10]
     strategy_name = str(unit.strategy_name or unit.strategy_id or "Unknown")
     artifact_metadata = build_optimization_artifact_metadata(task_id, result_index, result_entry)
-
     return {
         "task_id": f"{task_id}:{result_index}",
         "strategy_name": strategy_name,

@@ -11,15 +11,23 @@ surface consistent with the frontend `simulationApi` while avoiding duplication.
 Analytics endpoints (detail, kline, monthly-returns) are in simulation_analytics.py.
 """
 
+import inspect
 import logging
+import re
+import shutil
 import typing
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, PlainTextResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.api.simulation_analytics import router as analytics_router
+from app.db.database import get_db
+from app.models.permission import Role, user_roles
 from app.schemas.live_trading_instance import (
     LiveBatchResponse,
     LiveInstanceCreate,
@@ -29,7 +37,7 @@ from app.schemas.live_trading_instance import (
 from app.services.live_trading import instance as live_instance_service
 from app.services.live_trading_manager import LiveTradingManager, get_live_trading_manager
 from app.services.log_parser_service import find_latest_log_dir
-from app.services.strategy_service import get_strategy_dir
+from app.services.strategy_service import STRATEGIES_DIR, get_strategy_dir
 from app.services.workspace.units import (
     AIStrategyResearchPaperRuntimeDeleteError,
     AIStrategyResearchPaperRuntimeStopError,
@@ -39,8 +47,68 @@ from app.services.workspace.units import (
 
 logger = logging.getLogger(__name__)
 
+_SIMULATION_RUNTIMES_ROOT = Path(__file__).resolve().parents[4] / "var" / "simulation_runtimes"
+
 router = APIRouter()
 router.include_router(analytics_router)
+
+
+def _safe_owner_segment(user_id: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(user_id or "").strip()).strip("._")
+    return cleaned or "user"
+
+
+def _create_isolated_simulation_runtime_dir(strategy_id: str, user_id: str) -> str | None:
+    """Materialize a per-instance owner-scoped runtime copy of a strategy template."""
+    template_dir = get_strategy_dir(strategy_id)
+    if not (template_dir / "run.py").is_file():
+        return None
+    root = _SIMULATION_RUNTIMES_ROOT.resolve()
+    owner_dir = root / _safe_owner_segment(user_id)
+    runtime_dir = (owner_dir / uuid.uuid4().hex[:12]).resolve()
+    if not runtime_dir.is_relative_to(root):
+        raise ValueError("Invalid simulation runtime directory")
+    shutil.copytree(
+        template_dir,
+        runtime_dir,
+        ignore=shutil.ignore_patterns("logs", "__pycache__", "*.pyc", ".git"),
+    )
+    (runtime_dir / "logs").mkdir(parents=True, exist_ok=True)
+    return str(runtime_dir)
+
+
+async def _is_admin_user(db: AsyncSession, user_id: str) -> bool:
+    result = await db.execute(
+        select(user_roles.c.role).where(
+            user_roles.c.user_id == user_id,
+            user_roles.c.role == Role.ADMIN.value,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+def _is_inside_shared_strategies_dir(target_dir: Path) -> bool:
+    strategies_root = Path(STRATEGIES_DIR).resolve()
+    try:
+        resolved = target_dir.resolve()
+    except OSError:
+        resolved = target_dir
+    return resolved == strategies_root or resolved.is_relative_to(strategies_root)
+
+
+def _cleanup_isolated_runtime_dir(inst: typing.Mapping[str, typing.Any] | None) -> None:
+    if not inst:
+        return
+    raw_dir = str(inst.get("runtime_dir") or "").strip()
+    if not raw_dir:
+        return
+    try:
+        root = _SIMULATION_RUNTIMES_ROOT.resolve()
+        candidate = Path(raw_dir).expanduser().resolve()
+    except OSError:
+        return
+    if candidate.is_relative_to(root) and candidate.exists():
+        shutil.rmtree(candidate, ignore_errors=True)
 
 
 def _get_manager() -> LiveTradingManager:
@@ -98,8 +166,28 @@ async def add_instance(
             detail={"code": "AI_RESEARCH_PAPER_STRATEGY_MUTATION_FORBIDDEN"},
         )
     try:
+        isolated_runtime_dir = _create_isolated_simulation_runtime_dir(
+            req.strategy_id, current_user.sub
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    try:
+        add_sig = inspect.signature(mgr.add_instance)
+        if isolated_runtime_dir is not None and (
+            "runtime_dir" in add_sig.parameters
+            or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in add_sig.parameters.values())
+        ):
+            return mgr.add_instance(
+                req.strategy_id,
+                req.params,
+                user_id=current_user.sub,
+                runtime_dir=isolated_runtime_dir,
+            )
         return mgr.add_instance(req.strategy_id, req.params, user_id=current_user.sub)
     except ValueError as e:
+        if isolated_runtime_dir is not None:
+            shutil.rmtree(isolated_runtime_dir, ignore_errors=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
@@ -129,8 +217,10 @@ async def remove_instance(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": e.code},
         ) from e
+    inst = mgr.get_instance(instance_id, user_id=current_user.sub)
     if not mgr.remove_instance(instance_id, user_id=current_user.sub):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instance not found")
+    _cleanup_isolated_runtime_dir(inst)
     return {"message": "Deleted successfully"}
 
 
@@ -278,27 +368,22 @@ async def stop_all(
         ) from e
 
 
-def _get_strategy_log_dir(mgr: LiveTradingManager, instance_id: str, user_id: str) -> Path:
-    """Get the latest log directory for a simulation strategy instance.
-
-    Args:
-        mgr: The simulation manager instance.
-        instance_id: The ID of the simulation instance.
-        user_id: User ID for permission check.
-
-    Returns:
-        The path to the log directory.
-
-    Raises:
-        HTTPException: If the instance or log directory is not found.
-    """
+def _resolve_instance_base_dir(mgr: LiveTradingManager, instance_id: str, user_id: str) -> Path:
     inst = mgr.get_instance(instance_id, user_id=user_id)
     if not inst:
         raise HTTPException(status_code=404, detail="Instance not found")
+    runtime_dir = str(inst.get("runtime_dir") or "").strip()
+    if runtime_dir:
+        return Path(runtime_dir).expanduser()
     try:
-        strategy_dir = get_strategy_dir(inst["strategy_id"])
+        return get_strategy_dir(inst["strategy_id"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+def _get_strategy_log_dir(mgr: LiveTradingManager, instance_id: str, user_id: str) -> Path:
+    """Get the latest log directory for a simulation strategy instance."""
+    strategy_dir = _resolve_instance_base_dir(mgr, instance_id, user_id)
     log_dir = find_latest_log_dir(strategy_dir)
     if not log_dir:
         raise HTTPException(
@@ -408,27 +493,8 @@ async def download_simulation_log(
 
 
 def _get_strategy_config_path(mgr: LiveTradingManager, instance_id: str, user_id: str) -> Path:
-    """Resolve the config.yaml path for a simulation instance.
-
-    Args:
-        mgr: The simulation manager instance.
-        instance_id: The ID of the simulation instance.
-        user_id: User ID for permission check.
-
-    Returns:
-        Path to the config.yaml file.
-
-    Raises:
-        HTTPException: If the instance is not found or config file doesn't exist.
-    """
-    inst = mgr.get_instance(instance_id, user_id=user_id)
-    if not inst:
-        raise HTTPException(status_code=404, detail="Instance not found")
-    try:
-        strategy_dir = get_strategy_dir(inst["strategy_id"])
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    return strategy_dir / "config.yaml"
+    """Resolve the config.yaml path for a simulation instance."""
+    return _resolve_instance_base_dir(mgr, instance_id, user_id) / "config.yaml"
 
 
 @router.get(
@@ -479,6 +545,7 @@ async def update_instance_config(
     instance_id: str,
     body: dict,
     current_user: typing.Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> typing.Any:
     """Update the config.yaml for a simulation instance.
@@ -486,18 +553,6 @@ async def update_instance_config(
     Accepts either raw YAML text (field ``raw``) or a parsed config dict
     (field ``config``).  When ``raw`` is provided it is written directly;
     otherwise the ``config`` dict is serialised to YAML.
-
-    Args:
-        instance_id: The ID of the simulation instance.
-        body: Request body with ``raw`` (string) or ``config`` (dict).
-        current_user: The authenticated user.
-        mgr: The simulation manager instance.
-
-    Returns:
-        Success message.
-
-    Raises:
-        HTTPException: If the instance is not found or write fails.
     """
     import yaml as _yaml
 
@@ -517,6 +572,13 @@ async def update_instance_config(
         )
 
     config_path = _get_strategy_config_path(mgr, instance_id, current_user.sub)
+    if _is_inside_shared_strategies_dir(config_path.parent) and not await _is_admin_user(
+        db, current_user.sub
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Shared strategy template configs cannot be modified by non-admin users",
+        )
 
     raw_text = body.get("raw")
     config_dict = body.get("config")
@@ -560,24 +622,20 @@ async def clear_simulation_log(
     instance_id: str,
     filename: str,
     current_user: typing.Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> typing.Any:
-    """Clear (truncate) a single log file for a simulation instance.
-
-    Args:
-        instance_id: The ID of the simulation instance.
-        filename: The log file to clear.
-        current_user: The authenticated user.
-        mgr: The simulation manager instance.
-
-    Returns:
-        Success message.
-
-    Raises:
-        HTTPException: If the file is invalid or not found.
-    """
+    """Clear (truncate) a single log file for a simulation instance."""
     if not _safe_log_filename(filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
+    base_dir = _resolve_instance_base_dir(mgr, instance_id, current_user.sub)
+    if _is_inside_shared_strategies_dir(base_dir) and not await _is_admin_user(
+        db, current_user.sub
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Shared strategy template logs cannot be deleted by non-admin users",
+        )
     log_dir = _get_strategy_log_dir(mgr, instance_id, current_user.sub)
     filepath = log_dir / filename
     if not filepath.is_file() or not filepath.resolve().is_relative_to(log_dir.resolve()):
@@ -598,21 +656,18 @@ async def clear_simulation_log(
 async def clear_all_simulation_logs(
     instance_id: str,
     current_user: typing.Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> typing.Any:
-    """Clear (truncate) all log files for a simulation instance.
-
-    Args:
-        instance_id: The ID of the simulation instance.
-        current_user: The authenticated user.
-        mgr: The simulation manager instance.
-
-    Returns:
-        Summary of cleared files.
-
-    Raises:
-        HTTPException: If the log directory is not found.
-    """
+    """Clear (truncate) all log files for a simulation instance."""
+    base_dir = _resolve_instance_base_dir(mgr, instance_id, current_user.sub)
+    if _is_inside_shared_strategies_dir(base_dir) and not await _is_admin_user(
+        db, current_user.sub
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Shared strategy template logs cannot be deleted by non-admin users",
+        )
     log_dir = _get_strategy_log_dir(mgr, instance_id, current_user.sub)
     cleared = []
     for f in sorted(log_dir.iterdir()):

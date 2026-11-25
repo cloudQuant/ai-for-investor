@@ -1236,3 +1236,140 @@ def test_epoch_normalisation_accepts_millisecond_and_sub_second_units() -> None:
     assert controller._as_day(str(seconds * 1000)) == "2026-11-09"
     assert controller._as_day(seconds * 10**6) == "2026-11-09"
     assert controller._as_day(seconds * 10**9) == "2026-11-09"
+
+
+def test_as_day_ignores_non_finite_and_negative_numbers() -> None:
+    assert controller._as_day(float("nan")) is None
+    assert controller._as_day(float("inf")) is None
+    assert controller._as_day(float("-inf")) is None
+    assert controller._as_day(-1) is None
+
+
+def test_classify_source_only_dates_counts_all_gaps_beyond_date_list_limit() -> None:
+    from datetime import date, timedelta
+
+    base = date(2020, 1, 1)
+    all_days = [(base + timedelta(days=i)).isoformat() for i in range(500)]
+    baseline = warehouse_rows([all_days[100], all_days[200]])
+    src = source_payload(all_days)["rows"]
+
+    comparison = controller.compare_daily_ledgers(src, baseline)
+    assert len(comparison["source_only_dates"]) == controller.DATE_LIST_LIMIT
+    assert comparison["source_only_count"] == 498
+
+    gaps_via_comparison = controller.classify_source_only_dates(comparison, baseline)
+    assert gaps_via_comparison["head_count"] == 100
+    assert gaps_via_comparison["internal_count"] == 99
+    assert gaps_via_comparison["tail_count"] == 299
+
+    gaps_via_source = controller.classify_source_only_dates(
+        {"source_only_dates": []}, baseline, source_rows=src
+    )
+    assert gaps_via_source["head_count"] == 100
+    assert gaps_via_source["internal_count"] == 99
+    assert gaps_via_source["tail_count"] == 299
+
+
+def test_overview_reader_handles_legacy_table_without_source_column() -> None:
+    cols_without_source = [col for col in _WAREHOUSE_COLUMNS if col != "source"]
+    connection = RecordingConnection(columns=cols_without_source, rows=[])
+
+    with controller.MySQLConvertibleReader(connection) as reader:
+        _, evidence = reader.read_convertible_history_overview()
+
+    assert evidence["source_provenance"]["source_field_available"] is False
+    executed = " ".join(sql for sql, _ in connection.executed)
+    assert "NULLIF(source" not in executed
+
+
+def test_killable_probe_escalates_to_sigkill_when_child_ignores_sigterm() -> None:
+    import signal
+
+    def sigterm_ignoring_worker(connection: Any, symbol: str) -> None:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        time.sleep(30)
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="exceeded 1 seconds"):
+        controller._run_killable_probe(
+            sigterm_ignoring_worker, ("sh110001",), 1, start_method="fork"
+        )
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 5.0
+    assert [child for child in multiprocessing.active_children() if child.exitcode is None] == []
+
+
+def test_managed_repair_normalizes_akshare_catalog_source_to_sina(monkeypatch: Any) -> None:
+    from types import SimpleNamespace
+
+    captured: dict[str, Any] = {}
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+        async def execute(self, *_args: Any, **_kwargs: Any) -> Any:
+            return SimpleNamespace(
+                scalar_one_or_none=lambda: SimpleNamespace(is_active=True, source="akshare")
+            )
+
+    class FakeScriptService:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def run_script(self, script_id: str, *, parameters: dict[str, Any], **_kwargs: Any):
+            captured["script_id"] = script_id
+            captured["parameters"] = parameters
+            return SimpleNamespace(status="completed")
+
+    monkeypatch.setattr("app.db.database.async_session_maker", lambda: FakeSession())
+    monkeypatch.setattr("app.services.akshare.script.AkshareScriptService", FakeScriptService)
+
+    resolved = asyncio.run(controller._load_active_script_source())
+    assert resolved == "sina"
+
+    snap = controller.normalize_source_payload(BOND, source_payload(ALL_DATES))
+    asyncio.run(
+        controller._managed_repair(
+            BOND,
+            "akshare",
+            snap,
+            timeout_seconds=10.0,
+            source_timeout_seconds=5,
+        )
+    )
+    assert captured["parameters"]["source"] == "sina"
+
+
+def test_bond_zh_hs_cov_daily_ddl_has_source_and_propagates_db_errors(monkeypatch: Any) -> None:
+    import pandas as pd
+
+    from app.data_fetch.scripts.bonds.daily.bond_zh_hs_cov_daily import BondZhHsCovDaily
+
+    script = BondZhHsCovDaily()
+    assert "`source`" in script.create_table_sql
+    assert "uk_symbol_date_source" in script.create_table_sql
+
+    sample_df = pd.DataFrame(
+        {
+            "date": ["2024-01-02"],
+            "open": [100.0],
+            "high": [101.0],
+            "low": [99.0],
+            "close": [100.5],
+            "volume": [10],
+        }
+    )
+    monkeypatch.setattr(script, "fetch_ak_data", lambda *_a, **_kw: sample_df.copy())
+    monkeypatch.setattr(script, "create_table_if_not_exists", lambda *_a, **_kw: True)
+
+    def broken_save(*_a: Any, **_kw: Any) -> None:
+        raise RuntimeError("db write failed")
+
+    monkeypatch.setattr(script, "save_data", broken_save)
+    with pytest.raises(RuntimeError, match="db write failed"):
+        script.fetch_data(symbol="sh113062", source="sina")

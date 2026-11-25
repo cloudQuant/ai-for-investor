@@ -23,6 +23,7 @@ from app.services.research.quota import (
     QuotaSettlementRequest,
 )
 from app.services.research.redaction import redact_sensitive_payload
+from app.utils.invariants import require_present
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,12 +423,11 @@ class LlmGateway:
         )
         if error_code is not None:
             raise ValueError(error_code)
-        assert safe_output is not None
         return GatewayResult(
             invocation_id=invocation.id,
             requested_model=requested_model,
             resolved_model=resolved_model,
-            output=safe_output,
+            output=require_present(safe_output, "gateway output missing"),
         )
 
     async def _revalidate_quote(self, quote: BudgetQuote) -> None:

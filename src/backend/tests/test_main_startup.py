@@ -24,12 +24,14 @@ def test_shutdown_hooks_register_subsystems_in_order():
 
     assert modules == [
         "app.startup.orchestration",
+        "app.startup.monitoring",
         "app.startup.asset_research",
         "app.startup.stock_signal",
         "app.startup.paper_runtime",
         "app.startup.reconcile",
         "app.startup.audit_sink",
         "app.startup.ai_log_sink",
+        "app.startup.database",
     ]
 
 

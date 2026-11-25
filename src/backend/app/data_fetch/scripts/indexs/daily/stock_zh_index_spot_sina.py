@@ -147,9 +147,10 @@ class StockZhIndexSpotSina(AkshareToMySql):
                     unique_keys=["INDEX_CODE", "TRADE_DATE"],
                 )
 
-                if success:
+                if success is not False:
                     self.logger.info(f"Successfully updated {len(df)} records in {self.table_name}")
-                return success
+                    return True
+                return False
             else:
                 self.logger.warning("No data to update")
                 return False

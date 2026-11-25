@@ -18834,3 +18834,49 @@ async def test_auto_scheduler_requests_protected_paper_skip_for_market_close(mon
     await scheduler._loop()
 
     assert close_calls == [{"skip_server_owned_ai_research_paper_runtimes": True}]
+
+
+@pytest.mark.asyncio
+async def test_freshen_run_records_batches_workspace_queries():
+    from app.schemas.ai_strategy_research import AIStrategyResearchRunRecord
+    from app.services.ai_strategy_research_service import AIStrategyResearchService
+
+    status_calls: list[str] = []
+
+    class CountingWorkspaceService(FakeWorkspaceService):
+        async def get_units_status(self, workspace_id: str, user_id: str):
+            status_calls.append(workspace_id)
+            return [{"id": "unit-1", "last_task_id": "t-new", "run_status": "completed"}]
+
+    svc = AIStrategyResearchService(workspace_service=CountingWorkspaceService())
+    records = [
+        AIStrategyResearchRunRecord(
+            run_id=f"run-{i}",
+            prompt="test",
+            symbol="000001.SZ",
+            symbol_name="平安银行",
+            timeframe="1d",
+            timeframe_n=1,
+            initial_cash=100000.0,
+            commission=0.001,
+            annual_days=252,
+            calc_method="simple",
+            weight_mode="equal",
+            status="completed",
+            achieved=False,
+            target_sharpe=1.0,
+            quality_gates={},
+            min_total_trades=1,
+            max_iterations=1,
+            best_strategy_id="s1",
+            research_workspace_id="shared-research-ws",
+            started_at="2026-09-09T00:00:00+00:00",
+            completed_at="2026-09-09T00:01:00+00:00",
+            iterations=[{"iteration": 1, "unit_id": "unit-1", "run_result": {}}],
+        )
+        for i in range(3)
+    ]
+
+    refreshed, _ = await svc._freshen_run_records_with_paper_state("user-1", records)
+    assert len(refreshed) == 3
+    assert status_calls == ["shared-research-ws"]

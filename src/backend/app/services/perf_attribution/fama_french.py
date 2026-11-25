@@ -1,5 +1,6 @@
 """Fama-French three-factor attribution."""
 
+import math
 import statistics
 
 from app.schemas.perf_attribution import FamaFrenchAttributionResult
@@ -21,7 +22,7 @@ class FamaFrenchAttributionService:
         observation_count = min(
             len(strategy_returns), len(market_returns), len(smb_returns), len(hml_returns)
         )
-        if observation_count < min_observations:
+        if observation_count < min_observations or observation_count == 0:
             return FamaFrenchAttributionResult(
                 status="degraded",
                 observation_count=observation_count,
@@ -38,6 +39,14 @@ class FamaFrenchAttributionService:
             for index in range(observation_count)
         ]
         y_values = [float(strategy_returns[index]) for index in range(observation_count)]
+        if any(not math.isfinite(val) for row in x_rows for val in row) or any(
+            not math.isfinite(val) for val in y_values
+        ):
+            return FamaFrenchAttributionResult(
+                status="degraded",
+                observation_count=observation_count,
+                reason="non_finite_input",
+            )
         try:
             coefficients = _solve_normal_equations(x_rows, y_values)
         except ValueError:
@@ -58,6 +67,12 @@ class FamaFrenchAttributionService:
             for actual, predicted in zip(y_values, predictions, strict=False)
         )
         r_squared = 1.0 if ss_total == 0 else 1 - ss_residual / ss_total
+        if not (all(math.isfinite(c) for c in coefficients) and math.isfinite(r_squared)):
+            return FamaFrenchAttributionResult(
+                status="degraded",
+                observation_count=observation_count,
+                reason="non_finite_input",
+            )
         return FamaFrenchAttributionResult(
             status="ok",
             observation_count=observation_count,

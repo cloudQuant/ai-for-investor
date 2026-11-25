@@ -7,6 +7,7 @@ Exposes /metrics endpoint for monitoring systems.
 from fastapi import APIRouter, Response
 from fastapi.responses import PlainTextResponse
 
+from app.api.deps import RequireManageUsers
 from app.middleware.metrics import get_metrics_output, is_metrics_available
 from app.utils.logger import get_logger
 
@@ -34,7 +35,7 @@ router = APIRouter()
         },
     },
 )
-async def metrics_endpoint() -> Response:
+async def metrics_endpoint(_: object = RequireManageUsers) -> Response:
     """Get Prometheus metrics.
 
     Returns:
@@ -57,7 +58,7 @@ async def metrics_endpoint() -> Response:
     except Exception as e:
         logger.error(f"Failed to generate metrics: {e}")
         return Response(
-            content=f"# Error generating metrics: {e}\n",
+            content="# Error generating metrics\n",
             status_code=500,
             media_type="text/plain",
         )
@@ -68,7 +69,7 @@ async def metrics_endpoint() -> Response:
     summary="Metrics collection status",
     description="Returns the status of metrics collection.",
 )
-async def metrics_status() -> dict:
+async def metrics_status(_: object = RequireManageUsers) -> dict:
     """Get metrics collection status.
 
     Returns:

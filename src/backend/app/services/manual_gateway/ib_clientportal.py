@@ -606,7 +606,7 @@ def connect_ib_web_gateway(
     try:
         gateway_config_cls, gateway_runtime_cls = import_gateway_runtime_classes()
         source_credentials = credentials
-        verify_ssl = coerce_bool(credentials.get("verify_ssl"), default=False)
+        verify_ssl = coerce_bool(credentials.get("verify_ssl"), default=True)
         timeout = coerce_float(credentials.get("timeout"), default=10.0)
         base_url = normalize_base_url(credentials.get("base_url", "https://localhost:5000"))
         ensure_clientportal_running(base_url, logger)

@@ -11,6 +11,7 @@ import math
 import os
 from array import array
 from collections.abc import Mapping, Sequence
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta, timezone, tzinfo
 from functools import wraps
 from typing import Literal, SupportsFloat, SupportsIndex
@@ -25,6 +26,13 @@ from app.models.paper_trading import (
     OrderType,
     PaperTrade,
     Position,
+)
+from app.services.paper_trading_execution import (
+    cancel_order_transactional,
+    compute_execution_price,
+    list_account_positions,
+    process_order_transactional,
+    uses_real_sql_repos,
 )
 from app.services.paper_trading_positions import (
     PositionEvent,
@@ -46,6 +54,12 @@ from app.websocket_manager import MessageType
 from app.websocket_manager import manager as ws_manager
 
 logger = logging.getLogger(__name__)
+
+
+_ACTIVE_FENCE_ACCOUNTS: ContextVar[frozenset[str]] = ContextVar(
+    "_active_paper_fence_accounts",
+    default=frozenset(),
+)
 
 
 def _legacy_paper_writer_fence(
@@ -76,10 +90,18 @@ def _legacy_paper_writer_fence(
                     return await method(self, *args, **kwargs)
             if not account_id:
                 return await method(self, *args, **kwargs)
+            account_key = str(account_id)
+            active = _ACTIVE_FENCE_ACCOUNTS.get()
+            if account_key in active:
+                return await method(self, *args, **kwargs)
             from app.services.legacy_paper_migration import legacy_paper_writer_lease
 
-            async with legacy_paper_writer_lease(str(account_id)):
-                return await method(self, *args, **kwargs)
+            async with legacy_paper_writer_lease(account_key):
+                token = _ACTIVE_FENCE_ACCOUNTS.set(active | {account_key})
+                try:
+                    return await method(self, *args, **kwargs)
+                finally:
+                    _ACTIVE_FENCE_ACCOUNTS.reset(token)
 
         return wrapped
 
@@ -936,7 +958,7 @@ class PaperTradingService:
                 stop_price=stop_price,
                 limit_price=limit_price,
             )
-            asset_spec = self._local_asset_spec_for_symbol(symbol)
+            asset_spec = await asyncio.to_thread(self._local_asset_spec_for_symbol, symbol)
             self._validate_asset_order_constraints(
                 symbol=symbol,
                 size=size,
@@ -999,7 +1021,11 @@ class PaperTradingService:
             account_id: Account ID.
             account: Account object.
         """
-        # Get order
+        if uses_real_sql_repos(self):
+            await process_order_transactional(self, order_id, account_id, account)
+            return
+
+        # Get order (mocked-repository unit test path)
         order = await self.order_repo.get_by_id(order_id)
         if not order:
             logger.error(f"Order not found: {order_id}")
@@ -1016,7 +1042,7 @@ class PaperTradingService:
                 stop_price=self._optional_order_number(order, "stop_price"),
                 limit_price=self._optional_order_number(order, "limit_price"),
             )
-            asset_spec = self._local_asset_spec_for_symbol(order.symbol)
+            asset_spec = await asyncio.to_thread(self._local_asset_spec_for_symbol, order.symbol)
             self._validate_asset_order_constraints(
                 symbol=order.symbol,
                 size=normalized_size,
@@ -1216,12 +1242,7 @@ class PaperTradingService:
         if exact_open is not None:
             return exact_open
 
-        account_positions = await position_repo.list(
-            filters={"account_id": account_id},
-            limit=200,
-            sort_by="updated_at",
-            sort_order="desc",
-        )
+        account_positions = await list_account_positions(position_repo, account_id)
         alias_positions = [
             position
             for position in account_positions
@@ -1443,7 +1464,8 @@ class PaperTradingService:
         position_event: PositionEvent | None = None,
         account_repo: SQLRepository[Account] | None = None,
         position_repo: SQLRepository[Position] | None = None,
-    ) -> None:
+        send_notifications: bool = True,
+    ) -> Sequence[PositionView]:
         """Update account after order fill.
 
         Args:
@@ -1454,8 +1476,8 @@ class PaperTradingService:
         """
         account_repo = account_repo or self.account_repo
         position_repo = position_repo or self.position_repo
-        positions: Sequence[PositionView] = await position_repo.list(
-            filters={"account_id": account.id}
+        positions: Sequence[PositionView] = await list_account_positions(
+            position_repo, account.id, open_only=True
         )
         if position_event is not None:
             positions = self._merge_position_snapshot(
@@ -1484,7 +1506,9 @@ class PaperTradingService:
         # Update PnL
         profit_loss = account.total_equity - account.initial_cash
         account.profit_loss = profit_loss
-        account.profit_loss_pct = (profit_loss / account.initial_cash) * 100
+        account.profit_loss_pct = (
+            (profit_loss / account.initial_cash) * 100 if account.initial_cash else 0.0
+        )
 
         await account_repo.update(
             account.id,
@@ -1497,12 +1521,15 @@ class PaperTradingService:
             },
         )
 
-        # Send account update
-        await self._notify_account_update(account)
+        if send_notifications:
+            # Send account update
+            await self._notify_account_update(account)
 
-        # Send position updates
-        for position in positions:
-            await self._notify_position_update(position)
+            # Send position updates
+            for position in positions:
+                await self._notify_position_update(position)
+
+        return positions
 
     async def _get_last_trade(
         self,
@@ -1745,6 +1772,9 @@ class PaperTradingService:
             user_id=user_id,
             order_id=order_id,
         ):
+            if uses_real_sql_repos(self):
+                return await cancel_order_transactional(self, order_id, user_id)
+
             order = await self.order_repo.get_by_id(order_id)
             if not order:
                 return False
@@ -1865,58 +1895,7 @@ class PaperTradingService:
         slippage_rate: float,
     ) -> float | None:
         """Return the simulated fill price, or None when the order is not triggered."""
-        order_type = cls._order_type_value(order.order_type)
-        side = cls._order_side_value(order.side)
-
-        if order_type == OrderType.MARKET.value:
-            return market_price + cls._signed_slippage(side, market_price, slippage_rate)
-
-        if order_type == OrderType.LIMIT.value:
-            limit_price = cls._limit_price(order)
-            if limit_price is None:
-                return None
-            if side == OrderSide.BUY.value:
-                if market_price > limit_price:
-                    return None
-                return min(
-                    market_price + cls._signed_slippage(side, market_price, slippage_rate),
-                    limit_price,
-                )
-            if market_price < limit_price:
-                return None
-            return max(
-                market_price + cls._signed_slippage(side, market_price, slippage_rate), limit_price
-            )
-
-        if order_type == OrderType.STOP.value:
-            stop_price = cls._stop_price(order)
-            if stop_price is None:
-                return None
-            if side == OrderSide.BUY.value and market_price < stop_price:
-                return None
-            if side == OrderSide.SELL.value and market_price > stop_price:
-                return None
-            return market_price + cls._signed_slippage(side, market_price, slippage_rate)
-
-        if order_type == OrderType.STOP_LIMIT.value:
-            stop_price = cls._stop_price(order)
-            limit_price = cls._limit_price(order)
-            if stop_price is None or limit_price is None:
-                return None
-            if side == OrderSide.BUY.value:
-                if market_price < stop_price or market_price > limit_price:
-                    return None
-                return min(
-                    market_price + cls._signed_slippage(side, market_price, slippage_rate),
-                    limit_price,
-                )
-            if market_price > stop_price or market_price < limit_price:
-                return None
-            return max(
-                market_price + cls._signed_slippage(side, market_price, slippage_rate), limit_price
-            )
-
-        return None
+        return compute_execution_price(cls, order, market_price, slippage_rate)
 
     async def _get_simulated_price(self, symbol: str) -> float:
         """Get simulated price for trading.

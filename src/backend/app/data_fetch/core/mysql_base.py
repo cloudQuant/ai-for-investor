@@ -5,6 +5,7 @@ MySQL base class for database operations
 import json
 import logging
 import math
+import re
 from collections.abc import Sequence
 from datetime import datetime
 from types import TracebackType
@@ -22,6 +23,7 @@ from app.data_fetch.core.database import (
     _DatabaseCursor,
     _DatabaseParams,
     _DatabaseRow,
+    resolve_batch_affected_rows,
 )
 
 
@@ -127,6 +129,17 @@ def _adapt_connector_connection(
     return connection
 
 
+_VALID_SQL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff]+$")
+
+
+def _validate_sql_identifier(identifier: str, kind: str = "identifier") -> str:
+    """Validate that a dynamic SQL table/column identifier contains safe characters only."""
+    text = str(identifier or "").strip()
+    if not text or not _VALID_SQL_IDENTIFIER.match(text):
+        raise ValueError(f"Invalid SQL {kind}: {identifier!r}")
+    return text
+
+
 class MysqlBase(Database):
     """数据库连接和操作基类"""
 
@@ -160,14 +173,18 @@ class MysqlBase(Database):
     def disconnect_db(self) -> None:
         """关闭数据库连接"""
         cursor = self.cursor
-        if cursor is not None:
-            cursor.close()
+        try:
+            if cursor is not None:
+                cursor.close()
+        finally:
             self.cursor = None
-        connection = self.connection
-        if connection is not None and connection.is_connected():
-            connection.close()
-            self.connection = None
-            self.logger.info("数据库连接已关闭")
+            connection = self.connection
+            try:
+                if connection is not None and connection.is_connected():
+                    connection.close()
+                    self.logger.info("数据库连接已关闭")
+            finally:
+                self.connection = None
 
     @staticmethod
     def _first_row_value(row: _DatabaseRow) -> object | None:
@@ -228,15 +245,10 @@ class MysqlBase(Database):
         """
         try:
             cursor = self.require_cursor()
+            connection = self.require_connection()
             cursor.executemany(insert_sql, batch)
-            self.require_connection().commit()
-            reported = getattr(cursor, "rowcount", -1)
-            if not isinstance(reported, int) or reported < 0:
-                # Some test doubles / drivers do not expose rowcount. Falling
-                # back to the offered length is the only safe compatibility
-                # choice, but real MySQL always reports it.
-                return len(batch)
-            return min(reported, len(batch))
+            connection.commit()
+            return resolve_batch_affected_rows(insert_sql, len(batch), cursor, connection)
         except mysql.connector.Error as err:
             self.require_connection().rollback()
             self.logger.error(f"批量执行失败: {err}")
@@ -290,14 +302,14 @@ class MysqlBase(Database):
         cursor = self.require_cursor()
         connection = self.require_connection()
 
-        safe_table = str(table_name).replace("`", "``")
+        safe_table = _validate_sql_identifier(table_name, "table name")
 
         # 若表不存在则根据 DataFrame 自动建表
         try:
             if safe_table in self._table_exists_cache:
                 table_exists = self._table_exists_cache[safe_table]
             else:
-                cursor.execute(f"SHOW TABLES LIKE '{safe_table}'")
+                cursor.execute("SHOW TABLES LIKE %s", (safe_table,))
                 table_exists = bool(cursor.fetchone())
                 self._table_exists_cache[safe_table] = table_exists
             if not table_exists:
@@ -469,17 +481,19 @@ class MysqlBase(Database):
             self.logger.error("删除操作必须提供条件，禁止无条件删除")
             return False
 
+        safe_table = _validate_sql_identifier(table_name, "table name")
         self.connect_db()
 
         where_clauses = []
         values = []
 
         for col, val in conditions.items():
-            where_clauses.append(f"{col} = %s")
+            safe_col = _validate_sql_identifier(col, "column name")
+            where_clauses.append(f"{safe_col} = %s")
             values.append(val)
 
         where_str = " AND ".join(where_clauses)
-        delete_sql = f"DELETE FROM {table_name} WHERE {where_str}"  # nosec B608
+        delete_sql = f"DELETE FROM {safe_table} WHERE {where_str}"  # nosec B608
 
         try:
             cursor = self.require_cursor()
@@ -496,9 +510,11 @@ class MysqlBase(Database):
 
     def get_one_column_from_table(self, column_name: str, table_name: str) -> list[object | None]:
         """从表中获取单个列的所有值"""
+        safe_col = _validate_sql_identifier(column_name, "column name")
+        safe_table = _validate_sql_identifier(table_name, "table name")
         self.connect_db()
         try:
-            query = f"SELECT DISTINCT {column_name} FROM {table_name}"  # nosec B608
+            query = f"SELECT DISTINCT {safe_col} FROM {safe_table}"  # nosec B608
             cursor = self.require_cursor()
             cursor.execute(query)
             results = cursor.fetchall()
@@ -514,19 +530,22 @@ class MysqlBase(Database):
         conditions: dict[str, Any] | None = None,
     ) -> str | None:
         """获取表中指定日期列的最新日期"""
+        safe_table = _validate_sql_identifier(table_name, "table name")
+        safe_date_col = _validate_sql_identifier(date_column, "column name")
         self.connect_db()
         try:
             if conditions is None or not conditions:
-                query = f"SELECT MAX({date_column}) FROM {table_name}"  # nosec B608
+                query = f"SELECT MAX({safe_date_col}) FROM {safe_table}"  # nosec B608
                 params = None
             else:
                 where_conditions = []
                 params = []
                 for key, value in conditions.items():
-                    where_conditions.append(f"{key} = %s")
+                    safe_key = _validate_sql_identifier(key, "column name")
+                    where_conditions.append(f"{safe_key} = %s")
                     params.append(value)
                 where_clause = " AND ".join(where_conditions)
-                query = f"SELECT MAX({date_column}) FROM {table_name} WHERE {where_clause}"  # nosec B608
+                query = f"SELECT MAX({safe_date_col}) FROM {safe_table} WHERE {where_clause}"  # nosec B608
 
             cursor = self.require_cursor()
             cursor.execute(query, params or ())
@@ -553,10 +572,11 @@ class MysqlBase(Database):
 
     def table_exists(self, table_name: str) -> bool:
         """检查数据库中是否存在指定的表"""
+        safe_table = _validate_sql_identifier(table_name, "table name")
         try:
             self.connect_db()
             cursor = self.require_cursor()
-            cursor.execute(f"SHOW TABLES LIKE '{table_name}'")
+            cursor.execute("SHOW TABLES LIKE %s", (safe_table,))
             result = cursor.fetchone()
             return result is not None
         except mysql.connector.Error as err:

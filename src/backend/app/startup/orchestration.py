@@ -124,3 +124,14 @@ async def shutdown(app: FastAPI, settings: Any) -> None:
             await ths_scheduler.shutdown()
         except Exception:
             startup_logger.exception("Failed to shutdown THS market-data scheduler")
+
+    try:
+        from app.services.auto_trading_scheduler import shutdown_auto_trading_scheduler
+
+        await shutdown_auto_trading_scheduler()
+    except Exception as exc:
+        logger.exception("Failed to shutdown auto-trading scheduler")
+        if hasattr(startup_logger, "exception"):
+            startup_logger.exception("Failed to shutdown auto-trading scheduler")
+        elif hasattr(startup_logger, "error"):
+            startup_logger.error(f"Failed to shutdown auto-trading scheduler: {exc}")

@@ -83,6 +83,22 @@ class AnalyticsService:
 
         total_win = float(metrics.get("total_win_amount", 0.0) or 0.0)
         total_loss = float(metrics.get("total_loss_amount", 0.0) or 0.0)
+        if (total_win == 0.0 and profitable_trades) or (total_loss == 0.0 and losing_trades):
+            computed_win = 0.0
+            computed_loss = 0.0
+            for t in trades:
+                if not isinstance(t, dict):
+                    continue
+                raw_pnl = t.get("pnlcomm", t.get("net_pnl", t.get("pnl", 0.0)))
+                pnl_val = float(raw_pnl) if raw_pnl is not None else 0.0
+                if pnl_val > 0:
+                    computed_win += pnl_val
+                elif pnl_val < 0:
+                    computed_loss += abs(pnl_val)
+            if total_win == 0.0 and profitable_trades:
+                total_win = computed_win
+            if total_loss == 0.0 and losing_trades:
+                total_loss = computed_loss
         avg_win = total_win / profitable_trades if profitable_trades else 0.0
         avg_loss = total_loss / losing_trades if losing_trades else 0.0
 

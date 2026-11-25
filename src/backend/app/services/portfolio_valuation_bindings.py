@@ -25,6 +25,7 @@ from app.services.market_data.access import MarketDataAccessAuthorizer, MarketDa
 from app.services.market_data.capability_ledger import MarketDataCapabilityEvaluation
 from app.services.market_data.dataset_contracts import DEFAULT_DATASET_CONTRACT_REGISTRY
 from app.services.market_data.query_service import MarketDataQueryExecution, MarketDataQueryService
+from app.utils.invariants import require_present
 
 InputStatus = Literal[
     "available",
@@ -613,20 +614,18 @@ async def _execute_query(
     cache: dict[str, tuple[MarketDataQueryExecution | None, str | None]],
     db: AsyncSession,
 ) -> tuple[MarketDataQueryExecution | None, str | None]:
-    assert context is not None and context[0] is not None and context[1] is not None
+    resolved_context = require_present(context, "market data query context missing")
+    access = require_present(resolved_context[0], "market data access missing")
+    service = require_present(resolved_context[1], "market data service missing")
     request = binding.request(now)
     if request.query_fingerprint in cache:
         return cache[request.query_fingerprint]
     if len(cache) >= _MAX_QUERIES_PER_PROJECTION:
-        result: tuple[MarketDataQueryExecution | None, str | None] = (
-            None,
-            "MARKET_DATA_QUERY_LIMIT_REACHED",
-        )
-        cache[request.query_fingerprint] = result
-        return result
+        cache[request.query_fingerprint] = (None, "MARKET_DATA_QUERY_LIMIT_REACHED")
+        return cache[request.query_fingerprint]
     try:
         execution = await execute_market_data_query_with_singleflight(
-            service=context[1], db=db, request=request, access=context[0]
+            service=service, db=db, request=request, access=access
         )
         result = (
             (execution, None)

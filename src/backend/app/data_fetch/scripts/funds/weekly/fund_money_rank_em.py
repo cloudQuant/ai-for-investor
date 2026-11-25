@@ -244,17 +244,16 @@ class FundMoneyRankEm(AkshareToMySql):
             self.logger.info("没有新的货币型基金排行数据需要保存")
             return True
 
-        # save_data() is declared `-> int | Literal[False]` (core/mysql_base.py); this method's
-        # own contract is the bool from its docstring, its callers here use it only through
-        # `if success:` / `return success` truthiness, and sibling fund_rating_sh.py already
-        # narrows the same call with `return bool(saved_rows)`. Zero/False stay False exactly.
-        return bool(
+        # save_data() returns non-negative int (including 0 on idempotent no-op) on
+        # success and False only on skip/failure.
+        return (
             self.save_data(
                 df=df,
                 table_name=self.table_name,
                 on_duplicate_update=True,
                 unique_keys=["R_ID"],
             )
+            is not False
         )
 
     def _get_existing_ids(self) -> set:

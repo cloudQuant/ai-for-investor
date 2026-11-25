@@ -41,6 +41,7 @@ from typing import Any
 from app.data_fetch.utils.akshare_network_proxy import configure_akshare_network_proxy
 from app.models.akshare_mgmt import DataScript
 from app.services.akshare.write_fence import merge_committed_mysql_writes
+from app.utils.invariants import log_suppressed
 
 _WORKER_MODULE = "app.services.akshare.script_worker"
 _WORKER_REAP_TIMEOUT_SECONDS = 10.0
@@ -211,6 +212,8 @@ def _callable_descriptor(callable_obj: Any) -> dict[str, str] | None:
 
 def _kill_worker_group(proc: subprocess.Popen[bytes]) -> None:
     """SIGKILL the worker's process group and reap it before returning."""
+    if proc.poll() is not None:
+        return
     try:
         pgid = os.getpgid(proc.pid)
     except (ProcessLookupError, PermissionError, AttributeError):
@@ -232,7 +235,10 @@ def _kill_worker_group(proc: subprocess.Popen[bytes]) -> None:
             proc.kill()
         except (ProcessLookupError, OSError):
             pass
-        proc.wait(timeout=_WORKER_REAP_TIMEOUT_SECONDS)
+        try:
+            proc.wait(timeout=_WORKER_REAP_TIMEOUT_SECONDS)
+        except Exception as exc:
+            log_suppressed(__name__, "Worker process wait after kill failed", exc)
 
 
 def _await_worker(
@@ -301,45 +307,58 @@ async def _execute_callable_in_worker(
     child collected are merged into the parent's write-fence tracker.
     """
     receipt_dir = tempfile.mkdtemp(prefix="akshare-script-worker-")
-    receipt_path = os.path.join(receipt_dir, "receipt.pkl")
-    payload = pickle.dumps(
-        {
-            "descriptor": descriptor,
-            "params": params,
-            "result_path": receipt_path,
-            "fence": fence,
-        },
-        protocol=pickle.HIGHEST_PROTOCOL,
-    )
-    proc = subprocess.Popen(
-        [sys.executable, "-m", _WORKER_MODULE],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        # Inherit the parent's stderr so the writer's progress lines keep
-        # flowing into the operator log stream.
-        stderr=None,
-        cwd=_backend_root(),
-        env=_worker_environment(),
-        start_new_session=True,
-    )
+    proc: subprocess.Popen[bytes] | None = None
+    worker_task: asyncio.Task[tuple[int, bytes, bytes]] | None = None
     try:
+        receipt_path = os.path.join(receipt_dir, "receipt.pkl")
+        payload = pickle.dumps(
+            {
+                "descriptor": descriptor,
+                "params": params,
+                "result_path": receipt_path,
+                "fence": fence,
+            },
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-m", _WORKER_MODULE],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            # Inherit the parent's stderr so the writer's progress lines keep
+            # flowing into the operator log stream.
+            stderr=None,
+            cwd=_backend_root(),
+            env=_worker_environment(),
+            start_new_session=True,
+        )
+        worker_task = asyncio.ensure_future(
+            asyncio.to_thread(_await_worker, proc, payload, timeout_s)
+        )
         try:
             returncode, stdout, _ = await asyncio.wait_for(
-                asyncio.to_thread(_await_worker, proc, payload, timeout_s),
+                asyncio.shield(worker_task),
                 timeout=timeout_s + _WORKER_CEILING_GRACE_SECONDS,
             )
         except asyncio.TimeoutError as exc:
             _kill_worker_group(proc)
+            try:
+                await asyncio.wait_for(worker_task, timeout=1.0)
+            except BaseException as cleanup_exc:
+                log_suppressed(__name__, "worker cleanup after timeout", cleanup_exc)
             raise asyncio.TimeoutError(
                 f"Script call timed out after {timeout_s:g} seconds"
             ) from exc
         except _WorkerTimeoutError as exc:
-            _kill_worker_group(proc)
             raise asyncio.TimeoutError(
                 f"Script call timed out after {timeout_s:g} seconds"
             ) from exc
         except asyncio.CancelledError:
             _kill_worker_group(proc)
+            if worker_task is not None and not worker_task.done():
+                try:
+                    await asyncio.wait_for(worker_task, timeout=1.0)
+                except BaseException as cancel_exc:
+                    log_suppressed(__name__, "worker cleanup after cancellation", cancel_exc)
             raise
 
         receipt = _read_worker_receipt(receipt_path)
@@ -353,8 +372,13 @@ async def _execute_callable_in_worker(
             raise _worker_exception(receipt)
         return receipt.get("result")
     finally:
-        if proc.poll() is None:
+        if proc is not None and proc.poll() is None:
             _kill_worker_group(proc)
+        if worker_task is not None and not worker_task.done():
+            try:
+                await asyncio.wait_for(worker_task, timeout=0.5)
+            except BaseException as finally_exc:
+                log_suppressed(__name__, "worker cleanup in finally", finally_exc)
         shutil.rmtree(receipt_dir, ignore_errors=True)
 
 
@@ -416,12 +440,14 @@ async def _execute_callable(
     """
     # ``_``-prefixed keys are dispatch metadata (``_ingest_mode``,
     # ``_recovery_scope_hash``, ...) and the fence identity travels beside the
-    # call. Entrypoints forward ``**kwargs`` upstream, which rejects both, so
-    # neither may reach the script.
+    # call. Keep ``_call_timeout`` so entrypoints with ``**kwargs`` or explicit
+    # ``_call_timeout`` honour the configured request timeout, while letting
+    # ``_signature_parameters`` strip it for bare ``ak.*`` functions.
     script_params = {
         key: value
         for key, value in params.items()
-        if not str(key).startswith("_") and key not in _CONTROL_PARAMETER_KEYS
+        if (key == "_call_timeout" or not str(key).startswith("_"))
+        and key not in _CONTROL_PARAMETER_KEYS
     }
     script_params = _signature_parameters(callable_obj, script_params)
     descriptor = _callable_descriptor(callable_obj)

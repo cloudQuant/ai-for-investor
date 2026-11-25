@@ -6,6 +6,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from app.utils.async_tasks import spawn_tracked_task
+
 
 @dataclass(slots=True)
 class TopicPolicy:
@@ -45,7 +47,8 @@ class _Subscription:
 
 
 class DataTopicHub:
-    def __init__(self) -> None:
+    def __init__(self, *, max_topics: int = 1000) -> None:
+        self._max_topics = max(int(max_topics), 1)
         self._topics: dict[str, _TopicState] = {}
         self._producers: list[Producer] = []
         self._subscriptions: dict[str, _Subscription] = {}
@@ -56,12 +59,30 @@ class DataTopicHub:
         self._error_count = 0
         self._ws_gateway: Any | None = None
 
-    def register_topic(self, topic: str, policy: TopicPolicy | None = None) -> None:
-        current = self._topics.get(topic)
-        if current is None:
-            self._topics[topic] = _TopicState(policy=policy or TopicPolicy())
+    def _remove_topic_state(self, topic: str) -> None:
+        self._topics.pop(topic, None)
+        self._topic_errors.pop(topic, None)
+        stale_keys = [key for key in self._coalesce_values if key[1] == topic]
+        for key in stale_keys:
+            self._coalesce_values.pop(key, None)
+            task = self._coalesce_tasks.pop(key, None)
+            if task is not None and not task.done():
+                task.cancel()
+
+    def _ensure_topic(self, topic: str, policy: TopicPolicy | None = None) -> _TopicState:
+        state = self._topics.pop(topic, None)
+        if state is None:
+            while len(self._topics) >= self._max_topics:
+                oldest_topic = next(iter(self._topics))
+                self._remove_topic_state(oldest_topic)
+            state = _TopicState(policy=policy or TopicPolicy())
         elif policy is not None:
-            current.policy = policy
+            state.policy = policy
+        self._topics[topic] = state
+        return state
+
+    def register_topic(self, topic: str, policy: TopicPolicy | None = None) -> None:
+        self._ensure_topic(topic, policy)
 
     def register_producer(self, producer: Producer) -> None:
         self._producers.append(producer)
@@ -104,7 +125,7 @@ class DataTopicHub:
         return await self.request(topic, force=False)
 
     async def request(self, topic: str, *, force: bool = False) -> Any:
-        state = self._topics.setdefault(topic, _TopicState(policy=TopicPolicy()))
+        state = self._ensure_topic(topic)
         if state.policy.push_only:
             return state.value
         now = time.monotonic()
@@ -148,7 +169,7 @@ class DataTopicHub:
         self._error_subscribers.append(callback)
 
     async def push(self, topic: str, value: Any) -> int:
-        state = self._topics.setdefault(topic, _TopicState(policy=TopicPolicy()))
+        state = self._ensure_topic(topic)
         state.value = value
         state.updated_at = time.monotonic()
         self._topic_errors.pop(topic, None)
@@ -170,7 +191,7 @@ class DataTopicHub:
         return delivered
 
     def retire_topic(self, topic: str) -> None:
-        self._topics.pop(topic, None)
+        self._remove_topic_state(topic)
 
     def _find_producer(self, topic: str) -> Producer | None:
         for producer in self._producers:
@@ -190,8 +211,9 @@ class DataTopicHub:
         self._coalesce_values[key] = value
         task = self._coalesce_tasks.get(key)
         if task is None or task.done():
-            self._coalesce_tasks[key] = asyncio.create_task(
-                self._deliver_coalesced(key, subscription.callback, topic, delay_ms)
+            self._coalesce_tasks[key] = spawn_tracked_task(
+                self._deliver_coalesced(key, subscription.callback, topic, delay_ms),
+                name=f"topic-coalesce:{topic}",
             )
 
     async def _deliver_coalesced(
@@ -214,6 +236,9 @@ class DataTopicHub:
     def _emit_error(self, error: dict[str, Any]) -> None:
         topic = str(error.get("topic") or "")
         if topic:
+            self._topic_errors.pop(topic, None)
+            while len(self._topic_errors) >= self._max_topics:
+                self._topic_errors.pop(next(iter(self._topic_errors)), None)
             self._topic_errors[topic] = dict(error)
         self._error_count += 1
         for callback in self._error_subscribers:

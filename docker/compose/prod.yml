@@ -2,10 +2,10 @@
 # ai-for-investor - Production Docker Compose
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker/compose/prod.yml up -d
+#   docker compose -f docker/docker-compose.yml -f docker/compose/prod.yml up -d
 #
 # Prerequisites:
-#   - Create src/backend/.env (see scripts/docker_deploy.sh)
+#   - Create src/backend/.env (see scripts/ops/docker_deploy.sh)
 #   - Docker Engine 24+ and Docker Compose v2
 ###############################################################################
 
@@ -130,6 +130,7 @@ services:
     restart: "no"
     environment:
       APP_NAME: ai-for-investor
+      APP_ENV: production
       DEBUG: "false"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_TYPE: mysql
@@ -143,8 +144,18 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       DB_AUTO_CREATE_SCHEMA: "false"
       DB_AUTO_CREATE_DEFAULT_ADMIN: "false"
+      MARKET_DATA_SOURCE_GOVERNANCE_MAINTENANCE_FENCE: ${MARKET_DATA_SOURCE_GOVERNANCE_MAINTENANCE_FENCE:-}
+      MARKET_DATA_VISIBILITY_ANCHOR_MAINTENANCE_FENCE: ${MARKET_DATA_VISIBILITY_ANCHOR_MAINTENANCE_FENCE:-}
+      MARKET_DATA_SOURCE_RECEIPT_EVIDENCE_MAINTENANCE_FENCE: ${MARKET_DATA_SOURCE_RECEIPT_EVIDENCE_MAINTENANCE_FENCE:-}
+      MARKET_DATA_SHARED_BINDING_MAINTENANCE_FENCE: ${MARKET_DATA_SHARED_BINDING_MAINTENANCE_FENCE:-}
+      MARKET_DATA_FETCH_LEASE_MAINTENANCE_FENCE: ${MARKET_DATA_FETCH_LEASE_MAINTENANCE_FENCE:-}
+      MARKET_DATA_EXACT_IDENTITY_MAINTENANCE_FENCE: ${MARKET_DATA_EXACT_IDENTITY_MAINTENANCE_FENCE:-}
+      MARKET_DATA_CONSTRAINT_NAME_PORTABILITY_MAINTENANCE_FENCE: ${MARKET_DATA_CONSTRAINT_NAME_PORTABILITY_MAINTENANCE_FENCE:-}
+      MARKET_DATA_CAPABILITY_LEDGER_MAINTENANCE_FENCE: ${MARKET_DATA_CAPABILITY_LEDGER_MAINTENANCE_FENCE:-}
+      MARKET_DATA_SHARED_SOURCE_PAYLOAD_MAINTENANCE_FENCE: ${MARKET_DATA_SHARED_SOURCE_PAYLOAD_MAINTENANCE_FENCE:-}
       MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE: ${MARKET_DATA_SEMANTIC_RECORD_KEY_MAINTENANCE_FENCE:-}
       MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE: ${MARKET_DATA_B2_COMPLETENESS_EVIDENCE_MAINTENANCE_FENCE:-}
+      MARKET_DATA_PUBLICATION_RELEASE_HOLD_MAINTENANCE_FENCE: ${MARKET_DATA_PUBLICATION_RELEASE_HOLD_MAINTENANCE_FENCE:-}
       TZ: Asia/Shanghai
     command: ["python", "-m", "alembic", "upgrade", "head"]
     depends_on:
@@ -175,6 +186,9 @@ services:
       SERVER_DOMAIN: ${SERVER_DOMAIN:-localhost}
       CERT_NAME: ${CERT_NAME:-${SERVER_DOMAIN:-localhost}}
       TLS_ENABLED: ${TLS_ENABLED:-false}
+    depends_on:
+      backend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/healthz || exit 1"]
       interval: 15s
@@ -195,6 +209,8 @@ services:
     entrypoint: ["/bin/sh", "/docker/entrypoint-certbot-renew.sh"]
     environment:
       CERT_NAME: ${CERT_NAME:-${SERVER_DOMAIN:-localhost}}
+    networks:
+      - backtrader
 
 networks:
   backtrader:

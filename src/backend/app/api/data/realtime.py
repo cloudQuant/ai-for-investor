@@ -552,9 +552,13 @@ async def realtime_tick_websocket(
             },
         )
 
-        # Keep connection alive
+        # Drain incoming frames / ping keepalive so Starlette detects disconnects immediately
+        receive_text = getattr(websocket, "receive_text", None)
         while True:
-            await asyncio.sleep(1)
+            if callable(receive_text):
+                await receive_text()
+            else:
+                await asyncio.sleep(1)
 
     except WebSocketDisconnect:
         pass

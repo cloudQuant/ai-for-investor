@@ -14,6 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from baseline_update_guard import assert_update_allowed  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = Path(__file__).with_name("complexity_baseline.json")
 TARGET = ROOT / "src" / "backend" / "app"
@@ -45,6 +47,7 @@ def main() -> int:
 
     worst, count = _measure()
     if args.update:
+        assert_update_allowed("check_complexity_budget")
         BASELINE.write_text(
             json.dumps(
                 {"max_cc": worst, "count_cc_ge_50": count},

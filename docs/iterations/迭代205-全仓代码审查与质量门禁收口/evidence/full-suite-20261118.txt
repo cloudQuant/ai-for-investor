@@ -319,56 +319,56 @@ _ ERROR at setup of TestManualGatewayService.test_connect_gateway_bootstraps_ib_
 [gw3] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_extracted_modules.py:44: in preserve_app_settings_singleton
     assert main_module.settings is original_settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 ______ ERROR at setup of test_main_websocket_rejects_query_token_fallback ______
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_main_lifespan_and_websocket.py:17: in enable_schema_creation_for_websocket_tests
     assert main_module.settings is settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 ___ ERROR at setup of test_data_topics_websocket_streams_single_topic_update ___
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_main_lifespan_and_websocket.py:17: in enable_schema_creation_for_websocket_tests
     assert main_module.settings is settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 _ ERROR at setup of test_data_topics_websocket_pattern_route_receives_matching_update _
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_main_lifespan_and_websocket.py:17: in enable_schema_creation_for_websocket_tests
     assert main_module.settings is settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 _ ERROR at setup of TestBackendDetector.test_auto_detect_no_airflow_url_uses_apscheduler _
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_orchestration/test_base_and_backends.py:22: in isolated_settings_cache
     assert main_module.settings is application_settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 ________ ERROR at setup of TestBackendDetector.test_forced_apscheduler _________
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_orchestration/test_base_and_backends.py:22: in isolated_settings_cache
     assert main_module.settings is application_settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 __ ERROR at setup of TestBackendDetector.test_forced_airflow_no_url_fallback ___
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_orchestration/test_base_and_backends.py:22: in isolated_settings_cache
     assert main_module.settings is application_settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 _ ERROR at setup of TestBackendDetector.test_auto_detect_airflow_unreachable_fallback _
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_orchestration/test_base_and_backends.py:22: in isolated_settings_cache
     assert main_module.settings is application_settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 _ ERROR at setup of test_settings_cache_reset_restores_already_imported_modules _
 [gw13] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_orchestration/test_base_and_backends.py:22: in isolated_settings_cache
     assert main_module.settings is application_settings
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.main' from '/home/yun/Documents/ai-for-investor/src/backend/app/main.py'>.settings
 _ ERROR at setup of test_unsafe_base_url_shapes_are_rejected_before_sending_api_key[https://user:password@opendata.example.test] _
 [gw9] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 ScopeMismatch: You tried to access the function scoped fixture base_url with a session scoped request object. Requesting fixture stack:
@@ -485,7 +485,7 @@ ____ test_public_report_export_and_knowledge_base_publish_are_owner_scoped _____
 tests/asset_research/test_report_artifacts.py:280: in test_public_report_export_and_knowledge_base_publish_are_owner_scoped
     assert exported_pdf.status == "SUCCEEDED"
 E   AssertionError: assert 'FAILED' == 'SUCCEEDED'
-E     
+E
 E     - SUCCEEDED
 E     + FAILED
 ____ test_unclaimed_expired_freeze_resolves_issuer_and_allows_next_command _____
@@ -522,7 +522,7 @@ tests/test_afi09_gateway_multiworker_single_owner.py:766: in test_afi09_two_serv
     assert recovered[0] == "recovered", recovered
 E   AssertionError: ('error', 'ACCOUNT_SESSION_RECOVERY_FAILED')
 E   assert 'error' == 'recovered'
-E     
+E
 E     - recovered
 E     + error
 
@@ -775,7 +775,7 @@ tests/test_afi_policy_budget_owner_checker_host.py:942: in _exercise_http_accoun
     assert accepted_payload["service_code"] == "OK", accepted_payload
 E   AssertionError: {'account_ref': 'afi-budget-checker-account-a', 'actor_ref': 'afi-budget-application', 'delegate_ref': 'afi-budget-human-delegate', 'intent_id': 'c49144dcd23540728b331d7b5c9f0623', ...}
 E   assert 'ADMISSION_DENIED' == 'OK'
-E     
+E
 E     - OK
 E     + ADMISSION_DENIED
 ----------------------------- Captured stdout call -----------------------------
@@ -923,7 +923,7 @@ tests/test_afi_policy_budget_owner_checker_host_r10.py:942: in _exercise_http_ac
     assert accepted_payload["service_code"] == "OK", accepted_payload
 E   AssertionError: {'account_ref': 'afi-budget-checker-account-a', 'actor_ref': 'afi-budget-application', 'delegate_ref': 'afi-budget-human-delegate', 'intent_id': 'c16856b2f42e433fa7ccdd587acd076b', ...}
 E   assert 'ADMISSION_DENIED' == 'OK'
-E     
+E
 E     - OK
 E     + ADMISSION_DENIED
 ----------------------------- Captured stdout call -----------------------------
@@ -1108,7 +1108,7 @@ tests/test_afi_policy_ordinary_account_partial_effect_host.py:1015: in test_auth
     assert b1_order["service_code"] == "OK", b1_order
 E   AssertionError: {'account_ref': 'afi-ordinary-policy-account-b', 'actor_ref': 'afi-budget-checker-maker-actor-v1', 'delegate_ref': None, 'intent_id': '6acb75d5a6fe45ef95f7a4d04b33c5b2', ...}
 E   assert 'ADMISSION_DENIED' == 'OK'
-E     
+E
 E     - OK
 E     + ADMISSION_DENIED
 ----------------------------- Captured stdout call -----------------------------
@@ -2068,7 +2068,7 @@ _ TestIteration129KBChatAPI.test_send_knowledge_base_overview_lists_documents_wi
 tests/test_iteration129_kb_chat_api.py:256: in test_send_knowledge_base_overview_lists_documents_without_keyword_match
     assert payload["reason_code"] == "knowledge_base_overview"
 E   AssertionError: assert 'semantic_doc...ecommendation' == 'knowledge_base_overview'
-E     
+E
 E     - knowledge_base_overview
 E     + semantic_document_recommendation
 ---------------------------- Captured stdout setup -----------------------------
@@ -2165,7 +2165,7 @@ _ TestIteration129KBChatAPI.test_send_document_recommendation_lists_documents_wi
 tests/test_iteration129_kb_chat_api.py:296: in test_send_document_recommendation_lists_documents_without_keyword_match
     assert payload["reason_code"] == "knowledge_base_overview"
 E   AssertionError: assert 'semantic_doc...ecommendation' == 'knowledge_base_overview'
-E     
+E
 E     - knowledge_base_overview
 E     + semantic_document_recommendation
 ---------------------------- Captured stdout setup -----------------------------
@@ -2814,8 +2814,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('financial-owner',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -2957,8 +2957,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('observation-owner',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -3100,8 +3100,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('owner-a',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -3243,8 +3243,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('scope-owner-a',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -3570,8 +3570,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('cut-owner',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -3715,8 +3715,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('cut-owner',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -3860,8 +3860,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('cut-owner',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -3869,8 +3869,8 @@ _ test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_risk_host
 [gw6] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_service_read_portfolio_analytics_process.py:1204: in test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_risk_host
     assert main_module.settings is database_module.settings is get_settings()
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.db.database' from '/home/yun/Documents/ai-for-investor/src/backend/app/db/database.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.db.database' from '/home/yun/Documents/ai-for-investor/src/backend/app/db/database.py'>.settings
 E    +  and   Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <function get_settings at 0x77251836dee0>()
 ---------------------------- Captured stdout setup -----------------------------
 [32m2026-11-18 00:45:23.409[0m | [1mINFO    [0m | [36mapp.middleware.logging[0m:[36m__call__[0m:[36m192[0m | aff9c1a933344b93bb01d4cf15e431dd | [1mRequest started: POST /api/v1/auth/register[0m
@@ -3888,7 +3888,7 @@ _ test_manual_order_profile_rejects_nonmanual_or_expanded_grants[<lambda>-INVALI
 tests/test_service_order_submission.py:251: in test_manual_order_profile_rejects_nonmanual_or_expanded_grants
     assert error.value.code == expected_code
 E   AssertionError: assert 'INVALID_ORDE...BMIT_BINDINGS' == 'INVALID_DEPLOYMENT'
-E     
+E
 E     - INVALID_DEPLOYMENT
 E     + INVALID_ORDER_SUBMIT_BINDINGS
 _ test_authorized_http_reads_use_per_subject_owner_threads_and_service_grants __
@@ -4092,8 +4092,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('afi-user-a',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -4111,8 +4111,8 @@ E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
 [32m2026-11-18 00:45:38.926[0m | [1mINFO    [0m | [36mapp.middleware.logging[0m:[36m__call__[0m:[36m192[0m | 1b1534ee92694e9197aab071cc971c93 | [1mRequest started: POST /api/v1/portfolio/compositions[0m
 [32m2026-11-18 00:45:38.934[0m | [31m[1mERROR   [0m | [36mapp.middleware.logging[0m:[36m__call__[0m:[36m215[0m | 1b1534ee92694e9197aab071cc971c93 | [31m[1mRequest failed: POST /api/v1/portfolio/compositions[0m
 [32m2026-11-18 00:45:38.936[0m | [31m[1mERROR   [0m | [36mapp.middleware.exception_handling[0m:[36mhandle_generic_exception[0m:[36m278[0m | 1b1534ee92694e9197aab071cc971c93 | [31m[1mUnhandled exception: OperationalError - (sqlite3.OperationalError) no such table: users
-[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-FROM users 
+[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+FROM users
 WHERE users.id = ?]
 [parameters: ('afi-user-a',)]
 (Background on this error at: https://sqlalche.me/e/20/e3q8)[0m
@@ -4756,8 +4756,8 @@ WHERE users.id = ?]
              └ functools.partial(<built-in method rollback of sqlite3.Connection object at 0x79904b1386d0>)
 
 [31m[1msqlalchemy.exc.OperationalError[0m:[1m (sqlite3.OperationalError) no such table: users
-[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-FROM users 
+[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+FROM users
 WHERE users.id = ?]
 [parameters: ('afi-user-a',)]
 (Background on this error at: https://sqlalche.me/e/20/e3q8)[0m
@@ -4916,8 +4916,8 @@ app/api/afi_owner_scope.py:56: in require_persisted_owner_scope
 /home/yun/anaconda3/lib/python3.13/site-packages/aiosqlite/core.py:63: in _connection_worker_thread
     result = function()
 E   sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: users
-E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-E   FROM users 
+E   [SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+E   FROM users
 E   WHERE users.id = ?]
 E   [parameters: ('afi-user-a',)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
@@ -4935,8 +4935,8 @@ E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
 [32m2026-11-18 00:45:44.032[0m | [1mINFO    [0m | [36mapp.middleware.logging[0m:[36m__call__[0m:[36m192[0m | 38bb50d557f540369db6678fe98560df | [1mRequest started: POST /api/v1/portfolio/compositions[0m
 [32m2026-11-18 00:45:44.041[0m | [31m[1mERROR   [0m | [36mapp.middleware.logging[0m:[36m__call__[0m:[36m215[0m | 38bb50d557f540369db6678fe98560df | [31m[1mRequest failed: POST /api/v1/portfolio/compositions[0m
 [32m2026-11-18 00:45:44.043[0m | [31m[1mERROR   [0m | [36mapp.middleware.exception_handling[0m:[36mhandle_generic_exception[0m:[36m278[0m | 38bb50d557f540369db6678fe98560df | [31m[1mUnhandled exception: OperationalError - (sqlite3.OperationalError) no such table: users
-[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-FROM users 
+[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+FROM users
 WHERE users.id = ?]
 [parameters: ('afi-user-a',)]
 (Background on this error at: https://sqlalche.me/e/20/e3q8)[0m
@@ -5580,8 +5580,8 @@ WHERE users.id = ?]
              └ functools.partial(<built-in method rollback of sqlite3.Connection object at 0x7990607a5300>)
 
 [31m[1msqlalchemy.exc.OperationalError[0m:[1m (sqlite3.OperationalError) no such table: users
-[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
-FROM users 
+[SQL: SELECT users.id AS users_id, users.username AS users_username, users.email AS users_email, users.hashed_password AS users_hashed_password, users.is_active AS users_is_active, users.principal_kind AS users_principal_kind, users.ai_budget_daily_usd AS users_ai_budget_daily_usd, users.ai_budget_mode AS users_ai_budget_mode, users.ai_preferred_provider AS users_ai_preferred_provider, users.ai_preferred_model AS users_ai_preferred_model, users.created_at AS users_created_at, users.updated_at AS users_updated_at
+FROM users
 WHERE users.id = ?]
 [parameters: ('afi-user-a',)]
 (Background on this error at: https://sqlalche.me/e/20/e3q8)[0m
@@ -5598,7 +5598,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 __ test_legacy_partial_reason_and_financial_residual_keep_separate_state_cuts __
@@ -5611,7 +5611,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[unknown-financial-key] _
@@ -5624,7 +5624,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[missing-financial-field] _
@@ -5637,7 +5637,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[invalid-availability-envelope] _
@@ -5650,7 +5650,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 ___ test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts ___
@@ -5700,7 +5700,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[wrong-execution-generation] _
@@ -5713,7 +5713,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 ___ test_default_service_read_runtime_assembly_requests_gateway_owner_health ___
@@ -5733,7 +5733,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[duplicate-owner] _
@@ -5746,7 +5746,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[owner-cut-mismatch] _
@@ -5759,7 +5759,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[balanced-with-residual] _
@@ -5772,7 +5772,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_financial_extension_rejects_malformed_or_cross_account_cut_data[residual-without-residual] _
@@ -5785,7 +5785,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _____ test_actual_sdk_service_handle_payload_flows_through_afi_read_client _____
@@ -5798,7 +5798,7 @@ tests/test_service_read_account_book_contract.py:88: in _assert_pinned_sdk_sourc
     assert actual_sha256 == expected_sha256, module_name
 E   AssertionError: bt_api_py.service_execution_account_books
 E   assert '9d1c42425f18...02310fe9097e9' == 'b69e21212d8b...de46663da1d07'
-E     
+E
 E     - b69e21212d8b92ebe35e5f179be44bce82e59fd7beb45164353de46663da1d07
 E     + 9d1c42425f18d0c153e983d8a9c3b23d4b20a845041ab81919b02310fe9097e9
 _ test_afi09_gateway_health_http_reads_real_owner_facts_without_connecting_again _
@@ -6421,8 +6421,8 @@ __ test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_host __
 [gw5] linux -- Python 3.13.5 /home/yun/Documents/ai-for-investor/src/backend/.venv/bin/python
 tests/test_service_read_portfolio_analytics_process.py:771: in test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_host
     assert main_module.settings is database_module.settings is get_settings()
-E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
-E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='8cc6a569-3cd6-4f17-888a-461c5fbeebd0', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.db.database' from '/home/yun/Documents/ai-for-investor/src/backend/app/db/database.py'>.settings
+E   AssertionError: assert Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') is Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='')
+E    +  where Settings(APP_NAME='ai-for-investor', APP_ENV='test', DEBUG=True, SECRET_KEY='test-ai-research-provenance-secret-key-01...I_KEY='***REDACTED_OKX_API_KEY***', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <module 'app.db.database' from '/home/yun/Documents/ai-for-investor/src/backend/app/db/database.py'>.settings
 E    +  and   Settings(APP_NAME='ai-for-investor', APP_ENV='development', DEBUG=False, SECRET_KEY='service-read-integration-syntheti...ID='', OKX_ASSET_TYPE='SWAP', OKX_API_KEY='', OKX_SECRET_KEY='', OKX_PASSPHRASE='', OKX_TESTNET=False, OKX_BASE_URL='') = <function get_settings at 0x7d24a596dee0>()
 ---------------------------- Captured stdout setup -----------------------------
 [32m2026-11-18 00:46:08.498[0m | [1mINFO    [0m | [36mapp.middleware.logging[0m:[36m__call__[0m:[36m192[0m | 742fe07197134e7789fe71ceead9c40f | [1mRequest started: POST /api/v1/auth/register[0m
@@ -6441,7 +6441,7 @@ tests/test_strategy_reduction_http_host_integration.py:915: in test_http_reduce_
     assert state == "ready", detail
 E   AssertionError: PROVIDER_STATUS_MAPPING_INVALID
 E   assert 'error' == 'ready'
-E     
+E
 E     - ready
 E     + error
 ______ test_reg04_dual_worker_processes_and_strategy_run_share_one_owner _______
@@ -6553,7 +6553,7 @@ _________ TestAITradingServiceConfirmation.test_confirm_trade_success __________
 tests/test_ai_trading.py:1323: in test_confirm_trade_success
     assert pending_result.status == TradeStatus.PENDING_CONFIRMATION
 E   AssertionError: assert <TradeStatus....D: 'rejected'> == <TradeStatus....confirmation'>
-E     
+E
 E     - pending_confirmation
 E     + rejected
 _ TestAITradingServiceConfirmation.test_confirm_trade_expired_does_not_execute _
@@ -6566,7 +6566,7 @@ _ TestAITradingServiceConfirmation.test_confirm_trade_rechecks_risk_before_execu
 tests/test_ai_trading.py:1436: in test_confirm_trade_rechecks_risk_before_execution
     assert confirm_result.status == TradeStatus.REJECTED
 E   AssertionError: assert <TradeStatus.FAILED: 'failed'> == <TradeStatus....D: 'rejected'>
-E     
+E
 E     - rejected
 E     + failed
 ______________ TestAITradingServiceConfirmation.test_reject_trade ______________
@@ -6574,7 +6574,7 @@ ______________ TestAITradingServiceConfirmation.test_reject_trade ______________
 tests/test_ai_trading.py:1477: in test_reject_trade
     assert confirm_result.status == TradeStatus.CANCELLED
 E   AssertionError: assert <TradeStatus.FAILED: 'failed'> == <TradeStatus....: 'cancelled'>
-E     
+E
 E     - cancelled
 E     + failed
 ___________ TestAITradingServiceConfirmation.test_confirm_wrong_user ___________

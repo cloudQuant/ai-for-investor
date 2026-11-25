@@ -42,6 +42,46 @@ export function getAccessToken(): string | null {
   return null
 }
 
+export function getRefreshTokenFromStorage(): string | null {
+  if (!hasWindow()) {
+    return null
+  }
+  try {
+    const raw = window.sessionStorage.getItem(PINIA_AUTH_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed.refreshToken === 'string' && parsed.refreshToken) {
+        return parsed.refreshToken
+      }
+    }
+  } catch {
+    // Invalid persisted state is treated as lacking a refresh token.
+  }
+  return null
+}
+
+/**
+ * Persist rotated access/refresh tokens into the Pinia auth sessionStorage payload.
+ */
+export function persistSessionTokens(token: string, refreshToken?: string | null): void {
+  if (!hasWindow()) {
+    return
+  }
+  try {
+    const raw = window.sessionStorage.getItem(PINIA_AUTH_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    if (parsed && typeof parsed === 'object') {
+      parsed.token = token
+      if (refreshToken !== undefined) {
+        parsed.refreshToken = refreshToken
+      }
+      window.sessionStorage.setItem(PINIA_AUTH_KEY, JSON.stringify(parsed))
+    }
+  } catch {
+    // Best effort
+  }
+}
+
 /**
  * Clear access token from the session-scoped Pinia payload.
  */

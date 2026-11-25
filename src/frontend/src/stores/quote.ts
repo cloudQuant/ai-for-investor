@@ -467,19 +467,29 @@ export const useQuoteStore = defineStore('quote', () => {
     ])
   }
 
+  let searchSeq = 0
+
   async function searchSymbols(keyword: string) {
+    const seq = ++searchSeq
     if (!activeSource.value || !keyword) {
       symbolSearchResults.value = []
+      symbolSearchLoading.value = false
       return
     }
     symbolSearchLoading.value = true
     try {
       const res = await quoteApi.searchSymbols(activeSource.value, keyword)
-      symbolSearchResults.value = res.results
+      if (seq === searchSeq) {
+        symbolSearchResults.value = res.results
+      }
     } catch {
-      symbolSearchResults.value = []
+      if (seq === searchSeq) {
+        symbolSearchResults.value = []
+      }
     } finally {
-      symbolSearchLoading.value = false
+      if (seq === searchSeq) {
+        symbolSearchLoading.value = false
+      }
     }
   }
 

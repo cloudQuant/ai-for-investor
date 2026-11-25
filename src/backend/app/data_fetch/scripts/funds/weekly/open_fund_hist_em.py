@@ -314,7 +314,7 @@ class OpenFundHistEm(AkshareToMySql):
                         # 保存数据
                         success = self.save_fund_hist_data(df, indicator)
 
-                        if success:
+                        if success is not False:
                             total_count += len(df)
                             self.logger.info(
                                 f"成功保存基金[{fund_code}]{self.indicator_mapping.get(indicator, indicator)} {len(df)}条历史数据"

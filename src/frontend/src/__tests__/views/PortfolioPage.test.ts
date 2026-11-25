@@ -2351,4 +2351,50 @@ describe('PortfolioPage', () => {
     expect(wrapper.text()).not.toContain('market value 85')
     expect(wrapper.text()).toContain('account totals, cash, credit, or admission')
   })
+
+  it('paginates imported sources beyond 200 items without resetting back to page 1', async () => {
+    const makeItems = (start: number, count: number) =>
+      Array.from({ length: count }, (_, idx) => ({
+        import_version_id: `imp-${start + idx}`,
+        portfolio_id: `ledger-${start + idx}`,
+        portfolio_name: `Ledger ${start + idx}`,
+        base_currency: 'USD',
+        import_format: 'json',
+        imported_count: 1,
+        source_material_status: 'verified' as const,
+        source_as_of: '2026-10-13',
+        source_currency: 'USD',
+        source_sha256: 'a'.repeat(64),
+        created_at: '2026-10-15T00:00:00Z',
+      }))
+
+    vi.mocked(portfolioLedgerApi.listImportSources)
+      .mockResolvedValueOnce({ items: makeItems(1, 100), total: 250, page: 1, page_size: 100, has_more: true })
+      .mockResolvedValueOnce({ items: makeItems(101, 100), total: 250, page: 2, page_size: 100, has_more: true })
+      .mockResolvedValueOnce({ items: makeItems(201, 50), total: 250, page: 3, page_size: 100, has_more: false })
+
+    const wrapper = doMount()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    await vm.loadExistingImportSources(1)
+    expect(vm.existingImportSources).toHaveLength(100)
+    expect(vm.existingImportSourcesPage).toBe(1)
+
+    await vm.loadMoreImportedSources()
+    expect(vm.existingImportSources).toHaveLength(200)
+    expect(vm.existingImportSourcesPage).toBe(2)
+
+    await vm.loadMoreImportedSources()
+    expect(vm.existingImportSources).toHaveLength(250)
+    expect(vm.existingImportSourcesPage).toBe(3)
+    expect(vm.existingImportSourcesHasMore).toBe(false)
+    expect(portfolioLedgerApi.listImportSources).toHaveBeenCalledTimes(3)
+  })
+
+  it('escapes HTML special characters in tooltip helper', async () => {
+    const { escapeHtml } = await import('@/utils/html')
+    expect(escapeHtml('<img src=x onerror=alert(1)>')).toBe('&lt;img src=x onerror=alert(1)&gt;')
+    expect(escapeHtml('"a&b\'')).toBe('&quot;a&amp;b&#39;')
+  })
 })

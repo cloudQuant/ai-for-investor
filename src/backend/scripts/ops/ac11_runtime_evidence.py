@@ -148,8 +148,8 @@ def load_census(path: Path) -> dict[str, Any]:
 def parse_utc(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _to_naive_utc(value: Any) -> datetime | None:
@@ -167,7 +167,8 @@ def task_outcome(stat: Mapping[str, Any] | None, *, window_start: datetime) -> s
     if stat is None:
         return OUTCOME_NOT_RUN
     last = _to_naive_utc(stat.get("last_created_at"))
-    if last is None or last < window_start.replace(tzinfo=None):
+    window_start_utc = _to_naive_utc(window_start) or window_start.replace(tzinfo=None)
+    if last is None or last < window_start_utc:
         # every recorded execution predates the evidence window -> no runtime evidence
         return OUTCOME_NOT_RUN
     completed = int(stat.get("completed_executions") or 0)

@@ -2,12 +2,15 @@ import axios from 'axios'
 import type { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus/es/components/message/index.mjs'
 
+import * as sessionUtils from '@/utils/session'
 import {
-  clearAccessToken,
-  dispatchAuthExpired,
-  getAccessToken,
-} from '@/utils/session'
-import { expireSession, getSessionGeneration, getToken } from '@/utils/tokenRef'
+  applyRefreshedTokens,
+  expireSession,
+  getRefreshToken,
+  getSessionGeneration,
+  getToken,
+} from '@/utils/tokenRef'
+import type { Token } from '@/types'
 import i18n from '@/i18n'
 
 /** Per-request controls for localized or explicitly handled API fallbacks. */
@@ -16,6 +19,7 @@ export interface ApiRequestConfig<D = unknown, P = unknown> extends AxiosRequest
   suppressErrorToast?: boolean
   suppressErrorMessage?: boolean
   skipRetry?: boolean
+  skipAuthRefresh?: boolean
 }
 
 function tt(key: string): string {
@@ -76,9 +80,11 @@ type SessionRequestConfig = InternalAxiosRequestConfig & {
   __sessionToken?: string | null
   __retryCount?: number
   __isRetrying?: boolean
+  __hasRefreshed?: boolean
   suppressErrorToast?: boolean
   suppressErrorMessage?: boolean
   skipRetry?: boolean
+  skipAuthRefresh?: boolean
 }
 
 class SupersededSessionRequestError extends Error {
@@ -226,7 +232,7 @@ api.interceptors.request.use(
     const config = rawConfig as SessionRequestConfig
     if (config.__sessionGeneration === undefined) {
       const generation = getSessionGeneration()
-      const token = getToken() || getAccessToken()
+      const token = getToken() || sessionUtils.getAccessToken?.() || null
       if (generation !== getSessionGeneration()) {
         throw new SupersededSessionRequestError()
       }
@@ -247,6 +253,74 @@ api.interceptors.request.use(
     return Promise.reject(error)
   }
 )
+
+let activeRefreshPromise: Promise<string | null> | null = null
+let activeRefreshGeneration: number | null = null
+
+async function ensureFreshAccessToken(
+  expectedGeneration: number,
+  failedAccessToken?: string | null,
+): Promise<string | null> {
+  if (expectedGeneration !== getSessionGeneration()) {
+    return null
+  }
+
+  if (activeRefreshPromise && activeRefreshGeneration === expectedGeneration) {
+    return activeRefreshPromise
+  }
+
+  const currentToken = getToken()
+  if (
+    currentToken
+    && failedAccessToken
+    && currentToken !== failedAccessToken
+    && expectedGeneration === getSessionGeneration()
+  ) {
+    return currentToken
+  }
+
+  const storedRefreshToken = getRefreshToken() || sessionUtils.getRefreshTokenFromStorage?.() || null
+  if (!storedRefreshToken) {
+    return null
+  }
+
+  const promise = (async (): Promise<string | null> => {
+    try {
+      const refreshed = await api.post<Token, { refresh_token: string }>(
+        '/auth/refresh',
+        { refresh_token: storedRefreshToken },
+        {
+          skipAuthRefresh: true,
+          skipRetry: true,
+          suppressErrorToast: true,
+          suppressErrorMessage: true,
+        },
+      )
+      if (!refreshed?.access_token) {
+        return null
+      }
+      const nextRefresh = refreshed.refresh_token ?? storedRefreshToken
+      if (!applyRefreshedTokens(expectedGeneration, refreshed.access_token, nextRefresh)) {
+        return null
+      }
+      sessionUtils.persistSessionTokens?.(refreshed.access_token, nextRefresh)
+      return refreshed.access_token
+    } catch {
+      return null
+    }
+  })()
+
+  activeRefreshGeneration = expectedGeneration
+  activeRefreshPromise = promise
+  try {
+    return await promise
+  } finally {
+    if (activeRefreshPromise === promise) {
+      activeRefreshPromise = null
+      activeRefreshGeneration = null
+    }
+  }
+}
 
 // 响应拦截器
 api.interceptors.response.use(
@@ -285,18 +359,34 @@ api.interceptors.response.use(
       }
     }
 
-    // --- Error Handling (only fires once after all retries exhausted) ---
-    // Skip ElMessage if this was a retrying request that just completed its final retry
-    const isRetrying = config?.__isRetrying && (config.__retryCount || 0) < RETRY_CONFIG.maxRetries
-    if (isRetrying) {
-      return Promise.reject(error)
-    }
-
+    // --- Error Handling ---
     if (config?.suppressErrorMessage) {
       return Promise.reject(error)
     }
 
     const status = error.response?.status
+
+    if (
+      status === 401
+      && config
+      && !config.skipAuthRefresh
+      && !config.__hasRefreshed
+      && !String(config.url || '').includes('/auth/refresh')
+    ) {
+      const expectedGeneration = config.__sessionGeneration ?? getSessionGeneration()
+      const nextAccessToken = await ensureFreshAccessToken(expectedGeneration, config.__sessionToken)
+      if (isStaleSessionRequest(config)) {
+        return Promise.reject(new SupersededSessionRequestError())
+      }
+      if (nextAccessToken) {
+        config.__hasRefreshed = true
+        config.__sessionToken = nextAccessToken
+        config.headers = config.headers ?? ({} as SessionRequestConfig['headers'])
+        config.headers.Authorization = `Bearer ${nextAccessToken}`
+        return api.request(config)
+      }
+    }
+
     const data = error.response?.data
     const msg = extractApiErrorMessage(data)
     const genericMsg = tt('apiClient.errGenericFailure')
@@ -309,8 +399,8 @@ api.interceptors.response.use(
         && config.__sessionToken
         && expireSession(config.__sessionGeneration)
       ) {
-        clearAccessToken()
-        dispatchAuthExpired()
+        sessionUtils.clearAccessToken?.()
+        sessionUtils.dispatchAuthExpired?.()
       }
       if (!suppressErrorToast) {
         ElMessage.error(isGenericMsg ? tt('apiClient.errAuthExpired') : msg)

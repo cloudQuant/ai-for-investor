@@ -120,7 +120,7 @@ class IndexGlobalHistSina(AkshareToMySql):
                             on_duplicate_update=True,
                             unique_keys=["INDEX_NAME", "TRADE_DATE"],
                         )
-                        if success:
+                        if success is not False:
                             self.logger.info(f"Updated {len(df)} records for {idx}")
                         else:
                             all_success = False

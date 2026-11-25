@@ -305,6 +305,7 @@ import { ElMessage } from 'element-plus'
 import { Connection, DataLine, Refresh, VideoPause } from '@element-plus/icons-vue'
 import { dataTopicsApi, type DataTopicItem, type DataTopicPolicy, type DataTopicStats } from '@/api/dataTopics'
 import { getErrorMessage } from '@/api/index'
+import { useDataTopicStream } from '@/composables/useDataTopicStream'
 import { useAuthStore } from '@/stores/auth'
 
 type StatTone = 'primary' | 'success' | 'warning' | 'danger'
@@ -328,7 +329,14 @@ const latestValue = ref<unknown>(null)
 const topicPattern = ref('market:quote:*')
 const wsConnected = ref(false)
 const liveEvents = ref<Array<Record<string, unknown>>>([])
-let socket: WebSocket | null = null
+const { disconnectStream, connectStream } = useDataTopicStream({
+  selectedTopic,
+  topicPattern,
+  wsConnected,
+  liveEvents,
+  latestValue,
+  missingTokenMessage: () => t('dataPages.topicsTokenMissing'),
+})
 
 const isAdmin = computed(() => authStore.user?.is_admin ?? false)
 const selectedTopicItem = computed(() => {
@@ -437,49 +445,6 @@ async function refreshSelectedTopic() {
     ElMessage.error(`${fallback}: ${getErrorMessage(error, fallback)}`)
   } finally {
     refreshing.value = false
-  }
-}
-
-function disconnectStream() {
-  socket?.close()
-  socket = null
-  wsConnected.value = false
-}
-
-function connectStream() {
-  disconnectStream()
-  if (typeof window === 'undefined') {
-    return
-  }
-  const protocols = dataTopicsApi.getWebSocketProtocols()
-  if (protocols.length === 0) {
-    ElMessage.error(t('dataPages.topicsTokenMissing'))
-    return
-  }
-  const url = selectedTopic.value
-    ? dataTopicsApi.buildTopicStreamUrl(selectedTopic.value)
-    : dataTopicsApi.buildPatternStreamUrl(topicPattern.value)
-  socket = new window.WebSocket(url, protocols)
-  socket.onopen = () => {
-    wsConnected.value = true
-  }
-  socket.onmessage = (event: MessageEvent) => {
-    try {
-      const payload = JSON.parse(String(event.data)) as Record<string, unknown>
-      liveEvents.value = [payload, ...liveEvents.value].slice(0, 10)
-      if (payload.type === 'topic_update' || payload.type === 'snapshot') {
-        latestValue.value = payload.value
-      }
-    } catch {
-      liveEvents.value = [{ type: 'raw', data: String(event.data) }, ...liveEvents.value].slice(0, 10)
-    }
-  }
-  socket.onclose = () => {
-    wsConnected.value = false
-    socket = null
-  }
-  socket.onerror = () => {
-    wsConnected.value = false
   }
 }
 

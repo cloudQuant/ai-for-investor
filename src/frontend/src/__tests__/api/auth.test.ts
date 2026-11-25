@@ -56,4 +56,20 @@ describe('authApi', () => {
     await expect(authApi.getMe()).rejects.toBe(error)
     expect(api.get).toHaveBeenCalledWith('/auth/me', { suppressErrorToast: true })
   })
+
+  it('refresh calls POST /auth/refresh bypassing auth refresh and retry', async () => {
+    vi.mocked(api.post).mockResolvedValue({ ...mockToken, refresh_token: 'rt-new' })
+    const result = await authApi.refresh('rt-old')
+    expect(api.post).toHaveBeenCalledWith(
+      '/auth/refresh',
+      { refresh_token: 'rt-old' },
+      {
+        skipAuthRefresh: true,
+        skipRetry: true,
+        suppressErrorToast: true,
+        suppressErrorMessage: true,
+      },
+    )
+    expect(result.refresh_token).toBe('rt-new')
+  })
 })

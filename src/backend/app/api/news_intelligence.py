@@ -16,7 +16,13 @@ async def create_source(
     current_user: typing.Any = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> typing.Any:
-    return await get_news_intelligence_service(db).add_source(current_user.sub, payload)
+    try:
+        return await get_news_intelligence_service(db).add_source(current_user.sub, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/articles/ingest", response_model=None)

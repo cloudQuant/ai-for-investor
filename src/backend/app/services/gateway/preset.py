@@ -104,7 +104,7 @@ _IB_WEB_STOCK: dict[str, Any] = {
             "asset_type": "STK",
             "account_id": "DU123456",
             "base_url": "https://localhost:5000",
-            "verify_ssl": False,
+            "verify_ssl": True,
         }
     },
 }
@@ -136,7 +136,7 @@ _IB_WEB_FUTURES: dict[str, Any] = {
             "asset_type": "FUT",
             "account_id": "DU123456",
             "base_url": "https://localhost:5000",
-            "verify_ssl": False,
+            "verify_ssl": True,
         }
     },
 }

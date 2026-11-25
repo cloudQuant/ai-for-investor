@@ -189,6 +189,28 @@ class AutoTradingScheduler:
             self._task = None
         logger.info("Auto-trading scheduler stopped")
 
+    async def shutdown(self) -> None:
+        """Cancel and await the background scheduler task cleanly."""
+        self._running = False
+        self._triggered_actions.clear()
+        task = self._task
+        self._task = None
+        if task is not None and not task.done():
+            try:
+                task_loop = task.get_loop()
+                if not task_loop.is_closed():
+                    if task_loop is asyncio.get_running_loop():
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    else:
+                        task_loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:
+                pass
+        logger.info("Auto-trading scheduler shut down")
+
     def _should_trigger(
         self, action: str, session_name: str, scheduled_at: datetime, now: datetime
     ) -> bool:
@@ -272,3 +294,13 @@ def get_auto_trading_scheduler() -> AutoTradingScheduler:
         if cfg.get("enabled"):
             _scheduler_instance.ensure_running()
     return _scheduler_instance
+
+
+async def shutdown_auto_trading_scheduler() -> None:
+    """Stop the singleton auto-trading scheduler if running and clear cache."""
+    global _scheduler_instance
+    scheduler = _scheduler_instance
+    _scheduler_instance = None
+    get_auto_trading_scheduler.cache_clear()
+    if scheduler is not None:
+        await scheduler.shutdown()

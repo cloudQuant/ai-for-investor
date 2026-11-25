@@ -10,10 +10,15 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
-from app.db.database import async_session_maker
+from app.api.data.deps import require_data_admin_user
+from app.db.database import async_session_maker, get_db
 from app.models.alerts import Alert, AlertStatus
+from app.models.permission import Role, user_roles
+from app.models.user import User
+from app.services.live_trading_manager import get_live_trading_manager
 from app.services.risk_control_service import (
     RiskAlertLevel,
     RiskControlConfig,
@@ -75,6 +80,7 @@ class RiskControlConfigRequest(BaseModel):
     max_order_size: float = Field(
         100000.0,
         ge=1000,
+        le=100_000_000.0,
         description="Max single order amount / 单笔最大金额",
     )
     enable_stop_loss: bool = Field(True, description="Enable stop loss / 启用止损")
@@ -156,7 +162,7 @@ async def get_config(
 @router.put("/config", summary="Update risk control config / 更新风控配置")
 async def update_config(
     request: RiskControlConfigRequest,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: User = Depends(require_data_admin_user),
     service: RiskControlService = Depends(get_risk_service),
 ) -> RiskControlConfigResponse:
     """
@@ -254,6 +260,7 @@ async def get_alerts(
 async def clear_alerts(
     instance_id: str | None = None,
     current_user: typing.Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: RiskControlService = Depends(get_risk_service),
 ) -> dict:
     """
@@ -262,23 +269,51 @@ async def clear_alerts(
     清除风控告警。需要认证。
 
     Args:
-        instance_id: Instance ID (optional, clears all if not specified) /
-                     实例ID(可选，不指定则清除全部)
+        instance_id: Instance ID (optional, clears all for admins only) /
+                     实例ID(不指定全量清理仅限管理员)
     """
-    async with async_session_maker() as session:
-        query = select(Alert).where(
-            Alert.user_id == current_user.sub,
-            Alert.status == AlertStatus.ACTIVE.value,
+    role_result = await db.execute(
+        select(user_roles.c.role).where(
+            user_roles.c.user_id == current_user.sub,
+            user_roles.c.role == Role.ADMIN.value,
         )
-        if instance_id:
-            query = query.where(Alert.instance_id == instance_id)
-        result = await session.execute(query)
-        alerts = list(result.scalars().all())
-        now = datetime.now(timezone.utc)
-        for alert in alerts:
-            alert.status = AlertStatus.RESOLVED.value
-            alert.resolved_at = now
-        await session.commit()
+    )
+    is_admin = role_result.scalar_one_or_none() is not None
+
+    if not is_admin:
+        if not instance_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Clearing all alerts requires administrator privileges",
+            )
+        owned_alert = (
+            await db.execute(
+                select(Alert.id)
+                .where(Alert.user_id == current_user.sub, Alert.instance_id == instance_id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        owned_instance = get_live_trading_manager().get_instance(
+            instance_id, user_id=current_user.sub
+        )
+        if owned_alert is None and owned_instance is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to clear alerts for this instance",
+            )
+
+    query = select(Alert).where(Alert.status == AlertStatus.ACTIVE.value)
+    if not is_admin:
+        query = query.where(Alert.user_id == current_user.sub)
+    if instance_id:
+        query = query.where(Alert.instance_id == instance_id)
+    result = await db.execute(query)
+    alerts = list(result.scalars().all())
+    now = datetime.now(timezone.utc)
+    for alert in alerts:
+        alert.status = AlertStatus.RESOLVED.value
+        alert.resolved_at = now
+    await db.commit()
     # Legacy service state is a short-lived calculation cache only; clear it so
     # an old in-process check cannot immediately re-render a resolved alert.
     service.clear_alerts(instance_id)
@@ -292,7 +327,7 @@ async def clear_alerts(
 @router.post("/reset-daily", summary="Reset daily counters / 重置每日计数器")
 async def reset_daily_counters(
     instance_id: str | None = None,
-    current_user: typing.Any = Depends(get_current_user),
+    current_user: User = Depends(require_data_admin_user),
     service: RiskControlService = Depends(get_risk_service),
 ) -> dict:
     """

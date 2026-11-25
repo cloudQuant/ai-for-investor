@@ -9,6 +9,8 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from app.api.deps import RequireManageUsers
+
 router = APIRouter()
 
 POSTMAN_SCHEMA_URL = "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -180,7 +182,7 @@ def _openapi_to_postman(openapi_schema: dict[str, Any], base_url: str) -> dict[s
 
 
 @router.get("/postman", summary="Export Postman Collection")
-async def get_postman_collection(request: Request) -> JSONResponse:
+async def get_postman_collection(request: Request, _: Any = RequireManageUsers) -> JSONResponse:
     """Generate and return a Postman Collection v2.1 from the OpenAPI schema.
 
     Reads the application's OpenAPI schema and converts it to Postman Collection

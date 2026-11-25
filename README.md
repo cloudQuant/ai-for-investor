@@ -204,3 +204,8 @@ python scripts/ci/check_doc_links.py
 ## 许可证
 
 [MIT License](LICENSE)
+
+## 免责声明与使用风险（审阅草案）
+
+[免责声明与使用风险草案](DISCLAIMER.md)说明软件、数据、回测和实盘交易的主要风险；该文件尚未批准生效，其中拟议的责任限制不是现行条款。
+现行软件许可及第三方许可保持；许可调整状态和待审事项见[许可审阅说明](LICENSE-REVIEW.md)。

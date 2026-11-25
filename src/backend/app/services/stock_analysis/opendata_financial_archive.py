@@ -19,6 +19,7 @@ from app.services.market_data.opendata_credentials import (
     OpendataCredentials,
     OpendataCredentialsError,
 )
+from app.utils.invariants import require_present
 
 _ROUTE = "/api/v2/data/financial-statements/archive"
 _SOURCE_ID = "ths_fuyao"
@@ -435,9 +436,9 @@ class OpenDataFinancialArchiveReader:
         return records, len(body)
 
     def _endpoint_url(self) -> str:
-        assert self._credentials is not None
+        credentials = require_present(self._credentials, "opendata credentials missing")
         try:
-            parsed = urlsplit(self._credentials.base_url)
+            parsed = urlsplit(credentials.base_url)
             hostname = parsed.hostname
             configured_port = parsed.port
         except ValueError:
@@ -464,7 +465,7 @@ class OpenDataFinancialArchiveReader:
             raise OpenDataFinancialArchiveError("base_url_insecure_transport")
         if not is_loopback and (normalized_hostname, port) not in self._allowed_origins:
             raise OpenDataFinancialArchiveError("base_url_host_not_allowed")
-        return f"{self._credentials.base_url.rstrip('/')}{_ROUTE}"
+        return f"{credentials.base_url.rstrip('/')}{_ROUTE}"
 
     @classmethod
     def _validate_payload(

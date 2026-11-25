@@ -35,12 +35,14 @@ async def _lookup_stock_warehouse(
         SELECT *
         FROM STOCK_ZH_A_HIST
         WHERE (symbol = :code OR `股票代码` = :code)
-          AND STR_TO_DATE(`日期`, '%Y-%m-%d') BETWEEN :start AND :end
-        ORDER BY STR_TO_DATE(`日期`, '%Y-%m-%d') ASC
+          AND (adjustment = :adjustment OR adjustment IS NULL)
+          AND data_date BETWEEN :start AND :end
+        ORDER BY data_date ASC
         LIMIT 260
         """,
         {
             "code": code,
+            "adjustment": "qfq",
             "start": _market_instrument._sql_date_text(start_date, date.today()),
             "end": _market_instrument._sql_date_text(end_date, date.today()),
         },
@@ -59,7 +61,6 @@ async def _lookup_stock_warehouse(
         turnover_rate_key="换手率",
     )
     history_table = "STOCK_ZH_A_HIST" if history_rows else None
-
     snapshot = service._snapshot_from_cn_quote(spot or {}, symbol=code) if spot else {}
     snapshot = snapshot or service._snapshot_from_latest_history(code, history_rows)
     snapshot["data_source_table"] = (
@@ -721,41 +722,42 @@ async def _lookup_fx_warehouse(
         end_date=end_date,
         warnings=warnings,
     )
-    snapshot = {
-        "symbol": normalized,
-        "name": _market_instrument._safe_str(
-            _market_instrument._first_value(spot or {}, "名称", "name", "代码")
-        )
-        or normalized,
-        "price": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "最新价")
-        ),
-        "change": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "涨跌额")
-        ),
-        "change_pct": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "涨跌幅")
-        ),
-        "open": _market_instrument._safe_float(_market_instrument._first_value(spot or {}, "今开")),
-        "high": _market_instrument._safe_float(_market_instrument._first_value(spot or {}, "最高")),
-        "low": _market_instrument._safe_float(_market_instrument._first_value(spot or {}, "最低")),
-        "previous_close": _market_instrument._safe_float(
-            _market_instrument._first_value(spot or {}, "昨收")
-        ),
-        "update_time": _market_instrument._safe_str(
-            _market_instrument._first_value(spot or {}, "data_date")
-        ),
-        "data_source_table": "FOREX_SPOT_EM",
-    }
-    if spot and history_rows:
-        # The Eastmoney spot feed is unreachable from this deployment, so the quote card can
-        # sit months behind the mid-rate series; say so instead of showing a stale "current"
-        # price next to a current chart.
-        spot_date = str(snapshot.get("update_time") or "")[:10]
-        newest_history_date = str(history_rows[-1].get("date") or "")
-        if spot_date and newest_history_date > spot_date:
-            warnings.append(f"报价快照停留在 {spot_date}，其后历史由人民币中间价逐日推导")
-    snapshot = snapshot or service._snapshot_from_latest_history(normalized, history_rows)
+    if spot:
+        snapshot = {
+            "symbol": normalized,
+            "name": _market_instrument._safe_str(
+                _market_instrument._first_value(spot, "名称", "name", "代码")
+            )
+            or normalized,
+            "price": _market_instrument._safe_float(
+                _market_instrument._first_value(spot, "最新价")
+            ),
+            "change": _market_instrument._safe_float(
+                _market_instrument._first_value(spot, "涨跌额")
+            ),
+            "change_pct": _market_instrument._safe_float(
+                _market_instrument._first_value(spot, "涨跌幅")
+            ),
+            "open": _market_instrument._safe_float(_market_instrument._first_value(spot, "今开")),
+            "high": _market_instrument._safe_float(_market_instrument._first_value(spot, "最高")),
+            "low": _market_instrument._safe_float(_market_instrument._first_value(spot, "最低")),
+            "previous_close": _market_instrument._safe_float(
+                _market_instrument._first_value(spot, "昨收")
+            ),
+            "update_time": _market_instrument._safe_str(
+                _market_instrument._first_value(spot, "data_date")
+            ),
+            "data_source_table": "FOREX_SPOT_EM",
+        }
+        if history_rows:
+            spot_date = str(snapshot.get("update_time") or "")[:10]
+            newest_history_date = str(history_rows[-1].get("date") or "")
+            if spot_date and newest_history_date > spot_date:
+                warnings.append(f"报价快照停留在 {spot_date}，其后历史由人民币中间价逐日推导")
+    else:
+        snapshot = service._snapshot_from_latest_history(normalized, history_rows)
+        if history_rows:
+            snapshot.setdefault("data_source_table", "CURRENCY_BOC_SAFE")
     return service._payload(
         asset_type="fx",
         symbol=normalized,

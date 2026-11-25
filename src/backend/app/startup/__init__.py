@@ -8,6 +8,7 @@ from app.startup import (
     asset_research,
     audit_sink,
     database,
+    monitoring,
     orchestration,
     paper_runtime,
     reconcile,
@@ -31,12 +32,14 @@ STARTUP_HOOKS: tuple[StartupHook, ...] = (
 
 SHUTDOWN_HOOKS: tuple[StartupHook, ...] = (
     orchestration.shutdown,
+    monitoring.shutdown,
     asset_research.shutdown,
     stock_signal.shutdown,
     paper_runtime.shutdown,
     reconcile.shutdown,
     audit_sink.shutdown,
     ai_log_sink.shutdown,
+    database.shutdown,
 )
 
 

@@ -46,6 +46,9 @@ _SOURCE_FILES = (
     ("backend_query_schema", "src/backend/app/schemas/market_data_platform.py"),
     ("backend_legacy_contract", "src/backend/app/services/market_data/legacy_contract.py"),
     ("frontend_market_page", "src/frontend/src/views/data/useDataPage.ts"),
+    ("frontend_market_catalog_specs", "src/frontend/src/views/data/marketDataCatalogSpecs.ts"),
+    ("frontend_market_v2_query", "src/frontend/src/views/data/useMarketDataV2Query.ts"),
+    ("frontend_market_formatters", "src/frontend/src/views/data/marketDataFormatters.ts"),
     ("frontend_market_data_api", "src/frontend/src/api/marketData.ts"),
 )
 _BASELINE_KEYS = frozenset(
@@ -73,16 +76,16 @@ _MANIFEST_KEYS = frozenset(
         "manifest_sha256",
     }
 )
-_REQUIRED_FRONTEND_PAGE_V2_MARKERS = (
+_REQUIRED_FRONTEND_V2_QUERY_MARKERS = (
     "function defaultFamilyId(",
     "`${assetType}.realtime`",
     "function isMarketPageSelectableFamily(",
     "function selectedMarketPageFamilyFromQueryBundle(",
     "family.asset_type === assetType",
     "isMarketDataQueryBundleFamilyExecutable(family)",
-    "function genericObservationResultFromV2Response(",
     "selectedFamilyId.value",
 )
+_REQUIRED_FRONTEND_FORMATTER_MARKERS = ("function genericObservationResultFromV2Response(",)
 _REQUIRED_FRONTEND_API_V2_MARKERS = (
     "function hasCoherentMarketDataQueryBundleFamilyShape(",
     "export function isMarketDataQueryBundleFamilyExecutable(",
@@ -240,16 +243,29 @@ def load_scope_manifest(path: Path) -> dict[str, Any]:
 def inspect_frontend_market_input_surface(project_root: Path) -> FrontendMarketInputSurface:
     """Extract only stable current-page literals; syntax drift fails instead of guessing."""
     relative_path = "src/frontend/src/views/data/useDataPage.ts"
-    source = _read_project_source(project_root, relative_path)
+    _read_project_source(project_root, relative_path)
+    catalog_source = _read_project_source(
+        project_root, "src/frontend/src/views/data/marketDataCatalogSpecs.ts"
+    )
+    v2_query_source = _read_project_source(
+        project_root, "src/frontend/src/views/data/useMarketDataV2Query.ts"
+    )
+    formatters_source = _read_project_source(
+        project_root, "src/frontend/src/views/data/marketDataFormatters.ts"
+    )
     api_source = _read_project_source(project_root, "src/frontend/src/api/marketData.ts")
     asset_block = _const_block(
-        source, "const assetTabs: AssetTab[] = [", "const assetDisplayConfigs:"
+        catalog_source,
+        "export const assetTabs: AssetTab[] = [",
+        "export const assetDisplayConfigs:",
     )
-    period_block = _const_block(source, "const basePeriods = [", "const periods = computed(")
+    period_block = _const_block(
+        catalog_source, "export const basePeriods = [", "export const routeTabMap:"
+    )
     family_block = _const_block(
-        source,
-        "const assetDataFamilySpecs: Record<MarketAssetType, DataFamilySpec[]> = {",
-        "const assetTableSearchKeywords:",
+        catalog_source,
+        "export const assetDataFamilySpecs: Record<MarketAssetType, DataFamilySpec[]> = {",
+        "export const assetTableSearchKeywords:",
     )
 
     asset_types = _literal_values_from_block(asset_block, "key")
@@ -261,8 +277,10 @@ def inspect_frontend_market_input_surface(project_root: Path) -> FrontendMarketI
         raise ScopeManifestError("SCOPE_MANIFEST_FRONTEND_SURFACE_UNREADABLE")
     if len(family_ids) != len(set(family_ids)):
         raise ScopeManifestError("SCOPE_MANIFEST_FRONTEND_FAMILY_DRIFT")
-    if any(marker not in source for marker in _REQUIRED_FRONTEND_PAGE_V2_MARKERS) or any(
-        marker not in api_source for marker in _REQUIRED_FRONTEND_API_V2_MARKERS
+    if (
+        any(marker not in v2_query_source for marker in _REQUIRED_FRONTEND_V2_QUERY_MARKERS)
+        or any(marker not in formatters_source for marker in _REQUIRED_FRONTEND_FORMATTER_MARKERS)
+        or any(marker not in api_source for marker in _REQUIRED_FRONTEND_API_V2_MARKERS)
     ):
         raise ScopeManifestError("SCOPE_MANIFEST_FRONTEND_V2_RULE_UNREADABLE")
 

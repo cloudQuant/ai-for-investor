@@ -45,6 +45,8 @@ class TestCalculateMetrics:
         assert m.total_return > 0
         assert m.trade_count == 3
         assert m.win_rate > 0
+        assert m.avg_win == 6000.0
+        assert m.avg_loss == 2000.0
 
     def test_no_trades(self):
         """Test metrics calculation with no trades."""

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import html
+import ipaddress
 import re
+import socket
 import typing
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Mapping
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 from sqlalchemy import select
@@ -31,6 +34,75 @@ _RSS_REQUEST_HEADERS = {
 # Upper bound for one feed document.  RSS feeds are small; anything larger is
 # either an error page or an attempt to exhaust memory during XML parsing.
 _MAX_RSS_BYTES = 2 * 1024 * 1024
+_RSS_MAX_REDIRECTS = 5
+
+
+def _is_disallowed_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        return True
+    mapped = getattr(ip, "ipv4_mapped", None)
+    return mapped is not None and _is_disallowed_ip(mapped)
+
+
+def _validate_public_http_url(raw_url: str, *, require_dns: bool) -> str:
+    """Validate that an RSS feed URL uses HTTP(S) and cannot target internal networks."""
+    url = str(raw_url or "").strip()
+    if not url:
+        raise ValueError("RSS URL is required")
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise ValueError("Only http and https URLs are supported")
+    if parsed.username or parsed.password:
+        raise ValueError("Embedded credentials in RSS URLs are not allowed")
+    hostname = (parsed.hostname or "").strip().rstrip(".")
+    if not hostname:
+        raise ValueError("RSS URL must include a hostname")
+    lower_host = hostname.lower()
+    if (
+        lower_host in {"localhost", "localhost.localdomain"}
+        or lower_host.endswith(".localhost")
+        or lower_host.endswith(".local")
+        or lower_host.endswith(".internal")
+    ):
+        raise ValueError("Restricted RSS target host")
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip = None
+
+    if ip is not None:
+        if _is_disallowed_ip(ip):
+            raise ValueError("RSS URL cannot target private or loopback IP addresses")
+        return url
+
+    port = parsed.port or (443 if scheme == "https" else 80)
+    try:
+        addr_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        if require_dns:
+            raise ValueError(f"Unable to resolve RSS host {hostname!r}") from exc
+        return url
+
+    if not addr_infos and require_dns:
+        raise ValueError(f"RSS host {hostname!r} resolved no addresses")
+
+    for _family, _socktype, _proto, _canonname, sockaddr in addr_infos:
+        if not sockaddr:
+            continue
+        addr_text = str(sockaddr[0]).split("%", 1)[0]
+        resolved_ip = ipaddress.ip_address(addr_text)
+        if _is_disallowed_ip(resolved_ip):
+            raise ValueError("RSS URL resolves to a restricted IP address")
+    return url
 
 
 class _NewsSourceInstance(typing.Protocol):
@@ -53,6 +125,7 @@ class NewsIntelligenceService:
     async def add_source(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         db = self._require_db()
         name = str(payload.get("name") or "").strip()
+        raw_url = payload.get("url")
         result = await db.execute(
             select(NewsSourceModel).where(
                 NewsSourceModel.owner_id == user_id,
@@ -60,11 +133,15 @@ class NewsIntelligenceService:
             )
         )
         source = result.scalar_one_or_none()
+        candidate_url = str(raw_url or (source.url if source is not None else "") or "").strip()
+        validated_url = await asyncio.to_thread(
+            _validate_public_http_url, candidate_url, require_dns=False
+        )
         if source is None:
             source = NewsSourceModel(
                 owner_id=user_id,
                 name=name,
-                url=str(payload.get("url") or "").strip(),
+                url=validated_url,
                 tier=int(payload.get("tier") or 2),
                 status="active",
                 metadata_json=dict(payload.get("metadata") or {}),
@@ -73,7 +150,7 @@ class NewsIntelligenceService:
         else:
             # Legacy Column declarations type class attributes, not loaded ORM scalar values.
             source_row = typing.cast(_NewsSourceInstance, source)
-            source_row.url = str(payload.get("url") or source_row.url or "").strip()
+            source_row.url = validated_url
             source_row.tier = int(payload.get("tier") or source_row.tier or 2)
             source_row.status = str(payload.get("status") or source_row.status or "active")
             existing_metadata = source_row.metadata_json
@@ -194,16 +271,7 @@ class NewsIntelligenceService:
         try:
             feed_text = await self._rss_fetcher(str(source.url or ""))
             articles = self._parse_feed_items(feed_text, source, limit=limit)
-        except (ET.ParseError, ValueError):
-            return {
-                "source": source_name,
-                "status": "degraded",
-                "reason": "invalid_feed",
-                "fetched_count": 0,
-                "inserted_count": 0,
-                "total": await self._article_count(user_id),
-            }
-        except httpx.HTTPError:
+        except (ET.ParseError, ValueError, httpx.HTTPError):
             return {
                 "source": source_name,
                 "status": "degraded",
@@ -352,14 +420,43 @@ class NewsIntelligenceService:
         return len(list(result.scalars().all()))
 
     async def _default_rss_fetcher(self, url: str) -> str:
+        current_url = url
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
-            response = await client.get(
-                url,
-                follow_redirects=True,
-                headers=_RSS_REQUEST_HEADERS,
-            )
-            response.raise_for_status()
-            return response.text
+            for _hop in range(_RSS_MAX_REDIRECTS + 1):
+                current_url = await asyncio.to_thread(
+                    _validate_public_http_url, current_url, require_dns=True
+                )
+                async with client.stream(
+                    "GET",
+                    current_url,
+                    follow_redirects=False,
+                    headers=_RSS_REQUEST_HEADERS,
+                ) as response:
+                    if response.status_code in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ValueError("RSS redirect response missing Location header")
+                        current_url = urljoin(current_url, location)
+                        continue
+                    response.raise_for_status()
+                    content_length = response.headers.get("content-length")
+                    if content_length is not None:
+                        try:
+                            if int(content_length) > _MAX_RSS_BYTES:
+                                raise ValueError("RSS feed exceeds the maximum accepted size")
+                        except ValueError as exc:
+                            if "maximum accepted size" in str(exc):
+                                raise
+                    chunks: list[bytes] = []
+                    total_bytes = 0
+                    async for chunk in response.aiter_bytes():
+                        total_bytes += len(chunk)
+                        if total_bytes > _MAX_RSS_BYTES:
+                            raise ValueError("RSS feed exceeds the maximum accepted size")
+                        chunks.append(chunk)
+                    encoding = getattr(response, "encoding", None) or "utf-8"
+                    return b"".join(chunks).decode(encoding, errors="replace")
+            raise ValueError("Too many redirects while fetching RSS feed")
 
     def _parse_feed_items(
         self,

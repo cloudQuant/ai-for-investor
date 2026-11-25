@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -39,8 +38,45 @@ from app.services.service_read.client import (
     RiskAccountPolicyBinding,
     RiskPolicyBudgetBinding,
 )
+from app.services.service_read.deployment_validation import (
+    ServiceReadDeploymentError,
+    parse_and_verify_grants,
+    parse_profile_client_config,
+    parse_profile_curve_keys,
+    parse_profile_identity,
+    parse_profile_peers,
+    parse_profile_scopes,
+    parse_worker_options,
+    validate_profile_bindings,
+    validate_write_binding_exclusivity,
+)
+from app.services.service_read.deployment_validation import (
+    exact_mapping as _exact_mapping,
+)
+from app.services.service_read.deployment_validation import (
+    identifier as _identifier,
+)
+from app.services.service_read.deployment_validation import (
+    is_approved_target_scope as _is_approved_target_scope,
+)
+from app.services.service_read.deployment_validation import (
+    is_budget_management_scope as _is_budget_management_scope,
+)
+from app.services.service_read.deployment_validation import (
+    is_budget_member_scope as _is_budget_member_scope,
+)
+from app.services.service_read.deployment_validation import (
+    is_manual_order_scope as _is_manual_order_scope,
+)
+from app.services.service_read.deployment_validation import (
+    is_portfolio_analytics_scope as _is_portfolio_analytics_scope,
+)
+from app.services.service_read.deployment_validation import (
+    is_risk_account_policy_scope as _is_risk_account_policy_scope,
+)
 from app.services.service_read.session import SdkServiceReadSession
 from app.services.service_read.worker import ServiceReadWorker
+from app.utils.invariants import log_suppressed, require_present
 
 __all__ = [
     "ServiceReadDeployment",
@@ -52,55 +88,6 @@ _MAX_DEPLOYMENT_BYTES = 262_144
 _MAX_SUBJECTS = 256
 _MAX_BINDINGS_PER_SUBJECT = 128
 _MAX_SELECTORS = 4096
-_MAX_QUEUE_SIZE = 256
-_MAX_MAINTENANCE_INTERVAL = 300.0
-_Z85_ALPHABET = frozenset(
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
-)
-_SCOPE_FIELDS = frozenset(
-    {
-        "execution_domain_ref",
-        "account_ref",
-        "account_refs",
-        "strategy_ref",
-        "run_id",
-        "manual_book_ref",
-        "portfolio_ref",
-        "group_id",
-        "leg_id",
-    }
-)
-_READ_MOUNTS = frozenset(
-    {
-        "application.account",
-        "application.order_query",
-        "application.monitor",
-        "application.risk_analysis",
-    }
-)
-_DEPLOYMENT_MOUNTS = _READ_MOUNTS | {
-    "application.orders",
-    "application.risk_policy",
-    "application.paper_legacy_import",
-}
-
-
-class ServiceReadDeploymentError(RuntimeError):
-    """Finite startup or cleanup failure without configuration values."""
-
-    def __init__(
-        self,
-        code: str,
-        *,
-        cause_type: str | None = None,
-        failures: tuple[BaseException, ...] = (),
-        deployment: ServiceReadDeployment | None = None,
-    ) -> None:
-        self.code = code
-        self.cause_type = cause_type
-        self.failures = failures
-        self.deployment = deployment
-        super().__init__(code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,8 +226,8 @@ async def start_service_read_deployment(
         partial = ServiceReadDeployment(tuple(workers), ServiceReadAccessDirectory({}))
         try:
             await partial.aclose()
-        except BaseException:
-            pass
+        except BaseException as close_exc:
+            log_suppressed(__name__, "deployment rollback aclose failed", close_exc)
         raise ServiceReadDeploymentError(
             "START_FAILED",
             cause_type=type(error).__name__,
@@ -508,82 +495,13 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
     profile = raw
     subject = _identifier(profile["subject"])
-    identity_raw = _exact_mapping(
-        profile["identity"], {"principal_ref", "actor_ref", "delegate_ref"}
+    identity = parse_profile_identity(profile["identity"], sdk)
+    client_config, client_public = parse_profile_client_config(
+        profile["client_config"], identity, sdk
     )
-    if identity_raw["delegate_ref"] is not None:
-        delegate_ref = _identifier(identity_raw["delegate_ref"])
-    else:
-        delegate_ref = None
-    identity = sdk["WireIdentity"](
-        sdk["WireRole"].APPLICATION_CLIENT,
-        _identifier(identity_raw["principal_ref"]),
-        _identifier(identity_raw["actor_ref"]),
-        delegate_ref,
-    )
-
-    client_raw = profile["client_config"]
-    if type(client_raw) is not dict:
-        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
-    try:
-        client_config = sdk["parse_client_config"](client_raw)
-        client_public = client_config.to_public_dict()
-    except Exception:
-        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG") from None
-    if (
-        client_config.process_role != "application_client"
-        or client_config.registration.get("application_ref") != identity.actor_ref
-    ):
-        raise ServiceReadDeploymentError("CLIENT_IDENTITY_MISMATCH")
-
-    scopes_raw = profile["scope_claims"]
-    if (
-        type(scopes_raw) is not dict
-        or not scopes_raw
-        or len(scopes_raw) > _MAX_BINDINGS_PER_SUBJECT
-    ):
-        raise ServiceReadDeploymentError("INVALID_SCOPES")
-    scopes: dict[str, Any] = {}
-    for scope_ref, scope_raw in scopes_raw.items():
-        scope_ref = _identifier(scope_ref)
-        if type(scope_raw) is not dict or set(scope_raw) - _SCOPE_FIELDS:
-            raise ServiceReadDeploymentError("INVALID_SCOPES")
-        scope_arguments = dict(scope_raw)
-        if "execution_domain_ref" not in scope_arguments:
-            raise ServiceReadDeploymentError("INVALID_SCOPES")
-        if "account_refs" in scope_arguments:
-            if type(scope_arguments["account_refs"]) is not list:
-                raise ServiceReadDeploymentError("INVALID_SCOPES")
-            scope_arguments["account_refs"] = tuple(scope_arguments["account_refs"])
-        scopes[scope_ref] = sdk["WireScope"](**scope_arguments)
-
-    peers_raw = profile["peer_identities"]
-    if type(peers_raw) is not dict or not peers_raw or len(peers_raw) > _MAX_BINDINGS_PER_SUBJECT:
-        raise ServiceReadDeploymentError("INVALID_PEERS")
-    peers: dict[str, Any] = {}
-    for service_id, peer_raw in peers_raw.items():
-        service_id = _identifier(service_id)
-        peer = _exact_mapping(peer_raw, {"principal_ref", "actor_ref"})
-        actor_ref = _identifier(peer["actor_ref"])
-        if actor_ref != service_id:
-            raise ServiceReadDeploymentError("INVALID_PEERS")
-        peers[service_id] = sdk["WireIdentity"](
-            sdk["WireRole"].SERVICE,
-            _identifier(peer["principal_ref"]),
-            actor_ref,
-        )
-
-    key_raw = profile["curve_keys"]
-    if type(key_raw) is not dict or not key_raw or len(key_raw) > _MAX_BINDINGS_PER_SUBJECT:
-        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-    curve_keys: dict[str, tuple[bytes, bytes, bytes]] = {}
-    for security_ref, raw_keys in key_raw.items():
-        security_ref = _identifier(security_ref)
-        keys = _exact_mapping(raw_keys, {"server_key", "public_key", "secret_key"})
-        encoded = tuple(
-            _curve_key(keys[name]) for name in ("server_key", "public_key", "secret_key")
-        )
-        curve_keys[security_ref] = encoded  # type: ignore[assignment]
+    scopes = parse_profile_scopes(profile["scope_claims"], sdk)
+    peers = parse_profile_peers(profile["peer_identities"], sdk)
+    curve_keys = parse_profile_curve_keys(profile["curve_keys"])
 
     account_bindings = _parse_account_bindings(profile["account_bindings"], sdk)
     account_book_bindings = _parse_account_book_bindings(
@@ -608,14 +526,9 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         paper_submit_bindings,
         sdk,
     )
-    if set(order_submit_bindings) & set(approved_target_bindings):
-        raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
-    if paper_submit_bindings and (order_submit_bindings or approved_target_bindings):
-        raise ServiceReadDeploymentError("MIXED_PAPER_ORDER_WRITE_PROFILE")
-    if {binding.scope_ref for binding in paper_submit_bindings.values()} & set(
-        order_submit_bindings
-    ):
-        raise ServiceReadDeploymentError("DUPLICATE_ORDER_WRITE_SCOPE")
+    validate_write_binding_exclusivity(
+        order_submit_bindings, approved_target_bindings, paper_submit_bindings
+    )
     monitor_bindings = _parse_monitor_bindings(profile["monitor_bindings"])
     portfolio_analytics_bindings = _parse_portfolio_analytics_bindings(
         profile.get("portfolio_analytics_bindings", {}), scopes
@@ -632,100 +545,27 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         subject=subject,
         principal_ref=identity.principal_ref,
     )
-    grants_fields = {"account_refs", "order_scope_refs", "monitor_scope_refs"}
-    book_grant_fields = {"account_book_refs", "strategy_book_refs"}
-    optional_grant_fields = book_grant_fields | {
-        "order_submit_scope_refs",
-        "approved_target_scope_refs",
-        "paper_submit_account_ids",
-        "paper_legacy_import_account_ids",
-        "portfolio_refs",
-        "risk_policy_budget_refs",
-        "risk_account_policy_refs",
-    }
-    grants_raw = profile["grants"]
-    if (
-        type(grants_raw) is not dict
-        or not grants_fields <= set(grants_raw)
-        or set(grants_raw) - grants_fields - optional_grant_fields
-        or (bool(set(grants_raw) & book_grant_fields) and not book_grant_fields <= set(grants_raw))
-    ):
-        raise ServiceReadDeploymentError("INVALID_GRANTS")
-    account_grants = frozenset(_string_list(grants_raw["account_refs"]))
-    account_book_grants = frozenset(_string_list(grants_raw.get("account_book_refs", [])))
-    strategy_book_grants = frozenset(_string_list(grants_raw.get("strategy_book_refs", [])))
-    order_grants = frozenset(_string_list(grants_raw["order_scope_refs"]))
-    order_submit_grants = frozenset(_string_list(grants_raw.get("order_submit_scope_refs", [])))
-    approved_target_grants = frozenset(
-        _string_list(grants_raw.get("approved_target_scope_refs", []))
+    grants = parse_and_verify_grants(
+        profile["grants"],
+        {
+            "account_bindings": account_bindings,
+            "account_book_bindings": account_book_bindings,
+            "strategy_book_bindings": strategy_book_bindings,
+            "order_bindings": order_bindings,
+            "order_submit_bindings": order_submit_bindings,
+            "approved_target_bindings": approved_target_bindings,
+            "paper_submit_bindings": paper_submit_bindings,
+            "paper_legacy_import_bindings": paper_legacy_import_bindings,
+            "monitor_bindings": monitor_bindings,
+            "portfolio_analytics_bindings": portfolio_analytics_bindings,
+            "risk_policy_budget_bindings": risk_policy_budget_bindings,
+            "risk_account_policy_bindings": risk_account_policy_bindings,
+        },
+        strategy_book_bindings,
     )
-    paper_submit_grants = frozenset(_string_list(grants_raw.get("paper_submit_account_ids", [])))
-    paper_legacy_import_grants = frozenset(
-        _string_list(grants_raw.get("paper_legacy_import_account_ids", []))
-    )
-    monitor_grants = frozenset(_string_list(grants_raw["monitor_scope_refs"]))
-    portfolio_grants = frozenset(_string_list(grants_raw.get("portfolio_refs", [])))
-    risk_policy_budget_grants = frozenset(
-        _string_list(grants_raw.get("risk_policy_budget_refs", []))
-    )
-    risk_account_policy_grants = frozenset(
-        _string_list(grants_raw.get("risk_account_policy_refs", []))
-    )
-    if (
-        account_grants != frozenset(account_bindings)
-        or account_book_grants != frozenset(account_book_bindings)
-        or strategy_book_grants != frozenset(strategy_book_bindings)
-        or order_grants != frozenset(order_bindings)
-        or order_submit_grants != frozenset(order_submit_bindings)
-        or approved_target_grants != frozenset(approved_target_bindings)
-        or paper_submit_grants != frozenset(paper_submit_bindings)
-        or paper_legacy_import_grants != frozenset(paper_legacy_import_bindings)
-        or monitor_grants != frozenset(monitor_bindings)
-        or portfolio_grants != frozenset(portfolio_analytics_bindings)
-        or risk_policy_budget_grants != frozenset(risk_policy_budget_bindings)
-        or risk_account_policy_grants != frozenset(risk_account_policy_bindings)
-        or not (
-            account_grants
-            or account_book_grants
-            or strategy_book_grants
-            or order_grants
-            or order_submit_grants
-            or approved_target_grants
-            or paper_submit_grants
-            or paper_legacy_import_grants
-            or monitor_grants
-            or portfolio_grants
-            or risk_policy_budget_grants
-            or risk_account_policy_grants
-        )
-    ):
-        raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
-    if any(
-        binding.account_ref not in account_book_grants
-        for binding in strategy_book_bindings.values()
-    ):
-        raise ServiceReadDeploymentError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
+    max_queue_size, interval = parse_worker_options(profile["worker"])
 
-    worker_raw = profile["worker"]
-    if type(worker_raw) is not dict or set(worker_raw) - {
-        "max_queue_size",
-        "maintenance_interval_seconds",
-    }:
-        raise ServiceReadDeploymentError("INVALID_WORKER_OPTIONS")
-    max_queue_size = worker_raw.get("max_queue_size", 32)
-    interval = worker_raw.get("maintenance_interval_seconds", 1.0)
-    if type(max_queue_size) is not int or not 1 <= max_queue_size <= _MAX_QUEUE_SIZE:
-        raise ServiceReadDeploymentError("INVALID_WORKER_OPTIONS")
-    if (
-        isinstance(interval, bool)
-        or not isinstance(interval, (int, float))
-        or not math.isfinite(interval)
-        or interval <= 0
-        or interval > _MAX_MAINTENANCE_INTERVAL
-    ):
-        raise ServiceReadDeploymentError("INVALID_WORKER_OPTIONS")
-
-    _validate_profile_bindings(
+    validate_profile_bindings(
         client_public,
         identity,
         subject,
@@ -763,20 +603,20 @@ def _parse_profile(raw: object, sdk: Mapping[str, Any]) -> _SubjectProfile:
         portfolio_analytics_bindings=MappingProxyType(portfolio_analytics_bindings),
         risk_policy_budget_bindings=MappingProxyType(risk_policy_budget_bindings),
         risk_account_policy_bindings=MappingProxyType(risk_account_policy_bindings),
-        account_grants=account_grants,
-        account_book_grants=account_book_grants,
-        strategy_book_grants=strategy_book_grants,
-        order_grants=order_grants,
-        order_submit_grants=order_submit_grants,
-        paper_submit_grants=paper_submit_grants,
-        paper_legacy_import_grants=paper_legacy_import_grants,
-        approved_target_grants=approved_target_grants,
-        monitor_grants=monitor_grants,
-        portfolio_grants=portfolio_grants,
-        risk_policy_budget_grants=risk_policy_budget_grants,
-        risk_account_policy_grants=risk_account_policy_grants,
+        account_grants=grants["account_refs"],
+        account_book_grants=grants["account_book_refs"],
+        strategy_book_grants=grants["strategy_book_refs"],
+        order_grants=grants["order_scope_refs"],
+        order_submit_grants=grants["order_submit_scope_refs"],
+        paper_submit_grants=grants["paper_submit_account_ids"],
+        paper_legacy_import_grants=grants["paper_legacy_import_account_ids"],
+        approved_target_grants=grants["approved_target_scope_refs"],
+        monitor_grants=grants["monitor_scope_refs"],
+        portfolio_grants=grants["portfolio_refs"],
+        risk_policy_budget_grants=grants["risk_policy_budget_refs"],
+        risk_account_policy_grants=grants["risk_account_policy_refs"],
         max_queue_size=max_queue_size,
-        maintenance_interval_seconds=float(interval),
+        maintenance_interval_seconds=interval,
     )
 
 
@@ -1250,9 +1090,7 @@ def _parse_risk_policy_budget_bindings(
             management, portfolio_ref, frozenset(member_scope_refs)
         ):
             raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        # _is_budget_management_scope rejects None, so the scope is present here.
-        assert management is not None
-        execution_domain_ref = management.execution_domain_ref
+        execution_domain_ref = require_present(management).execution_domain_ref
         for account_ref, scope_ref in member_scope_refs.items():
             if not _is_budget_member_scope(
                 scopes.get(scope_ref),
@@ -1342,446 +1180,6 @@ def _parse_risk_account_policy_bindings(
     if len(scope_refs) != len(set(scope_refs)):
         raise ServiceReadDeploymentError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
     return result
-
-
-def _validate_profile_bindings(
-    client_config: Mapping[str, Any],
-    identity: Any,
-    subject: str,
-    scopes: Mapping[str, Any],
-    peers: Mapping[str, Any],
-    curve_keys: Mapping[str, Any],
-    account_bindings: Mapping[str, AccountBinding],
-    account_book_bindings: Mapping[str, AccountBookBinding],
-    order_bindings: Mapping[str, OrderBinding],
-    order_submit_bindings: Mapping[str, OrderSubmitBinding],
-    approved_target_bindings: Mapping[str, ApprovedTargetSubmitBinding],
-    paper_submit_bindings: Mapping[str, PaperSubmitBinding],
-    paper_legacy_import_bindings: Mapping[str, PaperLegacyImportBinding],
-    monitor_bindings: Mapping[str, MonitorBinding],
-    portfolio_analytics_bindings: Mapping[str, PortfolioAnalyticsBinding],
-    risk_policy_budget_bindings: Mapping[str, RiskPolicyBudgetBinding],
-    risk_account_policy_bindings: Mapping[str, RiskAccountPolicyBinding],
-) -> None:
-    declared: dict[tuple[str, str], tuple[str, str | None]] = {}
-    budget_management_portfolios: dict[tuple[str, str], str] = {}
-    for account_ref, account_binding in account_bindings.items():
-        scope = scopes.get(account_binding.scope_ref)
-        if (
-            account_binding.mount != "application.account"
-            or scope is None
-            or scope.account_ref != account_ref
-            or scope.account_refs
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, account_binding.mount, account_binding.scope_ref, account_ref)
-    for account_ref, account_book_binding in account_book_bindings.items():
-        scope = scopes.get(account_book_binding.scope_ref)
-        if (
-            account_book_binding.mount != "application.order_query"
-            or scope is None
-            or scope.account_ref != account_ref
-            or not _is_account_scope(scope)
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        snapshot_binding = account_bindings.get(account_ref)
-        if (
-            snapshot_binding is not None
-            and snapshot_binding.account_key.account_key_id
-            != account_book_binding.account_key.account_key_id
-        ):
-            raise ServiceReadDeploymentError("ACCOUNT_BOOK_KEY_MISMATCH")
-        _add_declared(
-            declared, account_book_binding.mount, account_book_binding.scope_ref, account_ref
-        )
-    for order_scope_ref, order_binding in order_bindings.items():
-        if order_binding.mount != "application.order_query" or order_scope_ref not in scopes:
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        scope = scopes[order_scope_ref]
-        _add_declared(declared, order_binding.mount, order_scope_ref, scope.account_ref)
-    for submit_scope_ref, submit_binding in order_submit_bindings.items():
-        scope = scopes.get(submit_scope_ref)
-        if (
-            submit_binding.mount != "application.orders"
-            or scope is None
-            or not _is_manual_order_scope(
-                scope, submit_binding.account_ref, submit_binding.manual_book_ref
-            )
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, submit_binding.mount, submit_scope_ref, submit_binding.account_ref)
-    for approved_scope_ref, approved_binding in approved_target_bindings.items():
-        scope = scopes.get(approved_scope_ref)
-        if (
-            approved_binding.mount != "application.orders"
-            or scope is None
-            or not _is_approved_target_scope(
-                scope, approved_binding.account_ref, approved_binding.strategy_ref
-            )
-            or scope != approved_binding.wire_scope
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(
-            declared, approved_binding.mount, approved_scope_ref, approved_binding.account_ref
-        )
-    for legacy_account_id, paper_binding in paper_submit_bindings.items():
-        scope = scopes.get(paper_binding.scope_ref)
-        query = scopes.get(paper_binding.query_scope_ref)
-        if (
-            legacy_account_id != paper_binding.legacy_account_id
-            or paper_binding.mount != "application.orders"
-            or scope is None
-            or query is None
-            or scope != paper_binding.wire_scope
-            or scope.account_ref != paper_binding.account_ref
-            or scope.execution_domain_ref != paper_binding.execution_domain_ref
-            or scope.strategy_ref != paper_binding.strategy_ref
-            or scope.account_refs
-            or scope.run_id is not None
-            or scope.manual_book_ref is not None
-            or scope.portfolio_ref is not None
-            or scope.group_id is not None
-            or scope.leg_id is not None
-            or query.execution_domain_ref != paper_binding.execution_domain_ref
-            or query.account_ref != paper_binding.account_ref
-            or query.account_refs
-            or query.strategy_ref != paper_binding.strategy_ref
-            or query.run_id is not None
-            or query.manual_book_ref is not None
-            or query.portfolio_ref is not None
-            or query.group_id is not None
-            or query.leg_id is not None
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(
-            declared, paper_binding.mount, paper_binding.scope_ref, paper_binding.account_ref
-        )
-    for legacy_account_id, legacy_import_binding in paper_legacy_import_bindings.items():
-        paper = paper_submit_bindings.get(legacy_account_id)
-        scope = scopes.get(legacy_import_binding.scope_ref)
-        if (
-            legacy_import_binding.mount != "application.paper_legacy_import"
-            or legacy_import_binding.legacy_account_id != legacy_account_id
-            or legacy_import_binding.owner_subject != subject
-            or paper is None
-            or legacy_import_binding.paper_binding is not paper
-            or legacy_import_binding.scope_ref != paper.scope_ref
-            or scope is None
-            or scope != paper.wire_scope
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        paper.paper_owner_domain.validate_binding(paper.wire_scope, paper.execution_scope)
-        _add_declared(
-            declared,
-            legacy_import_binding.mount,
-            legacy_import_binding.scope_ref,
-            paper.account_ref,
-        )
-    for monitor_scope_ref, monitor_binding in monitor_bindings.items():
-        scope = scopes.get(monitor_binding.scope_ref)
-        if (
-            monitor_binding.mount != "application.monitor"
-            or scope is None
-            or scope.strategy_ref != monitor_binding.strategy_ref
-            or scope.account_refs
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, monitor_binding.mount, monitor_scope_ref, None)
-    for analytics_portfolio_ref, analytics_binding in portfolio_analytics_bindings.items():
-        scope = scopes.get(analytics_binding.scope_ref)
-        if analytics_binding.mount != "application.risk_analysis" or (
-            not _is_portfolio_analytics_scope(scope, analytics_portfolio_ref)
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(
-            declared,
-            analytics_binding.mount,
-            analytics_binding.scope_ref,
-            analytics_portfolio_ref,
-        )
-    for budget_portfolio_ref, budget_binding in risk_policy_budget_bindings.items():
-        management_scope = scopes.get(budget_binding.management_scope_ref)
-        member_refs = frozenset(budget_binding.member_scope_refs)
-        if (
-            budget_binding.mount != "application.risk_policy"
-            or budget_binding.portfolio_ref != budget_portfolio_ref
-            or not _is_budget_management_scope(management_scope, budget_portfolio_ref, member_refs)
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        management_pair = (budget_binding.mount, budget_binding.management_scope_ref)
-        _add_declared(declared, budget_binding.mount, budget_binding.management_scope_ref, None)
-        previous_portfolio = budget_management_portfolios.get(management_pair)
-        if previous_portfolio is not None and previous_portfolio != budget_portfolio_ref:
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        budget_management_portfolios[management_pair] = budget_portfolio_ref
-        for account_ref, member_scope_ref in budget_binding.member_scope_refs.items():
-            member_scope = scopes.get(member_scope_ref)
-            # _is_budget_management_scope rejects None, so management_scope is present.
-            assert management_scope is not None
-            if not _is_budget_member_scope(
-                member_scope,
-                budget_portfolio_ref,
-                account_ref,
-                management_scope.execution_domain_ref,
-            ):
-                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            _add_declared(declared, budget_binding.mount, member_scope_ref, account_ref)
-
-    budget_scope_refs = {
-        binding.management_scope_ref for binding in risk_policy_budget_bindings.values()
-    } | {
-        scope_ref
-        for binding in risk_policy_budget_bindings.values()
-        for scope_ref in binding.member_scope_refs.values()
-    }
-    for account_ref, binding in risk_account_policy_bindings.items():
-        scope = scopes.get(binding.scope_ref)
-        if (
-            binding.mount != "application.risk_policy"
-            or binding.account_ref != account_ref
-            or not _is_risk_account_policy_scope(scope, account_ref)
-            or binding.scope_ref in budget_scope_refs
-        ):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        _add_declared(declared, binding.mount, binding.scope_ref, account_ref)
-
-    if set(scopes) != {scope_ref for _, scope_ref in declared}:
-        raise ServiceReadDeploymentError("UNUSED_SCOPE")
-
-    bindings_by_alias = client_config.get("clients")
-    if type(bindings_by_alias) is not dict:
-        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
-    observed: dict[tuple[str, str], tuple[str, str | None]] = {}
-    used_services: set[str] = set()
-    used_transports: set[str] = set()
-    for client in bindings_by_alias.values():
-        if type(client) is not dict or type(client.get("settings")) is not dict:
-            raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
-        bindings = client["settings"].get("bindings")
-        if type(bindings) is not list:
-            raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
-        for binding in bindings:
-            if type(binding) is not dict:
-                raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
-            mount = binding.get("mount")
-            scope_ref = binding.get("scope_ref")
-            if mount not in _DEPLOYMENT_MOUNTS or type(scope_ref) is not str:
-                raise ServiceReadDeploymentError("WRITABLE_BINDING_FORBIDDEN")
-            pair = (mount, scope_ref)
-            if pair in observed or pair not in declared:
-                raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
-            declared_account_ref = declared[pair][1]
-            if mount == "application.risk_analysis":
-                if (
-                    binding.get("portfolio_ref") != declared_account_ref
-                    or binding.get("account_ref") is not None
-                ):
-                    raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            elif mount == "application.risk_policy" and pair in budget_management_portfolios:
-                if (
-                    binding.get("portfolio_ref") != budget_management_portfolios[pair]
-                    or binding.get("account_ref") is not None
-                ):
-                    raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            elif mount == "application.risk_policy":
-                if (
-                    binding.get("account_ref") != declared_account_ref
-                    or binding.get("portfolio_ref") is not None
-                ):
-                    raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            elif binding.get("account_ref") != declared_account_ref:
-                raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-            service_id = binding.get("service_id")
-            transport_ref = binding.get("transport_ref")
-            if type(service_id) is not str or service_id not in peers:
-                raise ServiceReadDeploymentError("INVALID_PEERS")
-            if type(transport_ref) is not str:
-                raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-            observed[pair] = declared[pair]
-            used_services.add(service_id)
-            used_transports.add(transport_ref)
-
-    if set(observed) != set(declared):
-        raise ServiceReadDeploymentError("GRANT_BINDING_MISMATCH")
-    if used_services != set(peers):
-        raise ServiceReadDeploymentError("INVALID_PEERS")
-
-    communication = client_config.get("communication")
-    if type(communication) is not dict:
-        raise ServiceReadDeploymentError("INVALID_CLIENT_CONFIG")
-    profiles = communication.get("profiles")
-    if type(profiles) is not dict or set(profiles) != used_transports:
-        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-    used_security_refs: set[str] = set()
-    for transport in profiles.values():
-        if type(transport) is not dict:
-            raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-        endpoints = transport.get("endpoints")
-        security_ref = transport.get("security_profile_ref")
-        if type(endpoints) is not dict or "rpc_connect" not in endpoints:
-            raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-        if type(security_ref) is not str:
-            raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-        used_security_refs.add(security_ref)
-    if used_security_refs != set(curve_keys):
-        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-    if identity.role.value != "application_client":
-        raise ServiceReadDeploymentError("CLIENT_IDENTITY_MISMATCH")
-
-
-def _add_declared(
-    declared: dict[tuple[str, str], tuple[str, str | None]],
-    mount: str,
-    scope_ref: str,
-    account_ref: str | None,
-) -> None:
-    pair = (mount, scope_ref)
-    previous = declared.get(pair)
-    if previous is not None:
-        if previous != (mount, account_ref):
-            raise ServiceReadDeploymentError("SCOPE_BINDING_MISMATCH")
-        return
-    declared[pair] = (mount, account_ref)
-
-
-def _is_account_scope(scope: Any) -> bool:
-    return (
-        scope.account_ref is not None
-        and not scope.account_refs
-        and scope.strategy_ref is None
-        and scope.run_id is None
-        and scope.manual_book_ref is None
-        and scope.portfolio_ref is None
-        and scope.group_id is None
-        and scope.leg_id is None
-    )
-
-
-def _is_portfolio_analytics_scope(scope: Any, portfolio_ref: str) -> bool:
-    return (
-        scope is not None
-        and getattr(scope, "portfolio_ref", None) == portfolio_ref
-        and getattr(scope, "run_id", None) is None
-        and getattr(scope, "account_ref", None) is None
-        and not getattr(scope, "account_refs", ())
-        and getattr(scope, "strategy_ref", None) is None
-        and getattr(scope, "manual_book_ref", None) is None
-        and getattr(scope, "group_id", None) is None
-        and getattr(scope, "leg_id", None) is None
-    )
-
-
-def _is_budget_management_scope(
-    scope: Any, portfolio_ref: str, account_refs: frozenset[str]
-) -> bool:
-    return (
-        scope is not None
-        and getattr(scope, "portfolio_ref", None) == portfolio_ref
-        and getattr(scope, "account_ref", None) is None
-        and frozenset(getattr(scope, "account_refs", ())) == account_refs
-        and bool(getattr(scope, "execution_domain_ref", None))
-        and getattr(scope, "run_id", None) is None
-        and getattr(scope, "strategy_ref", None) is None
-        and getattr(scope, "manual_book_ref", None) is None
-        and getattr(scope, "group_id", None) is None
-        and getattr(scope, "leg_id", None) is None
-    )
-
-
-def _is_budget_member_scope(
-    scope: Any, portfolio_ref: str, account_ref: str, execution_domain_ref: str
-) -> bool:
-    return (
-        scope is not None
-        and getattr(scope, "portfolio_ref", None) == portfolio_ref
-        and getattr(scope, "account_ref", None) == account_ref
-        and not getattr(scope, "account_refs", ())
-        and getattr(scope, "execution_domain_ref", None) == execution_domain_ref
-        and getattr(scope, "run_id", None) is None
-        and getattr(scope, "strategy_ref", None) is None
-        and getattr(scope, "manual_book_ref", None) is None
-        and getattr(scope, "group_id", None) is None
-        and getattr(scope, "leg_id", None) is None
-    )
-
-
-def _is_risk_account_policy_scope(scope: Any, account_ref: str) -> bool:
-    """Accept only a manual-book scope identical in shape to a Risk target."""
-
-    return (
-        scope is not None
-        and getattr(scope, "account_ref", None) == account_ref
-        and not getattr(scope, "account_refs", ())
-        and bool(getattr(scope, "execution_domain_ref", None))
-        and bool(getattr(scope, "manual_book_ref", None))
-        and getattr(scope, "strategy_ref", None) is None
-        and getattr(scope, "run_id", None) is None
-        and getattr(scope, "portfolio_ref", None) is None
-        and getattr(scope, "group_id", None) is None
-        and getattr(scope, "leg_id", None) is None
-    )
-
-
-def _is_manual_order_scope(scope: Any, account_ref: str, manual_book_ref: str) -> bool:
-    return (
-        scope.account_ref == account_ref
-        and not scope.account_refs
-        and scope.strategy_ref is None
-        and scope.manual_book_ref == manual_book_ref
-        and scope.run_id is None
-        and scope.portfolio_ref is None
-        and scope.group_id is None
-        and scope.leg_id is None
-    )
-
-
-def _is_approved_target_scope(scope: Any, account_ref: str, strategy_ref: str) -> bool:
-    return (
-        scope.account_ref == account_ref
-        and not scope.account_refs
-        and scope.strategy_ref == strategy_ref
-        and scope.manual_book_ref is None
-        and scope.group_id is None
-        and scope.leg_id is None
-    )
-
-
-def _curve_key(value: object) -> bytes:
-    if (
-        type(value) is not str
-        or len(value) != 40
-        or any(character not in _Z85_ALPHABET for character in value)
-    ):
-        raise ServiceReadDeploymentError("INVALID_TRANSPORT_KEYS")
-    return value.encode("ascii")
-
-
-def _identifier(value: object) -> str:
-    if (
-        type(value) is not str
-        or not value
-        or value != value.strip()
-        or value == "*"
-        or len(value) > 256
-        or not value.isprintable()
-    ):
-        raise ServiceReadDeploymentError("INVALID_IDENTIFIER")
-    return value
-
-
-def _string_list(value: object) -> tuple[str, ...]:
-    if type(value) is not list or len(value) > _MAX_SELECTORS:
-        raise ServiceReadDeploymentError("INVALID_GRANTS")
-    result = tuple(_identifier(item) for item in value)
-    if len(set(result)) != len(result):
-        raise ServiceReadDeploymentError("INVALID_GRANTS")
-    return result
-
-
-def _exact_mapping(value: object, keys: set[str]) -> dict[str, Any]:
-    if type(value) is not dict or set(value) != keys:
-        raise ServiceReadDeploymentError("INVALID_DEPLOYMENT")
-    return value
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

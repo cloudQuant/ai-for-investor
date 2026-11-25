@@ -21,6 +21,7 @@ from app.services.workspace.market_data_binding_artifacts import (
 from app.services.workspace.market_data_binding_artifacts import (
     open_verified_market_data_binding_file as _open_verified_market_data_binding_file,
 )
+from app.utils.invariants import require_present
 
 logger = logging.getLogger(__name__)
 
@@ -1659,9 +1660,8 @@ def _build_unit_config(
         # The binding service, rather than a mutable unit category, defines
         # the data contract consumed by this exact artifact.
         asset_type = _asset_type_for_unit(bound_asset_type)
-        assert market_data_binding is not None
         try:
-            raw_artifact_directory = market_data_binding.artifact_directory
+            raw_artifact_directory = require_present(market_data_binding).artifact_directory
         except AttributeError as exc:
             raise MarketDataBindingRuntimeError(
                 "MARKET_DATA_BINDING_RUNTIME_CONFIG_INVALID"

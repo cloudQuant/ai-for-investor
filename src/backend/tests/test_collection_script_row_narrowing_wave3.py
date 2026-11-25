@@ -274,11 +274,9 @@ SAVE_BOOL_SITES: Final = [
 def test_save_functions_return_declared_bool_identity(
     module_name: str, class_name: str, method: str, saved: object
 ) -> None:
-    """save_data() is `int | Literal[False]` (core/mysql_base.py); the docstring contract of
-    these eight is bool and every consumer uses `if success:` truthiness. The wave made the
-    runtime match the contract with `bool(...)`, keeping every truthy decision identical
-    (200 -> True, 0 -> False, False -> False) - asserted here by identity, so the leaked row
-    count cannot come back."""
+    """save_data() is `int | Literal[False]` (core/mysql_base.py); 0 indicates an
+    idempotent no-op write (all rows matched without changes) rather than a save
+    failure, so only ``False`` maps to ``False``."""
     module = pytest.importorskip(f"app.data_fetch.scripts.funds.weekly.{module_name}")
     cls = getattr(module, class_name)
     service = object.__new__(cls)
@@ -296,7 +294,7 @@ def test_save_functions_return_declared_bool_identity(
 
     result = getattr(service, method)(frame)
 
-    assert result is (bool(saved))
+    assert result is (saved is not False)
     assert captured, "save_data was still never reached"
 
 

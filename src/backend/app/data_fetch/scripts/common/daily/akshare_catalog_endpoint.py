@@ -85,7 +85,7 @@ def run_endpoint(
         table_name=table, df=df, primary_key="R_ID", add_fetched_at=True
     )
     ok = provider.save_data(df_to_write, table, on_duplicate_update=True, unique_keys=["R_ID"])
-    return {"success": bool(ok), "table": table, "rows": int(len(df_to_write))}
+    return {"success": ok is not False, "table": table, "rows": int(len(df_to_write))}
 
 
 def run(

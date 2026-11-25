@@ -53,6 +53,11 @@ from app.services.research.holdout_execution_contract import (
     HoldoutExecutionCommand,
     HoldoutExecutionResult,
 )
+from app.services.research.promotion_authority_checks import (
+    validate_command_promotion_base,
+    validate_evaluator_receipt_chain,
+    validate_persisted_gate_decisions,
+)
 from app.services.research.statistics import calculate_deflated_sharpe
 
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -1114,92 +1119,28 @@ async def _read_evaluator_receipt_result(
     except (KeyError, TypeError, ValueError):
         raise ValueError("PROMOTION_RESULT_INVALID") from None
 
-    started_at = _utc_datetime(command.started_at)
-    completed_at = _utc_datetime(evaluation.completed_at)
-    if (
-        command.status != "SUCCEEDED"
-        or command.stage != "HOLDOUT_PENDING"
-        or command.error_code is not None
-        or any(
-            value is not None
-            for value in (
-                command.lease_owner,
-                command.lease_token_hash,
-                command.lease_expires_at,
-                command.lease_heartbeat_at,
-            )
-        )
-        or command.candidate_id != candidate.id
-        or command.candidate_hash != candidate.candidate_hash
-        or command.freeze_receipt_fingerprint != receipt_fingerprint
-        or command.policy_version != policy.version
-        or candidate.freeze_status != "FROZEN"
-        or evaluation.candidate_id != candidate.id
-        or evaluation.authorization_id != authorization.id
-        or evaluation.experiment_epoch_id != command.experiment_epoch_id
-        or evaluation.dataset_snapshot_id != command.dataset_snapshot_id
-        or evaluation.evaluator_identity != command.evaluator_identity
-        or evaluation.evaluator_version != command.evaluator_version
-        or evaluation.policy_version != policy.version
-        or evaluation.evaluation_type != "SEALED_HOLDOUT"
-        or evaluation.returns_artifact_id != artifact.id
-        or evaluation.status not in {"PASSED", "REJECTED"}
-        or started_at is None
-        or completed_at is None
-        or epoch.status != "CLOSED"
-        or epoch.selected_candidate_id != candidate.id
-        or _utc_datetime(epoch.closed_at) != completed_at
-        or authorization.status != "CONSUMED"
-        or authorization.experiment_epoch_id != command.experiment_epoch_id
-        or authorization.candidate_id != candidate.id
-        or authorization.candidate_hash != command.candidate_hash
-        or authorization.dataset_snapshot_id != command.dataset_snapshot_id
-        or authorization.policy_version != policy.version
-        or authorization.evaluator_identity != command.evaluator_identity
-        or authorization.capability_profile_id != command.capability_profile_id
-        or authorization.capability_profile_version != command.capability_profile_version
-        or authorization.capability_evidence_hash != command.capability_evidence_hash
-        or authorization.issued_by != binding.lease_owner
-        or claim_audit.actor_identity != binding.lease_owner
-        or claim_audit.result != "ACCEPTED"
-        or claim_audit.reason_code != "HOLDOUT_CLAIM_STARTED"
-        or claim_audit.evaluation_id != evaluation.id
-        or claim_audit.authorization_id != authorization.id
-        or checkpoint_audit.actor_identity != checkpoint_actor
-        or checkpoint_audit.result != "ACCEPTED"
-        or checkpoint_audit.reason_code != "HOLDOUT_FINALIZE_CHECKPOINT_RECORDED"
-        or binding.command_id != command.id
-        or binding.authorization_id != authorization.id
-        or binding.evaluation_id != evaluation.id
-        or binding.artifact_id != artifact.id
-        or binding.lease_owner != claim_audit.actor_identity
-        or binding.lease_generation != command.lease_generation
-        or binding.authority_binding_hash != expected_binding_hash
-        or execution.command_id != command.id
-        or execution.evaluation_id != evaluation.id
-        or execution.lease_owner != binding.lease_owner
-        or execution.lease_generation != command.lease_generation
-        or execution.command_hash != wire_command.command_hash
-        or execution.command_json != wire_command.snapshot
-        or execution.state not in {"OBSERVED", "SETTLED"}
-        or execution.result_hash != sha256(result.payload).hexdigest()
-        or execution.error_code is not None
-        or execution.observed_at is None
-        or (execution.state == "OBSERVED" and execution.settled_at is not None)
-        or (execution.state == "SETTLED" and execution.settled_at is None)
-        or result.snapshot["status"] != "SUCCEEDED"
-        or terminal["policy_version"] != policy.version
-        or terminal["promotion_policy_hash"] != promotion_policy_material_hash(policy)
-        or terminal["input_evidence_hash"] != input_evidence_hash
-        or artifact_receipt["artifact_hash"] != artifact.content_hash
-        or artifact_receipt["artifact_size_bytes"] != artifact.size_bytes
-        or artifact.kind != _SEALED_RECEIPT_KIND
-        or artifact.schema_version != _SEALED_RECEIPT_SCHEMA
-        or artifact.media_type != _SEALED_RECEIPT_MEDIA_TYPE
-        or artifact.producer_identity != command.evaluator_identity
-        or artifact.container_image_digest != command.evaluator_version
-        or artifact.storage_uri
-        != (f"controlled://sealed-holdout-artifact-receipt/{artifact_receipt['receipt_id']}")
+    policy_hash = promotion_policy_material_hash(policy)
+    if not validate_evaluator_receipt_chain(
+        command=command,
+        candidate=candidate,
+        evaluation=evaluation,
+        authorization=authorization,
+        artifact=artifact,
+        epoch=epoch,
+        binding=binding,
+        execution=execution,
+        claim_audit=claim_audit,
+        checkpoint_audit=checkpoint_audit,
+        checkpoint_actor=checkpoint_actor,
+        wire_command=wire_command,
+        result=result,
+        terminal=terminal,
+        artifact_receipt=artifact_receipt,
+        policy_version=policy.version,
+        policy_hash=policy_hash,
+        receipt_fingerprint=receipt_fingerprint,
+        input_evidence_hash=input_evidence_hash,
+        expected_binding_hash=expected_binding_hash,
     ):
         raise ValueError("PROMOTION_RESULT_INVALID")
 
@@ -1224,32 +1165,16 @@ async def _read_evaluator_receipt_result(
             )
         ).all()
     )
-    decisions = {decision.gate_code: decision for decision in persisted}
     eligible = all(outcome.status == "PASS" for outcome in outcomes)
-    gate_inputs = dict(evaluation.gate_inputs or {})
-    metrics = dict(evaluation.metrics or {})
-    if (
-        len(outcomes) != len(REQUIRED_HOLDOUT_GATE_CODES)
-        or tuple(outcome.code for outcome in outcomes) != REQUIRED_HOLDOUT_GATE_CODES
-        or len(persisted) != len(REQUIRED_HOLDOUT_GATE_CODES)
-        or set(decisions) != set(REQUIRED_HOLDOUT_GATE_CODES)
-        or any(
-            decisions[outcome.code].evaluation_id != evaluation.id
-            or decisions[outcome.code].executor_version != _SEALED_RECEIPT_EXECUTOR
-            or decisions[outcome.code].status != outcome.status
-            or decisions[outcome.code].reason != outcome.reason
-            for outcome in outcomes
-        )
-        or evaluation.status != ("PASSED" if eligible else "REJECTED")
-        or metrics != {"promotion_eligible": eligible}
-        or gate_inputs
-        != {
-            "input_evidence_hash": input_evidence_hash,
-            "sealed_dataset_hash": command.sealed_dataset_hash,
-            "strict_freeze_receipt_fingerprint": receipt_fingerprint,
-            "promotion_policy_hash": promotion_policy_material_hash(policy),
-            "gate_statuses": {outcome.code: outcome.status for outcome in outcomes},
-        }
+    if not validate_persisted_gate_decisions(
+        outcomes=outcomes,
+        persisted=persisted,
+        evaluation=evaluation,
+        command=command,
+        input_evidence_hash=input_evidence_hash,
+        receipt_fingerprint=receipt_fingerprint,
+        policy_hash=policy_hash,
+        eligible=eligible,
     ):
         raise ValueError("PROMOTION_RESULT_INVALID")
     return PromotionResult(
@@ -1491,131 +1416,31 @@ async def _require_command_promotion_authority(
         "evaluator_version": command.evaluator_version,
         "measurements": measurements,
     }
-    started_at = _utc_datetime(command.started_at)
-    issued_at = _utc_datetime(authorization.issued_at)
-    consumed_at = _utc_datetime(authorization.consumed_at)
-    authorization_expiry = _utc_datetime(authorization.expires_at)
-    evaluation_started_at = _utc_datetime(evaluation.started_at)
-    disclosed_at = _utc_datetime(epoch.disclosed_at)
-    binding_created_at = _utc_datetime(binding.created_at)
     checkpoint_actor = binding.lease_owner
     if len(transition_audits) == 1 and transition_audits[0].action == (
         "EXECUTION_OBSERVED_RECONCILING"
     ):
         checkpoint_actor = transition_audits[0].actor_identity
-    base_matches = bool(
-        command.user_id == candidate.user_id
-        and command.run_id == candidate.run_id
-        and command.candidate_id == candidate.id == authority.candidate_id
-        and command.candidate_hash == candidate.candidate_hash
-        and command.expected_candidate_state == "FROZEN"
-        and candidate.freeze_status == "FROZEN"
-        and command.experiment_epoch_id == candidate.experiment_epoch_id
-        and command.evaluation_id == evaluation.id == authority.evaluation_id
-        and command.authorization_id == evaluation.authorization_id
-        and command.policy_version == policy.version
-        and command.stage == "HOLDOUT_PENDING"
-        and command.lease_generation == authority.lease_generation
-        and command.attempt_count == authority.lease_generation
-        and started_at is not None
-        and command.evaluator_identity == authority.evaluator_identity
-        and command.evaluator_version == authority.evaluator_version
-        and authorization.id == command.authorization_id
-        and authorization.status == "CONSUMED"
-        and authorization.experiment_epoch_id == command.experiment_epoch_id
-        and authorization.candidate_id == command.candidate_id
-        and authorization.candidate_hash == command.candidate_hash
-        and authorization.dataset_snapshot_id == command.dataset_snapshot_id
-        and authorization.policy_version == command.policy_version
-        and authorization.evaluator_identity == command.evaluator_identity
-        and authorization.capability_profile_id == command.capability_profile_id
-        and authorization.capability_profile_version == command.capability_profile_version
-        and authorization.capability_evidence_hash == command.capability_evidence_hash
-        and authorization.issued_by == binding.lease_owner
-        and bool(_SHA256_HEX.fullmatch(authorization.token_hash))
-        and authorization.token_hash != authority.lease_token_hash
-        and issued_at == started_at
-        and consumed_at == started_at
-        and authorization_expiry is not None
-        and authorization_expiry > started_at
-        and binding.command_id == command.id
-        and binding.user_id == command.user_id
-        and binding.run_id == command.run_id
-        and binding.authorization_id == command.authorization_id
-        and binding.evaluation_id == evaluation.id
-        and binding.experiment_epoch_id == command.experiment_epoch_id
-        and binding.candidate_id == command.candidate_id
-        and binding.dataset_snapshot_id == command.dataset_snapshot_id
-        and binding.artifact_id == evaluation.returns_artifact_id
-        and binding.claim_access_audit_id == claim_audit.id
-        and binding.request_hash == command.request_hash
-        and binding.lease_generation == authority.lease_generation
-        and binding.binding_schema_version == _HOLDOUT_BINDING_SCHEMA
-        and binding.authority_binding_hash == expected_binding_hash
-        and binding_expiry is not None
-        and evaluation.experiment_epoch_id == command.experiment_epoch_id
-        and evaluation.candidate_id == command.candidate_id
-        and evaluation.dataset_snapshot_id == command.dataset_snapshot_id
-        and evaluation.evaluation_type == "SEALED_HOLDOUT"
-        and evaluation.evaluator_identity == authority.evaluator_identity
-        and evaluation.evaluator_version == authority.evaluator_version
-        and evaluation.policy_version == command.policy_version
-        and evaluation.returns_artifact_id == binding.artifact_id
-        and (evaluation.metrics or {}) == {}
-        and (evaluation.gate_inputs or {}) == {}
-        and evaluation.status == "RUNNING"
-        and evaluation_started_at == started_at
-        and evaluation.completed_at is None
-        and epoch.status == "DISCLOSED"
-        and epoch.selected_candidate_id == command.candidate_id
-        and disclosed_at == started_at
-        and epoch.closed_at is None
-        and claim_audit.action == "CLAIM_STARTED"
-        and claim_audit.result == "ACCEPTED"
-        and claim_audit.reason_code == "HOLDOUT_CLAIM_STARTED"
-        and claim_audit.actor_identity == binding.lease_owner
-        and claim_audit.evaluator_version == command.evaluator_version
-        and claim_audit.requested_command_id == command.id
-        and claim_audit.command_id == command.id
-        and claim_audit.authorization_id == authorization.id
-        and claim_audit.evaluation_id == evaluation.id
-        and claim_audit.experiment_epoch_id == command.experiment_epoch_id
-        and claim_audit.candidate_id == command.candidate_id
-        and claim_audit.dataset_snapshot_id == command.dataset_snapshot_id
-        and claim_audit.lease_generation == authority.lease_generation
-        and claim_audit.trace_id == command.trace_id
-        and _utc_datetime(claim_audit.created_at) == started_at
-        and artifact.kind == _SEALED_EVIDENCE_KIND
-        and artifact.content_hash == digest
-        and artifact.size_bytes == len(content)
-        and artifact.media_type == "application/json"
-        and artifact.schema_version == _SEALED_EVIDENCE_SCHEMA
-        and artifact.producer_identity == command.evaluator_identity
-        and artifact.container_image_digest == command.evaluator_version
-        and artifact.storage_uri == f"controlled://sealed-holdout-evidence/{digest}"
-        and retained.artifact_id == artifact.id
-        and _utc_datetime(artifact.created_at) == binding_created_at
-        and _utc_datetime(retained.created_at) == binding_created_at
-        and checkpoint_audit.action == "CHECKPOINT_RECORDED"
-        and checkpoint_audit.result == "ACCEPTED"
-        and checkpoint_audit.reason_code == "HOLDOUT_FINALIZE_CHECKPOINT_RECORDED"
-        and checkpoint_audit.actor_identity == checkpoint_actor
-        and checkpoint_audit.evaluator_version == command.evaluator_version
-        and checkpoint_audit.requested_command_id == command.id
-        and checkpoint_audit.command_id == command.id
-        and checkpoint_audit.authorization_id == authorization.id
-        and checkpoint_audit.evaluation_id == evaluation.id
-        and checkpoint_audit.experiment_epoch_id == command.experiment_epoch_id
-        and checkpoint_audit.candidate_id == command.candidate_id
-        and checkpoint_audit.dataset_snapshot_id == command.dataset_snapshot_id
-        and checkpoint_audit.lease_generation == authority.lease_generation
-        and checkpoint_audit.trace_id == command.trace_id
-        and _utc_datetime(checkpoint_audit.created_at) == binding_created_at
-        and isinstance(measurements, dict)
-        and set(decoded) == _SEALED_PAYLOAD_KEYS
-        and set(measurements).issubset(_MEASUREMENT_KEYS)
-        and decoded == expected_payload
-        and canonical_json(decoded).encode("utf-8") == content
+    base_matches = validate_command_promotion_base(
+        command=command,
+        candidate=candidate,
+        evaluation=evaluation,
+        authorization=authorization,
+        binding=binding,
+        epoch=epoch,
+        claim_audit=claim_audit,
+        checkpoint_audit=checkpoint_audit,
+        artifact=artifact,
+        retained=retained,
+        authority=authority,
+        policy_version=policy.version,
+        expected_binding_hash=expected_binding_hash,
+        binding_expiry=binding_expiry,
+        checkpoint_actor=checkpoint_actor,
+        decoded=decoded,
+        expected_payload=expected_payload,
+        digest=digest,
+        content=content,
     )
     if not base_matches:
         raise ValueError("PROMOTION_CLAIM_AUTHORITY_INVALID")

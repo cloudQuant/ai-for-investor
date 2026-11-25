@@ -37,6 +37,7 @@ from app.services.research.discovery_execution_contract import (
     DiscoveryExecutionResult,
 )
 from app.services.research.discovery_search_budget import lock_search_epoch, next_search_slot
+from app.utils.invariants import require_present
 
 _INTENT_SCHEMA_VERSION = "discovery-execution-intent-v1"
 _DISCOVERY_STAGE = "VALIDATE_DISCOVERY"
@@ -154,7 +155,7 @@ class DiscoveryExecutionJournal:
                 denied_code="DISCOVERY_EXECUTION_RESULT_DENIED",
                 conflict_code="DISCOVERY_EXECUTION_RESULT_CONFLICT",
             )
-            assert record is not None
+            record = require_present(record, "execution record missing")
             if record.status == "OBSERVED":
                 if _canonical_equal(record.result_json, expected_snapshot):
                     return record
@@ -216,7 +217,7 @@ class DiscoveryExecutionJournal:
                 denied_code="DISCOVERY_EXECUTION_UNKNOWN_DENIED",
                 conflict_code="DISCOVERY_EXECUTION_UNKNOWN_CONFLICT",
             )
-            assert record is not None
+            record = require_present(record, "execution record missing")
             await _require_recorded_dispatch(
                 session,
                 record=record,
@@ -299,7 +300,7 @@ class DiscoveryExecutionJournal:
                 denied_code="DISCOVERY_EXECUTION_RESULT_DENIED",
                 conflict_code="DISCOVERY_EXECUTION_RESULT_CONFLICT",
             )
-            assert record is not None
+            record = require_present(record, "execution record missing")
             try:
                 stored_command = DiscoveryExecutionCommand.from_mapping(
                     _json_copy(record.command_json)
@@ -332,7 +333,7 @@ class DiscoveryExecutionJournal:
                 denied_code="DISCOVERY_EXECUTION_RESULT_DENIED",
                 conflict_code="DISCOVERY_EXECUTION_RESULT_CONFLICT",
             )
-            assert record is not None
+            record = require_present(record, "execution record missing")
             if record.status == "OBSERVED" and _canonical_equal(
                 record.result_json, expected_result
             ):
@@ -356,7 +357,7 @@ class DiscoveryExecutionJournal:
                 denied_code="DISCOVERY_EXECUTION_UNKNOWN_DENIED",
                 conflict_code="DISCOVERY_EXECUTION_UNKNOWN_CONFLICT",
             )
-            assert record is not None
+            record = require_present(record, "execution record missing")
             if record.status == "OBSERVED":
                 return record
             if record.status == "UNKNOWN" and record.error_code == error_code:

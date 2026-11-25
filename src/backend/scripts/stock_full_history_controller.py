@@ -201,9 +201,10 @@ def _as_optional_float(value: Any) -> float | None:
     if text in {"", "-", "--", "nan", "NaN", "None", "null"}:
         return None
     try:
-        return float(text.replace(",", ""))
+        parsed = float(text.replace(",", ""))
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _pick(row: Mapping[str, Any], *names: str) -> Any:
@@ -556,14 +557,16 @@ def resolve_exit_code(statuses: Sequence[str]) -> int:
     """Map outcome statuses to the exit code the recovery worker expects."""
 
     present = set(statuses)
+    if present & ATTENTION_STATUSES:
+        # Attention failures (backfill_failed, verification_failed, etc.) must
+        # never be masked behind retryable source failures or budget deferrals.
+        return 1
     if STATUS_SOURCE_FAILED in present:
         # Worker: exit 2 with statuses inside {success, source_failed} is retryable.
         return 2
     if STATUS_DEFERRED_BUDGET in present:
         # Worker: exit 3 is the only budget-deferral signal it accepts.
         return 3
-    if present & ATTENTION_STATUSES:
-        return 1
     return 0
 
 
@@ -1017,7 +1020,7 @@ def build_live_adapters(
     return (
         AkshareSourceAdapter(timeout_seconds=config.source_timeout_seconds),
         WarehouseDailyAdapter(),
-        ManagedScriptWriterAdapter(),
+        ManagedScriptWriterAdapter(timeout_seconds=config.source_timeout_seconds),
     )
 
 
@@ -1134,6 +1137,9 @@ class ManagedScriptWriterAdapter:
     bypass the single-writer claim discipline the recovery pipeline depends on.
     """
 
+    def __init__(self, *, timeout_seconds: float | None = None) -> None:
+        self._timeout_seconds = timeout_seconds
+
     def write(
         self, symbol: str, *, bars: Sequence[DailyBar], scope: Mapping[str, Any]
     ) -> WriteReceipt:
@@ -1154,17 +1160,28 @@ class ManagedScriptWriterAdapter:
             "_recovery_scope_hash": scope.get("scope_hash"),
             "_recovery_period_key": scope.get("period_key"),
         }
+        if self._timeout_seconds is not None:
+            parameters["_call_timeout"] = self._timeout_seconds
 
         async def _dispatch() -> Any:
-            from app.db.database import async_session_maker
+            from app.db.database import async_session_maker, dispose_current_loop_engine
 
-            async with async_session_maker() as session:
-                service = AkshareScriptService(session)
-                return await service.run_script(
-                    STOCK_SCRIPT_ID,
-                    parameters=parameters,
-                    triggered_by=TriggeredBy.MANUAL,
-                )
+            try:
+                async with async_session_maker() as session:
+                    service = AkshareScriptService(session)
+                    coro = service.run_script(
+                        STOCK_SCRIPT_ID,
+                        parameters=parameters,
+                        triggered_by=TriggeredBy.MANUAL,
+                    )
+                    if self._timeout_seconds is not None:
+                        return await asyncio.wait_for(coro, timeout=self._timeout_seconds)
+                    return await coro
+            finally:
+                try:
+                    await dispose_current_loop_engine()
+                except Exception:
+                    pass
 
         try:
             execution = asyncio.run(_dispatch())
@@ -1197,9 +1214,9 @@ def _prefixed_symbol(symbol: str) -> str:
     text = str(symbol).strip()
     if text.startswith(("sh", "sz", "bj")):
         return text
-    if text.startswith("6"):
+    if text.startswith(("6", "900")):
         return f"sh{text}"
-    if text.startswith(("4", "8")):
+    if text.startswith(("4", "8", "920")):
         return f"bj{text}"
     return f"sz{text}"
 

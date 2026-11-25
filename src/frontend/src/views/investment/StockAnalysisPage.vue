@@ -392,6 +392,7 @@ import { DataAnalysis } from '@element-plus/icons-vue'
 import { aiObservabilityApi, type AIModelOption } from '@/api/aiObservability'
 import SignalHistoryPanel from '@/components/stock-analysis/SignalHistoryPanel.vue'
 import SignalQualityPanel from '@/components/stock-analysis/SignalQualityPanel.vue'
+import { useStockAnalysisPolling } from '@/composables/useStockAnalysisPolling'
 import { renderMarkdown } from '@/utils/markdown-sanitizer'
 import {
   stockAnalysisApi,
@@ -559,7 +560,7 @@ const activeReportTab = ref('technical')
 const signalHistory = ref<StockSignalRecord[]>([])
 const signalSummary = ref<StockSignalSummary | null>(null)
 const signalEvidenceLoading = ref(false)
-let pollingTimer: number | null = null
+const polling = useStockAnalysisPolling(3000)
 
 const modelOptions = computed(() =>
   availableModels.value.map((model) => ({
@@ -660,7 +661,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  stopPolling()
+  polling.dispose()
 })
 
 watch(
@@ -721,11 +722,13 @@ async function submitAnalysis() {
     return
   }
 
+  polling.invalidatePolling()
   submitting.value = true
   taskNotice.value = ''
   analysisResult.value = null
   try {
     const task = await stockAnalysisApi.createTask(payload)
+    if (polling.isUnmounted()) return
     currentTask.value = task
     taskNotice.value = t('stockAnalysis.taskSubmitted')
     ElMessage.success(t('stockAnalysis.taskSubmitted'))
@@ -742,36 +745,31 @@ async function submitAnalysis() {
 }
 
 function startPolling(taskId: string) {
-  stopPolling()
-  pollingTimer = window.setInterval(() => {
-    refreshTask(taskId)
-  }, 3000)
+  polling.startPolling(taskId, refreshTask)
 }
 
 function stopPolling() {
-  if (pollingTimer !== null) {
-    window.clearInterval(pollingTimer)
-    pollingTimer = null
-  }
+  polling.stopPolling()
 }
 
-async function refreshTask(taskId: string) {
+async function refreshTask(taskId: string, gen = polling.currentGen()) {
   try {
     const task = await stockAnalysisApi.getTask(taskId)
+    if (!polling.isCurrent(gen)) return
     currentTask.value = task
     if (task.status === 'completed') {
-      stopPolling()
+      polling.invalidatePolling()
       await loadResult(task.task_id)
-      ElMessage.success(t('stockAnalysis.reportReady'))
+      if (!polling.isUnmounted()) ElMessage.success(t('stockAnalysis.reportReady'))
     } else if (task.status === 'failed' || task.status === 'cancelled') {
-      stopPolling()
-      if (task.status === 'failed') {
-        ElMessage.error(task.error_message || t('stockAnalysis.taskFailed'))
-      }
+      polling.invalidatePolling()
+      if (task.status === 'failed') ElMessage.error(task.error_message || t('stockAnalysis.taskFailed'))
     }
   } catch {
-    stopPolling()
-    ElMessage.error(t('stockAnalysis.refreshFailed'))
+    if (gen === polling.currentGen()) {
+      polling.invalidatePolling()
+      ElMessage.error(t('stockAnalysis.refreshFailed'))
+    }
   }
 }
 

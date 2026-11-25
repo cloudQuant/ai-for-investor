@@ -8,7 +8,7 @@ import re
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Any, Protocol, cast
+from typing import Any, NoReturn, Protocol, cast
 
 from app.models.portfolio_analytics_dataset import PortfolioAnalyticsDatasetV1
 from app.models.portfolio_composition import PortfolioCompositionVersion
@@ -371,17 +371,8 @@ class PortfolioAnalyticsV1TaskService:
             "result": value["result"],
         }
 
-    def _validate_report(
-        self,
-        report: dict[str, Any],
-        dataset: PortfolioAnalyticsDatasetV1,
-        facts: PortfolioAnalyticsFactsV1,
-        *,
-        request: dict[str, Any] | None,
-        state: str,
-        detail_code: str | None,
-    ) -> None:
-        expected_keys = {
+    _REPORT_KEYS = frozenset(
+        {
             "beginning",
             "calculation_ref",
             "decimal_policy",
@@ -403,163 +394,242 @@ class PortfolioAnalyticsV1TaskService:
             "status",
             "version",
         }
-        if set(report) != expected_keys:
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        membership = report["membership"]
-        source = report["source"]
-        flow = report["flow_source"]
+    )
+    _DECIMAL_POLICY = (
+        "PRECISION_50_EMIN_NEG999999_EMAX_999999_HALF_EVEN_TRAPS_INVALID_"
+        "DIVISION_OVERFLOW_QUANTIZE_18_CANONICAL_STRING_V1"
+    )
+
+    @staticmethod
+    def _reply_invalid() -> NoReturn:
+        raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
+
+    @classmethod
+    def _validate_sha256_or_none(cls, value: object) -> None:
+        if type(value) not in (str, type(None)):
+            cls._reply_invalid()
+        if value is not None and _SHA256.fullmatch(cast(str, value)) is None:
+            cls._reply_invalid()
+
+    def _validate_report_header(
+        self,
+        report: dict[str, Any],
+        *,
+        state: str,
+        has_facts: bool,
+        facts_snapshot_ref: str,
+        request: dict[str, Any] | None,
+    ) -> list[str]:
+        if set(report) != self._REPORT_KEYS:
+            self._reply_invalid()
         reason_codes = report["reason_codes"]
+        if type(reason_codes) is not list or any(type(code) is not str for code in reason_codes):
+            self._reply_invalid()
+        static_checks = (
+            type(report["version"]) is int
+            and report["version"] == 1
+            and report["calculation_ref"] == "spot_nav_modified_dietz_v1"
+            and report["return_method"] == "MODIFIED_DIETZ_ESTIMATE_V1"
+            and report["flow_weight_policy"] == "UTC_CALENDAR_DAY_END_V1"
+            and report["fx_policy"] == "IDENTITY_OR_DIRECT_BASE_TO_REPORTING_V1"
+            and report["decimal_policy"] == self._DECIMAL_POLICY
+            and report["portfolio_ref"] == self._membership.portfolio_ref
+            and type(report["reporting_currency"]) is str
+            and _CURRENCY.fullmatch(report["reporting_currency"]) is not None
+            and type(report["model_profile_ref"]) is str
+            and bool(report["model_profile_ref"])
+            and type(report["status"]) is str
+            and report["status"] == ("AVAILABLE" if state == "succeeded" else "UNAVAILABLE")
+        )
+        if not static_checks:
+            self._reply_invalid()
+        if has_facts and report["facts_snapshot_ref"] != facts_snapshot_ref:
+            self._reply_invalid()
+        if not has_facts and (state != "unavailable" or "PERIOD_TOO_LONG" not in reason_codes):
+            self._reply_invalid()
+        if request is not None and report["reporting_currency"] != request["reporting_currency"]:
+            self._reply_invalid()
+        self._validate_sha256_or_none(report["input_sha256"])
+        return reason_codes
+
+    def _validate_report_membership(
+        self,
+        membership: object,
+        facts: PortfolioAnalyticsFactsV1,
+        *,
+        has_facts: bool,
+    ) -> None:
+        if type(membership) is not dict or set(membership) != {"content_sha256", "version"}:
+            self._reply_invalid()
+        content_sha256 = membership.get("content_sha256")
+        self._validate_sha256_or_none(content_sha256)
+        if type(membership.get("version")) is not int:
+            self._reply_invalid()
+        if membership["version"] != self._membership.membership_version:
+            self._reply_invalid()
+        if has_facts and content_sha256 != facts.membership.content_sha256:
+            self._reply_invalid()
+        if not has_facts and content_sha256 is not None:
+            self._reply_invalid()
+
+    @classmethod
+    def _validate_expected_block(
+        cls,
+        block: object,
+        expected: dict[str, object],
+        *,
+        has_facts: bool,
+    ) -> None:
+        if type(block) is not dict or set(block) != set(expected):
+            cls._reply_invalid()
+        if has_facts:
+            if any(block.get(key) != val for key, val in expected.items()):
+                cls._reply_invalid()
+        elif any(block.get(key) is not None for key in expected):
+            cls._reply_invalid()
+
+    def _validate_report_point(
+        self,
+        report: dict[str, Any],
+        *,
+        name: str,
+        point: Any,
+        expected_date: object,
+        state: str,
+        has_facts: bool,
+    ) -> None:
+        value = report[name]
+        expected_point_keys = {
+            "as_of_ns",
+            "date_utc",
+            "nav",
+            "native_values",
+            "snapshot_ref",
+            "source_cursor",
+        }
+        if type(value) is not dict or set(value) != expected_point_keys:
+            self._reply_invalid()
+        report_date = value.get("date_utc")
+        if report_date is not None and not self._is_iso_date(report_date):
+            self._reply_invalid()
+        if expected_date is not None and report_date != expected_date:
+            self._reply_invalid()
         if (
-            type(membership) is not dict
-            or type(source) is not dict
-            or type(flow) is not dict
-            or type(reason_codes) is not list
-            or any(type(code) is not str for code in reason_codes)
+            expected_date is None
+            and state == "succeeded"
+            and report_date != point.valuation_date_utc
         ):
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        start = request["period_start_date_utc"] if request is not None else None
-        end = request["period_end_date_utc"] if request is not None else None
-        has_facts = report["facts_snapshot_ref"] is not None
-        source_values = ("mode", "source_ref", "source_version", "generation")
-        flow_values = ("end_cursor", "source_ref", "source_version", "start_cursor")
-        if (
-            type(report["version"]) is not int
-            or report["version"] != 1
-            or report["calculation_ref"] != "spot_nav_modified_dietz_v1"
-            or report["return_method"] != "MODIFIED_DIETZ_ESTIMATE_V1"
-            or report["flow_weight_policy"] != "UTC_CALENDAR_DAY_END_V1"
-            or report["fx_policy"] != "IDENTITY_OR_DIRECT_BASE_TO_REPORTING_V1"
-            or report["decimal_policy"]
-            != (
-                "PRECISION_50_EMIN_NEG999999_EMAX_999999_HALF_EVEN_TRAPS_INVALID_"
-                "DIVISION_OVERFLOW_QUANTIZE_18_CANONICAL_STRING_V1"
-            )
-            or report["portfolio_ref"] != self._membership.portfolio_ref
-            or type(report["reporting_currency"]) is not str
-            or _CURRENCY.fullmatch(report["reporting_currency"]) is None
-            or (has_facts and report["facts_snapshot_ref"] != facts.facts_snapshot_ref)
-            or (not has_facts and state != "unavailable")
-            or (not has_facts and "PERIOD_TOO_LONG" not in reason_codes)
-            or type(report["model_profile_ref"]) is not str
-            or not report["model_profile_ref"]
-            or type(report["status"]) is not str
-            or report["status"] != ("AVAILABLE" if state == "succeeded" else "UNAVAILABLE")
-            or type(report["reason_codes"]) is not list
-            or any(type(code) is not str for code in report["reason_codes"])
-            or type(report["input_sha256"]) not in (str, type(None))
-            or (
-                report["input_sha256"] is not None
-                and _SHA256.fullmatch(report["input_sha256"]) is None
-            )
-            or type(membership) is not dict
-            or set(membership) != {"content_sha256", "version"}
-            or type(membership.get("content_sha256")) not in (str, type(None))
-            or (
-                membership.get("content_sha256") is not None
-                and _SHA256.fullmatch(membership["content_sha256"]) is None
-            )
-            or type(membership.get("version")) is not int
-            or membership["version"] != self._membership.membership_version
-            or type(source) is not dict
-            or set(source) != {"generation", "mode", "source_ref", "source_version"}
-            or (
-                has_facts
-                and (
-                    source.get("mode") != dataset.source_type
-                    or source.get("source_ref") != dataset.source_ref
-                    or source.get("source_version") != dataset.source_version
-                    or source.get("generation") != dataset.source_generation
-                )
-            )
-            or (not has_facts and any(source.get(name) is not None for name in source_values))
-            or type(flow) is not dict
-            or set(flow) != {"end_cursor", "source_ref", "source_version", "start_cursor"}
-            or (
-                has_facts
-                and (
-                    flow.get("end_cursor") != facts.flow_coverage.end_cursor
-                    or flow.get("source_ref") != facts.flow_coverage.source_ref
-                    or flow.get("source_version") != facts.flow_coverage.source_version
-                    or flow.get("start_cursor") != facts.flow_coverage.start_cursor
-                )
-            )
-            or (not has_facts and any(flow.get(name) is not None for name in flow_values))
-        ):
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        for name, point, expected_date in (
-            ("beginning", facts.beginning, start),
-            ("ending", facts.ending, end),
-        ):
-            value = report[name]
-            report_date = value.get("date_utc") if type(value) is dict else None
+            self._reply_invalid()
+        self._validate_point_lineage(value, point, has_facts=has_facts)
+        if not self._optional_decimal(value.get("nav")):
+            self._reply_invalid()
+        native_values = value.get("native_values")
+        if type(native_values) is not list:
+            self._reply_invalid()
+        for item in native_values:
             if (
-                type(value) is not dict
-                or set(value)
-                != {"as_of_ns", "date_utc", "nav", "native_values", "snapshot_ref", "source_cursor"}
-                or (value.get("date_utc") is not None and not self._is_iso_date(report_date))
-                or (expected_date is not None and value.get("date_utc") != expected_date)
-                or (
-                    expected_date is None
-                    and state == "succeeded"
-                    and value.get("date_utc") != point.valuation_date_utc
-                )
-                or (
-                    has_facts
-                    and (
-                        value.get("as_of_ns") != point.as_of_ns
-                        or value.get("snapshot_ref") != point.snapshot_ref
-                        or value.get("source_cursor") != point.source_cursor
-                    )
-                )
-                or (
-                    not has_facts
-                    and any(
-                        value.get(field) is not None
-                        for field in ("as_of_ns", "snapshot_ref", "source_cursor")
-                    )
-                )
-                or not self._optional_decimal(value.get("nav"))
-                or type(value.get("native_values")) is not list
-                or any(
-                    type(item) is not dict
-                    or set(item) != {"currency", "value"}
-                    or type(item.get("currency")) is not str
-                    or not self._decimal_or_none(item.get("value"))
-                    for item in value["native_values"]
-                )
+                type(item) is not dict
+                or set(item) != {"currency", "value"}
+                or type(item.get("currency")) is not str
+                or not self._decimal_or_none(item.get("value"))
             ):
-                raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
+                self._reply_invalid()
+
+    @classmethod
+    def _validate_point_lineage(cls, value: dict[str, Any], point: Any, *, has_facts: bool) -> None:
+        fields = ("as_of_ns", "snapshot_ref", "source_cursor")
+        if has_facts:
+            if any(value.get(field) != getattr(point, field) for field in fields):
+                cls._reply_invalid()
+        elif any(value.get(field) is not None for field in fields):
+            cls._reply_invalid()
+
+    def _validate_report_availability(
+        self,
+        report: dict[str, Any],
+        *,
+        state: str,
+        detail_code: str | None,
+        reason_codes: list[str],
+    ) -> None:
         if not self._decimal_or_none(report["external_cashflow_net"]) or not self._decimal_or_none(
             report["return_ratio"]
         ):
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        if request is not None and report["reporting_currency"] != request["reporting_currency"]:
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        if has_facts and membership.get("content_sha256") != facts.membership.content_sha256:
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        if not has_facts and membership.get("content_sha256") is not None:
-            raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
+            self._reply_invalid()
         if report["status"] == "AVAILABLE":
             if (
                 report["input_sha256"] is None
-                or not report["reason_codes"] == []
+                or reason_codes != []
                 or report["beginning"]["nav"] is None
                 or report["ending"]["nav"] is None
                 or report["return_ratio"] is None
                 or report["external_cashflow_net"] is None
             ):
-                raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-        else:
-            if (
-                state != "unavailable"
-                or not reason_codes
-                or reason_codes != sorted(set(reason_codes))
-            ):
-                raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-            if report["input_sha256"] is None and "PERIOD_TOO_LONG" not in reason_codes:
-                raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
-            if detail_code != reason_codes[0]:
-                raise PortfolioAnalyticsV1TaskError("ANALYTICS_REPLY_INVALID", 503)
+                self._reply_invalid()
+            return
+        if state != "unavailable" or not reason_codes or reason_codes != sorted(set(reason_codes)):
+            self._reply_invalid()
+        if report["input_sha256"] is None and "PERIOD_TOO_LONG" not in reason_codes:
+            self._reply_invalid()
+        if detail_code != reason_codes[0]:
+            self._reply_invalid()
+
+    def _validate_report(
+        self,
+        report: dict[str, Any],
+        dataset: PortfolioAnalyticsDatasetV1,
+        facts: PortfolioAnalyticsFactsV1,
+        *,
+        request: dict[str, Any] | None,
+        state: str,
+        detail_code: str | None,
+    ) -> None:
+        has_facts = report.get("facts_snapshot_ref") is not None
+        reason_codes = self._validate_report_header(
+            report,
+            state=state,
+            has_facts=has_facts,
+            facts_snapshot_ref=facts.facts_snapshot_ref,
+            request=request,
+        )
+        self._validate_report_membership(report["membership"], facts, has_facts=has_facts)
+        self._validate_expected_block(
+            report["source"],
+            {
+                "mode": dataset.source_type,
+                "source_ref": dataset.source_ref,
+                "source_version": dataset.source_version,
+                "generation": dataset.source_generation,
+            },
+            has_facts=has_facts,
+        )
+        self._validate_expected_block(
+            report["flow_source"],
+            {
+                "end_cursor": facts.flow_coverage.end_cursor,
+                "source_ref": facts.flow_coverage.source_ref,
+                "source_version": facts.flow_coverage.source_version,
+                "start_cursor": facts.flow_coverage.start_cursor,
+            },
+            has_facts=has_facts,
+        )
+        start = request["period_start_date_utc"] if request is not None else None
+        end = request["period_end_date_utc"] if request is not None else None
+        for name, point, expected_date in (
+            ("beginning", facts.beginning, start),
+            ("ending", facts.ending, end),
+        ):
+            self._validate_report_point(
+                report,
+                name=name,
+                point=point,
+                expected_date=expected_date,
+                state=state,
+                has_facts=has_facts,
+            )
+        self._validate_report_availability(
+            report, state=state, detail_code=detail_code, reason_codes=reason_codes
+        )
 
     @staticmethod
     def _optional_decimal(value: object) -> bool:

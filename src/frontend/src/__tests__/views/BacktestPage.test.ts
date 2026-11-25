@@ -259,4 +259,35 @@ describe('BacktestPage', () => {
 
     expect(ElMessage.error).toHaveBeenCalledWith('提交失败')
   })
+
+  it('ignores stale onStrategyChange responses after rapid strategy switching', async () => {
+    const vm = getVm()
+    await new Promise((r) => setTimeout(r, 0))
+    let resolveSlow!: (cfg: StrategyConfig) => void
+    const slowPromise = new Promise<StrategyConfig>((r) => { resolveSlow = r })
+    mocks.getTemplateConfig
+      .mockReturnValueOnce(slowPromise)
+      .mockResolvedValueOnce({
+        strategy_id: 's-fast',
+        strategy: { name: 'Fast' },
+        params: { fast: 10 },
+        data: { symbol: '000002.SZ' },
+        backtest: { initial_cash: 200000, commission: 0.001 },
+      })
+
+    const first = vm.onStrategyChange('s-slow')
+    const second = vm.onStrategyChange('s-fast')
+    await second
+    resolveSlow({
+      strategy_id: 's-slow',
+      strategy: { name: 'Slow' },
+      params: { fast: 999 },
+      data: { symbol: '600000.SH' },
+      backtest: { initial_cash: 100000, commission: 0.001 },
+    })
+    await first
+
+    expect((vm.strategyConfig as { data?: { symbol?: string } })?.data?.symbol).toBe('000002.SZ')
+    expect(vm.dynamicParams.fast).toBe(10)
+  })
 })

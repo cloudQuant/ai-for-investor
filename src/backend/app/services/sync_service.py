@@ -26,11 +26,11 @@ from app.schemas.sync import (
 from app.services.sync import progress as sync_progress
 from app.services.sync import schema_diff as sync_schema
 from app.services.sync import transport as sync_transport
+from app.utils.async_tasks import spawn_tracked_task
 from app.utils.backend_data_paths import get_backend_data_path
 from app.utils.secure_file import write_private_text
 
 logger = logging.getLogger(__name__)
-
 settings = get_settings()
 
 
@@ -290,7 +290,8 @@ class SyncService:
             sync_mode=request.sync_mode,
         )
         self._tasks[task_id] = payload.model_dump()
-        asyncio.get_running_loop().create_task(self._run_task(task_id, config, request))
+        sync_progress.prune_sync_tasks(self._tasks)
+        spawn_tracked_task(self._run_task(task_id, config, request), name=f"sync:{task_id}")
         return SyncTaskCreateResponse(
             task_id=task_id,
             status="pending",
@@ -1753,6 +1754,7 @@ class SyncService:
         current = self._tasks[task_id]
         current.update(changes)
         self._tasks[task_id] = current
+        sync_progress.prune_sync_tasks(self._tasks)
 
     async def _append_history(self, payload: dict[str, Any]) -> None:
         async with self._lock:

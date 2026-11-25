@@ -370,7 +370,17 @@ def _lifecycle_for(
 
     current = tuple(record for record in records if _record_is_current(record, now=now))
     if len(current) > 1:
-        return _LedgerLifecycle(False, False, False, False, False, "CAPABILITY_LEDGER_AMBIGUOUS")
+        attested = tuple(
+            record
+            for record in current
+            if record.verified_capability or record.authorized_capability
+        )
+        if len(attested) == 1:
+            current = attested
+        else:
+            return _LedgerLifecycle(
+                False, False, False, False, False, "CAPABILITY_LEDGER_AMBIGUOUS"
+            )
     if not current:
         if any(
             _as_utc(record.effective_until) <= now for record in records if record.effective_until

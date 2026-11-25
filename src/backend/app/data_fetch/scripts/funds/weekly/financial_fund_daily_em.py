@@ -291,12 +291,11 @@ class FinancialFundDailyEm(AkshareToMySql):
             # 保存数据
             success = self.save_financial_fund_daily_data(df)
 
-            if success:
+            if success is not False:
                 self.logger.info(f"成功保存{len(df)}条理财型基金每日收益数据")
-            else:
-                self.logger.error("保存理财型基金每日收益数据失败")
-
-            return success
+                return True
+            self.logger.error("保存理财型基金每日收益数据失败")
+            return False
 
         except Exception as e:
             self.logger.error(f"执行失败: {e}", exc_info=True)

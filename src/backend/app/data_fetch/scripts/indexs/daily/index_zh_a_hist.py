@@ -57,8 +57,8 @@ class IndexZhAHist(AkshareToMySql):
         finally:
             try:
                 self.disconnect_db()
-            except Exception:
-                pass
+            except Exception as exc:
+                self.logger.debug("Disconnect cleanup failed for %s: %s", self.table_name, exc)
 
     @staticmethod
     def _index_secid_candidates(symbol: str) -> list[str]:

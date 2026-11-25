@@ -331,7 +331,8 @@ def _bound_v1_task_service(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "ANALYTICS_SERVICE_NOT_CONFIGURED"},
         )
-    assert isinstance(scope_ref, str)
+    if not isinstance(scope_ref, str):
+        raise TypeError("scope_ref must be a string")
     try:
         return PortfolioAnalyticsV1TaskService(
             worker,

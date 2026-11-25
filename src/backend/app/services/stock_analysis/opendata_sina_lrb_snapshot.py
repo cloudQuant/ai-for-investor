@@ -27,6 +27,11 @@ from app.services.market_data.opendata_credentials import (
     OpendataCredentials,
     OpendataCredentialsError,
 )
+from app.services.stock_analysis.opendata_sina_validators import (
+    validate_lrb_node_table,
+    validate_sina_snapshot_tail,
+)
+from app.utils.invariants import require_present
 
 _DATASET_ID = "sina_lrb_report_observations"
 _SOURCE = {"source": "sina", "source_id": "sina-lrb"}
@@ -376,23 +381,21 @@ class OpenDataSinaLrbSnapshotReader:
                         raise OpenDataSinaLrbSnapshotError("snapshot_row_limit_exceeded")
                 if not has_more:
                     break
-                assert next_cursor is not None
-                if next_cursor in seen_cursors or next_cursor == cursor:
+                resolved_cursor = require_present(next_cursor, "snapshot next_cursor missing")
+                if resolved_cursor in seen_cursors or resolved_cursor == cursor:
                     raise OpenDataSinaLrbSnapshotError("snapshot_cursor_repeated")
-                seen_cursors.add(next_cursor)
-                cursor = next_cursor
+                seen_cursors.add(resolved_cursor)
+                cursor = resolved_cursor
 
         self._check_deadline(started_at)
         if len(records) != record_count or page_count < 1:
             raise OpenDataSinaLrbSnapshotError("snapshot_incomplete")
         report_count = sum(record["payload"]["record_kind"] == "report" for record in records)
-        if records:
-            if context_count != 1:
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            if report_list_ordinals != set(range(report_count)):
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            if report_date_ordinals != set(range(report_count)):
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
+        if records and (
+            context_count != 1
+            or not (report_list_ordinals == report_date_ordinals == set(range(report_count)))
+        ):
+            raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
         return SinaLrbSnapshotResult(
             snapshot=snapshot,
             records=tuple(records),
@@ -548,44 +551,43 @@ def _validate_snapshot(
         raise OpenDataSinaLrbSnapshotError("snapshot_scope_mismatch")
     if type(snapshot.get("sequence")) is not int or snapshot["sequence"] < 1:
         raise OpenDataSinaLrbSnapshotError("snapshot_metadata_invalid")
-    if (
-        snapshot.get("schema_version") != _SCHEMA_VERSION
-        or snapshot.get("semantic_version") != _SEMANTIC_VERSION
-        or snapshot.get("source") != _SOURCE
-        or snapshot.get("schema")
-        != [
-            {"name": name, "data_type": data_type, "nullable": nullable}
-            for name, data_type, nullable in _SCHEMA_FIELDS
-        ]
-    ):
-        raise OpenDataSinaLrbSnapshotError("snapshot_contract_mismatch")
-    if (
-        snapshot.get("quality") != {"status": "unknown", "report_id": None, "issue_count": 0}
-        or snapshot.get("field_units")
-        != {"report_list_ordinal": "source_ordinal", "report_date_ordinal": "source_ordinal"}
-        or snapshot.get("field_currencies") != {}
-        or snapshot.get("field_adjustments") != {}
-        or snapshot.get("currency") is not None
-        or snapshot.get("adjustment_basis") != "not_applicable"
-        or snapshot.get("asset_class") != "equity"
-        or snapshot.get("frequency") != "irregular"
-        or snapshot.get("record_kind") != "table"
-    ):
-        raise OpenDataSinaLrbSnapshotError("snapshot_contract_mismatch")
-    if (
-        snapshot.get("business_key_fields") != list(_BUSINESS_FIELDS)
-        or snapshot.get("ordering_fields") != list(_BUSINESS_FIELDS)
-        or snapshot.get("filter_fields") != list(_FILTER_FIELDS)
-        or snapshot.get("storage_order") != _STORAGE_ORDER
-        or snapshot.get("identity_key_encoding") != "canonical-json-array-v1"
-        or snapshot.get("time_field") is not None
-        or snapshot.get("temporal_semantics") != "none"
-        or snapshot.get("timezone") != "UTC"
-        or snapshot.get("pit_policy") != "unsupported"
-        or snapshot.get("source_available_at_field") is not None
-        or snapshot.get("calendar_id") is not None
-        or snapshot.get("identity_semantics") != _IDENTITY_SEMANTICS
-    ):
+    contract_pairs: tuple[tuple[str, Any], ...] = (
+        ("schema_version", _SCHEMA_VERSION),
+        ("semantic_version", _SEMANTIC_VERSION),
+        ("source", _SOURCE),
+        (
+            "schema",
+            [
+                {"name": name, "data_type": data_type, "nullable": nullable}
+                for name, data_type, nullable in _SCHEMA_FIELDS
+            ],
+        ),
+        ("quality", {"status": "unknown", "report_id": None, "issue_count": 0}),
+        (
+            "field_units",
+            {"report_list_ordinal": "source_ordinal", "report_date_ordinal": "source_ordinal"},
+        ),
+        ("field_currencies", {}),
+        ("field_adjustments", {}),
+        ("currency", None),
+        ("adjustment_basis", "not_applicable"),
+        ("asset_class", "equity"),
+        ("frequency", "irregular"),
+        ("record_kind", "table"),
+        ("business_key_fields", list(_BUSINESS_FIELDS)),
+        ("ordering_fields", list(_BUSINESS_FIELDS)),
+        ("filter_fields", list(_FILTER_FIELDS)),
+        ("storage_order", _STORAGE_ORDER),
+        ("identity_key_encoding", "canonical-json-array-v1"),
+        ("time_field", None),
+        ("temporal_semantics", "none"),
+        ("timezone", "UTC"),
+        ("pit_policy", "unsupported"),
+        ("source_available_at_field", None),
+        ("calendar_id", None),
+        ("identity_semantics", _IDENTITY_SEMANTICS),
+    )
+    if any(snapshot.get(key) != expected for key, expected in contract_pairs):
         raise OpenDataSinaLrbSnapshotError("snapshot_contract_mismatch")
     if (
         type(snapshot.get("contract_sha256")) is not str
@@ -593,38 +595,17 @@ def _validate_snapshot(
         or _SHA256.fullmatch(snapshot["contract_sha256"]) is None
     ):
         raise OpenDataSinaLrbSnapshotError("snapshot_contract_hash_mismatch")
-    window = snapshot.get("window")
-    if (
-        not isinstance(window, dict)
-        or set(window) != {"start", "end", "end_exclusive"}
-        or window.get("start") is not None
-        or window.get("end") is not None
-        or window.get("end_exclusive") is not True
-    ):
-        raise OpenDataSinaLrbSnapshotError("snapshot_window_invalid")
-    selection = snapshot.get("selection")
-    if (
-        not isinstance(selection, dict)
-        or set(selection) != {"instrument_id", "capture_id"}
-        or selection.get("instrument_id") != instrument_id
-        or selection.get("capture_id") != capture_id
-    ):
-        raise OpenDataSinaLrbSnapshotError("snapshot_selection_mismatch")
-    if type(snapshot.get("page_size")) is not int or snapshot["page_size"] != _ROW_PAGE_SIZE:
-        raise OpenDataSinaLrbSnapshotError("snapshot_metadata_invalid")
-    if (
-        type(snapshot.get("record_count")) is not int
-        or not 0 <= snapshot["record_count"] <= _MAX_ROWS
-    ):
-        raise OpenDataSinaLrbSnapshotError("snapshot_row_limit_exceeded")
-    for field in ("selection_sha256", "content_sha256"):
-        if type(snapshot.get(field)) is not str or _SHA256.fullmatch(snapshot[field]) is None:
-            raise OpenDataSinaLrbSnapshotError("snapshot_hash_invalid")
-    _validate_timestamp(snapshot.get("as_of"), nullable=False)
-    created_at = _validate_timestamp(snapshot.get("created_at"), nullable=False)
-    expires_at = _validate_timestamp(snapshot.get("expires_at"), nullable=False)
-    if created_at is None or expires_at is None or expires_at <= created_at:
-        raise OpenDataSinaLrbSnapshotError("snapshot_expiry_invalid")
+    validate_sina_snapshot_tail(
+        snapshot,
+        instrument_id=instrument_id,
+        capture_id=capture_id,
+        page_size=_ROW_PAGE_SIZE,
+        max_rows=_MAX_ROWS,
+        hash_fields=("selection_sha256", "content_sha256"),
+        sha256_re=_SHA256,
+        validate_timestamp_fn=_validate_timestamp,
+        error_cls=OpenDataSinaLrbSnapshotError,
+    )
     return snapshot
 
 
@@ -822,118 +803,16 @@ def _validate_payload(
 
 def _validate_node_table(value: object, *, context: bool) -> None:
     """Check the frozen node-table wire envelope without decoding its values."""
-    if not isinstance(value, dict) or set(value) != {"encoding", "root_id", "nodes"}:
-        raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-    nodes = value.get("nodes")
-    root_id = value.get("root_id")
-    if (
-        value.get("encoding") != _RESPONSE_ENCODING
-        or type(nodes) is not list
-        or not nodes
-        or len(nodes) > _MAX_NODE_TABLE_NODES
-        or type(root_id) is not int
-        or not 0 <= root_id < len(nodes)
-    ):
-        raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-    if not isinstance(nodes[root_id], dict) or nodes[root_id].get("kind") != "object":
-        raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-    edges: list[list[int]] = [[] for _node in nodes]
-    reference_names: set[str] = set()
-    for expected_id, node in enumerate(nodes):
-        if (
-            not isinstance(node, dict)
-            or node.get("id") != expected_id
-            or type(node.get("id")) is not int
-        ):
-            raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-        kind = node.get("kind")
-        if kind == "null" and set(node) == {"id", "kind"}:
-            continue
-        if kind in {"boolean", "integer", "string"} and set(node) == {"id", "kind", "value"}:
-            scalar = node["value"]
-            valid = (
-                (kind == "boolean" and type(scalar) is bool)
-                or (
-                    kind == "integer"
-                    and type(scalar) is int
-                    and len(str(scalar)) <= _MAX_VALUE_TEXT
-                )
-                or (kind == "string" and type(scalar) is str and len(scalar) <= _MAX_VALUE_TEXT)
-            )
-            if not valid:
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            continue
-        if kind == "decimal" and set(node) == {"id", "kind", "sign", "digits", "exponent"}:
-            sign = node["sign"]
-            digits = node["digits"]
-            exponent = node["exponent"]
-            if (
-                type(sign) is not int
-                or sign not in {0, 1}
-                or type(digits) is not str
-                or not digits
-                or len(digits) > _MAX_VALUE_TEXT
-                or any(character not in "0123456789" for character in digits)
-                or type(exponent) is not int
-                or abs(exponent) > _MAX_DECIMAL_EXPONENT
-            ):
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            continue
-        if kind == "array" and set(node) == {"id", "kind", "items"}:
-            items = node["items"]
-            if type(items) is not list or len(items) > len(nodes):
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            edges[expected_id] = _node_references(items, len(nodes))
-            continue
-        if kind == "object" and set(node) == {"id", "kind", "fields"}:
-            fields = node["fields"]
-            if type(fields) is not list or len(fields) > len(nodes):
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            names: set[str] = set()
-            refs: list[int] = []
-            for pair in fields:
-                if (
-                    type(pair) is not list
-                    or len(pair) != 2
-                    or type(pair[0]) is not str
-                    or len(pair[0]) > _MAX_VALUE_TEXT
-                    or pair[0] in names
-                ):
-                    raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-                names.add(pair[0])
-                refs.extend(_node_references([pair[1]], len(nodes)))
-            edges[expected_id] = refs
-            continue
-        if kind == "reference" and context and set(node) == {"id", "kind", "name"}:
-            name = node["name"]
-            if name not in {"report_date", "report_list"} or name in reference_names:
-                raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-            reference_names.add(name)
-            continue
-        raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-
-    if context and reference_names != {"report_date", "report_list"}:
-        raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-    visited: set[int] = set()
-    active: set[int] = set()
-    pending: list[tuple[int, bool, int]] = [(root_id, False, 0)]
-    while pending:
-        node_id, exiting, depth = pending.pop()
-        if depth > 32:
-            raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-        if exiting:
-            active.discard(node_id)
-            visited.add(node_id)
-            continue
-        if node_id in active:
-            raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-        if node_id in visited:
-            raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
-        active.add(node_id)
-        pending.append((node_id, True, depth))
-        pending.extend((child_id, False, depth + 1) for child_id in reversed(edges[node_id]))
-    if len(visited) != len(nodes):
-        raise OpenDataSinaLrbSnapshotError("record_payload_invalid")
+    validate_lrb_node_table(
+        value,
+        context=context,
+        response_encoding=_RESPONSE_ENCODING,
+        max_nodes=_MAX_NODE_TABLE_NODES,
+        max_value_text=_MAX_VALUE_TEXT,
+        max_decimal_exponent=_MAX_DECIMAL_EXPONENT,
+        node_references_fn=_node_references,
+        error_cls=OpenDataSinaLrbSnapshotError,
+    )
 
 
 def _node_references(values: list[object], node_count: int) -> list[int]:

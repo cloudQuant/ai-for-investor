@@ -296,7 +296,9 @@ def cache_response(
                         body = result.body
                         status_code = result.status_code
                         # Decode body for storage
-                        body_content = json.loads(body)
+                        body_content = json.loads(
+                            bytes(body) if isinstance(body, memoryview) else body
+                        )
                     else:
                         # Add X-Cache header and return as-is for non-JSON
                         result.headers["X-Cache"] = "MISS"

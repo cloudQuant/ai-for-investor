@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.deps import RequireManageUsers
 from app.db.cache import get_cache
 from app.db.database import async_session_maker
 
@@ -216,7 +217,7 @@ async def health_check(request: Request) -> Any:
 
 
 @router.get("/status/cache", summary="Cache statistics")
-async def get_cache_status() -> dict[str, Any]:
+async def get_cache_status(_: Any = RequireManageUsers) -> dict[str, Any]:
     """Get cache statistics for observability.
 
     Returns:
@@ -230,7 +231,7 @@ async def get_cache_status() -> dict[str, Any]:
 
 
 @router.get("/status/routers", summary="Optional router status")
-async def get_router_status() -> dict[str, Any]:
+async def get_router_status(_: Any = RequireManageUsers) -> dict[str, Any]:
     """Get status of optional routers.
 
     Returns:
@@ -271,7 +272,7 @@ def _build_capability_status(
 
 
 @router.get("/status/capabilities", summary="Product capability status")
-async def get_capability_status() -> dict[str, Any]:
+async def get_capability_status(_: Any = RequireManageUsers) -> dict[str, Any]:
     """Return product-domain capability availability.
 
     This endpoint is a product-level aggregation for workbench pages. It keeps

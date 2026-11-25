@@ -409,4 +409,32 @@ describe('useOverfittingRuntime', () => {
     expect(runtime.currentTaskId.value).toBe('')
     expect(runtime.progressInfo.value.message).not.toBe('still running')
   })
+
+  it('closes prior socket on rapid reconnect, catches async onmessage errors, and clears heartbeat on code 1000', async () => {
+    vi.useFakeTimers()
+    runtime.startRuntime('ot-r1')
+    await Promise.resolve()
+    const ws1 = MockWebSocket.instances[0]
+
+    runtime.startRuntime('ot-r2')
+    await Promise.resolve()
+    expect(ws1.close).toHaveBeenCalledOnce()
+    expect(MockWebSocket.instances).toHaveLength(2)
+
+    const ws2 = MockWebSocket.instances[1]
+    vi.mocked(strategyApi.getOverfittingTask).mockRejectedValueOnce(new Error('fetch failed'))
+    ws2.simulateMessage({ type: 'completed' })
+    await vi.waitFor(() => {
+      expect(runtime.loading.value).toBe(false)
+      expect(runtime.progressInfo.value.message).toBe('fetch failed')
+    })
+
+    runtime.startRuntime('ot-r3')
+    await Promise.resolve()
+    const ws3 = MockWebSocket.instances[2]
+    ws3.send.mockClear()
+    ws3.simulateClose(1000)
+    vi.advanceTimersByTime(65000)
+    expect(ws3.send).not.toHaveBeenCalled()
+  })
 })

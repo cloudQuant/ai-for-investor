@@ -218,7 +218,7 @@ class FundRatingSh(AkshareToMySql):
                 unique_keys=["R_ID"],
             )
             self.logger.info("批量写入/更新 %s 条上海证券基金评级数据", saved_rows)
-            return bool(saved_rows)
+            return saved_rows is not False
 
         except Exception as e:
             self.logger.error(f"保存上海证券基金评级数据失败: {e}")

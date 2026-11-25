@@ -456,4 +456,31 @@ describe('useAuthStore', () => {
     expect(() => store.logout()).not.toThrow()
     expect(store.token).toBeNull()
   })
+
+  it('persists refresh_token on login and syncs rotated tokens', async () => {
+    const { authApi } = await import('@/api/auth')
+    const { applyRefreshedTokens, getRefreshToken } = await import('@/utils/tokenRef')
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      access_token: 'access-1',
+      refresh_token: 'refresh-1',
+      token_type: 'bearer',
+      expires_in: 3600,
+    })
+
+    const store = useAuthStore()
+    await store.login({ username: 'u', password: 'p' })
+
+    expect(store.token).toBe('access-1')
+    expect(store.refreshToken).toBe('refresh-1')
+    expect(getRefreshToken()).toBe('refresh-1')
+
+    const { getSessionGeneration } = await import('@/utils/tokenRef')
+    expect(applyRefreshedTokens(getSessionGeneration(), 'access-2', 'refresh-2')).toBe(true)
+    expect(store.token).toBe('access-2')
+    expect(store.refreshToken).toBe('refresh-2')
+
+    store.logout()
+    expect(store.refreshToken).toBeNull()
+    expect(getRefreshToken()).toBeNull()
+  })
 })

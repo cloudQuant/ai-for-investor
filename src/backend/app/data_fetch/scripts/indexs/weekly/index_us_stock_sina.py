@@ -173,7 +173,7 @@ class IndexUsStockSina(AkshareToMySql):
                             unique_keys=["INDEX_CODE", "TRADE_DATE"],
                         )
 
-                        if success:
+                        if success is not False:
                             self.logger.info(
                                 f"Successfully updated {len(df)} records for index {symbol} "
                                 f"in {self.table_name}"

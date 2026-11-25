@@ -118,11 +118,14 @@ class ReitsRealtimeEm(AkshareToMySql):
             return True
 
         try:
-            return self.save_data(
-                df,
-                self.table_name,
-                on_duplicate_update=True,
-                unique_keys=["R_ID", "SECURITY_CODE"],
+            return (
+                self.save_data(
+                    df,
+                    self.table_name,
+                    on_duplicate_update=True,
+                    unique_keys=["R_ID", "SECURITY_CODE"],
+                )
+                is not False
             )
 
         except Exception as e:

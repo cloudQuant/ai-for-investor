@@ -25,16 +25,16 @@ class BrokerAccountSettingsMixin:
 
     CTP_INVESTOR_ID: str = Field(default="", description="CTP investor ID")
 
-    CTP_PASSWORD: str = Field(default="", description="CTP password")
+    CTP_PASSWORD: str = Field(default="", repr=False, description="CTP password")
 
     CTP_APP_ID: str = Field(default="simnow_client_test", description="CTP app ID")
 
-    CTP_AUTH_CODE: str = Field(default="0000000000000000", description="CTP auth code")
+    CTP_AUTH_CODE: str = Field(default="0000000000000000", repr=False, description="CTP auth code")
 
     # MT5 credentials
     MT5_LOGIN: str = Field(default="", description="MT5 login")
 
-    MT5_PASSWORD: str = Field(default="", description="MT5 password")
+    MT5_PASSWORD: str = Field(default="", repr=False, description="MT5 password")
 
     MT5_SERVER: str = Field(default="", description="MT5 server name")
 
@@ -42,7 +42,7 @@ class BrokerAccountSettingsMixin:
 
     MT5_DEMO_LOGIN: str = Field(default="", description="MT5 demo login")
 
-    MT5_DEMO_PASSWORD: str = Field(default="", description="MT5 demo password")
+    MT5_DEMO_PASSWORD: str = Field(default="", repr=False, description="MT5 demo password")
 
     MT5_DEMO_SERVER: str = Field(default="", description="MT5 demo server name")
 
@@ -50,7 +50,7 @@ class BrokerAccountSettingsMixin:
 
     MT5_LIVE_LOGIN: str = Field(default="", description="MT5 live login")
 
-    MT5_LIVE_PASSWORD: str = Field(default="", description="MT5 live password")
+    MT5_LIVE_PASSWORD: str = Field(default="", repr=False, description="MT5 live password")
 
     MT5_LIVE_SERVER: str = Field(default="", description="MT5 live server name")
 
@@ -67,7 +67,7 @@ class BrokerAccountSettingsMixin:
 
     IB_BASE_URL: str = Field(default="https://localhost:5000", description="IB Web base URL")
 
-    IB_ACCESS_TOKEN: str = Field(default="", description="IB access token")
+    IB_ACCESS_TOKEN: str = Field(default="", repr=False, description="IB access token")
 
     IB_VERIFY_SSL: bool = Field(default=True, description="IB Web verify SSL")
 
@@ -81,7 +81,7 @@ class BrokerAccountSettingsMixin:
 
     IB_USERNAME: str = Field(default="", description="IB Web username")
 
-    IB_PASSWORD: str = Field(default="", description="IB Web password")
+    IB_PASSWORD: str = Field(default="", repr=False, description="IB Web password")
 
     IB_LOGIN_BROWSER: str = Field(default="chrome", description="IB Web login browser")
 
@@ -97,7 +97,9 @@ class BrokerAccountSettingsMixin:
 
     IB_WEB_BASE_URL: str = Field(default="", description="IB Web base URL override")
 
-    IB_WEB_ACCESS_TOKEN: str = Field(default="", description="IB Web access token override")
+    IB_WEB_ACCESS_TOKEN: str = Field(
+        default="", repr=False, description="IB Web access token override"
+    )
 
     IB_WEB_VERIFY_SSL: bool = Field(default=True, description="IB Web verify SSL override")
 
@@ -111,7 +113,7 @@ class BrokerAccountSettingsMixin:
 
     IB_WEB_USERNAME: str = Field(default="", description="IB Web username override")
 
-    IB_WEB_PASSWORD: str = Field(default="", description="IB Web password override")
+    IB_WEB_PASSWORD: str = Field(default="", repr=False, description="IB Web password override")
 
     IB_WEB_LOGIN_MODE: str = Field(default="", description="IB Web login mode override")
 
@@ -129,7 +131,7 @@ class BrokerAccountSettingsMixin:
 
     IB_PAPER_BASE_URL: str = Field(default="", description="IB paper base URL")
 
-    IB_PAPER_ACCESS_TOKEN: str = Field(default="", description="IB paper access token")
+    IB_PAPER_ACCESS_TOKEN: str = Field(default="", repr=False, description="IB paper access token")
 
     IB_PAPER_VERIFY_SSL: bool = Field(default=True, description="IB paper verify SSL")
 
@@ -147,7 +149,7 @@ class BrokerAccountSettingsMixin:
 
     IB_LIVE_BASE_URL: str = Field(default="", description="IB live base URL")
 
-    IB_LIVE_ACCESS_TOKEN: str = Field(default="", description="IB live access token")
+    IB_LIVE_ACCESS_TOKEN: str = Field(default="", repr=False, description="IB live access token")
 
     IB_LIVE_VERIFY_SSL: bool = Field(default=True, description="IB live verify SSL")
 
@@ -164,9 +166,9 @@ class BrokerAccountSettingsMixin:
 
     BINANCE_ASSET_TYPE: str = Field(default="SWAP", description="Binance asset type")
 
-    BINANCE_API_KEY: str = Field(default="", description="Binance API key")
+    BINANCE_API_KEY: str = Field(default="", repr=False, description="Binance API key")
 
-    BINANCE_SECRET_KEY: str = Field(default="", description="Binance secret key")
+    BINANCE_SECRET_KEY: str = Field(default="", repr=False, description="Binance secret key")
 
     BINANCE_TESTNET: bool = Field(default=False, description="Binance testnet flag")
 
@@ -177,11 +179,11 @@ class BrokerAccountSettingsMixin:
 
     OKX_ASSET_TYPE: str = Field(default="SWAP", description="OKX asset type")
 
-    OKX_API_KEY: str = Field(default="", description="OKX API key")
+    OKX_API_KEY: str = Field(default="", repr=False, description="OKX API key")
 
-    OKX_SECRET_KEY: str = Field(default="", description="OKX secret key")
+    OKX_SECRET_KEY: str = Field(default="", repr=False, description="OKX secret key")
 
-    OKX_PASSPHRASE: str = Field(default="", description="OKX passphrase")
+    OKX_PASSPHRASE: str = Field(default="", repr=False, description="OKX passphrase")
 
     OKX_TESTNET: bool = Field(default=False, description="OKX testnet flag")
 

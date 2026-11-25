@@ -53,6 +53,7 @@ from app.services.research.promotion import (
     promotion_policy_material_hash,
     resolve_server_policy,
 )
+from app.utils.invariants import log_suppressed, require_present
 
 _cursor_rowcount = _persistence.cursor_rowcount
 _is_sha256 = _persistence.is_holdout_sha256
@@ -470,9 +471,9 @@ class HoldoutFinalizeService:
                     claim_audit=claim_audit,
                     binding=binding,
                 )
-                assert authorization is not None
-                assert evaluation is not None
-                assert claim_audit is not None
+                authorization = require_present(authorization, "authorization missing")
+                evaluation = require_present(evaluation, "evaluation missing")
+                claim_audit = require_present(claim_audit, "claim_audit missing")
                 payload = _evidence_payload(
                     graph.command,
                     authorization=authorization,
@@ -594,8 +595,8 @@ class HoldoutFinalizeService:
                 except Exception as exc:
                     try:
                         await session.rollback()
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        log_suppressed(__name__, "Checkpoint rollback failed", rollback_exc)
                     raise _CheckpointCommitOutcomeUncertain(probe) from exc
                 return receipt
             except _CheckpointCommitOutcomeUncertain:
@@ -691,14 +692,16 @@ class HoldoutFinalizeService:
                         ):
                             raise ValueError("HOLDOUT_FINALIZE_EXECUTION_INVALID")
                     else:
-                        assert lease_token_hash is not None
-                        assert lease_generation is not None
                         now = await database_utc_now(session)
                         _require_live_lease(
                             graph.command,
                             runtime=runtime,
-                            lease_token_hash=lease_token_hash,
-                            lease_generation=lease_generation,
+                            lease_token_hash=require_present(
+                                lease_token_hash, "lease_token_hash missing"
+                            ),
+                            lease_generation=require_present(
+                                lease_generation, "lease_generation missing"
+                            ),
                             now=now,
                         )
                     await session.rollback()
@@ -836,8 +839,10 @@ class HoldoutFinalizeService:
                 except Exception as exc:
                     try:
                         await session.rollback()
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        log_suppressed(
+                            __name__, "Observed checkpoint rollback failed", rollback_exc
+                        )
                     raise _ObservedCheckpointCommitOutcomeUncertain(probe) from exc
                 return receipt
             except _ObservedCheckpointCommitOutcomeUncertain:
@@ -900,22 +905,22 @@ class HoldoutFinalizeService:
                     )
                     generation = binding.lease_generation
                 else:
-                    assert lease_token_hash is not None
-                    assert lease_generation is not None
                     now = await database_utc_now(session)
+                    generation = require_present(lease_generation, "lease_generation missing")
                     _require_live_lease(
                         graph.command,
                         runtime=runtime,
-                        lease_token_hash=lease_token_hash,
-                        lease_generation=lease_generation,
+                        lease_token_hash=require_present(
+                            lease_token_hash, "lease_token_hash missing"
+                        ),
+                        lease_generation=generation,
                         now=now,
                     )
                     if (
-                        binding.lease_generation != lease_generation
+                        binding.lease_generation != generation
                         or binding.lease_owner != runtime.worker_identity
                     ):
                         raise ValueError("HOLDOUT_FINALIZE_LEASE_STALE")
-                    generation = lease_generation
 
                 policy = resolve_server_policy(graph.command.policy_version)
                 artifact = await session.get(
@@ -1010,8 +1015,8 @@ class HoldoutFinalizeService:
                 except Exception as exc:
                     try:
                         await session.rollback()
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        log_suppressed(__name__, "Finalize rollback failed", rollback_exc)
                     raise _FinalizeCommitOutcomeUncertain(probe) from exc
                 return receipt
             except _FinalizeCommitOutcomeUncertain:
@@ -2163,9 +2168,8 @@ def _required_identity(value: str | None) -> str:
 
 
 def _required_hash(value: str | None) -> str:
-    if not _is_sha256(value):
+    if not isinstance(value, str) or not _is_sha256(value):
         raise ValueError("HOLDOUT_FINALIZE_EXECUTION_INVALID")
-    assert isinstance(value, str)
     return value
 
 

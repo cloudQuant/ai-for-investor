@@ -5481,3 +5481,28 @@ async def test_service_compact_warehouse_table_keeps_page_contract(warehouse_eng
         {"date": "2024-01-03", "close": 1.1},
     ]
     assert page.adjustment_basis is None
+
+
+@pytest.mark.asyncio
+async def test_service_merges_verified_filter_into_observed_bases(warehouse_engine, monkeypatch):
+    await _create_warehouse_physical_table(
+        warehouse_engine,
+        table_name="svc_basis_late_hfq",
+        ddl="symbol TEXT, adjustment TEXT",
+        inserts=[
+            ("INSERT INTO svc_basis_late_hfq VALUES (:s, :a)", {"s": "000001", "a": "qfq"}),
+            ("INSERT INTO svc_basis_late_hfq VALUES (:s, :a)", {"s": "000002", "a": "hfq"}),
+        ],
+    )
+    service = AkshareDataService(None)
+
+    async def _truncated_sample(_conn, _quoted):
+        return ["qfq"]
+
+    monkeypatch.setattr(service, "_sample_observed_bases", _truncated_sample)
+    page = await service.get_table_rows("svc_basis_late_hfq", adjustment="hfq")
+    assert page.adjustment_basis == {
+        "filter": "hfq",
+        "observed_bases": ["hfq", "qfq"],
+        "mixed_adjustment_basis": True,
+    }

@@ -875,4 +875,13 @@ describe('BacktestResultPage', () => {
 
     expect(analyticsApi.exportResults).toHaveBeenCalledWith('t1', 'csv')
   })
+
+  it('validates local file URIs safely with buildSafeFileUrl', async () => {
+    const { buildSafeFileUrl } = await import('@/utils/url')
+    expect(buildSafeFileUrl('/tmp/artifacts/run 1/result.json')).toBe('file:///tmp/artifacts/run%201/result.json')
+    expect(buildSafeFileUrl('C:\\artifacts\\run')).toBe('file://C:/artifacts/run')
+    expect(buildSafeFileUrl('javascript:alert(1)')).toBeNull()
+    expect(buildSafeFileUrl('https://evil.example/x')).toBeNull()
+    expect(buildSafeFileUrl('/tmp/bad\npath')).toBeNull()
+  })
 })

@@ -1,9 +1,40 @@
 import pytest
+from httpx import AsyncClient
+
+from app.config import get_settings
+from app.db.database import create_default_admin
+from tests.conftest import register_and_login
+
+
+async def _admin_headers(client: AsyncClient) -> dict[str, str]:
+    await create_default_admin()
+    settings = get_settings()
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},
+    )
+    assert resp.status_code == 200
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest.mark.asyncio
+async def test_status_endpoints_require_admin_auth(client):
+    assert (await client.get("/api/v1/status/capabilities")).status_code == 401
+    assert (await client.get("/api/v1/status/routers")).status_code == 401
+    assert (await client.get("/api/v1/status/cache")).status_code == 401
+
+    _, user_headers = await register_and_login(client, username="status_non_admin")
+    assert (
+        await client.get("/api/v1/status/capabilities", headers=user_headers)
+    ).status_code == 403
+    assert (await client.get("/api/v1/status/routers", headers=user_headers)).status_code == 403
+    assert (await client.get("/api/v1/status/cache", headers=user_headers)).status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_capability_status_returns_product_domains(client):
-    response = await client.get("/api/v1/status/capabilities")
+    headers = await _admin_headers(client)
+    response = await client.get("/api/v1/status/capabilities", headers=headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -24,13 +55,14 @@ async def test_capability_status_returns_product_domains(client):
 async def test_capability_status_marks_optional_router_degraded(client, monkeypatch):
     from app.api import router as router_module
 
+    headers = await _admin_headers(client)
     monkeypatch.setitem(
         router_module.optional_router_status,
         "kb_chat",
         {"available": False, "error": "import failed"},
     )
 
-    response = await client.get("/api/v1/status/capabilities")
+    response = await client.get("/api/v1/status/capabilities", headers=headers)
 
     assert response.status_code == 200
     ai_domain = next(domain for domain in response.json()["domains"] if domain["id"] == "ai")
@@ -45,7 +77,8 @@ async def test_capability_status_marks_optional_router_degraded(client, monkeypa
 
 @pytest.mark.asyncio
 async def test_router_status_endpoint_keeps_existing_shape(client):
-    response = await client.get("/api/v1/status/routers")
+    headers = await _admin_headers(client)
+    response = await client.get("/api/v1/status/routers", headers=headers)
 
     assert response.status_code == 200
     assert "optional_routers" in response.json()

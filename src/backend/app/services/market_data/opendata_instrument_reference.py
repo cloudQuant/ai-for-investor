@@ -22,6 +22,13 @@ from urllib.parse import quote, urlsplit
 import httpx
 from pydantic import JsonValue
 
+from app.services.market_data.opendata_instrument_reference_validation import (
+    validate_instrument_payload_aliases,
+    validate_instrument_payload_dates,
+    validate_page_contract_metadata,
+    validate_page_timestamps_and_cursor,
+)
+
 _PROFILE_VERSION = "od.instrument-reference.v1"
 _SCHEMA_VERSION = "1"
 _SEMANTIC_VERSION = "1.0.0"
@@ -728,123 +735,33 @@ def _validate_page_metadata(
     snapshot_meta = snapshot.get("snapshot")
     if not isinstance(snapshot_meta, dict):
         raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    top_meta = {
-        key: value
-        for key, value in page.items()
-        if key not in {"meta", "rows", "count", "next_cursor", "has_more"}
-    }
-    if _canonical_json(snapshot_meta) != _canonical_json(top_meta):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-
-    if (
-        page["dataset_id"] != config.dataset_id
-        or page["schema_version"] != _SCHEMA_VERSION
-        or page["semantic_version"] != _SEMANTIC_VERSION
-        or page["asset_class"] != "equity"
-        or page["frequency"] != "irregular"
-        or page["record_kind"] != "table"
-        or page["filter_fields"] != []
-        or page["time_field"] is not None
-        or page["temporal_semantics"] != "none"
-        or page["source_available_at_field"] is not None
-        or page["calendar_id"] is not None
-        or page["timezone"] != "Asia/Shanghai"
-        or page["pit_policy"] != "unsupported"
-        or page["business_key_fields"] != ["instrument_id"]
-        or page["ordering_fields"] != ["instrument_id"]
-        or page["identity_key_encoding"] != "canonical-json-array-v1"
-        or _canonical_json(page["identity_semantics"]) != _canonical_json(_IDENTITY_SEMANTICS)
-        or _canonical_json(page["storage_order"]) != _canonical_json(_STORAGE_ORDER)
-        or snapshot["ordering_fields"] != ["instrument_id"]
-        or _canonical_json(snapshot["storage_order"]) != _canonical_json(_STORAGE_ORDER)
-        or snapshot["identity_key_encoding"] != "canonical-json-array-v1"
-        or _canonical_json(page["window"])
-        != _canonical_json({"start": None, "end": None, "end_exclusive": True})
-        or page["adjustment_basis"] != "not_applicable"
-        or page["currency"] is not None
-        or _canonical_json(page["field_units"]) != b"{}"
-        or _canonical_json(page["field_currencies"]) != b"{}"
-        or _canonical_json(page["field_adjustments"]) != b"{}"
-        or _canonical_json(page["schema"]) != _canonical_json(_schema_as_json())
-    ):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-
-    source = page.get("source")
-    if (
-        not isinstance(source, dict)
-        or set(source) != {"source_id", "source"}
-        or source.get("source_id") != config.source_id
-        or not _valid_text(source.get("source"), maximum=128)
-        or str(source.get("source", "")).strip() == ""
-    ):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    contract = _contract_from_page(page, source)
-    if (
-        page.get("contract_sha256") != config.contract_sha256
-        or _SHA256.fullmatch(str(page.get("contract_sha256"))) is None
-        or hashlib.sha256(_canonical_json(contract)).hexdigest() != config.contract_sha256
-    ):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-
-    quality = page.get("quality")
-    if (
-        not isinstance(quality, dict)
-        or set(quality) != {"status", "report_id", "issue_count"}
-        or quality.get("status") != "passed"
-        or not _valid_identifier(quality.get("report_id"))
-        or type(quality.get("issue_count")) is not int
-        or quality.get("issue_count") != 0
-    ):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-
-    for name in ("publication_id", "snapshot_id"):
-        if not _valid_identifier(page.get(name)):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    sequence = page.get("sequence")
-    if type(sequence) is not int or sequence < 1:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if type(page.get("page_size")) is not int or page["page_size"] != limits.page_size:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    record_count = page.get("record_count")
-    if type(record_count) is not int or record_count < 0:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if record_count > limits.max_rows:
-        raise InstrumentReferenceError(_LIMIT_EXCEEDED)
-    for name in ("selection_sha256", "content_sha256"):
-        value = page.get(name)
-        if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    as_of = _parse_datetime(page.get("as_of"))
-    created_at = _parse_datetime(page.get("created_at"))
-    expires_at = _parse_datetime(page.get("expires_at"))
-    if (
-        as_of > created_at
-        or as_of > now
-        or created_at > now
-        or expires_at <= now
-        or expires_at <= created_at
-    ):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if not _valid_date_only_or_none(page.get("as_of"), allow_datetime=True):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    page_rows = page.get("rows")
-    count = page.get("count")
-    has_more = page.get("has_more")
-    cursor = page.get("next_cursor")
-    if (
-        not isinstance(page_rows, list)
-        or type(count) is not int
-        or count != len(page_rows)
-        or count < 0
-        or count > limits.page_size
-        or type(has_more) is not bool
-    ):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if has_more:
-        if count != limits.page_size or not _valid_cursor(cursor):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    elif cursor is not None:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
+    validate_page_contract_metadata(
+        page,
+        snapshot,
+        snapshot_meta,
+        dataset_id=config.dataset_id,
+        source_id=config.source_id,
+        contract_sha256=config.contract_sha256,
+        identity_semantics=_IDENTITY_SEMANTICS,
+        storage_order=_STORAGE_ORDER,
+        schema_json=_schema_as_json(),
+        canonical_json_fn=_canonical_json,
+        contract_from_page_fn=_contract_from_page,
+        valid_text_fn=_valid_text,
+        valid_identifier_fn=_valid_identifier,
+        error_cls=InstrumentReferenceError,
+    )
+    validate_page_timestamps_and_cursor(
+        page,
+        page_size_limit=limits.page_size,
+        max_rows_limit=limits.max_rows,
+        now=now,
+        parse_datetime_fn=_parse_datetime,
+        valid_date_only_fn=_valid_date_only_or_none,
+        valid_identifier_fn=_valid_identifier,
+        valid_cursor_fn=_valid_cursor,
+        error_cls=InstrumentReferenceError,
+    )
     return snapshot_meta
 
 
@@ -1053,53 +970,19 @@ def _validate_payload(payload: Mapping[str, JsonValue]) -> None:
         or type(payload.get("start_boundary_unknown")) is not bool
     ):
         raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    status_as_of = date.fromisoformat(str(payload["status_as_of"]))
-    known_start = payload.get("known_start_date")
-    delisted_on = payload.get("delisted_on")
-    start_evidence = payload.get("start_evidence_ref")
-    delist_evidence = payload.get("delist_evidence_ref")
-    if known_start is not None and not _valid_date_only_or_none(known_start):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if delisted_on is not None and not _valid_date_only_or_none(delisted_on):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if start_evidence is not None and not _valid_evidence(start_evidence):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if delist_evidence is not None and not _valid_evidence(delist_evidence):
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if payload["start_boundary_unknown"]:
-        if known_start is not None or start_evidence is not None:
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    elif known_start is None or start_evidence is None:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if payload["status"] == "delisted":
-        if delisted_on is None or delist_evidence is None:
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        if status_as_of < date.fromisoformat(str(delisted_on)):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    elif delisted_on is not None or delist_evidence is not None:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    if known_start is not None and delisted_on is not None:
-        if date.fromisoformat(str(known_start)) > date.fromisoformat(str(delisted_on)):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    aliases = payload.get("aliases")
-    if not isinstance(aliases, list) or len(aliases) > 16:
-        raise InstrumentReferenceError(_PROTOCOL_INVALID)
-    for alias in aliases:
-        if not isinstance(alias, dict) or set(alias) != _ALIAS_KEYS:
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        if any(
-            not _valid_identifier(alias.get(field)) for field in ("alias", "alias_version")
-        ) or not _valid_evidence(alias.get("evidence_ref")):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        valid_from = alias.get("valid_from")
-        valid_through = alias.get("valid_through")
-        if valid_from is not None and not _valid_date_only_or_none(valid_from):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        if valid_through is not None and not _valid_date_only_or_none(valid_through):
-            raise InstrumentReferenceError(_PROTOCOL_INVALID)
-        if valid_from is not None and valid_through is not None:
-            if date.fromisoformat(str(valid_from)) > date.fromisoformat(str(valid_through)):
-                raise InstrumentReferenceError(_PROTOCOL_INVALID)
+    validate_instrument_payload_dates(
+        payload,
+        valid_date_only_fn=_valid_date_only_or_none,
+        valid_evidence_fn=_valid_evidence,
+        error_cls=InstrumentReferenceError,
+    )
+    validate_instrument_payload_aliases(
+        payload.get("aliases"),
+        valid_identifier_fn=_valid_identifier,
+        valid_evidence_fn=_valid_evidence,
+        valid_date_only_fn=_valid_date_only_or_none,
+        error_cls=InstrumentReferenceError,
+    )
 
 
 def _validate_registry(

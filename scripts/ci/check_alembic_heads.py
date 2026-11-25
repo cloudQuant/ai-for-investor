@@ -106,9 +106,9 @@ def check_history_continuity() -> bool:
         if "No such revision" in stderr:
             print(f"ERROR: Missing revision in chain:\n{stderr}")
             return False
-        # Other errors might be config-related (e.g., no DB), which is OK for CI
-        print(f"WARNING: Could not fully verify history: {stderr.strip()}")
-        return True
+        # Non-zero exit indicates broken env.py, config, or revision loading.
+        print(f"ERROR: 'alembic history' failed (exit code {returncode}):\n{stderr.strip()}")
+        return False
 
     # Verify the history output is parseable and continuous
     history_lines = [line.strip() for line in stdout.strip().split("\n") if line.strip()]

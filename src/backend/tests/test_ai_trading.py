@@ -1701,3 +1701,98 @@ class TestConditionalOrders:
         time.sleep(0.01)  # Ensure time passes
         orders = manager.list_conditional_orders("user1")
         assert orders[0]["status"] == "expired"
+
+
+@pytest.mark.asyncio
+async def test_confirm_trade_concurrency_user_scoped_ws_and_history_persistence(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from app.schemas.ai_trading import AITradingRequest, RiskAssessment, TradeConfirmRequest
+    from app.services import ai_trading_service as ai_mod
+    from app.services.ai_trading_service import _pending_trades
+    from tests.conftest import register_and_login
+
+    _pending_trades.clear()
+    _, headers = await register_and_login(client, username="ai_confirm_user")
+    me_resp = await client.get("/api/v1/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+    uid = me_resp.json()["id"]
+
+    sent_channels: list[tuple[str, dict]] = []
+    broadcast_calls: list[dict] = []
+
+    monkeypatch.setattr(
+        "app.websocket_manager.manager.send_to_task",
+        AsyncMock(side_effect=lambda ch, msg: sent_channels.append((ch, msg))),
+    )
+    monkeypatch.setattr(
+        "app.websocket_manager.manager.broadcast",
+        AsyncMock(side_effect=lambda msg: broadcast_calls.append(msg)),
+    )
+
+    intent = TradingIntent(
+        action=TradeAction.BUY,
+        symbol="600519",
+        quantity=100,
+        price=1500.0,
+        order_type=OrderType.LIMIT,
+        confidence=0.9,
+        risk_level=RiskLevel.HIGH,
+        reason="test confirmation",
+    )
+    svc = AITradingService()
+
+    async def fake_parse_intent(**kwargs):
+        return intent
+
+    async def fake_resolve_ctx(self, user_id: str, request: AITradingRequest):
+        return {"account_balance": 500000.0, "current_positions": {}, "degraded": False}
+
+    async def fake_reassess(self, **kwargs):
+        await asyncio.sleep(0.02)
+        return RiskAssessment(approved=True, risk_level=RiskLevel.HIGH, requires_confirmation=True)
+
+    monkeypatch.setattr(ai_mod, "parse_trading_intent", fake_parse_intent)
+    monkeypatch.setattr(AITradingService, "_resolve_trading_context", fake_resolve_ctx)
+    monkeypatch.setattr(AITradingService, "_enrich_intent_with_asset_spec", lambda self, i, r: True)
+    monkeypatch.setattr(AITradingService, "_reassess_confirmed_trade", fake_reassess)
+    monkeypatch.setattr(
+        svc.risk_guard,
+        "assess",
+        lambda **kwargs: RiskAssessment(
+            approved=True, risk_level=RiskLevel.HIGH, requires_confirmation=True
+        ),
+    )
+    monkeypatch.setattr(
+        AITradingService,
+        "_execute_trade",
+        AsyncMock(return_value={"success": True, "order_id": "ord-1"}),
+    )
+
+    req = AITradingRequest(message="买入100股茅台", dry_run=True, auto_confirm=False)
+    res = await svc.process_trading_request(uid, req)
+    assert res.status == TradeStatus.PENDING_CONFIRMATION
+    assert broadcast_calls == []
+    assert len(sent_channels) == 1 and sent_channels[0][0] == f"user:{uid}"
+
+    # Concurrent double confirmation must only execute once and never raise KeyError
+    r1, r2 = await asyncio.gather(
+        svc.confirm_trade(uid, TradeConfirmRequest(trade_id=res.trade_id, confirmed=True)),
+        svc.confirm_trade(uid, TradeConfirmRequest(trade_id=res.trade_id, confirmed=True)),
+    )
+    statuses = sorted([r1.status.value, r2.status.value])
+    assert statuses == ["failed", "filled"]
+
+    hist_resp = await client.get("/api/v1/ai-trading/history", headers=headers)
+    assert hist_resp.status_code == 200
+    assert any(item["trade_id"] == res.trade_id for item in hist_resp.json()["items"])
+
+    refl_resp = await client.post(
+        f"/api/v1/ai-trading/reflect/{res.trade_id}",
+        headers=headers,
+    )
+    assert refl_resp.status_code == 200
+    assert refl_resp.json()["success"] is True

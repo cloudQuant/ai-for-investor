@@ -1,8 +1,4 @@
-"""Workspace run/stop/status/polling operations mixin.
-
-Extracted from workspace_service.py in iteration 174 to keep
-the service file below the 800-line bar.
-"""
+"""Workspace run/stop/status/polling operations mixin."""
 
 from __future__ import annotations
 
@@ -38,6 +34,8 @@ from app.services.workspace.units import (
     is_server_owned_ai_research_paper_runtime,
     is_server_owned_ai_research_unit,
 )
+from app.utils.async_tasks import spawn_tracked_task
+from app.utils.invariants import require_present
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -169,7 +167,10 @@ def _schedule_paper_runtime_snapshots(user_id: str, units: list[StrategyUnit]) -
         runtime_snapshots.append((instance_id, dict(metrics), dict(settings)))
         snapshot_scheduler.ensure_running(user_id, instance_id)
     if runtime_snapshots:
-        asyncio.create_task(_initialize_paper_runtime_snapshots(user_id, runtime_snapshots))
+        spawn_tracked_task(
+            _initialize_paper_runtime_snapshots(user_id, runtime_snapshots),
+            name=f"workspace-snapshots:{user_id}",
+        )
 
 
 def _task_runtime_info(task: BacktestTask | None) -> dict[str, object]:
@@ -914,12 +915,14 @@ class WorkspaceRunOpsMixin:
                         materialization_started = False
                         try:
                             if binding_required:
-                                assert lease_token is not None
+                                active_lease = require_present(
+                                    lease_token, "run lease token missing"
+                                )
                                 materialization_started = (
                                     await self._begin_research_runtime_materialization(
                                         workspace_id,
                                         str(unit.id),
-                                        lease_token,
+                                        active_lease,
                                         task_id,
                                     )
                                 )
@@ -969,11 +972,10 @@ class WorkspaceRunOpsMixin:
                                 )
 
                             if binding_required:
-                                assert lease_token is not None
                                 if not await self._complete_research_runtime_materialization(
                                     workspace_id,
                                     str(unit.id),
-                                    lease_token,
+                                    require_present(lease_token, "run lease token missing"),
                                     task_id,
                                 ):
                                     # A stop won while ``sync_unit_runtime``
@@ -987,7 +989,9 @@ class WorkspaceRunOpsMixin:
                             return runtime_dir
                         except BaseException:
                             if binding_required and materialization_started:
-                                assert lease_token is not None
+                                active_lease = require_present(
+                                    lease_token, "run lease token missing"
+                                )
                                 if task_id is None:
                                     # No child task exists for this callback.
                                     # Release only after the synchronous writer
@@ -998,7 +1002,7 @@ class WorkspaceRunOpsMixin:
                                         await self._complete_research_runtime_materialization(
                                             workspace_id,
                                             str(unit.id),
-                                            lease_token,
+                                            active_lease,
                                             None,
                                         )
                                     )
@@ -1006,7 +1010,7 @@ class WorkspaceRunOpsMixin:
                                         await self._finish_research_unit_run_lease(
                                             workspace_id,
                                             str(unit.id),
-                                            lease_token,
+                                            active_lease,
                                             status="failed",
                                         )
                             raise
@@ -1016,11 +1020,10 @@ class WorkspaceRunOpsMixin:
                         nonlocal task_id
                         if not binding_required:
                             return True
-                        assert lease_token is not None
                         promoted = await self._promote_research_unit_run_lease(
                             workspace_id,
                             str(unit.id),
-                            lease_token,
+                            require_present(lease_token, "run lease token missing"),
                             created_task_id,
                         )
                         if promoted:
@@ -1062,7 +1065,7 @@ class WorkspaceRunOpsMixin:
                                 # unsynchronised delete can erase a newer
                                 # claimant's runtime after this retry loses its
                                 # ownership.
-                                assert lease_token is not None
+                                require_present(lease_token, "run lease token missing")
                             if time.monotonic() >= deadline:
                                 raise TimeoutError(
                                     "Timed out waiting for an available backtest execution slot"
@@ -1164,9 +1167,8 @@ class WorkspaceRunOpsMixin:
         # Fire-and-forget background polling for completion (Bug-1 fix)
         submitted = [(r["unit_id"], r["task_id"]) for r in results if r.get("task_id")]
         if submitted:
-            asyncio.create_task(
-                self._background_poll_units(workspace_id, user_id, submitted, backtest_service)
-            )
+            coro = self._background_poll_units(workspace_id, user_id, submitted, backtest_service)
+            spawn_tracked_task(coro, name=f"workspace-poll:{workspace_id}")
 
         return results
 

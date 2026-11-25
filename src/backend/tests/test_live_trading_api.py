@@ -196,15 +196,48 @@ class TestLiveTradingList:
         assert mt5["params"]["gateway"]["asset_type"] == "OTC"
         assert mt5["params"]["gateway"]["provider"] == "mt5_gateway"
 
-    async def test_gateway_health_empty(self, client: AsyncClient, auth_headers):
+    async def test_legacy_gateway_read_endpoints_reject_non_admin_users(
+        self, client: AsyncClient, auth_headers
+    ):
+        """Legacy unscoped gateway health/connected/account/positions require admin role."""
+        for path in (
+            "/api/v1/live-trading/gateways/health",
+            "/api/v1/live-trading/gateways/connected",
+            "/api/v1/live-trading/gateways/manual:CTP:089763/account",
+            "/api/v1/live-trading/gateways/manual:CTP:089763/positions",
+        ):
+            response = await client.get(path, headers=auth_headers)
+            assert response.status_code == 403, (
+                f"expected 403 for {path}, got {response.status_code}"
+            )
+
+    async def test_gateway_health_empty(self, client: AsyncClient, admin_headers):
         """Gateway health returns empty list when no gateways are active."""
-        response = await client.get("/api/v1/live-trading/gateways/health", headers=auth_headers)
+        response = await client.get("/api/v1/live-trading/gateways/health", headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 0
         assert data["gateways"] == []
 
-    async def test_gateway_health_with_subprocess_gateways(self, client: AsyncClient, auth_headers):
+    async def test_gateway_health_sanitizes_internal_errors(
+        self, client: AsyncClient, admin_headers
+    ):
+        """Gateway health 500 error does not leak internal exception strings."""
+        with patch("app.api.live_trading_api.get_live_trading_manager") as mock_get_mgr:
+            mock_mgr = MagicMock()
+            mock_mgr.get_gateway_health.side_effect = RuntimeError("internal-secret-dsn")
+            mock_get_mgr.return_value = mock_mgr
+
+            response = await client.get(
+                "/api/v1/live-trading/gateways/health", headers=admin_headers
+            )
+
+        assert response.status_code == 500
+        assert "internal-secret-dsn" not in response.text
+
+    async def test_gateway_health_with_subprocess_gateways(
+        self, client: AsyncClient, admin_headers
+    ):
         with patch("app.api.live_trading_api.get_live_trading_manager") as mock_get_mgr:
             mock_mgr = MagicMock()
             mock_mgr.get_gateway_health.return_value = [
@@ -234,7 +267,7 @@ class TestLiveTradingList:
             mock_get_mgr.return_value = mock_mgr
 
             response = await client.get(
-                "/api/v1/live-trading/gateways/health", headers=auth_headers
+                "/api/v1/live-trading/gateways/health", headers=admin_headers
             )
 
         assert response.status_code == 200
@@ -243,7 +276,9 @@ class TestLiveTradingList:
         assert data["gateways"][0]["gateway_key"] == "manual:CTP:089763"
         assert data["gateways"][0]["market_connection"] == "connected"
 
-    async def test_gateway_query_offloads_blocking_call(self, client: AsyncClient, auth_headers):
+    async def test_gateway_query_offloads_blocking_call(
+        self, client: AsyncClient, admin_headers, auth_headers
+    ):
         """A slow blocking gateway query must not stall the event loop (178 §B).
 
         ``query_gateway_account`` is a synchronous, potentially-blocking call that
@@ -270,7 +305,7 @@ class TestLiveTradingList:
             async def slow_request() -> None:
                 resp = await client.get(
                     "/api/v1/live-trading/gateways/manual:CTP:089763/account",
-                    headers=auth_headers,
+                    headers=admin_headers,
                 )
                 assert resp.status_code == 200
                 order.append("slow")
@@ -289,7 +324,7 @@ class TestLiveTradingList:
         assert order == ["fast", "slow"]
 
     async def test_gateway_positions_query_uses_strict_gateway_read(
-        self, client: AsyncClient, auth_headers
+        self, client: AsyncClient, admin_headers
     ):
         def _query_positions(_gateway_key: str, *, strict: bool = False) -> list[dict[str, str]]:
             assert strict is True
@@ -302,7 +337,7 @@ class TestLiveTradingList:
 
             response = await client.get(
                 "/api/v1/live-trading/gateways/manual:CTP:089763/positions",
-                headers=auth_headers,
+                headers=admin_headers,
             )
 
         assert response.status_code == 200
@@ -313,7 +348,7 @@ class TestLiveTradingList:
         }
 
     async def test_gateway_positions_query_returns_error_when_gateway_unavailable(
-        self, client: AsyncClient, auth_headers
+        self, client: AsyncClient, admin_headers
     ):
         with patch("app.api.live_trading_api.get_live_trading_manager") as mock_get_mgr:
             mock_mgr = MagicMock()
@@ -324,7 +359,7 @@ class TestLiveTradingList:
 
             response = await client.get(
                 "/api/v1/live-trading/gateways/manual:CTP:089763/positions",
-                headers=auth_headers,
+                headers=admin_headers,
             )
 
         assert response.status_code == 404

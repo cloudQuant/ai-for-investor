@@ -192,3 +192,20 @@ class TestHumanSummary:
         assert "AC11_RUNTIME_EVIDENCED / population = 1 / 2" in summary
         assert "not computed here" in summary
         assert "disposition ledger" in summary
+
+    def test_parse_utc_and_task_outcome_convert_non_utc_offset(self) -> None:
+        from datetime import timedelta
+
+        shanghai = timezone(timedelta(hours=8))
+        parsed = mod.parse_utc("2026-11-05T22:03:00+08:00")
+        assert parsed == WINDOW
+        assert parsed.tzinfo == timezone.utc
+
+        shanghai_window = datetime(2026, 11, 5, 22, 3, tzinfo=shanghai)
+        before_in_utc = datetime(2026, 11, 5, 14, 2, 59, tzinfo=timezone.utc)
+        rows = mod.classify_census(
+            [{"task_id": 1, "family": "binds"}],
+            {1: _stat(last=before_in_utc)},
+            window_start=shanghai_window,
+        )
+        assert rows[0]["outcome"] == mod.OUTCOME_NOT_RUN

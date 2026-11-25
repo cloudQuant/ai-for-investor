@@ -567,34 +567,19 @@ async def get_template_readme(template_id: str) -> typing.Any:
     response_model=None,
 )
 async def get_template_config(template_id: str) -> typing.Any:
-    """Read `config.yaml` for a strategy template.
-
-    Args:
-        template_id: The strategy template identifier.
-
-    Returns:
-        A dict containing:
-        - strategy: name/description/author
-        - params: parameter specs (including defaults)
-        - data: data settings (symbol, data type)
-        - backtest: backtest settings (initial cash, commission)
-
-    Raises:
-        HTTPException: If config file not found.
-    """
+    """Read `config.yaml` for a built-in strategy template."""
     import yaml as _yaml
 
     try:
         config_path = get_strategy_dir(template_id) / "config.yaml"
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-
+    if not get_template_by_id(template_id):
+        raise HTTPException(status_code=404, detail="Strategy template not found")
     if not config_path.is_file():
         raise HTTPException(status_code=404, detail="Strategy configuration file not found")
-
     with open(config_path, encoding="utf-8") as f:
         config = _yaml.safe_load(f) or {}
-
     return {
         "strategy_id": template_id,
         "strategy": config.get("strategy", {}),

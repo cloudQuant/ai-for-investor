@@ -118,16 +118,6 @@ ignore = ["E501", "B008"]
 "scripts/**" = ["T201"]
 "tests/test_performance_baseline.py" = ["T201"]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-markers = [
-    "performance: Performance benchmark tests",
-    "e2e: End-to-end integration tests",
-    "integration: Integration tests",
-    "slow: Slow running tests",
-]
-
 [tool.mypy]
 # Type checking is opt-in for now. Run locally with `mypy app`.
 # Once warnings drop and time allows, tighten step-by-step

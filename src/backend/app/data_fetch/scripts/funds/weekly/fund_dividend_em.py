@@ -219,7 +219,7 @@ class FundDividendEm(AkshareToMySql):
                     # 保存数据
                     success = self.save_fund_dividend_data(df)
 
-                    if success:
+                    if success is not False:
                         total_count += len(df)
                         self.logger.info(f"成功保存基金[{fund_code}]{len(df)}条分红数据")
                     else:

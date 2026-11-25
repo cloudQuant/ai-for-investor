@@ -119,7 +119,7 @@ async def get_gateway_credentials(
     summary="Get health status of all active gateways",
 )
 async def get_gateway_health(
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: typing.Any = Depends(require_data_admin_user),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> dict[str, Any]:
     """Return health snapshots for all active gateway runtimes.
@@ -128,13 +128,14 @@ async def get_gateway_health(
         A list of gateway health snapshots with state, connection,
         heartbeat, tick/order counts, and recent errors.
     """
+    del current_user
     try:
         gateways = await asyncio.to_thread(mgr.get_gateway_health)
     except Exception as exc:
         _logger.exception("Unhandled error in get_gateway_health")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get gateway health / 获取网关健康状态失败: {type(exc).__name__}: {exc}",
+            detail="Failed to get gateway health / 获取网关健康状态失败",
         ) from exc
     return {"total": len(gateways), "gateways": gateways}
 
@@ -184,10 +185,11 @@ def disconnect_gateway(current_user: TokenPayload = Depends(get_current_user)) -
     summary="List manually connected gateways",
 )
 async def list_connected_gateways(
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: typing.Any = Depends(require_data_admin_user),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> dict[str, Any]:
     """List all manually connected gateways with basic info."""
+    del current_user
     gateways = mgr.list_connected_gateways()
     return {"total": len(gateways), "gateways": gateways}
 
@@ -198,10 +200,11 @@ async def list_connected_gateways(
 )
 async def query_gateway_account(
     gateway_key: str,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: typing.Any = Depends(require_data_admin_user),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> dict[str, Any]:
     """Query account info from a connected gateway."""
+    del current_user
     result = await asyncio.to_thread(mgr.query_gateway_account, gateway_key)
     if result is None:
         raise HTTPException(
@@ -217,10 +220,11 @@ async def query_gateway_account(
 )
 async def query_gateway_positions(
     gateway_key: str,
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: typing.Any = Depends(require_data_admin_user),
     mgr: LiveTradingManager = Depends(_get_manager),
 ) -> dict[str, Any]:
     """Query positions from a connected gateway."""
+    del current_user
     try:
         positions = await asyncio.to_thread(
             mgr.query_gateway_positions,

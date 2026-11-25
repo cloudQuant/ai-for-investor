@@ -724,5 +724,29 @@ describe('useBacktestRuntime', () => {
       runtime.closeWebSocket() // second call is a no-op
       expect(runtime.loading.value).toBe(true) // state unchanged by closeWebSocket alone
     })
+
+    it('cleans up prior socket on reconnect, catches onmessage fetch errors, and stops heartbeat on code 1000', async () => {
+      vi.useFakeTimers()
+      const { runtime, mocks } = build()
+      mocks.fetchResult.mockRejectedValueOnce(new Error('result fetch failed'))
+      runtime.startRuntime('task-rc1')
+      const ws1 = MockWebSocket.instances[0]
+
+      runtime.startRuntime('task-rc2')
+      expect(ws1.close).toHaveBeenCalledOnce()
+      const ws2 = MockWebSocket.instances[1]
+
+      ws2.emit({ type: 'completed' })
+      await vi.waitFor(() => {
+        expect(runtime.loading.value).toBe(false)
+      })
+
+      runtime.startRuntime('task-rc3')
+      const ws3 = MockWebSocket.instances[2]
+      ws3.triggerClose(1000)
+      vi.advanceTimersByTime(65000)
+      expect(ws3.send).not.toHaveBeenCalled()
+      vi.useRealTimers()
+    })
   })
 })

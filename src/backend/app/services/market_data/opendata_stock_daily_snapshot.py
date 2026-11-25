@@ -363,6 +363,62 @@ def _validate_request(
     return contract
 
 
+def _validate_snapshot_quality(quality: object) -> None:
+    if (
+        not isinstance(quality, Mapping)
+        or set(quality) != {"status", "report_id", "issue_count"}
+        or not isinstance(quality.get("status"), str)
+        or quality.get("status") not in {"passed", "warning", "unknown"}
+        or (quality.get("report_id") is not None and not isinstance(quality.get("report_id"), str))
+        or type(quality.get("issue_count")) is not int
+        or quality.get("issue_count", -1) < 0
+    ):
+        raise OpendataStockDailySnapshotError("opendata_snapshot_contract_mismatch")
+
+
+def _validate_snapshot_contract_fields(
+    snapshot: Mapping[str, Any],
+    *,
+    request: MarketDataProviderRequest,
+    publication_id: str,
+) -> None:
+    start = request.start_at.date().isoformat()
+    end = request.end_at.date().isoformat()
+    stock_selection = {"market": request.market, "symbol": request.provider_symbol}
+    exact_pairs = (
+        ("dataset_id", _DATASET_ID),
+        ("publication_id", publication_id),
+        ("schema_version", "1.0.0"),
+        ("semantic_version", "stock-daily-raw-v1"),
+        ("source", _SOURCE),
+        ("schema", _SCHEMA),
+        ("field_units", _FIELD_UNITS),
+        ("field_currencies", _FIELD_CURRENCIES),
+        ("field_adjustments", _FIELD_ADJUSTMENTS),
+        ("currency", "CNY"),
+        ("adjustment_basis", "raw"),
+        ("asset_class", "equity"),
+        ("frequency", "1d"),
+        ("record_kind", "time_series"),
+        ("business_key_fields", _BUSINESS_KEY_FIELDS),
+        ("ordering_fields", _ORDERING_FIELDS),
+        ("storage_order", _STORAGE_ORDER),
+        ("identity_key_encoding", "canonical-json-array-v1"),
+        ("filter_fields", ["market", "symbol"]),
+        ("time_field", "trade_date"),
+        ("temporal_semantics", "business_date"),
+        ("source_available_at_field", None),
+        ("calendar_id", "SSE"),
+        ("timezone", "Asia/Shanghai"),
+        ("pit_policy", "unsupported"),
+        ("identity_semantics", _IDENTITY_SEMANTICS),
+        ("stock_selection", stock_selection),
+        ("window", {"start": start, "end": end, "end_exclusive": True}),
+    )
+    if any(snapshot.get(key) != expected for key, expected in exact_pairs):
+        raise OpendataStockDailySnapshotError("opendata_snapshot_contract_mismatch")
+
+
 def _validate_snapshot(
     snapshot: Mapping[str, Any],
     *,
@@ -370,52 +426,13 @@ def _validate_snapshot(
     publication_id: str,
 ) -> None:
     """Require the exact raw stock-daily contract and selected date window."""
-    start = request.start_at.date().isoformat()
-    end = request.end_at.date().isoformat()
-    stock_selection = {"market": request.market, "symbol": request.provider_symbol}
+    _validate_snapshot_contract_fields(snapshot, request=request, publication_id=publication_id)
+    _validate_snapshot_quality(snapshot.get("quality"))
     if (
-        snapshot.get("dataset_id") != _DATASET_ID
-        or snapshot.get("publication_id") != publication_id
-        or type(snapshot.get("sequence")) is not int
+        type(snapshot.get("sequence")) is not int
         or snapshot["sequence"] < 1
-        or snapshot.get("schema_version") != "1.0.0"
-        or snapshot.get("semantic_version") != "stock-daily-raw-v1"
         or _HEX_32.fullmatch(str(snapshot.get("snapshot_id", ""))) is None
         or _HEX_64.fullmatch(str(snapshot.get("contract_sha256", ""))) is None
-        or snapshot.get("source") != _SOURCE
-        or snapshot.get("schema") != _SCHEMA
-        or not isinstance(snapshot.get("quality"), Mapping)
-        or set(snapshot["quality"]) != {"status", "report_id", "issue_count"}
-        or not isinstance(snapshot["quality"].get("status"), str)
-        or snapshot["quality"].get("status") not in {"passed", "warning", "unknown"}
-        or (
-            snapshot["quality"].get("report_id") is not None
-            and not isinstance(snapshot["quality"].get("report_id"), str)
-        )
-        or type(snapshot["quality"].get("issue_count")) is not int
-        or snapshot["quality"].get("issue_count", -1) < 0
-        or snapshot.get("field_units") != _FIELD_UNITS
-        or snapshot.get("field_currencies") != _FIELD_CURRENCIES
-        or snapshot.get("field_adjustments") != _FIELD_ADJUSTMENTS
-        or snapshot.get("currency") != "CNY"
-        or snapshot.get("adjustment_basis") != "raw"
-        or snapshot.get("asset_class") != "equity"
-        or snapshot.get("frequency") != "1d"
-        or snapshot.get("record_kind") != "time_series"
-        or snapshot.get("business_key_fields") != _BUSINESS_KEY_FIELDS
-        or snapshot.get("ordering_fields") != _ORDERING_FIELDS
-        or snapshot.get("storage_order") != _STORAGE_ORDER
-        or snapshot.get("identity_key_encoding") != "canonical-json-array-v1"
-        or snapshot.get("filter_fields") != ["market", "symbol"]
-        or snapshot.get("time_field") != "trade_date"
-        or snapshot.get("temporal_semantics") != "business_date"
-        or snapshot.get("source_available_at_field") is not None
-        or snapshot.get("calendar_id") != "SSE"
-        or snapshot.get("timezone") != "Asia/Shanghai"
-        or snapshot.get("pit_policy") != "unsupported"
-        or snapshot.get("identity_semantics") != _IDENTITY_SEMANTICS
-        or snapshot.get("stock_selection") != stock_selection
-        or snapshot.get("window") != {"start": start, "end": end, "end_exclusive": True}
         or type(snapshot.get("page_size")) is not int
         or snapshot["page_size"] != 1000
         or type(snapshot.get("record_count")) is not int

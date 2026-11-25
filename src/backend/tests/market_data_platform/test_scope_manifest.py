@@ -44,6 +44,9 @@ def _copy_attested_sources(destination_root: Path) -> None:
         "src/backend/app/schemas/market_data_platform.py",
         "src/backend/app/services/market_data/legacy_contract.py",
         "src/frontend/src/views/data/useDataPage.ts",
+        "src/frontend/src/views/data/marketDataCatalogSpecs.ts",
+        "src/frontend/src/views/data/useMarketDataV2Query.ts",
+        "src/frontend/src/views/data/marketDataFormatters.ts",
         "src/frontend/src/api/marketData.ts",
     ):
         source = PROJECT_ROOT / relative_path
@@ -151,7 +154,7 @@ def test_scope_manifest_detects_frontend_family_drift_from_the_registry(tmp_path
     """A page family cannot silently disappear from a 21-family registry export."""
     copied_root = tmp_path / "copied-project"
     _copy_attested_sources(copied_root)
-    frontend_path = copied_root / "src/frontend/src/views/data/useDataPage.ts"
+    frontend_path = copied_root / "src/frontend/src/views/data/marketDataCatalogSpecs.ts"
     frontend_path.write_text(
         frontend_path.read_text(encoding="utf-8").replace(
             "familyId: 'crypto.range'", "familyId: 'crypto.unregistered'", 1
@@ -171,7 +174,7 @@ def test_frontend_parser_fails_when_the_v2_family_selection_rule_is_no_longer_pr
     """A source hash alone is insufficient if the narrowly reviewed rule vanishes."""
     copied_root = tmp_path / "copied-project"
     _copy_attested_sources(copied_root)
-    frontend_path = copied_root / "src/frontend/src/views/data/useDataPage.ts"
+    frontend_path = copied_root / "src/frontend/src/views/data/useMarketDataV2Query.ts"
     frontend_path.write_text(
         frontend_path.read_text(encoding="utf-8").replace(
             "isMarketDataQueryBundleFamilyExecutable(family)",

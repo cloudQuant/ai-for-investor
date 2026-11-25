@@ -6,6 +6,8 @@ from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+from app.config import get_settings, production_security_mode
+
 _TCP_TRANSPORT_GATEWAY_TYPES = {"CTP", "IB_WEB"}
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 _CTP_TRADING_SESSIONS = (
@@ -60,6 +62,14 @@ def coerce_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def resolve_ib_web_verify_ssl(value: Any) -> bool:
+    """Resolve IB Web TLS verification, defaulting to fail-closed True."""
+    verify_ssl = coerce_bool(value, default=True)
+    if not verify_ssl and production_security_mode(get_settings()):
+        raise ValueError("verify_ssl=False is not allowed for IB_WEB gateway in production")
+    return verify_ssl
 
 
 def coerce_float(value: Any, default: float = 0.0) -> float:
@@ -588,7 +598,7 @@ def build_ib_web_gateway_runtime_kwargs(
     verify_ssl_value = gateway_params.get("verify_ssl")
     if verify_ssl_value is None:
         verify_ssl_value = env_data.get("IB_WEB_VERIFY_SSL", ib_web.get("verify_ssl"))
-    verify_ssl = coerce_bool(verify_ssl_value, default=False)
+    verify_ssl = resolve_ib_web_verify_ssl(verify_ssl_value)
     timeout = coerce_float(
         env_data.get("IB_WEB_TIMEOUT", ib_web.get("timeout")),
         default=10.0,

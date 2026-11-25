@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import Callable
@@ -662,7 +663,7 @@ class ReqDocsMigrationService:
             ) from exc
 
         settings = self._parse_reqdocs_env()
-        existing_source_paths = self._build_existing_source_file_map()
+        existing_source_paths = await asyncio.to_thread(self._build_existing_source_file_map)
         (
             kb_by_reqdocs_id,
             doc_by_reqdocs_id,
@@ -679,7 +680,15 @@ class ReqDocsMigrationService:
             "messages": 0,
         }
 
-        conn = pymysql.connect(
+        def _query_rows(
+            db_conn: Any, sql: str, params: tuple[Any, ...] = ()
+        ) -> list[dict[str, Any]]:
+            with db_conn.cursor() as cur:
+                cur.execute(sql, params or None)
+                return list(cur.fetchall())
+
+        conn = await asyncio.to_thread(
+            pymysql.connect,
             host=settings.mysql_host,
             port=settings.mysql_port,
             user=settings.mysql_user,
@@ -690,14 +699,15 @@ class ReqDocsMigrationService:
         )
         mongo_client: Any | None = None
         try:
-            mongo_client = MongoClient(settings.mongodb_url)
-            mongo_db = mongo_client.get_default_database()
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, name, description, created_at, updated_at, current_version "
-                    "FROM projects ORDER BY id ASC"
-                )
-                projects = list(cur.fetchall())
+            active_mongo_client: Any = await asyncio.to_thread(MongoClient, settings.mongodb_url)
+            mongo_client = active_mongo_client
+            mongo_db = await asyncio.to_thread(active_mongo_client.get_default_database)
+            projects = await asyncio.to_thread(
+                _query_rows,
+                conn,
+                "SELECT id, name, description, created_at, updated_at, current_version "
+                "FROM projects ORDER BY id ASC",
+            )
 
             for project_index, project in enumerate(projects, start=1):
                 project_id = int(project["id"])
@@ -735,13 +745,13 @@ class ReqDocsMigrationService:
 
                 result["knowledge_bases"] += 1
 
-                with conn.cursor() as cur:
-                    cur.execute(
-                        f"SELECT {self._DOCUMENT_COLUMNS} FROM documents "
-                        "WHERE project_id = %s ORDER BY sort_order ASC, id ASC",
-                        (project_id,),
-                    )
-                    documents = list(cur.fetchall())
+                documents = await asyncio.to_thread(
+                    _query_rows,
+                    conn,
+                    f"SELECT {self._DOCUMENT_COLUMNS} FROM documents "
+                    "WHERE project_id = %s ORDER BY sort_order ASC, id ASC",
+                    (project_id,),
+                )
 
                 if progress_callback:
                     progress_callback(
@@ -760,16 +770,23 @@ class ReqDocsMigrationService:
                     self._chunked(documents, document_batch_size), start=1
                 ):
                     document_ids = [int(document["id"]) for document in batch]
-                    content_map = self._fetch_latest_mongo_content_map(
-                        mongo_db, "document_contents", document_ids, [("_id", -1)]
+                    content_map = await asyncio.to_thread(
+                        self._fetch_latest_mongo_content_map,
+                        mongo_db,
+                        "document_contents",
+                        document_ids,
+                        [("_id", -1)],
                     )
-                    markdown_map = self._fetch_latest_mongo_content_map(
+                    markdown_map = await asyncio.to_thread(
+                        self._fetch_latest_mongo_content_map,
                         mongo_db,
                         "markdown_contents",
                         document_ids,
                         [("generated_at", -1), ("_id", -1)],
                     )
-                    source_file_map = self._fetch_source_file_metadata_map(mongo_db, document_ids)
+                    source_file_map = await asyncio.to_thread(
+                        self._fetch_source_file_metadata_map, mongo_db, document_ids
+                    )
 
                     async with async_session_maker() as session:
                         for document in batch:
@@ -777,8 +794,11 @@ class ReqDocsMigrationService:
                             entity_id = doc_by_reqdocs_id.get(document_id)
                             entity = await session.get(KBDocument, entity_id) if entity_id else None
                             source_info = source_file_map.get(document_id)
-                            source_file_path = self._persist_source_file(
-                                document_id, source_info, existing_source_paths
+                            source_file_path = await asyncio.to_thread(
+                                self._persist_source_file,
+                                document_id,
+                                source_info,
+                                existing_source_paths,
                             )
                             content = markdown_map.get(
                                 document_id,
@@ -876,17 +896,18 @@ class ReqDocsMigrationService:
                         kb.document_count = len(documents)
                     await session.commit()
 
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, knowledge_base_id, title, created_by, created_at, updated_at "
-                    "FROM kb_conversations ORDER BY id ASC"
-                )
-                conversations = list(cur.fetchall())
-                cur.execute(
-                    "SELECT id, conversation_id, role, content, model, created_at "
-                    "FROM kb_chat_messages ORDER BY id ASC"
-                )
-                messages = list(cur.fetchall())
+            conversations = await asyncio.to_thread(
+                _query_rows,
+                conn,
+                "SELECT id, knowledge_base_id, title, created_by, created_at, updated_at "
+                "FROM kb_conversations ORDER BY id ASC",
+            )
+            messages = await asyncio.to_thread(
+                _query_rows,
+                conn,
+                "SELECT id, conversation_id, role, content, model, created_at "
+                "FROM kb_chat_messages ORDER BY id ASC",
+            )
 
             async with async_session_maker() as session:
                 for conversation in conversations:
@@ -962,10 +983,10 @@ class ReqDocsMigrationService:
 
             return result
         finally:
-            conn.close()
+            await asyncio.to_thread(conn.close)
             try:
                 if mongo_client is not None:
-                    mongo_client.close()
+                    await asyncio.to_thread(mongo_client.close)
             except Exception:
                 logger.debug("Failed to close MongoDB client (best-effort)", exc_info=True)
 

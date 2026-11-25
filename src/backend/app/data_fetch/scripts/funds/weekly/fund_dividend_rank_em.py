@@ -299,12 +299,11 @@ class FundDividendRankEm(AkshareToMySql):
             # 保存数据
             success = self.save_dividend_rank_data(df)
 
-            if success:
+            if success is not False:
                 self.logger.info(f"成功保存{len(df)}条基金分红排行数据")
-            else:
-                self.logger.error("保存基金分红排行数据失败")
-
-            return success
+                return True
+            self.logger.error("保存基金分红排行数据失败")
+            return False
 
         except Exception as e:
             self.logger.error(f"执行失败: {e}", exc_info=True)

@@ -99,6 +99,17 @@ def _build_param_ranges(param_specs: dict[str, ParamRangeSpec]) -> dict[str, dic
     }
 
 
+async def _mark_submission_failed(mgr: Any, task_id: str | None, exc: Exception) -> None:
+    if not task_id:
+        return
+    try:
+        await mgr.update_progress(task_id, 0, 0, [], status="failed", error_message=str(exc))
+    except Exception as cleanup_exc:
+        logger.warning(
+            "Failed to mark aborted optimization task %s failed: %s", task_id, cleanup_exc
+        )
+
+
 async def submit_optimization_task_internal(
     *,
     strategy_id: str,
@@ -129,8 +140,9 @@ async def submit_optimization_task_internal(
             detail="Parameter grid is empty, please check parameter ranges",
         )
 
+    task_id: str | None = None
+    mgr = get_optimization_execution_manager()
     try:
-        mgr = get_optimization_execution_manager()
         db_task = await mgr.create_task(
             user_id=user_id,
             strategy_id=strategy_id,
@@ -152,7 +164,11 @@ async def submit_optimization_task_internal(
             direction=direction,
         )
     except ValueError as e:
+        await _mark_submission_failed(mgr, task_id, e)
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        await _mark_submission_failed(mgr, task_id, e)
+        raise
 
     return OptimizationSubmitResponse(
         task_id=task_id,
@@ -187,8 +203,9 @@ async def submit_backtest_optimization_task_internal(
     param_spec = request.param_grid if request.method == "grid" else request.param_bounds
     n_workers = 1 if request.method == "bayesian" else 4
 
+    task_id: str | None = None
+    mgr = get_optimization_execution_manager()
     try:
-        mgr = get_optimization_execution_manager()
         db_task = await mgr.create_task(
             user_id=user_id,
             strategy_id=request.strategy_id,
@@ -207,7 +224,11 @@ async def submit_backtest_optimization_task_internal(
             persist_to_db=True,
         )
     except ValueError as e:
+        await _mark_submission_failed(mgr, task_id, e)
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        await _mark_submission_failed(mgr, task_id, e)
+        raise
 
     return OptimizationSubmitResponse(
         task_id=task_id,

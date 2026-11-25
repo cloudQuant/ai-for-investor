@@ -11,14 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import math
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from typing import cast as typing_cast
 
 from sqlalchemy import JSON, ColumnElement, LargeBinary, String, Text, cast, func, select
 from sqlalchemy import inspect as sa_inspect
@@ -34,46 +32,37 @@ from app.models.strategy_target_approval import (
     StrategyTargetApprovalEvent,
 )
 from app.models.workspace import StrategyUnit, Workspace
+from app.services.mig03_boundary_helpers import (
+    CODE_BOUNDARY_NOT_CONSERVED,
+    CODE_BOUNDARY_READ_FAILED,
+    CODE_INVALID_BOUNDARY_SCOPE,
+    CODE_WRITER_STILL_ACTIVE,
+    AfiConfiguredSnapshotWriter,
+    AfiMigrationBoundaryError,
+    build_configured_snapshot_writers,
+    collect_writer_instance_selections,
+    text_set,
+    validate_capture_inputs,
+    validate_writer_enumeration_inputs,
+)
+from app.services.mig03_boundary_helpers import (
+    canonical_json as _canonical_json,
+)
+from app.services.mig03_boundary_helpers import (
+    valid_sha256 as _valid_sha256,
+)
+from app.services.mig03_boundary_helpers import (
+    validate_approval_event_chains as _validate_approval_event_chains,
+)
+from app.services.mig03_boundary_helpers import (
+    validate_import_receipts as _validate_import_receipts,
+)
 from app.services.paper_runtime_scheduler import PaperRuntimeSnapshotScheduler
-
-CODE_INVALID_BOUNDARY_SCOPE = "AFI_MIG03_INVALID_BOUNDARY_SCOPE"
-CODE_BOUNDARY_READ_FAILED = "AFI_MIG03_BOUNDARY_READ_FAILED"
-CODE_BOUNDARY_NOT_CONSERVED = "AFI_MIG03_BOUNDARY_NOT_CONSERVED"
-CODE_WRITER_STILL_ACTIVE = "AFI_MIG03_WRITER_STILL_ACTIVE"
 
 _SCHEDULER_STOP_TIMEOUT_SECONDS = 5.0
 _PAPER_TERMINAL_STATES = frozenset({"filled", "cancelled", "rejected"})
 _MAX_BOUNDARY_ROWS = 100_000
 _MAX_BOUNDARY_BYTES = 32 * 1024 * 1024
-_LEGACY_IMPORT_CONTEXT_CATEGORIES = frozenset(
-    {
-        "risk_rules",
-        "alerts",
-        "alert_rules",
-        "alert_notifications",
-        "strategy_target_approvals",
-        "strategy_target_approval_events",
-        "strategy_order_approval_policy_versions",
-        "strategy_order_approval_policy_heads",
-        "strategy_approval_authority_epoch",
-        "paper_review_reports",
-        "live_handoff_reviews",
-        "paper_equity_snapshots",
-    }
-)
-_LEGACY_IMPORT_CURSOR_CONTRACT = {
-    "legacy_cursor_format": "base64url_json_observed_at_id",
-    "legacy_cursor_retained": "stateless_runtime_source_only",
-    "target_cursor_activated": False,
-}
-
-
-class AfiMigrationBoundaryError(RuntimeError):
-    """Finite AFI MIG03 inventory error without account data."""
-
-    def __init__(self, code: str) -> None:
-        self.code = code
-        super().__init__(code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,33 +123,67 @@ class PaperWriterStopReceipt:
     tasks_after: int
 
 
-@dataclass(frozen=True, slots=True)
-class AfiConfiguredSnapshotWriter:
-    """One production-restorable AFI paper snapshot writer and its owner link.
-
-    The external ``account_ref`` is supplied by the typed migration mapping;
-    this inventory proves only that the AFI runtime's persisted snapshot rows
-    all point to one real ``paper_trading_accounts.id`` owned by the workspace
-    user. It never derives either identity from a similarly named string.
-    """
-
-    consumer_id: str
-    consumer_kind: str
-    configuration_sha256: str
-    scope_sha256: str
-    operations_sha256: str
-    account_ref: str
-    paper_account_id: str
-    user_id: str
-    workspace_id: str
-    unit_id: str
-    instance_id: str
-
-
 @dataclass(slots=True)
 class _InventoryReadBudget:
     rows: int = 0
     bytes: int = 0
+
+
+def _validate_captured_consistency(
+    *,
+    account_values: tuple[str, ...],
+    paper_account_instances: dict[str, str],
+    operations: tuple[dict[str, Any], ...],
+    approved_http_operations: tuple[dict[str, Any], ...],
+    approvals: tuple[dict[str, Any], ...],
+    approval_events: tuple[dict[str, Any], ...],
+    accounts: tuple[dict[str, Any], ...],
+    all_user_accounts: tuple[dict[str, Any], ...],
+    positions: tuple[dict[str, Any], ...],
+    orders: tuple[dict[str, Any], ...],
+    trades: tuple[dict[str, Any], ...],
+    snapshots: tuple[dict[str, Any], ...],
+    import_receipts: tuple[dict[str, Any], ...],
+) -> None:
+    requested_accounts = set(account_values)
+    if {row["id"] for row in accounts} != requested_accounts:
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    if {row["id"] for row in all_user_accounts} != requested_accounts:
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    if any(row["account_id"] not in requested_accounts for row in (*positions, *orders, *trades)):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    if any(
+        row["paper_account_id"] is None
+        or paper_account_instances.get(row["paper_account_id"]) != row["instance_id"]
+        for row in snapshots
+    ):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    paper_user_by_account = {row["id"]: row["user_id"] for row in accounts}
+    if any(
+        row["user_id"] != paper_user_by_account.get(row["paper_account_id"]) for row in snapshots
+    ):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    _validate_import_receipts(import_receipts, accounts, account_values)
+    approvals_by_ref = {row["approval_ref"]: row for row in approvals}
+    if any(
+        row["approval_ref"] not in approvals_by_ref
+        or not _http_operation_matches_approval(row, approvals_by_ref[row["approval_ref"]])
+        for row in approved_http_operations
+    ):
+        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    _validate_identity_fields(
+        operations,
+        approved_http_operations,
+        approvals,
+        approval_events,
+        accounts,
+        positions,
+        orders,
+        trades,
+        snapshots,
+        import_receipts,
+    )
+    _validate_approval_event_chains(approvals, approval_events)
 
 
 def capture_afi_boundary(
@@ -181,42 +204,17 @@ def capture_afi_boundary(
     strings.  Queries include the original operation/approval references and
     every paper order/fill/position/snapshot row for the provided accounts.
     """
-
-    if (
-        not isinstance(session, Session)
-        or not session.is_active
-        or session.new
-        or session.dirty
-        or session.deleted
-    ):
-        raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
-    _require_text(scope_ref)
-    _require_text(account_ref)
-    _require_text(source_ref)
-    _require_sha256(configuration_sha256)
-    strategy_values = _text_set(strategy_refs)
-    if type(account_paper_accounts) is not dict:
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if any(type(key) is not str or not key for key in account_paper_accounts):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if any(type(value) is not str or not value for value in account_paper_accounts.values()):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if type(paper_account_instances) is not dict:
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if any(type(key) is not str or not key for key in paper_account_instances):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if any(type(value) is not str or not value for value in paper_account_instances.values()):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    account_values = tuple(sorted(paper_account_instances))
-    instance_values = tuple(sorted(set(paper_account_instances.values())))
-    if (
-        not strategy_values
-        or not account_values
-        or len(account_values) != 1
-        or not instance_values
-        or account_paper_accounts != {account_ref: account_values[0]}
-    ):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
+    strategy_values, account_values, instance_values = validate_capture_inputs(
+        session,
+        scope_ref=scope_ref,
+        account_ref=account_ref,
+        strategy_refs=strategy_refs,
+        account_paper_accounts=account_paper_accounts,
+        paper_account_instances=paper_account_instances,
+        source_ref=source_ref,
+        configuration_sha256=configuration_sha256,
+        max_rows=_MAX_BOUNDARY_ROWS,
+    )
 
     budget = _InventoryReadBudget()
     try:
@@ -321,45 +319,21 @@ def capture_afi_boundary(
     except Exception:
         raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED) from None
 
-    requested_accounts = set(account_values)
-    if {row["id"] for row in accounts} != requested_accounts:
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if {row["id"] for row in all_user_accounts} != requested_accounts:
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if any(row["account_id"] not in requested_accounts for row in (*positions, *orders, *trades)):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if any(
-        row["paper_account_id"] is None
-        or paper_account_instances.get(row["paper_account_id"]) != row["instance_id"]
-        for row in snapshots
-    ):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    paper_user_by_account = {row["id"]: row["user_id"] for row in accounts}
-    if any(
-        row["user_id"] != paper_user_by_account.get(row["paper_account_id"]) for row in snapshots
-    ):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    _validate_import_receipts(import_receipts, accounts, account_values)
-    approvals_by_ref = {row["approval_ref"]: row for row in approvals}
-    if any(
-        row["approval_ref"] not in approvals_by_ref
-        or not _http_operation_matches_approval(row, approvals_by_ref[row["approval_ref"]])
-        for row in approved_http_operations
-    ):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    _validate_identity_fields(
-        operations,
-        approved_http_operations,
-        approvals,
-        approval_events,
-        accounts,
-        positions,
-        orders,
-        trades,
-        snapshots,
-        import_receipts,
+    _validate_captured_consistency(
+        account_values=account_values,
+        paper_account_instances=paper_account_instances,
+        operations=operations,
+        approved_http_operations=approved_http_operations,
+        approvals=approvals,
+        approval_events=approval_events,
+        accounts=accounts,
+        all_user_accounts=all_user_accounts,
+        positions=positions,
+        orders=orders,
+        trades=trades,
+        snapshots=snapshots,
+        import_receipts=import_receipts,
     )
-    _validate_approval_event_chains(approvals, approval_events)
 
     operation_rows = (
         ("service_order_operations", operations),
@@ -471,28 +445,7 @@ def enumerate_paper_snapshot_writers(
     it is not itself evidence that the mapping is authorized or a runtime
     grant. The caller must preserve and verify that crosswalk separately.
     """
-
-    if (
-        not isinstance(session, Session)
-        or not session.is_active
-        or session.new
-        or session.dirty
-        or session.deleted
-        or type(account_refs_by_paper_account) is not dict
-    ):
-        raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
-    _require_sha256(configuration_sha256)
-    if any(
-        type(account_id) is not str
-        or not account_id
-        or type(account_ref) is not str
-        or not account_ref
-        for account_id, account_ref in account_refs_by_paper_account.items()
-    ):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    if len(set(account_refs_by_paper_account.values())) != len(account_refs_by_paper_account):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
+    validate_writer_enumeration_inputs(session, account_refs_by_paper_account, configuration_sha256)
     budget = _InventoryReadBudget()
     try:
         active_workspace_scope = (
@@ -551,168 +504,51 @@ def enumerate_paper_snapshot_writers(
 
         workspace_ids = tuple(sorted({row.workspace_id for row in configured_rows}))
         unit_ids = tuple(sorted({row.unit_id for row in configured_rows}))
-        workspace_rows = _query_rows(
-            session,
-            Workspace,
-            select(Workspace).where(Workspace.id.in_(workspace_ids)),
-            budget,
-        )
-        unit_rows = _query_rows(
-            session,
-            StrategyUnit,
-            select(StrategyUnit).where(StrategyUnit.id.in_(unit_ids)),
-            budget,
-        )
-        workspaces = {row["id"]: row for row in workspace_rows}
-        units = {row["id"]: row for row in unit_rows}
+        workspaces = {
+            row["id"]: row
+            for row in _query_rows(
+                session, Workspace, select(Workspace).where(Workspace.id.in_(workspace_ids)), budget
+            )
+        }
+        units = {
+            row["id"]: row
+            for row in _query_rows(
+                session,
+                StrategyUnit,
+                select(StrategyUnit).where(StrategyUnit.id.in_(unit_ids)),
+                budget,
+            )
+        }
         if set(workspaces) != set(workspace_ids) or set(units) != set(unit_ids):
             raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
 
-        selected: list[dict[str, Any]] = []
-        all_account_ids: set[str] = set()
-        seen_instances: set[str] = set()
-        snapshot_bytes = 0
-        snapshot_rows_seen = 0
-        for configured in configured_rows:
-            workspace_id = configured.workspace_id
-            user_id = configured.user_id
-            unit_id = configured.unit_id
-            instance_id = configured.instance_id
-            if (
-                type(workspace_id) is not str
-                or not workspace_id
-                or type(user_id) is not str
-                or not user_id
-                or type(unit_id) is not str
-                or not unit_id
-                or type(instance_id) is not str
-                or not instance_id
-                or configured.unit_workspace_id != workspace_id
-                or instance_id in seen_instances
-            ):
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            seen_instances.add(instance_id)
-            rows = list(
-                session.execute(
-                    select(
-                        PaperEquitySnapshot.id,
-                        PaperEquitySnapshot.user_id,
-                        PaperEquitySnapshot.workspace_id,
-                        PaperEquitySnapshot.unit_id,
-                        PaperEquitySnapshot.instance_id,
-                        PaperEquitySnapshot.paper_account_id,
-                    )
-                    .where(PaperEquitySnapshot.instance_id == instance_id)
-                    .order_by(PaperEquitySnapshot.id)
-                    .limit(_MAX_BOUNDARY_ROWS + 1)
-                ).all()
-            )
-            if not rows or len(rows) > _MAX_BOUNDARY_ROWS:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            accounts_for_instance: set[str] = set()
-            for row in rows:
-                identity = tuple(row)
-                encoded = _canonical_json(identity)
-                snapshot_bytes += len(encoded)
-                snapshot_rows_seen += 1
-                if snapshot_rows_seen > _MAX_BOUNDARY_ROWS or snapshot_bytes > _MAX_BOUNDARY_BYTES:
-                    raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED)
-                (
-                    snapshot_id,
-                    snapshot_user_id,
-                    snapshot_workspace_id,
-                    snapshot_unit_id,
-                    snapshot_instance_id,
-                    paper_account_id,
-                ) = identity
-                if (
-                    type(snapshot_id) is not str
-                    or not snapshot_id
-                    or (
-                        snapshot_user_id,
-                        snapshot_workspace_id,
-                        snapshot_unit_id,
-                        snapshot_instance_id,
-                    )
-                    != (user_id, workspace_id, unit_id, instance_id)
-                    or type(paper_account_id) is not str
-                    or not paper_account_id
-                ):
-                    raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-                accounts_for_instance.add(paper_account_id)
-            if len(accounts_for_instance) != 1:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            paper_account_id = next(iter(accounts_for_instance))
-            all_account_ids.add(paper_account_id)
-            selected.append(
-                {
-                    "user_id": user_id,
-                    "workspace_id": workspace_id,
-                    "unit_id": unit_id,
-                    "instance_id": instance_id,
-                    "paper_account_id": paper_account_id,
-                }
-            )
-
+        selected, all_account_ids = collect_writer_instance_selections(
+            session,
+            configured_rows,
+            max_rows=_MAX_BOUNDARY_ROWS,
+            max_bytes=_MAX_BOUNDARY_BYTES,
+        )
         if set(account_refs_by_paper_account) != all_account_ids:
             raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        accounts = _query_rows(
-            session,
-            Account,
-            select(Account).where(Account.id.in_(tuple(sorted(all_account_ids)))),
-            budget,
-        )
-        account_by_id = {row["id"]: row for row in accounts}
+        account_by_id = {
+            row["id"]: row
+            for row in _query_rows(
+                session,
+                Account,
+                select(Account).where(Account.id.in_(tuple(sorted(all_account_ids)))),
+                budget,
+            )
+        }
         if set(account_by_id) != all_account_ids:
             raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
-        consumers = []
-        operations = {"model": "PaperEquitySnapshot", "operation": "scheduled_snapshot"}
-        operations_sha256 = hashlib.sha256(_canonical_json(operations)).hexdigest()
-        for item in selected:
-            account_id = item["paper_account_id"]
-            if account_by_id[account_id]["user_id"] != item["user_id"]:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            account_ref = account_refs_by_paper_account[account_id]
-            workspace_row = workspaces[item["workspace_id"]]
-            unit_row = units[item["unit_id"]]
-            scope_document = {
-                "account_ref": account_ref,
-                "user_id": item["user_id"],
-                "workspace_id": item["workspace_id"],
-                "unit_id": item["unit_id"],
-                "instance_id": item["instance_id"],
-            }
-            configuration_document = {
-                "configuration_sha256": configuration_sha256,
-                "consumer_kind": "afi_snapshot_scheduler",
-                "scheduler": "app.services.paper_runtime_scheduler.PaperRuntimeSnapshotScheduler.start_existing",
-                "workspace": workspace_row,
-                "strategy_unit": unit_row,
-                "verified_account_fk": account_id,
-                "account_ref_crosswalk": account_ref,
-            }
-            configuration_digest = hashlib.sha256(
-                _canonical_json(configuration_document)
-            ).hexdigest()
-            scope_digest = hashlib.sha256(_canonical_json(scope_document)).hexdigest()
-            consumer_id = "afi-snapshot-writer-v1:" + configuration_digest
-            consumers.append(
-                AfiConfiguredSnapshotWriter(
-                    consumer_id=consumer_id,
-                    consumer_kind="afi_snapshot_scheduler",
-                    configuration_sha256=configuration_digest,
-                    scope_sha256=scope_digest,
-                    operations_sha256=operations_sha256,
-                    account_ref=account_ref,
-                    paper_account_id=account_id,
-                    user_id=item["user_id"],
-                    workspace_id=item["workspace_id"],
-                    unit_id=item["unit_id"],
-                    instance_id=item["instance_id"],
-                )
-            )
-        return tuple(sorted(consumers, key=lambda item: item.consumer_id))
+        return build_configured_snapshot_writers(
+            selected,
+            account_refs_by_paper_account,
+            account_by_id,
+            workspaces,
+            units,
+            configuration_sha256,
+        )
     except AfiMigrationBoundaryError:
         raise
     except Exception:
@@ -873,124 +709,6 @@ def _http_operation_matches_approval(operation: dict[str, Any], approval: dict[s
     )
 
 
-def _validate_approval_event_chains(
-    approvals: tuple[dict[str, Any], ...],
-    events: tuple[dict[str, Any], ...],
-) -> None:
-    events_by_ref: dict[str, list[dict[str, Any]]] = {}
-    for event in events:
-        if (
-            type(event.get("record_version")) is not int
-            or event["record_version"] < 1
-            or type(event.get("approval_version")) is not int
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        events_by_ref.setdefault(event["approval_ref"], []).append(event)
-    for approval in approvals:
-        if type(approval.get("approval_version")) is not int:
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        approval_events = sorted(
-            events_by_ref.get(approval["approval_ref"], ()),
-            key=lambda row: row["record_version"],
-        )
-        record_version = approval["record_version"]
-        if (
-            type(record_version) is not int
-            or record_version < 1
-            or not approval_events
-            or [row["record_version"] for row in approval_events]
-            != list(range(1, record_version + 1))
-            or any(
-                row["approval_version"] != approval["approval_version"] for row in approval_events
-            )
-            or any(row["owner_subject"] != approval["owner_subject"] for row in approval_events)
-            or any(row["target_sha256"] != approval["target_sha256"] for row in approval_events)
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        event_types = tuple(row["event_type"] for row in approval_events)
-        if (
-            event_types[0] != "APPROVED"
-            or any(
-                event_type not in {"APPROVED", "OPERATION_RESERVED", "REVOKED", "CONSUMED"}
-                for event_type in event_types
-            )
-            or event_types.count("APPROVED") != 1
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        reserved_events = [
-            row for row in approval_events if row["event_type"] == "OPERATION_RESERVED"
-        ]
-        reservation_values = tuple(
-            approval[field]
-            for field in (
-                "operation_key_sha256",
-                "operation_request_sha256",
-                "intent_id",
-                "operation_reserved_at_ns",
-            )
-        )
-        has_reserved_operation = all(value is not None for value in reservation_values)
-        if any(value is None for value in reservation_values) and any(
-            value is not None for value in reservation_values
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        if len(reserved_events) != int(has_reserved_operation) or any(
-            row["intent_id"] != approval["intent_id"]
-            or row["operation_key_sha256"] != approval["operation_key_sha256"]
-            or row["occurred_at_ns"] != approval["operation_reserved_at_ns"]
-            for row in reserved_events
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        expected_prefix = ("APPROVED",) + (
-            ("OPERATION_RESERVED",) if has_reserved_operation else ()
-        )
-        state = approval["state"]
-        expected_sequences = {
-            "APPROVED": {expected_prefix},
-            "REVOKED": {(*expected_prefix, "REVOKED")},
-            "CONSUMED": {(*expected_prefix, "CONSUMED")},
-        }.get(state)
-        if expected_sequences is None or event_types not in expected_sequences:
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        approved_event = approval_events[0]
-        if any(
-            approved_event[event_field] != approval[approval_field]
-            for event_field, approval_field in (
-                ("owner_subject", "owner_subject"),
-                ("actor_subject", "approved_by_subject"),
-                ("principal_ref", "approved_by_principal_ref"),
-                ("actor_ref", "approved_by_actor_ref"),
-                ("delegate_ref", "approved_by_delegate_ref"),
-                ("occurred_at_ns", "approved_at_ns"),
-            )
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        if state == "REVOKED":
-            revoked_event = approval_events[-1]
-            if any(
-                revoked_event[event_field] != approval[approval_field]
-                for event_field, approval_field in (
-                    ("actor_subject", "revoked_by_subject"),
-                    ("actor_ref", "revoked_by_actor_ref"),
-                    ("reason_code", "revocation_reason_code"),
-                    ("occurred_at_ns", "revoked_at_ns"),
-                )
-            ):
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        if state == "CONSUMED":
-            consumed_event = approval_events[-1]
-            if (
-                approval["consumed_record_version"] != approval["record_version"]
-                or consumed_event["record_version"] != approval["consumed_record_version"]
-                or consumed_event["intent_id"] != approval["intent_id"]
-                or consumed_event["operation_key_sha256"] != approval["operation_key_sha256"]
-                or consumed_event["intent_sha256"] != approval["consumed_intent_sha256"]
-                or consumed_event["consumption_ref"] != approval["consumption_ref"]
-                or consumed_event["occurred_at_ns"] != approval["consumed_at_ns"]
-            ):
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
-
 def _validate_identity_fields(
     operations: tuple[dict[str, Any], ...],
     http_operations: tuple[dict[str, Any], ...],
@@ -1116,157 +834,6 @@ def _validate_identity_fields(
     order_ids = {row["id"] for row in orders}
     if any(row["order_id"] is not None and row["order_id"] not in order_ids for row in trades):
         raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
-
-def _validate_import_receipts(
-    receipts: tuple[dict[str, Any], ...],
-    accounts: tuple[dict[str, Any], ...],
-    account_values: tuple[str, ...],
-) -> None:
-    """Validate AFI12 source-side handoff receipts before inventorying them."""
-
-    users_by_account = {row["id"]: row["user_id"] for row in accounts}
-    generations: set[tuple[str, int]] = set()
-    active_accounts: set[str] = set()
-    for row in receipts:
-        account_id = row.get("legacy_account_id")
-        state = row.get("state")
-        string_fields = (
-            "id",
-            "legacy_account_id",
-            "owner_subject",
-            "state",
-            "source_inventory_sha256",
-            "target_import_sha256",
-            "target_domain_sha256",
-            "binding_sha256",
-            "target_scope_key",
-            "target_account_key",
-            "cash_currency",
-            "opening_cash",
-            "cumulative_fees",
-            "unallocated_equity_residual",
-            "preserved_context_sha256",
-        )
-        if any(type(row.get(field)) is not str or not row[field] for field in string_fields):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        if (
-            account_id not in account_values
-            or row.get("owner_subject") != users_by_account.get(account_id)
-            or type(row.get("receipt_version")) is not int
-            or row["receipt_version"] != 1
-            or type(row.get("generation")) is not int
-            or row["generation"] < 1
-            or any(
-                type(row.get(field)) is not int or row[field] < 0
-                for field in (
-                    "source_order_count",
-                    "source_position_count",
-                    "source_trade_count",
-                )
-            )
-            or any(
-                not _valid_sha256(row[field])
-                for field in (
-                    "source_inventory_sha256",
-                    "target_import_sha256",
-                    "target_domain_sha256",
-                    "binding_sha256",
-                    "preserved_context_sha256",
-                )
-            )
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        generation_key = (account_id, row["generation"])
-        if generation_key in generations:
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        generations.add(generation_key)
-        active_fence_key = row.get("active_fence_key")
-        if state in {"PREPARED", "COMMITTED", "ACTIVE"}:
-            if active_fence_key != account_id or account_id in active_accounts:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            active_accounts.add(account_id)
-        elif state == "ABORTED":
-            if active_fence_key is not None:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        else:
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
-        source_json = row.get("source_snapshot_json")
-        context_json = row.get("preserved_context_json")
-        try:
-            if type(source_json) is not str or type(context_json) is not str:
-                raise ValueError("invalid receipt payload type")
-            source_bytes = source_json.encode("utf-8")
-            context_bytes = context_json.encode("utf-8")
-            if len(context_bytes) > 8 * 1024 * 1024:
-                raise ValueError("preserved context exceeds producer limit")
-            source_document = json.loads(source_json)
-            context_document = json.loads(context_json)
-            if (
-                _canonical_json(source_document) != source_bytes
-                or hashlib.sha256(source_bytes).hexdigest() != row["source_inventory_sha256"]
-                or _canonical_json(context_document) != context_bytes
-                or hashlib.sha256(context_bytes).hexdigest() != row["preserved_context_sha256"]
-            ):
-                raise ValueError("non-canonical receipt payload")
-        except (RecursionError, TypeError, ValueError, UnicodeError):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
-        if (
-            type(source_document) is not dict
-            or set(source_document) != {"schema", "account", "orders", "positions", "trades"}
-            or source_document.get("schema") != "afi.legacy-paper-inventory.v1"
-            or type(source_document.get("account")) is not dict
-            or source_document["account"].get("id") != account_id
-            or source_document["account"].get("user_id") != row["owner_subject"]
-            or type(context_document) is not dict
-            or context_document.get("schema") != "afi.legacy-paper-preserved-context.v1"
-            or context_document.get("source_account_id") != account_id
-            or context_document.get("owner_subject") != row["owner_subject"]
-            or context_document.get("activation") != "retained_in_legacy_source_only"
-            or context_document.get("cursor_contract") != _LEGACY_IMPORT_CURSOR_CONTRACT
-            or type(context_document.get("categories")) is not dict
-            or set(context_document["categories"]) != _LEGACY_IMPORT_CONTEXT_CATEGORIES
-            or any(
-                type(category_rows) is not list
-                or any(type(category_row) is not dict for category_row in category_rows)
-                for category_rows in context_document["categories"].values()
-            )
-        ):
-            raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-        for name, count_field in (
-            ("orders", "source_order_count"),
-            ("positions", "source_position_count"),
-            ("trades", "source_trade_count"),
-        ):
-            source_rows = source_document.get(name)
-            if type(source_rows) is not list or len(source_rows) != row[count_field]:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            row_ids: set[str] = set()
-            for source_row in source_rows:
-                if (
-                    type(source_row) is not dict
-                    or source_row.get("account_id") != account_id
-                    or type(source_row.get("id")) is not str
-                    or not source_row["id"]
-                    or source_row["id"] in row_ids
-                ):
-                    raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-                row_ids.add(source_row["id"])
-        for field in (
-            "opening_cash",
-            "cumulative_fees",
-            "unallocated_equity_residual",
-        ):
-            value = row.get(field)
-            if type(value) is not str:
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-            try:
-                decimal_value = Decimal(value)
-            except (InvalidOperation, ValueError):
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
-            if not decimal_value.is_finite():
-                raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
 
 
 def _participant_facts(
@@ -1608,19 +1175,6 @@ def _canonical_value(value: Any) -> Any:
     return value
 
 
-def _canonical_json(value: Any) -> bytes:
-    try:
-        return json.dumps(
-            value,
-            allow_nan=False,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8", errors="strict")
-    except (TypeError, ValueError, UnicodeError):
-        raise AfiMigrationBoundaryError(CODE_BOUNDARY_READ_FAILED) from None
-
-
 def _decimal(value: Any) -> Decimal:
     try:
         if type(value) is dict:
@@ -1677,37 +1231,4 @@ def _decimal_text(value: Decimal) -> str:
 
 
 def _text_set(values: Iterable[str]) -> tuple[str, ...]:
-    if type(values) not in (tuple, list):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
-    # The exact tuple/list check above guarantees a sized collection.
-    sized_values = typing_cast("Collection[str]", values)
-    if len(sized_values) > _MAX_BOUNDARY_ROWS:
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE) from None
-    if any(type(value) is not str or not value for value in sized_values) or len(
-        set(sized_values)
-    ) != len(sized_values):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-    result = tuple(sorted(sized_values))
-    return result
-
-
-def _require_text(value: Any) -> None:
-    if type(value) is not str or not value:
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
-
-def _require_sha256(value: Any) -> None:
-    if (
-        type(value) is not str
-        or len(value) != 64
-        or any(character not in "0123456789abcdef" for character in value)
-    ):
-        raise AfiMigrationBoundaryError(CODE_INVALID_BOUNDARY_SCOPE)
-
-
-def _valid_sha256(value: Any) -> bool:
-    return (
-        type(value) is str
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
+    return text_set(values, max_rows=_MAX_BOUNDARY_ROWS)

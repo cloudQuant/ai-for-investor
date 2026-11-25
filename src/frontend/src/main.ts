@@ -84,8 +84,8 @@ async function bootstrap() {
       if (isAuth) {
         auditTracker.start(router)
       } else {
-        void auditTracker.flush()
         auditTracker.stop()
+        auditTracker.clearPending()
       }
     },
   )

@@ -26,6 +26,7 @@ from app.models.ai_research_v2 import (
 )
 from app.services.research.canonical import canonical_json, content_hash
 from app.services.research.database_clock import DatabaseUtcAfter, DatabaseUtcNow, database_utc_now
+from app.utils.invariants import require_present
 
 _MAX_QUOTA_AMOUNT = 2_147_483_647
 _MODEL_COST_RESOURCE_TYPE = "model_cost_microusd"
@@ -1027,8 +1028,7 @@ def _bundle_context_is_consistent(
         return not require_reservation_context
     if any(context is None for context in normalized_contexts):
         return False
-    first = normalized_contexts[0]
-    assert first is not None
+    first = require_present(normalized_contexts[0], "reservation context missing")
     if require_reservation_context and first.get("schema_version") != reservation_context_schema:
         return False
     context_hash = content_hash(first)

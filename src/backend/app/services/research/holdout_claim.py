@@ -45,6 +45,7 @@ from app.services.research.discovery_search_budget import lock_experiment_epoch
 from app.services.research.holdout_authorization import HoldoutAuthorizationRegistry
 from app.services.research.holdout_request import holdout_request_binding_hash
 from app.services.research.promotion import resolve_server_policy
+from app.utils.invariants import log_suppressed
 
 _CLAIM_LOCK_SHARD_COUNT = 64
 _CLAIM_LOCK_SHARDS_BY_LOOP: weakref.WeakKeyDictionary[
@@ -229,8 +230,10 @@ class HoldoutClaimService:
                         result="REJECTED",
                         reason_code="HOLDOUT_CLAIM_AUDIT_UNAVAILABLE",
                     )
-                except Exception:
-                    pass
+                except Exception as audit_exc:
+                    log_suppressed(
+                        __name__, "Holdout claim non-authoritative audit failed", audit_exc
+                    )
                 raise ValueError("HOLDOUT_CLAIM_AUDIT_UNAVAILABLE") from None
             except ValueError as exc:
                 await self._record_non_authoritative_audit_or_fail(
@@ -260,7 +263,6 @@ class HoldoutClaimService:
         lease_generation: int,
     ) -> HoldoutLeaseHeartbeat:
         """Renew exactly one live lease using a database-time CAS fence."""
-
         if type(lease_generation) is not int or lease_generation < 1:
             raise ValueError("HOLDOUT_CLAIM_LEASE_STALE")
         token_hash = _secret_hash(lease_token)
@@ -487,8 +489,8 @@ class HoldoutClaimService:
                 except Exception as exc:
                     try:
                         await session.rollback()
-                    except Exception:
-                        pass
+                    except Exception as rollback_exc:
+                        log_suppressed(__name__, "Holdout claim rollback failed", rollback_exc)
                     raise _CommitOutcomeUncertain(probe) from exc
             except (_CommitOutcomeUncertain, _SnapshotRevalidationFailure):
                 raise

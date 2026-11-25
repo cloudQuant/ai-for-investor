@@ -831,3 +831,57 @@ async def test_admin_manifest_control_plane_is_authorized_idempotent_and_retires
     assert retired.status_code == 200, retired.text
     assert retired.json()["status"] == "RETIRED"
     assert retired.json()["schedules"][0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_approved_schedule_manifests_batches_schedule_queries(
+    client, auth_headers
+) -> None:
+    from sqlalchemy import event
+
+    from app.db.database import engine
+    from app.models.asset_research import AssetScheduleManifest
+
+    now = datetime.now(timezone.utc)
+    async with async_session_maker() as session:
+        session.add_all(
+            [
+                AssetScheduleManifest(
+                    id=f"ocr37-manifest-{idx}",
+                    manifest_key=f"manifest-batch-{idx}",
+                    manifest_version=idx,
+                    owner_scope="PUBLIC_SHADOW",
+                    approval_reference="APR-BATCH",
+                    evidence_uri="https://example.invalid/ev",
+                    evidence_content_hash="e" * 64,
+                    content_hash=f"{idx}" * 64,
+                    approved_by="admin-fixture",
+                    approved_at=now,
+                    status="ACTIVE",
+                )
+                for idx in range(1, 4)
+            ]
+        )
+        await session.commit()
+
+    schedule_selects: list[str] = []
+
+    def _capture_sql(_conn, _cursor, statement, _params, _ctx, _many):
+        normalized = " ".join(str(statement).split())
+        if "FROM asset_signal_schedules" in normalized:
+            schedule_selects.append(normalized)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", _capture_sql)
+    app.dependency_overrides[require_data_admin_user] = lambda: SimpleNamespace(id="admin-fixture")
+    try:
+        listed = await client.get(
+            "/api/v1/asset-research/admin/schedule-manifests",
+            headers=auth_headers,
+        )
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", _capture_sql)
+        app.dependency_overrides.pop(require_data_admin_user, None)
+
+    assert listed.status_code == 200, listed.text
+    assert len(listed.json()) >= 3
+    assert len(schedule_selects) == 1

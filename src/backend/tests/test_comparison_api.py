@@ -245,3 +245,36 @@ async def test_toggle_comparison_favorite_returns_not_found_when_update_races():
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_and_update_comparison_map_missing_or_foreign_backtest_to_404(
+    client: AsyncClient,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from app.api import comparison as comparison_api
+    from app.main import app as fastapi_app
+    from app.services.comparison_service import ComparisonService
+    from tests.conftest import register_and_login
+
+    _, attacker_headers = await register_and_login(client, username="comp_attacker")
+
+    svc = ComparisonService()
+    svc.backtest_service = AsyncMock()
+    svc.backtest_service.get_result = AsyncMock(return_value=None)
+
+    fastapi_app.dependency_overrides[comparison_api.get_comparison_service] = lambda: svc
+    try:
+        resp = await client.post(
+            "/api/v1/comparisons/",
+            headers=attacker_headers,
+            json={
+                "name": "cross-user",
+                "backtest_task_ids": ["foreign-task-1", "foreign-task-2"],
+                "type": "metrics",
+            },
+        )
+        assert resp.status_code == 404
+    finally:
+        fastapi_app.dependency_overrides.pop(comparison_api.get_comparison_service, None)

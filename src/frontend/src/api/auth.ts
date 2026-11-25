@@ -13,4 +13,12 @@ export const authApi = {
   async getMe(): Promise<UserInfo> {
     return api.get<UserInfo>('/auth/me', { suppressErrorToast: true })
   },
+
+  async refresh(refreshToken: string): Promise<Token> {
+    return api.post<Token, { refresh_token: string }>(
+      '/auth/refresh',
+      { refresh_token: refreshToken },
+      { skipAuthRefresh: true, skipRetry: true, suppressErrorToast: true, suppressErrorMessage: true },
+    )
+  },
 }

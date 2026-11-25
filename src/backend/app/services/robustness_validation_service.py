@@ -98,6 +98,33 @@ class RobustnessValidationService:
             model = result.scalars().first()
         return RobustnessTestResultResponse.model_validate(model) if model else None
 
+    async def get_latest_by_backtest_ids(
+        self,
+        *,
+        backtest_ids: list[str],
+        user_id: str,
+    ) -> dict[str, RobustnessTestResultResponse]:
+        """Batch load the latest robustness result per backtest_id in one query."""
+        normalized_ids = [str(item) for item in backtest_ids if item]
+        if not normalized_ids:
+            return {}
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(RobustnessTestResultModel)
+                .where(
+                    RobustnessTestResultModel.backtest_id.in_(normalized_ids),
+                    RobustnessTestResultModel.user_id == user_id,
+                )
+                .order_by(RobustnessTestResultModel.created_at.desc())
+            )
+            models = list(result.scalars().all())
+        latest_by_id: dict[str, RobustnessTestResultResponse] = {}
+        for model in models:
+            key = str(model.backtest_id)
+            if key not in latest_by_id:
+                latest_by_id[key] = RobustnessTestResultResponse.model_validate(model)
+        return latest_by_id
+
     async def _get_backtest_task(self, backtest_id: str, user_id: str) -> BacktestTask | None:
         async with async_session_maker() as session:
             task = await session.get(BacktestTask, backtest_id)

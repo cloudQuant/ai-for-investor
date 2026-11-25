@@ -160,6 +160,7 @@ async function handleSend() {
 }
 
 async function handleConfirmDialog(response: AITradingResponse) {
+  let confirmedByUser = false
   try {
     await ElMessageBox.confirm(
       response.message,
@@ -171,20 +172,38 @@ async function handleConfirmDialog(response: AITradingResponse) {
         dangerouslyUseHTMLString: false,
       }
     )
-    // User confirmed
+    confirmedByUser = true
+  } catch {
+    // User cancelled or dismissed the confirmation dialog
+  }
+
+  if (!confirmedByUser) {
+    try {
+      await confirmTrade({
+        trade_id: response.trade_id,
+        confirmed: false,
+      })
+    } catch {
+      // Best-effort cancellation notification
+    }
+    ElMessage.info(t('aiTrading.msgTradeCancelled'))
+    return
+  }
+
+  try {
     const result = await confirmTrade({
       trade_id: response.trade_id,
       confirmed: true,
     })
     ElMessage.success(result.message)
     await loadHistory()
-  } catch {
-    // User cancelled
-    await confirmTrade({
-      trade_id: response.trade_id,
-      confirmed: false,
-    })
-    ElMessage.info(t('aiTrading.msgTradeCancelled'))
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error && error.message
+        ? error.message
+        : t('aiTrading.msgTradeRequestFailed')
+    )
+    await loadHistory().catch(() => undefined)
   }
 }
 

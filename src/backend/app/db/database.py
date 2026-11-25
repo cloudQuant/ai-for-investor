@@ -4,18 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 import weakref
 from collections.abc import AsyncGenerator
 from typing import cast
 
-import sqlalchemy as sa
-from sqlalchemy import Table, event, insert, select, text
+from sqlalchemy import event, insert, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
+from app.db.schema_compatibility import (
+    _ensure_akshare_mgmt_schema_compatibility_sync as _ensure_akshare_mgmt_schema_compatibility_sync,
+)
+from app.db.schema_compatibility import run_all_schema_compatibility_sync
 from app.middleware.metrics import record_db_query
 from app.utils.username_identity import normalize_reserved_username
 
@@ -23,30 +32,26 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# Engine / session-maker caches are keyed by the running event loop.  A pooled
-# MySQL engine is bound to one loop; reusing it from another loop is what made
-# the old code fall back to NullPool and open a fresh TCP/auth connection per
-# session.  Per-loop engines keep pooling without reintroducing
-# "Future attached to a different loop".
-_engine = None  # fallback for callers outside a running loop
-_async_session_maker = None
-_engines: weakref.WeakKeyDictionary[object, object] = weakref.WeakKeyDictionary()
-_session_makers: weakref.WeakKeyDictionary[object, object] = weakref.WeakKeyDictionary()
+# Engine / session-maker caches are keyed by the running event loop and guarded
+# by ``_engine_lock`` so worker threads and async handlers never race or share a
+# loop-bound MySQL pool across event loops.
+_engine_lock = threading.RLock()
+_engine: AsyncEngine | None = None  # fallback for callers outside a running loop
+_async_session_maker: async_sessionmaker[AsyncSession] | None = None
+_engines: weakref.WeakKeyDictionary[object, AsyncEngine] = weakref.WeakKeyDictionary()
+_session_makers: weakref.WeakKeyDictionary[object, async_sessionmaker[AsyncSession]] = (
+    weakref.WeakKeyDictionary()
+)
 
 
-def _register_db_metrics(engine) -> None:
-    """Wire DB query metrics (iteration 193 P0-3: dead-metric接线).
+def _register_db_metrics(target_engine: AsyncEngine) -> None:
+    """Wire DB query metrics so db_query_total/duration reflect real DB activity."""
 
-    Times every cursor execution and reports it to ``record_db_query`` so the
-    ``db_query_total`` / ``db_query_duration_seconds`` gauges reflect real DB
-    activity instead of staying dead.
-    """
-
-    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    @event.listens_for(target_engine.sync_engine, "before_cursor_execute")
     def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         context._db_query_start = time.perf_counter()
 
-    @event.listens_for(engine.sync_engine, "after_cursor_execute")
+    @event.listens_for(target_engine.sync_engine, "after_cursor_execute")
     def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         start = getattr(context, "_db_query_start", None)
         if start is None:
@@ -63,7 +68,6 @@ def _extract_table_name(statement: str) -> str:
     for prefix in ("insert into ", "update ", "delete from ", "from ", "into "):
         if stripped.startswith(prefix):
             rest = stripped[len(prefix) :]
-            # take the first identifier token
             token = ""
             for ch in rest:
                 if ch.isalnum() or ch in "_.":
@@ -74,14 +78,11 @@ def _extract_table_name(statement: str) -> str:
     return "unknown"
 
 
-def _create_engine():
+def _create_engine() -> AsyncEngine:
     """Build one async engine with pooling and pre-ping enabled."""
 
     extra_kwargs: dict[str, object] = {"pool_pre_ping": True}
     if settings.DATABASE_URL.startswith("mysql"):
-        # A pooled MySQL engine is loop-bound, but each loop now gets its own
-        # engine (see _get_engine).  NullPool made every request pay a fresh
-        # TCP + authentication handshake and hid connection exhaustion.
         extra_kwargs.update(
             pool_size=5,
             max_overflow=10,
@@ -101,42 +102,80 @@ def _running_loop():
         return None
 
 
-def _get_engine():
+def _get_engine() -> AsyncEngine:
     global _engine
     loop = _running_loop()
-    if loop is None:
-        if _engine is None:
-            _engine = _create_engine()
-            _register_db_metrics(_engine)
-        return _engine
-    engine = _engines.get(loop)
-    if engine is None:
-        engine = _create_engine()
-        _engines[loop] = engine
-        _register_db_metrics(engine)
-    return engine
+    with _engine_lock:
+        if loop is None:
+            if _engine is None:
+                _engine = _create_engine()
+                _register_db_metrics(_engine)
+            return _engine
+        resolved = _engines.get(loop)
+        if resolved is None:
+            resolved = _create_engine()
+            _engines[loop] = resolved
+            _register_db_metrics(resolved)
+        return resolved
 
 
-def _get_session_maker():
+def _get_session_maker() -> async_sessionmaker[AsyncSession]:
     global _async_session_maker
     loop = _running_loop()
-    if loop is None:
-        if _async_session_maker is None:
-            _async_session_maker = async_sessionmaker(
+    with _engine_lock:
+        if loop is None:
+            if _async_session_maker is None:
+                _async_session_maker = async_sessionmaker(
+                    _get_engine(),
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                )
+            return _async_session_maker
+        maker = _session_makers.get(loop)
+        if maker is None:
+            maker = async_sessionmaker(
                 _get_engine(),
                 class_=AsyncSession,
                 expire_on_commit=False,
             )
-        return _async_session_maker
-    maker = _session_makers.get(loop)
-    if maker is None:
-        maker = async_sessionmaker(
-            _get_engine(),
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-        _session_makers[loop] = maker
-    return maker
+            _session_makers[loop] = maker
+        return maker
+
+
+async def dispose_current_loop_engine() -> None:
+    """Dispose the already-created engine for the active loop without creating a new one."""
+    global _engine, _async_session_maker
+    loop = _running_loop()
+    target: AsyncEngine | None
+    with _engine_lock:
+        if loop is None:
+            target = _engine
+            _engine = None
+            _async_session_maker = None
+        else:
+            target = _engines.pop(loop, None)
+            _session_makers.pop(loop, None)
+    if target is not None:
+        await target.dispose()
+
+
+async def dispose_all_engines() -> None:
+    """Dispose all cached per-loop and fallback engines cleanly."""
+    global _engine, _async_session_maker
+    targets: list[AsyncEngine] = []
+    with _engine_lock:
+        if _engine is not None:
+            targets.append(_engine)
+            _engine = None
+        _async_session_maker = None
+        targets.extend(_engines.values())
+        _engines.clear()
+        _session_makers.clear()
+    for target in targets:
+        try:
+            await target.dispose()
+        except Exception:
+            logger.exception("Failed to dispose SQLAlchemy engine cleanly")
 
 
 class _EngineProxy:
@@ -149,7 +188,7 @@ class _EngineProxy:
         return _get_engine().begin()
 
     async def dispose(self):
-        return await _get_engine().dispose()
+        return await dispose_current_loop_engine()
 
 
 class _SessionMakerProxy:
@@ -167,698 +206,15 @@ async_session_maker = _SessionMakerProxy()
 
 
 class Base(DeclarativeBase):
-    """ORM base class.
-
-    This class serves as the declarative base for all SQLAlchemy models.
-    Models inherit from this class to gain ORM functionality.
-    """
+    """ORM base class for all SQLAlchemy models."""
 
     pass
-
-
-def _has_table(bind, table_name: str) -> bool:
-    return sa.inspect(bind).has_table(table_name)
-
-
-def _get_column_names(bind, table_name: str) -> set[str]:
-    return {column["name"] for column in sa.inspect(bind).get_columns(table_name)}
-
-
-def _get_index_names(bind, table_name: str) -> set[str]:
-    return {index["name"] for index in sa.inspect(bind).get_indexes(table_name)}
-
-
-def _add_column_if_missing(bind, table_name: str, column_name: str, ddl: str) -> bool:
-    if not _has_table(bind, table_name):
-        return False
-    if column_name in _get_column_names(bind, table_name):
-        return False
-
-    bind.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {ddl}"))
-    logger.warning(
-        "Added missing database column %s.%s during startup schema sync", table_name, column_name
-    )
-    return True
-
-
-def _ensure_index_if_missing(bind, table_name: str, index_name: str, column_name: str) -> None:
-    _ensure_index_columns_if_missing(bind, table_name, index_name, (column_name,))
-
-
-def _ensure_index_columns_if_missing(
-    bind,
-    table_name: str,
-    index_name: str,
-    column_names: tuple[str, ...],
-) -> None:
-    if not _has_table(bind, table_name):
-        return
-    if index_name in _get_index_names(bind, table_name):
-        return
-
-    metadata = sa.MetaData()
-    table = sa.Table(table_name, metadata, autoload_with=bind)
-    sa.Index(index_name, *(table.c[column_name] for column_name in column_names)).create(bind=bind)
-    logger.warning(
-        "Added missing database index %s on %s(%s)",
-        index_name,
-        table_name,
-        ", ".join(column_names),
-    )
-
-
-def _modify_mysql_column_type_if_needed(
-    bind,
-    table_name: str,
-    column_name: str,
-    ddl: str,
-    expected_type_fragment: str,
-) -> None:
-    if bind.dialect.name != "mysql" or not _has_table(bind, table_name):
-        return
-
-    columns = {column["name"]: column for column in sa.inspect(bind).get_columns(table_name)}
-    column = columns.get(column_name)
-    if column is None:
-        return
-
-    current_type = str(column["type"]).upper()
-    if expected_type_fragment.upper() in current_type:
-        return
-
-    bind.execute(text(f"ALTER TABLE {table_name} MODIFY COLUMN {column_name} {ddl}"))
-    logger.warning(
-        "Modified MySQL column %s.%s to %s during startup schema sync",
-        table_name,
-        column_name,
-        ddl,
-    )
-
-
-def _make_column_nullable_if_needed(
-    bind,
-    table_name: str,
-    column_name: str,
-    ddl: str,
-) -> None:
-    if not _has_table(bind, table_name):
-        return
-
-    columns = {column["name"]: column for column in sa.inspect(bind).get_columns(table_name)}
-    column = columns.get(column_name)
-    if column is None or column.get("nullable", True):
-        return
-
-    dialect_name = bind.dialect.name
-    if dialect_name == "mysql":
-        bind.execute(text(f"ALTER TABLE {table_name} MODIFY COLUMN {column_name} {ddl}"))
-    elif dialect_name == "postgresql":
-        bind.execute(text(f"ALTER TABLE {table_name} ALTER COLUMN {column_name} DROP NOT NULL"))
-    elif dialect_name == "sqlite" and table_name == "chat_conversations":
-        _rebuild_sqlite_chat_conversations_with_nullable_kb(bind)
-    else:
-        logger.warning(
-            "Cannot automatically make %s.%s nullable for dialect %s",
-            table_name,
-            column_name,
-            dialect_name,
-        )
-        return
-
-    logger.warning(
-        "Made database column %s.%s nullable during startup schema sync",
-        table_name,
-        column_name,
-    )
-
-
-def _rebuild_sqlite_chat_conversations_with_nullable_kb(bind) -> None:
-    """Rebuild SQLite chat_conversations so knowledge_base_id can be NULL."""
-    bind.execute(text("PRAGMA foreign_keys=OFF"))
-    bind.execute(text("DROP TABLE IF EXISTS chat_conversations_new"))
-    bind.execute(
-        text(
-            """
-            CREATE TABLE chat_conversations_new (
-                id VARCHAR(36) NOT NULL PRIMARY KEY,
-                knowledge_base_id VARCHAR(36),
-                user_id VARCHAR(36) NOT NULL,
-                title VARCHAR(255) NOT NULL,
-                model_id VARCHAR(200),
-                settings JSON,
-                created_at DATETIME,
-                updated_at DATETIME,
-                FOREIGN KEY(knowledge_base_id) REFERENCES knowledge_bases(id) ON DELETE CASCADE,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-    )
-    existing_columns = _get_column_names(bind, "chat_conversations")
-    copy_columns = [
-        column
-        for column in (
-            "id",
-            "knowledge_base_id",
-            "user_id",
-            "title",
-            "model_id",
-            "settings",
-            "created_at",
-            "updated_at",
-        )
-        if column in existing_columns
-    ]
-    if copy_columns:
-        columns_sql = ", ".join(copy_columns)
-        bind.execute(
-            text(
-                f"INSERT INTO chat_conversations_new ({columns_sql}) "
-                f"SELECT {columns_sql} FROM chat_conversations"
-            )
-        )
-    bind.execute(text("DROP TABLE chat_conversations"))
-    bind.execute(text("ALTER TABLE chat_conversations_new RENAME TO chat_conversations"))
-    bind.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_chat_conversations_knowledge_base_id "
-            "ON chat_conversations (knowledge_base_id)"
-        )
-    )
-    bind.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_chat_conversations_user_id "
-            "ON chat_conversations (user_id)"
-        )
-    )
-    bind.execute(text("PRAGMA foreign_keys=ON"))
-
-
-def _ensure_workspace_schema_compatibility_sync(bind) -> None:
-    dialect_name = bind.dialect.name
-    false_literal = "FALSE" if dialect_name == "postgresql" else "0"
-
-    if _has_table(bind, "workspaces"):
-        _add_column_if_missing(
-            bind,
-            "workspaces",
-            "workspace_type",
-            "workspace_type VARCHAR(32) NOT NULL DEFAULT 'research'",
-        )
-        _add_column_if_missing(
-            bind,
-            "workspaces",
-            "trading_config",
-            "trading_config JSON",
-        )
-        if "workspace_type" in _get_column_names(bind, "workspaces"):
-            bind.execute(
-                text(
-                    "UPDATE workspaces SET workspace_type = 'research' WHERE workspace_type IS NULL"
-                )
-            )
-            _ensure_index_if_missing(
-                bind,
-                "workspaces",
-                "ix_workspaces_workspace_type",
-                "workspace_type",
-            )
-            _ensure_index_columns_if_missing(
-                bind,
-                "workspaces",
-                "ix_workspaces_user_type_updated_id",
-                ("user_id", "workspace_type", "updated_at", "id"),
-            )
-            _ensure_index_columns_if_missing(
-                bind,
-                "workspaces",
-                "ix_workspaces_user_updated_id",
-                ("user_id", "updated_at", "id"),
-            )
-
-    if _has_table(bind, "strategy_units"):
-        _add_column_if_missing(
-            bind,
-            "strategy_units",
-            "trading_mode",
-            "trading_mode VARCHAR(20) NOT NULL DEFAULT 'paper'",
-        )
-        _add_column_if_missing(
-            bind,
-            "strategy_units",
-            "gateway_config",
-            "gateway_config JSON",
-        )
-        _add_column_if_missing(
-            bind,
-            "strategy_units",
-            "lock_trading",
-            f"lock_trading BOOLEAN NOT NULL DEFAULT {false_literal}",
-        )
-        _add_column_if_missing(
-            bind,
-            "strategy_units",
-            "lock_running",
-            f"lock_running BOOLEAN NOT NULL DEFAULT {false_literal}",
-        )
-        _add_column_if_missing(
-            bind,
-            "strategy_units",
-            "trading_instance_id",
-            "trading_instance_id VARCHAR(36)",
-        )
-        _add_column_if_missing(
-            bind,
-            "strategy_units",
-            "trading_snapshot",
-            "trading_snapshot JSON",
-        )
-
-        unit_columns = _get_column_names(bind, "strategy_units")
-        if "trading_mode" in unit_columns:
-            bind.execute(
-                text("UPDATE strategy_units SET trading_mode = 'paper' WHERE trading_mode IS NULL")
-            )
-        if "lock_trading" in unit_columns:
-            bind.execute(
-                text(
-                    f"UPDATE strategy_units SET lock_trading = {false_literal} "
-                    "WHERE lock_trading IS NULL"
-                )
-            )
-        if "lock_running" in unit_columns:
-            bind.execute(
-                text(
-                    f"UPDATE strategy_units SET lock_running = {false_literal} "
-                    "WHERE lock_running IS NULL"
-                )
-            )
-
-
-def _ensure_knowledge_base_schema_compatibility_sync(bind) -> None:
-    """Create or patch tables used by the knowledge-base and AI chat modules."""
-    from app.models.knowledge_base import (
-        ChatConversation,
-        ChatMessage,
-        DocumentChunk,
-        KBDocument,
-        KnowledgeBase,
-        ModelConfig,
-        ModelUsageLog,
-    )
-
-    for table in (
-        KnowledgeBase.__table__,
-        KBDocument.__table__,
-        DocumentChunk.__table__,
-        ChatConversation.__table__,
-        ChatMessage.__table__,
-        ModelConfig.__table__,
-        ModelUsageLog.__table__,
-    ):
-        _create_table_if_missing(table, bind)
-
-    dialect_name = bind.dialect.name
-    json_type = "JSON" if dialect_name != "sqlite" else "JSON"
-    datetime_type = "TIMESTAMP" if dialect_name == "postgresql" else "DATETIME"
-
-    _add_column_if_missing(
-        bind,
-        "chat_conversations",
-        "user_id",
-        "user_id VARCHAR(36)",
-    )
-    _add_column_if_missing(
-        bind,
-        "chat_conversations",
-        "model_id",
-        "model_id VARCHAR(200)",
-    )
-    _add_column_if_missing(
-        bind,
-        "chat_conversations",
-        "settings",
-        f"settings {json_type}",
-    )
-    _add_column_if_missing(
-        bind,
-        "chat_conversations",
-        "created_at",
-        f"created_at {datetime_type}",
-    )
-    _add_column_if_missing(
-        bind,
-        "chat_conversations",
-        "updated_at",
-        f"updated_at {datetime_type}",
-    )
-    _make_column_nullable_if_needed(
-        bind,
-        "chat_conversations",
-        "knowledge_base_id",
-        "VARCHAR(36) NULL",
-    )
-
-    if _has_table(bind, "chat_messages"):
-        _add_column_if_missing(bind, "chat_messages", "citations", f"citations {json_type}")
-        _add_column_if_missing(bind, "chat_messages", "tokens_used", "tokens_used INTEGER")
-        _add_column_if_missing(bind, "chat_messages", "model_id", "model_id VARCHAR(200)")
-        _add_column_if_missing(bind, "chat_messages", "reasoning", "reasoning TEXT")
-        _add_column_if_missing(bind, "chat_messages", "metadata", f"metadata {json_type}")
-        _add_column_if_missing(bind, "chat_messages", "created_at", f"created_at {datetime_type}")
-
-    _modify_mysql_column_type_if_needed(
-        bind, "kb_documents", "content", "LONGTEXT NULL", "LONGTEXT"
-    )
-    _modify_mysql_column_type_if_needed(
-        bind, "document_chunks", "content", "LONGTEXT NOT NULL", "LONGTEXT"
-    )
-    _modify_mysql_column_type_if_needed(
-        bind, "chat_messages", "content", "LONGTEXT NOT NULL", "LONGTEXT"
-    )
-    _modify_mysql_column_type_if_needed(
-        bind, "chat_messages", "reasoning", "LONGTEXT NULL", "LONGTEXT"
-    )
-
-
-def _ensure_airflow_schema_compatibility_sync(bind) -> None:
-    """Add Airflow-related columns to ak_task_executions if missing."""
-    if _has_table(bind, "ak_task_executions"):
-        _add_column_if_missing(
-            bind, "ak_task_executions", "airflow_dag_id", "airflow_dag_id VARCHAR(200)"
-        )
-        _add_column_if_missing(
-            bind, "ak_task_executions", "airflow_run_id", "airflow_run_id VARCHAR(200)"
-        )
-        _add_column_if_missing(
-            bind, "ak_task_executions", "airflow_task_id", "airflow_task_id VARCHAR(200)"
-        )
-
-
-def _ensure_ai_budget_schema_compatibility_sync(bind) -> None:
-    if _has_table(bind, "users"):
-        _add_column_if_missing(bind, "users", "ai_budget_daily_usd", "ai_budget_daily_usd FLOAT")
-        _add_column_if_missing(bind, "users", "ai_budget_mode", "ai_budget_mode VARCHAR(20)")
-        _add_column_if_missing(
-            bind, "users", "ai_preferred_provider", "ai_preferred_provider VARCHAR(50)"
-        )
-        _add_column_if_missing(
-            bind, "users", "ai_preferred_model", "ai_preferred_model VARCHAR(100)"
-        )
-
-
-def _ensure_prompt_template_schema_compatibility_sync(bind) -> None:
-    from app.models.prompt_template import PromptTemplate
-
-    _create_table_if_missing(PromptTemplate.__table__, bind)
-    _add_column_if_missing(
-        bind,
-        "prompt_templates",
-        "rollout_percentage",
-        "rollout_percentage INTEGER NOT NULL DEFAULT 0",
-    )
-    _add_column_if_missing(
-        bind,
-        "ai_call_logs",
-        "prompt_template_version",
-        "prompt_template_version VARCHAR(50)",
-    )
-    _ensure_index_if_missing(
-        bind,
-        "ai_call_logs",
-        "ix_ai_call_logs_prompt_template_version",
-        "prompt_template_version",
-    )
-
-
-def _ensure_broker_profiles_schema_compatibility_sync(bind) -> None:
-    if _has_table(bind, "broker_connection_profiles"):
-        _add_column_if_missing(
-            bind,
-            "broker_connection_profiles",
-            "runtime_gateway_key",
-            "runtime_gateway_key VARCHAR(120)",
-        )
-        _add_column_if_missing(
-            bind,
-            "broker_connection_profiles",
-            "runtime_account_id",
-            "runtime_account_id VARCHAR(100)",
-        )
-        _ensure_index_if_missing(
-            bind,
-            "broker_connection_profiles",
-            "ix_broker_connection_profiles_runtime_gateway_key",
-            "runtime_gateway_key",
-        )
-
-
-def _ensure_portfolio_ledger_schema_compatibility_sync(bind) -> None:
-    from app.models.portfolio_ledger import (
-        PortfolioLedgerImportModel,
-        PortfolioLedgerModel,
-        PortfolioLedgerSnapshotModel,
-        PortfolioLedgerTransactionModel,
-    )
-
-    for table in (
-        PortfolioLedgerModel.__table__,
-        PortfolioLedgerImportModel.__table__,
-        PortfolioLedgerTransactionModel.__table__,
-        PortfolioLedgerSnapshotModel.__table__,
-    ):
-        _create_table_if_missing(table, bind)
-
-
-def _ensure_news_intelligence_schema_compatibility_sync(bind) -> None:
-    from app.models.news_intelligence import (
-        NewsAnalysisModel,
-        NewsArticleModel,
-        NewsSourceModel,
-    )
-
-    for table in (
-        NewsSourceModel.__table__,
-        NewsArticleModel.__table__,
-        NewsAnalysisModel.__table__,
-    ):
-        _create_table_if_missing(table, bind)
-
-    _add_column_if_missing(bind, "news_articles", "content", "content TEXT NULL")
-
-
-def _ensure_stock_analysis_schema_compatibility_sync(bind) -> None:
-    from app.models.stock_analysis import (
-        StockAnalysisExportModel,
-        StockAnalysisReportModel,
-        StockAnalysisTaskModel,
-    )
-
-    for table in (
-        StockAnalysisTaskModel.__table__,
-        StockAnalysisReportModel.__table__,
-        StockAnalysisExportModel.__table__,
-    ):
-        _create_table_if_missing(table, bind)
-
-
-def _ensure_scanner_plan_schema_compatibility_sync(bind) -> None:
-    from app.models.scanner_plan import ScannerPlanModel, ScannerPlanRunModel
-
-    for table in (
-        ScannerPlanModel.__table__,
-        ScannerPlanRunModel.__table__,
-    ):
-        _create_table_if_missing(table, bind)
-
-    if _has_table(bind, "scanner_plans"):
-        _add_column_if_missing(
-            bind,
-            "scanner_plans",
-            "result_table_name",
-            "result_table_name VARCHAR(120)",
-        )
-        _add_column_if_missing(
-            bind,
-            "scanner_plans",
-            "result_table_status",
-            "result_table_status VARCHAR(20) DEFAULT 'missing' NOT NULL",
-        )
-        _ensure_index_if_missing(
-            bind,
-            "scanner_plans",
-            "ix_scanner_plans_result_table_name",
-            "result_table_name",
-        )
-
-
-# Akshare management columns persisted by older releases as uppercase enum *names*
-# (e.g. ``MANUAL``); the current ORM persists and reads lowercase enum *values*
-# (``manual``). Legacy rows therefore raise ``LookupError`` on read.
-_AKSHARE_LEGACY_ENUM_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("ak_data_scripts", "frequency"),
-    ("ak_interface_parameters", "param_type"),
-    ("ak_scheduled_tasks", "schedule_type"),
-    ("ak_task_executions", "status"),
-    ("ak_task_executions", "triggered_by"),
-)
-
-
-def _ensure_akshare_mgmt_schema_compatibility_sync(bind) -> None:
-    """Normalize legacy uppercase akshare enum labels to lowercase values."""
-    dialect_name = bind.dialect.name
-    normalized_postgres_enum_types: set[tuple[str | None, str]] = set()
-    for table_name, column_name in _AKSHARE_LEGACY_ENUM_COLUMNS:
-        if not _has_table(bind, table_name):
-            continue
-        columns = {column["name"]: column for column in sa.inspect(bind).get_columns(table_name)}
-        column = columns.get(column_name)
-        if column is None:
-            continue
-
-        if dialect_name == "mysql":
-            enum_labels = list(getattr(column["type"], "enums", []) or [])
-            if not enum_labels or all(label == label.lower() for label in enum_labels):
-                continue
-            # Preserve the existing label order: MySQL rewrites stored values by
-            # index, which converts each 'MANUAL' to 'manual' in place.
-            labels_sql = ", ".join(f"'{label.lower()}'" for label in enum_labels)
-            null_sql = "NULL" if column.get("nullable", True) else "NOT NULL"
-            bind.execute(
-                text(
-                    f"ALTER TABLE {table_name} MODIFY COLUMN {column_name} "
-                    f"ENUM({labels_sql}) {null_sql}"
-                )
-            )
-            logger.warning(
-                "Normalized MySQL enum column %s.%s to lowercase values during startup schema sync",
-                table_name,
-                column_name,
-            )
-            continue
-
-        if dialect_name == "postgresql":
-            enum_labels = list(getattr(column["type"], "enums", []) or [])
-            enum_type_name = getattr(column["type"], "name", None)
-            if enum_labels:
-                if not enum_type_name:
-                    logger.warning(
-                        "Skipped PostgreSQL enum normalization for %s.%s: enum type has no name",
-                        table_name,
-                        column_name,
-                    )
-                    continue
-
-                rename_pairs = [
-                    (label, label.lower()) for label in enum_labels if label != label.lower()
-                ]
-                if not rename_pairs:
-                    continue
-
-                enum_schema = getattr(column["type"], "schema", None)
-                enum_key = (enum_schema, enum_type_name)
-                if enum_key in normalized_postgres_enum_types:
-                    continue
-
-                existing_labels = set(enum_labels)
-                if any(new_label in existing_labels for _, new_label in rename_pairs):
-                    logger.warning(
-                        "Skipped PostgreSQL enum normalization for %s.%s: lower-case labels already exist",
-                        table_name,
-                        column_name,
-                    )
-                    continue
-
-                quote_identifier = bind.dialect.identifier_preparer.quote
-                enum_sql = quote_identifier(enum_type_name)
-                if enum_schema:
-                    enum_sql = f"{quote_identifier(enum_schema)}.{enum_sql}"
-                for old_label, new_label in rename_pairs:
-                    old_sql = old_label.replace("'", "''")
-                    new_sql = new_label.replace("'", "''")
-                    bind.execute(
-                        text(f"ALTER TYPE {enum_sql} RENAME VALUE '{old_sql}' TO '{new_sql}'")
-                    )
-                normalized_postgres_enum_types.add(enum_key)
-                logger.warning(
-                    "Normalized PostgreSQL enum type %s to lowercase values during startup schema sync",
-                    enum_sql,
-                )
-                continue
-
-        # Text-backed dialects such as SQLite: lowercase legacy rows so ORM reads
-        # resolve to the defined enum values. PostgreSQL native enums are handled
-        # above through type-level label renames because LOWER(enum) is invalid.
-        updated = bind.execute(
-            text(
-                f"UPDATE {table_name} SET {column_name} = LOWER({column_name}) "
-                f"WHERE {column_name} <> LOWER({column_name})"
-            )
-        ).rowcount
-        if updated:
-            logger.warning(
-                "Normalized %d legacy uppercase enum value(s) in %s.%s during startup schema sync",
-                updated,
-                table_name,
-                column_name,
-            )
-
-
-def _ensure_trading_schema_compatibility_sync(bind) -> None:
-    """Patch legacy trading tables that ``create_all`` cannot alter in place."""
-    for column_name, ddl in (
-        ("average_holding_bars", "average_holding_bars FLOAT"),
-        ("max_consecutive_wins", "max_consecutive_wins INTEGER"),
-        ("max_consecutive_losses", "max_consecutive_losses INTEGER"),
-        ("profit_loss_ratio", "profit_loss_ratio FLOAT"),
-        ("standard_metrics", "standard_metrics JSON"),
-        ("result_summary", "result_summary JSON"),
-    ):
-        _add_column_if_missing(bind, "backtest_results", column_name, ddl)
-
-    for column_name, ddl in (
-        ("margin_value", "margin_value FLOAT NOT NULL DEFAULT 0"),
-        ("multiplier", "multiplier FLOAT NOT NULL DEFAULT 1"),
-        ("margin_rate", "margin_rate FLOAT NOT NULL DEFAULT 1"),
-        ("commission_rate", "commission_rate FLOAT NOT NULL DEFAULT 0"),
-        ("commission_amount", "commission_amount FLOAT NOT NULL DEFAULT 0"),
-    ):
-        _add_column_if_missing(bind, "paper_trading_positions", column_name, ddl)
-
-    for table_name, column_name in (
-        ("paper_trading_positions", "size"),
-        ("paper_trading_orders", "size"),
-        ("paper_trading_orders", "filled_size"),
-        ("paper_trades", "size"),
-    ):
-        _modify_mysql_column_type_if_needed(
-            bind, table_name, column_name, "FLOAT NOT NULL", "FLOAT"
-        )
-
-    for column_name, ddl in (
-        ("workspace_id", "workspace_id VARCHAR(36)"),
-        ("unit_id", "unit_id VARCHAR(36)"),
-        ("instance_id", "instance_id VARCHAR(36)"),
-        ("dedupe_key", "dedupe_key VARCHAR(200)"),
-    ):
-        _add_column_if_missing(bind, "alerts", column_name, ddl)
 
 
 async def ensure_schema_compatibility() -> None:
     """Patch legacy databases with columns required by the current ORM schema."""
     async with engine.begin() as conn:
-        await conn.run_sync(_ensure_workspace_schema_compatibility_sync)
-        await conn.run_sync(_ensure_knowledge_base_schema_compatibility_sync)
-        await conn.run_sync(_ensure_airflow_schema_compatibility_sync)
-        await conn.run_sync(_ensure_ai_budget_schema_compatibility_sync)
-        await conn.run_sync(_ensure_prompt_template_schema_compatibility_sync)
-        await conn.run_sync(_ensure_broker_profiles_schema_compatibility_sync)
-        await conn.run_sync(_ensure_portfolio_ledger_schema_compatibility_sync)
-        await conn.run_sync(_ensure_news_intelligence_schema_compatibility_sync)
-        await conn.run_sync(_ensure_stock_analysis_schema_compatibility_sync)
-        await conn.run_sync(_ensure_scanner_plan_schema_compatibility_sync)
-        await conn.run_sync(_ensure_akshare_mgmt_schema_compatibility_sync)
-        await conn.run_sync(_ensure_trading_schema_compatibility_sync)
+        await conn.run_sync(run_all_schema_compatibility_sync)
 
 
 async def create_tables() -> None:
@@ -867,26 +223,11 @@ async def create_tables() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_ensure_workspace_schema_compatibility_sync)
-        await conn.run_sync(_ensure_knowledge_base_schema_compatibility_sync)
-        await conn.run_sync(_ensure_airflow_schema_compatibility_sync)
-        await conn.run_sync(_ensure_ai_budget_schema_compatibility_sync)
-        await conn.run_sync(_ensure_prompt_template_schema_compatibility_sync)
-        await conn.run_sync(_ensure_broker_profiles_schema_compatibility_sync)
-        await conn.run_sync(_ensure_portfolio_ledger_schema_compatibility_sync)
-        await conn.run_sync(_ensure_news_intelligence_schema_compatibility_sync)
-        await conn.run_sync(_ensure_stock_analysis_schema_compatibility_sync)
-        await conn.run_sync(_ensure_scanner_plan_schema_compatibility_sync)
-        await conn.run_sync(_ensure_akshare_mgmt_schema_compatibility_sync)
-        await conn.run_sync(_ensure_trading_schema_compatibility_sync)
+        await conn.run_sync(run_all_schema_compatibility_sync)
 
 
 async def init_db():
-    """Initialize database tables.
-
-    This helper is retained for backward compatibility in tests and scripts.
-    It no longer creates the default administrator account implicitly.
-    """
+    """Initialize database tables (retained for test/script compatibility)."""
     await create_tables()
 
 
@@ -899,7 +240,7 @@ async def verify_database_schema() -> None:
     """Verify database revision using read-only queries only."""
     from app.db.schema_readiness import verify_database_revision
 
-    await verify_database_revision(_get_engine())
+    await verify_database_revision(cast(AsyncEngine, engine))
 
 
 async def ensure_database_ready() -> None:
@@ -916,36 +257,25 @@ async def ensure_database_ready() -> None:
 
 
 async def create_default_admin() -> None:
-    """Create the configured administrator only when its username is unused.
-
-    Existing accounts are never promoted by name. The users.username unique
-    constraint arbitrates concurrent registration/bootstrap attempts; a
-    losing bootstrap re-reads the winner in a fresh transaction and succeeds
-    only when that exact account already has the ADMIN role.
-    """
+    """Create the configured administrator only when its username is unused."""
     from app.models.permission import Role, user_roles
     from app.models.user import User
     from app.utils.security import get_password_hash
 
-    settings = get_settings()
+    local_settings = get_settings()
 
     async def find_existing_admin(session: AsyncSession) -> User | None:
         """Resolve configured username using the active database collation."""
         result = await session.execute(
-            select(User).where(User.username == settings.ADMIN_USERNAME).limit(2)
+            select(User).where(User.username == local_settings.ADMIN_USERNAME).limit(2)
         )
         matches = list(result.scalars().all())
         if not matches:
-            # Case-sensitive databases such as SQLite/PostgreSQL may not find
-            # a case/accent/compatibility equivalent with `=`. Bootstrap is an
-            # explicit operator action, so scan the account names on this rare
-            # creation path and fail closed if a conservative alias exists.
-            configured_identity = normalize_reserved_username(settings.ADMIN_USERNAME)
+            configured_identity = normalize_reserved_username(local_settings.ADMIN_USERNAME)
             all_users = await session.execute(select(User))
             aliases = [
                 user
                 for user in all_users.scalars().all()
-                # SQLAlchemy Column(String) attributes are Column[str] to mypy but str on instances.
                 if normalize_reserved_username(cast(str, user.username)) == configured_identity
             ]
             if aliases:
@@ -960,7 +290,7 @@ async def create_default_admin() -> None:
             )
 
         existing_user = matches[0]
-        if existing_user.username != settings.ADMIN_USERNAME:
+        if existing_user.username != local_settings.ADMIN_USERNAME:
             raise RuntimeError(
                 "Default admin bootstrap refused: configured username resolves to a differently "
                 "spelled account under the database collation."
@@ -986,9 +316,9 @@ async def create_default_admin() -> None:
                 return
 
             admin_user = User(
-                username=settings.ADMIN_USERNAME,
-                email=settings.ADMIN_EMAIL,
-                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                username=local_settings.ADMIN_USERNAME,
+                email=local_settings.ADMIN_EMAIL,
+                hashed_password=get_password_hash(local_settings.ADMIN_PASSWORD),
                 is_active=True,
             )
             session.add(admin_user)
@@ -999,8 +329,6 @@ async def create_default_admin() -> None:
             await session.commit()
             logger.info("Default admin account created")
     except IntegrityError:
-        # The failed transaction is unusable. Resolve a possible concurrent
-        # bootstrap winner in a new session, and never adopt a registration.
         async with async_session_maker() as retry_session:
             concurrent_admin = await find_existing_admin(retry_session)
             if concurrent_admin is not None:
@@ -1011,18 +339,8 @@ async def create_default_admin() -> None:
         ) from None
 
 
-def _create_table_if_missing(from_clause: sa.FromClause, bind) -> None:
-    """Create one declared table when the clause is a concrete Table (always at runtime)."""
-    if isinstance(from_clause, Table):
-        from_clause.create(bind=bind, checkfirst=True)
-
-
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Get database session.
-
-    Yields:
-        An async database session.
-    """
+    """Yield an async database session."""
     async with async_session_maker() as session:
         try:
             yield session

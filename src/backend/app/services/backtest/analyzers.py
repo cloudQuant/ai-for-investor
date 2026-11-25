@@ -563,60 +563,44 @@ class FincoreAdapter:
 
         return float(annualized_return) if math.isfinite(annualized_return) else 0.0
 
+    @staticmethod
+    def _trade_pnl(trade: dict) -> float | None:
+        raw_pnl = trade.get("pnlcomm")
+        if raw_pnl is None:
+            raw_pnl = trade.get("pnl")
+        if raw_pnl is None:
+            return None
+        try:
+            return float(raw_pnl)
+        except (TypeError, ValueError):
+            return None
+
     def calculate_win_rate(self, trades: list) -> float:
-        """Calculate win rate from a list of trades.
-
-        Win rate is the percentage of profitable trades.
-        Note: fincore library doesn't have a win_rate function, so this
-        always uses manual calculation regardless of use_fincore setting.
-
-        Args:
-            trades: List of trade records, each containing 'pnlcomm' field
-                    (profit/loss after commission).
-
-        Returns:
-            Win rate as decimal (e.g., 0.55 for 55%).
-            Returns 0.0 if no trades provided.
-
-        Formula:
-            Win Rate = Winning Trades / Total Trades
-        """
+        """Calculate win rate from a list of trades."""
         if not trades:
             return 0.0
 
-        # Manual calculation (fincore doesn't have win_rate function)
-        closed_trades = [
-            t for t in trades if t.get("pnlcomm") is not None or t.get("pnl") is not None
-        ]
-        winning_trades = sum(1 for t in closed_trades if t.get("pnlcomm", t.get("pnl", 0)) > 0)
-        total_trades = len(closed_trades)
-
-        if total_trades == 0:
+        pnls = [pnl for pnl in (self._trade_pnl(t) for t in trades) if pnl is not None]
+        if not pnls:
             return 0.0
 
-        return float(winning_trades / total_trades)
+        winning_trades = sum(1 for pnl in pnls if pnl > 0)
+        return float(winning_trades / len(pnls))
 
     def calculate_profit_factor(self, trades: list) -> float:
-        """Calculate profit factor (ratio of average win to average loss).
-
-        Args:
-            trades: List of trade records, each containing 'pnlcomm' field
-                    (profit/loss after commission).
-
-        Returns:
-            Profit factor as float. Returns 0.0 if no losses or no trades.
-        """
+        """Calculate profit factor (ratio of average win to average loss)."""
         if not trades:
             return 0.0
 
-        winning_trades = [t for t in trades if t.get("pnlcomm", 0) > 0]
-        losing_trades = [t for t in trades if t.get("pnlcomm", 0) < 0]
+        pnls = [pnl for pnl in (self._trade_pnl(t) for t in trades) if pnl is not None]
+        winning_trades = [pnl for pnl in pnls if pnl > 0]
+        losing_trades = [pnl for pnl in pnls if pnl < 0]
 
         if not losing_trades or not winning_trades:
             return 0.0
 
-        avg_win = sum(t.get("pnlcomm", 0) for t in winning_trades) / len(winning_trades)
-        avg_loss = abs(sum(t.get("pnlcomm", 0) for t in losing_trades) / len(losing_trades))
+        avg_win = sum(winning_trades) / len(winning_trades)
+        avg_loss = abs(sum(losing_trades) / len(losing_trades))
 
         if avg_loss == 0:
             return 0.0
@@ -713,8 +697,8 @@ class FincoreAdapter:
         current = 0
 
         for t in trades:
-            pnl = t.get("pnlcomm", 0)
-            if pnl == 0:
+            pnl = self._trade_pnl(t)
+            if pnl is None or pnl == 0:
                 current = 0
                 continue
             is_win = pnl > 0
@@ -740,14 +724,16 @@ class FincoreAdapter:
 
         import numpy as np
 
-        equity_array = np.array(equity_curve)
+        equity_array = np.array(equity_curve, dtype=float)
         peak = equity_array[0]
         max_dd = 0.0
         max_dd_duration = 0
         current_duration = 0
 
-        for value in equity_array:
-            if value > peak:
+        for value in equity_array[1:]:
+            if not np.isfinite(value):
+                continue
+            if not np.isfinite(peak) or value > peak:
                 peak = value
                 current_duration = 0
             else:

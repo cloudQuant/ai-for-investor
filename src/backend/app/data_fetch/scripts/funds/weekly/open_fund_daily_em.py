@@ -267,7 +267,7 @@ class OpenFundDailyEm(AkshareToMySql):
             rows_saved = self.save_open_fund_daily_data(df)
 
             # save_data 返回保存的行数或 False
-            if rows_saved and rows_saved > 0:
+            if rows_saved is not False:
                 self.logger.info(f"成功保存{rows_saved}条开放式基金日净值数据")
                 return True
             else:

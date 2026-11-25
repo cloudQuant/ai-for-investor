@@ -74,3 +74,16 @@ async def test_brinson_api_returns_result(client: AsyncClient):
     assert payload["allocation_effect"] == pytest.approx(0.005)
     assert payload["selection_effect"] == pytest.approx(0.005)
     assert payload["interaction_effect"] == pytest.approx(0.003)
+
+
+def test_brinson_service_degrades_on_non_finite_values():
+    from app.services.perf_attribution.brinson import BrinsonAttributionService
+
+    result = BrinsonAttributionService().calculate(
+        portfolio_weights={"tech": float("nan")},
+        benchmark_weights={"tech": 0.5},
+        portfolio_returns={"tech": 0.1},
+        benchmark_returns={"tech": 0.05},
+    )
+    assert result.status == "degraded"
+    assert result.reason == "non_finite_input"

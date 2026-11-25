@@ -142,4 +142,20 @@ describe('KnowledgeBaseDocumentPage', () => {
     wrapper.unmount()
   })
 
+  it('registers and removes the fullscreenchange listener with the lifecycle', async () => {
+    const addSpy = vi.spyOn(document, 'addEventListener')
+    const removeSpy = vi.spyOn(document, 'removeEventListener')
+    const wrapper = mount(KnowledgeBaseDocumentPage, { global: { stubs: { ...elStubs } } })
+    await flushPromises()
+
+    const addedCall = addSpy.mock.calls.find(([event]) => event === 'fullscreenchange')
+    expect(addedCall).toBeDefined()
+    wrapper.unmount()
+
+    const removedCall = removeSpy.mock.calls.find(([event]) => event === 'fullscreenchange')
+    expect(removedCall?.[1]).toBe(addedCall?.[1])
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+
 })

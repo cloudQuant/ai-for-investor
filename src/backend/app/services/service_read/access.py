@@ -106,12 +106,7 @@ class ReadAccess:
     application_identity: Any = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        required_methods = ("read_account", "read_order", "read_strategy_health")
-        if any(
-            not inspect.iscoroutinefunction(getattr(self.worker, name, None))
-            for name in required_methods
-        ):
-            raise ServiceReadAccessError("INVALID_WORKER")
+        _require_async_methods(self.worker, "read_account", "read_order", "read_strategy_health")
         for name in (
             "allow_account_refs",
             "allow_account_book_refs",
@@ -126,295 +121,104 @@ class ReadAccess:
             "allow_risk_account_policy_refs",
         ):
             object.__setattr__(self, name, _immutable_selectors(getattr(self, name)))
-        if self.allow_account_book_refs and not inspect.iscoroutinefunction(
-            getattr(self.worker, "read_account_book", None)
-        ):
-            raise ServiceReadAccessError("INVALID_WORKER")
-        bindings = self.strategy_book_bindings
-        if not isinstance(bindings, Mapping) or len(bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
-        normalized: dict[str, StrategyBookBinding] = {}
-        for selector, strategy_binding in bindings.items():
-            if not _valid_identifier(selector) or type(strategy_binding) is not StrategyBookBinding:
-                raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
-            normalized[selector] = strategy_binding
-        if normalized and not inspect.iscoroutinefunction(
-            getattr(self.worker, "read_account_book", None)
-        ):
-            raise ServiceReadAccessError("INVALID_WORKER")
-        target_keys = [(item.account_ref, item.owner_ref) for item in normalized.values()]
-        if len(target_keys) != len(set(target_keys)):
-            raise ServiceReadAccessError("DUPLICATE_STRATEGY_BOOK_OWNER")
-        if any(
-            item.account_ref not in self.allow_account_book_refs for item in normalized.values()
-        ):
-            raise ServiceReadAccessError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
-        object.__setattr__(self, "strategy_book_bindings", MappingProxyType(normalized))
-        submit_bindings = self.order_submit_bindings
-        if not isinstance(submit_bindings, Mapping) or len(submit_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_ORDER_SUBMIT_BINDINGS")
-        normalized_submit: dict[str, OrderSubmitBinding] = {}
-        for selector, submit_binding in submit_bindings.items():
-            if (
-                not _valid_identifier(selector)
-                or type(submit_binding) is not OrderSubmitBinding
-                or submit_binding.scope_ref != selector
-            ):
-                raise ServiceReadAccessError("INVALID_ORDER_SUBMIT_BINDINGS")
-            normalized_submit[selector] = submit_binding
-        if set(normalized_submit) != set(self.allow_order_submit_scope_refs):
-            raise ServiceReadAccessError("ORDER_SUBMIT_BINDING_MISMATCH")
-        if normalized_submit:
-            if not inspect.iscoroutinefunction(getattr(self.worker, "submit_manual_order", None)):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-                or (
-                    getattr(identity, "delegate_ref", None) is not None
-                    and not _valid_identifier(identity.delegate_ref)
-                )
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(self, "order_submit_bindings", MappingProxyType(normalized_submit))
+        if self.allow_account_book_refs:
+            _require_async_methods(self.worker, "read_account_book")
 
-        paper_bindings = self.paper_submit_bindings
-        if not isinstance(paper_bindings, Mapping) or len(paper_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
-        normalized_paper: dict[str, PaperSubmitBinding] = {}
-        for selector, paper_submit_binding in paper_bindings.items():
-            if (
-                not _valid_identifier(selector)
-                or type(paper_submit_binding) is not PaperSubmitBinding
-                or paper_submit_binding.legacy_account_id != selector
-                or paper_submit_binding.scope_ref in self.allow_order_submit_scope_refs
-            ):
-                raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
-            normalized_paper[selector] = paper_submit_binding
-        if set(normalized_paper) != set(self.allow_paper_submit_account_ids):
-            raise ServiceReadAccessError("PAPER_SUBMIT_BINDING_MISMATCH")
-        if normalized_paper:
-            if not inspect.iscoroutinefunction(getattr(self.worker, "submit_paper_order", None)):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            if not inspect.iscoroutinefunction(getattr(self.worker, "read_order", None)):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            if any(
-                binding.query_scope_ref not in self.allow_order_scope_refs
-                for binding in normalized_paper.values()
-            ):
-                raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
-            if len({binding.scope_ref for binding in normalized_paper.values()}) != len(
-                normalized_paper
-            ) or len({binding.account_ref for binding in normalized_paper.values()}) != len(
-                normalized_paper
-            ):
-                raise ServiceReadAccessError("DUPLICATE_PAPER_OWNER_DOMAIN")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-                or (
-                    getattr(identity, "delegate_ref", None) is not None
-                    and not _valid_identifier(identity.delegate_ref)
-                )
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(self, "paper_submit_bindings", MappingProxyType(normalized_paper))
-
-        import_bindings = self.paper_legacy_import_bindings
-        if not isinstance(import_bindings, Mapping) or len(import_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_PAPER_LEGACY_IMPORT_BINDINGS")
-        normalized_imports: dict[str, PaperLegacyImportBinding] = {}
-        for selector, import_binding in import_bindings.items():
-            paper_binding = normalized_paper.get(selector)
-            if (
-                not _valid_identifier(selector)
-                or type(import_binding) is not PaperLegacyImportBinding
-                or import_binding.legacy_account_id != selector
-                or paper_binding is None
-                or import_binding.paper_binding is not paper_binding
-            ):
-                raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
-            normalized_imports[selector] = import_binding
-        if set(normalized_imports) != set(self.allow_paper_legacy_import_account_ids):
-            raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_GRANT_MISMATCH")
-        if normalized_imports:
-            if not inspect.iscoroutinefunction(
-                getattr(self.worker, "call_paper_legacy_import", None)
-            ):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            if any(
-                binding.paper_binding.query_scope_ref not in self.allow_order_scope_refs
-                for binding in normalized_imports.values()
-            ):
-                raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(
-            self, "paper_legacy_import_bindings", MappingProxyType(normalized_imports)
+        strategy_bindings = _normalize_strategy_book_bindings(
+            self.strategy_book_bindings, self.allow_account_book_refs, self.worker
         )
+        object.__setattr__(self, "strategy_book_bindings", strategy_bindings)
 
-        approved_bindings = self.approved_target_bindings
-        if not isinstance(approved_bindings, Mapping) or len(approved_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
-        normalized_approved: dict[str, ApprovedTargetSubmitBinding] = {}
-        for selector, approved_binding in approved_bindings.items():
-            if (
-                not _valid_identifier(selector)
-                or type(approved_binding) is not ApprovedTargetSubmitBinding
-                or approved_binding.scope_ref != selector
-            ):
-                raise ServiceReadAccessError("INVALID_APPROVED_TARGET_BINDINGS")
-            normalized_approved[selector] = approved_binding
-        if normalized_approved:
-            if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
-                raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
-            if set(normalized_approved) & set(self.allow_order_submit_scope_refs):
-                raise ServiceReadAccessError("GRANT_BINDING_MISMATCH")
-            if not inspect.iscoroutinefunction(
-                getattr(self.worker, "submit_approved_target", None)
-            ):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-                or (
-                    getattr(identity, "delegate_ref", None) is not None
-                    and not _valid_identifier(identity.delegate_ref)
-                )
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(self, "approved_target_bindings", MappingProxyType(normalized_approved))
-        if set(normalized_approved) != set(self.allow_approved_target_scope_refs):
-            raise ServiceReadAccessError("APPROVED_TARGET_BINDING_MISMATCH")
+        submit_bindings = _normalize_keyed_bindings(
+            self.order_submit_bindings,
+            type_cls=OrderSubmitBinding,
+            key_attr="scope_ref",
+            invalid_code="INVALID_ORDER_SUBMIT_BINDINGS",
+            allow_refs=self.allow_order_submit_scope_refs,
+            mismatch_code="ORDER_SUBMIT_BINDING_MISMATCH",
+            worker=self.worker,
+            required_methods=("submit_manual_order",),
+            identity=self.application_identity,
+        )
+        object.__setattr__(self, "order_submit_bindings", submit_bindings)
 
-        analytics_bindings = self.portfolio_analytics_bindings
-        if not isinstance(analytics_bindings, Mapping) or len(analytics_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
-        normalized_analytics: dict[str, PortfolioAnalyticsBinding] = {}
-        for portfolio_ref, analytics_binding in analytics_bindings.items():
-            if (
-                not _valid_identifier(portfolio_ref)
-                or type(analytics_binding) is not PortfolioAnalyticsBinding
-                or analytics_binding.portfolio_ref != portfolio_ref
-            ):
-                raise ServiceReadAccessError("INVALID_PORTFOLIO_ANALYTICS_BINDINGS")
-            normalized_analytics[portfolio_ref] = analytics_binding
-        if set(normalized_analytics) != set(self.allow_portfolio_refs):
-            raise ServiceReadAccessError("PORTFOLIO_ANALYTICS_BINDING_MISMATCH")
-        if normalized_analytics:
-            required_analytics_methods = (
+        paper_bindings = _normalize_paper_submit_bindings(
+            self.paper_submit_bindings,
+            allow_ids=self.allow_paper_submit_account_ids,
+            order_submit_scopes=self.allow_order_submit_scope_refs,
+            order_query_scopes=self.allow_order_scope_refs,
+            worker=self.worker,
+            identity=self.application_identity,
+        )
+        object.__setattr__(self, "paper_submit_bindings", paper_bindings)
+
+        import_bindings = _normalize_paper_legacy_import_bindings(
+            self.paper_legacy_import_bindings,
+            paper_bindings=paper_bindings,
+            allow_ids=self.allow_paper_legacy_import_account_ids,
+            order_query_scopes=self.allow_order_scope_refs,
+            worker=self.worker,
+            identity=self.application_identity,
+        )
+        object.__setattr__(self, "paper_legacy_import_bindings", import_bindings)
+
+        approved_bindings = _normalize_keyed_bindings(
+            self.approved_target_bindings,
+            type_cls=ApprovedTargetSubmitBinding,
+            key_attr="scope_ref",
+            invalid_code="INVALID_APPROVED_TARGET_BINDINGS",
+            allow_refs=self.allow_approved_target_scope_refs,
+            mismatch_code="APPROVED_TARGET_BINDING_MISMATCH",
+            disjoint_refs=self.allow_order_submit_scope_refs,
+            worker=self.worker,
+            required_methods=("submit_approved_target",),
+            identity=self.application_identity,
+        )
+        object.__setattr__(self, "approved_target_bindings", approved_bindings)
+
+        analytics_bindings = _normalize_keyed_bindings(
+            self.portfolio_analytics_bindings,
+            type_cls=PortfolioAnalyticsBinding,
+            key_attr="portfolio_ref",
+            invalid_code="INVALID_PORTFOLIO_ANALYTICS_BINDINGS",
+            allow_refs=self.allow_portfolio_refs,
+            mismatch_code="PORTFOLIO_ANALYTICS_BINDING_MISMATCH",
+            worker=self.worker,
+            required_methods=(
                 "upload_portfolio_analytics_input",
                 "submit_portfolio_analytics_task",
                 "query_portfolio_analytics_task",
                 "cancel_portfolio_analytics_task",
-            )
-            if any(
-                not inspect.iscoroutinefunction(getattr(self.worker, name, None))
-                for name in required_analytics_methods
-            ):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-                or (
-                    getattr(identity, "delegate_ref", None) is not None
-                    and not _valid_identifier(identity.delegate_ref)
-                )
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(
-            self, "portfolio_analytics_bindings", MappingProxyType(normalized_analytics)
+            ),
+            identity=self.application_identity,
         )
+        object.__setattr__(self, "portfolio_analytics_bindings", analytics_bindings)
 
-        budget_bindings = self.risk_policy_budget_bindings
-        if not isinstance(budget_bindings, Mapping) or len(budget_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
-        normalized_budgets: dict[str, RiskPolicyBudgetBinding] = {}
-        for portfolio_ref, budget_binding in budget_bindings.items():
-            if (
-                not _valid_identifier(portfolio_ref)
-                or type(budget_binding) is not RiskPolicyBudgetBinding
-                or budget_binding.portfolio_ref != portfolio_ref
-            ):
-                raise ServiceReadAccessError("INVALID_RISK_POLICY_BUDGET_BINDINGS")
-            normalized_budgets[portfolio_ref] = budget_binding
-        if set(normalized_budgets) != set(self.allow_risk_policy_budget_refs):
-            raise ServiceReadAccessError("RISK_POLICY_BUDGET_BINDING_MISMATCH")
-        if normalized_budgets:
-            if not inspect.iscoroutinefunction(
-                getattr(self.worker, "call_risk_policy_budget", None)
-            ):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-                or (
-                    getattr(identity, "delegate_ref", None) is not None
-                    and not _valid_identifier(identity.delegate_ref)
-                )
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(
-            self, "risk_policy_budget_bindings", MappingProxyType(normalized_budgets)
+        budget_bindings = _normalize_keyed_bindings(
+            self.risk_policy_budget_bindings,
+            type_cls=RiskPolicyBudgetBinding,
+            key_attr="portfolio_ref",
+            invalid_code="INVALID_RISK_POLICY_BUDGET_BINDINGS",
+            allow_refs=self.allow_risk_policy_budget_refs,
+            mismatch_code="RISK_POLICY_BUDGET_BINDING_MISMATCH",
+            worker=self.worker,
+            required_methods=("call_risk_policy_budget",),
+            identity=self.application_identity,
         )
+        object.__setattr__(self, "risk_policy_budget_bindings", budget_bindings)
 
-        account_policy_bindings = self.risk_account_policy_bindings
-        if not isinstance(account_policy_bindings, Mapping) or len(account_policy_bindings) > 4096:
-            raise ServiceReadAccessError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
-        normalized_account_policies: dict[str, RiskAccountPolicyBinding] = {}
-        for account_ref, policy_binding in account_policy_bindings.items():
-            if (
-                not _valid_identifier(account_ref)
-                or type(policy_binding) is not RiskAccountPolicyBinding
-                or policy_binding.account_ref != account_ref
-            ):
-                raise ServiceReadAccessError("INVALID_RISK_ACCOUNT_POLICY_BINDINGS")
-            normalized_account_policies[account_ref] = policy_binding
-        if set(normalized_account_policies) != set(self.allow_risk_account_policy_refs):
-            raise ServiceReadAccessError("RISK_ACCOUNT_POLICY_BINDING_MISMATCH")
-        if normalized_account_policies:
-            if not inspect.iscoroutinefunction(
-                getattr(self.worker, "call_risk_account_policy", None)
-            ):
-                raise ServiceReadAccessError("INVALID_WORKER")
-            identity = self.application_identity
-            role_value = getattr(getattr(identity, "role", None), "value", None)
-            if (
-                role_value != "application_client"
-                or not _valid_identifier(getattr(identity, "principal_ref", None))
-                or not _valid_identifier(getattr(identity, "actor_ref", None))
-                or (
-                    getattr(identity, "delegate_ref", None) is not None
-                    and not _valid_identifier(identity.delegate_ref)
-                )
-            ):
-                raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
-        object.__setattr__(
-            self,
-            "risk_account_policy_bindings",
-            MappingProxyType(normalized_account_policies),
+        account_policy_bindings = _normalize_keyed_bindings(
+            self.risk_account_policy_bindings,
+            type_cls=RiskAccountPolicyBinding,
+            key_attr="account_ref",
+            invalid_code="INVALID_RISK_ACCOUNT_POLICY_BINDINGS",
+            allow_refs=self.allow_risk_account_policy_refs,
+            mismatch_code="RISK_ACCOUNT_POLICY_BINDING_MISMATCH",
+            worker=self.worker,
+            required_methods=("call_risk_account_policy",),
+            identity=self.application_identity,
         )
+        object.__setattr__(self, "risk_account_policy_bindings", account_policy_bindings)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -583,6 +387,151 @@ class ServiceReadAccessDirectory:
         if access is None or selector not in getattr(access, grant_field):
             raise ServiceReadAccessError("ACCESS_DENIED")
         return access
+
+
+def _require_async_methods(worker: Any, *method_names: str) -> None:
+    if any(not inspect.iscoroutinefunction(getattr(worker, name, None)) for name in method_names):
+        raise ServiceReadAccessError("INVALID_WORKER")
+
+
+def _require_application_identity(identity: Any, *, check_delegate: bool = True) -> None:
+    role_value = getattr(getattr(identity, "role", None), "value", None)
+    invalid_delegate = (
+        check_delegate
+        and getattr(identity, "delegate_ref", None) is not None
+        and not _valid_identifier(identity.delegate_ref)
+    )
+    if (
+        role_value != "application_client"
+        or not _valid_identifier(getattr(identity, "principal_ref", None))
+        or not _valid_identifier(getattr(identity, "actor_ref", None))
+        or invalid_delegate
+    ):
+        raise ServiceReadAccessError("INVALID_APPLICATION_IDENTITY")
+
+
+def _normalize_strategy_book_bindings(
+    bindings: Any, allow_account_book_refs: frozenset[str], worker: Any
+) -> Mapping[str, StrategyBookBinding]:
+    if not isinstance(bindings, Mapping) or len(bindings) > 4096:
+        raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
+    normalized: dict[str, StrategyBookBinding] = {}
+    for selector, strategy_binding in bindings.items():
+        if not _valid_identifier(selector) or type(strategy_binding) is not StrategyBookBinding:
+            raise ServiceReadAccessError("INVALID_STRATEGY_BOOK_BINDINGS")
+        normalized[selector] = strategy_binding
+    if normalized:
+        _require_async_methods(worker, "read_account_book")
+    target_keys = [(item.account_ref, item.owner_ref) for item in normalized.values()]
+    if len(target_keys) != len(set(target_keys)):
+        raise ServiceReadAccessError("DUPLICATE_STRATEGY_BOOK_OWNER")
+    if any(item.account_ref not in allow_account_book_refs for item in normalized.values()):
+        raise ServiceReadAccessError("STRATEGY_BOOK_ACCOUNT_NOT_GRANTED")
+    return MappingProxyType(normalized)
+
+
+def _normalize_keyed_bindings(
+    bindings: Any,
+    *,
+    type_cls: type[Any],
+    key_attr: str,
+    invalid_code: str,
+    allow_refs: frozenset[str],
+    mismatch_code: str,
+    worker: Any,
+    required_methods: tuple[str, ...],
+    identity: Any,
+    disjoint_refs: frozenset[str] = frozenset(),
+) -> Mapping[str, Any]:
+    if not isinstance(bindings, Mapping) or len(bindings) > 4096:
+        raise ServiceReadAccessError(invalid_code)
+    normalized: dict[str, Any] = {}
+    for selector, item in bindings.items():
+        if (
+            not _valid_identifier(selector)
+            or type(item) is not type_cls
+            or getattr(item, key_attr) != selector
+        ):
+            raise ServiceReadAccessError(invalid_code)
+        normalized[selector] = item
+    if set(normalized) != set(allow_refs):
+        raise ServiceReadAccessError(mismatch_code)
+    if normalized:
+        if disjoint_refs and (set(normalized) & set(disjoint_refs)):
+            raise ServiceReadAccessError("GRANT_BINDING_MISMATCH")
+        _require_async_methods(worker, *required_methods)
+        _require_application_identity(identity)
+    return MappingProxyType(normalized)
+
+
+def _normalize_paper_submit_bindings(
+    bindings: Any,
+    *,
+    allow_ids: frozenset[str],
+    order_submit_scopes: frozenset[str],
+    order_query_scopes: frozenset[str],
+    worker: Any,
+    identity: Any,
+) -> Mapping[str, PaperSubmitBinding]:
+    if not isinstance(bindings, Mapping) or len(bindings) > 4096:
+        raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
+    normalized: dict[str, PaperSubmitBinding] = {}
+    for selector, binding in bindings.items():
+        if (
+            not _valid_identifier(selector)
+            or type(binding) is not PaperSubmitBinding
+            or binding.legacy_account_id != selector
+            or binding.scope_ref in order_submit_scopes
+        ):
+            raise ServiceReadAccessError("INVALID_PAPER_SUBMIT_BINDINGS")
+        normalized[selector] = binding
+    if set(normalized) != set(allow_ids):
+        raise ServiceReadAccessError("PAPER_SUBMIT_BINDING_MISMATCH")
+    if normalized:
+        _require_async_methods(worker, "submit_paper_order", "read_order")
+        if any(b.query_scope_ref not in order_query_scopes for b in normalized.values()):
+            raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
+        if len({b.scope_ref for b in normalized.values()}) != len(normalized) or len(
+            {b.account_ref for b in normalized.values()}
+        ) != len(normalized):
+            raise ServiceReadAccessError("DUPLICATE_PAPER_OWNER_DOMAIN")
+        _require_application_identity(identity)
+    return MappingProxyType(normalized)
+
+
+def _normalize_paper_legacy_import_bindings(
+    bindings: Any,
+    *,
+    paper_bindings: Mapping[str, PaperSubmitBinding],
+    allow_ids: frozenset[str],
+    order_query_scopes: frozenset[str],
+    worker: Any,
+    identity: Any,
+) -> Mapping[str, PaperLegacyImportBinding]:
+    if not isinstance(bindings, Mapping) or len(bindings) > 4096:
+        raise ServiceReadAccessError("INVALID_PAPER_LEGACY_IMPORT_BINDINGS")
+    normalized: dict[str, PaperLegacyImportBinding] = {}
+    for selector, binding in bindings.items():
+        paper_binding = paper_bindings.get(selector)
+        if (
+            not _valid_identifier(selector)
+            or type(binding) is not PaperLegacyImportBinding
+            or binding.legacy_account_id != selector
+            or paper_binding is None
+            or binding.paper_binding is not paper_binding
+        ):
+            raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_BINDING_MISMATCH")
+        normalized[selector] = binding
+    if set(normalized) != set(allow_ids):
+        raise ServiceReadAccessError("PAPER_LEGACY_IMPORT_GRANT_MISMATCH")
+    if normalized:
+        _require_async_methods(worker, "call_paper_legacy_import")
+        if any(
+            b.paper_binding.query_scope_ref not in order_query_scopes for b in normalized.values()
+        ):
+            raise ServiceReadAccessError("PAPER_QUERY_SCOPE_NOT_GRANTED")
+        _require_application_identity(identity, check_delegate=False)
+    return MappingProxyType(normalized)
 
 
 def _immutable_selectors(value: object) -> frozenset[str]:

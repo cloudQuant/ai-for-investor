@@ -238,7 +238,7 @@ def test_manual_order_profile_requests_only_normal_submit_operation():
             lambda profile: profile["order_submit_bindings"]["manual-current"].update(
                 operations=["orders.cancel"]
             ),
-            "INVALID_DEPLOYMENT",
+            "INVALID_ORDER_SUBMIT_BINDINGS",
         ),
     ),
 )

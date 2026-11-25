@@ -311,10 +311,8 @@ def _validate_persisted_close_target(
     return target
 
 
-def _validate_owner_reply(
-    value: object, intent_id: str, *, approved_quantity: object
-) -> dict[str, Any]:
-    fields = {
+_REDUCTION_OUTCOME_FIELDS = frozenset(
+    {
         "schema_id",
         "schema_version",
         "intent_id",
@@ -326,13 +324,27 @@ def _validate_owner_reply(
         "review_required",
         "reason_code",
     }
+)
+_REDUCTION_STATUS_OUTCOMES = {
+    "NOT_DISPATCHED": "not_dispatched",
+    "PENDING": "pending",
+    "PARTIAL": "partial",
+    "FILLED": "filled",
+    "TERMINAL": "terminal",
+    "UNKNOWN": "unknown_review_required",
+}
+
+
+def _parse_reduction_outcome(
+    value: object, intent_id: str, approved_quantity: object
+) -> Mapping[str, Any] | None:
     if (
         not isinstance(value, Mapping)
         or set(value) != {"ok", "code", "result"}
         or value.get("ok") is not True
         or value.get("code") != "OK"
     ):
-        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
+        return None
     result = value.get("result")
     outcome = (
         result.get("reduction")
@@ -341,13 +353,12 @@ def _validate_owner_reply(
     )
     if (
         not isinstance(outcome, Mapping)
-        or set(outcome) != fields
+        or set(outcome) != _REDUCTION_OUTCOME_FIELDS
         or outcome.get("schema_id") != "bt_api.owner_strategy_reduction_outcome"
         or type(outcome.get("schema_version")) is not int
         or outcome.get("schema_version") != 1
         or outcome.get("intent_id") != intent_id
-        or outcome.get("status")
-        not in {"NOT_DISPATCHED", "PENDING", "PARTIAL", "FILLED", "TERMINAL", "UNKNOWN"}
+        or outcome.get("status") not in _REDUCTION_STATUS_OUTCOMES
         or outcome.get("stage") not in {"AUTHORITY", "EXECUTION"}
         or type(outcome.get("is_terminal")) is not bool
         or type(outcome.get("review_required")) is not bool
@@ -358,28 +369,27 @@ def _validate_owner_reply(
         or type(approved_quantity) is not str
         or not _DECIMAL_RE.fullmatch(approved_quantity)
     ):
-        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
-    state = outcome.get("execution_state")
-    if state is not None and (type(state) is not str or state not in _EXECUTION_STATES):
-        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
-    status_text = str(outcome["status"])
+        return None
+    return outcome
+
+
+def _reduction_state_consistent(
+    outcome: Mapping[str, Any], state: str | None, status_text: str
+) -> bool:
     expected_terminal = state in _TERMINAL_STATES if state is not None else False
-    expected_status = (
-        (
-            "FILLED"
-            if state == "FILLED"
-            else "PARTIAL"
-            if state == "PARTIALLY_FILLED"
-            else "UNKNOWN"
-            if state == "UNKNOWN"
-            else "TERMINAL"
-            if state in _TERMINAL_STATES
-            else "PENDING"
-        )
-        if state is not None
-        else status_text
-    )
-    if (
+    if state is None:
+        expected_status = status_text
+    elif state == "FILLED":
+        expected_status = "FILLED"
+    elif state == "PARTIALLY_FILLED":
+        expected_status = "PARTIAL"
+    elif state == "UNKNOWN":
+        expected_status = "UNKNOWN"
+    elif state in _TERMINAL_STATES:
+        expected_status = "TERMINAL"
+    else:
+        expected_status = "PENDING"
+    return not (
         outcome["is_terminal"] is not expected_terminal
         or status_text != expected_status
         or (state is not None and outcome["stage"] != "EXECUTION")
@@ -391,14 +401,18 @@ def _validate_owner_reply(
             status_text == "NOT_DISPATCHED"
             and (outcome["review_required"] or outcome["filled_quantity"] != "0")
         )
-    ):
-        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
+    )
+
+
+def _reduction_quantities_valid(
+    filled_text: str, approved_quantity: object, status_text: str
+) -> bool:
     try:
-        filled = Decimal(outcome["filled_quantity"])
-        maximum = Decimal(approved_quantity)
+        filled = Decimal(filled_text)
+        maximum = Decimal(str(approved_quantity))
     except (InvalidOperation, ValueError):
-        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
-    if (
+        return False
+    return not (
         not filled.is_finite()
         or not maximum.is_finite()
         or maximum <= 0
@@ -406,19 +420,27 @@ def _validate_owner_reply(
         or filled > maximum
         or (status_text == "FILLED" and filled != maximum)
         or (status_text == "PARTIAL" and not Decimal(0) < filled < maximum)
-    ):
+    )
+
+
+def _validate_owner_reply(
+    value: object, intent_id: str, *, approved_quantity: object
+) -> dict[str, Any]:
+    outcome = _parse_reduction_outcome(value, intent_id, approved_quantity)
+    if outcome is None:
+        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
+    state = outcome.get("execution_state")
+    if state is not None and (type(state) is not str or state not in _EXECUTION_STATES):
+        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
+    status_text = str(outcome["status"])
+    if not _reduction_state_consistent(outcome, state, status_text):
+        return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
+    if not _reduction_quantities_valid(outcome["filled_quantity"], approved_quantity, status_text):
         return _unknown_projection(intent_id, "OWNER_REPLY_INVALID")
     return {
         "operation_kind": "owner_strategy_reduction",
         "intent_id": intent_id,
-        "outcome": {
-            "NOT_DISPATCHED": "not_dispatched",
-            "PENDING": "pending",
-            "PARTIAL": "partial",
-            "FILLED": "filled",
-            "TERMINAL": "terminal",
-            "UNKNOWN": "unknown_review_required",
-        }[status_text],
+        "outcome": _REDUCTION_STATUS_OUTCOMES[status_text],
         "execution": dict(outcome),
         "flatness": "not_established",
         "authority": "Execution order result for the approved target; not a position or account flatness claim",

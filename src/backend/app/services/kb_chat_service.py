@@ -1,6 +1,5 @@
 """KB chat service for iteration 129."""
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +12,7 @@ from app.schemas.kb_chat import ConversationCreate, KBChatRequest
 from app.services.rag_service import RAGService
 from app.services.stock_analysis.tasks import StockAnalysisTaskService
 from app.services.strategy_service import build_ai_strategy_draft, render_ai_strategy_draft_answer
+from app.utils.async_tasks import spawn_tracked_task
 from app.utils.datetime_utils import utc_now_naive
 from app.utils.knowledge_base_settings import merge_knowledge_base_settings
 
@@ -579,8 +579,9 @@ class KBChatService:
             await session.flush()
             task.assistant_message_id = assistant_message.id
             await session.commit()
-            asyncio.create_task(
-                StockAnalysisTaskService.run_pending_task(task_id=task.id, user_id=user_id)
+            spawn_tracked_task(
+                StockAnalysisTaskService.run_pending_task(task_id=task.id, user_id=user_id),
+                name=f"kb-stock-analysis:{task.id}",
             )
 
             return {

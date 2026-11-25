@@ -512,6 +512,7 @@ import { useI18n } from 'vue-i18n'
 import { Document, Filter, Link, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { marketIntelApi, type NewsArticleItem } from '@/api/marketIntel'
 import { formatNewsArticleMeta } from '@/utils/newsArticleFormat'
+import { openSafeExternalUrl } from '@/utils/url'
 
 const { t } = useI18n()
 
@@ -797,9 +798,7 @@ async function showArticleContent(article: NewsArticleItem) {
 }
 
 function openArticle(article: NewsArticleItem) {
-  const articleUrl = String(article.url || '').trim()
-  if (!articleUrl) return
-  window.open(articleUrl, '_blank', 'noopener,noreferrer')
+  openSafeExternalUrl(article.url)
 }
 
 function displayValue(value: unknown) {

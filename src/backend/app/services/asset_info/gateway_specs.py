@@ -99,8 +99,10 @@ def _query_local_futures_spec(symbol: str) -> dict[str, Any]:
         if connection is not None:
             try:
                 connection.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                from app.utils.invariants import log_suppressed
+
+                log_suppressed(__name__, "MySQL connection cleanup failed", exc)
     return {}
 
 

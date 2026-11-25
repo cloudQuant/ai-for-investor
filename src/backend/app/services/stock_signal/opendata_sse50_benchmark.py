@@ -16,6 +16,7 @@ from app.services.market_data.opendata_credentials import (
     OpendataCredentials,
     OpendataCredentialsError,
 )
+from app.utils.invariants import require_present
 
 _ROUTE = "/api/v1/data/index/index_daily"
 _SYMBOL = "000016"
@@ -168,9 +169,9 @@ class OpenDataSse50BenchmarkReader:
 
     def _endpoint_url(self) -> str:
         """Validate the configured origin before joining a fixed route."""
-        assert self._credentials is not None
+        credentials = require_present(self._credentials, "opendata credentials missing")
         try:
-            base_url = self._credentials.base_url
+            base_url = credentials.base_url
             parsed = urlsplit(base_url)
             hostname = parsed.hostname
             _ = parsed.port
@@ -265,7 +266,7 @@ class OpenDataSse50BenchmarkReader:
         remaining: float,
     ) -> tuple[Mapping[str, Any], int]:
         """Stream and validate one response without forwarding credentials."""
-        assert self._credentials is not None
+        credentials = require_present(self._credentials, "opendata credentials missing")
         body = bytearray()
         try:
             async with client.stream(
@@ -275,7 +276,7 @@ class OpenDataSse50BenchmarkReader:
                 headers={
                     "Accept": "application/json",
                     "Accept-Encoding": "identity",
-                    "X-API-Key": self._credentials.api_key,
+                    "X-API-Key": credentials.api_key,
                 },
                 timeout=min(self._timeout_seconds, remaining),
                 follow_redirects=False,

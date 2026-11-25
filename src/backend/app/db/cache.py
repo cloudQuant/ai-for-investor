@@ -241,3 +241,12 @@ def get_cache() -> RedisCache | MemoryCache:
             _cache_instance = MemoryCache()
 
     return _cache_instance
+
+
+async def close_cache() -> None:
+    """Close the initialized cache backend if it holds external connections."""
+    global _cache_instance
+    instance = _cache_instance
+    _cache_instance = None
+    if isinstance(instance, RedisCache):
+        await instance.redis.aclose()

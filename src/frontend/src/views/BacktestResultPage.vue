@@ -491,6 +491,7 @@ import { ElMessage } from 'element-plus'
 import { Loading, CircleCloseFilled, Download, Back, Close, FolderOpened } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { getErrorMessage } from '@/api'
+import { buildSafeFileUrl } from '@/utils/url'
 import ResearchWorkflowGuide from '@/components/research/ResearchWorkflowGuide.vue'
 import { APP_PATHS } from '@/navigation/routes'
 import type { ResearchWorkflowStep } from '@/types/researchWorkflow'
@@ -581,21 +582,16 @@ const {
   currentResult: overfittingTask,
 })
 
-onMounted(() => {
-  loadData()
-})
+let loadGeneration = 0
+let isUnmounted = false
 
-onUnmounted(() => {
-  disposeOverfittingRuntime()
-})
-
+onMounted(() => { void loadData() })
+onUnmounted(() => { isUnmounted = true; loadGeneration += 1; disposeOverfittingRuntime() })
+watch(taskId, () => { void loadData() })
 watch(activeTab, (tab) => {
   if (!detail.value) return
-  if (tab === 'kline') {
-    void ensureKlineData()
-  } else if (tab === 'analysis') {
-    void ensureMonthlyReturns()
-  }
+  if (tab === 'kline') void ensureKlineData()
+  else if (tab === 'analysis') void ensureMonthlyReturns()
 })
 
 const resultStatusLabel = computed(() => {
@@ -850,98 +846,77 @@ function handleMobileDiagnosticsKeydown(event: KeyboardEvent) {
 }
 
 async function loadData() {
+  const gen = ++loadGeneration
   stopOverfittingRuntime()
-  loading.value = true
-  error.value = null
-  strategyScore.value = null
-  strategyExplanation.value = null
-  overfittingTask.value = null
-  backtestSummary.value = null
-  robustnessResult.value = null
-  klineData.value = null
-  monthlyReturns.value = null
-
+  loading.value = true; error.value = null; strategyScore.value = null; strategyExplanation.value = null
+  overfittingTask.value = null; backtestSummary.value = null; robustnessResult.value = null
+  klineData.value = null; monthlyReturns.value = null
+  const currentTaskId = taskId.value
   const summaryRequest = isOptimizationArtifactMode.value
     ? Promise.resolve()
-    : loadBacktestTrustSnapshot()
-
+    : loadBacktestTrustSnapshot(currentTaskId, gen)
   try {
-    let detailRes: BacktestDetailResponse
-
-    if (isOptimizationArtifactMode.value && workspaceId.value && optimizationUnitId.value && optimizationResultIndex.value !== null) {
-      detailRes = await workspaceApi.getOptimizationResultDetail(workspaceId.value, optimizationUnitId.value, optimizationResultIndex.value)
-    } else {
-      detailRes = await analyticsApi.getBacktestDetail(taskId.value)
-    }
-
+    const detailRes = (isOptimizationArtifactMode.value && workspaceId.value && optimizationUnitId.value && optimizationResultIndex.value !== null)
+      ? await workspaceApi.getOptimizationResultDetail(workspaceId.value, optimizationUnitId.value, optimizationResultIndex.value)
+      : await analyticsApi.getBacktestDetail(currentTaskId)
+    if (isUnmounted || gen !== loadGeneration) return
     detail.value = strategyNameFromQuery.value
       ? { ...detailRes, strategy_name: strategyNameFromQuery.value }
       : detailRes
-
-    if (!isOptimizationArtifactMode.value) {
-      void loadDiagnostics()
-    }
-    if (activeTab.value === 'kline') {
-      void ensureKlineData()
-    } else if (activeTab.value === 'analysis') {
-      void ensureMonthlyReturns()
-    }
-
+    if (!isOptimizationArtifactMode.value) void loadDiagnostics(currentTaskId, gen)
+    if (activeTab.value === 'kline') void ensureKlineData()
+    else if (activeTab.value === 'analysis') void ensureMonthlyReturns()
   } catch (e: unknown) {
-    error.value = getErrorMessage(e, t('backtest.loadFailed'))
+    if (!isUnmounted && gen === loadGeneration) error.value = getErrorMessage(e, t('backtest.loadFailed'))
   } finally {
-    loading.value = false
+    if (!isUnmounted && gen === loadGeneration) loading.value = false
     await summaryRequest
   }
 }
 
-async function loadBacktestTrustSnapshot() {
+async function loadBacktestTrustSnapshot(id = taskId.value, gen = loadGeneration) {
   try {
-    backtestSummary.value = await backtestApi.getSummary(taskId.value)
+    const summary = await backtestApi.getSummary(id)
+    if (!isUnmounted && gen === loadGeneration) backtestSummary.value = summary
   } catch {
-    backtestSummary.value = null
+    if (!isUnmounted && gen === loadGeneration) backtestSummary.value = null
   }
 }
 
 async function ensureKlineData() {
   if (klineData.value) return
+  const gen = loadGeneration
   try {
-    if (isOptimizationArtifactMode.value && workspaceId.value && optimizationUnitId.value && optimizationResultIndex.value !== null) {
-      klineData.value = await workspaceApi.getOptimizationResultKline(
-        workspaceId.value,
-        optimizationUnitId.value,
-        optimizationResultIndex.value,
-      )
-      return
-    }
-    klineData.value = await analyticsApi.getKlineWithSignals(taskId.value)
+    const res = (isOptimizationArtifactMode.value && workspaceId.value && optimizationUnitId.value && optimizationResultIndex.value !== null)
+      ? await workspaceApi.getOptimizationResultKline(workspaceId.value, optimizationUnitId.value, optimizationResultIndex.value)
+      : await analyticsApi.getKlineWithSignals(taskId.value)
+    if (!isUnmounted && gen === loadGeneration) klineData.value = res
   } catch {
-    klineData.value = { symbol: detail.value?.symbol || '', klines: [], signals: [], indicators: {} }
+    if (!isUnmounted && gen === loadGeneration) {
+      klineData.value = { symbol: detail.value?.symbol || '', klines: [], signals: [], indicators: {} }
+    }
   }
 }
 
 async function ensureMonthlyReturns() {
   if (monthlyReturns.value) return
+  const gen = loadGeneration
   try {
-    if (isOptimizationArtifactMode.value && workspaceId.value && optimizationUnitId.value && optimizationResultIndex.value !== null) {
-      monthlyReturns.value = await workspaceApi.getOptimizationResultMonthlyReturns(
-        workspaceId.value,
-        optimizationUnitId.value,
-        optimizationResultIndex.value,
-      )
-      return
-    }
-    monthlyReturns.value = await analyticsApi.getMonthlyReturns(taskId.value)
+    const res = (isOptimizationArtifactMode.value && workspaceId.value && optimizationUnitId.value && optimizationResultIndex.value !== null)
+      ? await workspaceApi.getOptimizationResultMonthlyReturns(workspaceId.value, optimizationUnitId.value, optimizationResultIndex.value)
+      : await analyticsApi.getMonthlyReturns(taskId.value)
+    if (!isUnmounted && gen === loadGeneration) monthlyReturns.value = res
   } catch {
-    monthlyReturns.value = { returns: [], years: [], summary: {} }
+    if (!isUnmounted && gen === loadGeneration) monthlyReturns.value = { returns: [], years: [], summary: {} }
   }
 }
 
-async function loadDiagnostics() {
+async function loadDiagnostics(id = taskId.value, gen = loadGeneration) {
   const [scoreRes, explanationRes] = await Promise.all([
-    strategyApi.createScore({ backtest_id: taskId.value }).catch(() => null),
-    strategyApi.explainStrategy({ backtest_id: taskId.value }).catch(() => null),
+    strategyApi.createScore({ backtest_id: id }).catch(() => null),
+    strategyApi.explainStrategy({ backtest_id: id }).catch(() => null),
   ])
+  if (isUnmounted || gen !== loadGeneration) return
   strategyScore.value = scoreRes
   strategyExplanation.value = explanationRes
 }
@@ -992,37 +967,34 @@ function handleExport(format: 'csv' | 'json') {
 
 async function handleOpenArtifactDir() {
   if (!workspaceId.value || !optimizationUnitId.value || optimizationResultIndex.value === null) return
-  let artifactPath = detail.value?.artifact_path || null
-  if (!artifactPath) {
-    const artifact = await workspaceApi.getOptimizationResultArtifact(
-      workspaceId.value,
-      optimizationUnitId.value,
-      optimizationResultIndex.value,
-    )
-    artifactPath = artifact.artifact_path
-  }
-  if (!artifactPath) {
-    ElMessage.warning(t('backtest.artifactNotFound'))
-    return
-  }
   try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(artifactPath)
+    let artifactPath = detail.value?.artifact_path || null
+    if (!artifactPath) {
+      const artifact = await workspaceApi.getOptimizationResultArtifact(workspaceId.value, optimizationUnitId.value, optimizationResultIndex.value)
+      artifactPath = artifact.artifact_path
     }
-  } catch {
-    // Silently ignore clipboard errors
+    const safeFileUrl = buildSafeFileUrl(artifactPath)
+    if (!safeFileUrl) {
+      ElMessage.warning(t('backtest.artifactNotFound'))
+      return
+    }
+    if (navigator.clipboard?.writeText && artifactPath) {
+      await navigator.clipboard.writeText(artifactPath).catch(() => {})
+    }
+    window.open(safeFileUrl, '_blank', 'noopener,noreferrer')
+    ElMessage.success(t('backtest.artifactOpened'))
+  } catch (e: unknown) {
+    ElMessage.error(getErrorMessage(e, t('backtest.artifactNotFound')))
   }
-  window.open(`file://${encodeURI(artifactPath.replace(/\\/g, '/'))}`, '_blank', 'noopener')
-  ElMessage.success(t('backtest.artifactOpened'))
 }
 
 async function handleDownloadArtifact() {
   if (!workspaceId.value || !optimizationUnitId.value || optimizationResultIndex.value === null) return
-  await workspaceApi.downloadOptimizationResultArtifact(
-    workspaceId.value,
-    optimizationUnitId.value,
-    optimizationResultIndex.value,
-  )
+  try {
+    await workspaceApi.downloadOptimizationResultArtifact(workspaceId.value, optimizationUnitId.value, optimizationResultIndex.value)
+  } catch (e: unknown) {
+    ElMessage.error(getErrorMessage(e, t('backtest.loadFailed')))
+  }
 }
 
 function handleBack() {

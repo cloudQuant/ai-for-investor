@@ -36,6 +36,7 @@ from app.models.portfolio_ledger import (  # noqa: E402
     PortfolioLedgerModel,
 )
 from app.models.strategy_approval_authority import StrategyApprovalAuthorityEpoch  # noqa: E402
+from app.models.user import User  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 from app.services.asset_research.data import canonical_json_hash  # noqa: E402
 from app.services.portfolio_composition import _public_financial_projection  # noqa: E402
@@ -306,9 +307,20 @@ def test_financial_projection_reaches_composition_http_response():
             poolclass=StaticPool,
         )
         async with engine.begin() as connection:
+            await connection.run_sync(User.__table__.create)
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
         async with session_maker() as db:
+            db.add(
+                User(
+                    id=owner.sub,
+                    username=owner.sub,
+                    email=f"{owner.sub}@example.com",
+                    hashed_password="x",
+                    is_active=True,
+                    principal_kind="HUMAN",
+                )
+            )
             db.add(
                 PortfolioCompositionVersion(
                     owner_subject=owner.sub,
@@ -528,9 +540,20 @@ def test_provider_observations_reach_live_composition_http_without_fx_or_account
             poolclass=StaticPool,
         )
         async with engine.begin() as connection:
+            await connection.run_sync(User.__table__.create)
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
         async with session_maker() as db:
+            db.add(
+                User(
+                    id=owner.sub,
+                    username=owner.sub,
+                    email=f"{owner.sub}@example.com",
+                    hashed_password="x",
+                    is_active=True,
+                    principal_kind="HUMAN",
+                )
+            )
             db.add(
                 PortfolioCompositionVersion(
                     owner_subject=owner.sub,
@@ -609,10 +632,27 @@ def test_provider_observations_reach_live_composition_http_without_fx_or_account
                 "native_symbol": "NO-MARK/EUR",
             }
             assert account_a["positions"][1]["valuation_inputs"] == {
-                "mark_price": {"status": "missing", "value": None},
-                "contract_multiplier": {"status": "unsupported", "value": None},
-                "fx_rate": {"status": "unsupported", "value": None},
-                "market_value": {"status": "not_calculated", "value": None},
+                "status": "unsupported",
+                "mark_price": {
+                    "code": "VALUATION_BINDING_NOT_CONFIGURED",
+                    "status": "unsupported",
+                    "value": None,
+                },
+                "contract_multiplier": {
+                    "code": "VALUATION_BINDING_NOT_CONFIGURED",
+                    "status": "unsupported",
+                    "value": None,
+                },
+                "fx_rate": {
+                    "code": "VALUATION_BINDING_NOT_CONFIGURED",
+                    "status": "unsupported",
+                    "value": None,
+                },
+                "market_value": {
+                    "code": "AFI04_VALUATION_NOT_CALCULATED",
+                    "status": "not_calculated",
+                    "value": None,
+                },
             }
             consistency = projected["provider_snapshot_consistency"]
             assert consistency["cut_model"] == "independent_provider_observation_per_account"
@@ -659,6 +699,7 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
             poolclass=StaticPool,
         )
         async with engine.begin() as connection:
+            await connection.run_sync(User.__table__.create)
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
             await connection.run_sync(StrategyApprovalAuthorityEpoch.__table__.create)
             await connection.run_sync(AssetAnalysisTask.__table__.create)
@@ -750,7 +791,30 @@ def test_composition_membership_versions_and_live_overview_projection(monkeypatc
         corrupt_report.content_hash = "0" * 64
         async with session_maker() as source_db:
             source_db.add_all(
-                [owner_task, owner_report, other_task, other_report, corrupt_task, corrupt_report]
+                [
+                    User(
+                        id="owner-a",
+                        username="owner-a",
+                        email="owner-a@example.com",
+                        hashed_password="x",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                    User(
+                        id="owner-b",
+                        username="owner-b",
+                        email="owner-b@example.com",
+                        hashed_password="x",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                    owner_task,
+                    owner_report,
+                    other_task,
+                    other_report,
+                    corrupt_task,
+                    corrupt_report,
+                ]
             )
             await source_db.commit()
             report_count_before_projection = await source_db.scalar(
@@ -1258,6 +1322,7 @@ def test_live_composition_scope_denial_is_private_and_does_not_write():
             poolclass=StaticPool,
         )
         async with engine.begin() as connection:
+            await connection.run_sync(User.__table__.create)
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -1276,6 +1341,26 @@ def test_live_composition_scope_denial_is_private_and_does_not_write():
             )
 
         async with session_maker() as session:
+            session.add_all(
+                [
+                    User(
+                        id=owner_a.sub,
+                        username=owner_a.username,
+                        email=f"{owner_a.sub}@example.com",
+                        hashed_password="x",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                    User(
+                        id=owner_b.sub,
+                        username=owner_b.username,
+                        email=f"{owner_b.sub}@example.com",
+                        hashed_password="x",
+                        is_active=True,
+                        principal_kind="HUMAN",
+                    ),
+                ]
+            )
             session.add(
                 PortfolioCompositionVersion(
                     owner_subject=owner_a.sub,

@@ -124,7 +124,6 @@ from app.api.portfolio.position_aggregation import (
     _snapshot_positions_for_portfolio as _snapshot_positions_for_portfolio,
 )
 from app.db.database import async_session_maker, get_db
-from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.workspace import StrategyUnit, Workspace
 from app.services import workspace_unit_runtime
 from app.services.live_trading_manager import LiveTradingManager, get_live_trading_manager
@@ -152,6 +151,7 @@ from app.services.workspace.units import is_server_owned_ai_research_unit
 
 from . import asset_spec_adapter as _asset_spec_adapter
 from . import instance_resolution as _instance_resolution
+from . import paper_equity as _paper_equity
 from . import portfolio_calculations as _portfolio_calculations
 
 _COMMISSION_FIELD_KEYS = _portfolio_calculations._COMMISSION_FIELD_KEYS
@@ -1401,21 +1401,19 @@ async def get_portfolio_trades(
 # ---------- Portfolio Equity Curve ----------
 
 
-_PAPER_RUNTIME_MODES = frozenset({"paper", "simulation", "simulated"})
-_MAX_PORTFOLIO_EQUITY_POINTS = 1_500
+_is_paper_runtime_source = _paper_equity._is_paper_runtime_source
+_sample_indexes = _paper_equity._sample_indexes
 
 
-def _is_paper_runtime_source(source: _PortfolioSource) -> bool:
-    """Return whether a source represents a simulated trading runtime."""
-    return str(source.trading_mode or "paper").strip().lower() in _PAPER_RUNTIME_MODES
-
-
-def _sample_indexes(length: int, max_points: int = _MAX_PORTFOLIO_EQUITY_POINTS) -> list[int]:
-    """Return shared sample indexes so every portfolio series stays aligned."""
-    if length <= max_points:
-        return list(range(length))
-    step = (length - 1) / (max_points - 1)
-    return [round(index * step) for index in range(max_points)]
+def _paper_runtime_value_data(
+    source: _PortfolioSource,
+    paper_points: list[tuple[str, float, float, float]],
+) -> dict[str, list[Any]]:
+    return _paper_equity._paper_runtime_value_data(
+        source,
+        paper_points,
+        parse_value_log_fn=parse_value_log,
+    )
 
 
 async def _paper_equity_points(
@@ -1423,104 +1421,12 @@ async def _paper_equity_points(
     sources: list[_PortfolioSource],
 ) -> dict[str, list[tuple[str, float, float, float]]]:
     """Load canonical equity snapshots for the current run of each paper instance."""
-    instance_ids = sorted({source.id for source in sources if _is_paper_runtime_source(source)})
-    user_id = _current_user_id(current_user)
-    if not instance_ids or not user_id:
-        return {}
-
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(PaperEquitySnapshot)
-            .where(
-                PaperEquitySnapshot.user_id == user_id,
-                PaperEquitySnapshot.instance_id.in_(instance_ids),
-            )
-            .order_by(
-                PaperEquitySnapshot.instance_id,
-                PaperEquitySnapshot.observed_at,
-                PaperEquitySnapshot.id,
-            )
-            # Safety bound: a long-lived paper instance accumulates one row per
-            # minute.  The UI downsamples anyway; loading millions of rows just
-            # to discard them is the actual failure mode.
-            .limit(_MAX_PAPER_EQUITY_SNAPSHOTS)
-        )
-        snapshots = result.scalars().all()
-
-    points_by_instance: dict[str, list[tuple[str, float, float, float]]] = {}
-    for snapshot in snapshots:
-        observed_at = snapshot.observed_at.replace(second=0, microsecond=0)
-        point = (
-            observed_at.isoformat(),
-            float(snapshot.total_equity),
-            float(snapshot.cash),
-            float(snapshot.realized_pnl) + float(snapshot.unrealized_pnl),
-        )
-        # A paper instance id is deliberately reused when a workspace unit is
-        # restarted. ``initial`` marks the beginning of the new runtime, so
-        # prior snapshots must not be joined to its current equity curve.
-        if str(snapshot.source or "").strip().lower() == "initial":
-            points_by_instance[snapshot.instance_id] = []
-        instance_points = points_by_instance.setdefault(snapshot.instance_id, [])
-        if instance_points and instance_points[-1][0] == point[0]:
-            instance_points[-1] = point
-        else:
-            instance_points.append(point)
-
-    return points_by_instance
-
-
-def _paper_runtime_value_data(
-    source: _PortfolioSource,
-    paper_points: list[tuple[str, float, float, float]],
-) -> dict[str, list[Any]]:
-    """Prepend current-runtime log history that predates paper snapshots."""
-    snapshot_dates = [point[0] for point in paper_points]
-    snapshot_equity = [point[1] for point in paper_points]
-    snapshot_cash = [point[2] for point in paper_points]
-    snapshot_pnl = [point[3] for point in paper_points]
-
-    # ``parse_value_log`` already handles a missing or empty log directory.
-    # Do not pre-filter with ``Path.is_dir``: compatibility adapters may hand
-    # us a path-like runtime log location whose existence is resolved by the
-    # parser itself, and an empty snapshot history must still fall back to it.
-    log_data = parse_value_log(source.log_dir, prefer_log_time=False) if source.log_dir else {}
-    log_dates = list(log_data.get("datetimes") or log_data.get("dates", []))
-    log_equity = list(log_data.get("equity_curve", []))
-    log_cash = list(log_data.get("cash_curve", []))
-    first_snapshot_day = _trading_day(snapshot_dates[0]) if snapshot_dates else ""
-
-    history_dates: list[str] = []
-    history_equity: list[float] = []
-    history_cash: list[float] = []
-    history_pnl: list[float] = []
-    initial_log_equity = _safe_float(log_equity[0]) if log_equity else 0.0
-    initial_log_cash = _safe_float(log_cash[0]) if log_cash else initial_log_equity
-    base_equity = snapshot_equity[0] if snapshot_equity else initial_log_equity
-    base_cash = snapshot_cash[0] if snapshot_cash else initial_log_cash
-    base_pnl = snapshot_pnl[0] if snapshot_pnl else 0.0
-    for index, dt in enumerate(log_dates):
-        if index >= len(log_equity):
-            break
-        if first_snapshot_day and _trading_day(dt) >= first_snapshot_day:
-            continue
-        equity_delta = _safe_float(log_equity[index]) - initial_log_equity
-        cash_delta = (
-            _safe_float(log_cash[index]) - initial_log_cash
-            if index < len(log_cash)
-            else equity_delta
-        )
-        history_dates.append(str(dt))
-        history_equity.append(base_equity + equity_delta)
-        history_cash.append(base_cash + cash_delta)
-        history_pnl.append(base_pnl + equity_delta)
-
-    return {
-        "datetimes": [*history_dates, *snapshot_dates],
-        "equity_curve": [*history_equity, *snapshot_equity],
-        "cash_curve": [*history_cash, *snapshot_cash],
-        "pnl_curve": [*history_pnl, *snapshot_pnl],
-    }
+    return await _paper_equity.load_paper_equity_points(
+        current_user,
+        sources,
+        session_maker=async_session_maker,
+        max_total_snapshots=_MAX_PAPER_EQUITY_SNAPSHOTS,
+    )
 
 
 @router.get("/equity", summary="Portfolio equity curve (live trading)", response_model=None)

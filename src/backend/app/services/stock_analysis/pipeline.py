@@ -189,9 +189,9 @@ class StockAnalysisPipeline:
             f"若价格能够重新站上 {self._format_price(resistance, context)}，短线趋势会得到修复；"
             f"若跌破 {self._format_price(support, context)}，则说明回撤压力仍未释放完成。\n\n"
             "2. 动量、波动与短期反转\n"
-            f"最近可用 5 日动量为 {self._format_pct(context['momentum_5'])}，"
-            f"5 日波动率约 {self._format_pct(context['volatility_5'])}，"
-            f"1 日反转因子为 {self._format_pct(context['reversal_1'])}。"
+            f"最近可用 5 日动量为 {self._format_pct(context['momentum_5'], scale=100.0)}，"
+            f"5 日波动率约 {self._format_pct(context['volatility_5'], scale=100.0)}，"
+            f"1 日反转因子为 {self._format_pct(context['reversal_1'], scale=100.0)}。"
             "这些指标显示价格不是单边强势突破，而是处在趋势修复与短线获利回吐并存的阶段。\n\n"
             "三、价格趋势分析\n"
             f"历史样本区间显示，近期收盘价从 {self._format_price(context['first_close'], context)} "
@@ -953,13 +953,9 @@ class StockAnalysisPipeline:
         return self._latest_factor(fallback)
 
     @staticmethod
-    def _format_pct(value: Any) -> str:
+    def _format_pct(value: Any, *, scale: float = 1.0) -> str:
         numeric = StockAnalysisPipeline._float_or_none(value)
-        if numeric is None:
-            return "数据不足"
-        if abs(numeric) <= 1:
-            numeric *= 100
-        return f"{numeric:.2f}%"
+        return "数据不足" if numeric is None else f"{numeric * scale:.2f}%"
 
     @staticmethod
     def _format_price(value: Any, context: dict[str, Any]) -> str:
@@ -1105,17 +1101,16 @@ class StockAnalysisPipeline:
 
     @staticmethod
     def _float_or_default(value: Any, default: float) -> float:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        numeric = StockAnalysisPipeline._float_or_none(value)
+        return default if numeric is None else numeric
 
     @staticmethod
     def _float_or_none(value: Any) -> float | None:
         try:
-            return float(value)
+            numeric = float(value)
         except (TypeError, ValueError):
             return None
+        return numeric if isfinite(numeric) else None
 
     @staticmethod
     def _finite_metric(value: Any) -> float | None:

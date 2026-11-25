@@ -841,8 +841,8 @@ class TradingWorkspaceService:
             try:
                 manager_instance = instance if isinstance(instance, dict) else dict(instance or {})
                 persist_asset_specs(Path(runtime_dir).expanduser(), manager_instance, asset_specs)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to persist asset specs into %s: %s", runtime_dir, exc)
         return cls._sync_unit_contract_metadata_from_specs(unit, asset_specs)
 
     @classmethod

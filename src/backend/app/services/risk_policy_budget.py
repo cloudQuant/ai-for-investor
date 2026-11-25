@@ -105,6 +105,101 @@ class CompiledStaticPortfolioBudget:
         )
 
 
+def _validate_budget_header(
+    plan: StaticPortfolioBudgetPlan,
+    fx_observations: Mapping[str, FxObservationV1] | None,
+) -> tuple[str, str, Decimal, Decimal, Mapping[str, FxObservationV1]]:
+    if type(plan) is not StaticPortfolioBudgetPlan:
+        raise RiskPolicyBudgetError("INVALID_PLAN")
+    portfolio_ref = _identifier(plan.portfolio_ref, "INVALID_PORTFOLIO_REF")
+    if type(plan.membership_version) is not int or plan.membership_version < 1:
+        raise RiskPolicyBudgetError("INVALID_MEMBERSHIP_VERSION")
+    if type(plan.membership_sha256) is not str or not _SHA256_RE.fullmatch(plan.membership_sha256):
+        raise RiskPolicyBudgetError("INVALID_MEMBERSHIP_DIGEST")
+    currency = _currency(plan.currency)
+    if plan.metric != _SUPPORTED_METRIC:
+        raise RiskPolicyBudgetError("UNSUPPORTED_BUDGET_METRIC")
+    if (
+        type(plan.allocations) is not tuple
+        or not plan.allocations
+        or len(plan.allocations) > _MAX_ACCOUNT_ALLOCATIONS
+    ):
+        raise RiskPolicyBudgetError("INVALID_ALLOCATIONS")
+    total_amount = _amount(plan.total_amount, "INVALID_TOTAL_AMOUNT")
+    unallocated_amount = _amount(plan.unallocated_amount, "INVALID_UNALLOCATED_AMOUNT")
+    if total_amount <= 0:
+        raise RiskPolicyBudgetError("INVALID_TOTAL_AMOUNT")
+    if fx_observations is None:
+        fx_by_currency: Mapping[str, FxObservationV1] = {}
+    elif isinstance(fx_observations, Mapping) and all(type(key) is str for key in fx_observations):
+        fx_by_currency = fx_observations
+    else:
+        raise RiskPolicyBudgetError("INVALID_BUDGET_FX_FACTS")
+    return portfolio_ref, currency, total_amount, unallocated_amount, fx_by_currency
+
+
+def _convert_allocation_fx(
+    source_amount: Decimal,
+    source_currency: str,
+    target_currency: str,
+    fx_by_currency: Mapping[str, FxObservationV1],
+    now_ns: int | None,
+) -> tuple[Decimal, dict[str, object], int]:
+    fx_observation = fx_by_currency.get(source_currency)
+    if fx_observation is None or type(fx_observation) is not FxObservationV1:
+        raise RiskPolicyBudgetError("BUDGET_FX_REQUIRED")
+    if (
+        fx_observation.base_currency != source_currency
+        or fx_observation.quote_currency != target_currency
+        or fx_observation.direction != "BASE_TO_QUOTE"
+        or fx_observation.rate_unit != "QUOTE_PER_BASE"
+    ):
+        raise RiskPolicyBudgetError("BUDGET_FX_PAIR_MISMATCH")
+    if now_ns is None:
+        now_ns = time.time_ns()
+        if type(now_ns) is not int or now_ns <= 0:
+            raise RiskPolicyBudgetError("INVALID_BUDGET_FX_CLOCK")
+    if not fx_observation.as_of_ns <= now_ns < fx_observation.valid_until_ns:
+        raise RiskPolicyBudgetError("BUDGET_FX_NOT_CURRENT")
+    if now_ns - fx_observation.as_of_ns > _MAX_BUDGET_FX_AGE_NS:
+        raise RiskPolicyBudgetError("BUDGET_FX_STALE")
+    rate = _amount(fx_observation.rate, "INVALID_BUDGET_FX_RATE")
+    if rate <= 0:
+        raise RiskPolicyBudgetError("INVALID_BUDGET_FX_RATE")
+    amount = _amount(
+        _fraction_as_decimal(Fraction(source_amount) * Fraction(rate)),
+        "INVALID_CONVERTED_ALLOCATION_AMOUNT",
+    )
+    if amount <= 0:
+        raise RiskPolicyBudgetError("INVALID_CONVERTED_ALLOCATION_AMOUNT")
+    return amount, _fx_observation_payload(fx_observation, rate), now_ns
+
+
+def _validate_policy_refs_map(
+    policy_refs: Mapping[str, str], seen_accounts: set[str]
+) -> dict[str, str]:
+    if not isinstance(policy_refs, Mapping):
+        raise RiskPolicyBudgetError("INVALID_POLICY_REFS")
+    if any(type(account_ref) is not str for account_ref in policy_refs):
+        raise RiskPolicyBudgetError("INVALID_POLICY_REFS")
+    if set(policy_refs) != seen_accounts:
+        raise RiskPolicyBudgetError("POLICY_REF_ACCOUNT_SET_MISMATCH")
+    refs_by_account: dict[str, str] = {}
+    seen_refs: set[str] = set()
+    for account_ref, policy_ref in policy_refs.items():
+        if (
+            type(policy_ref) is not str
+            or len(policy_ref) > 128
+            or not _VERSIONED_POLICY_REF_RE.fullmatch(policy_ref)
+        ):
+            raise RiskPolicyBudgetError("VERSIONED_POLICY_REF_REQUIRED")
+        if policy_ref in seen_refs:
+            raise RiskPolicyBudgetError("DUPLICATE_POLICY_REF")
+        seen_refs.add(policy_ref)
+        refs_by_account[account_ref] = policy_ref
+    return refs_by_account
+
+
 def compile_static_portfolio_budget(
     plan: StaticPortfolioBudgetPlan,
     *,
@@ -122,36 +217,9 @@ def compile_static_portfolio_budget(
     remains explicit, so converted limits plus withheld budget equal the
     declared portfolio total exactly.
     """
-
-    if type(plan) is not StaticPortfolioBudgetPlan:
-        raise RiskPolicyBudgetError("INVALID_PLAN")
-    portfolio_ref = _identifier(plan.portfolio_ref, "INVALID_PORTFOLIO_REF")
-    if type(plan.membership_version) is not int or plan.membership_version < 1:
-        raise RiskPolicyBudgetError("INVALID_MEMBERSHIP_VERSION")
-    if type(plan.membership_sha256) is not str or not _SHA256_RE.fullmatch(plan.membership_sha256):
-        raise RiskPolicyBudgetError("INVALID_MEMBERSHIP_DIGEST")
-    currency = _currency(plan.currency)
-    if plan.metric != _SUPPORTED_METRIC:
-        raise RiskPolicyBudgetError("UNSUPPORTED_BUDGET_METRIC")
-    if (
-        type(plan.allocations) is not tuple
-        or not plan.allocations
-        or len(plan.allocations) > _MAX_ACCOUNT_ALLOCATIONS
-    ):
-        raise RiskPolicyBudgetError("INVALID_ALLOCATIONS")
-
-    total_amount = _amount(plan.total_amount, "INVALID_TOTAL_AMOUNT")
-    unallocated_amount = _amount(plan.unallocated_amount, "INVALID_UNALLOCATED_AMOUNT")
-    if total_amount <= 0:
-        raise RiskPolicyBudgetError("INVALID_TOTAL_AMOUNT")
-
-    if fx_observations is None:
-        fx_by_currency: Mapping[str, FxObservationV1] = {}
-    elif isinstance(fx_observations, Mapping) and all(type(key) is str for key in fx_observations):
-        fx_by_currency = fx_observations
-    else:
-        raise RiskPolicyBudgetError("INVALID_BUDGET_FX_FACTS")
-
+    portfolio_ref, currency, total_amount, unallocated_amount, fx_by_currency = (
+        _validate_budget_header(plan, fx_observations)
+    )
     normalized: list[
         tuple[AccountBudgetAllocation, str, str, str, str, dict[str, object] | None]
     ] = []
@@ -173,7 +241,6 @@ def compile_static_portfolio_budget(
             raise RiskPolicyBudgetError("INVALID_ALLOCATION_AMOUNT")
         if type(allocation.max_increase_count) is not int or allocation.max_increase_count < 0:
             raise RiskPolicyBudgetError("INVALID_INCREASE_COUNT")
-
         fx_payload: dict[str, object] | None = None
         if source_currency == currency:
             if source_currency in fx_by_currency:
@@ -181,35 +248,9 @@ def compile_static_portfolio_budget(
             amount = source_amount
         else:
             required_fx_currencies.add(source_currency)
-            fx_observation = fx_by_currency.get(source_currency)
-            if fx_observation is None or type(fx_observation) is not FxObservationV1:
-                raise RiskPolicyBudgetError("BUDGET_FX_REQUIRED")
-            if (
-                fx_observation.base_currency != source_currency
-                or fx_observation.quote_currency != currency
-                or fx_observation.direction != "BASE_TO_QUOTE"
-                or fx_observation.rate_unit != "QUOTE_PER_BASE"
-            ):
-                raise RiskPolicyBudgetError("BUDGET_FX_PAIR_MISMATCH")
-            if now_ns is None:
-                now_ns = time.time_ns()
-                if type(now_ns) is not int or now_ns <= 0:
-                    raise RiskPolicyBudgetError("INVALID_BUDGET_FX_CLOCK")
-            if not fx_observation.as_of_ns <= now_ns < fx_observation.valid_until_ns:
-                raise RiskPolicyBudgetError("BUDGET_FX_NOT_CURRENT")
-            if now_ns - fx_observation.as_of_ns > _MAX_BUDGET_FX_AGE_NS:
-                raise RiskPolicyBudgetError("BUDGET_FX_STALE")
-            rate = _amount(fx_observation.rate, "INVALID_BUDGET_FX_RATE")
-            if rate <= 0:
-                raise RiskPolicyBudgetError("INVALID_BUDGET_FX_RATE")
-            amount = _amount(
-                _fraction_as_decimal(Fraction(source_amount) * Fraction(rate)),
-                "INVALID_CONVERTED_ALLOCATION_AMOUNT",
+            amount, fx_payload, now_ns = _convert_allocation_fx(
+                source_amount, source_currency, currency, fx_by_currency, now_ns
             )
-            if amount <= 0:
-                raise RiskPolicyBudgetError("INVALID_CONVERTED_ALLOCATION_AMOUNT")
-            fx_payload = _fx_observation_payload(fx_observation, rate)
-
         normalized.append(
             (
                 allocation,
@@ -226,36 +267,18 @@ def compile_static_portfolio_budget(
             raise RiskPolicyBudgetError("BUDGET_FX_REQUIRED")
         raise RiskPolicyBudgetError("UNEXPECTED_BUDGET_FX_FACT")
 
-    if not isinstance(policy_refs, Mapping):
-        raise RiskPolicyBudgetError("INVALID_POLICY_REFS")
-    if any(type(account_ref) is not str for account_ref in policy_refs):
-        raise RiskPolicyBudgetError("INVALID_POLICY_REFS")
-    if set(policy_refs) != seen_accounts:
-        raise RiskPolicyBudgetError("POLICY_REF_ACCOUNT_SET_MISMATCH")
-
-    refs_by_account: dict[str, str] = {}
-    seen_refs: set[str] = set()
-    for account_ref, policy_ref in policy_refs.items():
-        if (
-            type(policy_ref) is not str
-            or len(policy_ref) > 128
-            or not _VERSIONED_POLICY_REF_RE.fullmatch(policy_ref)
-        ):
-            raise RiskPolicyBudgetError("VERSIONED_POLICY_REF_REQUIRED")
-        if policy_ref in seen_refs:
-            raise RiskPolicyBudgetError("DUPLICATE_POLICY_REF")
-        seen_refs.add(policy_ref)
-        refs_by_account[account_ref] = policy_ref
-
+    refs_by_account = _validate_policy_refs_map(policy_refs, seen_accounts)
     all_amounts = [total_amount, unallocated_amount] + [
         _amount(amount_text, "INVALID_CONVERTED_ALLOCATION_AMOUNT")
         for _, _, _, _, amount_text, _ in normalized
     ]
     scale = max(max(0, -_decimal_exponent(amount)) for amount in all_amounts)
-    conserved_units = sum(_amount_units(amount, scale) for amount in all_amounts[1:])
-    if conserved_units != _amount_units(total_amount, scale):
+    if sum(_amount_units(amount, scale) for amount in all_amounts[1:]) != _amount_units(
+        total_amount, scale
+    ):
         raise RiskPolicyBudgetError("BUDGET_NOT_CONSERVED")
 
+    ordered = sorted(normalized, key=lambda row: row[1])
     manifest_allocations = [
         {
             "account_ref": account_ref,
@@ -268,9 +291,7 @@ def compile_static_portfolio_budget(
             "metric": allocation.metric,
             "currency": currency,
         }
-        for allocation, account_ref, source_amount_text, source_currency, amount_text, fx_payload in sorted(
-            normalized, key=lambda row: row[1]
-        )
+        for allocation, account_ref, source_amount_text, source_currency, amount_text, fx_payload in ordered
     ]
     allocation_manifest = {
         "kind": _BUDGET_KIND,
@@ -285,53 +306,42 @@ def compile_static_portfolio_budget(
         "allocations": manifest_allocations,
     }
     allocation_set_sha256 = _canonical_sha256(allocation_manifest)
-
-    drafts: list[AccountRiskPolicyDraft] = []
-    for (
-        allocation,
-        account_ref,
-        source_amount_text,
-        source_currency,
-        amount_text,
-        fx_payload,
-    ) in sorted(normalized, key=lambda row: row[1]):
-        policy_ref = refs_by_account[account_ref]
-        risk_policy = {
-            "policy_id": policy_ref,
-            "max_increase_notional": amount_text,
-            "max_increase_count": allocation.max_increase_count,
-            "permit_ttl_seconds": 30.0,
-            "require_strategy_allocation": False,
-            "notional_unit": currency,
-        }
-        content = {
-            "afi_budget": {
-                "kind": _BUDGET_KIND,
-                "schema_version": _BUDGET_SCHEMA_VERSION,
-                "portfolio_ref": portfolio_ref,
-                "membership_version": plan.membership_version,
-                "membership_sha256": plan.membership_sha256,
-                "allocation_set_sha256": allocation_set_sha256,
-                "metric": plan.metric,
-                "currency": currency,
-                "total_amount": _decimal_text(total_amount),
-                "unallocated_amount": _decimal_text(unallocated_amount),
-                "account_ref": account_ref,
-                "source_amount": source_amount_text,
-                "source_currency": source_currency,
-                "allocated_amount": amount_text,
-                "fx_observation": fx_payload,
-            },
-            "risk_policy": risk_policy,
-        }
-        drafts.append(
-            AccountRiskPolicyDraft(
-                policy_ref=policy_ref,
-                account_ref=account_ref,
-                _content_json=_canonical_json(content),
-            )
+    drafts = tuple(
+        AccountRiskPolicyDraft(
+            policy_ref=refs_by_account[account_ref],
+            account_ref=account_ref,
+            _content_json=_canonical_json(
+                {
+                    "afi_budget": {
+                        "kind": _BUDGET_KIND,
+                        "schema_version": _BUDGET_SCHEMA_VERSION,
+                        "portfolio_ref": portfolio_ref,
+                        "membership_version": plan.membership_version,
+                        "membership_sha256": plan.membership_sha256,
+                        "allocation_set_sha256": allocation_set_sha256,
+                        "metric": plan.metric,
+                        "currency": currency,
+                        "total_amount": _decimal_text(total_amount),
+                        "unallocated_amount": _decimal_text(unallocated_amount),
+                        "account_ref": account_ref,
+                        "source_amount": source_amount_text,
+                        "source_currency": source_currency,
+                        "allocated_amount": amount_text,
+                        "fx_observation": fx_payload,
+                    },
+                    "risk_policy": {
+                        "policy_id": refs_by_account[account_ref],
+                        "max_increase_notional": amount_text,
+                        "max_increase_count": allocation.max_increase_count,
+                        "permit_ttl_seconds": 30.0,
+                        "require_strategy_allocation": False,
+                        "notional_unit": currency,
+                    },
+                }
+            ),
         )
-
+        for allocation, account_ref, source_amount_text, source_currency, amount_text, fx_payload in ordered
+    )
     return CompiledStaticPortfolioBudget(
         portfolio_ref=portfolio_ref,
         membership_version=plan.membership_version,
@@ -340,7 +350,7 @@ def compile_static_portfolio_budget(
         unallocated_amount=_decimal_text(unallocated_amount),
         currency=currency,
         metric=plan.metric,
-        drafts=tuple(drafts),
+        drafts=drafts,
     )
 
 

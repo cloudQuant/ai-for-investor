@@ -11,6 +11,7 @@ Supports:
 import asyncio
 import json
 import logging
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -55,6 +56,63 @@ def _alert_created_at_isoformat(alert: Any) -> str | None:
     return created_at.isoformat()
 
 
+class MonitoringTaskManager:
+    """Process-wide singleton registry for active alert monitoring tasks and trigger state."""
+
+    def __init__(self) -> None:
+        self.tasks: dict[str, asyncio.Task[Any]] = {}
+        self.trigger_state: dict[str, Any] = {}
+
+    async def shutdown(self) -> int:
+        cancelled = 0
+        pending_tasks: list[asyncio.Task[Any]] = []
+        for rule_id, task in list(self.tasks.items()):
+            self.tasks.pop(rule_id, None)
+            done_fn = getattr(task, "done", None)
+            cancel_fn = getattr(task, "cancel", None)
+            is_done = callable(done_fn) and done_fn() is True
+            if callable(cancel_fn) and not is_done:
+                cancel_fn()
+                cancelled += 1
+                if isinstance(task, asyncio.Task):
+                    pending_tasks.append(task)
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
+        self.trigger_state.clear()
+        return cancelled
+
+
+_MONITORING_MANAGER_LOCK = threading.Lock()
+_monitoring_manager: MonitoringTaskManager | None = None
+
+
+def get_monitoring_task_manager() -> MonitoringTaskManager:
+    """Return the process-wide ``MonitoringTaskManager`` singleton."""
+    global _monitoring_manager
+    with _MONITORING_MANAGER_LOCK:
+        if _monitoring_manager is None:
+            _monitoring_manager = MonitoringTaskManager()
+        return _monitoring_manager
+
+
+def reset_monitoring_task_manager() -> None:
+    """Cancel any non-loop-bound handles and reset the singleton registry (tests)."""
+    global _monitoring_manager
+    with _MONITORING_MANAGER_LOCK:
+        if _monitoring_manager is not None:
+            for rule_id, task in list(_monitoring_manager.tasks.items()):
+                _monitoring_manager.tasks.pop(rule_id, None)
+                done_fn = getattr(task, "done", None)
+                cancel_fn = getattr(task, "cancel", None)
+                if callable(cancel_fn) and not (callable(done_fn) and done_fn() is True):
+                    try:
+                        cancel_fn()
+                    except Exception as exc:
+                        logger.debug("Failed to cancel monitoring task %s: %s", rule_id, exc)
+            _monitoring_manager.trigger_state.clear()
+        _monitoring_manager = None
+
+
 class MonitoringService:
     """
     Monitoring and alerting service.
@@ -67,20 +125,20 @@ class MonitoringService:
     5. Manage alert lifecycle
     """
 
-    def __init__(self):
+    def __init__(self, task_manager: MonitoringTaskManager | None = None):
         self.alert_repo = SQLRepository(Alert)
         self.alert_rule_repo = SQLRepository(AlertRule)
         self.notification_repo = SQLRepository(AlertNotification)
         self.backtest_service = BacktestService()
         self.paper_trading_service = PaperTradingService()
 
-        # In-memory monitoring task registry (per-process).
-        #
-        # Note: this is intentionally kept in-memory; for production usage you would
-        # likely want a proper scheduler and persistent state.
-        self._monitoring_tasks: dict[str, asyncio.Task] = {}
+        # Process-wide task & trigger state registry so disabling/deleting a rule
+        # in a later request can cancel tasks spawned by earlier requests.
+        manager = task_manager or get_monitoring_task_manager()
+        self._task_manager = manager
+        self._monitoring_tasks = manager.tasks
         self._running = False
-        self._trigger_state: dict[str, Any] = {}
+        self._trigger_state = manager.trigger_state
 
     async def create_alert_rule(
         self,
@@ -329,9 +387,14 @@ class MonitoringService:
         Args:
             rule_id: The unique identifier of the alert rule to monitor.
         """
-        if rule_id in self._monitoring_tasks:
-            logger.warning(f"Monitoring task already exists: {rule_id}")
-            return
+        existing = self._monitoring_tasks.get(rule_id)
+        if existing is not None:
+            done_fn = getattr(existing, "done", None)
+            if callable(done_fn) and done_fn() is True:
+                self._monitoring_tasks.pop(rule_id, None)
+            else:
+                logger.warning(f"Monitoring task already exists: {rule_id}")
+                return
 
         rule = await self.alert_rule_repo.get_by_id(rule_id)
         if not rule or not rule.is_active:
@@ -350,12 +413,11 @@ class MonitoringService:
         Args:
             rule_id: The unique identifier of the alert rule to stop monitoring.
         """
-        if rule_id in self._monitoring_tasks:
-            task = self._monitoring_tasks[rule_id]
+        task = self._monitoring_tasks.pop(rule_id, None)
+        if task is not None:
             task.cancel()
-            del self._monitoring_tasks[rule_id]
-
             logger.info(f"Stopped monitoring task: {rule_id}")
+        self._trigger_state.pop(rule_id, None)
 
     async def _monitor_task(self, rule_id: str):
         """Background monitoring loop for a single alert rule.
@@ -366,45 +428,57 @@ class MonitoringService:
         Args:
             rule_id: The unique identifier of the alert rule to monitor.
         """
-        rule = await self.alert_rule_repo.get_by_id(rule_id)
-        if not rule or not rule.is_active:
-            logger.info(f"Rule not active, stopping monitoring: {rule_id}")
-            return
+        try:
+            rule = await self.alert_rule_repo.get_by_id(rule_id)
+            if not rule or not rule.is_active:
+                logger.info(f"Rule not active, stopping monitoring: {rule_id}")
+                return
 
-        logger.info(f"Monitoring task started for rule: {rule_id}")
+            logger.info(f"Monitoring task started for rule: {rule_id}")
 
-        while True:
-            try:
-                # Fetch the latest rule configuration.
-                rule = await self.alert_rule_repo.get_by_id(rule_id)
-                if not rule or not rule.is_active:
-                    logger.info(f"Rule not active, stopping monitoring: {rule_id}")
+            while True:
+                try:
+                    # Fetch the latest rule configuration.
+                    rule = await self.alert_rule_repo.get_by_id(rule_id)
+                    if not rule or not rule.is_active:
+                        logger.info(f"Rule not active, stopping monitoring: {rule_id}")
+                        break
+
+                    # Check if trigger conditions are met.
+                    should_trigger = await self._check_trigger(rule)
+
+                    if should_trigger:
+                        # Trigger the alert.
+                        await self._trigger_alert(rule)
+
+                    # Determine check interval based on alert type.
+                    settings = get_settings()
+                    if rule.alert_type == AlertType.SYSTEM:
+                        await asyncio.sleep(settings.MONITORING_SYSTEM_INTERVAL)
+                    elif rule.alert_type in [AlertType.ACCOUNT, AlertType.POSITION]:
+                        await asyncio.sleep(settings.MONITORING_ACCOUNT_INTERVAL)
+                    elif rule.alert_type == AlertType.STRATEGY:
+                        await asyncio.sleep(settings.MONITORING_STRATEGY_INTERVAL)
+                    else:
+                        await asyncio.sleep(settings.MONITORING_DEFAULT_INTERVAL)
+
+                except asyncio.CancelledError:
+                    logger.info(f"Monitoring task cancelled: {rule_id}")
                     break
-
-                # Check if trigger conditions are met.
-                should_trigger = await self._check_trigger(rule)
-
-                if should_trigger:
-                    # Trigger the alert.
-                    await self._trigger_alert(rule)
-
-                # Determine check interval based on alert type.
-                settings = get_settings()
-                if rule.alert_type == AlertType.SYSTEM:
-                    await asyncio.sleep(settings.MONITORING_SYSTEM_INTERVAL)
-                elif rule.alert_type in [AlertType.ACCOUNT, AlertType.POSITION]:
-                    await asyncio.sleep(settings.MONITORING_ACCOUNT_INTERVAL)
-                elif rule.alert_type == AlertType.STRATEGY:
-                    await asyncio.sleep(settings.MONITORING_STRATEGY_INTERVAL)
-                else:
-                    await asyncio.sleep(settings.MONITORING_DEFAULT_INTERVAL)
-
-            except asyncio.CancelledError:
-                logger.info(f"Monitoring task cancelled: {rule_id}")
-                break
-            except Exception as e:
-                logger.error(f"Monitoring task error ({rule_id}): {e}")
-                await asyncio.sleep(get_settings().MONITORING_DEFAULT_INTERVAL)
+                except Exception as e:
+                    logger.error(f"Monitoring task error ({rule_id}): {e}")
+                    await asyncio.sleep(get_settings().MONITORING_DEFAULT_INTERVAL)
+        finally:
+            current_task = None
+            try:
+                current_task = asyncio.current_task()
+            except RuntimeError:
+                pass
+            monitoring_tasks = getattr(self, "_monitoring_tasks", None)
+            if monitoring_tasks is not None:
+                existing = monitoring_tasks.get(rule_id)
+                if current_task is None or existing is current_task:
+                    monitoring_tasks.pop(rule_id, None)
 
     async def _check_trigger(self, rule: AlertRule) -> bool:
         """Evaluates whether a rule should trigger based on its trigger type."""

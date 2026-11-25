@@ -224,11 +224,14 @@ class BondInfoCm(AkshareToMySql):
 
             df = self.fetch_bond_info(max_pages=max_pages)
             if not df.empty:
-                return self.save_data(
-                    df=df.replace(np.nan, None),
-                    table_name=self.table_name,
-                    on_duplicate_update=True,
-                    unique_keys=["BASEDATE", "BOND_CODE", "QUERY_CODE"],
+                return (
+                    self.save_data(
+                        df=df.replace(np.nan, None),
+                        table_name=self.table_name,
+                        on_duplicate_update=True,
+                        unique_keys=["BASEDATE", "BOND_CODE", "QUERY_CODE"],
+                    )
+                    is not False
                 )
 
             self.logger.warning("No bond data to process")

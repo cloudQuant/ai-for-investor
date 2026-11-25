@@ -1056,3 +1056,48 @@ class TestStartStopMonitoring:
         await service._stop_monitoring("rule_123")
 
         assert len(service._monitoring_tasks) == 0
+
+    async def test_monitoring_tasks_shared_across_instances_and_cleaned_up(self):
+        import asyncio
+
+        svc1 = MonitoringService()
+        svc2 = MonitoringService()
+        assert svc1._monitoring_tasks is svc2._monitoring_tasks
+
+        active_rule = Mock(id="rule_shared", is_active=True)
+        svc1.alert_rule_repo = AsyncMock()
+        svc1.alert_rule_repo.get_by_id = AsyncMock(return_value=active_rule)
+        svc1._check_trigger = AsyncMock(return_value=False)
+
+        await svc1._start_monitoring("rule_shared")
+        assert "rule_shared" in svc2._monitoring_tasks
+
+        await svc2._stop_monitoring("rule_shared")
+        assert "rule_shared" not in svc1._monitoring_tasks
+
+        # Early return in _monitor_task also removes stale key in finally
+        inactive_rule = Mock(id="rule_done", is_active=False)
+        svc1.alert_rule_repo.get_by_id = AsyncMock(return_value=inactive_rule)
+        task = asyncio.create_task(svc1._monitor_task("rule_done"))
+        svc1._monitoring_tasks["rule_done"] = task
+        await task
+        assert "rule_done" not in svc1._monitoring_tasks
+
+    async def test_startup_monitoring_shutdown_cancels_active_tasks(self):
+        import asyncio
+
+        from app.startup import monitoring as monitoring_startup
+
+        svc = MonitoringService()
+
+        async def _sleeper():
+            await asyncio.sleep(60)
+
+        t = asyncio.create_task(_sleeper())
+        svc._monitoring_tasks["rule_shutdown"] = t
+        svc._trigger_state["rule_shutdown"] = {"count": 1}
+
+        await monitoring_startup.shutdown(None, None)
+        assert svc._monitoring_tasks == {}
+        assert svc._trigger_state == {}
+        assert t.cancelled() or t.done()

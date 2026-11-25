@@ -40,6 +40,7 @@ from app.services.research.dataset_registry import (
 )
 from app.services.research.discovery_search_budget import lock_experiment_epoch
 from app.services.research.promotion import resolve_server_policy
+from app.utils.invariants import log_suppressed
 
 _REQUEST_SCHEMA_VERSION = "holdout-evaluation-request-v1"
 _REQUEST_INTENT_SCHEMA_VERSION = "holdout-evaluation-request-intent-v1"
@@ -291,10 +292,12 @@ class HoldoutRequestService:
             except Exception as exc:
                 try:
                     await session.rollback()
-                except Exception:
+                except Exception as rollback_exc:
                     # A broken connection cannot change the classification:
                     # COMMIT was sent, so only primary readback can resolve it.
-                    pass
+                    log_suppressed(
+                        __name__, "Holdout request rollback cleanup failed", rollback_exc
+                    )
                 raise _CommitOutcomeUncertain(probe) from exc
             return command
 

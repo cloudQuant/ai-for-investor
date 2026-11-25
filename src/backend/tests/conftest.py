@@ -10,6 +10,7 @@ import asyncio
 import importlib
 import logging
 import os
+import shutil
 import tempfile
 import uuid
 from collections.abc import AsyncGenerator
@@ -22,10 +23,41 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 # Ensure test environment configuration (before any app imports)
+os.environ["AFI_DISABLE_DOTENV"] = "1"
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("SQL_ECHO", "false")
 os.environ.setdefault("ADMIN_PASSWORD", "TestAdmin@12345")
+# Isolate tests from any developer-local broker/exchange/provider credentials.
+for _broker_env_key in (
+    "CTP_PASSWORD",
+    "CTP_USER_ID",
+    "CTP_INVESTOR_ID",
+    "MT5_LOGIN",
+    "MT5_PASSWORD",
+    "MT5_DEMO_LOGIN",
+    "MT5_DEMO_PASSWORD",
+    "MT5_LIVE_LOGIN",
+    "MT5_LIVE_PASSWORD",
+    "IB_ACCESS_TOKEN",
+    "IB_PASSWORD",
+    "IB_WEB_ACCESS_TOKEN",
+    "IB_WEB_PASSWORD",
+    "IB_PAPER_ACCESS_TOKEN",
+    "IB_LIVE_ACCESS_TOKEN",
+    "BINANCE_API_KEY",
+    "BINANCE_SECRET_KEY",
+    "OKX_API_KEY",
+    "OKX_SECRET_KEY",
+    "OKX_PASSPHRASE",
+    "AIRFLOW_PASSWORD",
+    "AIRFLOW_CALLBACK_SECRET",
+    "VOLCENGINE_ARK_API_KEY",
+    "SILICONFLOW_API_KEY",
+    "FRED_API_KEY",
+    "FMP_API_KEY",
+):
+    os.environ.pop(_broker_env_key, None)
 # The static risk-budget contract is loaded from the application module, not
 # from a developer-specific path.  Without this the test module raises KeyError
 # during collection.
@@ -131,7 +163,7 @@ def pytest_collection_modifyitems(config, items):
             "known pre-existing/environmental failure; tracked in iteration 206; "
             "see tests/known_preexisting_failures.txt"
         ),
-        strict=False,
+        strict=True,
     )
     for item in items:
         if item.nodeid.removeprefix("tests/") in known:
@@ -139,10 +171,13 @@ def pytest_collection_modifyitems(config, items):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """Dispose the shared async engine so aiosqlite worker threads can exit."""
+    """Dispose the shared async engine so aiosqlite worker threads exit and clean temp logs."""
     for noisy_logger in ("aiosqlite", "aiosqlite.core"):
         logging.getLogger(noisy_logger).disabled = True
-    asyncio.run(_test_engine.dispose())
+    try:
+        asyncio.run(_test_engine.dispose())
+    finally:
+        shutil.rmtree(_TEST_LOG_DIR, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)
@@ -186,8 +221,14 @@ def disable_live_gateway_restore(monkeypatch, tmp_path):
         lambda self: None,
     )
     live_trading_manager._manager = None
+    backtest_runner = importlib.import_module("app.services.backtest.runner")
+    monitoring_service = importlib.import_module("app.services.monitoring_service")
+    backtest_runner.reset_default_backtest_runner()
+    monitoring_service.reset_monitoring_task_manager()
     yield
     live_trading_manager._manager = None
+    backtest_runner.reset_default_backtest_runner()
+    monitoring_service.reset_monitoring_task_manager()
 
 
 @pytest.fixture(autouse=True)

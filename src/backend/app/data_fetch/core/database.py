@@ -3,6 +3,7 @@ Database base class for data fetch operations
 """
 
 import logging
+import re
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from types import TracebackType
@@ -248,10 +249,8 @@ class Database:
                         break
                     except ValueError:
                         continue
-                if base_date is None:
-                    raise ValueError(f"不支持的日期格式: {base_month}")
-
-            assert base_date is not None  # Type narrow for mypy
+            if base_date is None:
+                raise ValueError(f"不支持的日期格式: {base_month}")
             if base_date.month == 12:
                 next_month = base_date.replace(year=base_date.year + 1, month=1, day=1)
             else:
@@ -261,3 +260,69 @@ class Database:
         except Exception as e:
             self.logger.error(f"获取下个月份失败: {str(e)}")
             raise
+
+
+_RECORDS_DUPLICATES_RE = re.compile(r"Records:\s*(\d+)\s+Duplicates:\s*(\d+)", re.IGNORECASE)
+
+
+def _extract_mysql_info_message(cursor: object, connection: object | None = None) -> str | None:
+    """Read MySQL's OK-packet info string (e.g. ``Records: 3  Duplicates: 2``) if exposed."""
+    candidates: list[object] = [
+        getattr(cursor, "info", None),
+        getattr(getattr(cursor, "_result", None), "message", None),
+        getattr(getattr(getattr(cursor, "_cursor", None), "_result", None), "message", None),
+        getattr(connection, "info", None) if connection is not None else None,
+    ]
+    for candidate in candidates:
+        if callable(candidate):
+            try:
+                candidate = candidate()
+            except Exception:
+                continue
+        if isinstance(candidate, bytes):
+            decoded = candidate.decode("utf-8", errors="ignore").strip()
+            if decoded:
+                return decoded
+        elif isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return None
+
+
+def resolve_batch_affected_rows(
+    insert_sql: str,
+    batch_size: int,
+    cursor: object,
+    connection: object | None = None,
+) -> int:
+    """Compute distinct logical rows written/updated for one executed MySQL batch.
+
+    For ``INSERT IGNORE`` / plain ``INSERT``, MySQL reports 1 per inserted row and
+    0 for ignored duplicates. For ``ON DUPLICATE KEY UPDATE``, MySQL adds 2 to
+    ``rowcount`` for every updated row and 1 for every newly inserted row; when
+    the driver exposes MySQL's ``Records: R  Duplicates: D`` info message for the
+    batch, deduplicate the double-counted updates so receipts reflect distinct
+    persisted/modified rows.
+    """
+    if batch_size <= 0:
+        return 0
+    reported = getattr(cursor, "rowcount", -1)
+    if not isinstance(reported, int) or isinstance(reported, bool) or reported < 0:
+        return batch_size
+    if reported == 0:
+        return 0
+
+    if "ON DUPLICATE KEY UPDATE" in insert_sql.upper():
+        info_message = _extract_mysql_info_message(cursor, connection)
+        if info_message:
+            matched = _RECORDS_DUPLICATES_RE.search(info_message)
+            if matched:
+                records = int(matched.group(1))
+                duplicates = int(matched.group(2))
+                if records == batch_size and 0 <= duplicates <= records:
+                    inserted = records - duplicates
+                    remainder = reported - inserted
+                    if remainder >= 0 and remainder % 2 == 0:
+                        updated = min(duplicates, remainder // 2)
+                        return min(inserted + updated, batch_size)
+
+    return min(reported, batch_size)

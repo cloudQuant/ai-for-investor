@@ -522,4 +522,32 @@ describe('QuotePage', () => {
     expect(quoteApiMocks.removeSubscriptions).toHaveBeenCalledWith('eastmoney', ['RB2405'])
     wrapper.unmount()
   })
+
+  it('clears search debounce on unmount and drops stale search responses', async () => {
+    let resolveFirst!: (val: { results: Array<{ symbol: string; name: string }> }) => void
+    const firstPromise = new Promise<{ results: Array<{ symbol: string; name: string }> }>((r) => {
+      resolveFirst = r
+    })
+    quoteApiMocks.searchSymbols
+      .mockReturnValueOnce(firstPromise as never)
+      .mockResolvedValueOnce({ results: [{ symbol: 'NEW1', name: 'NewResult' }] } as never)
+
+    const wrapper = mountQuotePage()
+    await flushPromises()
+    const store = useQuoteStore()
+    const firstReq = store.searchSymbols('old')
+    const secondReq = store.searchSymbols('new')
+    await secondReq
+    resolveFirst({ results: [{ symbol: 'OLD1', name: 'OldResult' }] })
+    await firstReq
+    expect(store.symbolSearchResults).toEqual([{ symbol: 'NEW1', name: 'NewResult' }])
+
+    const callsBeforeUnmount = quoteApiMocks.searchSymbols.mock.calls.length
+    const vm = wrapper.vm as any
+    vm.addKeyword = 'pending-after-unmount'
+    vm.handleAddSearch()
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(400)
+    expect(quoteApiMocks.searchSymbols).toHaveBeenCalledTimes(callsBeforeUnmount)
+  })
 })

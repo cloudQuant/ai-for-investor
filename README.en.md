@@ -347,6 +347,11 @@ Other resources in the cloudQuant quant ecosystem:
 
 [MIT License](LICENSE) — Use it freely for personal, commercial, or educational purposes.
 
+## Disclaimer and Usage Risks (Review Draft)
+
+The [disclaimer and usage-risk draft](DISCLAIMER.md) describes key software, data, backtesting, and live-trading risks. It has not been approved or adopted; its proposed liability limitations are not current terms.
+The existing software and third-party licenses remain unchanged. See the [license review notes](LICENSE-REVIEW.md) for status and outstanding questions. The full disclaimer draft is in Chinese.
+
 ---
 
 <p align="center">

@@ -620,16 +620,17 @@ async def websocket_account_endpoint(websocket: WebSocket, account_id: str) -> t
             },
         )
 
-        # Keep connection alive and push updates
+        # Wait on client frames / close events so disconnects are detected immediately
+        receive_text = getattr(websocket, "receive_text", None)
         while True:
-            await asyncio.sleep(1)
-
-            # Latest account, order, and position information should be
-            # fetched from the service and pushed via WebSocket
-            # Temporarily using polling; should use event-driven in production
+            if callable(receive_text):
+                await receive_text()
+            else:
+                await asyncio.sleep(1)
 
     except WebSocketDisconnect:
-        ws_manager.disconnect(websocket, f"account:{account_id}", client_id)
+        pass
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+    finally:
         ws_manager.disconnect(websocket, f"account:{account_id}", client_id)

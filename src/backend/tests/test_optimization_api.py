@@ -235,6 +235,52 @@ class TestOptimizationSubmit:
                     assert exc_info.value.status_code == 400
                     assert "Invalid parameters" in exc_info.value.detail
 
+    async def test_submit_optimization_marks_task_failed_on_dispatch_error(
+        self, mock_current_user, mock_strategy_template
+    ):
+        from app.api.optimization_api import (
+            ParamRangeSpec,
+            submit_optimization_task_internal,
+        )
+
+        mock_db_task = MagicMock()
+        mock_db_task.id = "orphan-opt-1"
+        mock_mgr = AsyncMock()
+        mock_mgr.create_task = AsyncMock(return_value=mock_db_task)
+        mock_mgr.update_progress = AsyncMock(return_value=True)
+
+        with patch(
+            "app.api.optimization_api.get_template_by_id", return_value=mock_strategy_template
+        ):
+            with patch(
+                "app.services.param_optimization_service.generate_param_grid",
+                return_value=[{"fast": 5}],
+            ):
+                with patch(
+                    "app.services.optimization.execution_manager.get_optimization_execution_manager",
+                    return_value=mock_mgr,
+                ):
+                    with patch(
+                        "app.api.optimization_api.submit_optimization",
+                        side_effect=ValueError("dispatch boom"),
+                    ):
+                        with pytest.raises(HTTPException) as exc_info:
+                            await submit_optimization_task_internal(
+                                strategy_id="test_strategy",
+                                param_ranges={
+                                    "fast": ParamRangeSpec(
+                                        start=5, end=15, step=5, type="int"
+                                    ).model_dump()
+                                },
+                                n_workers=2,
+                                user_id=mock_current_user.sub,
+                            )
+
+        assert exc_info.value.status_code == 400
+        mock_mgr.update_progress.assert_awaited_once_with(
+            "orphan-opt-1", 0, 0, [], status="failed", error_message="dispatch boom"
+        )
+
     async def test_submit_optimization_default_workers(
         self, mock_current_user, mock_strategy_template
     ):

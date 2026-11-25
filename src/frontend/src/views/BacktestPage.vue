@@ -341,7 +341,10 @@ function showRequestMessage(
   ElMessage.error(message)
 }
 
+let strategyConfigSeq = 0
+
 async function onStrategyChange(strategyId: string) {
+  const seq = ++strategyConfigSeq
   if (!strategyId) {
     strategyConfig.value = null
     return
@@ -349,6 +352,7 @@ async function onStrategyChange(strategyId: string) {
   configLoading.value = true
   try {
     const config = await strategyApi.getTemplateConfig(strategyId)
+    if (seq !== strategyConfigSeq) return
     strategyConfig.value = config
 
     // 填充策略参数（仅 params 段）
@@ -359,10 +363,13 @@ async function onStrategyChange(strategyId: string) {
       })
     }
   } catch (e: unknown) {
+    if (seq !== strategyConfigSeq) return
     showRequestMessage(e, t('backtestPg.msgConfigLoadFail'), 'warning')
     strategyConfig.value = null
   } finally {
-    configLoading.value = false
+    if (seq === strategyConfigSeq) {
+      configLoading.value = false
+    }
   }
 }
 
@@ -450,7 +457,7 @@ async function deleteBacktest(taskId: string) {
   await ElMessageBox.confirm(t('backtestPg.confirmDelete'), t('backtestPg.msgDeletePrompt'), {
     type: 'warning',
   })
-  
+
   await backtestStore.deleteResult(taskId)
   ElMessage.success(t('backtestPg.msgDeleted'))
 }
@@ -462,7 +469,7 @@ onMounted(async () => {
       strategyStore.fetchTemplates(),
       backtestStore.fetchResults(),
     ])
-  
+
     // Support ?strategy= query param from strategy gallery
     const queryStrategy = route.query.strategy as string
     if (queryStrategy) {

@@ -732,7 +732,8 @@ async def draft_budget_generation_members(
     completed: list[dict[str, object]] = []
     for draft_request in catalog_requests:
         content = draft_request["content"]
-        assert type(content) is dict
+        if type(content) is not dict:
+            raise ValueError("Draft request content must be a dict")
         budget = content["afi_budget"]
         account_ref = str(budget["account_ref"])
         try:

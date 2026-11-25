@@ -232,7 +232,10 @@ async def test_strategy_templates_and_config_missing_branches(tmp_path: Path):
     # get_template_config: 404 when missing + success when present
     strategies_dir = tmp_path / "strategies"
     (strategies_dir / "t1").mkdir(parents=True)
-    with patch("app.services.strategy_service.STRATEGIES_DIR", strategies_dir):
+    with (
+        patch("app.services.strategy_service.STRATEGIES_DIR", strategies_dir),
+        patch.object(api, "get_template_by_id", return_value=tpl1),
+    ):
         with pytest.raises(HTTPException) as ei:
             await api.get_template_config("t1")
         assert ei.value.status_code == 404

@@ -448,7 +448,7 @@ async def list_approved_schedule_manifests(
     """Admin-only list of configuration evidence and persisted exact entries."""
     del current_user
     manifests = await service.list_approved_schedule_manifests(limit=limit)
-    return [await service.schedule_manifest_payload(manifest) for manifest in manifests]
+    return await service.schedule_manifest_payloads(manifests)
 
 
 @router.get(

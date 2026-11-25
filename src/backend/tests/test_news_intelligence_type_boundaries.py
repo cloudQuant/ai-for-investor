@@ -19,12 +19,27 @@ _FEED = """
 async def test_default_service_keeps_local_helpers_and_requires_db_for_persistence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[str] = []
+    import socket
 
-    class FakeResponse:
-        text = "<rss><channel></channel></rss>"
+    calls: list[str] = []
+    payload = b"<rss><channel></channel></rss>"
+
+    class FakeStreamResponse:
+        status_code = 200
+        headers: dict[str, str] = {}
+        encoding = "utf-8"
 
         def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_bytes(self):
+            yield payload
+
+    class FakeStreamContext:
+        async def __aenter__(self) -> FakeStreamResponse:
+            return FakeStreamResponse()
+
+        async def __aexit__(self, *_args: object) -> None:
             return None
 
     class FakeAsyncClient:
@@ -37,11 +52,18 @@ async def test_default_service_keeps_local_helpers_and_requires_db_for_persisten
         async def __aexit__(self, *_args: object) -> None:
             pass
 
-        async def get(self, url: str, **_kwargs: object) -> FakeResponse:
+        def stream(self, _method: str, url: str, **_kwargs: object) -> FakeStreamContext:
             calls.append(url)
-            return FakeResponse()
+            return FakeStreamContext()
 
     monkeypatch.setattr("app.services.news_intelligence.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))
+        ],
+    )
     service = NewsIntelligenceService()
 
     classification = service.analyze("Bullish demand surge", allow_ai=False)

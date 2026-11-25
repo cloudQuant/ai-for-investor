@@ -54,14 +54,17 @@ async def create_comparison(
     Returns:
         ComparisonResponse: The created comparison details.
     """
-    comparison = await service.create_comparison(
-        user_id=current_user.sub,
-        name=request.name,
-        description=request.description,
-        backtest_task_ids=request.backtest_task_ids,
-        comparison_type=request.type,
-        is_public=False,
-    )
+    try:
+        comparison = await service.create_comparison(
+            user_id=current_user.sub,
+            name=request.name,
+            description=request.description,
+            backtest_task_ids=request.backtest_task_ids,
+            comparison_type=request.type,
+            is_public=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     return comparison
 
@@ -125,11 +128,14 @@ async def update_comparison(
     Raises:
         HTTPException: If the comparison does not exist or user lacks permission (404).
     """
-    comparison = await service.update_comparison(
-        comparison_id=comparison_id,
-        user_id=current_user.sub,
-        update_data=request,
-    )
+    try:
+        comparison = await service.update_comparison(
+            comparison_id=comparison_id,
+            user_id=current_user.sub,
+            update_data=request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     if not comparison:
         raise HTTPException(

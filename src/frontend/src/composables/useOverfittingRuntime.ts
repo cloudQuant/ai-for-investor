@@ -118,6 +118,7 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
   }
 
   function connectWebSocket(taskId: string): boolean {
+    closeWebSocket()
     if (typeof window === 'undefined' || typeof window.WebSocket === 'undefined') {
       return false
     }
@@ -128,58 +129,74 @@ export function useOverfittingRuntime(options: UseOverfittingRuntimeOptions) {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/overfitting/${taskId}`
     pollingStarted = false
-    ws = new WebSocket(wsUrl, protocols)
+    const currentWs = new WebSocket(wsUrl, protocols)
+    ws = currentWs
 
     heartbeatTimer = setInterval(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send('ping')
+      if (ws === currentWs && currentWs.readyState === WebSocket.OPEN) {
+        currentWs.send('ping')
       }
     }, 30000)
 
-    ws.onmessage = async (event) => {
-      const data = parseRuntimeEvent(event.data)
-      if (!data || data.type === 'pong' || data.type === 'connected') {
-        return
-      }
-      if (data.type === 'task_created') {
-        progressInfo.value = {
-          progress: 0,
-          message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgTaskSubmitted'),
-        }
-        return
-      }
-      if (data.type === 'progress') {
-        progressInfo.value = {
-          progress: typeof data.progress === 'number' ? data.progress : progressInfo.value.progress,
-          message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgRunning'),
-        }
-        return
-      }
-      if (data.type === 'completed') {
-        progressInfo.value = {
-          progress: typeof data.progress === 'number' ? data.progress : 100,
-          message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgCompleted'),
-        }
-        if (data.result) {
-          finishWithResult(data.result)
+    currentWs.onmessage = async (event) => {
+      if (ws !== currentWs) return
+      try {
+        const data = parseRuntimeEvent(event.data)
+        if (!data || data.type === 'pong' || data.type === 'connected') {
           return
         }
-        const result = await strategyApi.getOverfittingTask(taskId)
-        finishWithResult(result)
-        return
-      }
-      if (data.type === 'failed') {
-        finishAsFailed(typeof data.error === 'string' ? data.error : (data.message || tt('overfittingRt.msgFailed')))
+        if (data.type === 'task_created') {
+          progressInfo.value = {
+            progress: 0,
+            message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgTaskSubmitted'),
+          }
+          return
+        }
+        if (data.type === 'progress') {
+          progressInfo.value = {
+            progress: typeof data.progress === 'number' ? data.progress : progressInfo.value.progress,
+            message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgRunning'),
+          }
+          return
+        }
+        if (data.type === 'completed') {
+          progressInfo.value = {
+            progress: typeof data.progress === 'number' ? data.progress : 100,
+            message: typeof data.message === 'string' ? data.message : tt('overfittingRt.msgCompleted'),
+          }
+          if (data.result) {
+            finishWithResult(data.result)
+            return
+          }
+          const result = await strategyApi.getOverfittingTask(taskId)
+          finishWithResult(result)
+          return
+        }
+        if (data.type === 'failed') {
+          finishAsFailed(typeof data.error === 'string' ? data.error : (data.message || tt('overfittingRt.msgFailed')))
+        }
+      } catch (error) {
+        finishAsFailed(
+          error instanceof Error && error.message
+            ? error.message
+            : tt('overfittingRt.msgFailed')
+        )
       }
     }
 
-    ws.onerror = () => {
+    currentWs.onerror = () => {
+      if (ws !== currentWs) return
       closeWebSocket()
       startPollingFallback(taskId)
     }
 
-    ws.onclose = (event) => {
+    currentWs.onclose = (event) => {
+      if (ws !== currentWs) return
       if (!loading.value || event.code === 1000) {
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer)
+          heartbeatTimer = null
+        }
         return
       }
       closeWebSocket()

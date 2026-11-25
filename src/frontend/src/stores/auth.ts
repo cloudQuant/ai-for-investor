@@ -3,9 +3,12 @@ import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import {
   beginSession,
+  getRefreshToken,
   getSessionGeneration,
   getToken,
+  setRefreshToken,
   setToken,
+  setTokenRefreshListener,
 } from '@/utils/tokenRef'
 import type { UserInfo, LoginRequest, RegisterRequest } from '@/types'
 import { clearAccessToken } from '@/utils/session'
@@ -31,6 +34,13 @@ export const useAuthStore = defineStore('auth', () => {
   )
   const isAuthenticated = computed(() => isIdentityConfirmed.value)
 
+  setTokenRefreshListener((nextToken, nextRefreshToken) => {
+    if (token.value !== null) {
+      token.value = nextToken
+      refreshToken.value = nextRefreshToken
+    }
+  })
+
   function isUnauthorized(error: unknown): boolean {
     if (!error || typeof error !== 'object' || !('response' in error)) {
       return false
@@ -51,12 +61,12 @@ export const useAuthStore = defineStore('auth', () => {
 
     useWorkspaceStore().resetForSession()
     token.value = response.access_token
-    refreshToken.value = null
+    refreshToken.value = response.refresh_token ?? null
     user.value = null
     identityStatus.value = 'loading'
     identityError.value = null
     initialized.value = false
-    const sessionGeneration = beginSession(response.access_token)
+    const sessionGeneration = beginSession(response.access_token, response.refresh_token ?? null)
     const confirmed = await fetchUser(sessionGeneration)
 
     if (
@@ -86,6 +96,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (expectedSessionGeneration === undefined && getToken() !== requestToken) {
       setToken(requestToken)
+    }
+    if (expectedSessionGeneration === undefined && getRefreshToken() !== refreshToken.value) {
+      setRefreshToken(refreshToken.value)
     }
 
     const sessionGeneration = expectedSessionGeneration ?? getSessionGeneration()
@@ -162,6 +175,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (getToken() !== storedToken) {
         setToken(storedToken)
+      }
+      if (getRefreshToken() !== refreshToken.value) {
+        setRefreshToken(refreshToken.value)
       }
       const sessionGeneration = getSessionGeneration()
       await fetchUser(sessionGeneration)

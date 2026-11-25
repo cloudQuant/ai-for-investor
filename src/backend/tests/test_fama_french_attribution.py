@@ -84,3 +84,16 @@ async def test_fama_french_api_returns_result(client: AsyncClient):
     assert payload["smb_beta"] == pytest.approx(0.5)
     assert payload["hml_beta"] == pytest.approx(-0.3)
     assert payload["r_squared"] == pytest.approx(1.0)
+
+
+def test_fama_french_service_degrades_on_non_finite_inputs():
+    from app.services.perf_attribution.fama_french import FamaFrenchAttributionService
+
+    result = FamaFrenchAttributionService().calculate(
+        strategy_returns=[0.01, float("nan"), 0.02, 0.03],
+        market_returns=[0.01, 0.02, -0.01, 0.03],
+        smb_returns=[0.0, 0.0, 0.0, 0.0],
+        hml_returns=[0.0, 0.0, 0.0, 0.0],
+    )
+    assert result.status == "degraded"
+    assert result.reason == "non_finite_input"

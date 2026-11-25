@@ -21,6 +21,7 @@ from app.services.live_trading.service_execution_launch import (
     SERVICE_EXECUTION_READY_ENV,
     ServiceStrategyProfileError,
 )
+from app.utils.async_tasks import spawn_tracked_task
 
 # Callback dependencies injected by ``LiveTradingManager``; typed loosely
 # since the concrete signatures vary per callback.
@@ -393,7 +394,10 @@ async def start_instance(
                     latest[instance_id] = failed
                     save_instances(latest)
             if alive:
-                asyncio.create_task(wait_process_callback(instance_id, proc))
+                spawn_tracked_task(
+                    wait_process_callback(instance_id, proc),
+                    name=f"live-wait-failed:{instance_id}",
+                )
             else:
                 await proc.wait()
                 _close_subprocess_log_handles(proc)
@@ -437,7 +441,10 @@ async def start_instance(
         normalize_instance_metadata(inst, instance_id=instance_id, now=now, touch=True)
         latest[instance_id] = inst
         save_instances(latest)
-    asyncio.create_task(wait_process_callback(instance_id, proc))
+    spawn_tracked_task(
+        wait_process_callback(instance_id, proc),
+        name=f"live-wait:{instance_id}",
+    )
     inst["id"] = instance_id
     return inst
 

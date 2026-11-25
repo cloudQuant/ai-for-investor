@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import re
 from datetime import date, timedelta
@@ -30,6 +31,8 @@ from app.services.stock_analysis.opendata_sina_lrb_snapshot import (
     OpenDataSinaLrbSnapshotError,
     OpenDataSinaLrbSnapshotReader,
 )
+
+logger = logging.getLogger(__name__)
 
 _SINA_FZB_SAFE_REASON_CODES = frozenset(
     {
@@ -278,7 +281,7 @@ class StockAnalysisDataCollector:
                 "info": info,
                 "history": history.get("rows") if isinstance(history, dict) else None,
                 "financials": self._has_financial_data(financials),
-                "technicals": technicals,
+                "technicals": bool(technicals.get("factors")),
             }.items()
             if value is False or not value
         ]
@@ -329,22 +332,19 @@ class StockAnalysisDataCollector:
 
     async def _collect_news(self, user_id: str, symbol: str, market_type: str) -> dict[str, Any]:
         local_news = {"items": [], "total": 0, "status": "degraded"}
+        news_svc = get_news_intelligence_service(self.db)
         try:
             local_news = await asyncio.wait_for(
-                get_news_intelligence_service(self.db).list_articles(user_id, ticker=symbol),
-                timeout=10,
+                news_svc.list_articles(user_id, ticker=symbol), timeout=10
             )
             if not local_news.get("items"):
                 normalized_symbol = self._cn_stock_code(symbol)
                 if normalized_symbol != symbol.upper():
                     local_news = await asyncio.wait_for(
-                        get_news_intelligence_service(self.db).list_articles(
-                            user_id, ticker=normalized_symbol
-                        ),
-                        timeout=10,
+                        news_svc.list_articles(user_id, ticker=normalized_symbol), timeout=10
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Local news lookup failed for %s: %s", symbol, exc)
 
         if local_news.get("items") or not self._is_cn_stock(symbol, market_type):
             return local_news
@@ -355,21 +355,18 @@ class StockAnalysisDataCollector:
                 timeout=20,
             )
             items = self._normalize_cn_news(raw_news, symbol)
-        except Exception:
+        except Exception as exc:
+            logger.warning("CN stock news fetch failed for %s: %s", symbol, exc)
             items = []
         if not items:
             return local_news
-        return {
-            "items": items,
-            "total": len(items),
-            "status": "ok",
-            "provider": "akshare",
-        }
+        return {"items": items, "total": len(items), "status": "ok", "provider": "akshare"}
 
     async def _collect_market(self, *, symbol: str, analysis_date: date) -> dict[str, Any]:
         end_date = analysis_date
         start_date = end_date - timedelta(days=365)
         try:
+            # Legacy lookup is deliberately local-only; provider I/O must use the v2 path.
             return await asyncio.wait_for(
                 self.market_service.lookup(
                     asset_type="stock",
@@ -377,13 +374,12 @@ class StockAnalysisDataCollector:
                     start_date=start_date,
                     end_date=end_date,
                     period="daily",
-                    # Legacy lookup is deliberately local-only. Provider I/O
-                    # must use the v2 local-first path with durable receipts.
                     refresh_online=False,
                 ),
                 timeout=30,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Local market lookup failed for %s: %s", symbol, exc)
             return {
                 "symbol": symbol,
                 "name": symbol,
@@ -441,7 +437,8 @@ class StockAnalysisDataCollector:
                 asyncio.to_thread(self._fetch_cn_company_profile, self._cn_xq_symbol(symbol)),
                 timeout=20,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Company profile lookup failed for %s: %s", symbol, exc)
             return info, peers
 
         profile = self._frame_key_values(profile_frame)
@@ -452,10 +449,10 @@ class StockAnalysisDataCollector:
 
         try:
             members_frame = await asyncio.wait_for(
-                asyncio.to_thread(self._fetch_cn_industry_members, industry),
-                timeout=20,
+                asyncio.to_thread(self._fetch_cn_industry_members, industry), timeout=20
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Industry peers lookup failed for %s (%s): %s", symbol, industry, exc)
             return info, peers
         items = self._normalize_cn_industry_peers(
             members_frame,
@@ -573,11 +570,10 @@ class StockAnalysisDataCollector:
                 timeout=30,
             )
             annual, quarterly = self._normalize_cn_financials(
-                abstract,
-                indicators,
-                analysis_date=analysis_date,
+                abstract, indicators, analysis_date=analysis_date
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("CN financial fetch failed for %s: %s", symbol, exc)
             return financials
 
         if annual or quarterly:

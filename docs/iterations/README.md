@@ -10,6 +10,7 @@
 
 | 迭代 | 主题 | 状态 |
 |------|------|------|
+| [迭代206](迭代206-OpenCodeReview全仓代码审阅与缺陷修复方案/README.md) | OpenCodeReview 全仓代码审阅与缺陷修复方案 | **PLANNED（审阅完成）**；基于 `ocr v1.13.11` 委托规则集与 6 路并行源码审阅，确认 44 项缺陷与优化（P0×8 / P1×24 / P2×7 / P3×5），已建立 [AUDIT](迭代206-OpenCodeReview全仓代码审阅与缺陷修复方案/AUDIT.md) 与逐项 [TODO 清单](迭代206-OpenCodeReview全仓代码审阅与缺陷修复方案/TODO.md) |
 | [迭代205](迭代205-全仓代码审查与质量门禁收口/README.md) | 全仓代码审查与质量门禁收口 | **ACCEPTED_LOCAL（P0/P1/P2 代码范围）**；P0 数据写入回执与 SQLite 迁移已修复；门禁 fail-closed、MySQL 连接池、THS offload、APP_ENV、后端 e2e、复杂度棘轮已落地；全量套件 54 failed/0 error，残项为 pinned-SDK/既有 fixture，见 [ACCEPTANCE_RESULT](迭代205-全仓代码审查与质量门禁收口/ACCEPTANCE_RESULT.md) |
 | [迭代204](迭代204-OpenData数据中台拆分与五人并行迁移/README.md) | OpenData数据中台拆分与五人并行迁移 | 两仓 `dev` 已有局部代码/离线交付合入；98个控制任务：8 DEV_DONE、9 IN_PROGRESS、81 PLANNED；迭代204整体未完成，真实源/生产/部署验收仍开放 |
 | [迭代202](迭代202-项目综合审查与可靠性优化/README.md) | 项目综合审查与可靠性优化 | PASS / ACCEPTED_LOCAL；12项本轮缺陷完成，D04/D05及WP03延后至OpenData |

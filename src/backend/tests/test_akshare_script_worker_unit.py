@@ -662,3 +662,94 @@ def test_main_exits_without_interpreter_finalisation(
     # ``os._exit(0)`` is the guarantee that a blocked non-daemon thread cannot
     # keep the killable worker alive after its receipt is on disk.
     assert exits == [0]
+
+
+def test_execute_callable_preserves_call_timeout_when_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    seen: dict[str, Any] = {}
+
+    def with_kwargs(**kwargs: Any) -> dict[str, Any]:
+        seen["kwargs"] = kwargs
+        return kwargs
+
+    def explicit_timeout(symbol: str, _call_timeout: int | None = None) -> tuple[str, int | None]:
+        return symbol, _call_timeout
+
+    def plain_endpoint(symbol: str) -> str:
+        return symbol
+
+    monkeypatch.setattr(runtime_module, "_callable_descriptor", lambda _callable: None)
+
+    kwargs_result = asyncio.run(
+        runtime_module._execute_callable(
+            with_kwargs,
+            {
+                "symbol": "000001",
+                "_call_timeout": 15,
+                "_ingest_mode": "backfill",
+                "claim_key": "k",
+            },
+            timeout_s=30,
+        )
+    )
+    assert kwargs_result == {"symbol": "000001", "_call_timeout": 15}
+
+    explicit_result = asyncio.run(
+        runtime_module._execute_callable(
+            explicit_timeout,
+            {"symbol": "000001", "_call_timeout": 12, "_ingest_mode": "incremental"},
+            timeout_s=30,
+        )
+    )
+    assert explicit_result == ("000001", 12)
+
+    plain_result = asyncio.run(
+        runtime_module._execute_callable(
+            plain_endpoint,
+            {"symbol": "000001", "_call_timeout": 12, "_ingest_mode": "incremental"},
+            timeout_s=30,
+        )
+    )
+    assert plain_result == "000001"
+
+
+def test_execute_callable_in_worker_cleans_up_temp_dir_on_pickle_error(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    import asyncio
+    import pickle
+
+    created_dir = tmp_path / "worker-receipt-leak-check"
+    created_dir.mkdir()
+    monkeypatch.setattr(runtime_module.tempfile, "mkdtemp", lambda prefix="": str(created_dir))
+    monkeypatch.setattr(
+        runtime_module.pickle,
+        "dumps",
+        lambda *_a, **_kw: (_ for _ in ()).throw(pickle.PicklingError("unpicklable")),
+    )
+
+    with pytest.raises(pickle.PicklingError, match="unpicklable"):
+        asyncio.run(
+            runtime_module._execute_callable_in_worker(
+                {"kind": "function", "module": "m", "qualname": "f"},
+                {},
+                timeout_s=5.0,
+            )
+        )
+    assert not created_dir.exists()
+
+
+def test_kill_worker_group_skips_already_exited_process(monkeypatch: Any) -> None:
+    class _ExitedProc:
+        pid = 123456
+
+        def poll(self) -> int:
+            return 0
+
+    called: list[str] = []
+    monkeypatch.setattr(runtime_module.os, "getpgid", lambda _pid: called.append("getpgid"))
+    runtime_module._kill_worker_group(_ExitedProc())  # type: ignore[arg-type]
+    assert called == []

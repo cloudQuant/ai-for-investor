@@ -759,3 +759,37 @@ async def test_paper_account_websocket_accepts_owner_with_subprotocol(monkeypatc
     manager.send_to_task.assert_awaited()
     assert manager.send_to_task.await_args.args[1]["data"]["total_equity"] == 1005.0
     manager.disconnect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_paper_account_websocket_detects_disconnect_via_receive_text(monkeypatch):
+    """Real WebSocket endpoints must drain receive_text() and clean up in finally."""
+    from app.api import paper_trading
+
+    websocket = SimpleNamespace(
+        close=AsyncMock(),
+        receive_text=AsyncMock(side_effect=WebSocketDisconnect()),
+    )
+    account = SimpleNamespace(
+        id="acct-1",
+        user_id="u1",
+        current_cash=1000.0,
+        total_equity=1005.0,
+        profit_loss=5.0,
+        profit_loss_pct=0.5,
+    )
+    service = SimpleNamespace(get_account=AsyncMock(return_value=account))
+    manager = SimpleNamespace(connect=AsyncMock(), send_to_task=AsyncMock(), disconnect=Mock())
+
+    monkeypatch.setattr(
+        paper_trading,
+        "get_websocket_current_user",
+        lambda _ws: (SimpleNamespace(sub="u1"), "access-token"),
+    )
+    monkeypatch.setattr(paper_trading, "PaperTradingService", lambda: service)
+    monkeypatch.setattr("app.websocket_manager.manager", manager)
+
+    await paper_trading.websocket_account_endpoint(websocket, "acct-1")
+
+    websocket.receive_text.assert_awaited_once()
+    manager.disconnect.assert_called_once()

@@ -26,6 +26,7 @@ from app.services.research.promotion import (
     promotion_policy_material_hash,
     resolve_server_policy,
 )
+from app.utils.invariants import require_present
 
 _LOCK_SHARDS = 64
 _LOCKS_BY_LOOP: weakref.WeakKeyDictionary[
@@ -183,7 +184,7 @@ class HoldoutExecutionJournal:
                     command=verified,
                     code="HOLDOUT_EXECUTION_TRANSITION_DENIED",
                 )
-                assert record is not None
+                record = require_present(record, "execution record missing")
                 bound_command = await _require_unknown_binding(
                     session,
                     user_id=user_id,
@@ -271,7 +272,7 @@ class HoldoutExecutionJournal:
                     command=verified,
                     code="HOLDOUT_EXECUTION_TRANSITION_DENIED",
                 )
-                assert record is not None
+                record = require_present(record, "execution record missing")
                 if record.state == "PREPARED" and record.not_executed_at is not None:
                     return record
                 if (
@@ -326,7 +327,7 @@ class HoldoutExecutionJournal:
                     command=verified,
                     code="HOLDOUT_EXECUTION_RESULT_DENIED",
                 )
-                assert record is not None
+                record = require_present(record, "execution record missing")
                 if record.state in {"OBSERVED", "SETTLED"}:
                     if record.result_hash == result_hash and record.result_json == result_snapshot:
                         return record
@@ -375,7 +376,7 @@ class HoldoutExecutionJournal:
                     command=verified,
                     code="HOLDOUT_EXECUTION_SETTLEMENT_DENIED",
                 )
-                assert record is not None
+                record = require_present(record, "execution record missing")
                 if record.state == "SETTLED":
                     return record
                 if record.state != "OBSERVED" or record.result_hash is None:
@@ -415,7 +416,7 @@ class HoldoutExecutionJournal:
                 command=verified,
                 code="HOLDOUT_EXECUTION_NOT_FOUND",
             )
-            assert record is not None
+            record = require_present(record, "execution record missing")
             return record
 
     async def _transition(
@@ -438,7 +439,7 @@ class HoldoutExecutionJournal:
                     command=verified,
                     code="HOLDOUT_EXECUTION_TRANSITION_DENIED",
                 )
-                assert record is not None
+                record = require_present(record, "execution record missing")
                 if record.state == to_state and record.error_code == error_code:
                     return record
                 if record.state not in from_states or record.result_hash is not None:
@@ -669,7 +670,7 @@ def _require_exact(
 ) -> ResearchHoldoutExecution:
     _require_owner_command(record, user_id=user_id, command=command, code=conflict_code)
     snapshot = command.snapshot
-    assert record is not None
+    record = require_present(record, "execution record missing")
     if (
         record.operation_id != snapshot["operation_id"]
         or record.evaluation_id != snapshot["evaluation_id"]

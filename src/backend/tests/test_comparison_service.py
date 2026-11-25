@@ -141,7 +141,7 @@ class TestCreateComparison:
         )
 
         assert response.id == "comp_123"
-        service.backtest_service.get_result.assert_awaited_once_with("task1")
+        service.backtest_service.get_result.assert_awaited_once_with("task1", user_id="user_123")
 
 
 @pytest.mark.asyncio
@@ -305,10 +305,89 @@ class TestFindBestMetrics:
         result = service._find_best_metrics(backtest_results)
 
         assert result["total_return"]["task_id"] == "task2"  # 0.18 > 0.15
-        # max_drawdown: look for smallest (most negative) value, so task1(-0.10)
-        assert result["max_drawdown"]["task_id"] == "task1"
-        assert result["max_drawdown"]["value"] == -0.10
+        # max_drawdown: shallowest drawdown magnitude wins (-0.08 beats -0.10)
+        assert result["max_drawdown"]["task_id"] == "task2"
+        assert result["max_drawdown"]["value"] == -0.08
         assert result["win_rate"]["task_id"] == "task2"  # 0.65 > 0.60
+
+    def test_find_best_metrics_empty_returns_none_sentinels(self):
+        import json
+
+        service = ComparisonService()
+        result = service._find_best_metrics({})
+        for metric in ("total_return", "annual_return", "sharpe_ratio", "max_drawdown", "win_rate"):
+            assert result[metric] == {"task_id": None, "value": None}
+        json.dumps(result)
+
+    async def test_create_and_update_comparison_with_trades_and_user_scoping(self):
+        from types import SimpleNamespace
+
+        from app.schemas.backtest import TradeRecord
+
+        service = ComparisonService()
+        seen_calls = []
+
+        async def fake_get_result(task_id: str, user_id: str | None = None):
+            seen_calls.append((task_id, user_id))
+            return SimpleNamespace(
+                strategy_id="s1",
+                symbol="000001.SZ",
+                total_return=0.2,
+                annual_return=0.15,
+                sharpe_ratio=1.2,
+                max_drawdown=-5.0,
+                win_rate=0.5,
+                total_trades=2,
+                equity_curve=[100.0, 110.0],
+                equity_dates=["2024-01-01", "2024-01-02"],
+                drawdown_curve=[0.0, -0.05],
+                trades=[
+                    TradeRecord(
+                        date="2024-01-02",
+                        type="sell",
+                        price=10.0,
+                        size=1.0,
+                        value=10.0,
+                        pnl=5.0,
+                    )
+                ],
+            )
+
+        service.backtest_service = AsyncMock()
+        service.backtest_service.get_result = AsyncMock(side_effect=fake_get_result)
+        service.comparison_repo = AsyncMock()
+        created_obj = Mock()
+        created_obj.id = "comp_t"
+        created_obj.user_id = "owner-1"
+        created_obj.name = "Trades Comp"
+        created_obj.description = None
+        created_obj.type = ComparisonType.TRADES
+        created_obj.backtest_task_ids = ["t1", "t2"]
+        created_obj.comparison_data = {}
+        created_obj.is_favorite = False
+        created_obj.is_public = False
+        created_obj.created_at = datetime.now()
+        created_obj.updated_at = datetime.now()
+        service.comparison_repo.create = AsyncMock(
+            side_effect=lambda obj: setattr(obj, "id", "comp_t") or created_obj
+        )
+        service.comparison_repo.get_by_id = AsyncMock(return_value=created_obj)
+        service.comparison_repo.update = AsyncMock(return_value=created_obj)
+
+        for comp_type in (ComparisonType.METRICS, ComparisonType.TRADES, ComparisonType.EQUITY):
+            created_obj.type = comp_type
+            await service.create_comparison(
+                user_id="owner-1",
+                name="Trades Comp",
+                backtest_task_ids=["t1", "t2"],
+                comparison_type=comp_type,
+            )
+            await service.update_comparison(
+                comparison_id="comp_t",
+                user_id="owner-1",
+                update_data=ComparisonUpdate(backtest_task_ids=["t1", "t2"]),
+            )
+        assert all(uid == "owner-1" for _, uid in seen_calls)
 
     def test_find_best_metrics_single_task(self):
         """Test finding best metrics for single task"""

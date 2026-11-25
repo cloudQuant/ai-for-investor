@@ -103,6 +103,7 @@ export class AuditTracker {
   private getUserId: () => string | null
   private sessionId: string
   private active = false
+  private flushing = false
 
   constructor(getUserId: () => string | null) {
     this.getUserId = getUserId
@@ -169,11 +170,24 @@ export class AuditTracker {
   }
 
   /**
+   * Clear buffered and locally persisted pending events (e.g. on logout).
+   */
+  clearPending(): void {
+    this.buffer = []
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // Ignore storage failures
+    }
+  }
+
+  /**
    * Flush buffered events to the API immediately.
    */
   async flush(): Promise<void> {
-    if (this.buffer.length === 0) return
+    if (this.flushing || this.buffer.length === 0 || !this.getUserId()) return
 
+    this.flushing = true
     const eventsToSend = this.buffer.splice(0, MAX_BATCH_SIZE)
 
     try {
@@ -183,6 +197,8 @@ export class AuditTracker {
     } catch {
       // API unreachable — store events in localStorage
       this.persistToLocal(eventsToSend)
+    } finally {
+      this.flushing = false
     }
   }
 
@@ -259,17 +275,25 @@ export class AuditTracker {
     const stored = this.getStoredEvents()
     if (stored.length === 0) return
 
+    let sentCount = 0
     try {
-      // Send in batches of MAX_BATCH_SIZE
-      while (stored.length > 0) {
-        const batch = stored.splice(0, MAX_BATCH_SIZE)
+      // Send in batches of MAX_BATCH_SIZE; advance offset only after success so failed batches stay queued
+      while (sentCount < stored.length) {
+        const batch = stored.slice(sentCount, sentCount + MAX_BATCH_SIZE)
         await postAuditEvents(batch)
+        sentCount += batch.length
       }
       localStorage.removeItem(STORAGE_KEY)
     } catch {
-      // Re-store remaining events
-      if (stored.length > 0) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
+      const remaining = stored.slice(sentCount)
+      try {
+        if (remaining.length > 0) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining.slice(-MAX_LOCAL_STORAGE_EVENTS)))
+        } else {
+          localStorage.removeItem(STORAGE_KEY)
+        }
+      } catch {
+        // localStorage might be full or unavailable
       }
     }
   }

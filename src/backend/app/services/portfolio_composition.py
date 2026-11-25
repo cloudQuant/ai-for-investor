@@ -30,6 +30,7 @@ from app.services.service_read.contracts import (
     AccountReadView,
     ReadQuality,
 )
+from app.utils.invariants import require_present
 
 
 class PortfolioCompositionService:
@@ -825,11 +826,8 @@ def _project_account_total(
     grouped: dict[str, list[tuple[str, AccountReadView]]] = defaultdict(list)
     unresolved: list[tuple[str, AccountReadView]] = []
     for member_ref, view, identity in reads:
-        assert view is not None
-        if not identity:
-            unresolved.append((member_ref, view))
-        else:
-            grouped[identity].append((member_ref, view))
+        resolved_view = require_present(view, "account read view missing")
+        (grouped[identity] if identity else unresolved).append((member_ref, resolved_view))
 
     rows: list[dict[str, Any]] = []
     total = Decimal("0")

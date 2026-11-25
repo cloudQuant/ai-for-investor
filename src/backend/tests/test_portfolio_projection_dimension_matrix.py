@@ -32,6 +32,7 @@ from app.api.portfolio import router as portfolio_router  # noqa: E402
 from app.api.service_read import configure_service_read  # noqa: E402
 from app.db.database import get_db  # noqa: E402
 from app.models.portfolio_composition import PortfolioCompositionVersion  # noqa: E402
+from app.models.user import User  # noqa: E402
 from app.schemas.auth import TokenPayload  # noqa: E402
 from app.services.service_read.access import ReadAccess, ServiceReadAccessDirectory  # noqa: E402
 from app.services.service_read.contracts import AccountReadView, ReadQuality  # noqa: E402
@@ -138,10 +139,21 @@ def _read_live_projection(views: dict[str, AccountReadView]) -> dict[str, Any]:
             poolclass=StaticPool,
         )
         async with engine.begin() as connection:
+            await connection.run_sync(User.__table__.create)
             await connection.run_sync(PortfolioCompositionVersion.__table__.create)
         session_maker = async_sessionmaker(engine, expire_on_commit=False)
         members = [{"kind": "account", "ref": account_ref} for account_ref in views]
         async with session_maker() as db:
+            db.add(
+                User(
+                    id=owner.sub,
+                    username=owner.username,
+                    email=f"{owner.sub}@example.com",
+                    hashed_password="x",
+                    is_active=True,
+                    principal_kind="HUMAN",
+                )
+            )
             db.add(
                 PortfolioCompositionVersion(
                     owner_subject=owner.sub,

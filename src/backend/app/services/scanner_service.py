@@ -60,9 +60,11 @@ class ScannerService:
         # unit contracts. Fail before resolving a provider or touching caches/tasks.
         raise ValueError(SCANNER_DATA_UNAVAILABLE)
 
-    def get_task(self, task_id: str) -> dict[str, Any] | None:
+    def get_task(self, task_id: str, user_id: str | None = None) -> dict[str, Any] | None:
         payload = self._tasks.get(task_id)
         if payload is None:
+            return None
+        if user_id is not None and str(payload.get("user_id") or "") != str(user_id):
             return None
         result = dict(payload)
         if result.get("data_status") != "verified":

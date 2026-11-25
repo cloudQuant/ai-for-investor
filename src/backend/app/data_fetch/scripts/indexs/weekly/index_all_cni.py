@@ -176,12 +176,13 @@ class IndexAllCNI(AkshareToMySql):
                 unique_keys=["TRADE_DATE", "INDEX_CODE"],
             )
 
-            if success:
+            if success is not False:
                 self.logger.info(
                     f"Successfully updated {len(df)} records in {self.table_name} "
                     f"for date {trade_date}"
                 )
-            return success
+                return True
+            return False
 
         except Exception as e:
             self.logger.error(f"Error in run: {str(e)}", exc_info=True)

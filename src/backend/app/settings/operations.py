@@ -114,3 +114,9 @@ class OperationsSettingsMixin:
         default="http://localhost:8000",
         description="Base URL for Airflow task callbacks to ai-for-investor",
     )
+
+    AIRFLOW_CALLBACK_SECRET: str = Field(
+        default="",
+        repr=False,
+        description="Shared secret (Bearer token or HMAC-SHA256 key) for Airflow task callbacks",
+    )

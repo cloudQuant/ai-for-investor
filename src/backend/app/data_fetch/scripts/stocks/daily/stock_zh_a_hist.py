@@ -25,12 +25,99 @@ class StockZhAHist(AkshareToMySql):
             `symbol` VARCHAR(50) COMMENT '品种代码',
             `name` VARCHAR(100) COMMENT '品种名称',
             `data_date` DATE COMMENT '数据日期',
+            `source` VARCHAR(32) NOT NULL DEFAULT 'eastmoney' COMMENT '数据来源',
+            `adjustment` VARCHAR(32) NOT NULL DEFAULT 'qfq' COMMENT '复权口径',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-        UNIQUE KEY uk_symbol_date (`symbol`, `data_date`),
+        UNIQUE KEY uk_symbol_date_adjustment_source (`symbol`, `data_date`, `adjustment`, `source`),
         INDEX idx_data_date (`data_date`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Stock Zh A Hist'
     """
+
+    def create_table_if_not_exists(
+        self, table_name: str | None = None, create_table_sql: str | None = None
+    ) -> bool:
+        """Create table when absent, or backfill ``source``/``adjustment``/UK on legacy tables."""
+        created = super().create_table_if_not_exists(table_name, create_table_sql)
+        target_table = table_name or self.table_name
+        if not created and target_table == self.table_name:
+            self._migrate_legacy_schema(target_table)
+        return created
+
+    def _migrate_legacy_schema(self, table_name: str = "STOCK_ZH_A_HIST") -> None:
+        """Ensure legacy ``STOCK_ZH_A_HIST`` tables have ``source``, ``adjustment``, and the 4-col UK."""
+        safe_table = str(table_name).replace("`", "``")
+        try:
+            self.connect_db()
+            cursor = self.require_cursor()
+            conn = self.require_connection()
+
+            cursor.execute(f"SHOW COLUMNS FROM `{safe_table}`")  # nosec B608
+            existing_cols = {
+                str(row[0]).lower() for row in (cursor.fetchall() or []) if row and row[0]
+            }
+            if "source" not in existing_cols:
+                cursor.execute(
+                    f"ALTER TABLE `{safe_table}` ADD COLUMN `source` "  # nosec B608
+                    "VARCHAR(32) NOT NULL DEFAULT 'eastmoney' COMMENT '数据来源'"
+                )
+            if "adjustment" not in existing_cols:
+                cursor.execute(
+                    f"ALTER TABLE `{safe_table}` ADD COLUMN `adjustment` "  # nosec B608
+                    "VARCHAR(32) NOT NULL DEFAULT 'qfq' COMMENT '复权口径'"
+                )
+
+            cursor.execute(f"SHOW INDEX FROM `{safe_table}`")  # nosec B608
+            unique_indexes: dict[str, list[tuple[int, str]]] = {}
+            for row in cursor.fetchall() or []:
+                if not row or len(row) < 5:
+                    continue
+                non_unique = int(row[1]) if row[1] is not None else 1
+                key_name = str(row[2])
+                if non_unique != 0 or key_name.upper() == "PRIMARY":
+                    continue
+                seq_in_index = int(row[3]) if row[3] is not None else 0
+                col_name = str(row[4]).lower()
+                unique_indexes.setdefault(key_name, []).append((seq_in_index, col_name))
+
+            desired_cols = ("symbol", "data_date", "adjustment", "source")
+            has_desired_uk = False
+            for idx_name, col_pairs in unique_indexes.items():
+                ordered = tuple(col for _, col in sorted(col_pairs))
+                if ordered == desired_cols:
+                    has_desired_uk = True
+                elif ordered in {("symbol", "data_date"), ("symbol", "data_date", "adjustment")}:
+                    safe_idx = idx_name.replace("`", "``")
+                    cursor.execute(
+                        f"ALTER TABLE `{safe_table}` DROP INDEX `{safe_idx}`"  # nosec B608
+                    )
+
+            if not has_desired_uk:
+                cursor.execute(
+                    f"ALTER TABLE `{safe_table}` "  # nosec B608
+                    "ADD UNIQUE KEY uk_symbol_date_adjustment_source "
+                    "(`symbol`, `data_date`, `adjustment`, `source`)"
+                )
+            conn.commit()
+        except Exception as exc:
+            self.logger.warning(f"Failed to check/migrate {table_name} schema: {exc}")
+        finally:
+            self.disconnect_db()
+
+    @staticmethod
+    def _normalize_adjust(raw_adjust: object) -> tuple[str, str]:
+        """Return ``(upstream_ak_adjust, warehouse_adjustment_label)``.
+
+        Explicit empty string ``""`` denotes unadjusted (不复权) prices and must
+        never collapse into ``"qfq"``. When omitted (``None``), preserve the
+        historical ``"qfq"`` default and pass it consistently upstream.
+        """
+        if raw_adjust is None:
+            return "qfq", "qfq"
+        text = str(raw_adjust).strip().lower()
+        if text in {"", "none", "unadjusted", "bfq"}:
+            return "", "none"
+        return text, text
 
     @staticmethod
     def _trend_secid(symbol: str) -> str:
@@ -43,6 +130,13 @@ class StockZhAHist(AkshareToMySql):
         symbol = str(symbol or "").strip()
         if symbol.startswith(("sh", "sz", "bj")):
             return symbol
+        if symbol.startswith("920"):
+            # Beijing Stock Exchange renumbered its board to 920xxxx in 2024; the old
+            # 4xxxxx/8xxxxx rule leaves these misrouted to Shenzhen, where they 404.
+            return f"bj{symbol}"
+        if symbol.startswith("9"):
+            # 900xxx are Shanghai B shares, not another Beijing segment.
+            return f"sh{symbol}"
         if symbol.startswith("6"):
             return f"sh{symbol}"
         if symbol.startswith(("4", "8")):
@@ -51,18 +145,19 @@ class StockZhAHist(AkshareToMySql):
 
     def _fetch_daily_from_tencent(self, **kwargs) -> pd.DataFrame:
         symbol = str(kwargs.get("symbol") or "000001").strip()
+        upstream_adjust, _ = self._normalize_adjust(kwargs.get("adjust"))
         tx_kwargs = {
             "symbol": self._tx_symbol(symbol),
             "start_date": kwargs.get("start_date", "19700101"),
             "end_date": kwargs.get("end_date", "20500101"),
-            "adjust": kwargs.get("adjust", "qfq"),
+            "adjust": upstream_adjust,
         }
         if kwargs.get("_call_timeout") is not None:
             tx_kwargs["_call_timeout"] = kwargs["_call_timeout"]
         try:
             df = self.fetch_ak_data("stock_zh_a_hist_tx", **tx_kwargs)
         except Exception as exc:
-            self.logger.warning(f"Tencent stock history fallback failed: {exc}")
+            self.logger.warning(f"Tencent stock history fetch failed: {exc}")
             return pd.DataFrame()
         if df is None or df.empty:
             return pd.DataFrame()
@@ -85,9 +180,7 @@ class StockZhAHist(AkshareToMySql):
         for column in ("振幅", "涨跌幅", "涨跌额", "换手率"):
             if column not in df.columns:
                 df[column] = None
-        self.logger.warning(
-            "Eastmoney kline returned empty; populated STOCK_ZH_A_HIST from Tencent daily history"
-        )
+        self.logger.info("Populated STOCK_ZH_A_HIST from Tencent daily history")
         return df
 
     def _fetch_daily_from_trends(
@@ -194,99 +287,98 @@ class StockZhAHist(AkshareToMySql):
         Returns:
             pd.DataFrame: Fetched data
         """
-        try:
-            source = str(kwargs.pop("source", "auto") or "auto").lower()
-            source_aliases = {
-                "tx": "tencent",
-                "qq": "tencent",
-                "em": "eastmoney",
-                "east_money": "eastmoney",
-            }
-            source = source_aliases.get(source, source)
-            if source not in {"auto", "eastmoney", "tencent"}:
-                self.logger.warning(f"Unknown stock history source {source!r}; using auto")
-                source = "auto"
+        raw_adjust = kwargs.pop("adjust", None)
+        upstream_adjust, adjustment_label = self._normalize_adjust(raw_adjust)
+        source = str(kwargs.pop("source", "auto") or "auto").lower()
+        source_aliases = {
+            "tx": "tencent",
+            "qq": "tencent",
+            "em": "eastmoney",
+            "east_money": "eastmoney",
+        }
+        source = source_aliases.get(source, source)
+        if source not in {"auto", "eastmoney", "tencent"}:
+            self.logger.warning(f"Unknown stock history source {source!r}; using auto")
+            source = "auto"
 
-            # Fetch data from AkShare
+        fetch_kwargs = dict(kwargs)
+        fetch_kwargs["adjust"] = upstream_adjust
+
+        try:
             source_used = "eastmoney"
+            symbol = str(fetch_kwargs.get("symbol") or "000001")
             if source == "tencent":
-                df = self._fetch_daily_from_tencent(**kwargs)
+                df = self._fetch_daily_from_tencent(**fetch_kwargs)
                 source_used = "tencent"
             else:
                 try:
-                    df = self.fetch_ak_data("stock_zh_a_hist", **kwargs)
+                    df = self.fetch_ak_data("stock_zh_a_hist", **fetch_kwargs)
                 except Exception as fetch_exc:
-                    self.logger.warning(
-                        f"Eastmoney kline fetch failed, trying Tencent daily history: {fetch_exc}"
-                    )
+                    self.logger.warning(f"Eastmoney kline fetch failed: {fetch_exc}")
                     df = pd.DataFrame()
 
-            if df is None or df.empty:
-                symbol = str(kwargs.get("symbol") or "000001")
-                if source in {"auto", "tencent"}:
-                    df = self._fetch_daily_from_tencent(**kwargs)
+                if (df is None or df.empty) and source == "auto":
+                    df = self._fetch_daily_from_tencent(**fetch_kwargs)
                     if df is not None and not df.empty:
                         source_used = "tencent"
+
                 if df is None or df.empty:
                     df = self._fetch_daily_from_trends(
                         symbol=symbol,
-                        start_date=kwargs.get("start_date"),
-                        end_date=kwargs.get("end_date"),
+                        start_date=fetch_kwargs.get("start_date"),
+                        end_date=fetch_kwargs.get("end_date"),
                     )
-                if df is None or df.empty:
-                    self.logger.warning("No data found")
-                    return pd.DataFrame()
+                    if df is not None and not df.empty:
+                        source_used = "eastmoney_trends"
+                        adjustment_label = "none"
 
-            # Process data if needed
+            if df is None or df.empty:
+                self.logger.warning("No data found")
+                return pd.DataFrame()
+
             # Add data_date if not exists
             if "日期" in df.columns:
                 df["日期"] = pd.to_datetime(df["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
                 df = df.dropna(subset=["日期"]).drop_duplicates(subset=["日期"])
+                if df.empty:
+                    self.logger.warning("No valid rows left after date normalization")
+                    return pd.DataFrame()
                 df["data_date"] = df["日期"]
             elif "data_date" not in df.columns:
                 df["data_date"] = pd.Timestamp.now().date()
             if "symbol" not in df.columns:
                 if "股票代码" in df.columns:
                     df["symbol"] = df["股票代码"].astype(str)
-                elif kwargs.get("symbol") is not None:
-                    df["symbol"] = str(kwargs["symbol"])
-            if "name" not in df.columns and kwargs.get("symbol") is not None:
-                df["name"] = str(kwargs["symbol"])
-            # A business date can carry several observation series (source and
-            # adjustment basis are part of the table's unique key). Stamping both
-            # keeps this run's series distinct from rows the legacy pipeline wrote
-            # with its column defaults instead of overwriting them.
+                elif fetch_kwargs.get("symbol") is not None:
+                    df["symbol"] = str(fetch_kwargs["symbol"])
+            if "name" not in df.columns and fetch_kwargs.get("symbol") is not None:
+                df["name"] = str(fetch_kwargs["symbol"])
+            # A business date can carry several observation series (adjustment
+            # basis and source are part of the table's unique key). Stamping
+            # both keeps this run's series distinct from other bases/sources.
             df["source"] = source_used
-            df["adjustment"] = str(kwargs.get("adjust") or "qfq")
-
-            # Save to database. STOCK_ZH_A_HIST is keyed by
-            # (symbol, data_date, adjustment); deleting by data_date alone would
-            # remove the same day's rows for other symbols during batch backfills.
-            import sys
-
-            sys.stderr.write(
-                "stock save payload symbol={} rows={} adjustment={} source={} last_date={}\n".format(
-                    df["symbol"].iloc[-1],
-                    len(df),
-                    df["adjustment"].iloc[-1],
-                    df["source"].iloc[-1],
-                    df["data_date"].iloc[-1],
-                )
-            )
-            sys.stderr.flush()
-            self.create_table_if_not_exists(self.table_name, self.create_table_sql)
-            self.save_data(
-                df,
-                self.table_name,
-                on_duplicate_update=True,
-                unique_keys=["symbol", "data_date", "adjustment"],
-            )
-
-            return df
-
-        except Exception as e:
-            self.logger.error(f"Error fetching data: {e}")
+            df["adjustment"] = adjustment_label
+        except Exception as exc:
+            self.logger.error(f"Error fetching data: {exc}")
             return pd.DataFrame()
+
+        self.logger.info(
+            "stock save payload symbol=%s rows=%d adjustment=%s source=%s last_date=%s",
+            df["symbol"].iloc[-1],
+            len(df),
+            df["adjustment"].iloc[-1],
+            df["source"].iloc[-1],
+            df["data_date"].iloc[-1],
+        )
+        self.create_table_if_not_exists(self.table_name, self.create_table_sql)
+        self.save_data(
+            df,
+            self.table_name,
+            on_duplicate_update=True,
+            unique_keys=["symbol", "data_date", "adjustment", "source"],
+        )
+
+        return df
 
 
 def main():

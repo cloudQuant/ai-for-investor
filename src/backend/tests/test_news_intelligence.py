@@ -181,12 +181,25 @@ async def test_news_intelligence_pull_source_and_filter_articles(
 async def test_news_intelligence_default_rss_fetcher_uses_financial_feed_headers(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    import socket
+
     captured: dict[str, object] = {}
 
-    class FakeResponse:
-        text = "<rss><channel></channel></rss>"
+    class FakeStreamResponse:
+        status_code = 200
+        headers: dict[str, str] = {}
+        encoding = "utf-8"
 
         def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_bytes(self):
+            yield b"<rss><channel></channel></rss>"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args) -> None:
             return None
 
     class FakeAsyncClient:
@@ -199,20 +212,142 @@ async def test_news_intelligence_default_rss_fetcher_uses_financial_feed_headers
         async def __aexit__(self, *args) -> None:
             return None
 
-        async def get(self, url: str, **kwargs):
+        def stream(self, method: str, url: str, **kwargs):
+            captured["method"] = method
             captured["url"] = url
-            captured["get_kwargs"] = kwargs
-            return FakeResponse()
+            captured["stream_kwargs"] = kwargs
+            return FakeStreamResponse()
 
     monkeypatch.setattr("app.services.news_intelligence.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, **k: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))
+        ],
+    )
 
     body = await NewsIntelligenceService()._default_rss_fetcher(
         "https://feeds.bloomberg.com/markets/news.rss"
     )
 
-    get_kwargs = captured["get_kwargs"]
+    stream_kwargs = captured["stream_kwargs"]
     assert body.startswith("<rss")
+    assert captured["method"] == "GET"
     assert captured["url"] == "https://feeds.bloomberg.com/markets/news.rss"
-    assert "headers" in get_kwargs
-    assert "Mozilla/5.0" in get_kwargs["headers"]["User-Agent"]
-    assert "application/rss+xml" in get_kwargs["headers"]["Accept"]
+    assert stream_kwargs["follow_redirects"] is False
+    assert "headers" in stream_kwargs
+    assert "Mozilla/5.0" in stream_kwargs["headers"]["User-Agent"]
+    assert "application/rss+xml" in stream_kwargs["headers"]["Accept"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "blocked_url",
+    [
+        "file:///etc/passwd",
+        "http://127.0.0.1:8080/internal",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://localhost/feed.xml",
+    ],
+)
+async def test_news_intelligence_blocks_ssrf_schemes_and_private_ips(
+    client: AsyncClient,
+    blocked_url: str,
+):
+    _, headers = await register_and_login(client, username=f"ssrf_{hash(blocked_url) & 0xFFFF}")
+    resp = await client.post(
+        "/api/v1/news-intelligence/sources",
+        headers=headers,
+        json={"name": "bad-src", "url": blocked_url},
+    )
+    assert resp.status_code == 422
+
+    with pytest.raises(ValueError):
+        await NewsIntelligenceService()._default_rss_fetcher(blocked_url)
+
+
+@pytest.mark.asyncio
+async def test_news_intelligence_blocks_private_redirects_and_oversized_streams(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import socket
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, **k: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1" if host == "rebind.test" else "93.184.216.34", 443),
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="restricted IP"):
+        await NewsIntelligenceService()._default_rss_fetcher("https://rebind.test/rss.xml")
+
+    class RedirectResponse:
+        status_code = 302
+        headers = {"location": "http://127.0.0.1/admin"}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+    class RedirectClient:
+        def __init__(self, *a, **k) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a) -> None:
+            return None
+
+        def stream(self, method: str, url: str, **kwargs):
+            return RedirectResponse()
+
+    monkeypatch.setattr("app.services.news_intelligence.httpx.AsyncClient", RedirectClient)
+    with pytest.raises(ValueError, match="private or loopback"):
+        await NewsIntelligenceService()._default_rss_fetcher("https://example.com/rss.xml")
+
+    class HugeResponse:
+        status_code = 200
+        headers: dict[str, str] = {}
+        encoding = "utf-8"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_bytes(self):
+            for _ in range(5):
+                yield b"x" * (600 * 1024)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a) -> None:
+            return None
+
+    class HugeClient:
+        def __init__(self, *a, **k) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a) -> None:
+            return None
+
+        def stream(self, method: str, url: str, **kwargs):
+            return HugeResponse()
+
+    monkeypatch.setattr("app.services.news_intelligence.httpx.AsyncClient", HugeClient)
+    with pytest.raises(ValueError, match="maximum accepted size"):
+        await NewsIntelligenceService()._default_rss_fetcher("https://example.com/huge.xml")

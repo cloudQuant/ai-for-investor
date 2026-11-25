@@ -203,10 +203,10 @@ class StrategyService:
         # (the term aligns with design §5 phase set ``{submit, version_create}``).
         with business_span("backtrader.strategy.submit", user_id=user_id):
             snapshot_run_id = str(server_owned_ai_research_snapshot_run_id or "").strip()
-            strategy_id = str(uuid.uuid4()) if snapshot_run_id else None
+            strategy_id: str | None = None
             description = strategy_create.description
             if snapshot_run_id:
-                assert strategy_id is not None
+                strategy_id = str(uuid.uuid4())
                 marker = issue_server_owned_ai_research_strategy_snapshot_marker(
                     user_id=user_id,
                     strategy_id=strategy_id,

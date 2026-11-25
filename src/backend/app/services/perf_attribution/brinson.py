@@ -1,5 +1,7 @@
 """Brinson performance attribution."""
 
+import math
+
 from app.schemas.perf_attribution import BrinsonAttributionResult
 
 
@@ -32,6 +34,11 @@ class BrinsonAttributionService:
             benchmark_weight = float(benchmark_weights[asset])
             portfolio_return = float(portfolio_returns[asset])
             benchmark_return = float(benchmark_returns[asset])
+            if not all(
+                math.isfinite(val)
+                for val in (portfolio_weight, benchmark_weight, portfolio_return, benchmark_return)
+            ):
+                return BrinsonAttributionResult(status="degraded", reason="non_finite_input")
             allocation_effect += (portfolio_weight - benchmark_weight) * benchmark_return
             selection_effect += benchmark_weight * (portfolio_return - benchmark_return)
             interaction_effect += (portfolio_weight - benchmark_weight) * (

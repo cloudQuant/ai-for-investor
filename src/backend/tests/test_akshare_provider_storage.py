@@ -109,3 +109,69 @@ def test_create_table_if_not_exists_rejects_missing_arguments_without_connecting
     )
 
     assert provider.create_table_if_not_exists() is False
+
+
+def test_provider_pools_are_keyed_by_config_and_disconnect_closes_connection_on_cursor_error(
+    monkeypatch,
+) -> None:
+    created_configs = []
+
+    class FakePooledDB:
+        def __init__(self, **kwargs):
+            created_configs.append(kwargs["database"])
+
+    fake_dbutils = type(
+        "FakeDBUtilsMod",
+        (),
+        {"PooledDB": FakePooledDB},
+    )
+    monkeypatch.setitem(__import__("sys").modules, "dbutils.pooled_db", fake_dbutils)
+    monkeypatch.setattr(akshare_provider, "_connection_pools", {})
+
+    pool_a = akshare_provider._get_connection_pool(
+        {
+            "host": "h",
+            "port": 3306,
+            "user": "u",
+            "password": "p",
+            "database": "db_a",
+            "charset": "utf8mb4",
+            "autocommit": False,
+        }
+    )
+    pool_b = akshare_provider._get_connection_pool(
+        {
+            "host": "h",
+            "port": 3306,
+            "user": "u",
+            "password": "p",
+            "database": "db_b",
+            "charset": "utf8mb4",
+            "autocommit": False,
+        }
+    )
+    pool_a2 = akshare_provider._get_connection_pool(
+        {
+            "host": "h",
+            "port": 3306,
+            "user": "u",
+            "password": "p",
+            "database": "db_a",
+            "charset": "utf8mb4",
+            "autocommit": False,
+        }
+    )
+    assert pool_a is pool_a2
+    assert pool_a is not pool_b
+    assert created_configs == ["db_a", "db_b"]
+
+    provider = AkshareProvider("mysql://u:p@h/db_a")
+    cursor = FakeCursor()
+    conn = FakeConnection(cursor)
+    cursor.close = lambda: (_ for _ in ()).throw(RuntimeError("cursor close boom"))
+    provider.cursor = cursor
+    provider.connection = conn
+    with pytest.raises(RuntimeError, match="cursor close boom"):
+        provider.disconnect_db()
+    assert conn.closed is True
+    assert provider.connection is None

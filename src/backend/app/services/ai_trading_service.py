@@ -6,6 +6,7 @@ It coordinates intent parsing, risk assessment, and order execution.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import re
@@ -193,7 +194,7 @@ class AITradingService:
                 diagnostic_message=diagnostic_message,
             )
 
-        if not self._enrich_intent_with_asset_spec(intent, request):
+        if not await asyncio.to_thread(self._enrich_intent_with_asset_spec, intent, request):
             diagnostic_message = "缺少可验证的本地资产乘数，无法安全估算实盘风险。"
             if not request.dry_run:
                 degraded_risk = self._build_degraded_risk_assessment(diagnostic_message)
@@ -218,6 +219,9 @@ class AITradingService:
 
         # Step 3: Determine action based on risk assessment
         if not risk_assessment.approved:
+            await self._persist_trade_log(
+                trade_id, user_id, request, intent, risk_assessment, TradeStatus.REJECTED
+            )
             return AITradingResponse(
                 trade_id=trade_id,
                 intent=intent,
@@ -243,7 +247,15 @@ class AITradingService:
             }
 
             # Push WebSocket notification for real-time confirmation
-            await self._notify_confirmation_needed(trade_id, intent, risk_assessment)
+            await self._notify_confirmation_needed(user_id, trade_id, intent, risk_assessment)
+            await self._persist_trade_log(
+                trade_id,
+                user_id,
+                request,
+                intent,
+                risk_assessment,
+                TradeStatus.PENDING_CONFIRMATION,
+            )
 
             return AITradingResponse(
                 trade_id=trade_id,
@@ -258,6 +270,16 @@ class AITradingService:
 
         # Step 5: Execute trade
         if request.dry_run:
+            dry_run_result = {"dry_run": True, "would_execute": intent.model_dump()}
+            await self._persist_trade_log(
+                trade_id,
+                user_id,
+                request,
+                intent,
+                risk_assessment,
+                TradeStatus.CONFIRMED,
+                execution_result=dry_run_result,
+            )
             return AITradingResponse(
                 trade_id=trade_id,
                 intent=intent,
@@ -265,7 +287,7 @@ class AITradingService:
                 status=TradeStatus.CONFIRMED,
                 message=self._build_dry_run_message(intent),
                 ai_reasoning=intent.reason,
-                execution_result={"dry_run": True, "would_execute": intent.model_dump()},
+                execution_result=dry_run_result,
                 suggestions=self._build_suggestions(intent, risk_assessment),
             )
 
@@ -274,6 +296,15 @@ class AITradingService:
             user_id, intent, request, operation_id=trade_id
         )
         status = self._execution_status(execution_result)
+        await self._persist_trade_log(
+            trade_id,
+            user_id,
+            request,
+            intent,
+            risk_assessment,
+            status,
+            execution_result=execution_result,
+        )
 
         return AITradingResponse(
             trade_id=trade_id,
@@ -291,15 +322,7 @@ class AITradingService:
         user_id: str,
         request: TradeConfirmRequest,
     ) -> TradeConfirmResponse:
-        """Confirm or reject a pending trade.
-
-        Args:
-            user_id: The authenticated user's ID.
-            request: Confirmation request with trade_id and decision.
-
-        Returns:
-            TradeConfirmResponse with execution result.
-        """
+        """Confirm or reject a pending trade."""
         pending = _pending_trades.get(request.trade_id)
         if not pending:
             return TradeConfirmResponse(
@@ -315,27 +338,54 @@ class AITradingService:
                 message="无权操作此交易",
             )
 
+        # Atomically claim the pending trade before any await to prevent concurrent double execution.
+        claimed = _pending_trades.pop(request.trade_id, None)
+        if not claimed:
+            return TradeConfirmResponse(
+                trade_id=request.trade_id,
+                status=TradeStatus.FAILED,
+                message="交易不存在或已过期",
+            )
+
+        intent = TradingIntent(**claimed["intent"])
+        original_request = AITradingRequest(**claimed["request"])
+        prior_risk = RiskAssessment(**claimed["risk_assessment"])
+
         if not request.confirmed:
-            del _pending_trades[request.trade_id]
+            await self._persist_trade_log(
+                request.trade_id,
+                user_id,
+                original_request,
+                intent,
+                prior_risk,
+                TradeStatus.CANCELLED,
+            )
             return TradeConfirmResponse(
                 trade_id=request.trade_id,
                 status=TradeStatus.CANCELLED,
                 message="交易已取消",
             )
 
-        intent = TradingIntent(**pending["intent"])
-        original_request = AITradingRequest(**pending["request"])
-        if self._pending_trade_expired(pending):
-            del _pending_trades[request.trade_id]
+        if self._pending_trade_expired(claimed):
+            expired_result = {
+                "success": False,
+                "error": "confirmation_expired",
+                "expires_at": claimed.get("expires_at"),
+            }
+            await self._persist_trade_log(
+                request.trade_id,
+                user_id,
+                original_request,
+                intent,
+                prior_risk,
+                TradeStatus.FAILED,
+                execution_result=expired_result,
+            )
             return TradeConfirmResponse(
                 trade_id=request.trade_id,
                 status=TradeStatus.FAILED,
                 message="确认已过期，请重新提交交易请求。",
-                execution_result={
-                    "success": False,
-                    "error": "confirmation_expired",
-                    "expires_at": pending.get("expires_at"),
-                },
+                execution_result=expired_result,
             )
 
         try:
@@ -345,39 +395,63 @@ class AITradingService:
                 request=original_request,
             )
         except MissingGatewayContextError as exc:
-            del _pending_trades[request.trade_id]
             diagnostic_message = str(exc)
+            unavailable_result = {
+                "success": False,
+                "error": "context_unavailable",
+                "message": diagnostic_message,
+            }
+            await self._persist_trade_log(
+                request.trade_id,
+                user_id,
+                original_request,
+                intent,
+                prior_risk,
+                TradeStatus.REJECTED,
+                execution_result=unavailable_result,
+            )
             return TradeConfirmResponse(
                 trade_id=request.trade_id,
                 status=TradeStatus.REJECTED,
                 message=f"交易上下文不可用，已取消确认执行: {diagnostic_message}",
-                execution_result={
-                    "success": False,
-                    "error": "context_unavailable",
-                    "message": diagnostic_message,
-                },
+                execution_result=unavailable_result,
             )
 
         if not current_risk.approved:
-            del _pending_trades[request.trade_id]
+            rejected_result = {
+                "success": False,
+                "error": "risk_recheck_failed",
+                "risk_assessment": current_risk.model_dump(),
+            }
+            await self._persist_trade_log(
+                request.trade_id,
+                user_id,
+                original_request,
+                intent,
+                current_risk,
+                TradeStatus.REJECTED,
+                execution_result=rejected_result,
+            )
             return TradeConfirmResponse(
                 trade_id=request.trade_id,
                 status=TradeStatus.REJECTED,
                 message=self._build_rejection_message(current_risk),
-                execution_result={
-                    "success": False,
-                    "error": "risk_recheck_failed",
-                    "risk_assessment": current_risk.model_dump(),
-                },
+                execution_result=rejected_result,
             )
-
-        # Remove from pending immediately before execution to prevent double-submit.
-        del _pending_trades[request.trade_id]
 
         execution_result = await self._execute_trade(
             user_id, intent, original_request, operation_id=request.trade_id
         )
         status = self._execution_status(execution_result)
+        await self._persist_trade_log(
+            request.trade_id,
+            user_id,
+            original_request,
+            intent,
+            current_risk,
+            status,
+            execution_result=execution_result,
+        )
 
         return TradeConfirmResponse(
             trade_id=request.trade_id,
@@ -408,7 +482,7 @@ class AITradingService:
             diagnostic_message = str(context.get("diagnostic_message") or "交易上下文不可用")
             raise MissingGatewayContextError(diagnostic_message)
 
-        if self._enrich_intent_with_asset_spec(intent, request) is False:
+        if await asyncio.to_thread(self._enrich_intent_with_asset_spec, intent, request) is False:
             raise MissingGatewayContextError("缺少可验证的本地资产乘数，无法安全估算实盘风险。")
         return self.risk_guard.assess(
             intent=intent,
@@ -489,38 +563,19 @@ class AITradingService:
         status: TradeStatus,
         execution_result: dict[str, Any] | None = None,
     ) -> None:
-        """Persist a trade log entry to the database."""
-        try:
-            async with async_session_maker() as session:
-                log_entry = AITradingLog(
-                    id=str(uuid.uuid4()),
-                    user_id=user_id,
-                    trade_id=trade_id,
-                    user_input=request.message,
-                    action=intent.action.value,
-                    symbol=intent.symbol,
-                    exchange=intent.exchange,
-                    quantity=intent.quantity,
-                    price=intent.price,
-                    order_type=intent.order_type.value,
-                    stop_loss=intent.stop_loss,
-                    take_profit=intent.take_profit,
-                    confidence=intent.confidence,
-                    risk_level=intent.risk_level.value,
-                    risk_approved=risk_assessment.approved,
-                    risk_warnings=risk_assessment.warnings,
-                    risk_blocked_reasons=risk_assessment.blocked_reasons,
-                    requires_confirmation=risk_assessment.requires_confirmation,
-                    status=status.value,
-                    execution_result=execution_result,
-                    gateway_id=request.gateway_id,
-                    dry_run=request.dry_run,
-                    ai_reasoning=intent.reason,
-                )
-                session.add(log_entry)
-                await session.commit()
-        except Exception as e:
-            logger.warning("Failed to persist trade log: %s", e)
+        """Persist or update a trade log entry in the database."""
+        from app.services.ai_trading.trade_log import persist_ai_trade_log
+
+        await persist_ai_trade_log(
+            trade_id=trade_id,
+            user_id=user_id,
+            request=request,
+            intent=intent,
+            risk_assessment=risk_assessment,
+            status=status,
+            execution_result=execution_result,
+            session_maker=async_session_maker,
+        )
 
     async def _resolve_trading_context(
         self,
@@ -948,11 +1003,12 @@ class AITradingService:
 
     async def _notify_confirmation_needed(
         self,
+        user_id: str,
         trade_id: str,
         intent: TradingIntent,
         risk_assessment: RiskAssessment,
     ) -> None:
-        """Push WebSocket notification when a trade requires confirmation."""
+        """Push WebSocket notification to the owning user's channel when confirmation is needed."""
         try:
             from app.websocket_manager import manager as ws_manager
 
@@ -969,121 +1025,39 @@ class AITradingService:
                     f"AI 交易需要确认: {intent.action.value} {intent.quantity} {intent.symbol}"
                 ),
             }
-            await ws_manager.broadcast(message)
+            await ws_manager.send_to_task(f"user:{user_id}", message)
         except Exception as e:
             logger.debug("WebSocket notification failed (non-critical): %s", e)
 
     async def get_history(self, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
-        """Get trading history for a user.
+        """Get trading history for a user."""
+        from app.services.ai_trading.trade_log import get_ai_trading_history
 
-        Args:
-            user_id: The user's ID.
-            limit: Maximum number of records.
-
-        Returns:
-            List of trade log entries as dicts.
-        """
-        try:
-            from sqlalchemy import select
-
-            async with async_session_maker() as session:
-                result = await session.execute(
-                    select(AITradingLog)
-                    .where(AITradingLog.user_id == user_id)
-                    .order_by(AITradingLog.created_at.desc())
-                    .limit(limit)
-                )
-                logs = result.scalars().all()
-                return [
-                    {
-                        "trade_id": log.trade_id,
-                        "user_input": log.user_input,
-                        "action": log.action,
-                        "symbol": log.symbol,
-                        "quantity": log.quantity,
-                        "price": log.price,
-                        "status": log.status,
-                        "confidence": log.confidence,
-                        "risk_level": log.risk_level,
-                        "ai_reasoning": log.ai_reasoning,
-                        "dry_run": log.dry_run,
-                        "created_at": log.created_at.isoformat() if log.created_at else None,
-                        "executed_at": log.executed_at.isoformat() if log.executed_at else None,
-                    }
-                    for log in logs
-                ]
-        except Exception as e:
-            logger.warning("Failed to fetch trading history: %s", e)
-            return []
+        return await get_ai_trading_history(
+            user_id,
+            limit,
+            session_maker=async_session_maker,
+        )
 
     async def generate_reflection(
         self,
         trade_id: str,
         user_id: str,
     ) -> dict[str, Any]:
-        """Generate AI reflection on a completed trade.
+        """Generate AI reflection on a completed trade."""
+        from app.services.ai_trading.trade_log import generate_ai_trade_reflection
 
-        Analyzes the trade decision, execution result, and provides
-        lessons learned for future improvement.
-
-        Args:
-            trade_id: The trade to reflect on.
-            user_id: The user's ID.
-
-        Returns:
-            Reflection result with analysis and suggestions.
-        """
-        try:
-            from sqlalchemy import select
-
-            async with async_session_maker() as session:
-                result = await session.execute(
-                    select(AITradingLog).where(
-                        AITradingLog.trade_id == trade_id,
-                        AITradingLog.user_id == user_id,
-                    )
-                )
-                log = result.scalar_one_or_none()
-                if not log:
-                    return {"success": False, "message": "交易记录不存在"}
-
-                # Build reflection prompt (for future LLM-based reflection)
-                # reflection_context includes trade details for AI analysis
-                reflection_text = self._generate_simple_reflection(log)
-
-                # Persist reflection
-                log.reflection = reflection_text
-                await session.commit()
-
-                return {
-                    "success": True,
-                    "trade_id": trade_id,
-                    "reflection": reflection_text,
-                }
-        except Exception as e:
-            logger.warning("Failed to generate reflection: %s", e)
-            return {"success": False, "message": f"反思生成失败: {e}"}
+        return await generate_ai_trade_reflection(
+            trade_id,
+            user_id,
+            session_maker=async_session_maker,
+        )
 
     def _generate_simple_reflection(self, log: AITradingLog) -> str:
         """Generate a simple rule-based reflection without LLM."""
-        parts = []
+        from app.services.ai_trading.trade_log import generate_simple_reflection
 
-        if log.status == "filled":
-            parts.append("✅ 交易已成功执行。")
-        elif log.status == "rejected":
-            parts.append("⚠️ 交易被风控拦截。")
-            if log.risk_blocked_reasons:
-                parts.append(f"拦截原因: {', '.join(log.risk_blocked_reasons)}")
-        elif log.status == "cancelled":
-            parts.append("ℹ️ 交易被用户取消。")
-
-        if log.confidence and log.confidence < 0.5:
-            parts.append("建议: 下次尝试更明确地描述交易意图以提高解析准确度。")
-
-        if log.action in ("buy", "sell") and not log.stop_loss:
-            parts.append("建议: 考虑设置止损以控制下行风险。")
-
-        return " ".join(parts) if parts else "交易已记录。"
+        return generate_simple_reflection(log)
 
     def build_conversation_context(
         self,

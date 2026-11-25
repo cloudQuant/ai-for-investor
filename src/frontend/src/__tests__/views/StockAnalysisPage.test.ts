@@ -368,4 +368,22 @@ describe('StockAnalysisPage', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:stock-report')
     wrapper.unmount()
   })
+
+  it('stops polling cleanly when unmounted', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mountPage()
+      await flushPromises()
+      const startButton = wrapper.findAll('button').find((b) => b.text().includes('开始智能分析'))
+      await startButton!.trigger('click')
+      await flushPromises()
+
+      wrapper.unmount()
+      const callsAtUnmount = mocks.getTask.mock.calls.length
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mocks.getTask).toHaveBeenCalledTimes(callsAtUnmount)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

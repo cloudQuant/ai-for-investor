@@ -17,6 +17,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.utils.backend_data_paths import get_backend_data_path
+from app.utils.invariants import require_present
 
 logger = logging.getLogger(__name__)
 
@@ -255,8 +256,8 @@ class SemanticRetrievalService:
 
     def _has_knowledge_base(self, knowledge_base_id: str) -> bool:
         self._ensure_ready()
-        assert self._collection is not None
-        result = self._collection.get(
+        collection = require_present(self._collection, "semantic collection not ready")
+        result = collection.get(
             where={"knowledge_base_id": knowledge_base_id},
             limit=1,
             include=[],
@@ -265,8 +266,8 @@ class SemanticRetrievalService:
 
     def _count_knowledge_base(self, knowledge_base_id: str) -> int:
         self._ensure_ready()
-        assert self._collection is not None
-        result = self._collection.get(
+        collection = require_present(self._collection, "semantic collection not ready")
+        result = collection.get(
             where={"knowledge_base_id": knowledge_base_id},
             include=[],
         )
@@ -274,21 +275,21 @@ class SemanticRetrievalService:
 
     def _upsert_chunks(self, chunks: list[SemanticChunk]) -> None:
         self._ensure_ready()
-        assert self._collection is not None
-        assert self._model is not None
+        collection = require_present(self._collection, "semantic collection not ready")
+        model = require_present(self._model, "embedding model not ready")
         for offset in range(0, len(chunks), self.upsert_batch_size):
             batch = chunks[offset : offset + self.upsert_batch_size]
             documents = [
                 f"文档标题：{chunk.document_title}\n内容：{chunk.content}".strip()
                 for chunk in batch
             ]
-            embeddings = self._model.encode(
+            embeddings = model.encode(
                 documents,
                 batch_size=32,
                 normalize_embeddings=True,
                 show_progress_bar=False,
             )
-            self._collection.upsert(
+            collection.upsert(
                 ids=[chunk.chunk_id for chunk in batch],
                 documents=documents,
                 embeddings=embeddings.tolist(),
@@ -304,8 +305,8 @@ class SemanticRetrievalService:
 
     def _delete_document(self, knowledge_base_id: str, document_id: str) -> None:
         self._ensure_ready()
-        assert self._collection is not None
-        self._collection.delete(
+        collection = require_present(self._collection, "semantic collection not ready")
+        collection.delete(
             where={
                 "$and": [
                     {"knowledge_base_id": knowledge_base_id},
@@ -321,14 +322,14 @@ class SemanticRetrievalService:
         limit: int,
     ) -> list[SemanticSearchMatch]:
         self._ensure_ready()
-        assert self._collection is not None
-        assert self._model is not None
-        query_embedding = self._model.encode(
+        collection = require_present(self._collection, "semantic collection not ready")
+        model = require_present(self._model, "embedding model not ready")
+        query_embedding = model.encode(
             [query],
             normalize_embeddings=True,
             show_progress_bar=False,
         ).tolist()
-        result = self._collection.query(
+        result = collection.query(
             query_embeddings=query_embedding,
             n_results=limit,
             where={"knowledge_base_id": knowledge_base_id},

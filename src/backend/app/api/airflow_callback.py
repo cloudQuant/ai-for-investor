@@ -5,11 +5,15 @@ Receives execution results from Airflow DAG tasks and persists them
 to the TaskExecution table for unified monitoring.
 """
 
+import hashlib
+import hmac
+import secrets
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db.database import get_db
 from app.models.akshare_mgmt import TaskExecution, TaskStatus
 from app.schemas.airflow import AirflowCallbackPayload
@@ -19,7 +23,47 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.post("/airflow/callback")
+async def _verify_airflow_callback_auth(request: Request) -> None:
+    """Verify Airflow callback Bearer token or HMAC-SHA256 body signature."""
+    secret = str(getattr(get_settings(), "AIRFLOW_CALLBACK_SECRET", "") or "").strip()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Airflow callback authentication is not configured",
+        )
+
+    signature_header = (request.headers.get("X-Airflow-Signature") or "").strip()
+    if signature_header:
+        provided = signature_header.removeprefix("sha256=").strip().lower()
+        body = await request.body()
+        expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+        if not secrets.compare_digest(provided, expected):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid Airflow callback signature",
+            )
+        return
+
+    token = ""
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+    elif request.headers.get("X-Airflow-Callback-Token"):
+        token = request.headers.get("X-Airflow-Callback-Token", "").strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Airflow callback credentials",
+        )
+    if not secrets.compare_digest(token, secret):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Airflow callback token",
+        )
+
+
+@router.post("/airflow/callback", dependencies=[Depends(_verify_airflow_callback_auth)])
 async def receive_airflow_callback(
     payload: AirflowCallbackPayload,
     db: AsyncSession = Depends(get_db),

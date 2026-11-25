@@ -323,4 +323,42 @@ describe('AuditTracker', () => {
     await tracker.flush()
     expect(auditApi.postAuditEvents).not.toHaveBeenCalled()
   })
+
+  it('retains failed stored batches in localStorage instead of dropping them on error', async () => {
+    const storedEvents = [
+      {
+        event_type: 'click' as const,
+        event_target: '#stored-1',
+        page_path: '/p1',
+        event_data: {},
+        client_timestamp: '2026-05-29T00:00:00Z',
+        session_id: 's1',
+      },
+      {
+        event_type: 'click' as const,
+        event_target: '#stored-2',
+        page_path: '/p2',
+        event_data: {},
+        client_timestamp: '2026-05-29T00:00:01Z',
+        session_id: 's1',
+      },
+    ]
+    vi.mocked(auditApi.postAuditEvents)
+      .mockResolvedValueOnce(undefined as never) // main buffer succeeds
+      .mockRejectedValueOnce(new Error('transient')) // stored batch fails
+
+    tracker.start()
+    localStorage.setItem('audit_tracker_pending', JSON.stringify(storedEvents))
+    const btn = document.createElement('button')
+    btn.id = 'trigger-send'
+    document.body.appendChild(btn)
+    btn.click()
+
+    await tracker.flush()
+    const persisted = JSON.parse(localStorage.getItem('audit_tracker_pending') || '[]')
+    expect(persisted.map((e: { event_target: string }) => e.event_target)).toEqual(['#stored-1', '#stored-2'])
+
+    tracker.clearPending()
+    expect(localStorage.getItem('audit_tracker_pending')).toBeNull()
+  })
 })

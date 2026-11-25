@@ -151,14 +151,20 @@ jobs:
 
       - name: Wait for backend health check
         run: |
+          backend_ready=0
           for i in {1..30}; do
-            if curl -s http://127.0.0.1:8000/health > /dev/null; then
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
               echo "Backend is ready"
+              backend_ready=1
               break
             fi
             echo "Waiting for backend... ($i/30)"
             sleep 2
           done
+          if [ "$backend_ready" -ne 1 ]; then
+            echo "Backend failed to become ready on http://127.0.0.1:8000" >&2
+            exit 1
+          fi
 
       - name: Build frontend
         working-directory: src/frontend
@@ -307,13 +313,19 @@ jobs:
 
       - name: Wait for backend
         run: |
+          backend_ready=0
           for i in {1..30}; do
-            if curl -s http://127.0.0.1:8000/health > /dev/null; then
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
               echo "Backend is ready"
+              backend_ready=1
               break
             fi
             sleep 2
           done
+          if [ "$backend_ready" -ne 1 ]; then
+            echo "Backend failed to become ready on http://127.0.0.1:8000" >&2
+            exit 1
+          fi
 
       - name: Build frontend
         working-directory: src/frontend
@@ -445,12 +457,18 @@ jobs:
 
       - name: Wait for backend
         run: |
+          backend_ready=0
           for i in {1..30}; do
-            if curl -s http://127.0.0.1:8000/health > /dev/null; then
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              backend_ready=1
               break
             fi
             sleep 2
           done
+          if [ "$backend_ready" -ne 1 ]; then
+            echo "Backend failed to become ready on http://127.0.0.1:8000" >&2
+            exit 1
+          fi
 
       - name: Build frontend
         working-directory: src/frontend
@@ -583,12 +601,18 @@ jobs:
 
       - name: Wait for backend
         run: |
+          backend_ready=0
           for i in {1..30}; do
-            if curl -s http://127.0.0.1:8000/health > /dev/null; then
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              backend_ready=1
               break
             fi
             sleep 2
           done
+          if [ "$backend_ready" -ne 1 ]; then
+            echo "Backend failed to become ready on http://127.0.0.1:8000" >&2
+            exit 1
+          fi
 
       - name: Build frontend
         working-directory: src/frontend

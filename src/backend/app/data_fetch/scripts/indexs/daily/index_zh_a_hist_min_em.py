@@ -323,7 +323,7 @@ class IndexZhAHistMinEm(AkshareToMySql):
                                 ],
                             )
 
-                            if success:
+                            if success is not False:
                                 self.logger.info(
                                     f"Successfully updated {len(df)} records for index {symbol} "
                                     f"(period: {period}min) in {self.table_name}"

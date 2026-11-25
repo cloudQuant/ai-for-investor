@@ -18,6 +18,8 @@ _STANDARD_KEYS = (
     "profitable_trades",
     "losing_trades",
     "break_even_trades",
+    "total_win_amount",
+    "total_loss_amount",
     "avg_holding_bars",
     "avg_holding_period",
     "max_consecutive_wins",
@@ -60,6 +62,14 @@ class MetricsService:
         normalized.setdefault("profitable_trades", _int(metrics.get("profitable_trades"), 0))
         normalized.setdefault("losing_trades", _int(metrics.get("losing_trades"), 0))
         normalized.setdefault("break_even_trades", _int(metrics.get("break_even_trades"), 0))
+        normalized.setdefault(
+            "total_win_amount",
+            _float(metrics.get("total_win_amount"), 0.0),
+        )
+        normalized.setdefault(
+            "total_loss_amount",
+            _float(metrics.get("total_loss_amount"), 0.0),
+        )
         normalized.setdefault("avg_holding_bars", _float(metrics.get("avg_holding_bars"), 0.0))
         normalized.setdefault(
             "avg_holding_period",

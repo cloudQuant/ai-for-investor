@@ -203,6 +203,96 @@ def apply_position_rows_to_snapshot(
     return latest_price
 
 
+def _resolve_snapshot_log_and_positions(
+    cls: type[TradingWorkspaceService],
+    unit: StrategyUnit,
+    instance: Mapping[str, object] | None,
+    *,
+    full_log: bool,
+    dependencies: SnapshotDependencies,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], str]:
+    log_result: dict[str, Any] | None = None
+    position_rows: list[dict[str, Any]] = []
+    position_rows_source = "none"
+    log_dir = dependencies.instance_log_dir(instance)
+    if log_dir is None:
+        workspace_id = str(getattr(unit, "workspace_id", "") or "").strip()
+        unit_id = str(getattr(unit, "id", "") or "").strip()
+        if workspace_id and unit_id:
+            persisted_log_dir = dependencies.workspace_unit_dir(workspace_id, unit_id) / "logs"
+            if persisted_log_dir.is_dir():
+                log_dir = persisted_log_dir
+    if log_dir and log_dir.is_dir():
+        log_result = dependencies.parse_log_dir(log_dir) if full_log else None
+        position_rows = cls._latest_position_rows(dependencies.parse_position_log(log_dir))
+        if position_rows:
+            position_rows_source = "log"
+        else:
+            position_rows = dependencies.parse_current_position(log_dir)
+            if position_rows:
+                position_rows_source = "snapshot"
+    return log_result, position_rows, position_rows_source
+
+
+def _apply_snapshot_log_metrics(
+    snapshot: dict[str, Any],
+    unit: StrategyUnit,
+    log_result: dict[str, Any],
+    *,
+    latest_price: float | None,
+    safe_float: Callable[..., float],
+    cls: type[TradingWorkspaceService],
+) -> tuple[dict[str, Any], int | None]:
+    bar_count: int | None = None
+    snapshot["trades"] = cls._normalize_trade_rows(list(log_result.get("trades") or []), unit=unit)
+    kline = log_result.get("kline") or {}
+    dates = list(kline.get("dates") or [])
+    ohlc = list(kline.get("ohlc") or [])
+    if dates:
+        snapshot["trading_day"] = str(dates[-1])[:10]
+        bar_count = len(dates)
+    if len(ohlc) >= 1:
+        last_close = safe_float((ohlc[-1] or [None, None])[1], default=0.0)
+        if last_close > 0:
+            snapshot["latest_price"] = round(last_close, 4)
+        if len(ohlc) >= 2:
+            prev_close = safe_float((ohlc[-2] or [None, None])[1], default=0.0)
+            if prev_close > 0 and last_close > 0:
+                snapshot["change_pct"] = round((last_close - prev_close) / prev_close * 100, 2)
+
+    equity_curve = list(log_result.get("equity_curve") or [])
+    initial_cash = safe_float(log_result.get("initial_cash"), 0.0)
+    final_value = safe_float(log_result.get("final_value"), 0.0)
+    if len(equity_curve) >= 2:
+        snapshot["today_pnl"] = round(equity_curve[-1] - equity_curve[-2], 2)
+    snapshot["cumulative_pnl"] = round(final_value - initial_cash, 2)
+    snapshot["max_drawdown_rate"] = round(safe_float(log_result.get("max_drawdown")), 2)
+    total_market_value = safe_float(snapshot.get("long_market_value")) + safe_float(
+        snapshot.get("short_market_value")
+    )
+    if final_value > 0 and total_market_value > 0:
+        snapshot["leverage"] = round(total_market_value / final_value, 4)
+    if snapshot.get("latest_price") is None and latest_price is not None:
+        snapshot["latest_price"] = round(latest_price, 4)
+    metrics_snapshot = {
+        "total_return": log_result.get("total_return"),
+        "annual_return": log_result.get("annual_return"),
+        "sharpe_ratio": log_result.get("sharpe_ratio"),
+        "max_drawdown": log_result.get("max_drawdown"),
+        "win_rate": log_result.get("win_rate"),
+        "total_trades": log_result.get("total_trades"),
+        "profitable_trades": log_result.get("profitable_trades"),
+        "losing_trades": log_result.get("losing_trades"),
+        "initial_cash": initial_cash,
+        "final_value": final_value,
+        "net_value": round(final_value / initial_cash, 6) if initial_cash > 0 else None,
+        "net_profit": round(final_value - initial_cash, 2),
+        "max_leverage": snapshot.get("leverage"),
+        "trading_days": len(equity_curve),
+    }
+    return metrics_snapshot, bar_count
+
+
 def build_snapshot(
     cls: type[TradingWorkspaceService],
     unit: StrategyUnit,
@@ -212,16 +302,6 @@ def build_snapshot(
     include_gateway_positions: bool = True,
     dependencies: SnapshotDependencies,
 ) -> tuple[dict[str, Any], dict[str, Any], int | None, float | None]:
-    _LIGHT_HYDRATE_PRESERVE_KEYS = dependencies.light_hydrate_preserve_keys
-    _append_unique = dependencies.append_unique
-    _instance_log_dir = dependencies.instance_log_dir
-    _safe_dict = dependencies.safe_dict
-    _safe_float = dependencies.safe_float
-    _safe_iso_text = dependencies.safe_iso_text
-    parse_current_position = dependencies.parse_current_position
-    parse_log_dir = dependencies.parse_log_dir
-    parse_position_log = dependencies.parse_position_log
-    workspace_unit_dir = dependencies.workspace_unit_dir
     instance_status = str((instance or {}).get("status") or "stopped").strip().lower()
     error = str((instance or {}).get("error") or "").strip() or None
     snapshot = cls.default_snapshot(
@@ -230,48 +310,22 @@ def build_snapshot(
         error=error,
     )
     if not full_log:
-        current_snapshot = _safe_dict(getattr(unit, "trading_snapshot", None))
-        for key in _LIGHT_HYDRATE_PRESERVE_KEYS:
+        current_snapshot = dependencies.safe_dict(getattr(unit, "trading_snapshot", None))
+        for key in dependencies.light_hydrate_preserve_keys:
             if key in current_snapshot:
                 snapshot[key] = current_snapshot[key]
     snapshot["instance_id"] = (instance or {}).get("id") or unit.trading_instance_id
-    snapshot["started_at"] = _safe_iso_text((instance or {}).get("started_at"))
-    snapshot["stopped_at"] = _safe_iso_text((instance or {}).get("stopped_at"))
+    snapshot["started_at"] = dependencies.safe_iso_text((instance or {}).get("started_at"))
+    snapshot["stopped_at"] = dependencies.safe_iso_text((instance or {}).get("stopped_at"))
 
     metrics_snapshot: dict[str, Any] = {}
     bar_count: int | None = None
     elapsed_seconds: float | None = None
     latest_price: float | None = None
+    log_result, position_rows, position_rows_source = _resolve_snapshot_log_and_positions(
+        cls, unit, instance, full_log=full_log, dependencies=dependencies
+    )
 
-    log_result: dict[str, Any] | None = None
-    position_rows: list[dict[str, Any]] = []
-    position_rows_source = "none"
-    log_dir = _instance_log_dir(instance)
-    if log_dir is None:
-        # The live-trading manager is process-local and is empty after an
-        # API-server restart. Workspace runtimes persist their logs under
-        # the unit directory, so use that durable source for historical
-        # position and trade recovery.
-        workspace_id = str(getattr(unit, "workspace_id", "") or "").strip()
-        unit_id = str(getattr(unit, "id", "") or "").strip()
-        if workspace_id and unit_id:
-            persisted_log_dir = workspace_unit_dir(workspace_id, unit_id) / "logs"
-            if persisted_log_dir.is_dir():
-                log_dir = persisted_log_dir
-    if log_dir and log_dir.is_dir():
-        log_result = parse_log_dir(log_dir) if full_log else None
-        position_rows = cls._latest_position_rows(parse_position_log(log_dir))
-        if position_rows:
-            position_rows_source = "log"
-        if not position_rows:
-            position_rows = parse_current_position(log_dir)
-            if position_rows:
-                position_rows_source = "snapshot"
-
-    # Paper workspaces must display their own simulated state.  Their shared
-    # market-data gateway is not an account for each strategy unit, and a
-    # gateway request per unit makes the portfolio/risk page unresponsive.
-    # Explicitly configured live units retain the broker-confirmed path.
     is_explicit_paper = str(getattr(unit, "trading_mode", "")).strip().lower() == "paper"
     gateway_position_rows = (
         None
@@ -286,73 +340,23 @@ def build_snapshot(
         and instance_status == "running"
     ):
         snapshot["valuation_status"] = "stale_fallback"
-        _append_unique(
+        dependencies.append_unique(
             snapshot["valuation_warnings"],
             "运行中的实盘单元未能从交易所网关确认当前持仓，当前盈亏可能来自过期日志/快照",
         )
 
     if position_rows or gateway_position_rows is not None:
         snapshot["position_source"] = position_rows_source
-        latest_price = cls._apply_position_rows_to_snapshot(
+        latest_price = cls._apply_position_rows_to_snapshot(snapshot, unit, instance, position_rows)
+    if log_result:
+        metrics_snapshot, bar_count = _apply_snapshot_log_metrics(
             snapshot,
             unit,
-            instance,
-            position_rows,
+            log_result,
+            latest_price=latest_price,
+            safe_float=dependencies.safe_float,
+            cls=cls,
         )
-
-    if log_result:
-        snapshot["trades"] = cls._normalize_trade_rows(
-            list(log_result.get("trades") or []),
-            unit=unit,
-        )
-
-        kline = log_result.get("kline") or {}
-        dates = list(kline.get("dates") or [])
-        ohlc = list(kline.get("ohlc") or [])
-        if dates:
-            snapshot["trading_day"] = str(dates[-1])[:10]
-            bar_count = len(dates)
-        if len(ohlc) >= 1:
-            last_close = _safe_float((ohlc[-1] or [None, None])[1], default=0.0)
-            if last_close > 0:
-                snapshot["latest_price"] = round(last_close, 4)
-            if len(ohlc) >= 2:
-                prev_close = _safe_float((ohlc[-2] or [None, None])[1], default=0.0)
-                if prev_close > 0 and last_close > 0:
-                    snapshot["change_pct"] = round((last_close - prev_close) / prev_close * 100, 2)
-
-        equity_curve = list(log_result.get("equity_curve") or [])
-        initial_cash = _safe_float(log_result.get("initial_cash"), 0.0)
-        final_value = _safe_float(log_result.get("final_value"), 0.0)
-        if len(equity_curve) >= 2:
-            snapshot["today_pnl"] = round(equity_curve[-1] - equity_curve[-2], 2)
-        snapshot["cumulative_pnl"] = round(final_value - initial_cash, 2)
-        snapshot["max_drawdown_rate"] = round(_safe_float(log_result.get("max_drawdown")), 2)
-        total_market_value = _safe_float(snapshot.get("long_market_value")) + _safe_float(
-            snapshot.get("short_market_value")
-        )
-        if final_value > 0 and total_market_value > 0:
-            snapshot["leverage"] = round(total_market_value / final_value, 4)
-        if snapshot.get("latest_price") is None and latest_price is not None:
-            snapshot["latest_price"] = round(latest_price, 4)
-
-        metrics_snapshot = {
-            "total_return": log_result.get("total_return"),
-            "annual_return": log_result.get("annual_return"),
-            "sharpe_ratio": log_result.get("sharpe_ratio"),
-            "max_drawdown": log_result.get("max_drawdown"),
-            "win_rate": log_result.get("win_rate"),
-            "total_trades": log_result.get("total_trades"),
-            "profitable_trades": log_result.get("profitable_trades"),
-            "losing_trades": log_result.get("losing_trades"),
-            "initial_cash": initial_cash,
-            "final_value": final_value,
-            "net_value": round(final_value / initial_cash, 6) if initial_cash > 0 else None,
-            "net_profit": round(final_value - initial_cash, 2),
-            "max_leverage": snapshot.get("leverage"),
-            "trading_days": len(equity_curve),
-        }
-
     if snapshot.get("latest_price") is None and latest_price is not None:
         snapshot["latest_price"] = round(latest_price, 4)
 
@@ -364,5 +368,4 @@ def build_snapshot(
             elapsed_seconds = None
         else:
             elapsed_seconds = round((datetime.now() - started_dt).total_seconds(), 2)
-
     return snapshot, metrics_snapshot, bar_count, elapsed_seconds

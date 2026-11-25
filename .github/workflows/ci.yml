@@ -121,14 +121,14 @@ jobs:
       - name: ORM ↔ migration drift check (175 §8)
         run: python scripts/ci/check_orm_schema_drift.py
 
-      # Iteration 175 §8.6 — advisory: flag risky migration operations on
-      # files added/modified in this PR. Always exits 0; output is captured
-      # in job summary.
-      - name: Migration safety lint (175 §8.6, advisory)
+      # Iteration 175 §8.6 + Iteration 206 OCR-42: flag risky migration ops
+      # on files added/modified in this PR and block unacknowledged destructive
+      # or unparseable operations.
+      - name: Migration safety lint (175 §8.6)
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: origin/${{ github.base_ref }}
-        run: python scripts/ci/check_migration_safety.py
+        run: python scripts/ci/check_migration_safety.py --strict
 
   asset-research-mysql-contract:
     name: Asset Research - MySQL 9.4 Contract
@@ -693,7 +693,7 @@ jobs:
       - name: Check complexity budget
         # Iteration 205 WP07: freeze the reviewed complexity baseline.
         run: |
-          python -m pip install radon
+          python -m pip install "radon==6.0.1"
           python ../../scripts/ci/check_complexity_budget.py
 
       - name: Check diff coverage
@@ -1509,9 +1509,20 @@ jobs:
             src/backend/pyproject.toml
             config/requirements-dev.lock
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install workspace tooling
+        run: |
+          python -m pip install -e "src/backend[dev,backtrader]"
+          npm --prefix src/frontend ci
+
       - name: Run check_all.sh (advisory)
         run: bash scripts/dev/check_all.sh
-        continue-on-error: true
 
   # ========================================
   # Integration Tests
@@ -1752,11 +1763,7 @@ jobs:
           echo "| Backend Mypy Collection (advisory) | ${{ needs.backend-mypy-collection.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Backend Test | ${{ needs.backend-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Backend Security | ${{ needs.backend-security.result }} |" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.secret-scan.result }}" = "failure" ]; then
-            echo "| Secret Scan (177, advisory) | ⚠️ ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Secret Scan (177, advisory) | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "| Secret Scan (177) | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Lint | ${{ needs.frontend-lint.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Test | ${{ needs.frontend-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Build | ${{ needs.frontend-build.result }} |" >> $GITHUB_STEP_SUMMARY
@@ -1794,6 +1801,7 @@ jobs:
           needs.backend-mypy-services.result == 'failure' ||
           needs.backend-test.result == 'failure' ||
           needs.backend-security.result == 'failure' ||
+          needs.secret-scan.result == 'failure' ||
           needs.frontend-lint.result == 'failure' ||
           needs.frontend-test.result == 'failure' ||
           needs.frontend-build.result == 'failure' ||

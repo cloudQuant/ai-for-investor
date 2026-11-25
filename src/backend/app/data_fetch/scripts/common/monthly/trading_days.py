@@ -152,11 +152,14 @@ class TradingDaysUpdater(AkshareToMySql):
                 self.disconnect_db()
 
                 # 保存新数据
-                return self.save_data(
-                    df=df.replace(np.nan, None),
-                    table_name=self.table_name,
-                    on_duplicate_update=True,
-                    unique_keys=["TRADE_DATE"],
+                return (
+                    self.save_data(
+                        df=df.replace(np.nan, None),
+                        table_name=self.table_name,
+                        on_duplicate_update=True,
+                        unique_keys=["TRADE_DATE"],
+                    )
+                    is not False
                 )
 
             self.logger.warning("No trading days data to process")

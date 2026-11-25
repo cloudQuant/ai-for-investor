@@ -19,6 +19,8 @@ from typing import Any, TypeGuard, cast
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
+from app.utils.invariants import log_suppressed
+
 _MAX_DEPLOYMENT_BYTES = 262_144
 _MAX_PROFILES = 128
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -280,10 +282,10 @@ class StrategyReductionDeployment:
         finally:
             try:
                 runtime.close()
-            except Exception:
+            except Exception as exc:
                 # A received immutable owner result remains useful. A cleanup
                 # failure is not turned into a second call or fabricated fill.
-                pass
+                log_suppressed(__name__, "Strategy reduction runtime close failed", exc)
 
 
 def get_deployment_setting() -> SecretStr:

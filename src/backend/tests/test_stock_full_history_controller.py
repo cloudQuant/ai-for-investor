@@ -973,7 +973,10 @@ def test_controller_never_emits_an_unclassifiable_status(tmp_path: Path) -> None
 
     observed = set(statuses_of(result.report))
     assert observed <= STOCK_KNOWN_STATUSES, sorted(observed - STOCK_KNOWN_STATUSES)
-    assert result.exit_code == 2
+    # 000004 fails with backfill_failed (an attention status), which must take precedence over source_failed.
+    assert result.exit_code == 1
+    status, attention = assert_worker_contract(result.exit_code, result.report)
+    assert (status, attention) == ("attention_required", True)
 
 
 def test_failed_write_never_reports_a_verified_symbol(tmp_path: Path) -> None:
@@ -1200,3 +1203,64 @@ def test_managed_writer_reads_the_execution_status_value(monkeypatch: Any) -> No
     assert receipt.status == "completed"
     assert receipt.execution_id == 7
     assert receipt.error is None
+
+
+def test_as_optional_float_rejects_non_finite_and_writer_forwards_timeout(monkeypatch) -> None:
+    import math
+    from types import SimpleNamespace
+
+    from app.models.akshare_mgmt import TaskStatus
+
+    assert controller._as_optional_float("inf") is None
+    assert controller._as_optional_float("-Infinity") is None
+    assert controller._as_optional_float("nan") is None
+    assert controller._as_optional_float(math.inf) is None
+    assert controller._as_optional_float("12.34") == 12.34
+
+    captured_params = []
+    disposed = []
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    class FakeScriptService:
+        def __init__(self, session):
+            self.session = session
+
+        async def run_script(self, script_id, parameters, triggered_by):
+            captured_params.append(parameters)
+            return SimpleNamespace(id=9, status=TaskStatus.COMPLETED, error_message=None)
+
+    async def _fake_dispose():
+        disposed.append(True)
+
+    monkeypatch.setattr("app.db.database.async_session_maker", lambda: FakeSession())
+    monkeypatch.setattr("app.db.database.dispose_current_loop_engine", _fake_dispose)
+    monkeypatch.setattr("app.services.akshare.script.AkshareScriptService", FakeScriptService)
+
+    writer = controller.ManagedScriptWriterAdapter(timeout_seconds=12.5)
+    bar = controller.DailyBar(date_key="2026-11-09", open=11.0, close=11.5, high=11.6, low=10.9)
+    receipt = writer.write("000001", bars=[bar], scope={"scope_hash": "h", "period_key": "p"})
+    assert receipt.status == "completed"
+    assert captured_params[0]["_call_timeout"] == 12.5
+    assert disposed == [True]
+
+
+def test_prefixed_symbol_handles_bse_920_and_sse_b_900() -> None:
+    assert controller._prefixed_symbol("920001") == "bj920001"
+    assert controller._prefixed_symbol("900901") == "sh900901"
+    assert controller._prefixed_symbol("600000") == "sh600000"
+    assert controller._prefixed_symbol("000001") == "sz000001"
+    assert controller._prefixed_symbol("830001") == "bj830001"
+
+
+def test_resolve_exit_code_prioritizes_attention_over_retryable_statuses() -> None:
+    assert controller.resolve_exit_code(["source_failed", "verification_failed"]) == 1
+    assert controller.resolve_exit_code(["deferred_budget", "backfill_failed"]) == 1
+    assert controller.resolve_exit_code(["verified_match", "source_failed"]) == 2
+    assert controller.resolve_exit_code(["verified_match", "deferred_budget"]) == 3
+    assert controller.resolve_exit_code(["verified_match"]) == 0

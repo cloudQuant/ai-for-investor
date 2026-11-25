@@ -20,6 +20,30 @@ from typing import Any
 from urllib.parse import urlparse
 
 HISTORY_MAX_ENTRIES = 200
+TASK_MAX_ENTRIES = 200
+_TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled"}
+
+
+def prune_sync_tasks(
+    tasks: dict[str, dict[str, Any]],
+    *,
+    max_entries: int = TASK_MAX_ENTRIES,
+) -> None:
+    """Bound in-memory sync task dictionary, evicting finished tasks oldest-first."""
+    if max_entries <= 0:
+        tasks.clear()
+        return
+    if len(tasks) <= max_entries:
+        return
+    for task_id in [
+        key for key, value in tasks.items() if value.get("status") in _TERMINAL_TASK_STATUSES
+    ]:
+        if len(tasks) <= max_entries:
+            return
+        tasks.pop(task_id, None)
+    while len(tasks) > max_entries:
+        oldest_key = next(iter(tasks))
+        tasks.pop(oldest_key, None)
 
 
 def now_iso() -> str:

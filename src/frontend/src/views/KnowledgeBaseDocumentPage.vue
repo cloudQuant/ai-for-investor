@@ -591,17 +591,11 @@ watch(
   { immediate: true }
 )
 
-onMounted(fetchDocument)
-onBeforeUnmount(revokeSourcePreviewUrl)
-
-// Listen for fullscreen exit (browser ESC etc.)
-if (typeof window !== 'undefined') {
-  window.document.addEventListener('fullscreenchange', () => {
-    if (!window.document.fullscreenElement) {
-      pdfFullscreen.value = false
-    }
-  })
+function handleFullscreenChange() {
+  if (typeof window !== 'undefined' && !window.document.fullscreenElement) pdfFullscreen.value = false
 }
+onMounted(() => { void fetchDocument(); if (typeof window !== 'undefined') window.document.addEventListener('fullscreenchange', handleFullscreenChange) })
+onBeforeUnmount(() => { revokeSourcePreviewUrl(); if (typeof window !== 'undefined') window.document.removeEventListener('fullscreenchange', handleFullscreenChange) })
 </script>
 
 <style scoped>

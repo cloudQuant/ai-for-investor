@@ -5,6 +5,7 @@ Supports comparing and analyzing multiple backtest results.
 """
 
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -37,6 +38,66 @@ class ComparisonService:
         self.comparison_repo = SQLRepository(Comparison)
         self.backtest_service = BacktestService()
 
+    @staticmethod
+    def _serialize_backtest_result(result: Any) -> dict[str, Any]:
+        """Convert a backtest result object or mock into a JSON-safe comparison payload."""
+        total_trades_raw = getattr(result, "total_trades", 0)
+        total_trades = (
+            total_trades_raw
+            if isinstance(total_trades_raw, int) and not isinstance(total_trades_raw, bool)
+            else 0
+        )
+        trades_raw = list(getattr(result, "trades", None) or [])
+        serialized_trades = [
+            trade.model_dump(mode="json") if hasattr(trade, "model_dump") else dict(trade)
+            for trade in trades_raw
+        ]
+        profitable_raw = getattr(result, "profitable_trades", None)
+        if isinstance(profitable_raw, int) and not isinstance(profitable_raw, bool):
+            profitable_trades = profitable_raw
+        else:
+            profitable_trades = sum(
+                1
+                for t in serialized_trades
+                if isinstance(t.get("pnl"), (int, float)) and t["pnl"] > 0
+            )
+        losing_raw = getattr(result, "losing_trades", None)
+        if isinstance(losing_raw, int) and not isinstance(losing_raw, bool):
+            losing_trades = losing_raw
+        else:
+            losing_trades = sum(
+                1
+                for t in serialized_trades
+                if isinstance(t.get("pnl"), (int, float)) and t["pnl"] < 0
+            )
+        return {
+            "strategy_id": getattr(result, "strategy_id", None),
+            "symbol": getattr(result, "symbol", None),
+            "total_return": getattr(result, "total_return", 0.0),
+            "annual_return": getattr(result, "annual_return", 0.0),
+            "sharpe_ratio": getattr(result, "sharpe_ratio", 0.0),
+            "max_drawdown": getattr(result, "max_drawdown", 0.0),
+            "win_rate": getattr(result, "win_rate", 0.0),
+            "total_trades": total_trades,
+            "profitable_trades": profitable_trades,
+            "losing_trades": losing_trades,
+            "equity_curve": list(getattr(result, "equity_curve", None) or []),
+            "equity_dates": list(getattr(result, "equity_dates", None) or []),
+            "drawdown_curve": list(getattr(result, "drawdown_curve", None) or []),
+            "trades": serialized_trades,
+        }
+
+    async def _load_user_backtest_results(
+        self, task_ids: list[str], user_id: str
+    ) -> dict[str, dict[str, Any]]:
+        backtest_results: dict[str, dict[str, Any]] = {}
+        for task_id in task_ids:
+            result = await self.backtest_service.get_result(task_id, user_id=user_id)
+            if result is None:
+                raise ValueError(f"Backtest task not found: {task_id}")
+            backtest_results[task_id] = self._serialize_backtest_result(result)
+        return backtest_results
+
     async def create_comparison(
         self,
         user_id: str,
@@ -64,27 +125,7 @@ class ComparisonService:
         Raises:
             ValueError: If any of the specified backtest tasks do not exist.
         """
-        # Fetch and validate each requested backtest result once so it cannot
-        # disappear between validation and payload construction.
-        backtest_results = {}
-        for task_id in backtest_task_ids:
-            result = await self.backtest_service.get_result(task_id)
-            if result is None:
-                raise ValueError(f"Backtest task not found: {task_id}")
-            backtest_results[task_id] = {
-                "strategy_id": result.strategy_id,
-                "symbol": result.symbol,
-                "total_return": result.total_return,
-                "annual_return": result.annual_return,
-                "sharpe_ratio": result.sharpe_ratio,
-                "max_drawdown": result.max_drawdown,
-                "win_rate": result.win_rate,
-                "total_trades": result.total_trades,
-                "equity_curve": result.equity_curve,
-                "equity_dates": result.equity_dates,
-                "drawdown_curve": result.drawdown_curve,
-                "trades": result.trades,
-            }
+        backtest_results = await self._load_user_backtest_results(backtest_task_ids, user_id)
 
         # Generate comparison data
         comparison_data = await self._generate_comparison_data(backtest_results, comparison_type)
@@ -180,46 +221,41 @@ class ComparisonService:
     ) -> dict[str, Any]:
         """Identify the best performing metrics across all backtest results.
 
-        Args:
-            backtest_results: Dictionary of backtest results keyed by task ID.
-
-        Returns:
-            Dictionary containing the task ID and value for each best metric.
-            For return-based metrics (total return, annual return, Sharpe ratio,
-            win rate), the maximum value is selected. For maximum drawdown,
-            the minimum value is selected.
+        For return metrics (``total_return``, ``annual_return``, ``sharpe_ratio``,
+        ``win_rate``), higher values win. For ``max_drawdown`` (stored as negative
+        percentages, or non-negative magnitudes), the shallowest drawdown (smallest
+        absolute magnitude) wins. Empty inputs keep JSON-safe ``None`` values.
         """
         best_metrics: dict[str, dict[str, str | float | None]] = {
-            "total_return": {"task_id": None, "value": float("-inf")},
-            "annual_return": {"task_id": None, "value": float("-inf")},
-            "sharpe_ratio": {"task_id": None, "value": float("-inf")},
-            "max_drawdown": {"task_id": None, "value": float("inf")},
-            "win_rate": {"task_id": None, "value": 0.0},
+            "total_return": {"task_id": None, "value": None},
+            "annual_return": {"task_id": None, "value": None},
+            "sharpe_ratio": {"task_id": None, "value": None},
+            "max_drawdown": {"task_id": None, "value": None},
+            "win_rate": {"task_id": None, "value": None},
         }
 
         for task_id, result in backtest_results.items():
-            # Total return (maximize)
-            if result["total_return"] > best_metrics["total_return"]["value"]:
-                best_metrics["total_return"] = {"task_id": task_id, "value": result["total_return"]}
+            for metric in ("total_return", "annual_return", "sharpe_ratio", "win_rate"):
+                raw = result.get(metric)
+                if (
+                    not isinstance(raw, (int, float))
+                    or isinstance(raw, bool)
+                    or not math.isfinite(raw)
+                ):
+                    continue
+                current_best = best_metrics[metric]["value"]
+                if not isinstance(current_best, (int, float)) or raw > current_best:
+                    best_metrics[metric] = {"task_id": task_id, "value": raw}
 
-            # Annual return (maximize)
-            if result["annual_return"] > best_metrics["annual_return"]["value"]:
-                best_metrics["annual_return"] = {
-                    "task_id": task_id,
-                    "value": result["annual_return"],
-                }
-
-            # Sharpe ratio (maximize)
-            if result["sharpe_ratio"] > best_metrics["sharpe_ratio"]["value"]:
-                best_metrics["sharpe_ratio"] = {"task_id": task_id, "value": result["sharpe_ratio"]}
-
-            # Maximum drawdown (minimize)
-            if result["max_drawdown"] < best_metrics["max_drawdown"]["value"]:
-                best_metrics["max_drawdown"] = {"task_id": task_id, "value": result["max_drawdown"]}
-
-            # Win rate (maximize)
-            if result["win_rate"] > best_metrics["win_rate"]["value"]:
-                best_metrics["win_rate"] = {"task_id": task_id, "value": result["win_rate"]}
+            raw_dd = result.get("max_drawdown")
+            if (
+                isinstance(raw_dd, (int, float))
+                and not isinstance(raw_dd, bool)
+                and math.isfinite(raw_dd)
+            ):
+                current_dd = best_metrics["max_drawdown"]["value"]
+                if not isinstance(current_dd, (int, float)) or abs(raw_dd) < abs(current_dd):
+                    best_metrics["max_drawdown"] = {"task_id": task_id, "value": raw_dd}
 
         return best_metrics
 
@@ -227,43 +263,31 @@ class ComparisonService:
         self,
         backtest_results: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
-        """Compare equity curves across multiple backtest results.
-
-        Args:
-            backtest_results: Dictionary of backtest results keyed by task ID.
-
-        Returns:
-            Dictionary containing aligned dates and equity curves for comparison.
-            The curves are aligned to a common date timeline for proper comparison.
-        """
+        """Compare equity curves across multiple backtest results."""
         equity_comparison: dict[str, Any] = {
             "dates": [],
             "curves": {},
         }
 
-        # Collect all dates from all backtest results
-        all_dates = set()
-        for _task_id, result in backtest_results.items():
-            all_dates.update(result["equity_dates"])
-        equity_comparison["dates"] = sorted(all_dates)
+        all_dates: set[Any] = set()
+        for result in backtest_results.values():
+            all_dates.update(result.get("equity_dates") or [])
+        sorted_dates = sorted(all_dates)
+        equity_comparison["dates"] = sorted_dates
 
-        # Collect equity curve data
         for task_id, result in backtest_results.items():
-            # Align dates
-            aligned_curve = []
-            result_dates = result["equity_dates"]
-            result_curve = result["equity_curve"]
+            aligned_curve: list[Any] = []
+            result_dates = result.get("equity_dates") or []
+            result_curve = result.get("equity_curve") or []
+            date_to_value = dict(zip(result_dates, result_curve, strict=False))
 
-            for date in equity_comparison["dates"]:
-                if date in result_dates:
-                    index = result_dates.index(date)
-                    aligned_curve.append(result_curve[index])
+            for date in sorted_dates:
+                if date in date_to_value:
+                    aligned_curve.append(date_to_value[date])
+                elif aligned_curve:
+                    aligned_curve.append(aligned_curve[-1])
                 else:
-                    # Use previous value or initial capital
-                    if aligned_curve:
-                        aligned_curve.append(aligned_curve[-1])
-                    else:
-                        aligned_curve.append(100000.0)  # Default initial capital
+                    aligned_curve.append(100000.0)
 
             equity_comparison["curves"][task_id] = aligned_curve
 
@@ -358,22 +382,9 @@ class ComparisonService:
             update_dict["is_public"] = update_data.is_public
         if update_data.backtest_task_ids is not None:
             update_dict["backtest_task_ids"] = update_data.backtest_task_ids
-            # Regenerate comparison data
-            backtest_results = {}
-            for task_id in update_data.backtest_task_ids:
-                result = await self.backtest_service.get_result(task_id)
-                if result:
-                    backtest_results[task_id] = {
-                        "strategy_id": result.strategy_id,
-                        "total_return": result.total_return,
-                        "sharpe_ratio": result.sharpe_ratio,
-                        "max_drawdown": result.max_drawdown,
-                        "win_rate": result.win_rate,
-                        "equity_curve": result.equity_curve,
-                        "equity_dates": result.equity_dates,
-                        "drawdown_curve": result.drawdown_curve,
-                    }
-
+            backtest_results = await self._load_user_backtest_results(
+                update_data.backtest_task_ids, user_id
+            )
             update_dict["comparison_data"] = await self._generate_comparison_data(
                 backtest_results, comparison.type
             )

@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db import database
 from app.models.ai_research_v2 import ResearchConfigProfile
 from app.services.research.canonical import content_hash
+from app.utils.invariants import require_instance
 
 _MAX_DEPTH = 12
 _METADATA_KEYS = frozenset({"id", "name", "description", "created_at", "updated_at"})
@@ -220,8 +221,11 @@ def _parse_profiles(raw_yaml: str) -> list[dict[str, Any]]:
 def _sanitize_config(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str], list[str]]:
     credential_refs: dict[str, str] = {}
     dropped_paths: list[str] = []
-    safe = _sanitize_value(config, "config", credential_refs, dropped_paths, depth=0)
-    assert isinstance(safe, dict)
+    safe = require_instance(
+        _sanitize_value(config, "config", credential_refs, dropped_paths, depth=0),
+        dict,
+        "sanitized config must be a dict",
+    )
     return safe, credential_refs, dropped_paths
 
 

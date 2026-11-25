@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 
 from app.schemas.risk_analytics import BenchmarkMetricsResult, BenchmarkReturnObservation
+from app.utils.invariants import require_present
 
 
 class BenchmarkMetricsService:
@@ -68,11 +69,13 @@ class BenchmarkMetricsService:
                 reason="invalid_return_intervals",
             )
 
-        assert strategy_by_interval is not None
-        assert benchmark_by_interval is not None
-        common_intervals = sorted(strategy_by_interval.keys() & benchmark_by_interval.keys())
-        strategy = [strategy_by_interval[interval] for interval in common_intervals]
-        benchmark = [benchmark_by_interval[interval] for interval in common_intervals]
+        resolved_strategy = require_present(strategy_by_interval, "strategy interval index missing")
+        resolved_benchmark = require_present(
+            benchmark_by_interval, "benchmark interval index missing"
+        )
+        common_intervals = sorted(resolved_strategy.keys() & resolved_benchmark.keys())
+        strategy = [resolved_strategy[interval] for interval in common_intervals]
+        benchmark = [resolved_benchmark[interval] for interval in common_intervals]
         count = len(common_intervals)
         if count < 2:
             return BenchmarkMetricsResult(

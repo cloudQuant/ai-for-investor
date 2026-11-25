@@ -4,7 +4,7 @@
 # ai-for-investor - 启动脚本
 ###############################################################################
 
-set -e
+set -euo pipefail
 
 # 颜色定义
 RED='\033[0;31m'
@@ -30,6 +30,8 @@ BACKEND_STARTUP_TIMEOUT_SECONDS="${BACKEND_STARTUP_TIMEOUT_SECONDS:-120}"
 # PID 文件
 BACKEND_PID_FILE="$PID_DIR/backend.pid"
 FRONTEND_PID_FILE="$PID_DIR/frontend.pid"
+BACKEND_PID=""
+FRONTEND_PID=""
 
 # 日志文件
 BACKEND_LOG="$LOG_DIR/backend.log"
@@ -98,6 +100,18 @@ stop_started_backend() {
     fi
 }
 
+stop_started_frontend() {
+    if [ -n "${FRONTEND_PID:-}" ] && ps -p "$FRONTEND_PID" > /dev/null 2>&1; then
+        echo -e "${YELLOW}正在停止本次启动的前端进程 (PID: $FRONTEND_PID)...${NC}"
+        kill "$FRONTEND_PID" 2>/dev/null || true
+        for _ in 1 2 3 4 5; do
+            ps -p "$FRONTEND_PID" > /dev/null 2>&1 || break
+            sleep 1
+        done
+        kill -9 "$FRONTEND_PID" 2>/dev/null || true
+    fi
+}
+
 echo -e "${CYAN}"
 echo "======================================"
 echo "  ai-for-investor - 启动项目"
@@ -109,7 +123,7 @@ if [ -f "$BACKEND_PID_FILE" ]; then
     BACKEND_PID=$(cat "$BACKEND_PID_FILE")
     if ps -p "$BACKEND_PID" > /dev/null 2>&1; then
         echo -e "${YELLOW}后端服务已在运行 (PID: $BACKEND_PID)${NC}"
-        echo -e "如需重启，请先运行: ${CYAN}./scripts/stop_app.sh${NC}"
+        echo -e "如需重启，请先运行: ${CYAN}./scripts/ops/stop_app.sh${NC}"
         exit 1
     fi
     rm -f "$BACKEND_PID_FILE"
@@ -119,7 +133,7 @@ if [ -f "$FRONTEND_PID_FILE" ]; then
     FRONTEND_PID=$(cat "$FRONTEND_PID_FILE")
     if ps -p "$FRONTEND_PID" > /dev/null 2>&1; then
         echo -e "${YELLOW}前端服务已在运行 (PID: $FRONTEND_PID)${NC}"
-        echo -e "如需重启，请先运行: ${CYAN}./scripts/stop_app.sh${NC}"
+        echo -e "如需重启，请先运行: ${CYAN}./scripts/ops/stop_app.sh${NC}"
         exit 1
     fi
     rm -f "$FRONTEND_PID_FILE"
@@ -155,7 +169,7 @@ done
 
 if [ $MISSING_DEPS -eq 1 ]; then
     echo -e "${RED}错误: 缺少 Python 依赖，请先安装:${NC}"
-    echo -e "  ${YELLOW}pip install -r requirements.txt${NC}"
+    echo -e "  ${YELLOW}cd src/backend && pip install -e '.[dev]'${NC}"
     exit 1
 fi
 echo -e "  ${GREEN}✓${NC} Python 依赖完整"
@@ -197,14 +211,17 @@ if [ ! -f ".env" ]; then
     fi
 fi
 
-# 启动后端
-BACKEND_HOST="${HOST:-0.0.0.0}"
-# Never default DEBUG to true: production-only guards key off APP_ENV, and a
-# silent DEBUG=true would also change framework error behavior.
-BACKEND_DEBUG="${DEBUG:-false}"
-BACKEND_APP_ENV="${APP_ENV:-development}"
-echo -e "  ${GREEN}启动 FastAPI 服务 (端口 ${BACKEND_PORT}, 地址 ${BACKEND_HOST}, APP_ENV ${BACKEND_APP_ENV})...${NC}"
-BACKEND_PID=$(start_background "$BACKEND_LOG" env DEBUG="$BACKEND_DEBUG" APP_ENV="$BACKEND_APP_ENV" HOST="$BACKEND_HOST" "$PYTHON_BIN" -m uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT")
+# 启动后端：仅当外部显式传入 APP_ENV/DEBUG 时才透传，否则交由 .env 与 Settings 默认值决定
+BACKEND_HOST="${HOST:-127.0.0.1}"
+backend_env_args=("HOST=$BACKEND_HOST")
+if [ -n "${APP_ENV:-}" ]; then
+    backend_env_args+=("APP_ENV=$APP_ENV")
+fi
+if [ -n "${DEBUG:-}" ]; then
+    backend_env_args+=("DEBUG=$DEBUG")
+fi
+echo -e "  ${GREEN}启动 FastAPI 服务 (端口 ${BACKEND_PORT}, 地址 ${BACKEND_HOST}, APP_ENV ${APP_ENV:-<from .env>})...${NC}"
+BACKEND_PID=$(start_background "$BACKEND_LOG" env "${backend_env_args[@]}" "$PYTHON_BIN" -m uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT")
 echo $BACKEND_PID > "$BACKEND_PID_FILE"
 
 # 等待后端启动并验证应用完成生命周期初始化。
@@ -224,12 +241,11 @@ fi
 echo ""
 echo -e "${BLUE}[3/4]${NC} 启动前端服务..."
 
-cd "$FRONTEND_DIR"
-
-# 检查前端目录是否存在
+# 检查前端目录是否存在（先检查再 cd，避免 set -e 下提前退出）
 if [ ! -d "$FRONTEND_DIR" ]; then
     echo -e "${YELLOW}警告: 前端目录不存在，跳过前端启动${NC}"
 else
+    cd "$FRONTEND_DIR"
     # 安装依赖
     if [ ! -d "node_modules" ]; then
         echo -e "  ${YELLOW}安装 NPM 依赖...${NC}"
@@ -248,8 +264,9 @@ else
         echo -e "  ${GREEN}前端服务启动成功 (PID: $FRONTEND_PID)${NC}"
     else
         echo -e "${YELLOW}前端服务启动失败，请查看日志: $FRONTEND_LOG${NC}"
-        cat "$FRONTEND_LOG" | tail -10
+        tail -n 10 "$FRONTEND_LOG" || true
         rm -f "$FRONTEND_PID_FILE"
+        FRONTEND_PID=""
     fi
 fi
 
@@ -268,8 +285,9 @@ if backend_is_running && backend_is_healthy; then
 else
     echo -e "  ${RED}✗${NC} 后端服务未运行或健康检查失败"
     show_backend_startup_failure
+    stop_started_frontend
     stop_started_backend
-    rm -f "$BACKEND_PID_FILE"
+    rm -f "$BACKEND_PID_FILE" "$FRONTEND_PID_FILE"
     exit 1
 fi
 
@@ -300,7 +318,7 @@ echo ""
 echo -e "  ${YELLOW}日志目录:${NC} $LOG_DIR"
 echo -e "  ${YELLOW}PID目录:${NC} $PID_DIR"
 echo ""
-echo -e "  ${GREEN}停止服务:${NC} ./scripts/stop_app.sh"
-echo -e "  ${GREEN}重启服务:${NC} ./scripts/restart_app.sh"
+echo -e "  ${GREEN}停止服务:${NC} ./scripts/ops/stop_app.sh"
+echo -e "  ${GREEN}重启服务:${NC} ./scripts/ops/restart_app.sh"
 echo -e "  ${GREEN}查看日志:${NC} tail -f logs/*.log"
 echo ""

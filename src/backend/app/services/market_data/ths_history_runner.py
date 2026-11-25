@@ -393,7 +393,8 @@ class ThsHistoryRunner:
                         provider_id=THS_DUMP_PROVIDER_ID,
                         checked_at=datetime.now(_UTC),
                     )
-                    payload = self._downloader.fetch_ths_json(
+                    payload = await asyncio.to_thread(
+                        self._downloader.fetch_ths_json,
                         "/api/a-share/corporate-actions/adjustment-factors",
                         params={"thscode": symbol},
                     )
@@ -485,7 +486,8 @@ class ThsHistoryRunner:
                         provider_id=THS_DUMP_PROVIDER_ID,
                         checked_at=datetime.now(_UTC),
                     )
-                    payload = self._downloader.fetch_ths_json(
+                    payload = await asyncio.to_thread(
+                        self._downloader.fetch_ths_json,
                         endpoints[statement],
                         params={"thscode": symbol, "period": "annual", "limit": 20},
                     )
@@ -615,7 +617,9 @@ class ThsHistoryRunner:
                 checked_at=datetime.now(_UTC),
             )
 
-            payload = self._downloader.fetch_ths_json(_THS_CALENDAR_ENDPOINT_PATH)
+            payload = await asyncio.to_thread(
+                self._downloader.fetch_ths_json, _THS_CALENDAR_ENDPOINT_PATH
+            )
             envelope = parse_ths_envelope(payload)
             rows = normalize_calendar(envelope)
             evidence_content_hash = _canonical_ths_calendar_response_hash(rows)

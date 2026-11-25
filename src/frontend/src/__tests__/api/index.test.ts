@@ -623,5 +623,113 @@ describe('API module', () => {
       await expect(handler.rejected(error)).rejects.toBe(error)
       expect(ElMessage.error).toHaveBeenCalled()
     })
+
+    it('still expires session and shows toast when a retried request receives 401 before maxRetries', async () => {
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
+      const api = (await import('@/api/index')).default
+      const handler = (api.interceptors.response as any).handlers[0]
+      const gen = beginSession('old-access')
+      const events: string[] = []
+      const onExpired = () => { events.push('expired') }
+      window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+      try {
+        const error = {
+          config: {
+            method: 'GET',
+            url: '/strategy/list',
+            headers: {},
+            __isRetrying: true,
+            __retryCount: 1,
+            __sessionGeneration: gen,
+            __sessionToken: 'old-access',
+          },
+          response: { status: 401, data: {} },
+        }
+        await expect(handler.rejected(error)).rejects.toBe(error)
+        expect(events).toEqual(['expired'])
+        expect(getSessionGeneration()).toBe(gen + 1)
+        expect(ElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+      } finally {
+        window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
+      }
+    })
+
+    it('uses single-flight /auth/refresh on concurrent 401s and replays requests', async () => {
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
+      const { getRefreshToken, getToken } = await import('@/utils/tokenRef')
+      const api = (await import('@/api/index')).default
+      const handler = (api.interceptors.response as any).handlers[0]
+      sessionStorageMock.setItem('auth', JSON.stringify({ token: 'old-access', refreshToken: 'rt-1' }))
+      const gen = beginSession('old-access', 'rt-1')
+
+      let resolveRefresh!: (val: any) => void
+      const refreshPromise = new Promise((resolve) => { resolveRefresh = resolve })
+      const postSpy = vi.spyOn(api, 'post').mockImplementation(() => refreshPromise as Promise<any>)
+      const requestSpy = vi.spyOn(api, 'request').mockResolvedValue({ ok: true } as never)
+
+      try {
+        const err1 = {
+          config: { url: '/portfolio/overview', method: 'get', headers: {}, __sessionGeneration: gen, __sessionToken: 'old-access' },
+          response: { status: 401, data: {} },
+        }
+        const err2 = {
+          config: { url: '/strategy/list', method: 'get', headers: {}, __sessionGeneration: gen, __sessionToken: 'old-access' },
+          response: { status: 401, data: {} },
+        }
+
+        const p1 = handler.rejected(err1)
+        const p2 = handler.rejected(err2)
+
+        resolveRefresh({ access_token: 'new-access', refresh_token: 'rt-2', token_type: 'bearer', expires_in: 3600 })
+        await expect(Promise.all([p1, p2])).resolves.toEqual([{ ok: true }, { ok: true }])
+
+        expect(postSpy).toHaveBeenCalledTimes(1)
+        expect(postSpy).toHaveBeenCalledWith(
+          '/auth/refresh',
+          { refresh_token: 'rt-1' },
+          expect.objectContaining({ skipAuthRefresh: true, skipRetry: true }),
+        )
+        expect(requestSpy).toHaveBeenCalledTimes(2)
+        expect((err1.config as any).headers.Authorization).toBe('Bearer new-access')
+        expect((err2.config as any).headers.Authorization).toBe('Bearer new-access')
+        expect((err1.config as any).__hasRefreshed).toBe(true)
+        expect(getToken()).toBe('new-access')
+        expect(getRefreshToken()).toBe('rt-2')
+        expect(ElMessage.error).not.toHaveBeenCalled()
+      } finally {
+        postSpy.mockRestore()
+        requestSpy.mockRestore()
+      }
+    })
+
+    it('logs out cleanly once when /auth/refresh fails', async () => {
+      const { ElMessage } = await import('element-plus/es/components/message/index.mjs')
+      const api = (await import('@/api/index')).default
+      const handler = (api.interceptors.response as any).handlers[0]
+      sessionStorageMock.setItem('auth', JSON.stringify({ token: 'old-access', refreshToken: 'rt-bad' }))
+      const gen = beginSession('old-access', 'rt-bad')
+      const expiredEvents: string[] = []
+      const onExpired = () => { expiredEvents.push('expired') }
+      window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+
+      const postSpy = vi.spyOn(api, 'post').mockRejectedValue(new Error('refresh failed'))
+      const requestSpy = vi.spyOn(api, 'request')
+
+      try {
+        const err = {
+          config: { url: '/portfolio/overview', method: 'get', headers: {}, __sessionGeneration: gen, __sessionToken: 'old-access' },
+          response: { status: 401, data: {} },
+        }
+        await expect(handler.rejected(err)).rejects.toBe(err)
+        expect(postSpy).toHaveBeenCalledTimes(1)
+        expect(requestSpy).not.toHaveBeenCalled()
+        expect(expiredEvents).toEqual(['expired'])
+        expect(ElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+      } finally {
+        postSpy.mockRestore()
+        requestSpy.mockRestore()
+        window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
+      }
+    })
   })
 })

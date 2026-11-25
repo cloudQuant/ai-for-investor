@@ -15,7 +15,7 @@ import math
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -25,6 +25,12 @@ from app.services.market_data.opendata_credentials import (
     OpendataCredentials,
     OpendataCredentialsError,
 )
+from app.services.stock_analysis.opendata_sina_validators import (
+    validate_fzb_entry,
+    validate_fzb_payload_header,
+    validate_sina_snapshot_tail,
+)
+from app.utils.invariants import require_present
 
 _DATASET_ID = "sina_fzb_report_observations"
 _SOURCE = {"source": "sina", "source_id": "sina-fzb"}
@@ -349,16 +355,14 @@ class OpenDataSinaFzbSnapshotReader:
                         raise OpenDataSinaFzbSnapshotError("snapshot_row_limit_exceeded")
                 if not has_more:
                     break
-                assert next_cursor is not None
-                if next_cursor in seen_cursors or next_cursor == cursor:
+                resolved_cursor = require_present(next_cursor, "snapshot next_cursor missing")
+                if resolved_cursor in seen_cursors or resolved_cursor == cursor:
                     raise OpenDataSinaFzbSnapshotError("snapshot_cursor_repeated")
-                seen_cursors.add(next_cursor)
-                cursor = next_cursor
+                seen_cursors.add(resolved_cursor)
+                cursor = resolved_cursor
 
         self._check_deadline(started_at)
-        if len(rows) != record_count:
-            raise OpenDataSinaFzbSnapshotError("snapshot_incomplete")
-        if page_count < 1:
+        if len(rows) != record_count or page_count < 1:
             raise OpenDataSinaFzbSnapshotError("snapshot_incomplete")
         return SinaFzbSnapshotResult(
             snapshot=snapshot,
@@ -515,78 +519,52 @@ def _validate_snapshot(
         raise OpenDataSinaFzbSnapshotError("snapshot_scope_mismatch")
     if type(snapshot.get("sequence")) is not int or snapshot["sequence"] < 1:
         raise OpenDataSinaFzbSnapshotError("snapshot_metadata_invalid")
-    if (
-        snapshot.get("schema_version") != "source-native-report-v1"
-        or snapshot.get("semantic_version") != "sina-fzb-source-native-v1"
-        or snapshot.get("source") != _SOURCE
-        or snapshot.get("schema")
-        != [
-            {"name": name, "data_type": data_type, "nullable": False}
-            for name, data_type in _SCHEMA_FIELDS
-        ]
-    ):
+    contract_pairs: tuple[tuple[str, Any], ...] = (
+        ("schema_version", "source-native-report-v1"),
+        ("semantic_version", "sina-fzb-source-native-v1"),
+        ("source", _SOURCE),
+        (
+            "schema",
+            [
+                {"name": name, "data_type": data_type, "nullable": False}
+                for name, data_type in _SCHEMA_FIELDS
+            ],
+        ),
+        ("quality", {"status": "unknown", "report_id": None, "issue_count": 0}),
+        ("field_units", {"source_update_epoch_seconds": "unix_seconds"}),
+        ("field_currencies", {}),
+        ("field_adjustments", {}),
+        ("currency", None),
+        ("adjustment_basis", "not_applicable"),
+        ("asset_class", "equity"),
+        ("frequency", "irregular"),
+        ("record_kind", "table"),
+        ("business_key_fields", list(_BUSINESS_FIELDS)),
+        ("ordering_fields", list(_BUSINESS_FIELDS)),
+        ("filter_fields", list(_FILTER_FIELDS)),
+        ("storage_order", _STORAGE_ORDER),
+        ("identity_key_encoding", "canonical-json-array-v1"),
+        ("time_field", None),
+        ("temporal_semantics", "none"),
+        ("timezone", "UTC"),
+        ("pit_policy", "unsupported"),
+        ("source_available_at_field", None),
+        ("calendar_id", None),
+        ("identity_semantics", _IDENTITY_SEMANTICS),
+    )
+    if any(snapshot.get(key) != expected for key, expected in contract_pairs):
         raise OpenDataSinaFzbSnapshotError("snapshot_contract_mismatch")
-    if (
-        snapshot.get("quality") != {"status": "unknown", "report_id": None, "issue_count": 0}
-        or snapshot.get("field_units") != {"source_update_epoch_seconds": "unix_seconds"}
-        or snapshot.get("field_currencies") != {}
-        or snapshot.get("field_adjustments") != {}
-        or snapshot.get("currency") is not None
-        or snapshot.get("adjustment_basis") != "not_applicable"
-        or snapshot.get("asset_class") != "equity"
-        or snapshot.get("frequency") != "irregular"
-        or snapshot.get("record_kind") != "table"
-    ):
-        raise OpenDataSinaFzbSnapshotError("snapshot_contract_mismatch")
-    if (
-        snapshot.get("business_key_fields") != list(_BUSINESS_FIELDS)
-        or snapshot.get("ordering_fields") != list(_BUSINESS_FIELDS)
-        or snapshot.get("filter_fields") != list(_FILTER_FIELDS)
-        or snapshot.get("storage_order") != _STORAGE_ORDER
-        or snapshot.get("identity_key_encoding") != "canonical-json-array-v1"
-        or snapshot.get("time_field") is not None
-        or snapshot.get("temporal_semantics") != "none"
-        or snapshot.get("timezone") != "UTC"
-        or snapshot.get("pit_policy") != "unsupported"
-        or snapshot.get("source_available_at_field") is not None
-        or snapshot.get("calendar_id") is not None
-        or snapshot.get("identity_semantics") != _IDENTITY_SEMANTICS
-    ):
-        raise OpenDataSinaFzbSnapshotError("snapshot_contract_mismatch")
-    window = snapshot.get("window")
-    if (
-        not isinstance(window, dict)
-        or set(window) != {"start", "end", "end_exclusive"}
-        or window.get("start") is not None
-        or window.get("end") is not None
-        or window.get("end_exclusive") is not True
-    ):
-        raise OpenDataSinaFzbSnapshotError("snapshot_window_invalid")
-    selection = snapshot.get("selection")
-    if (
-        not isinstance(selection, dict)
-        or set(selection) != {"instrument_id", "capture_id"}
-        or selection.get("instrument_id") != instrument_id
-        or selection.get("capture_id") != capture_id
-    ):
-        raise OpenDataSinaFzbSnapshotError("snapshot_selection_mismatch")
-    if snapshot.get("page_size") != _ROW_PAGE_SIZE or type(snapshot.get("page_size")) is not int:
-        raise OpenDataSinaFzbSnapshotError("snapshot_metadata_invalid")
-    if (
-        type(snapshot.get("record_count")) is not int
-        or not 0 <= snapshot["record_count"] <= _MAX_ROWS
-    ):
-        raise OpenDataSinaFzbSnapshotError("snapshot_row_limit_exceeded")
-    for field in ("contract_sha256", "selection_sha256", "content_sha256"):
-        if type(snapshot.get(field)) is not str or _SHA256.fullmatch(snapshot[field]) is None:
-            raise OpenDataSinaFzbSnapshotError("snapshot_hash_invalid")
-    _validate_timestamp(snapshot.get("as_of"), nullable=False)
-    created_at = _validate_timestamp(snapshot.get("created_at"), nullable=False)
-    expires_at = _validate_timestamp(snapshot.get("expires_at"), nullable=False)
-    # nullable=False cannot return None; narrow the values for comparison.
-    assert created_at is not None and expires_at is not None
-    if expires_at <= created_at:
-        raise OpenDataSinaFzbSnapshotError("snapshot_expiry_invalid")
+    validate_sina_snapshot_tail(
+        snapshot,
+        instrument_id=instrument_id,
+        capture_id=capture_id,
+        page_size=_ROW_PAGE_SIZE,
+        max_rows=_MAX_ROWS,
+        hash_fields=("contract_sha256", "selection_sha256", "content_sha256"),
+        sha256_re=_SHA256,
+        validate_timestamp_fn=_validate_timestamp,
+        error_cls=OpenDataSinaFzbSnapshotError,
+    )
     return snapshot
 
 
@@ -710,123 +688,30 @@ def _validate_row(
 
 
 def _validate_payload(payload: dict[str, Any], *, instrument_id: str, capture_id: str) -> int:
-    if (
-        payload.get("instrument_id") != instrument_id
-        or payload.get("capture_id") != capture_id
-        or payload.get("statement_code") != "fzb"
-    ):
-        raise OpenDataSinaFzbSnapshotError("record_payload_scope_mismatch")
-    if (
-        type(payload.get("report_period")) is not str
-        or _ISO_DATE.fullmatch(payload["report_period"]) is None
-        or not _valid_date(payload["report_period"])
-        or type(payload.get("source_paper_code")) is not str
-        or payload["source_paper_code"] != _sina_paper_code(instrument_id)
-        or type(payload.get("published_on")) is not str
-        or _ISO_DATE.fullmatch(payload["published_on"]) is None
-        or not _valid_date(payload["published_on"])
-        or payload.get("publication_precision") != "date"
-        or type(payload.get("source_update_epoch_seconds")) is not int
-        or payload["source_update_epoch_seconds"] <= 0
-        or type(payload.get("source_updated_at_timezone")) is not str
-        or payload["source_updated_at_timezone"] != "Asia/Shanghai"
-        or type(payload.get("currency")) is not str
-        or not payload["currency"]
-    ):
-        raise OpenDataSinaFzbSnapshotError("record_payload_invalid")
-    source_updated_at = _validate_timestamp(payload.get("source_updated_at"), nullable=False)
-    retrieved_at_utc = _validate_timestamp(payload.get("retrieved_at_utc"), nullable=False)
-    if (
-        source_updated_at is None
-        or source_updated_at.utcoffset() != timedelta(hours=8)
-        or retrieved_at_utc is None
-        or retrieved_at_utc.utcoffset() != timedelta(0)
-        or not payload["retrieved_at_utc"].endswith("Z")
-    ):
-        raise OpenDataSinaFzbSnapshotError("record_payload_invalid")
-    try:
-        source_update_epoch = datetime.fromtimestamp(
-            payload["source_update_epoch_seconds"], tz=timezone.utc
-        )
-    except (OverflowError, OSError, ValueError):
-        raise OpenDataSinaFzbSnapshotError("record_payload_invalid") from None
-    if source_update_epoch.astimezone(source_updated_at.tzinfo) != source_updated_at:
-        raise OpenDataSinaFzbSnapshotError("record_payload_invalid")
-    for field in ("period_metadata", "report_metadata"):
-        _validate_scalar_object(payload.get(field))
+    validate_fzb_payload_header(
+        payload,
+        instrument_id=instrument_id,
+        capture_id=capture_id,
+        expected_paper_code=_sina_paper_code(instrument_id),
+        iso_date_re=_ISO_DATE,
+        valid_date_fn=_valid_date,
+        validate_timestamp_fn=_validate_timestamp,
+        validate_scalar_object_fn=_validate_scalar_object,
+        error_cls=OpenDataSinaFzbSnapshotError,
+    )
     entries = payload.get("entries")
     if not isinstance(entries, list) or len(entries) > _MAX_REPORT_ENTRIES:
         raise OpenDataSinaFzbSnapshotError("record_entries_invalid")
     seen_ordinals: list[int] = []
     previous_first_ordinal = -1
     for entry in entries:
-        if not isinstance(entry, dict):
-            raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-        kind = entry.get("kind")
-        if kind == "item":
-            expected = {
-                "kind",
-                "source_item_id",
-                "source_title",
-                "source_ordinals",
-                "raw_value",
-                "value_state",
-                "source_metadata",
-            }
-            if set(entry) != expected:
-                raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-            if (
-                type(entry.get("source_item_id")) is not str
-                or not entry["source_item_id"]
-                or type(entry.get("source_title")) is not str
-                or not entry["source_title"]
-                or (entry.get("raw_value") is not None and type(entry["raw_value"]) is not str)
-            ):
-                raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-            expected_state = (
-                "null"
-                if entry["raw_value"] is None
-                else "empty"
-                if entry["raw_value"] == ""
-                else "present"
-            )
-            if entry.get("value_state") != expected_state:
-                raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-        elif kind == "group_marker":
-            expected = {
-                "kind",
-                "source_ordinals",
-                "source_group_no",
-                "source_title",
-                "raw_item_field",
-                "raw_item_value",
-                "source_metadata",
-            }
-            if set(entry) != expected:
-                raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-            if (
-                type(entry.get("source_group_no")) is not int
-                or entry["source_group_no"] not in {1, 2, 3, 4, 5}
-                or type(entry.get("source_title")) is not str
-                or not entry["source_title"]
-                or entry.get("raw_item_field") != ""
-                or entry.get("raw_item_value") != ""
-            ):
-                raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-        else:
-            raise OpenDataSinaFzbSnapshotError("record_entry_invalid")
-        _validate_scalar_object(entry.get("source_metadata"))
-        ordinals = entry.get("source_ordinals")
-        if (
-            not isinstance(ordinals, list)
-            or not ordinals
-            or len(ordinals) > _MAX_REPORT_ENTRIES
-            or any(type(value) is not int or value < 0 for value in ordinals)
-            or any(left >= right for left, right in zip(ordinals, ordinals[1:], strict=False))
-            or ordinals[0] <= previous_first_ordinal
-        ):
-            raise OpenDataSinaFzbSnapshotError("record_ordinals_invalid")
-        previous_first_ordinal = ordinals[0]
+        previous_first_ordinal, ordinals = validate_fzb_entry(
+            entry,
+            max_report_entries=_MAX_REPORT_ENTRIES,
+            previous_first_ordinal=previous_first_ordinal,
+            validate_scalar_object_fn=_validate_scalar_object,
+            error_cls=OpenDataSinaFzbSnapshotError,
+        )
         seen_ordinals.extend(ordinals)
     if len(seen_ordinals) > _MAX_REPORT_ENTRIES or sorted(seen_ordinals) != list(
         range(len(seen_ordinals))

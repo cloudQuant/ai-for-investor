@@ -69,6 +69,102 @@ def _thaw_json(value: Any) -> Any:
     return value
 
 
+_ACCOUNT_BOOK_LEGACY_FIELDS = frozenset(
+    {
+        "view",
+        "coverage",
+        "state",
+        "books",
+        "managed_orders",
+        "managed_fills",
+        "external_orders",
+        "external_fills",
+        "provider_position_change",
+        "position_residual",
+        "fee_residual",
+    }
+)
+_ACCOUNT_BOOK_COVERAGE_FIELDS = frozenset(
+    {
+        "account_key",
+        "scope_directory_revision",
+        "journal_generation",
+        "baseline_execution_cursor",
+        "current_execution_cursor",
+        "complete",
+        "reasons",
+        "scanned_outbox_events",
+        "outbox_history_contiguous",
+        "outbox_scan_complete",
+        "continuations",
+        "input_continuations",
+        "quarantined_intents",
+    }
+)
+
+
+def _validate_string_pair_rows(rows: object, first_key: str, second_key: str) -> None:
+    expected_keys = {first_key, second_key}
+    if type(rows) is not tuple or any(
+        not isinstance(item, Mapping)
+        or set(item) != expected_keys
+        or type(item[first_key]) is not str
+        or type(item[second_key]) is not str
+        for item in rows
+    ):
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+
+
+def _validate_account_book_coverage(coverage: object) -> None:
+    if not isinstance(coverage, Mapping) or set(coverage) != _ACCOUNT_BOOK_COVERAGE_FIELDS:
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+    # The SDK's ExecutionScope account token is a separate internal key
+    # from Base AccountKey.account_key_id. Keep the trusted deployment key
+    # for AFI-side deduplication, but validate the service token on its own.
+    _text(coverage["account_key"], "INVALID_ACCOUNT_BOOK_COVERAGE")
+    for name in ("scope_directory_revision", "journal_generation"):
+        _text(coverage[name], "INVALID_ACCOUNT_BOOK_COVERAGE")
+    for name in ("baseline_execution_cursor", "current_execution_cursor", "scanned_outbox_events"):
+        if type(coverage[name]) is not int or coverage[name] < 0:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+    if coverage["baseline_execution_cursor"] > coverage["current_execution_cursor"]:
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+    if any(
+        type(coverage[name]) is not bool
+        for name in ("complete", "outbox_history_contiguous", "outbox_scan_complete")
+    ):
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+    if type(coverage["reasons"]) is not tuple or any(
+        type(reason) is not str for reason in coverage["reasons"]
+    ):
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+    if any(
+        type(coverage[name]) is not tuple
+        for name in ("continuations", "input_continuations", "quarantined_intents")
+    ):
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
+
+
+def _validate_account_book_entries(books: object) -> None:
+    if type(books) is not tuple:
+        raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+    owner_keys: set[tuple[str, str]] = set()
+    book_fields = {"owner_kind", "owner_ref", "current_positions", "fees_since_baseline"}
+    for book in books:
+        if not isinstance(book, Mapping) or set(book) != book_fields:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        owner_kind = book["owner_kind"]
+        if owner_kind not in {"STRATEGY", "MANUAL_BOOK", "UNALLOCATED"}:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        owner_ref = _text(book["owner_ref"], "INVALID_ACCOUNT_BOOK_REPLY")
+        owner_key = (owner_kind, owner_ref)
+        if owner_key in owner_keys:
+            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+        owner_keys.add(owner_key)
+        _validate_string_pair_rows(book["current_positions"], "instrument", "net_quantity")
+        _validate_string_pair_rows(book["fees_since_baseline"], "currency", "amount")
+
+
 @dataclass(frozen=True, slots=True)
 class AccountBookReadView:
     """An exact account-level execution-book projection from the SDK service.
@@ -89,25 +185,12 @@ class AccountBookReadView:
         _text(self.account_ref, "INVALID_ACCOUNT_REF")
         _text(self.account_key_id, "INVALID_ACCOUNT_KEY_ID")
         projection = _freeze_json(self.projection, "INVALID_ACCOUNT_BOOK_REPLY")
-        legacy_fields = {
-            "view",
-            "coverage",
-            "state",
-            "books",
-            "managed_orders",
-            "managed_fills",
-            "external_orders",
-            "external_fills",
-            "provider_position_change",
-            "position_residual",
-            "fee_residual",
-        }
         projection_fields = (
             frozenset(projection) if isinstance(projection, Mapping) else frozenset()
         )
         if not isinstance(projection, Mapping) or projection_fields not in {
-            frozenset(legacy_fields),
-            frozenset(legacy_fields | {"financial"}),
+            _ACCOUNT_BOOK_LEGACY_FIELDS,
+            _ACCOUNT_BOOK_LEGACY_FIELDS | {"financial"},
         }:
             raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
         if projection["view"] != "ACCOUNT" or projection["state"] not in {
@@ -116,116 +199,14 @@ class AccountBookReadView:
             "BALANCED",
         }:
             raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-
         coverage = projection["coverage"]
-        coverage_fields = {
-            "account_key",
-            "scope_directory_revision",
-            "journal_generation",
-            "baseline_execution_cursor",
-            "current_execution_cursor",
-            "complete",
-            "reasons",
-            "scanned_outbox_events",
-            "outbox_history_contiguous",
-            "outbox_scan_complete",
-            "continuations",
-            "input_continuations",
-            "quarantined_intents",
-        }
-        if not isinstance(coverage, Mapping) or set(coverage) != coverage_fields:
-            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
-        # The SDK's ExecutionScope account token is a separate internal key
-        # from Base AccountKey.account_key_id. Keep the trusted deployment key
-        # for AFI-side deduplication, but validate the service token on its own.
-        _text(coverage["account_key"], "INVALID_ACCOUNT_BOOK_COVERAGE")
-        for name in ("scope_directory_revision", "journal_generation"):
-            _text(coverage[name], "INVALID_ACCOUNT_BOOK_COVERAGE")
-        for name in (
-            "baseline_execution_cursor",
-            "current_execution_cursor",
-            "scanned_outbox_events",
-        ):
-            if type(coverage[name]) is not int or coverage[name] < 0:
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
-        if coverage["baseline_execution_cursor"] > coverage["current_execution_cursor"]:
-            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
-        if any(
-            type(coverage[name]) is not bool
-            for name in ("complete", "outbox_history_contiguous", "outbox_scan_complete")
-        ):
-            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
-        if type(coverage["reasons"]) is not tuple or any(
-            type(reason) is not str for reason in coverage["reasons"]
-        ):
-            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
-        for name in ("continuations", "input_continuations", "quarantined_intents"):
-            if type(coverage[name]) is not tuple:
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_COVERAGE")
-
+        _validate_account_book_coverage(coverage)
         if "financial" in projection:
             _validate_account_book_financial(projection["financial"], coverage)
-
-        books = projection["books"]
-        if type(books) is not tuple:
-            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-        owner_keys: set[tuple[str, str]] = set()
-        for book in books:
-            if not isinstance(book, Mapping) or set(book) != {
-                "owner_kind",
-                "owner_ref",
-                "current_positions",
-                "fees_since_baseline",
-            }:
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-            owner_kind = book["owner_kind"]
-            if owner_kind not in {"STRATEGY", "MANUAL_BOOK", "UNALLOCATED"}:
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-            owner_ref = _text(book["owner_ref"], "INVALID_ACCOUNT_BOOK_REPLY")
-            owner_key = (owner_kind, owner_ref)
-            if owner_key in owner_keys:
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-            owner_keys.add(owner_key)
-            positions = book["current_positions"]
-            fees = book["fees_since_baseline"]
-            if type(positions) is not tuple or type(fees) is not tuple:
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-            if any(
-                not isinstance(item, Mapping)
-                or set(item) != {"instrument", "net_quantity"}
-                or type(item["instrument"]) is not str
-                or type(item["net_quantity"]) is not str
-                for item in positions
-            ):
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-            if any(
-                not isinstance(item, Mapping)
-                or set(item) != {"currency", "amount"}
-                or type(item["currency"]) is not str
-                or type(item["amount"]) is not str
-                for item in fees
-            ):
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-
+        _validate_account_book_entries(projection["books"])
         for name in ("provider_position_change", "position_residual"):
-            items = projection[name]
-            if type(items) is not tuple or any(
-                not isinstance(item, Mapping)
-                or set(item) != {"instrument", "net_quantity"}
-                or type(item["instrument"]) is not str
-                or type(item["net_quantity"]) is not str
-                for item in items
-            ):
-                raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
-        fees = projection["fee_residual"]
-        if type(fees) is not tuple or any(
-            not isinstance(item, Mapping)
-            or set(item) != {"currency", "amount"}
-            or type(item["currency"]) is not str
-            or type(item["amount"]) is not str
-            for item in fees
-        ):
-            raise ServiceReadContractError("INVALID_ACCOUNT_BOOK_REPLY")
+            _validate_string_pair_rows(projection[name], "instrument", "net_quantity")
+        _validate_string_pair_rows(projection["fee_residual"], "currency", "amount")
         for name in ("managed_orders", "managed_fills", "external_orders", "external_fills"):
             if type(projection[name]) is not tuple or any(
                 not isinstance(item, Mapping) for item in projection[name]

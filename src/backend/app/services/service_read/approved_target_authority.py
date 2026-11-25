@@ -27,6 +27,7 @@ from app.services.strategy_target_approvals import (
     reserve_approved_target_operation,
     resolve_approved_target_v1,
 )
+from app.utils.invariants import log_suppressed
 
 _OPERATION_TIMEOUT_SECONDS = 5.0
 _CANCELLATION_TIMEOUT_SECONDS = 2.0
@@ -357,15 +358,15 @@ def create_execution_approved_target_resources(
         if bridge is not None:
             try:
                 bridge.close()
-            except BaseException:
-                pass
+            except BaseException as close_exc:
+                log_suppressed(__name__, "approved target bridge close failed", close_exc)
         elif engine is not None:
             try:
                 loop.run_until_complete(
                     asyncio.wait_for(engine.dispose(), timeout=_CLOSE_TIMEOUT_SECONDS)
                 )
-            except BaseException:
-                pass
+            except BaseException as dispose_exc:
+                log_suppressed(__name__, "approved target engine dispose failed", dispose_exc)
             if not loop.is_closed():
                 loop.close()
         elif not loop.is_closed():

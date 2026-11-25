@@ -1375,35 +1375,20 @@ function renderChart() {
   chartInstance = echarts.init(chartContainerRef.value)
   chartInstance.setOption(buildChartOption())
 }
-
-function handleChartResize() {
-  chartInstance?.resize()
-}
-
+function handleChartResize() { chartInstance?.resize() }
 function stopSourceRefresh() {
-  if (sourceRefreshTimer) {
-    clearInterval(sourceRefreshTimer)
-    sourceRefreshTimer = null
-  }
+  if (sourceRefreshTimer) { clearInterval(sourceRefreshTimer); sourceRefreshTimer = null }
 }
-
 function startSourceRefresh() {
   stopSourceRefresh()
   sourceRefreshTimer = setInterval(async () => {
     await store.fetchSources()
-    if (store.activeSourceInfo?.status === 'available' && !store.quotesLoading) {
-      await store.fetchQuotes()
-    }
+    if (store.activeSourceInfo?.status === 'available' && !store.quotesLoading) await store.fetchQuotes()
   }, 60_000)
 }
-
 watch(
   () => [store.chartBars, store.chartDrawerVisible],
-  () => {
-    if (store.chartDrawerVisible && store.chartBars.length > 0) {
-      nextTick(() => renderChart())
-    }
-  },
+  () => { if (store.chartDrawerVisible && store.chartBars.length > 0) nextTick(() => renderChart()) },
   { deep: true },
 )
 
@@ -1423,21 +1408,25 @@ watch(
   },
 )
 
-// ---- lifecycle ----
+let isUnmounted = false
+
 onMounted(async () => {
   await store.fetchSources()
+  if (isUnmounted) return
   startSourceRefresh()
   if (store.activeSource && store.activeSourceInfo?.status === 'available') {
     await store.fetchQuotes()
-    if (store.autoRefresh) store.startAutoRefresh()
+    if (!isUnmounted && store.autoRefresh) store.startAutoRefresh()
   }
-  window.addEventListener('resize', handleChartResize)
+  if (!isUnmounted) window.addEventListener('resize', handleChartResize)
 })
 
 onUnmounted(() => {
+  isUnmounted = true
+  if (searchDebounce) { clearTimeout(searchDebounce); searchDebounce = null }
   store.cleanup()
   stopSourceRefresh()
-  chartInstance?.dispose()
+  chartInstance?.dispose(); chartInstance = null
   window.removeEventListener('resize', handleChartResize)
 })
 </script>

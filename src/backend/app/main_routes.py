@@ -3,13 +3,19 @@ import sys
 import time as _time
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, status
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, status
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import config as _app_config
+from app.api._dependencies import _user_has_permission, get_current_user, security
 from app.api.backtest_enhanced import websocket_endpoint as stream_backtest_progress
 from app.api.data.topics import websocket_pattern_endpoint as stream_data_topic_pattern
 from app.api.data.topics import websocket_topic_endpoint as stream_data_topic
 from app.api.overfitting import websocket_endpoint as stream_overfitting_progress
+from app.db.database import get_db
+from app.models.permission import Permission
 
 
 def register_runtime_routes(
@@ -126,7 +132,7 @@ def register_runtime_routes(
             db_status = "connected"
 
             real_engine = _get_engine()
-            pool = real_engine.pool
+            pool: Any = real_engine.pool
             if hasattr(pool, "size"):
                 pool_info = {
                     "pool_size": pool.size(),
@@ -176,10 +182,7 @@ def register_runtime_routes(
 
         from app.db.cache import get_cache
         from app.db.database import async_session_maker
-        from app.services.ai_router.health import (
-            AIProviderHealthService,
-            build_provider_health_payload,
-        )
+        from app.services.ai_router.health import AIProviderHealthService
         from app.services.live_trading.manager import get_live_trading_manager
 
         database_status = "ready"
@@ -193,21 +196,22 @@ def register_runtime_routes(
         cache_payload: dict[str, Any]
         try:
             cache_stats = await _asyncio.wait_for(get_cache().get_stats(), timeout=1.0)
-            cache_payload = {"status": "ready", "details": cache_stats}
-            if cache_stats.get("error"):
-                cache_payload["status"] = "degraded"
+            cache_payload = {"status": "degraded" if cache_stats.get("error") else "ready"}
         except Exception:
             logger.warning("Readiness cache probe failed", exc_info=True)
-            cache_payload = {"status": "degraded", "details": {"error": "unavailable"}}
+            cache_payload = {"status": "degraded"}
 
         try:
             providers = await _asyncio.wait_for(AIProviderHealthService().check_all(), timeout=2.0)
-            ai_payload = {"status": "ready", **build_provider_health_payload(providers)}
-            if not any(provider.available for provider in providers):
-                ai_payload["status"] = "degraded"
+            available_count = sum(1 for provider in providers if provider.available)
+            ai_payload: dict[str, Any] = {
+                "status": "ready" if available_count > 0 else "degraded",
+                "total": len(providers),
+                "available": available_count,
+            }
         except Exception:
             logger.warning("Readiness AI provider probe failed", exc_info=True)
-            ai_payload = {"status": "degraded", "summary": {"error": "unavailable"}}
+            ai_payload = {"status": "degraded", "total": 0, "available": 0}
 
         try:
             gateways = await _asyncio.to_thread(get_live_trading_manager().get_gateway_health)
@@ -232,8 +236,22 @@ def register_runtime_routes(
             return JSONResponse(content=payload, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
         return payload
 
+    async def _require_admin_in_production(
+        request: Request,
+        db: AsyncSession = Depends(get_db),
+        credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    ) -> None:
+        if not _app_config.production_security_mode(_app_config.get_settings()):
+            return
+        user = await get_current_user(request, credentials)
+        if not await _user_has_permission(user, Permission.MANAGE_USERS, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+
     @app.get("/info", summary="System information")
-    async def system_info():
+    async def system_info(_: None = Depends(_require_admin_in_production)):
         return {
             "version": "2.0.0",
             "database_type": settings.DATABASE_TYPE,

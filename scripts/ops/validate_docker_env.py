@@ -30,7 +30,10 @@ def parse_env_file(path: pathlib.Path) -> dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        values[key.strip()] = value.strip()
+        cleaned = value.strip()
+        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'"}:
+            cleaned = cleaned[1:-1]
+        values[key.strip()] = cleaned
     return values
 
 
@@ -75,6 +78,14 @@ def validate_secret_values(values: dict[str, str]) -> tuple[list[str], list[str]
             warnings.append(message)
         else:
             errors.append(message)
+    for db_key in ("DB_PASSWORD", "MYSQL_ROOT_PASSWORD"):
+        db_val = values.get(db_key, "")
+        if db_val and db_val in DEFAULT_ADMIN_PASSWORDS:
+            message = f"{db_key} still uses an insecure default value"
+            if debug_enabled:
+                warnings.append(message)
+            else:
+                errors.append(message)
     return errors, warnings
 
 
@@ -92,6 +103,11 @@ def main() -> int:
     parser.add_argument("--mysql-host", default="127.0.0.1")
     parser.add_argument("--mysql-port", type=int, default=3306)
     parser.add_argument("--timeout", type=float, default=3.0)
+    parser.add_argument(
+        "--skip-mysql-check",
+        action="store_true",
+        help="Skip host TCP probe when MySQL is isolated on an internal Docker network.",
+    )
     args = parser.parse_args()
 
     env_path = pathlib.Path(args.env_file).expanduser().resolve()
@@ -107,7 +123,8 @@ def main() -> int:
     secret_errors, secret_warnings = validate_secret_values(values)
     errors.extend(secret_errors)
     warnings.extend(secret_warnings)
-    errors.extend(validate_mysql_connectivity(args.mysql_host, args.mysql_port, args.timeout))
+    if not args.skip_mysql_check:
+        errors.extend(validate_mysql_connectivity(args.mysql_host, args.mysql_port, args.timeout))
 
     if errors:
         print("Validation failed:")

@@ -236,6 +236,11 @@ describe('DataTopicsPage', () => {
       vm.connectStream()
       expect(sockets[0].close).toHaveBeenCalled()
       sockets[1].onopen?.(new Event('open'))
+      expect(vm.wsConnected).toBe(true)
+      // Stale socket handlers are detached and cannot overwrite newer socket state
+      expect(sockets[0].onclose).toBeNull()
+      expect(sockets[0].onerror).toBeNull()
+      expect(sockets[0].onmessage).toBeNull()
       sockets[1].onerror?.(new Event('error'))
       expect(vm.wsConnected).toBe(false)
       sockets[1].onclose?.(new CloseEvent('close'))

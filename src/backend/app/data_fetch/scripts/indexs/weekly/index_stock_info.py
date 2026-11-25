@@ -94,11 +94,14 @@ class IndexStockInfo(AkshareToMySql):
             # Fetch and save data
             df = self.fetch_index_info()
             if not df.empty:
-                return self.save_data(
-                    df=df.replace(np.nan, None),
-                    table_name=self.table_name,
-                    on_duplicate_update=True,
-                    unique_keys=["INDEX_NAME"],
+                return (
+                    self.save_data(
+                        df=df.replace(np.nan, None),
+                        table_name=self.table_name,
+                        on_duplicate_update=True,
+                        unique_keys=["INDEX_NAME"],
+                    )
+                    is not False
                 )
 
             self.logger.warning("No data to process")

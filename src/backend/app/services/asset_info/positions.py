@@ -11,57 +11,14 @@ globals().update(
 )
 
 
-def normalize_gateway_position(
+def _resolve_position_prices(
     row: dict[str, Any],
+    asset_spec: dict[str, Any] | None,
     *,
-    fallback_symbol: str = "",
-    asset_spec: dict[str, Any] | None = None,
-    recent_trades: Iterable[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Normalize exchange position rows to the valuation input shape."""
-    symbol = gateway_position_symbol(row, fallback_symbol)
-    size = signed_gateway_size(row)
-    position_side = _position_side(row, size)
-    inverse_contract = _is_inverse_contract_spec(row, asset_spec)
-    multiplier_keys = (
-        (
-            "contract_value",
-            "contractValue",
-            "contract_value_amount",
-            "contractValueAmount",
-            "contract_notional_value",
-            "okx_contract_value",
-            "ctVal",
-            "multiplier",
-            "mult",
-            "contract_size",
-            "trade_contract_size",
-            "contract_multiplier",
-            "ctMult",
-            "VolumeMultiple",
-            "CONTRACT_MULTIPLIER",
-        )
-        if inverse_contract
-        else (
-            "multiplier",
-            "mult",
-            "contract_size",
-            "trade_contract_size",
-            "contract_notional_value",
-            "okx_contract_value",
-            "contract_multiplier",
-            "ctVal",
-            "ctMult",
-            "VolumeMultiple",
-            "CONTRACT_MULTIPLIER",
-        )
-    )
-    multiplier_value = _first_number(
-        _first_value(asset_spec or {}, *multiplier_keys),
-        _first_value(row, *multiplier_keys),
-    )
-    has_multiplier = multiplier_value is not None
-    multiplier = multiplier_value or 1.0
+    size: float,
+    multiplier: float,
+    inverse_contract: bool,
+) -> tuple[float, Any, float | None]:
     price = (
         _safe_float(
             _first_value(
@@ -101,6 +58,7 @@ def normalize_gateway_position(
         )
         if position_cost and position_cost > 0:
             price = position_cost / (abs(size) * multiplier)
+
     current_price = _first_value(
         row,
         "current_price",
@@ -136,16 +94,19 @@ def normalize_gateway_position(
     current_price_number = _safe_float(current_price)
     if current_price_number is not None:
         current_price = current_price_number
+    return price, current_price, current_price_number
 
-    explicit_net_pnl_key, explicit_net_pnl_value = _first_value_with_key(
-        row,
-        *EXPLICIT_NET_PNL_FIELD_KEYS,
-    )
-    if explicit_net_pnl_value in (None, "") and _row_marks_pnl_as_net(row):
-        explicit_net_pnl_key, explicit_net_pnl_value = _first_value_with_key(
-            row,
-            *MARKABLE_NET_PNL_FIELD_KEYS,
-        )
+
+def _resolve_position_commission_and_carry(
+    row: dict[str, Any],
+    *,
+    symbol: str,
+    size: float,
+    position_side: str,
+    asset_spec: dict[str, Any] | None,
+    recent_trades: Iterable[dict[str, Any]] | None,
+    explicit_net_pnl_value: Any,
+) -> tuple[bool, float, str | None, str | None, float, bool]:
     commission_key, commission_value = _first_value_with_key(row, *COMMISSION_FIELD_KEYS)
     has_commission = commission_value not in (None, "")
     carry_pnl = _sum_signed_amounts(row, CARRY_PNL_FIELD_KEYS)
@@ -157,10 +118,7 @@ def normalize_gateway_position(
     commission = 0.0
     if has_commission:
         raw_commission = _internal_commission_from_exchange_fee(
-            commission_key,
-            commission_value,
-            row=row,
-            asset_spec=asset_spec,
+            commission_key, commission_value, row=row, asset_spec=asset_spec
         )
         conversion_rate = _fee_valuation_conversion_rate(row, symbol, asset_spec)
         if conversion_rate is None:
@@ -189,6 +147,34 @@ def normalize_gateway_position(
             commission_unconfirmed_reason = None
         elif trade_unconfirmed_reason:
             commission_unconfirmed_reason = trade_unconfirmed_reason
+    return (
+        has_commission,
+        commission,
+        commission_source,
+        commission_unconfirmed_reason,
+        carry_pnl,
+        has_carry_pnl,
+    )
+
+
+def _resolve_position_pnls(
+    row: dict[str, Any],
+    *,
+    symbol: str,
+    asset_spec: dict[str, Any] | None,
+    size: float,
+    price: float,
+    current_price: Any,
+    current_price_number: float | None,
+    multiplier: float,
+    has_multiplier: bool,
+    inverse_contract: bool,
+    explicit_net_pnl_key: str | None,
+    explicit_net_pnl_value: Any,
+    has_commission: bool,
+    carry_pnl: float,
+    commission: float,
+) -> tuple[float | None, float | None, bool, bool]:
     gross_pnl_key, gross_pnl_value = _first_value_with_key(
         row,
         "gross_pnl",
@@ -272,6 +258,182 @@ def normalize_gateway_position(
         net_pnl = explicit_net_pnl
     elif gross_pnl is not None and has_commission:
         net_pnl = gross_pnl + carry_pnl - commission
+    return gross_pnl, net_pnl, generic_pnl_recalculated, exchange_pnl_recalculated
+
+
+def _populate_position_extras(normalized: dict[str, Any], row: dict[str, Any]) -> None:
+    for key in RAW_ASSET_SPEC_FIELD_KEYS:
+        value = row.get(key)
+        if value in (None, "") or normalized.get(key) not in (None, ""):
+            continue
+        number = _safe_float(value)
+        normalized[key] = number if number is not None else value
+    for target_key, field_keys, positive_only in (
+        ("today_position", TODAY_POSITION_FIELD_KEYS, False),
+        ("yesterday_position", YESTERDAY_POSITION_FIELD_KEYS, False),
+        ("long_position", LONG_POSITION_FIELD_KEYS, True),
+        ("short_position", SHORT_POSITION_FIELD_KEYS, True),
+    ):
+        val = _first_number(*(row.get(k) for k in field_keys))
+        if val is not None and (not positive_only or val > 0):
+            normalized[target_key] = val
+
+    long_market_value = _first_number(
+        _first_value(
+            row,
+            "long_market_value",
+            "longMarketValue",
+            "long_position_value",
+            "longPositionValue",
+            "long_notional",
+            "longNotional",
+        )
+    )
+    if long_market_value is not None:
+        normalized["long_market_value"] = abs(long_market_value)
+    short_market_value = _first_number(
+        _first_value(
+            row,
+            "short_market_value",
+            "shortMarketValue",
+            "short_position_value",
+            "shortPositionValue",
+            "short_notional",
+            "shortNotional",
+        )
+    )
+    if short_market_value is not None:
+        normalized["short_market_value"] = abs(short_market_value)
+
+    for target_key, keys in (
+        ("realized_pnl", ("realized_pnl", "position_realized_pnl", "realizedPnl", "realised_pnl")),
+        ("leverage", ("leverage", "lever", "max_leverage")),
+        ("margin_type", ("margin_type", "mgnMode")),
+    ):
+        raw_val = _first_value(row, *keys)
+        if raw_val not in (None, ""):
+            normalized[target_key] = raw_val
+
+    market_value = _first_value(
+        row,
+        "market_value",
+        "marketValue",
+        "MarketValue",
+        "mktValue",
+        "positionValue",
+        "position_value",
+        "notionalUsd",
+        "notional_usd",
+        "notional",
+        "notionalValue",
+        "notional_value",
+        "position_notional_usd",
+        "position_notional",
+        "positionNotional",
+        "value",
+    )
+    if market_value not in (None, ""):
+        market_value_number = _safe_float(market_value)
+        normalized["market_value"] = (
+            market_value_number if market_value_number is not None else market_value
+        )
+
+
+def normalize_gateway_position(
+    row: dict[str, Any],
+    *,
+    fallback_symbol: str = "",
+    asset_spec: dict[str, Any] | None = None,
+    recent_trades: Iterable[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Normalize exchange position rows to the valuation input shape."""
+    symbol = gateway_position_symbol(row, fallback_symbol)
+    size = signed_gateway_size(row)
+    position_side = _position_side(row, size)
+    inverse_contract = _is_inverse_contract_spec(row, asset_spec)
+    multiplier_keys = (
+        (
+            "contract_value",
+            "contractValue",
+            "contract_value_amount",
+            "contractValueAmount",
+            "contract_notional_value",
+            "okx_contract_value",
+            "ctVal",
+            "multiplier",
+            "mult",
+            "contract_size",
+            "trade_contract_size",
+            "contract_multiplier",
+            "ctMult",
+            "VolumeMultiple",
+            "CONTRACT_MULTIPLIER",
+        )
+        if inverse_contract
+        else (
+            "multiplier",
+            "mult",
+            "contract_size",
+            "trade_contract_size",
+            "contract_notional_value",
+            "okx_contract_value",
+            "contract_multiplier",
+            "ctVal",
+            "ctMult",
+            "VolumeMultiple",
+            "CONTRACT_MULTIPLIER",
+        )
+    )
+    multiplier_value = _first_number(
+        _first_value(asset_spec or {}, *multiplier_keys), _first_value(row, *multiplier_keys)
+    )
+    has_multiplier = multiplier_value is not None
+    multiplier = multiplier_value or 1.0
+    price, current_price, current_price_number = _resolve_position_prices(
+        row, asset_spec, size=size, multiplier=multiplier, inverse_contract=inverse_contract
+    )
+    explicit_net_pnl_key, explicit_net_pnl_value = _first_value_with_key(
+        row, *EXPLICIT_NET_PNL_FIELD_KEYS
+    )
+    if explicit_net_pnl_value in (None, "") and _row_marks_pnl_as_net(row):
+        explicit_net_pnl_key, explicit_net_pnl_value = _first_value_with_key(
+            row, *MARKABLE_NET_PNL_FIELD_KEYS
+        )
+    (
+        has_commission,
+        commission,
+        commission_source,
+        commission_unconfirmed_reason,
+        carry_pnl,
+        has_carry_pnl,
+    ) = _resolve_position_commission_and_carry(
+        row,
+        symbol=symbol,
+        size=size,
+        position_side=position_side,
+        asset_spec=asset_spec,
+        recent_trades=recent_trades,
+        explicit_net_pnl_value=explicit_net_pnl_value,
+    )
+    gross_pnl, net_pnl, generic_pnl_recalculated, exchange_pnl_recalculated = (
+        _resolve_position_pnls(
+            row,
+            symbol=symbol,
+            asset_spec=asset_spec,
+            size=size,
+            price=price,
+            current_price=current_price,
+            current_price_number=current_price_number,
+            multiplier=multiplier,
+            has_multiplier=has_multiplier,
+            inverse_contract=inverse_contract,
+            explicit_net_pnl_key=explicit_net_pnl_key,
+            explicit_net_pnl_value=explicit_net_pnl_value,
+            has_commission=has_commission,
+            carry_pnl=carry_pnl,
+            commission=commission,
+        )
+    )
     explicit_margin = _safe_float(
         _first_value(
             row,
@@ -312,50 +474,7 @@ def normalize_gateway_position(
             "position_source": "gateway",
         }
     )
-    for key in RAW_ASSET_SPEC_FIELD_KEYS:
-        value = row.get(key)
-        if value in (None, "") or normalized.get(key) not in (None, ""):
-            continue
-        number = _safe_float(value)
-        normalized[key] = number if number is not None else value
-    today_position = _first_number(*(row.get(key) for key in TODAY_POSITION_FIELD_KEYS))
-    if today_position is not None:
-        normalized["today_position"] = today_position
-    yesterday_position = _first_number(*(row.get(key) for key in YESTERDAY_POSITION_FIELD_KEYS))
-    if yesterday_position is not None:
-        normalized["yesterday_position"] = yesterday_position
-    long_position = _first_number(*(row.get(key) for key in LONG_POSITION_FIELD_KEYS))
-    if long_position is not None and long_position > 0:
-        normalized["long_position"] = long_position
-    short_position = _first_number(*(row.get(key) for key in SHORT_POSITION_FIELD_KEYS))
-    if short_position is not None and short_position > 0:
-        normalized["short_position"] = short_position
-    long_market_value = _first_number(
-        _first_value(
-            row,
-            "long_market_value",
-            "longMarketValue",
-            "long_position_value",
-            "longPositionValue",
-            "long_notional",
-            "longNotional",
-        )
-    )
-    if long_market_value is not None:
-        normalized["long_market_value"] = abs(long_market_value)
-    short_market_value = _first_number(
-        _first_value(
-            row,
-            "short_market_value",
-            "shortMarketValue",
-            "short_position_value",
-            "shortPositionValue",
-            "short_notional",
-            "shortNotional",
-        )
-    )
-    if short_market_value is not None:
-        normalized["short_market_value"] = abs(short_market_value)
+    _populate_position_extras(normalized, row)
     if has_commission:
         normalized["commission"] = commission
         normalized["commission_signed"] = True
@@ -365,17 +484,6 @@ def normalize_gateway_position(
         normalized["commission_currency_mismatch"] = True
     if has_carry_pnl:
         normalized["swap"] = carry_pnl
-    realized_pnl = _first_value(
-        row, "realized_pnl", "position_realized_pnl", "realizedPnl", "realised_pnl"
-    )
-    if realized_pnl not in (None, ""):
-        normalized["realized_pnl"] = realized_pnl
-    leverage = _first_value(row, "leverage", "lever", "max_leverage")
-    if leverage not in (None, ""):
-        normalized["leverage"] = leverage
-    margin_type = _first_value(row, "margin_type", "mgnMode")
-    if margin_type not in (None, ""):
-        normalized["margin_type"] = margin_type
     if net_pnl is not None:
         normalized["pnlcomm"] = net_pnl
         normalized["position_pnl"] = net_pnl
@@ -385,29 +493,6 @@ def normalize_gateway_position(
         normalized["generic_pnl_recalculated"] = True
     if exchange_pnl_recalculated:
         normalized["exchange_pnl_recalculated"] = True
-    market_value = _first_value(
-        row,
-        "market_value",
-        "marketValue",
-        "MarketValue",
-        "mktValue",
-        "positionValue",
-        "position_value",
-        "notionalUsd",
-        "notional_usd",
-        "notional",
-        "notionalValue",
-        "notional_value",
-        "position_notional_usd",
-        "position_notional",
-        "positionNotional",
-        "value",
-    )
-    if market_value not in (None, ""):
-        market_value_number = _safe_float(market_value)
-        normalized["market_value"] = (
-            market_value_number if market_value_number is not None else market_value
-        )
     if explicit_margin is not None:
         normalized["margin_value"] = abs(explicit_margin)
         normalized["use_margin"] = abs(explicit_margin)

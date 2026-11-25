@@ -1626,7 +1626,7 @@ import type * as echarts from 'echarts'
 import { getErrorMessage } from '@/api'
 import { portfolioApi } from '@/api/portfolio'
 import PortfolioAnalyticsTaskPanel from '@/components/portfolio/PortfolioAnalyticsTaskPanel.vue'
-import type { PortfolioLedgerImportSource, PortfolioLedgerImportSourceDetail } from '@/api/portfolioLedger'
+import type { PortfolioLedgerImportSourceDetail } from '@/api/portfolioLedger'
 import { portfolioLedgerApi } from '@/api/portfolioLedger'
 import { workspaceApi } from '@/api/workspace'
 import type {
@@ -1646,6 +1646,8 @@ import type {
   Workspace,
 } from '@/types/workspace'
 import { PORTFOLIO_DRAWDOWN_AREA_COLOR, PORTFOLIO_DRAWDOWN_COLOR } from '@/constants/chartColors'
+import { useImportSourcesPagination } from '@/composables/useImportSourcesPagination'
+import { escapeHtml } from '@/utils/html'
 
 const { t } = useI18n()
 
@@ -1666,11 +1668,20 @@ const showImportedSourceDialog = ref(false)
 const sourceImportBusy = ref(false)
 const sourceImportError = ref('')
 const importedSourceDetailError = ref('')
-const existingImportsLoading = ref(false)
-const existingImportSources = ref<PortfolioLedgerImportSource[]>([])
-const existingImportSourcesPage = ref(1)
-const existingImportSourcesHasMore = ref(false)
 const selectedImportVersionId = ref('')
+const {
+  existingImportsLoading,
+  existingImportSources,
+  existingImportSourcesPage,
+  existingImportSourcesHasMore,
+  loadExistingImportSources,
+  loadMoreImportedSources,
+} = useImportSourcesPagination({
+  selectedImportVersionId,
+  sourceImportError,
+  loadFailedMessage: () => t('portfolio.importSourceLoadFailed'),
+})
+defineExpose({ existingImportSourcesPage })
 const importedSourceLoadingId = ref('')
 const importedSourceDetails = ref<Record<string, PortfolioLedgerImportSourceDetail>>({})
 const importPortfolioName = ref('')
@@ -1885,52 +1896,6 @@ function openImportedSourceDialog() {
   if (!importPortfolioRef.value) importPortfolioRef.value = `imported-${Date.now()}`
   if (!importIdempotencyKey.value) importIdempotencyKey.value = newImportIdempotencyKey()
   void loadExistingImportSources()
-}
-
-async function loadExistingImportSources(page = 1) {
-  if (existingImportsLoading.value) return
-  existingImportsLoading.value = true
-  sourceImportError.value = ''
-  try {
-    const result = await portfolioLedgerApi.listImportSources(page, 100)
-    if (page === 1) existingImportSources.value = result.items
-    else existingImportSources.value = [...existingImportSources.value, ...result.items]
-    existingImportSourcesPage.value = result.page
-    existingImportSourcesHasMore.value = result.has_more
-    if (
-      !selectedImportVersionId.value
-      || !existingImportSources.value.some(item => item.import_version_id === selectedImportVersionId.value)
-    ) {
-      selectedImportVersionId.value = result.items.find(
-        item => item.source_material_status === 'verified',
-      )?.import_version_id ?? ''
-    }
-  } catch (error: unknown) {
-    sourceImportError.value = getErrorMessage(error, t('portfolio.importSourceLoadFailed'))
-  } finally {
-    existingImportsLoading.value = false
-  }
-}
-
-async function loadMoreImportedSources() {
-  if (!existingImportSourcesHasMore.value || existingImportsLoading.value) return
-  const nextPage = existingImportSourcesPage.value + 1
-  existingImportsLoading.value = true
-  try {
-    const result = await portfolioLedgerApi.listImportSources(nextPage, 100)
-    if (result.total !== existingImportSources.value.length + result.items.length) {
-      existingImportsLoading.value = false
-      await loadExistingImportSources(1)
-      return
-    }
-    existingImportSources.value = [...existingImportSources.value, ...result.items]
-    existingImportSourcesPage.value = result.page
-    existingImportSourcesHasMore.value = result.has_more
-  } catch (error: unknown) {
-    sourceImportError.value = getErrorMessage(error, t('portfolio.importSourceLoadFailed'))
-  } finally {
-    existingImportsLoading.value = false
-  }
 }
 
 async function createImportedComposition(importVersionId: string, portfolioRef: string, baseCurrency: string) {
@@ -2187,6 +2152,8 @@ let pnlChart: echarts.ECharts | null = null
 let drawdownChart: echarts.ECharts | null = null
 let allocationChart: echarts.ECharts | null = null
 let echartsLoader: Promise<typeof echarts> | null = null
+let chartsDisposed = false
+let chartRenderGen = 0
 
 function loadEcharts() {
   echartsLoader ??= import('echarts')
@@ -2638,7 +2605,9 @@ function chartThemeColors() {
 async function renderPnlChart() {
   const curve = selectedEquityCurve.value
   if (!pnlChartRef.value || curve.values.length === 0) return
+  const gen = chartRenderGen
   const echarts = await loadEcharts()
+  if (chartsDisposed || gen !== chartRenderGen || !pnlChartRef.value) return
   if (pnlChart && pnlChart.getDom() !== pnlChartRef.value) {
     pnlChart.dispose()
     pnlChart = null
@@ -2664,7 +2633,7 @@ async function renderPnlChart() {
       textStyle: { color: colors.primaryText },
       formatter: (params: { axisValue?: string; value?: number } | { axisValue?: string; value?: number }[]) => {
         const p = Array.isArray(params) ? params[0] : params
-        return `${p?.axisValue ?? ''}<br/>${t('portfolio.chartCumulativePnl')}: ${formatSignedMoney(Number(p?.value ?? 0))}`
+        return `${escapeHtml(p?.axisValue ?? '')}<br/>${escapeHtml(t('portfolio.chartCumulativePnl'))}: ${escapeHtml(formatSignedMoney(Number(p?.value ?? 0)))}`
       },
     },
     grid: { left: 80, right: 20, top: 38, bottom: 30 },
@@ -2703,7 +2672,9 @@ async function renderPnlChart() {
 async function renderDrawdownChart() {
   const curve = selectedEquityCurve.value
   if (!drawdownChartRef.value || curve.values.length === 0) return
+  const gen = chartRenderGen
   const echarts = await loadEcharts()
+  if (chartsDisposed || gen !== chartRenderGen || !drawdownChartRef.value) return
   if (drawdownChart && drawdownChart.getDom() !== drawdownChartRef.value) {
     drawdownChart.dispose()
     drawdownChart = null
@@ -2725,7 +2696,7 @@ async function renderDrawdownChart() {
       textStyle: { color: colors.primaryText },
       formatter: (params: { axisValue?: string; value?: number } | { axisValue?: string; value?: number }[]) => {
         const p = Array.isArray(params) ? params[0] : params
-        return `${p?.axisValue ?? ''}<br/>${t('portfolio.drawdownTooltip', { value: ((p?.value ?? 0) * 100).toFixed(2) })}`
+        return `${escapeHtml(p?.axisValue ?? '')}<br/>${escapeHtml(t('portfolio.drawdownTooltip', { value: ((p?.value ?? 0) * 100).toFixed(2) }))}`
       },
     },
     grid: { left: 80, right: 20, top: 38, bottom: 30 },
@@ -2758,7 +2729,9 @@ async function renderDrawdownChart() {
 
 async function renderAllocationChart() {
   if (!allocationChartRef.value || allocationItems.value.length === 0) return
+  const gen = chartRenderGen
   const echarts = await loadEcharts()
+  if (chartsDisposed || gen !== chartRenderGen || !allocationChartRef.value) return
   if (allocationChart && allocationChart.getDom() !== allocationChartRef.value) {
     allocationChart.dispose()
     allocationChart = null
@@ -2774,7 +2747,9 @@ async function renderAllocationChart() {
   allocationChart.setOption({
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c} ({d}%)',
+      formatter: (params: { name?: string; value?: number; percent?: number }) => (
+        `${escapeHtml(params?.name ?? '')}: ${escapeHtml(params?.value ?? 0)} (${escapeHtml(params?.percent ?? 0)}%)`
+      ),
       backgroundColor: colors.surface,
       borderColor: colors.border,
       textStyle: { color: colors.primaryText },
@@ -2806,6 +2781,7 @@ function handleResize() {
 }
 
 watch(activeTab, async (tab) => {
+  chartRenderGen += 1
   await loadTabData(tab)
   if (tab === 'equity') {
     nextTick(() => {
@@ -2826,15 +2802,18 @@ watch(selectedEquitySeries, () => {
 })
 
 onMounted(() => {
+  chartsDisposed = false
   loadData()
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
+  chartsDisposed = true
+  chartRenderGen += 1
   window.removeEventListener('resize', handleResize)
-  pnlChart?.dispose()
-  drawdownChart?.dispose()
-  allocationChart?.dispose()
+  pnlChart?.dispose(); pnlChart = null
+  drawdownChart?.dispose(); drawdownChart = null
+  allocationChart?.dispose(); allocationChart = null
 })
 </script>
 

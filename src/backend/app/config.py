@@ -135,6 +135,27 @@ class Settings(
         extra="ignore",
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """Skip default dotenv loading when test isolation sets AFI_DISABLE_DOTENV."""
+        disable_dotenv = os.environ.get("AFI_DISABLE_DOTENV", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if disable_dotenv and getattr(
+            dotenv_settings, "env_file", None
+        ) == settings_cls.model_config.get("env_file"):
+            return (init_settings, env_settings, file_secret_settings)
+        return (init_settings, env_settings, dotenv_settings, file_secret_settings)
+
     @model_validator(mode="after")
     def validate_runtime_security_guards(self) -> "Settings":
         """Validate production-only secret and admin-password guards."""
@@ -160,6 +181,10 @@ class Settings(
                     "MARKET_DATA_RESEARCH_BACKTEST_BRIDGE_ENABLED=true"
                 )
         if production_security_mode(self):
+            if self.DEBUG:
+                raise ValueError(
+                    "DEBUG=True is not allowed in production. Set DEBUG=False in production."
+                )
             cors_origins = {
                 origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()
             }

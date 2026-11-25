@@ -14,14 +14,19 @@ Tests:
 - Price simulation
 """
 
+import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from sqlalchemy import select
 
+from app.db.database import async_session_maker
 from app.models.paper_trading import (
+    Order,
     OrderSide,
     OrderStatus,
+    PaperTrade,
     Position,
 )
 from app.services.paper_trading_service import PaperTradingService
@@ -2853,3 +2858,173 @@ class TestHelperFunctions:
         result = await service._get_last_trade("order_123")
 
         assert result is None
+
+
+@pytest.mark.asyncio
+class TestPaperTradingConcurrencyAndAtomicity:
+    """OCR-14 regressions: transactional order fill, CAS state transitions, unbounded positions."""
+
+    async def test_concurrent_submit_order_prevents_double_spend(self):
+        service = PaperTradingService()
+        account = await service.create_account(
+            user_id="user_conc",
+            name="Concurrent Account",
+            initial_cash=1100.0,
+            commission_rate=0.0,
+            slippage_rate=0.0,
+        )
+
+        # Symbol 000001 simulated price = 10.5; qty=100 costs 1050 (so only 1 order fits in 1100 cash)
+        with patch.object(service, "_local_asset_spec_for_symbol", return_value=None):
+            with patch.object(service, "_notify_order_update", new_callable=AsyncMock):
+                with patch.object(service, "_notify_account_update", new_callable=AsyncMock):
+                    with patch.object(service, "_notify_position_update", new_callable=AsyncMock):
+                        o1, o2 = await asyncio.gather(
+                            service.submit_order(account.id, "000001.SZ", "market", "buy", 100),
+                            service.submit_order(account.id, "000001.SZ", "market", "buy", 100),
+                        )
+
+        statuses = sorted(
+            [
+                str(o1.status.value if hasattr(o1.status, "value") else o1.status),
+                str(o2.status.value if hasattr(o2.status, "value") else o2.status),
+            ]
+        )
+        assert statuses == [OrderStatus.FILLED.value, OrderStatus.REJECTED.value]
+
+        refreshed = await service.get_account(account.id)
+        assert refreshed is not None
+        assert refreshed.current_cash == pytest.approx(50.0)
+        assert refreshed.current_cash >= 0.0
+
+        async with async_session_maker() as session:
+            trades = list(
+                (
+                    await session.execute(
+                        select(PaperTrade).where(PaperTrade.account_id == account.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            orders = list(
+                (await session.execute(select(Order).where(Order.account_id == account.id)))
+                .scalars()
+                .all()
+            )
+        assert len(trades) == 1
+        assert len(orders) == 2
+
+    async def test_process_order_rolls_back_atomically_on_account_failure(self):
+        service = PaperTradingService()
+        account = await service.create_account(
+            user_id="user_rb",
+            name="Rollback Account",
+            initial_cash=5000.0,
+            commission_rate=0.0,
+            slippage_rate=0.0,
+        )
+        pending_order = Order(
+            account_id=account.id,
+            symbol="000001.SZ",
+            order_type="market",
+            side=OrderSide.BUY,
+            size=10,
+            status=OrderStatus.PENDING,
+            commission=0.0,
+        )
+        pending_order = await service.order_repo.create(pending_order)
+
+        with patch.object(service, "_local_asset_spec_for_symbol", return_value=None):
+            with patch.object(
+                service,
+                "_update_account",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("db fail"),
+            ):
+                with pytest.raises(RuntimeError, match="db fail"):
+                    await service._process_order(pending_order.id, account.id, account)
+
+        refreshed = await service.get_account(account.id)
+        assert refreshed is not None
+        assert refreshed.current_cash == pytest.approx(5000.0)
+
+        order_after = await service.order_repo.get_by_id(pending_order.id)
+        assert order_after is not None
+        assert order_after.status == OrderStatus.PENDING
+
+        async with async_session_maker() as session:
+            trades = list(
+                (
+                    await session.execute(
+                        select(PaperTrade).where(PaperTrade.account_id == account.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert trades == []
+
+    async def test_update_account_includes_more_than_100_open_positions(self):
+        service = PaperTradingService()
+        account = await service.create_account(
+            user_id="user_pos120",
+            name="Many Positions Account",
+            initial_cash=10000.0,
+            commission_rate=0.0,
+            slippage_rate=0.0,
+        )
+        for idx in range(120):
+            await service.position_repo.create(
+                Position(
+                    account_id=account.id,
+                    symbol=f"SYM{idx:03d}.SZ",
+                    size=10.0,
+                    avg_price=10.0,
+                    market_value=100.0,
+                    margin_value=100.0,
+                    multiplier=1.0,
+                    margin_rate=1.0,
+                    unrealized_pnl=0.0,
+                    unrealized_pnl_pct=0.0,
+                )
+            )
+        order = Order(
+            account_id=account.id,
+            symbol="EXTRA.SZ",
+            order_type="market",
+            side=OrderSide.BUY,
+            size=1.0,
+            status=OrderStatus.PENDING,
+            commission=0.0,
+        )
+        with patch.object(service, "_notify_account_update", new_callable=AsyncMock):
+            with patch.object(service, "_notify_position_update", new_callable=AsyncMock):
+                await service._update_account(
+                    account,
+                    order,
+                    10.0,
+                    0.0,
+                    position_event={"cash_delta": 0.0},
+                )
+        refreshed = await service.get_account(account.id)
+        assert refreshed is not None
+        # 10000 cash + 120 * 100.0 = 22000.0 (would be 20000.0 under limit=100 bug)
+        assert refreshed.total_equity == pytest.approx(22000.0)
+
+    async def test_cancel_order_sql_cas_rejects_filled_order(self):
+        service = PaperTradingService()
+        account = await service.create_account(user_id="user_cas", name="CAS Account")
+        order = await service.order_repo.create(
+            Order(
+                account_id=account.id,
+                symbol="000001.SZ",
+                order_type="market",
+                side=OrderSide.BUY,
+                size=1.0,
+                status=OrderStatus.FILLED,
+                commission=0.0,
+            )
+        )
+        cancelled = await service.cancel_order(order.id, "user_cas")
+        assert cancelled is False

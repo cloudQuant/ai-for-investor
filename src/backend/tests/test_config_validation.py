@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from app.config import Settings, get_settings
 
 _SETTINGS_ENV_KEYS = (
+    "APP_ENV",
     "DEBUG",
     "SECRET_KEY",
     "JWT_SECRET_KEY",
@@ -25,7 +26,7 @@ _ORIGINAL_SETTINGS_ENV = {key: os.environ.get(key) for key in _SETTINGS_ENV_KEYS
 @pytest.fixture(autouse=True)
 def isolate_settings_security_environment(monkeypatch):
     """Keep test-local production flags from leaking into later settings tests."""
-    for key in _SETTINGS_ENV_KEYS[3:]:
+    for key in _SETTINGS_ENV_KEYS[4:]:
         monkeypatch.setenv(key, "true")
     yield
     for key, value in _ORIGINAL_SETTINGS_ENV.items():
@@ -371,4 +372,64 @@ class TestSettingsIntegration:
         )
         # Should use sensible defaults for everything else
         assert settings.DATABASE_TYPE == "sqlite"
+
+    def test_pytest_isolates_settings_from_local_dotenv_and_hides_broker_secrets(self):
+        """Pytest isolation skips developer .env and repr omits broker secrets."""
+        settings = Settings(OKX_API_KEY="synthetic-okx-key", BINANCE_SECRET_KEY="synthetic-bn")
+        assert get_settings().OKX_API_KEY == ""
+        assert "synthetic-okx-key" not in repr(settings)
+        assert "synthetic-bn" not in repr(settings)
         assert settings.PORT == 8000
+
+    def test_production_rejects_debug_true_and_ib_web_verify_ssl_defaults_true(self, monkeypatch):
+        """OCR-34: production rejects DEBUG=True and IB_WEB TLS verification defaults fail-closed."""
+        with pytest.raises(ValidationError, match="DEBUG=True"):
+            Settings(
+                APP_ENV="production",
+                DEBUG=True,
+                SECRET_KEY="a" * 32,
+                JWT_SECRET_KEY="b" * 32,
+                ADMIN_PASSWORD="SecurePass@123!",
+                CORS_ORIGINS="https://app.example.test",
+            )
+
+        from app.services.gateway.launch_builder import (
+            build_ib_web_gateway_runtime_kwargs,
+            resolve_ib_web_verify_ssl,
+        )
+        from app.services.gateway.preset import get_gateway_presets
+
+        runtime_kwargs = build_ib_web_gateway_runtime_kwargs(
+            config_data={},
+            env_data={},
+            gateway_params={"account_id": "DU123456"},
+            default_transport="tcp",
+        )
+        assert runtime_kwargs["verify_ssl"] is True
+
+        prod_settings = Settings(
+            APP_ENV="production",
+            DEBUG=False,
+            SECRET_KEY="a" * 32,
+            JWT_SECRET_KEY="b" * 32,
+            ADMIN_PASSWORD="SecurePass@123!",
+            CORS_ORIGINS="https://app.example.test",
+            IB_VERIFY_SSL=True,
+            IB_WEB_VERIFY_SSL=True,
+            IB_PAPER_VERIFY_SSL=True,
+            IB_LIVE_VERIFY_SSL=True,
+        )
+        monkeypatch.setattr(
+            "app.services.gateway.launch_builder.get_settings",
+            lambda: prod_settings,
+        )
+        with pytest.raises(ValueError, match="verify_ssl=False"):
+            resolve_ib_web_verify_ssl(False)
+
+        ib_presets = {
+            p["id"]: p
+            for p in get_gateway_presets()
+            if p["id"] in {"ib_web_stock_gateway", "ib_web_futures_gateway"}
+        }
+        assert ib_presets["ib_web_stock_gateway"]["params"]["gateway"]["verify_ssl"] is True
+        assert ib_presets["ib_web_futures_gateway"]["params"]["gateway"]["verify_ssl"] is True

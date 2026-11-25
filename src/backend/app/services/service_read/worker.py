@@ -17,6 +17,8 @@ from collections.abc import Callable
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
+from app.utils.invariants import require_instance
+
 if TYPE_CHECKING:
     from app.services.service_read.contracts import (
         AccountBookReadView,
@@ -427,8 +429,7 @@ class ServiceReadWorker:
                     continue
                 if item is _STOP:
                     break
-                request = item
-                assert isinstance(request, _Request)
+                request = require_instance(item, _Request, "unexpected queue item")
                 with self._lock:
                     closing = self._state is _State.CLOSING
                 if closing:

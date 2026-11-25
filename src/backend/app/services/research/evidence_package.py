@@ -60,6 +60,7 @@ from app.services.research.promotion import (
     resolve_server_policy,
 )
 from app.services.research.redaction import redact_sensitive_payload
+from app.utils.invariants import log_suppressed
 
 _LEGACY_MANIFEST_VERSION = "ai_research_evidence_manifest/v1"
 _MANIFEST_VERSION = "ai_research_evidence_manifest/v2"
@@ -268,15 +269,14 @@ class EvidencePackageService:
             except Exception as exc:
                 try:
                     await session.rollback()
-                except Exception:
-                    pass
+                except Exception as rollback_exc:
+                    log_suppressed(__name__, "Evidence package rollback failed", rollback_exc)
                 raise _EvidenceCommitOutcomeUncertain(probe) from exc
             await session.refresh(model)
             return model
 
     async def _commit(self, session: AsyncSession) -> None:
         """Commit through a narrow seam so lost acknowledgements are testable."""
-
         await session.commit()
 
     async def _read_committed_package(

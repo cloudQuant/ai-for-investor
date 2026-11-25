@@ -245,7 +245,7 @@ async def run_scanner(
 async def get_scanner_task(
     task_id: str, current_user: typing.Any = Depends(get_current_user)
 ) -> typing.Any:
-    payload = get_scanner_service().get_task(task_id)
+    payload = get_scanner_service().get_task(task_id, user_id=_user_id(current_user))
     if payload is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scanner_task_not_found")
     return payload

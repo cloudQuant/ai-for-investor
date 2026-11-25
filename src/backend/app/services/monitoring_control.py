@@ -35,6 +35,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.utils.invariants import log_suppressed
+
 _MAX_DEPLOYMENT_BYTES = 262_144
 _MAX_BINDINGS = 128
 _MAX_ISSUANCE_ROWS = 10_000
@@ -541,11 +543,11 @@ class OwnerControlDeployment:
         finally:
             try:
                 runtime.close()
-            except Exception:
+            except Exception as exc:
                 # The owner reply is already durable. A client close failure
                 # cannot turn an acknowledged batch into a terminal result or
                 # erase its per-order receipt.
-                pass
+                log_suppressed(__name__, "Monitor control runtime close failed", exc)
         return projection
 
     def _reserve_or_replay(
@@ -702,29 +704,21 @@ class OwnerControlDeployment:
         path = self._state_path
         if path.is_symlink() or (path.exists() and not path.is_file()) or not path.parent.is_dir():
             raise OwnerControlError("ISSUER_STATE_UNAVAILABLE")
+        connection: sqlite3.Connection | None = None
         try:
             connection = sqlite3.connect(path, timeout=5.0)
             connection.row_factory = sqlite3.Row
             connection.execute(
                 """CREATE TABLE IF NOT EXISTS afi_monitor_control_issuance (
-                    issuer TEXT NOT NULL,
-                    idempotency_digest TEXT NOT NULL,
-                    request_digest TEXT NOT NULL,
-                    command_id TEXT NOT NULL UNIQUE,
-                    issuer_sequence INTEGER NOT NULL,
-                    subject TEXT NOT NULL,
-                    binding_id TEXT NOT NULL,
-                    afi_account_id TEXT NOT NULL,
-                    portfolio_ref TEXT,
-                    alert_id TEXT NOT NULL,
-                    expires_at REAL NOT NULL,
-                    payload BLOB NOT NULL,
-                    signature BLOB NOT NULL,
+                    issuer TEXT NOT NULL, idempotency_digest TEXT NOT NULL,
+                    request_digest TEXT NOT NULL, command_id TEXT NOT NULL UNIQUE,
+                    issuer_sequence INTEGER NOT NULL, subject TEXT NOT NULL,
+                    binding_id TEXT NOT NULL, afi_account_id TEXT NOT NULL,
+                    portfolio_ref TEXT, alert_id TEXT NOT NULL, expires_at REAL NOT NULL,
+                    payload BLOB NOT NULL, signature BLOB NOT NULL,
                     owner_final INTEGER NOT NULL CHECK(owner_final IN (0, 1)),
-                    owner_status TEXT,
-                    owner_projection_json TEXT,
-                    PRIMARY KEY (issuer, idempotency_digest),
-                    UNIQUE (issuer, issuer_sequence)
+                    owner_status TEXT, owner_projection_json TEXT,
+                    PRIMARY KEY (issuer, idempotency_digest), UNIQUE (issuer, issuer_sequence)
                 )"""
             )
             columns = {
@@ -739,6 +733,8 @@ class OwnerControlDeployment:
                 )
             return connection
         except (OSError, sqlite3.Error):
+            if connection is not None:
+                connection.close()
             raise OwnerControlError("ISSUER_STATE_UNAVAILABLE") from None
 
     def _issuance_row(self, command_id: str) -> sqlite3.Row | None:

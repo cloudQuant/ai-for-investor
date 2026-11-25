@@ -778,3 +778,68 @@ async def test_fundamentals_report_treats_nonfinite_revenue_and_yoy_as_unavailab
     assert "净利润同比变化约 数据不足" in report
     assert "nan" not in report.lower()
     assert "inf" not in report.lower()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_does_not_rescale_normalized_change_pct_and_filters_nonfinite_quote() -> (
+    None
+):
+    import json
+
+    pipeline = StockAnalysisPipeline()
+    assert pipeline._format_pct(0.5) == "0.50%"
+    assert pipeline._format_pct(-0.25) == "-0.25%"
+
+    output = await pipeline.run(
+        symbol="601398.SH",
+        market_type="A股",
+        research_depth="标准",
+        selected_modules=["market", "fundamentals", "news", "risk"],
+        snapshot={
+            "analysis_date": "2026-07-30",
+            "quote": {
+                "symbol": "601398.SH",
+                "name": "中国工商银行",
+                "price": float("nan"),
+                "volume": float("inf"),
+                "change_pct": 0.005,
+            },
+            "info": {"symbol": "601398.SH", "name": "中国工商银行"},
+            "history": {
+                "rows": [
+                    {"date": "2026-07-29", "close": 10.0, "low": 9.8, "volume": 100},
+                    {"date": "2026-07-30", "close": 10.05, "low": 9.9, "volume": 200},
+                ]
+            },
+            "technicals": {"factors": {}},
+            "financials": {"annual": [], "quarterly": []},
+            "news": {"items": [], "total": 0},
+        },
+    )
+
+    assert "涨跌幅：0.50%" in output["market_report"]
+    assert "50.00%" not in output["market_report"]
+    json.dumps(output, allow_nan=False)
+
+
+@pytest.mark.asyncio
+async def test_collector_marks_empty_technicals_as_missing_and_logs_errors(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    monkeypatch.setattr(
+        "app.services.stock_analysis.data_collector.get_news_intelligence_service",
+        lambda _db: _NoNewsLibrary(),
+    )
+    collector = StockAnalysisDataCollector(db=SimpleNamespace())
+    collector.market_service = _RefreshAwareMarketService()
+
+    with caplog.at_level("WARNING"):
+        snapshot = await collector.collect(
+            user_id="collector-tech-test",
+            symbol="000001.SZ",
+            market_type="US",
+            analysis_date=date(2026, 7, 30),
+        )
+
+    assert "technicals" in snapshot["data_quality"]["missing_fields"]
+    assert snapshot["data_quality"]["status"] == "degraded"

@@ -157,7 +157,8 @@ def test_save_data_adds_missing_columns_before_insert(monkeypatch):
             self.executed_sql = []
             self.inserted = None
 
-        def execute(self, sql):
+        def execute(self, sql, params=()):
+            del params
             self.executed_sql.append(sql)
             if sql.startswith("SHOW TABLES LIKE"):
                 self.fetchone_value = ("OPTION_SSE_CODES_SINA",)
@@ -212,7 +213,8 @@ def test_save_data_drops_columns_that_failed_auto_add(monkeypatch):
             self.executed_sql = []
             self.inserted = None
 
-        def execute(self, sql):
+        def execute(self, sql, params=()):
+            del params
             self.executed_sql.append(sql)
             if sql.startswith("SHOW TABLES LIKE"):
                 self.fetchone_value = ("WIDE_TABLE",)
@@ -463,3 +465,57 @@ def test_adapting_a_non_connector_connection_keeps_its_identity():
     connection = FakeConnection()
 
     assert _adapt_connector_connection(connection) is connection
+
+
+def test_mysql_base_validates_identifiers_parameterizes_show_tables_and_closes_conn():
+    executed = []
+
+    class ParamCursor:
+        def __init__(self, fail_close: bool = False):
+            self.fail_close = fail_close
+
+        def execute(self, sql, params=()):
+            executed.append((sql, params))
+
+        def fetchone(self):
+            return ("prices",)
+
+        def close(self):
+            if self.fail_close:
+                raise RuntimeError("cursor close failure")
+
+    class SafeConn:
+        def __init__(self):
+            self.closed = False
+
+        def is_connected(self):
+            return True
+
+        def cursor(self):
+            return ParamCursor()
+
+        def close(self):
+            self.closed = True
+
+    service = MysqlBase({})
+    conn = SafeConn()
+    service.connection = conn
+    service.cursor = ParamCursor(fail_close=True)
+    service.connect_db = lambda: None  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="Invalid SQL table name"):
+        service.table_exists("prices'; DROP TABLE users;--")
+
+    with pytest.raises(RuntimeError, match="cursor close failure"):
+        service.disconnect_db()
+    assert conn.closed is True
+    assert service.connection is None
+
+    service.connection = conn
+    service.cursor = ParamCursor()
+    conn.closed = False
+    assert service.table_exists("prices") is True
+    assert ("SHOW TABLES LIKE %s", ("prices",)) in executed
+    assert service.get_latest_date.__name__ == "get_latest_date"
+    with pytest.raises(ValueError, match="Invalid SQL column name"):
+        service.get_latest_date("prices", "bad col; --")

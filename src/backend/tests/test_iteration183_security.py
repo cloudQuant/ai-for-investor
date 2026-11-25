@@ -206,6 +206,7 @@ def test_production_settings_reject_disabled_ib_tls_and_docker_sandbox():
     from app.config import Settings
 
     secure_settings = {
+        "APP_ENV": "production",
         "DEBUG": False,
         "SECRET_KEY": "a" * 32,
         "JWT_SECRET_KEY": "b" * 32,

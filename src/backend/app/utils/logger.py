@@ -148,8 +148,9 @@ def _build_daily_or_size_rotation(max_bytes: int) -> str | Callable[[Any, Any], 
             file_date = _date_from_dated_log_name(Path(file.name).name)
             if file_date is not None and file_date < message_date:
                 return True
-        except Exception:
-            pass
+        except (AttributeError, OSError, TypeError, ValueError) as exc:
+            # Avoid recursive logger emission while deciding log rotation.
+            _ = exc
 
         try:
             file.seek(0, 2)

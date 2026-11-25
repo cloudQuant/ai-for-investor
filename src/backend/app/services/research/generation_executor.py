@@ -39,6 +39,7 @@ from app.services.research.llm_gateway import GatewayResult, LlmGateway
 from app.services.research.quota import QuotaReservationRequest, QuotaService
 from app.services.research.redaction import redact_sensitive_payload
 from app.services.research.workflow_worker import StageExecutionContext, StageExecutionOutcome
+from app.utils.invariants import require_present
 
 _GENERATE_STAGE = "GENERATE"
 _OUTPUT_SCHEMA_VERSION = "research-generation-v1"
@@ -361,14 +362,16 @@ class ResearchGenerationExecutor:
                     or profile.evidence_hash != run.capability_evidence_hash
                 ):
                     raise ValueError("RESEARCH_GENERATION_PROFILE_NOT_CURRENT")
-                assert hypothesis is not None and dataset is not None and epoch is not None
+                resolved_hypothesis = require_present(hypothesis, "hypothesis missing")
+                resolved_dataset = require_present(dataset, "dataset missing")
+                resolved_epoch = require_present(epoch, "epoch missing")
                 await self._prechecks.require_current(
                     session,
                     user_id=context.user_id,
                     precheck_id=run.data_precheck_id,
-                    hypothesis=hypothesis,
-                    dataset=dataset,
-                    epoch=epoch,
+                    hypothesis=resolved_hypothesis,
+                    dataset=resolved_dataset,
+                    epoch=resolved_epoch,
                     profile=profile,
                     profile_id=run.capability_profile_id,
                     profile_version=run.capability_profile_version,

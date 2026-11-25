@@ -26,7 +26,7 @@ class LiveInstanceCreate(BaseModel):
                         "asset_type": "STK",
                         "account_id": "DU123456",
                         "base_url": "https://localhost:5000",
-                        "verify_ssl": False,
+                        "verify_ssl": True,
                     },
                 },
             }

@@ -223,6 +223,8 @@ def _as_day(value: Any) -> str | None:
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
         return _epoch_or_compact_day(int(value))
     text = str(value).strip()
     if text.isdigit():
@@ -244,6 +246,8 @@ def _epoch_or_compact_day(number: int) -> str | None:
     # Vendors mix second, millisecond, microsecond and nanosecond epochs; the
     # magnitude decides the unit, and an unnormalised value overflows
     # ``fromtimestamp`` ("year 52960 is out of range") instead of comparing.
+    if number < 0:
+        return None
     if number >= 10**17:
         number //= 10**9
     elif number >= 10**14:
@@ -251,7 +255,10 @@ def _epoch_or_compact_day(number: int) -> str | None:
     elif number >= 10**11:
         number //= 10**3
     if number >= 10**9:
-        return datetime.fromtimestamp(number, tz=timezone.utc).date().isoformat()
+        try:
+            return datetime.fromtimestamp(number, tz=timezone.utc).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
     if len(str(number)) == 8:
         text = str(number)
         return f"{text[:4]}-{text[4:6]}-{text[6:]}"
@@ -406,6 +413,37 @@ def compare_daily_ledgers(
         for day in sorted(set(source) & set(warehouse))
         if source[day] != warehouse[day]
     ]
+    warehouse_dates_all = sorted(warehouse)
+    if not warehouse_dates_all:
+        pre_truncated_gaps: dict[str, Any] = {
+            "warehouse_first_date": None,
+            "warehouse_last_date": None,
+            "head_count": 0,
+            "internal_count": 0,
+            "tail_count": 0,
+            "unclassified_no_warehouse_baseline_count": len(source_only),
+            "head_dates": [],
+            "internal_dates": [],
+            "tail_dates": [],
+            "unclassified_dates": source_only[:DATE_LIST_LIMIT],
+        }
+    else:
+        first_wh, last_wh = warehouse_dates_all[0], warehouse_dates_all[-1]
+        head_all = [day for day in source_only if day < first_wh]
+        tail_all = [day for day in source_only if day > last_wh]
+        internal_all = [day for day in source_only if first_wh <= day <= last_wh]
+        pre_truncated_gaps = {
+            "warehouse_first_date": first_wh,
+            "warehouse_last_date": last_wh,
+            "head_count": len(head_all),
+            "internal_count": len(internal_all),
+            "tail_count": len(tail_all),
+            "unclassified_no_warehouse_baseline_count": 0,
+            "head_dates": head_all[:DATE_LIST_LIMIT],
+            "internal_dates": internal_all[:DATE_LIST_LIMIT],
+            "tail_dates": tail_all[:DATE_LIST_LIMIT],
+            "unclassified_dates": [],
+        }
     return {
         "source_observation_count": len(source),
         "warehouse_observation_count": len(warehouse),
@@ -415,6 +453,7 @@ def compare_daily_ledgers(
         "source_last_date": max(source) if source else None,
         "source_only_count": len(source_only),
         "source_only_dates": source_only[:DATE_LIST_LIMIT],
+        "source_only_gap_summary": pre_truncated_gaps,
         "warehouse_only_count": len(warehouse_only),
         "warehouse_only_dates": warehouse_only[:DATE_LIST_LIMIT],
         "ohlc_mismatch_count": len(mismatches),
@@ -429,6 +468,8 @@ def compare_daily_ledgers(
 def classify_source_only_dates(
     comparison: Mapping[str, Any],
     warehouse_rows: Iterable[Mapping[str, Any]],
+    *,
+    source_rows: Iterable[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Split source-only dates into head/internal/tail without closing any gap."""
 
@@ -437,9 +478,26 @@ def classify_source_only_dates(
         day for day in (_as_day(row.get("data_date", row.get("date"))) for row in rows) if day
     )
     known = set(warehouse_dates)
-    missing = sorted(
-        day for day in map(str, comparison.get("source_only_dates", [])) if day not in known
-    )
+    if source_rows is None and isinstance(comparison.get("source_only_gap_summary"), Mapping):
+        summary = dict(comparison["source_only_gap_summary"])
+        expected_first = warehouse_dates[0] if warehouse_dates else None
+        expected_last = warehouse_dates[-1] if warehouse_dates else None
+        if (
+            summary.get("warehouse_first_date") == expected_first
+            and summary.get("warehouse_last_date") == expected_last
+        ):
+            return summary
+    if source_rows is not None:
+        source_days = {
+            day
+            for day in (_as_day(row.get("data_date", row.get("date"))) for row in source_rows)
+            if day
+        }
+        missing = sorted(source_days - known)
+    else:
+        missing = sorted(
+            day for day in map(str, comparison.get("source_only_dates", [])) if day not in known
+        )
     if not warehouse_dates:
         return {
             "warehouse_first_date": None,
@@ -1126,9 +1184,15 @@ class MySQLConvertibleReader:
         )
 
     def _provenance_by_symbol(self, table: str) -> tuple[dict[str, Any], dict[str, dict[str, int]]]:
+        columns = self._table_columns(table)
+        has_source = "source" in columns
+        source_expr = (
+            "COALESCE(NULLIF(source, ''), 'legacy_unknown')" if has_source else "'legacy_unknown'"
+        )
+        group_cols = "symbol, source" if has_source else "symbol"
         rows = self._execute(
-            "SELECT symbol, COALESCE(NULLIF(source, ''), 'legacy_unknown') AS source, "
-            f"COUNT(*) AS row_count FROM {table} GROUP BY symbol, source"
+            f"SELECT symbol, {source_expr} AS source, "
+            f"COUNT(*) AS row_count FROM {table} GROUP BY {group_cols}"
         )
         totals: dict[str, int] = {}
         unrecognized: dict[str, int] = {}
@@ -1172,13 +1236,18 @@ class MySQLConvertibleReader:
         """Aggregate the legacy series that carries no usable instrument key."""
 
         columns = self._table_columns(table)
+        has_source = "source" in columns
+        source_expr = (
+            "COALESCE(NULLIF(source, ''), 'legacy_unknown')" if has_source else "'legacy_unknown'"
+        )
+        group_cols = "symbol_key, source" if has_source else "symbol_key"
         unattributable = (
             "symbol IS NULL OR symbol = '' OR LOWER(LEFT(symbol, 2)) NOT IN ('sh', 'sz', 'bj')"
         )
         groups = self._execute(
             "SELECT COALESCE(NULLIF(symbol, ''), '<no-symbol>') AS symbol_key, "
-            "COALESCE(NULLIF(source, ''), 'legacy_unknown') AS source, COUNT(*) AS row_count "
-            f"FROM {table} WHERE {unattributable} GROUP BY symbol_key, source ORDER BY symbol_key"
+            f"{source_expr} AS source, COUNT(*) AS row_count "
+            f"FROM {table} WHERE {unattributable} GROUP BY {group_cols} ORDER BY symbol_key"
         )
         distinct_values = sorted({str(row.get("symbol_key")) for row in groups})
         total_rows = sum(int(row.get("row_count") or 0) for row in groups)
@@ -1341,6 +1410,9 @@ def _run_killable_probe(
         if not receiving.poll(timeout=timeout_seconds):
             process.terminate()
             process.join(timeout=1)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=1)
             raise TimeoutError(f"convertible full-history probe exceeded {timeout_seconds} seconds")
         payload: Any = receiving.recv()
     except EOFError as exc:
@@ -1354,6 +1426,9 @@ def _run_killable_probe(
         if process.is_alive():
             process.terminate()
             process.join(timeout=1)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=1)
     if isinstance(payload, str):
         payload = json.loads(payload)
     if not isinstance(payload, dict):
@@ -1406,7 +1481,10 @@ async def _load_active_script_source() -> str:
         ).scalar_one_or_none()
     if script is None or not script.is_active:
         raise RuntimeError(f"{SCRIPT_ID} is missing or inactive")
-    return str(script.source)
+    # Preserve script registration gate while ensuring convertible writes keep 'sina' series provenance
+    # rather than overriding it with a generic catalog provider label such as 'akshare'.
+    raw_source = str(getattr(script, "source", "") or "").strip().lower()
+    return raw_source if raw_source == "sina" else "sina"
 
 
 def _claim_identity(
@@ -1458,7 +1536,9 @@ async def _managed_repair(
     # script executor strips them before calling the data function.
     parameters: dict[str, Any] = {
         **identity["parameters"],
-        "source": source,
+        "source": "sina"
+        if str(source or "").strip().lower() in {"", "akshare"}
+        else str(source).strip().lower(),
         "_claim_key": claim_key,
         "_period_key": period_key,
         "_source_identity": SOURCE_IDENTITY,
@@ -1780,7 +1860,7 @@ async def _reconcile_symbol(
     record["warehouse_provenance_before"] = warehouse_provenance(before_rows)
     record["comparison_before"] = comparison_before
     record["source_only_gap_distribution_before"] = classify_source_only_dates(
-        comparison_before, before_rows
+        comparison_before, before_rows, source_rows=snapshot.normalized_ledger
     )
 
     if comparison_before["date_key_and_ohlc_match"]:
@@ -1911,7 +1991,7 @@ async def _reconcile_symbol(
     record["warehouse_provenance_after"] = warehouse_provenance(after_rows)
     record["comparison_after"] = comparison_after
     record["source_only_gap_distribution_after"] = classify_source_only_dates(
-        comparison_after, after_rows
+        comparison_after, after_rows, source_rows=snapshot.normalized_ledger
     )
     record["verification"] = "fresh_autocommit_sql_exact_keys_and_ohlc"
     return _finish(

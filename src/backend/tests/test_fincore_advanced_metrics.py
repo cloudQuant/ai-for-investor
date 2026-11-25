@@ -332,3 +332,19 @@ class TestAdvancedMetricsEdgeCases:
         # No drawdown
         assert max_dd == 0.0
         assert duration == 0
+
+    def test_drawdown_peak_at_index_zero_and_none_pnl(self):
+        adapter = FincoreAdapter()
+        dd, duration = adapter.calculate_max_drawdown_with_duration([120, 100, 90, 130])
+        assert dd == pytest.approx(-0.25)
+        assert duration == 2
+
+        trades = [
+            {"pnlcomm": None, "pnl": 100},
+            {"pnlcomm": None, "pnl": -50},
+            {"pnlcomm": None},
+        ]
+        assert adapter.calculate_win_rate(trades) == pytest.approx(0.5)
+        assert adapter.calculate_profit_factor(trades) == pytest.approx(2.0)
+        assert adapter.calculate_max_consecutive(trades, win=True) == 1
+        assert adapter.calculate_max_consecutive(trades, win=False) == 1

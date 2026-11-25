@@ -71,14 +71,13 @@ if [ "$RETRIES" -eq "$MAX_RETRIES" ]; then
     exit 1
 fi
 
-# Run seed data script if enabled
+# Run optional seed / admin bootstrap script if enabled
 if [ "${SEED_DATA:-false}" = "true" ]; then
-    echo "SEED_DATA=true: Checking if seed data is needed..."
+    echo "SEED_DATA=true: Bootstrapping dev data..."
     if [ -f "/opt/workspace/ai-for-investor/scripts/seed_dev_data.py" ]; then
-        python /opt/workspace/ai-for-investor/scripts/seed_dev_data.py || \
-            echo "WARNING: Seed data script failed, continuing anyway..."
+        python /opt/workspace/ai-for-investor/scripts/seed_dev_data.py
     else
-        echo "INFO: Seed script not found, skipping. (Will be available after task 5.5)"
+        python -m app.db.bootstrap_admin
     fi
 fi
 

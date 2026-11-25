@@ -125,70 +125,83 @@ export function useBacktestRuntime(options: UseBacktestRuntimeOptions) {
   }
 
   function connectWebSocket(taskId: string) {
+    closeWebSocket()
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/backtest/${taskId}`
     const protocols = createBacktestWebSocketProtocols()
     pollingStarted = false
-    ws = protocols.length > 0 ? new WebSocket(wsUrl, protocols) : new WebSocket(wsUrl)
+    const currentWs = protocols.length > 0 ? new WebSocket(wsUrl, protocols) : new WebSocket(wsUrl)
+    ws = currentWs
 
     heartbeatTimer = setInterval(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send('ping')
+      if (ws === currentWs && currentWs.readyState === WebSocket.OPEN) {
+        currentWs.send('ping')
       }
     }, 30000)
 
-    ws.onmessage = async (event) => {
-      const data = parseRuntimeEvent(event.data)
-      if (!data || data.type === 'pong' || data.type === 'connected') {
-        return
-      }
-      if (data.type === 'task_created') {
-        progressInfo.value = {
-          progress: 0,
-          message: data.message || tt('backtestRt.msgTaskSubmitted'),
+    currentWs.onmessage = async (event) => {
+      if (ws !== currentWs) return
+      try {
+        const data = parseRuntimeEvent(event.data)
+        if (!data || data.type === 'pong' || data.type === 'connected') {
+          return
         }
-        return
-      }
-      if (data.type === 'progress') {
-        progressInfo.value = {
-          progress: typeof data.progress === 'number' ? data.progress : progressInfo.value.progress,
-          message: typeof data.message === 'string' ? data.message : tt('backtestRt.msgRunning'),
+        if (data.type === 'task_created') {
+          progressInfo.value = {
+            progress: 0,
+            message: data.message || tt('backtestRt.msgTaskSubmitted'),
+          }
+          return
         }
-        return
-      }
-      if (data.type === 'completed') {
-        progressInfo.value = {
-          progress: typeof data.progress === 'number' ? data.progress : 100,
-          message: typeof data.message === 'string' ? data.message : tt('backtestRt.msgCompleted'),
+        if (data.type === 'progress') {
+          progressInfo.value = {
+            progress: typeof data.progress === 'number' ? data.progress : progressInfo.value.progress,
+            message: typeof data.message === 'string' ? data.message : tt('backtestRt.msgRunning'),
+          }
+          return
         }
-        await finishWithResult(taskId)
-        return
-      }
-      if (data.type === 'failed') {
-        const message = typeof data.error === 'string'
-          ? data.error
-          : typeof data.message === 'string'
-            ? data.message
+        if (data.type === 'completed') {
+          progressInfo.value = {
+            progress: typeof data.progress === 'number' ? data.progress : 100,
+            message: typeof data.message === 'string' ? data.message : tt('backtestRt.msgCompleted'),
+          }
+          await finishWithResult(taskId)
+          return
+        }
+        if (data.type === 'failed') {
+          const message = typeof data.error === 'string'
+            ? data.error
+            : typeof data.message === 'string'
+              ? data.message
+              : tt('backtestRt.msgUnknownError')
+          finishAsFailed(message)
+          return
+        }
+        if (data.type === 'cancelled') {
+          finishAsCancelled()
+        }
+      } catch (error) {
+        finishAsFailed(
+          error instanceof Error && error.message
+            ? error.message
             : tt('backtestRt.msgUnknownError')
-        finishAsFailed(message)
-        return
-      }
-      if (data.type === 'cancelled') {
-        finishAsCancelled()
+        )
       }
     }
 
-    ws.onerror = () => {
+    currentWs.onerror = () => {
+      if (ws !== currentWs) return
       closeWebSocket()
       startPollingFallback(taskId)
     }
 
-    ws.onclose = (event) => {
-      if (!loading.value || event.code === 1000) {
-        return
-      }
+    currentWs.onclose = (event) => {
+      if (ws !== currentWs) return
+      const shouldFallback = loading.value && event.code !== 1000
       closeWebSocket()
-      startPollingFallback(taskId)
+      if (shouldFallback) {
+        startPollingFallback(taskId)
+      }
     }
   }
 

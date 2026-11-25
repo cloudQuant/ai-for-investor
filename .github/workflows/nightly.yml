@@ -425,6 +425,9 @@ jobs:
   dependency-audit:
     name: Dependency Audit & Vulnerability Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - name: Checkout code
@@ -443,6 +446,7 @@ jobs:
           cache-dependency-path: src/frontend/package-lock.json
 
       - name: Backend - Install dependencies and run pip-audit
+        id: pip_audit
         working-directory: src/backend
         run: |
           python -m pip install --upgrade pip
@@ -450,19 +454,24 @@ jobs:
           python -m pip install --upgrade "setuptools==83.0.0"
           pip install -e ".[dev,backtrader,data,redis]"
           pip install pip-audit
-          # Keep the machine-readable report for triage, but fail the job on a
-          # vulnerability: audit is a gate, not an advisory log.
+          # Capture the JSON report even when vulnerabilities are detected, then exit with pip-audit's status.
+          set +e
           pip-audit --desc --format json --output pip-audit-report.json
+          pip_rc=$?
           pip-audit --desc
+          exit $pip_rc
 
       - name: Frontend - Install dependencies and run npm audit
+        id: npm_audit
+        if: always()
         working-directory: src/frontend
         run: |
           npm ci
-          npm audit --json > npm-audit-report.json
+          npm audit --json > npm-audit-report.json || true
           npm audit --audit-level=high
 
       - name: Check for high/critical vulnerabilities and create issues
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -625,5 +634,6 @@ jobs:
         if: |
           needs.backend-full-tests.result == 'failure' ||
           needs.frontend-full-tests.result == 'failure' ||
-          needs.e2e-full-tests.result == 'failure'
+          needs.e2e-full-tests.result == 'failure' ||
+          needs.dependency-audit.result == 'failure'
         run: exit 1

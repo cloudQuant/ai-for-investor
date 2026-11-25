@@ -2,10 +2,16 @@
 Akshare data warehouse database connection management.
 """
 
+import threading
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.engine import URL, make_url
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
@@ -13,7 +19,8 @@ from app.config import get_settings
 settings = get_settings()
 
 # Lazy initialization to avoid event loop mismatch with MySQL async drivers.
-_akshare_data_engine = None
+_akshare_lock = threading.RLock()
+_akshare_data_engine: AsyncEngine | None = None
 _akshare_data_session_maker = None
 
 
@@ -46,35 +53,48 @@ def _database_url_drivername(database_url: str | URL) -> str:
 
 def _get_akshare_data_engine():
     global _akshare_data_engine
-    if _akshare_data_engine is None:
-        database_url = _resolve_akshare_data_database_url()
-        if database_url is None:
-            return None
-        extra_kwargs: dict[str, object] = {}
-        if _database_url_drivername(database_url).startswith("mysql"):
-            extra_kwargs["poolclass"] = NullPool
-        else:
-            extra_kwargs["pool_pre_ping"] = True
-        _akshare_data_engine = create_async_engine(
-            database_url,
-            echo=settings.SQL_ECHO,
-            **extra_kwargs,
-        )
-    return _akshare_data_engine
+    with _akshare_lock:
+        if _akshare_data_engine is None:
+            database_url = _resolve_akshare_data_database_url()
+            if database_url is None:
+                return None
+            extra_kwargs: dict[str, object] = {}
+            if _database_url_drivername(database_url).startswith("mysql"):
+                extra_kwargs["poolclass"] = NullPool
+            else:
+                extra_kwargs["pool_pre_ping"] = True
+            _akshare_data_engine = create_async_engine(
+                database_url,
+                echo=settings.SQL_ECHO,
+                **extra_kwargs,
+            )
+        return _akshare_data_engine
 
 
 def _get_akshare_data_session_maker():
     global _akshare_data_session_maker
-    if _akshare_data_session_maker is None:
-        eng = _get_akshare_data_engine()
-        if eng is None:
-            return None
-        _akshare_data_session_maker = async_sessionmaker(
-            eng,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-    return _akshare_data_session_maker
+    with _akshare_lock:
+        if _akshare_data_session_maker is None:
+            eng = _get_akshare_data_engine()
+            if eng is None:
+                return None
+            _akshare_data_session_maker = async_sessionmaker(
+                eng,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+        return _akshare_data_session_maker
+
+
+async def dispose_akshare_data_engine() -> None:
+    """Dispose the lazy akshare data warehouse engine if initialized."""
+    global _akshare_data_engine, _akshare_data_session_maker
+    with _akshare_lock:
+        target = _akshare_data_engine
+        _akshare_data_engine = None
+        _akshare_data_session_maker = None
+    if target is not None:
+        await target.dispose()
 
 
 async def get_akshare_data_db() -> AsyncGenerator[AsyncSession, None]:

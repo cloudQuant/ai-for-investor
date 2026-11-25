@@ -133,7 +133,7 @@ class FundRatingZs(AkshareToMySql):
                 unique_keys=["R_ID"],
             )
             self.logger.info("Upserted %s China Merchants rating records", saved_rows)
-            return bool(saved_rows)
+            return saved_rows is not False
 
         except Exception as e:
             self.logger.error(f"Error saving data: {e}")

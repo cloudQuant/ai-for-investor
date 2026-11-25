@@ -1160,3 +1160,112 @@ class TestGetTaskStatusErrorPaths:
         with patch.object(svc.task_repo, "get_by_id", return_value=task):
             result = await svc.get_task_status("task123")
         assert result == TaskStatus.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_list_results_sorts_by_result_metric_and_batches_robustness(monkeypatch):
+    from sqlalchemy import delete
+
+    from app.db.database import async_session_maker
+    from app.models.backtest import BacktestResultModel as OrmResult
+    from app.models.backtest import BacktestTask as OrmTask
+    from app.schemas.market_data_trust import RobustnessTestResultResponse
+    from app.services import robustness_validation_service as rvs_module
+
+    user_id = "ocr37-sort-user"
+    async with async_session_maker() as session:
+        await session.execute(delete(OrmResult).where(OrmResult.task_id.like("ocr37-t%")))
+        await session.execute(delete(OrmTask).where(OrmTask.user_id == user_id))
+        tasks = [
+            OrmTask(
+                id="ocr37-t1",
+                user_id=user_id,
+                strategy_id="s1",
+                symbol="000001.SZ",
+                status="completed",
+                request_data={},
+                created_at=datetime(2024, 1, 1),
+            ),
+            OrmTask(
+                id="ocr37-t2",
+                user_id=user_id,
+                strategy_id="s1",
+                symbol="000002.SZ",
+                status="completed",
+                request_data={},
+                created_at=datetime(2024, 1, 2),
+            ),
+            OrmTask(
+                id="ocr37-t3",
+                user_id=user_id,
+                strategy_id="s1",
+                symbol="000003.SZ",
+                status="completed",
+                request_data={},
+                created_at=datetime(2024, 1, 3),
+            ),
+        ]
+        results = [
+            OrmResult(task_id="ocr37-t1", sharpe_ratio=2.5, total_return=5.0),
+            OrmResult(task_id="ocr37-t2", sharpe_ratio=0.5, total_return=30.0),
+            OrmResult(task_id="ocr37-t3", sharpe_ratio=1.5, total_return=15.0),
+        ]
+        session.add_all([*tasks, *results])
+        await session.commit()
+
+    batch_calls = []
+
+    class FakeRobustnessService:
+        async def get_latest(self, **_kwargs):
+            raise AssertionError("list_results must batch robustness queries instead of N+1")
+
+        async def get_latest_by_backtest_ids(self, *, backtest_ids, user_id: str):
+            batch_calls.append((list(backtest_ids), user_id))
+            return {
+                "ocr37-t1": RobustnessTestResultResponse(
+                    id="r1",
+                    user_id=user_id,
+                    backtest_id="ocr37-t1",
+                    method="overfitting_suite",
+                    status="passed",
+                    metrics={"robustness_score": 88.0},
+                    gate_evaluations=[],
+                    report={},
+                )
+            }
+
+    monkeypatch.setattr(
+        "app.services.backtest.list_queries.get_robustness_validation_service",
+        lambda: FakeRobustnessService(),
+    )
+    svc = BacktestService()
+    try:
+        top_sharpe = await svc.list_results(
+            user_id, limit=2, offset=0, sort_by="sharpe_ratio", sort_desc=True
+        )
+        assert [item.task_id for item in top_sharpe.items] == ["ocr37-t1", "ocr37-t3"]
+        assert top_sharpe.items[0].robustness == {
+            "id": "r1",
+            "user_id": user_id,
+            "run_id": None,
+            "strategy_version_id": None,
+            "backtest_id": "ocr37-t1",
+            "method": "overfitting_suite",
+            "status": "passed",
+            "metrics": {"robustness_score": 88.0},
+            "gate_evaluations": [],
+            "report": {},
+            "error_message": None,
+            "created_at": None,
+        }
+        lowest_ret = await svc.list_results(
+            user_id, limit=2, offset=1, sort_by="total_return", sort_desc=False
+        )
+        assert [item.task_id for item in lowest_ret.items] == ["ocr37-t3", "ocr37-t2"]
+        assert len(batch_calls) == 2
+        del rvs_module
+    finally:
+        async with async_session_maker() as session:
+            await session.execute(delete(OrmResult).where(OrmResult.task_id.like("ocr37-t%")))
+            await session.execute(delete(OrmTask).where(OrmTask.user_id == user_id))
+            await session.commit()

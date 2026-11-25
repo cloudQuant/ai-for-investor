@@ -38,6 +38,7 @@ from app.services.market_data.providers import (
 )
 from app.services.market_data.query_resolution import ResolvedMarketDataQueryContext
 from app.services.market_data.store import MarketDataStore, PersistedProviderFetch
+from app.utils.invariants import require_present
 
 _UTC = timezone.utc
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -299,8 +300,8 @@ class ThsDumpDownloader:
                 last_error = exc
                 if attempt + 1 < attempts:
                     time.sleep(1.0 * (attempt + 1))
-        assert last_error is not None
-        raise ThsDumpError("THS_DUMP_NETWORK_ERROR", detail=type(last_error).__name__)
+        resolved_error = require_present(last_error, "network retry loop ended without error")
+        raise ThsDumpError("THS_DUMP_NETWORK_ERROR", detail=type(resolved_error).__name__)
 
 
 class ThsDumpImporter:

@@ -233,6 +233,24 @@ class TestSanitizeCachedResultPayload:
         result = BacktestService._sanitize_cached_result_payload(payload)
         assert len(result["trades"]) == 1
 
+    def test_sanitize_trades_preserves_fractional_sizes_and_rejects_nonfinite(self):
+        from app.services.backtest.sanitize import sanitize_trades
+
+        trades = sanitize_trades(
+            [
+                {"date": "2024-01-15", "type": "buy", "price": 50000.0, "size": 0.1},
+                {"date": "2024-01-16", "type": "sell", "price": 3000.0, "size": 1.75},
+                {"date": "2024-01-17", "type": "buy", "price": 100.0, "size": float("nan")},
+                {"date": "2024-01-18", "type": "buy", "price": 100.0, "size": float("inf")},
+                {"date": "2024-01-19", "type": "buy", "price": 100.0, "size": 0},
+            ]
+        )
+        assert len(trades) == 2
+        assert trades[0]["size"] == 0.1
+        assert trades[0]["value"] == 5000.0
+        assert trades[1]["size"] == 1.75
+        assert trades[1]["value"] == 5250.0
+
 
 class TestGetRequestData:
     """Test _get_request_data static method."""

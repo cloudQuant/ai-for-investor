@@ -13,6 +13,7 @@ Run from project root: python scripts/ci/check_doc_links.py
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -31,6 +32,7 @@ EXCLUDED_PARTS = {
     "archived",
     "dist",
     "build",
+    "evidence",
     "__pycache__",
     ".kiro",
     "clientportal.gw",  # vendored IB gateway product docs (Task F: tracked separately)
@@ -70,12 +72,16 @@ def resolve_path(link_path: str, base_file: Path) -> Path:
 
 
 def iter_markdown_files() -> list[Path]:
-    """Yield every *.md file under the repo root, minus excluded trees."""
+    """Yield every *.md file under the repo root, pruning excluded trees."""
     files: list[Path] = []
-    for path in PROJECT_ROOT.rglob("*.md"):
-        if EXCLUDED_PARTS.intersection(path.parts):
-            continue
-        files.append(path)
+    for root, dirnames, filenames in os.walk(PROJECT_ROOT):
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in EXCLUDED_PARTS and not d.startswith(".venv")
+        )
+        root_path = Path(root)
+        for name in filenames:
+            if name.endswith(".md"):
+                files.append(root_path / name)
     return sorted(files)
 
 

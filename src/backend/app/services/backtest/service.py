@@ -40,8 +40,13 @@ from app.schemas.backtest_enhanced import (
 )
 from app.schemas.backtest_summary import BacktestSummaryResponse, CanonicalMetrics
 from app.schemas.market_data_trust import DataPrecheckRequest
+from app.services.backtest.list_queries import list_backtest_results_page
 from app.services.backtest.manager import BacktestExecutionManager
-from app.services.backtest.runner import BacktestExecutionRunner
+from app.services.backtest.runner import (
+    BacktestExecutionRunner,
+    get_default_backtest_runner,
+    wait_and_reap_process,
+)
 from app.services.backtest.sanitize import (
     coerce_float as _coerce_float,
 )
@@ -133,20 +138,12 @@ class BacktestService:
         task_manager: BacktestExecutionManager | None = None,
         task_runner: BacktestExecutionRunner | None = None,
     ) -> None:
-        """Initialize the BacktestService.
-
-        Attributes:
-            task_repo: Repository for backtest task CRUD operations.
-            result_repo: Repository for backtest result CRUD operations.
-            cache: Cache instance for storing frequently accessed results.
-            task_manager: BacktestExecutionManager for database-backed task state.
-            task_runner: Process-local execution runner used by the current API worker.
-        """
+        """Initialize the BacktestService."""
         self.task_repo = SQLRepository(BacktestTask)
         self.result_repo = SQLRepository(BacktestResultModel)
         self.cache = get_cache()
         self.task_manager = task_manager or BacktestExecutionManager()
-        self.task_runner = task_runner or BacktestExecutionRunner()
+        self.task_runner = task_runner or get_default_backtest_runner()
 
     @staticmethod
     def _get_request_data(task: BacktestTask) -> dict[str, object]:
@@ -900,21 +897,24 @@ class BacktestService:
             env["BACKTRADER_LOG_DIR"] = str(work_dir / "logs" / f"task_{task_id}")
 
         def _run() -> tuple[int | None, str, str]:
-            proc = subprocess.Popen(
-                [python_exec, "-O", str(run_py)],
-                cwd=str(work_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env,
-            )
-            # Record PID for cancellation
+            popen_kwargs: dict[str, Any] = {
+                "cwd": str(work_dir),
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+                "text": True,
+                "env": env,
+            }
+            if os.name != "nt":
+                popen_kwargs["start_new_session"] = True
+            proc = subprocess.Popen([python_exec, "-O", str(run_py)], **popen_kwargs)
             if task_id:
                 self.task_runner.register_process(task_id, proc)
             from app.config import get_settings
 
             try:
-                stdout, stderr = proc.communicate(timeout=get_settings().BACKTEST_TIMEOUT)
+                stdout, stderr = wait_and_reap_process(
+                    proc, get_settings().BACKTEST_TIMEOUT, task_id=task_id
+                )
                 return proc.returncode, stdout, stderr
             finally:
                 if task_id:
@@ -1072,6 +1072,17 @@ class BacktestService:
 
         return await self._attach_latest_robustness(result, user_id=user_id)
 
+    @staticmethod
+    def _apply_robustness(result: BacktestResult, latest: Any) -> BacktestResult:
+        if latest is None:
+            return result
+        robustness_payload = latest.model_dump(mode="json")
+        summary = dict(result.result_summary or {})
+        summary["robustness"] = robustness_payload
+        return result.model_copy(
+            update={"robustness": robustness_payload, "result_summary": summary}
+        )
+
     async def _attach_latest_robustness(
         self,
         result: BacktestResult,
@@ -1084,17 +1095,7 @@ class BacktestService:
             backtest_id=result.task_id,
             user_id=user_id,
         )
-        if latest is None:
-            return result
-        robustness_payload = latest.model_dump(mode="json")
-        summary = dict(result.result_summary or {})
-        summary["robustness"] = robustness_payload
-        return result.model_copy(
-            update={
-                "robustness": robustness_payload,
-                "result_summary": summary,
-            }
-        )
+        return self._apply_robustness(result, latest)
 
     async def get_result_summary(
         self,
@@ -1233,28 +1234,17 @@ class BacktestService:
         Returns:
             BacktestListResponse containing total count and list of results.
         """
-        tasks = await self.task_repo.list(
-            filters={"user_id": user_id},
-            skip=offset,
+        total, items = await list_backtest_results_page(
+            task_repo=self.task_repo,
+            result_repo=self.result_repo,
+            user_id=user_id,
+            sort_by=sort_by,
+            sort_desc=sort_desc,
+            offset=offset,
             limit=limit,
-            order_by=sort_by,
-            order_desc=sort_desc,
+            build_result=self._build_backtest_result,
+            apply_robustness=self._apply_robustness,
         )
-        total = await self.task_repo.count(filters={"user_id": user_id})
-
-        task_ids = [str(task.id) for task in tasks]
-        result_models = (
-            await self.result_repo.list(filters={"task_id": task_ids}, limit=len(task_ids) or 1)
-            if task_ids
-            else []
-        )
-        result_by_task_id = {str(r.task_id): r for r in result_models}
-
-        items = [
-            self._build_backtest_result(task, result_by_task_id.get(str(task.id))) for task in tasks
-        ]
-        items = [await self._attach_latest_robustness(item, user_id=user_id) for item in items]
-
         return BacktestListResponse(total=total, items=items)
 
     async def delete_result(self, task_id: str, user_id: str) -> bool:

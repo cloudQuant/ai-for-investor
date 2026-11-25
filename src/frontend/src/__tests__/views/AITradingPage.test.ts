@@ -237,4 +237,33 @@ describe('AITradingPage', () => {
     })
     expect(messageMocks.info).toHaveBeenCalledWith('交易已取消')
   })
+
+  it('does not send cancellation when confirming an order fails', async () => {
+    const wrapper = mountWithPlugins(AITradingPage, {
+      customStubs: {
+        Promotion: true,
+        Warning: true,
+        Document: true,
+      },
+    })
+
+    await flushPromises()
+    vi.clearAllMocks()
+
+    confirmMock.mockResolvedValueOnce('confirm')
+    apiMocks.confirmTrade.mockRejectedValueOnce(new Error('order execution timeout'))
+
+    const vm = wrapper.vm as any
+    await vm.handleConfirmDialog(buildResponse({ trade_id: 'trade-err', requires_confirmation: true }))
+    await flushPromises()
+
+    expect(apiMocks.confirmTrade).toHaveBeenCalledTimes(1)
+    expect(apiMocks.confirmTrade).toHaveBeenCalledWith({
+      trade_id: 'trade-err',
+      confirmed: true,
+    })
+    expect(messageMocks.error).toHaveBeenCalledWith('order execution timeout')
+    expect(messageMocks.info).not.toHaveBeenCalled()
+    expect(apiMocks.getTradingHistory).toHaveBeenCalledTimes(1)
+  })
 })

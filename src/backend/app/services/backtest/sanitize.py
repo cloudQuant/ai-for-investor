@@ -12,6 +12,7 @@ compatibility with anything that called e.g.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -85,7 +86,7 @@ def sanitize_trades(trades: Any) -> list[dict[str, Any]]:
             price = float(trade.get("price") or 0)
         except (TypeError, ValueError):
             continue
-        if price <= 0:
+        if not math.isfinite(price) or price <= 0:
             continue
         size_raw = trade.get("size")
         if size_raw is None:
@@ -93,19 +94,19 @@ def sanitize_trades(trades: Any) -> list[dict[str, Any]]:
         if size_raw is None:
             size_raw = trade.get("volume")
         try:
-            size = int(abs(float(size_raw or 0)))
+            size = abs(float(size_raw or 0))
         except (TypeError, ValueError):
             continue
-        if size <= 0:
+        if not math.isfinite(size) or size <= 0:
             continue
         try:
             value_raw = trade.get("value")
             value = float(value_raw) if value_raw is not None else price * size
         except (TypeError, ValueError):
             value = price * size
-        if value <= 0:
+        if not math.isfinite(value) or value <= 0:
             value = price * size
-        if value <= 0:
+        if not math.isfinite(value) or value <= 0:
             continue
         pnl_raw = trade.get("pnl")
         try:

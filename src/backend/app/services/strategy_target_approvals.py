@@ -24,10 +24,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.strategy_target_approval import (
-    StrategyTargetApproval,
-    StrategyTargetApprovalEvent,
-)
+from app.models.strategy_target_approval import StrategyTargetApproval, StrategyTargetApprovalEvent
+from app.utils.invariants import log_suppressed, require_instance, require_present
 
 _TARGET_KEYS = frozenset(
     {
@@ -258,8 +256,7 @@ async def create_approved_order_target(
     else:
         _required_identifier(approval_ref, "approval_ref")
 
-    wire_scope = normalized["wire_scope"]
-    assert isinstance(wire_scope, dict)
+    wire_scope = require_instance(normalized["wire_scope"], dict, "wire_scope must be dict")
     membership_version = normalized["membership_version"]
     membership_sha256 = normalized["membership_sha256"]
     row = StrategyTargetApproval(
@@ -602,8 +599,8 @@ async def consume_approved_target_v1(
         if db.in_transaction():
             try:
                 await db.rollback()
-            except Exception:
-                pass
+            except Exception as exc:
+                log_suppressed(__name__, "Target approval rollback cleanup failed", exc)
         raise
     if db.in_transaction():
         try:
@@ -924,8 +921,7 @@ def _target_from_row(row: StrategyTargetApproval) -> dict[str, object]:
         or canonical_target_sha256(normalized) != row.target_sha256
     ):
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
-    wire_scope = normalized["wire_scope"]
-    assert isinstance(wire_scope, dict)
+    wire_scope = require_instance(normalized["wire_scope"], dict, "wire_scope must be dict")
     if (
         normalized["owner_subject"] != row.owner_subject
         or normalized["principal_ref"] != row.principal_ref
@@ -1061,7 +1057,7 @@ async def _cas_update(
             .values(**values)
         )
         # UPDATE statements always return a cursor-backed result at runtime.
-        if result.rowcount != 1:
+        if getattr(result, "rowcount", None) != 1:
             return False
         for name, value in values.items():
             setattr(row, name, value)
@@ -1339,10 +1335,9 @@ def _validate_target(value: Mapping[str, object]) -> dict[str, object]:
         normalized_limits[field] = (
             None if limit is None else _positive_decimal_text(limit, f"limits.{field}")[1]
         )
-    max_quantity_text = normalized_limits["max_quantity"]
-    # The normalization loop above rejects a None max_quantity.
-    assert max_quantity_text is not None
-    max_quantity = Decimal(max_quantity_text)
+    max_quantity = Decimal(
+        require_present(normalized_limits["max_quantity"], "max_quantity missing")
+    )
     if quantity > max_quantity:
         raise StrategyTargetApprovalError("APPROVAL_TARGET_INVALID")
     if target["order_type"] == "MARKET" and normalized_limits["max_notional"] is not None:

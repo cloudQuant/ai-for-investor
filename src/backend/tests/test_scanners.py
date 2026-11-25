@@ -769,3 +769,44 @@ async def test_scanner_plan_can_be_updated_deleted_and_manage_result_table(
     listed = await client.get("/api/v1/scanners/plans", headers=headers)
     assert listed.status_code == 200
     assert all(item["id"] != plan["id"] for item in listed.json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_get_scanner_task_enforces_user_ownership_idor(
+    client: AsyncClient, tmp_path, monkeypatch
+):
+    from app.api import scanners as scanners_api
+    from app.services.scanner_service import ScannerService
+    from app.services.scanner_universe import ScannerUniverseService
+
+    service = ScannerService(
+        universe_service=ScannerUniverseService(
+            storage_path=tmp_path / "scanner_universe_pools.json",
+            market_client=FakeScannerMarketClient(),
+        )
+    )
+    service._tasks["task-owned-by-a"] = {
+        "task_id": "task-owned-by-a",
+        "user_id": "",
+        "status": "completed",
+        "data_status": "verified",
+    }
+    monkeypatch.setattr(scanners_api, "get_scanner_service", lambda: service)
+
+    _, headers_a = await register_and_login(client, username="scanner_owner_a")
+    _, headers_b = await register_and_login(client, username="scanner_attacker_b")
+    user_a = (await client.get("/api/v1/auth/me", headers=headers_a)).json()
+    user_b = (await client.get("/api/v1/auth/me", headers=headers_b)).json()
+    service._tasks["task-owned-by-a"]["user_id"] = user_a["id"]
+    service._tasks["task-unowned"] = {"task_id": "task-unowned", "status": "completed"}
+
+    assert user_a["id"] != user_b["id"]
+    denied = await client.get("/api/v1/scanners/tasks/task-owned-by-a", headers=headers_b)
+    assert denied.status_code == 404
+
+    unowned = await client.get("/api/v1/scanners/tasks/task-unowned", headers=headers_b)
+    assert unowned.status_code == 404
+
+    allowed = await client.get("/api/v1/scanners/tasks/task-owned-by-a", headers=headers_a)
+    assert allowed.status_code == 200
+    assert allowed.json()["task_id"] == "task-owned-by-a"

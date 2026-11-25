@@ -34,6 +34,7 @@ from app.services.research.promotion import (
     promotion_policy_material_hash,
     resolve_server_policy,
 )
+from app.utils.invariants import require_present
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,13 +200,12 @@ class HoldoutEvaluationWorker:
                     inspection=inspection,
                 )
             else:
-                assert inspection.result is not None
+                result = require_present(inspection.result, "holdout inspection result missing")
                 record = await self._journal.record_result(
                     user_id=user_id,
                     command=command,
-                    result=inspection.result,
+                    result=result,
                 )
-                result = inspection.result
 
         if record.state == "PREPARED":
             won = await self._journal.begin_dispatch(

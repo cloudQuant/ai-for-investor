@@ -225,3 +225,28 @@ async def test_stock_warehouse_does_not_substitute_recent_rows_outside_the_reque
     assert "STOCK_ZH_A_HIST_TX" not in queries[0]
     assert "STOCK_ZH_A_DAILY" not in queries[0]
     assert "LIMIT 120" not in queries[0]
+    assert "data_date BETWEEN :start AND :end" in queries[0]
+    assert "adjustment = :adjustment" in queries[0]
+
+
+@pytest.mark.asyncio
+async def test_fx_warehouse_falls_back_to_history_snapshot_when_spot_missing():
+    class FxHistoryOnlyService(MarketInstrumentService):
+        async def _fetch_one(self, *_args, **_kwargs):
+            return None
+
+        async def _fetch_rows(self, sql, *_args, **_kwargs):
+            if "CURRENCY_BOC_SAFE" in sql:
+                return [{"日期": "2026-06-18", "美元": 715.0, "欧元": 775.0}]
+            return []
+
+    payload = await FxHistoryOnlyService()._lookup_fx_warehouse(
+        symbol="EURUSD",
+        start_date="2026-06-01",
+        end_date="2026-06-19",
+        period="daily",
+        market="FX",
+        warnings=[],
+    )
+    assert payload["snapshot"]["price"] is not None
+    assert payload["snapshot"]["data_source_table"] == "CURRENCY_BOC_SAFE"

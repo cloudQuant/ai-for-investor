@@ -13,6 +13,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from app.utils.invariants import log_suppressed, require_present
+
 from .client import (
     PAPER_LEGACY_IMPORT_OPERATIONS,
     AccountBinding,
@@ -195,8 +197,8 @@ class SdkServiceReadSession:
             if cleanup_error is not None:
                 try:
                     error.__dict__["service_read_cleanup_error"] = cleanup_error
-                except Exception:
-                    pass
+                except Exception as dict_exc:
+                    log_suppressed(__name__, "Failed to attach cleanup error metadata", dict_exc)
             raise
 
     @staticmethod
@@ -215,11 +217,16 @@ class SdkServiceReadSession:
         if self._closed:
             raise ServiceReadUnavailableError("SERVICE_READ_CLOSED")
 
+    def _active_runtime(self) -> ServiceClientRuntime:
+        return require_present(self._runtime, "service-read runtime is not initialized")
+
+    def _active_read_client(self) -> AuthorizedServiceReadClient:
+        return require_present(self._read_client, "service-read client is not initialized")
+
     def _check_identity(self) -> None:
-        assert self._runtime is not None
         from bt_api_base.service_protocol import WireRole
 
-        actual = self._runtime.identity
+        actual = self._active_runtime().identity
         if actual != self._expected_identity or actual.role is not WireRole.APPLICATION_CLIENT:
             raise ServiceReadSessionError(
                 "SERVICE_READ_IDENTITY_MISMATCH",
@@ -342,8 +349,8 @@ class SdkServiceReadSession:
         return expected
 
     def _validate_registered_bindings(self) -> None:
-        assert self._runtime is not None
-        active = [binding for binding in self._runtime.bindings if self._active(binding)]
+        runtime = self._active_runtime()
+        active = [binding for binding in runtime.bindings if self._active(binding)]
         expected = self._expected_binding_specs()
         observed = [
             (binding.mount, binding.scope_ref, self._operations(binding)) for binding in active
@@ -596,10 +603,10 @@ class SdkServiceReadSession:
         )
 
     def _one_registered_binding(self, mount: str, scope_ref: str) -> Any:
-        assert self._runtime is not None
+        runtime = self._active_runtime()
         matches = [
             binding
-            for binding in self._runtime.bindings
+            for binding in runtime.bindings
             if self._active(binding) and binding.mount == mount and binding.scope_ref == scope_ref
         ]
         if len(matches) != 1:
@@ -609,19 +616,20 @@ class SdkServiceReadSession:
             )
         return matches[0]
 
-    def _validate_runtime(self) -> None:
-        assert self._runtime is not None
+    def _validate_runtime(self) -> ServiceClientRuntime:
+        runtime = self._active_runtime()
         self._check_identity()
-        if self._state_name(self._runtime) != "registered" or not self._runtime.healthy:
+        if self._state_name(runtime) != "registered" or not runtime.healthy:
             raise ServiceReadSessionError(
                 "SERVICE_READ_RUNTIME_UNHEALTHY",
                 "service runtime is not registered and healthy",
             )
         self._validate_registered_bindings()
+        return runtime
 
     def _validate_account_scope(self, account_ref: str, configured: AccountBinding) -> None:
-        assert self._runtime is not None
-        view = self._runtime.account_binding_view(
+        runtime = self._active_runtime()
+        view = runtime.account_binding_view(
             configured.mount,
             account_ref,
             required_operations=frozenset({"account.snapshot", "account.head"}),
@@ -704,10 +712,10 @@ class SdkServiceReadSession:
                 "SERVICE_READ_ALREADY_STARTED",
                 "service-read runtime start may be attempted only once",
             )
-        assert self._runtime is not None
+        runtime = self._active_runtime()
         self._start_attempted = True
         self._check_identity()
-        self._runtime.start()
+        runtime.start()
         self._validate_runtime()
         self._started = True
 
@@ -719,8 +727,8 @@ class SdkServiceReadSession:
                 "SERVICE_READ_NOT_STARTED",
                 "service-read runtime must be started before maintenance",
             )
-        assert self._runtime is not None
-        self._runtime.maintain()
+        runtime = self._active_runtime()
+        runtime.maintain()
         self._validate_runtime()
 
     def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView:
@@ -736,8 +744,7 @@ class SdkServiceReadSession:
             raise ServiceReadUnavailableError("ACCOUNT_NOT_CONFIGURED")
         self._validate_runtime()
         self._validate_account_scope(account_ref, configured)
-        assert self._read_client is not None
-        return self._read_client.read_account(account_ref, currency=currency)
+        return self._active_read_client().read_account(account_ref, currency=currency)
 
     def read_gateway_health(self, account_ref: str) -> GatewayHealthView:
         """Read Gateway owner status and account facts as separate observations."""
@@ -752,17 +759,15 @@ class SdkServiceReadSession:
         configured = self._account_bindings.get(account_ref)
         if configured is None:
             raise ServiceReadUnavailableError("ACCOUNT_NOT_CONFIGURED")
-        self._validate_runtime()
+        runtime = self._validate_runtime()
         self._validate_account_scope(account_ref, configured)
-        assert self._runtime is not None
-        assert self._read_client is not None
-        head_reply = self._runtime.call(
+        head_reply = runtime.call(
             configured.mount,
             "account.head",
             {},
             scope_ref=configured.scope_ref,
         )
-        account_observation = self._read_client.read_account(account_ref)
+        account_observation = self._active_read_client().read_account(account_ref)
         return GatewayHealthView.from_replies(
             account_ref,
             head_reply,
@@ -781,8 +786,7 @@ class SdkServiceReadSession:
         if configured is None:
             raise ServiceReadUnavailableError("ORDER_SCOPE_NOT_CONFIGURED")
         self._validate_runtime()
-        assert self._read_client is not None
-        return self._read_client.read_order(scope_ref, intent_id)
+        return self._active_read_client().read_order(scope_ref, intent_id)
 
     def submit_manual_order(
         self, scope_ref: str, arguments: Mapping[str, Any]
@@ -805,9 +809,8 @@ class SdkServiceReadSession:
             or set(arguments) != self._MANUAL_SUBMIT_ARGUMENTS
         ):
             raise ServiceReadUnavailableError("INVALID_ORDER_SUBMIT_ARGUMENTS")
-        self._validate_runtime()
-        assert self._runtime is not None
-        return self._runtime.call(
+        runtime = self._validate_runtime()
+        return runtime.call(
             configured.mount,
             "orders.submit",
             dict(arguments),
@@ -833,9 +836,8 @@ class SdkServiceReadSession:
             or set(arguments) != self._PAPER_SUBMIT_ARGUMENTS
         ):
             raise ServiceReadUnavailableError("INVALID_PAPER_SUBMIT_ARGUMENTS")
-        self._validate_runtime()
-        assert self._runtime is not None
-        return self._runtime.call(
+        runtime = self._validate_runtime()
+        return runtime.call(
             configured.mount,
             "orders.submit",
             dict(arguments),
@@ -863,9 +865,8 @@ class SdkServiceReadSession:
             or set(arguments) != {"approval_ref", "approval_version", "target_sha256", "intent_id"}
         ):
             raise ServiceReadUnavailableError("INVALID_APPROVED_TARGET_ARGUMENTS")
-        self._validate_runtime()
-        assert self._runtime is not None
-        return self._runtime.call(
+        runtime = self._validate_runtime()
+        return runtime.call(
             configured.mount,
             "orders.submit_approved_target",
             dict(arguments),
@@ -884,8 +885,7 @@ class SdkServiceReadSession:
         if configured is None:
             raise ServiceReadUnavailableError("ACCOUNT_BOOK_NOT_CONFIGURED")
         self._validate_runtime()
-        assert self._read_client is not None
-        return self._read_client.read_account_book(account_ref)
+        return self._active_read_client().read_account_book(account_ref)
 
     def upload_portfolio_analytics_input(
         self, scope_ref: str, input_snapshot_id: str, facts: dict[str, Any]
@@ -958,11 +958,8 @@ class SdkServiceReadSession:
         )
         if configured is None:
             raise ServiceReadUnavailableError("PORTFOLIO_ANALYTICS_NOT_CONFIGURED")
-        self._validate_runtime()
-        assert self._runtime is not None
-        reply = self._runtime.call(
-            configured.mount, operation, arguments, scope_ref=configured.scope_ref
-        )
+        runtime = self._validate_runtime()
+        reply = runtime.call(configured.mount, operation, arguments, scope_ref=configured.scope_ref)
         if not isinstance(reply, Mapping):
             raise ServiceReadUnavailableError("INVALID_ANALYTICS_REPLY")
         # SDK wire replies are recursively frozen as MappingProxyType/tuples.
@@ -1065,10 +1062,9 @@ class SdkServiceReadSession:
                 raise ServiceReadUnavailableError("RISK_POLICY_BUDGET_MEMBER_NOT_CONFIGURED")
             scope_ref = binding.management_scope_ref
 
-        self._validate_runtime()
-        assert self._runtime is not None
+        runtime = self._validate_runtime()
         reply = _thaw_json(
-            self._runtime.call(
+            runtime.call(
                 binding.mount,
                 operation,
                 dict(arguments),
@@ -1116,10 +1112,9 @@ class SdkServiceReadSession:
         required = expected_arguments.get(operation)
         if required is None or set(arguments) != required:
             raise ServiceReadUnavailableError("INVALID_RISK_ACCOUNT_POLICY_ARGUMENTS")
-        self._validate_runtime()
-        assert self._runtime is not None
+        runtime = self._validate_runtime()
         reply = _thaw_json(
-            self._runtime.call(
+            runtime.call(
                 binding.mount,
                 operation,
                 dict(arguments),
@@ -1199,13 +1194,12 @@ class SdkServiceReadSession:
             ):
                 raise ServiceReadUnavailableError("INVALID_PAPER_LEGACY_IMPORT_ARGUMENTS")
 
-        self._validate_runtime()
-        assert self._runtime is not None
+        runtime = self._validate_runtime()
         try:
             from bt_api_py.service_paper_legacy_import_client import PaperLegacyImportClient
 
             client = PaperLegacyImportClient(
-                self._runtime,
+                runtime,
                 account_ref=configured.paper_binding.account_ref,
                 scope_ref=configured.scope_ref,
             )
@@ -1216,8 +1210,7 @@ class SdkServiceReadSession:
         elif operation == "paper.import.inspect_source":
             reply = client.inspect_source(configured.legacy_account_id)
         elif operation == "paper.import.prepare":
-            assert imported is not None
-            reply = client.prepare(imported)
+            reply = client.prepare(require_present(imported, "imported payload missing"))
         elif operation == "paper.import.activate":
             reply = client.activate()
         else:
@@ -1240,8 +1233,7 @@ class SdkServiceReadSession:
         if configured is None:
             raise ServiceReadUnavailableError("MONITOR_SCOPE_NOT_CONFIGURED")
         self._validate_runtime()
-        assert self._read_client is not None
-        return self._read_client.read_strategy_health(scope_ref)
+        return self._active_read_client().read_strategy_health(scope_ref)
 
     def _close_runtime_after_constructor_failure(self, runtime: Any) -> BaseException | None:
         try:

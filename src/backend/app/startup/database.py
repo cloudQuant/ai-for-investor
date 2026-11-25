@@ -2,7 +2,9 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app.db.database import ensure_database_ready
+from app.db.akshare_data_database import dispose_akshare_data_engine
+from app.db.cache import close_cache
+from app.db.database import dispose_all_engines, ensure_database_ready
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -26,3 +28,10 @@ async def register(app: FastAPI, settings: Any) -> None:
 
     cache_type = "Redis" if settings.REDIS_URL else "Memory"
     startup_logger.info(f"Cache backend: {cache_type}")
+
+
+async def shutdown(app: FastAPI, settings: Any) -> None:
+    del app, settings
+    await dispose_all_engines()
+    await dispose_akshare_data_engine()
+    await close_cache()

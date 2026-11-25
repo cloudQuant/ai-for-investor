@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from app.config import get_settings
-from app.services.gateway.launch_builder import build_gateway_session_key_from_runtime_kwargs
+from app.services.gateway import launch_builder as _glb
+from app.utils.invariants import log_suppressed
 
 _LIVE_SUBPROCESS_THREAD_DEFAULTS = {
     "BACKTRADER_LIGHT_IMPORT": "1",
@@ -141,7 +142,7 @@ def _resolve_gateway_state_session_key(state: dict[str, Any]) -> str:
         if not isinstance(config, dict)
         else config.get("ws_uri", ""),
     }
-    resolved = build_gateway_session_key_from_runtime_kwargs(runtime_kwargs)
+    resolved = _glb.build_gateway_session_key_from_runtime_kwargs(runtime_kwargs)
     if resolved:
         state["session_key"] = resolved
     return resolved
@@ -185,7 +186,7 @@ def _refresh_ib_web_session_for_launch(launch: dict[str, Any], logger: Any) -> N
     base_url = manual_gateway_service._normalize_ib_web_base_url(
         str(credentials.get("base_url") or "https://localhost:5000")
     )
-    verify_ssl = bool(credentials.get("verify_ssl", False))
+    verify_ssl = _glb.resolve_ib_web_verify_ssl(credentials.get("verify_ssl"))
     timeout = float(credentials.get("timeout") or 10.0)
     manual_gateway_service._ensure_ib_clientportal_running(
         base_url,
@@ -440,8 +441,8 @@ def _runtime_spec_for_symbol(
     aliases = [symbol]
     try:
         aliases.extend(symbol_aliases(symbol))
-    except Exception:
-        pass
+    except Exception as exc:
+        log_suppressed(__name__, "symbol_aliases lookup", exc)
     aliases = [str(alias or "").strip() for alias in aliases if str(alias or "").strip()]
     compact_aliases = {"".join(ch for ch in alias if ch.isalnum()).upper() for alias in aliases}
     for alias in aliases:
@@ -872,7 +873,7 @@ def acquire_gateway_for_instance(
         return None
     runtime_kwargs = launch["runtime_kwargs"]
     key = launch["config"].runtime_name
-    session_key = build_gateway_session_key_from_runtime_kwargs(runtime_kwargs)
+    session_key = _glb.build_gateway_session_key_from_runtime_kwargs(runtime_kwargs)
     state = gateways.get(key)
     if state is None:
         matched_key = _find_gateway_key_by_session_key(gateways, session_key)
@@ -885,7 +886,7 @@ def acquire_gateway_for_instance(
         _refresh_ib_web_session_for_launch(launch, logger)
         runtime_kwargs = launch["runtime_kwargs"]
         key = launch["config"].runtime_name
-        session_key = build_gateway_session_key_from_runtime_kwargs(runtime_kwargs)
+        session_key = _glb.build_gateway_session_key_from_runtime_kwargs(runtime_kwargs)
         state = gateways.get(key)
         if state is None:
             matched_key = _find_gateway_key_by_session_key(gateways, session_key)

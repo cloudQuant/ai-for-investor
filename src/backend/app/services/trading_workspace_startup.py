@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from app.models.workspace import StrategyUnit
+from app.utils.invariants import require_instance, require_present
 
 if TYPE_CHECKING:
     from app.services.live_trading.manager import LiveTradingManager
@@ -169,16 +170,14 @@ async def start_units(
                     require_runtime_snapshot=False,
                 ):
                     raise ValueError("AI_RESEARCH_PAPER_RUNTIME_PROVENANCE_INVALID")
-                assert isinstance(paper_runtime_anchor, dict)
-                expected_runtime_digest = paper_runtime_anchor.get("runtime_digest")
+                verified_anchor = require_instance(paper_runtime_anchor, dict)
+                expected_runtime_digest = verified_anchor.get("runtime_digest")
                 refreshed_anchor = issue_ai_research_paper_runtime_anchor(
                     user_id=user_id,
-                    research_workspace_id=str(
-                        paper_runtime_anchor.get("research_workspace_id") or ""
-                    ),
+                    research_workspace_id=str(verified_anchor.get("research_workspace_id") or ""),
                     paper_workspace_id=str(unit.workspace_id),
                     paper_unit_id=str(unit.id),
-                    run_id=str(paper_runtime_anchor.get("run_id") or ""),
+                    run_id=str(verified_anchor.get("run_id") or ""),
                     unit=unit,
                     workspace_settings=normalized_workspace_settings,
                     include_runtime_snapshot=True,
@@ -280,13 +279,16 @@ async def start_units(
                     )
                 await asyncio.to_thread(_clear_runtime_logs_before_start, runtime_dir)
                 if server_attested_paper_runtime:
-                    assert server_attested_paper_runtime_digest is not None
                     manager.attest_paper_runtime_start(
                         str(unit.trading_instance_id),
-                        server_attested_paper_runtime_digest,
+                        require_present(
+                            server_attested_paper_runtime_digest, "paper runtime digest missing"
+                        ),
                     )
                 if server_attested_live_handoff:
-                    assert live_handoff_activation_token is not None
+                    live_handoff_token = require_present(
+                        live_handoff_activation_token, "live handoff activation token missing"
+                    )
                     if live_handoff_pre_start_validator is None:
                         raise ValueError("AI_RESEARCH_LIVE_HANDOFF_SERVER_ACTIVATION_REQUIRED")
                     # Run this after isolated runtime materialization and
@@ -298,7 +300,7 @@ async def start_units(
                     await live_handoff_pre_start_validator()
                     manager.attest_live_handoff_runtime_start(
                         str(unit.trading_instance_id),
-                        live_handoff_activation_token,
+                        live_handoff_token,
                     )
                 try:
                     start_instance_kwargs: dict[str, Any] = {}

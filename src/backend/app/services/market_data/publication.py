@@ -579,11 +579,10 @@ class MarketDataPublicationManager:
             # is application code and must not be allowed to invalidate the
             # state that this publication transaction is about to seal.
             await pre_publish_guard()
-            current_transaction = self._db.get_transaction()
+            current_sync_tx = self._db.sync_session.get_transaction()
             if (
-                current_transaction is None
-                or current_transaction.sync_transaction
-                is not publication_transaction.sync_transaction
+                current_sync_tx is None
+                or current_sync_tx is not publication_transaction.sync_transaction
                 or not publication_transaction.is_active
             ):
                 raise MarketDataPublicationError("PUBLICATION_DEFERRED_GUARD_TRANSACTION_LOST")

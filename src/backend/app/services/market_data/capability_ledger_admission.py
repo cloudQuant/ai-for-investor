@@ -56,6 +56,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -277,7 +278,16 @@ def _window_is_free(
     )
 
 
-_WRITE_LOCK = asyncio.Lock()
+_WRITE_LOCKS: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = WeakKeyDictionary()
+
+
+def _get_write_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _WRITE_LOCKS.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _WRITE_LOCKS[loop] = lock
+    return lock
 
 
 async def record_admission_observations(
@@ -337,10 +347,15 @@ async def _record_admission_observations(
     recorded: list[str] = []
     skipped: list[str] = []
     pending: list[MdCapabilityLedgerEntry] = []
+    bind = getattr(db, "bind", None)
+    write_session: AsyncSession | None = (
+        AsyncSession(bind=bind, expire_on_commit=False) if bind is not None else None
+    )
+    target_db = write_session if write_session is not None else db
     try:
-        async with _WRITE_LOCK:
+        async with _get_write_lock():
             existing = await _existing_rows(
-                db, [observation.capability_id for observation in observations]
+                target_db, [observation.capability_id for observation in observations]
             )
             for observation in observations:
                 entries = existing.get(observation.capability_id, ())
@@ -375,19 +390,21 @@ async def _record_admission_observations(
                     recorded_capability_ids=(),
                     skipped_capability_ids=tuple(skipped),
                 )
-            db.add_all(pending)
-            # The durable observation must survive the handler's own refusal:
-            # ``get_db`` never commits a session that ends in an HTTPException.
-            await db.commit()
+            if write_session is not None:
+                write_session.add_all(pending)
+                await write_session.commit()
+            else:
+                async with db.begin_nested():
+                    db.add_all(pending)
         recorded = [str(entry.capability_id) for entry in pending]
     except IntegrityError:
-        # Another worker appended the same pre-image first; the unique
-        # (capability_id, revision) key is the idempotency tiebreak.
-        await _safe_rollback(db)
+        if write_session is not None:
+            await _safe_rollback(write_session)
         skipped = sorted({*skipped, *(str(entry.capability_id) for entry in pending)})
         recorded = []
     except SQLAlchemyError as exc:
-        await _safe_rollback(db)
+        if write_session is not None:
+            await _safe_rollback(write_session)
         logger.warning(
             "market-data capability admission observation skipped: %s",
             type(exc).__name__,
@@ -398,6 +415,9 @@ async def _record_admission_observations(
                 [observation.capability_id for observation in observations]
             ),
         )
+    finally:
+        if write_session is not None:
+            await write_session.close()
     return AdmissionObservationResult(
         recorded_capability_ids=tuple(recorded),
         skipped_capability_ids=tuple(skipped),

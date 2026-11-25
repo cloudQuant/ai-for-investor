@@ -44,14 +44,17 @@ async def shutdown(app: FastAPI, settings: Any) -> None:
     startup_logger = _get_logger(app)
     try:
         from app.services.backtest.manager import BacktestExecutionManager
+        from app.services.backtest.runner import get_default_backtest_runner
         from app.services.stock_analysis.tasks import StockAnalysisTaskService
 
+        cancelled_local = get_default_backtest_runner().cancel_all()
         mgr = BacktestExecutionManager()
         interrupted_backtests = await mgr.interrupt_active_tasks()
         interrupted_stock_analysis = await StockAnalysisTaskService.interrupt_active_tasks()
-        if interrupted_backtests or interrupted_stock_analysis:
+        if cancelled_local or interrupted_backtests or interrupted_stock_analysis:
             startup_logger.warning(
-                "Interrupted active tasks during shutdown: backtest_tasks=%s, stock_analysis_tasks=%s",
+                "Interrupted active tasks during shutdown: cancelled_local=%s, backtest_tasks=%s, stock_analysis_tasks=%s",
+                cancelled_local,
                 interrupted_backtests,
                 interrupted_stock_analysis,
             )

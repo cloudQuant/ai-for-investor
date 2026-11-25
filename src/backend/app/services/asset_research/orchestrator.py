@@ -671,49 +671,55 @@ class AssetResearchOrchestrator:
         self, *, limit: int = 100
     ) -> list[AssetScheduleManifest]:
         """List auditable manifest versions, never reconstructing a universe."""
-        return list(
-            (
-                await self.db.execute(
-                    select(AssetScheduleManifest)
-                    .order_by(
-                        desc(AssetScheduleManifest.approved_at),
-                        desc(AssetScheduleManifest.id),
-                    )
-                    .limit(max(1, min(limit, 100)))
-                )
-            ).scalars()
+        stmt = (
+            select(AssetScheduleManifest)
+            .order_by(desc(AssetScheduleManifest.approved_at), desc(AssetScheduleManifest.id))
+            .limit(max(1, min(limit, 100)))
         )
+        return list((await self.db.execute(stmt)).scalars())
 
     async def schedule_manifest_payload(
         self, manifest: AssetScheduleManifest
     ) -> ApprovedScheduleManifestResponse:
         """Serialize control-plane metadata and its explicitly persisted schedules."""
-        schedules = list(
-            (
-                await self.db.execute(
-                    select(AssetSignalSchedule)
-                    .where(AssetSignalSchedule.approved_manifest_id == manifest.id)
-                    .order_by(AssetSignalSchedule.manifest_entry_key, AssetSignalSchedule.id)
-                )
-            ).scalars()
+        return (await self.schedule_manifest_payloads([manifest]))[0]
+
+    async def schedule_manifest_payloads(
+        self, manifests: list[AssetScheduleManifest]
+    ) -> list[ApprovedScheduleManifestResponse]:
+        """Batch-serialize manifests with a single schedule query to avoid N+1 queries."""
+        manifest_ids = [manifest.id for manifest in manifests]
+        if not manifest_ids:
+            return []
+        schedules_stmt = (
+            select(AssetSignalSchedule)
+            .where(AssetSignalSchedule.approved_manifest_id.in_(manifest_ids))
+            .order_by(AssetSignalSchedule.manifest_entry_key, AssetSignalSchedule.id)
         )
-        return ApprovedScheduleManifestResponse(
-            manifest_id=manifest.id,
-            manifest_key=manifest.manifest_key,
-            manifest_version=manifest.manifest_version,
-            owner_scope=manifest.owner_scope,
-            approval_reference=manifest.approval_reference,
-            evidence_uri=manifest.evidence_uri,
-            evidence_content_hash=manifest.evidence_content_hash,
-            content_hash=manifest.content_hash,
-            approved_by=manifest.approved_by,
-            approved_at=manifest.approved_at,
-            status=manifest.status,
-            retired_by=manifest.retired_by,
-            retired_at=manifest.retired_at,
-            retirement_reason_codes=list(manifest.retirement_reason_codes_json or []),
-            schedules=[self.schedule_payload(schedule) for schedule in schedules],
-        )
+        grouped: dict[str, list[AssetSignalSchedule]] = {}
+        for schedule in (await self.db.execute(schedules_stmt)).scalars():
+            if schedule.approved_manifest_id:
+                grouped.setdefault(schedule.approved_manifest_id, []).append(schedule)
+        return [
+            ApprovedScheduleManifestResponse(
+                manifest_id=manifest.id,
+                manifest_key=manifest.manifest_key,
+                manifest_version=manifest.manifest_version,
+                owner_scope=manifest.owner_scope,
+                approval_reference=manifest.approval_reference,
+                evidence_uri=manifest.evidence_uri,
+                evidence_content_hash=manifest.evidence_content_hash,
+                content_hash=manifest.content_hash,
+                approved_by=manifest.approved_by,
+                approved_at=manifest.approved_at,
+                status=manifest.status,
+                retired_by=manifest.retired_by,
+                retired_at=manifest.retired_at,
+                retirement_reason_codes=list(manifest.retirement_reason_codes_json or []),
+                schedules=[self.schedule_payload(s) for s in grouped.get(manifest.id, [])],
+            )
+            for manifest in manifests
+        ]
 
     async def update_schedule(
         self,

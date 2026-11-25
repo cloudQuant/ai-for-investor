@@ -5,7 +5,9 @@ Supports MySQL storage with automatic table creation
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 import os
 import queue
 import threading
@@ -23,6 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.data_fetch.core.database import resolve_batch_affected_rows
 
 settings = get_settings()
 
@@ -68,21 +71,27 @@ class _AkshareConnectionPool(Protocol):
     def connection(self) -> object: ...
 
 
-_connection_pool: _AkshareConnectionPool | None = None
+_connection_pools: dict[tuple[tuple[str, Any], ...], _AkshareConnectionPool] = {}
 _pool_lock = threading.Lock()
 
 
+def _pool_cache_key(db_config: _MySQLConnectionOptions) -> tuple[tuple[str, Any], ...]:
+    return tuple(sorted(db_config.items()))
+
+
 def _get_connection_pool(db_config: _MySQLConnectionOptions) -> _AkshareConnectionPool | None:
-    global _connection_pool
-    if _connection_pool is not None:
-        return _connection_pool
+    cache_key = _pool_cache_key(db_config)
+    cached_pool = _connection_pools.get(cache_key)
+    if cached_pool is not None:
+        return cached_pool
     with _pool_lock:
-        if _connection_pool is not None:
-            return _connection_pool
+        cached_pool = _connection_pools.get(cache_key)
+        if cached_pool is not None:
+            return cached_pool
         try:
             from dbutils.pooled_db import PooledDB
 
-            _connection_pool = PooledDB(
+            created_pool = PooledDB(
                 creator=pymysql,
                 maxconnections=10,
                 mincached=2,
@@ -90,14 +99,15 @@ def _get_connection_pool(db_config: _MySQLConnectionOptions) -> _AkshareConnecti
                 blocking=True,
                 **db_config,
             )
+            _connection_pools[cache_key] = created_pool
             _default_logger.info("MySQL connection pool created (DBUtils)")
+            return created_pool
         except ImportError:
             _default_logger.warning(
                 "DBUtils not installed, falling back to direct connections. "
                 "Install with: pip install DBUtils"
             )
-            _connection_pool = None
-        return _connection_pool
+            return None
 
 
 class FuncThread(threading.Thread):
@@ -185,12 +195,18 @@ class AkshareProvider:
             raise
 
     def disconnect_db(self) -> None:
-        if self.cursor is not None:
-            self.cursor.close()
+        cursor = self.cursor
+        try:
+            if cursor is not None:
+                cursor.close()
+        finally:
             self.cursor = None
-        if self.connection is not None:
-            self.connection.close()
-            self.connection = None
+            connection = self.connection
+            try:
+                if connection is not None:
+                    connection.close()
+            finally:
+                self.connection = None
 
     def _require_connection(self) -> _AkshareConnection:
         connection = self.connection
@@ -292,12 +308,10 @@ class AkshareProvider:
         """
         try:
             cursor = self._require_cursor()
+            connection = self._require_connection()
             cursor.executemany(insert_sql, batch)
-            self._require_connection().commit()
-            reported = getattr(cursor, "rowcount", -1)
-            if not isinstance(reported, int) or reported < 0:
-                return len(batch)
-            return min(reported, len(batch))
+            connection.commit()
+            return resolve_batch_affected_rows(insert_sql, len(batch), cursor, connection)
         except pymysql.Error as err:
             self._require_connection().rollback()
             self.logger.error(f"批量执行失败: {err}")
@@ -374,7 +388,8 @@ class AkshareProvider:
         if not column_mapping:
             self.logger.warning(f"表 {table_name} 无可写入的有效列")
             return None
-        return df.rename(columns=column_mapping).copy()
+        kept_columns = [col for col in df.columns if str(col) in column_mapping]
+        return df.loc[:, kept_columns].rename(columns=column_mapping).copy()
 
     def _build_insert_sql(
         self,
@@ -402,6 +417,22 @@ class AkshareProvider:
             return insert_sql
         return f"INSERT INTO `{safe_table}` ({cols_str}) VALUES ({placeholders})"
 
+    @staticmethod
+    def _coerce_mysql_value(value: Any) -> Any:
+        """Normalize non-finite floats and nested containers for PyMySQL binding."""
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(value, pd.Timestamp):
+            return value.to_pydatetime()
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        if isinstance(value, (dict, list, tuple, set)):
+            return json.dumps(value, ensure_ascii=False, default=str)
+        return value
+
     def save_data(
         self,
         df: pd.DataFrame,
@@ -420,33 +451,35 @@ class AkshareProvider:
             return False
         df = normalized_df
 
-        self.connect_db()
-        safe_table = self._validate_identifier(table_name)
-
-        if create_table:
-            try:
-                cursor = self._require_cursor()
-                cursor.execute("SHOW TABLES LIKE %s", (safe_table,))
-                if not cursor.fetchone():
-                    self._auto_create_table(safe_table, df)
-            except pymysql.Error as err:
-                self.logger.warning(f"检查表是否存在时出错: {err}")
-
-        aligned_df = self._align_df_to_table(df, safe_table, table_name)
-        if aligned_df is None:
-            return False
-        df = aligned_df
-
-        cols = [str(col) for col in df.columns]
-        insert_sql = self._build_insert_sql(
-            safe_table, cols, on_duplicate_update, unique_keys, ignore_duplicates
-        )
-
-        df = df.astype(object).where(pd.notnull(df), None)
-        values = df.values.tolist()
-        total_rows = len(values)
-
         try:
+            self.connect_db()
+            safe_table = self._validate_identifier(table_name)
+
+            if create_table:
+                try:
+                    cursor = self._require_cursor()
+                    cursor.execute("SHOW TABLES LIKE %s", (safe_table,))
+                    if not cursor.fetchone():
+                        self._auto_create_table(safe_table, df)
+                except pymysql.Error as err:
+                    self.logger.warning(f"检查表是否存在时出错: {err}")
+
+            aligned_df = self._align_df_to_table(df, safe_table, table_name)
+            if aligned_df is None:
+                return False
+            df = aligned_df
+
+            cols = [str(col) for col in df.columns]
+            insert_sql = self._build_insert_sql(
+                safe_table, cols, on_duplicate_update, unique_keys, ignore_duplicates
+            )
+
+            df = df.astype(object).where(pd.notnull(df), None)
+            values = [
+                [self._coerce_mysql_value(cell) for cell in row] for row in df.values.tolist()
+            ]
+            total_rows = len(values)
+
             start_time = datetime.now()
             processed = 0
             affected = 0

@@ -1745,11 +1745,11 @@ def test_stock_zh_a_hist_upserts_by_symbol_date_without_date_wide_delete(monkeyp
     assert saved["table"] == "STOCK_ZH_A_HIST"
     assert saved["kwargs"] == {
         "on_duplicate_update": True,
-        "unique_keys": ["symbol", "data_date", "adjustment"],
+        "unique_keys": ["symbol", "data_date", "adjustment", "source"],
     }
     # The row's observation series must be explicit: the table's unique key is
-    # (symbol, data_date, adjustment), and unstamped rows fall back to the
-    # legacy column defaults, which silently collide with the legacy series.
+    # (symbol, data_date, adjustment, source), so different sources/bases do not
+    # collide with legacy or alternate series.
     assert saved["df"]["source"].tolist() == ["eastmoney", "eastmoney"]
     assert saved["df"]["adjustment"].tolist() == ["qfq", "qfq"]
 
@@ -1789,6 +1789,133 @@ def test_stock_zh_a_hist_can_fetch_directly_from_tencent(monkeypatch):
     assert calls[0][1]["symbol"] == "sz000002"
     assert result["symbol"].tolist() == ["000002"]
     assert saved["df"]["data_date"].tolist() == ["2026-06-19"]
+
+
+@pytest.mark.parametrize(
+    ("adjust_arg", "expected_upstream", "expected_label"),
+    [
+        ("", "", "none"),
+        ("none", "", "none"),
+        ("qfq", "qfq", "qfq"),
+        ("hfq", "hfq", "hfq"),
+    ],
+)
+def test_stock_zh_a_hist_preserves_explicit_adjustment_basis(
+    monkeypatch, adjust_arg, expected_upstream, expected_label
+):
+    script = StockZhAHist()
+    seen = {}
+
+    def fake_fetch(name, **kwargs):
+        seen["fetch_kwargs"] = kwargs
+        return pd.DataFrame(
+            {
+                "日期": ["2026-06-19"],
+                "开盘": [10.0],
+                "收盘": [10.1],
+                "最高": [10.2],
+                "最低": [9.9],
+                "成交量": [100],
+            }
+        )
+
+    monkeypatch.setattr(script, "fetch_ak_data", fake_fetch)
+    monkeypatch.setattr(script, "create_table_if_not_exists", lambda *a, **k: None)
+    monkeypatch.setattr(
+        script,
+        "save_data",
+        lambda df, table, **kwargs: seen.update(df=df.copy(), save_kwargs=kwargs) or len(df),
+    )
+
+    script.fetch_data(
+        symbol="000001", start_date="20260601", end_date="20260630", adjust=adjust_arg
+    )
+
+    assert seen["fetch_kwargs"]["adjust"] == expected_upstream
+    assert seen["df"]["adjustment"].tolist() == [expected_label]
+    assert seen["save_kwargs"]["unique_keys"] == ["symbol", "data_date", "adjustment", "source"]
+
+
+def test_stock_zh_a_hist_tencent_source_does_not_retry_or_fallback(monkeypatch):
+    script = StockZhAHist()
+    calls = []
+
+    def fake_fetch(name, **kwargs):
+        calls.append(name)
+        return pd.DataFrame()
+
+    monkeypatch.setattr(script, "fetch_ak_data", fake_fetch)
+    monkeypatch.setattr(
+        script,
+        "_fetch_daily_from_trends",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("tencent must not fall back to trends2")
+        ),
+    )
+
+    result = script.fetch_data(
+        symbol="000001", start_date="20260601", end_date="20260630", source="tencent"
+    )
+
+    assert calls == ["stock_zh_a_hist_tx"]
+    assert result.empty
+
+
+def test_stock_zh_a_hist_trends_fallback_and_schema_and_db_error_propagation(monkeypatch):
+    script = StockZhAHist()
+    assert "`source`" in script.create_table_sql
+    assert "`adjustment`" in script.create_table_sql
+    assert "uk_symbol_date_adjustment_source" in script.create_table_sql
+
+    saved = {}
+    monkeypatch.setattr(script, "fetch_ak_data", lambda *a, **k: pd.DataFrame())
+    monkeypatch.setattr(
+        script,
+        "_fetch_daily_from_trends",
+        lambda **kwargs: pd.DataFrame(
+            {
+                "日期": ["2026-06-19", "not-a-date"],
+                "开盘": [10.0, 10.1],
+                "收盘": [10.2, 10.3],
+            }
+        ),
+    )
+    monkeypatch.setattr(script, "create_table_if_not_exists", lambda *a, **k: None)
+    monkeypatch.setattr(
+        script,
+        "save_data",
+        lambda df, table, **kwargs: saved.update(df=df.copy()) or len(df),
+    )
+
+    result = script.fetch_data(symbol="000001", adjust="qfq")
+    assert len(result) == 1
+    assert saved["df"]["source"].tolist() == ["eastmoney_trends"]
+    assert saved["df"]["adjustment"].tolist() == ["none"]
+
+    # Empty after dropna(日期) must return safely without crashing or saving
+    monkeypatch.setattr(
+        script, "_fetch_daily_from_trends", lambda **k: pd.DataFrame({"日期": ["bad"]})
+    )
+    monkeypatch.setattr(
+        script,
+        "save_data",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not save empty rows")),
+    )
+    assert script.fetch_data(symbol="000001").empty
+
+    # DB persistence failures must propagate rather than being masked as empty DataFrame
+    monkeypatch.setattr(
+        script,
+        "fetch_ak_data",
+        lambda *a, **k: pd.DataFrame({"日期": ["2026-06-19"], "开盘": [10.0]}),
+    )
+    monkeypatch.setattr(
+        script,
+        "save_data",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mysql write failure")),
+    )
+    with pytest.raises(RuntimeError, match="mysql write failure"):
+        script.fetch_data(symbol="000001")
 
 
 def test_futures_daily_market_falls_back_to_sina_dce_main_contracts(monkeypatch):

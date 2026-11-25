@@ -8,6 +8,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.utils.invariants import require_present
+
 _LiteLLMCompletion = Callable[..., Awaitable[Any] | Any]
 _URLOpen = Callable[..., Any]
 
@@ -89,7 +91,9 @@ class AIChatRouter:
         timeout: float,
         max_tokens: int | None,
     ) -> ChatCompletionResponse:
-        assert self._litellm_completion is not None
+        completion = require_present(
+            self._litellm_completion, "litellm completion client not configured"
+        )
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -102,7 +106,7 @@ class AIChatRouter:
             kwargs["api_key"] = api_key
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
-        response = self._litellm_completion(**kwargs)
+        response = completion(**kwargs)
         if inspect.isawaitable(response):
             response = await response
         return _parse_chat_response(response, fallback_model=model, provider="litellm")

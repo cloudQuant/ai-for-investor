@@ -210,4 +210,20 @@ describe('NewsIntelligencePage', () => {
     })
     expect(apiMocks.listArticles).toHaveBeenCalled()
   })
+
+  it('blocks non-http/https schemes when opening article links', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const wrapper = mountWithPlugins(NewsIntelligencePage)
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.openArticle({ url: 'javascript:alert(1)' })
+    vm.openArticle({ url: 'data:text/html,<script>alert(1)</script>' })
+    vm.openArticle({ url: '   ' })
+    expect(openSpy).not.toHaveBeenCalled()
+
+    vm.openArticle({ url: 'https://example.com/news/1' })
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/news/1', '_blank', 'noopener,noreferrer')
+    openSpy.mockRestore()
+  })
 })

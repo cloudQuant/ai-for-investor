@@ -15,10 +15,15 @@ class WSGatewayMetrics:
 
 class WSGateway:
     def __init__(
-        self, *, token_validator: Callable[[str], bool], heartbeat_timeout_ms: int = 30_000
+        self,
+        *,
+        token_validator: Callable[[str], bool],
+        heartbeat_timeout_ms: int = 30_000,
+        max_messages: int = 2000,
     ) -> None:
         self.token_validator = token_validator
         self.heartbeat_timeout_ms = heartbeat_timeout_ms
+        self.max_messages = max(int(max_messages), 0)
         self._connections: dict[str, float] = {}
         self._subscriptions: dict[str, list[str]] = {}
         self._messages: list[tuple[str, str, Any]] = []
@@ -47,6 +52,10 @@ class WSGateway:
                 self._messages.append((client_id, topic, payload))
                 delivered += 1
                 self.touch(client_id)
+        if self.max_messages == 0:
+            self._messages.clear()
+        elif len(self._messages) > self.max_messages:
+            del self._messages[: len(self._messages) - self.max_messages]
         return delivered
 
     def pop_messages(self, client_id: str) -> list[tuple[str, Any]]:
@@ -72,6 +81,9 @@ class WSGateway:
                 closed.append(client_id)
                 self._connections.pop(client_id, None)
                 self._subscriptions.pop(client_id, None)
+        if closed:
+            closed_set = set(closed)
+            self._messages = [item for item in self._messages if item[0] not in closed_set]
         return closed
 
     def metrics(self) -> WSGatewayMetrics:

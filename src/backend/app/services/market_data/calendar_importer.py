@@ -28,6 +28,7 @@ from app.services.market_data.publication import (
     MarketDataPublicationError,
     MarketDataPublicationManager,
 )
+from app.utils.invariants import require_present
 
 UTC = timezone.utc
 MANIFEST_VERSION: Literal["market-data-calendar-v1"] = "market-data-calendar-v1"
@@ -196,12 +197,12 @@ class MarketDataCalendarManifest(_StrictModel):
                 ):
                     raise ValueError("calendar event timestamp is outside advertised coverage")
             if event.is_trading_day and event.event_type == "session":
-                assert event.event_start is not None
-                assert event.coverage is not None
+                event_start = require_present(event.event_start, "calendar session start missing")
+                coverage = require_present(event.coverage, "calendar session coverage missing")
                 coverage_key = (
-                    event.coverage.data_kind,
-                    event.coverage.frequency,
-                    event.event_start,
+                    coverage.data_kind,
+                    coverage.frequency,
+                    event_start,
                 )
                 if coverage_key in coverage_event_starts:
                     raise ValueError("calendar manifest contains duplicate coverage event key")
