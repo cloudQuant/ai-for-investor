@@ -4,417 +4,43 @@
       to="#page-header-actions"
       :disabled="!props.toolbarInHeader || !props.active"
     >
-      <div
-        class="flex items-center justify-between flex-wrap gap-2"
+      <ResearchUnitActionsBar
+        :compact="true"
         :class="props.toolbarInHeader && props.active ? 'mb-0' : 'mb-4'"
-      >
-        <div class="flex items-center gap-2 flex-wrap">
-          <!-- Group 1: Run operations -->
-          <el-button-group>
-            <el-tooltip
-              :content="t('units.runSerial')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection || store.running"
-                size="small"
-                @click="handleRunSelected(false)"
-              >
-                <el-icon aria-hidden="true">
-                  <VideoPlay />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.runParallel')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection || store.running"
-                size="small"
-                @click="handleRunSelected(true)"
-              >
-                <el-icon aria-hidden="true">
-                  <VideoPause />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.stopSelected')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection"
-                size="small"
-                type="danger"
-                plain
-                @click="handleStopSelected"
-              >
-                <el-icon aria-hidden="true">
-                  <SwitchButton />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-
-          <!-- Group 2: Unit management -->
-          <el-button-group>
-            <el-tooltip
-              :content="t('units.reloadStrategy')"
-              placement="top"
-            >
-              <el-button
-                size="small"
-                @click="handleReloadStrategy"
-              >
-                <el-icon aria-hidden="true">
-                  <RefreshRight />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.createUnit')"
-              placement="top"
-            >
-              <el-button
-                size="small"
-                type="primary"
-                @click="showCreateUnit = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Plus />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.deleteUnit')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection"
-                size="small"
-                @click="handleBulkDelete"
-              >
-                <el-icon aria-hidden="true">
-                  <Delete />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.importUnits')"
-              placement="top"
-            >
-              <el-button
-                size="small"
-                @click="handleImportUnits"
-              >
-                <el-icon aria-hidden="true">
-                  <Upload />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.exportUnits')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection"
-                size="small"
-                @click="handleExportUnits"
-              >
-                <el-icon aria-hidden="true">
-                  <Download />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-
-          <!-- Group 3: Config dialogs -->
-          <el-button-group>
-            <el-tooltip
-              :content="t('units.dataSource')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showDataSource = true"
-              >
-                <el-icon aria-hidden="true">
-                  <DataLine />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.unitSettings')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showUnitSettings = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Setting />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.strategyParams')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showStrategyParams = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Document />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.switchSymbol')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showChangeSymbol = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Switch />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.open') + ' K'"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="handleOpenKline"
-              >
-                <el-icon aria-hidden="true">
-                  <TrendCharts />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.viewBacktestResults')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasOpenableSelectedReport"
-                size="small"
-                @click="handleOpenSelectedReport"
-              >
-                <el-icon aria-hidden="true">
-                  <View />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-
-          <!-- Group 4: Optimization -->
-          <el-button-group>
-            <el-tooltip
-              :content="t('units.paramOpt')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showOptConfig = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Aim />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.threadOpt')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showOptThread = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Cpu />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.batchParamOpt')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection"
-                size="small"
-                @click="showBatchOptConfig = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Operation />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.submitBatchOpt')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection || batchSubmittingOptimization"
-                :loading="batchSubmittingOptimization"
-                size="small"
-                type="success"
-                @click="handleBatchSubmitOpt"
-              >
-                <el-icon aria-hidden="true">
-                  <Promotion />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.paramOptCopy')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection || !hasSelection"
-                size="small"
-                @click="handleCopyOptParams"
-              >
-                <el-icon aria-hidden="true">
-                  <CopyDocument />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.optResults')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="emit('switch-tab', 'optimization', store.selectedUnitIds[0])"
-              >
-                <el-icon aria-hidden="true">
-                  <Odometer />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.multiTaskReport')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection"
-                size="small"
-                @click="emit('switch-tab', 'report', store.selectedUnitIds[0], [...store.selectedUnitIds])"
-              >
-                <el-icon aria-hidden="true">
-                  <Notebook />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-
-          <!-- Group 5: Rename & Sort -->
-          <el-button-group>
-            <el-tooltip
-              :content="t('units.groupRename')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSelection"
-                size="small"
-                @click="showGroupRename = true"
-              >
-                <el-icon aria-hidden="true">
-                  <EditPen />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.renameUnit')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="showUnitRename = true"
-              >
-                <el-icon aria-hidden="true">
-                  <Edit />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-
-          <el-button-group>
-            <el-tooltip
-              :content="t('units.moveUp')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="handleMove('up')"
-              >
-                <el-icon aria-hidden="true">
-                  <Top />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.moveDown')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="handleMove('down')"
-              >
-                <el-icon aria-hidden="true">
-                  <Bottom />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.moveTop')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="handleMove('top')"
-              >
-                <el-icon aria-hidden="true">
-                  <Upload />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :content="t('units.moveBottom')"
-              placement="top"
-            >
-              <el-button
-                :disabled="!hasSingleSelection"
-                size="small"
-                @click="handleMove('bottom')"
-              >
-                <el-icon aria-hidden="true">
-                  <Download />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </el-button-group>
-        </div>
-
-        <span class="text-sm text-gray-400">{{ t('units.total') }} {{ store.units.length }} {{ t('units.nUnitsSuffix') }}</span>
-      </div>
+        :has-selection="hasSelection"
+        :has-single-selection="hasSingleSelection"
+        :has-openable-selected-report="hasOpenableSelectedReport"
+        :running="store.running"
+        :batch-submitting-optimization="batchSubmittingOptimization"
+        :unit-count="store.units.length"
+        @run-serial="handleRunSelected(false)"
+        @run-parallel="handleRunSelected(true)"
+        @stop-selected="handleStopSelected"
+        @reload-strategy="handleReloadStrategy"
+        @create-unit="showCreateUnit = true"
+        @delete-selected="handleBulkDelete"
+        @import-units="handleImportUnits"
+        @export-units="handleExportUnits"
+        @open-data-source="showDataSource = true"
+        @open-unit-settings="showUnitSettings = true"
+        @open-strategy-params="showStrategyParams = true"
+        @open-change-symbol="showChangeSymbol = true"
+        @open-kline="handleOpenKline"
+        @open-selected-report="handleOpenSelectedReport"
+        @open-opt-config="showOptConfig = true"
+        @open-opt-thread="showOptThread = true"
+        @open-batch-opt-config="showBatchOptConfig = true"
+        @submit-batch-opt="handleBatchSubmitOpt"
+        @copy-opt-params="handleCopyOptParams"
+        @open-opt-results="emit('switch-tab', 'optimization', store.selectedUnitIds[0])"
+        @open-multi-task-report="emit('switch-tab', 'report', store.selectedUnitIds[0], [...store.selectedUnitIds])"
+        @open-group-rename="showGroupRename = true"
+        @open-unit-rename="showUnitRename = true"
+        @move-up="handleMove('up')"
+        @move-down="handleMove('down')"
+        @move-top="handleMove('top')"
+        @move-bottom="handleMove('bottom')"
+      />
     </teleport>
 
     <!-- Strategy Unit Table -->
@@ -722,13 +348,9 @@
 </template>
 
 <script setup lang="ts">
-import {
-  Plus, Delete, VideoPlay, VideoPause, SwitchButton,
-  DataLine, Setting, Document, Aim, EditPen, Edit,
-  Top, Bottom, Upload, Download, RefreshRight,
-  Switch, TrendCharts, Cpu, CopyDocument, Odometer, Notebook,
-  Operation, Promotion, View,
-} from '@element-plus/icons-vue'
+import { View } from '@element-plus/icons-vue'
+import { ResearchUnitActionsBar } from '@bt-api/workspace-ui/research'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import CreateUnitDialog from './CreateUnitDialog.vue'
 import DataSourceDialog from './DataSourceDialog.vue'
 import UnitSettingsDialog from './UnitSettingsDialog.vue'
@@ -748,6 +370,7 @@ const props = defineProps<WorkspaceUnitsTabProps>()
 const emit = defineEmits<{
   'switch-tab': [tab: string, unitId?: string, unitIds?: string[]]
 }>()
+useWorkspaceUiBridge()
 const unitsPage = useWorkspaceUnitsTab(props)
 const {
   batchSubmittingOptimization,

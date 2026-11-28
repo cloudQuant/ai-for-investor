@@ -14,6 +14,8 @@ import 'element-plus/dist/index.css'
 
 import './style.css'
 import './styles/design-system.scss'
+import '@bt-api/workspace-ui/styles/tokens.css'
+import '@bt-api/workspace-ui/styles/adapter-ai-investor.css'
 
 function installPerformanceMeasureGuard(): void {
   if (typeof window === 'undefined' || typeof Performance === 'undefined') {

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from bt_api_workspace.trading.guards import check_unit_control_lock
+
 from app.models.workspace import StrategyUnit
 from app.utils.invariants import require_instance, require_present
 
@@ -103,9 +105,15 @@ async def start_units(
     for unit in units:
         gateway_startup_key = self._gateway_startup_key(unit)
         try:
-            if unit.lock_running:
-                raise ValueError("该策略单元已锁定运行")
-            if unit.lock_trading:
+            lock_decision = check_unit_control_lock(
+                str(unit.id),
+                lock_running=bool(unit.lock_running),
+                lock_trading=bool(unit.lock_trading),
+                require_unlocked_trading=True,
+            )
+            if not lock_decision.allowed:
+                if lock_decision.code == "unit_locked_running":
+                    raise ValueError("该策略单元已锁定运行")
                 raise ValueError("该策略单元已锁定交易")
             if not str(unit.strategy_id or "").strip():
                 raise ValueError("策略单元缺少策略模板")

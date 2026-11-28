@@ -1,67 +1,26 @@
 <template>
-  <el-dialog
+  <SharedOptimizationThreadDialog
     :model-value="modelValue"
-    :title="t('workspaceDialogs.otdTitle')"
-    width="420px"
-    destroy-on-close
+    :config="initialConfig"
+    :on-save="handleSave"
     @update:model-value="$emit('update:modelValue', $event)"
-  >
-    <el-form
-      label-width="120px"
-      size="small"
-    >
-      <el-form-item :label="t('workspaceDialogs.otdParallelThreads')">
-        <el-input-number
-          v-model="form.n_workers"
-          :min="1"
-          :max="32"
-        />
-      </el-form-item>
-      <el-form-item :label="t('workspaceDialogs.otdRunMode')">
-        <el-radio-group v-model="form.mode">
-          <el-radio value="grid">
-            {{ t('workspaceDialogs.otdModeGrid') }}
-          </el-radio>
-          <el-radio value="random">
-            {{ t('workspaceDialogs.otdModeRandom') }}
-          </el-radio>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item :label="t('workspaceDialogs.otdTimeoutSec')">
-        <el-input-number
-          v-model="form.timeout"
-          :min="0"
-          :max="86400"
-          :step="60"
-        />
-        <div class="text-xs text-gray-400 mt-1">
-          {{ t('workspaceDialogs.otdTimeoutZeroHint') }}
-        </div>
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">
-        {{ t('common.cancel') }}
-      </el-button>
-      <el-button
-        type="primary"
-        @click="handleSave"
-      >
-        {{ t('workspaceDialogs.otdConfirm') }}
-      </el-button>
-    </template>
-  </el-dialog>
+    @saved="$emit('saved')"
+  />
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+import type { OptimizationThreadConfig } from '@bt-api/workspace-ui/core'
+import { OptimizationThreadDialog as SharedOptimizationThreadDialog } from '@bt-api/workspace-ui/research'
 import { workspaceApi } from '@/api/workspace'
 import { getErrorMessage } from '@/api/index'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import type { StrategyUnit } from '@/types/workspace'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
 
 const props = defineProps<{
   modelValue: boolean
@@ -69,43 +28,37 @@ const props = defineProps<{
   unit: StrategyUnit | null
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   'update:modelValue': [val: boolean]
   saved: []
 }>()
 
-const form = reactive({
-  n_workers: 4,
-  mode: 'grid' as 'grid' | 'random',
-  timeout: 0,
+const initialConfig = computed<Partial<OptimizationThreadConfig>>(() => {
+  const oc = (props.unit?.optimization_config || {}) as Record<string, unknown>
+  return {
+    n_workers: typeof oc.n_workers === 'number' ? oc.n_workers : 4,
+    mode: oc.mode === 'random' ? 'random' : 'grid',
+    timeout: typeof oc.timeout === 'number' ? oc.timeout : 0,
+  }
 })
 
-watch(() => props.unit, (u) => {
-  if (u?.optimization_config) {
-    const oc = u.optimization_config as Record<string, unknown>
-    form.n_workers = (oc.n_workers as number) ?? 4
-    form.mode = (oc.mode as 'grid' | 'random') ?? 'grid'
-    form.timeout = (oc.timeout as number) ?? 0
-  }
-}, { immediate: true })
-
-async function handleSave() {
+async function handleSave(config: OptimizationThreadConfig): Promise<void> {
   if (!props.unit) return
   try {
     const existingConfig = props.unit.optimization_config || {}
     await workspaceApi.updateUnit(props.workspaceId, props.unit.id, {
       optimization_config: {
         ...existingConfig,
-        n_workers: form.n_workers,
-        mode: form.mode,
-        timeout: form.timeout,
+        n_workers: config.n_workers,
+        mode: config.mode,
+        timeout: config.timeout,
       },
     })
     ElMessage.success(t('workspaceDialogs.otdSaved'))
-    emit('saved')
-    emit('update:modelValue', false)
   } catch (e: unknown) {
-    ElMessage.error(getErrorMessage(e, t('workspaceDialogs.otdSaveFailed')))
+    const message = getErrorMessage(e, t('workspaceDialogs.otdSaveFailed'))
+    ElMessage.error(message)
+    throw new Error(message)
   }
 }
 </script>

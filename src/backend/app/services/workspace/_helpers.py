@@ -18,6 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
+from bt_api_workspace.core.models import (
+    RESEARCH_CAPABILITIES,
+    TRADING_FULL_CAPABILITIES,
+    WorkspaceCapabilities,
+)
+from bt_api_workspace.core.rules import compute_renamed_text
+
 from app.models.backtest import BacktestTask
 from app.models.optimization import OptimizationTask
 from app.models.workspace import StrategyUnit
@@ -379,6 +386,13 @@ def unit_to_dict(unit: StrategyUnit, opt_info: dict[str, Any] | None = None) -> 
 # ---------------------------------------------------------------------------
 
 
+def get_workspace_capabilities(workspace_type: str) -> WorkspaceCapabilities:
+    """Return shared bt_api_workspace capability descriptor for research or trading."""
+    if str(workspace_type or "").strip().lower() == "trading":
+        return TRADING_FULL_CAPABILITIES
+    return RESEARCH_CAPABILITIES
+
+
 def compute_rename(
     unit: StrategyUnit,
     mode: str,
@@ -386,18 +400,19 @@ def compute_rename(
     search: str,
     replace: str,
 ) -> str:
-    """Compute the new name for a unit based on rename mode."""
-    if mode == "custom":
+    """Compute the new name for a unit via shared ``bt_api_workspace.core.rules``."""
+    if mode not in {"custom", "strategy", "symbol", "symbol_name", "category", "replace"}:
         return value
-    elif mode == "strategy":
-        return str(unit.strategy_name or "")
-    elif mode == "symbol":
-        return str(unit.symbol or "")
-    elif mode == "symbol_name":
-        return str(unit.symbol_name or "")
-    elif mode == "category":
-        return str(unit.category or "")
-    elif mode == "replace":
-        current = str(unit.group_name or "")
-        return current.replace(search, replace) if search else current
-    return value
+    return compute_renamed_text(
+        current=str(unit.group_name or "") if mode == "replace" else "",
+        mode=mode,
+        unit_name="",
+        strategy_name=str(unit.strategy_name or ""),
+        symbol=str(unit.symbol or ""),
+        symbol_name=str(unit.symbol_name or ""),
+        category=str(unit.category or ""),
+        value=value,
+        search=search,
+        replace=replace,
+        max_len=256,
+    )

@@ -23,6 +23,7 @@
     "verify:approval-errors": "node scripts/verify-ai-research-approval-errors.mjs"
   },
   "dependencies": {
+    "@bt-api/workspace-ui": "file:../../../bt_api_workspace/frontend",
     "@element-plus/icons-vue": "^2.3.1",
     "@monaco-editor/loader": "^1.7.0",
     "axios": "^1.18.0",

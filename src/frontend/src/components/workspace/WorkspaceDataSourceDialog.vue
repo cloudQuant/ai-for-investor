@@ -215,6 +215,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { createDefaultWorkspaceDataSourceConfig } from '@bt-api/workspace-ui/research'
 import { useI18n } from 'vue-i18n'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { getErrorMessage } from '@/api/index'
@@ -235,47 +236,10 @@ const emit = defineEmits<{
 const store = useWorkspaceStore()
 const saving = ref(false)
 
-function createDefaultDataSourceConfig(): WorkspaceDataSourceConfig {
-  return {
-    type: 'csv',
-    csv: {
-      directory_path: '',
-      delimiter: ',',
-      encoding: 'utf-8',
-      has_header: true,
-    },
-    mysql: {
-      host: '127.0.0.1',
-      port: 3306,
-      database: '',
-      username: '',
-      password: '',
-      table: '',
-    },
-    postgresql: {
-      host: '127.0.0.1',
-      port: 5432,
-      database: '',
-      schema: 'public',
-      username: '',
-      password: '',
-      table: '',
-    },
-    mongodb: {
-      uri: 'mongodb://127.0.0.1:27017',
-      database: '',
-      collection: '',
-      username: '',
-      password: '',
-      auth_source: 'admin',
-    },
-  }
-}
-
-const form = ref<WorkspaceDataSourceConfig>(createDefaultDataSourceConfig())
+const form = ref<WorkspaceDataSourceConfig>(createDefaultWorkspaceDataSourceConfig())
 
 function initForm() {
-  const defaultConfig = createDefaultDataSourceConfig()
+  const defaultConfig = createDefaultWorkspaceDataSourceConfig()
   const source = props.workspace?.settings?.data_source
   if (!source) {
     form.value = defaultConfig

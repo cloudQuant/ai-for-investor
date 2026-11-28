@@ -25,6 +25,8 @@ from datetime import datetime, time, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
+from bt_api_workspace.trading.schedule import shift_hhmm
+
 from app.utils.backend_data_paths import get_backend_data_path
 
 logger = logging.getLogger(__name__)
@@ -146,18 +148,14 @@ class AutoTradingScheduler:
             A list of dicts with keys ``session``, ``start``, ``stop``.
         """
         cfg = self.get_config()
-        buf = cfg["buffer_minutes"]
+        buf = int(cfg["buffer_minutes"])
         result = []
         for sess in cfg["sessions"]:
-            open_t = _parse_time(sess["open"])
-            close_t = _parse_time(sess["close"])
-            start_dt = datetime.combine(datetime.today(), open_t) - timedelta(minutes=buf)
-            stop_dt = datetime.combine(datetime.today(), close_t) + timedelta(minutes=buf)
             result.append(
                 {
                     "session": sess.get("name", ""),
-                    "start": start_dt.strftime("%H:%M"),
-                    "stop": stop_dt.strftime("%H:%M"),
+                    "start": shift_hhmm(sess["open"], -buf),
+                    "stop": shift_hhmm(sess["close"], buf),
                     "market_open": sess["open"],
                     "market_close": sess["close"],
                 }

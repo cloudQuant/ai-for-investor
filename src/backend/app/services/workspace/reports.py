@@ -16,6 +16,8 @@ import math
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, TypeGuard
 
+from bt_api_workspace.research.report_rules import compute_annualized_return
+
 from app.db.database import async_session_maker
 from app.models.workspace import (
     StrategyUnit,
@@ -141,18 +143,18 @@ def _unit_in_range(unit: StrategyUnit, start_date: str | None, end_date: str | N
 def _recalc_annual(
     metrics: Mapping[str, object], *, calc_method: str, annual_days: int
 ) -> int | float | None:
-    """Recompute ``annual_return`` from ``total_return`` + ``trading_days``."""
+    """Recompute ``annual_return`` via shared ``bt_api_workspace.research.report_rules``."""
     total_return = _numeric_metric_float(metrics.get("total_return"))
     trading_days = _numeric_metric_float(metrics.get("trading_days"))
-    if total_return is None or trading_days is None or trading_days <= 0:
+    computed = compute_annualized_return(
+        total_return,
+        trading_days,
+        calc_method="compound" if calc_method == "compound" else "simple",
+        annual_days=annual_days,
+    )
+    if computed is None:
         return _numeric_metric(metrics.get("annual_return"))
-
-    if calc_method == "compound":
-        try:
-            return round(((1 + total_return) ** (annual_days / trading_days) - 1), 6)
-        except (OverflowError, ValueError):
-            return _numeric_metric(metrics.get("annual_return"))
-    return round(total_return * (annual_days / trading_days), 6)
+    return computed
 
 
 def _serialize_unit_reference(unit: StrategyUnit, value_metric_key: str) -> dict[str, Any]:

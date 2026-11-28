@@ -100,6 +100,11 @@ export default defineConfig({
     sequence: {
       setupFiles: 'list',
     },
+    server: {
+      deps: {
+        inline: ['@bt-api/workspace-ui'],
+      },
+    },
     testTimeout: 10000,
     coverage: {
       provider: 'v8',
@@ -137,6 +142,7 @@ export default defineConfig({
     exclude: ['monaco-editor'],
   },
   resolve: {
+    dedupe: ['vue', 'element-plus', '@element-plus/icons-vue', 'echarts'],
     alias: {
       '@': resolve(__dirname, 'src'),
     },
