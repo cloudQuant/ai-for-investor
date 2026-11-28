@@ -1,0 +1,411 @@
+--- /tmp/ai-investor-iter200-202-20261012.afLb99/portfolio-api-before-completion.py	2026-10-12 13:29:15
++++ src/backend/app/api/portfolio/api.py	2026-10-12 22:14:38
+@@ -74,8 +74,6 @@
+ )
+ from app.api.portfolio.portfolio_common import (
+     _ACTIVE_TRADING_STATUSES,
+-    _EXPLICIT_NET_PNL_FIELD_KEYS,
+-    _GROSS_PNL_FIELD_KEYS,
+     _append_unique,
+     _first_number,
+     _has_any,
+@@ -86,6 +84,12 @@
+     _unique_text,
+ )
+ from app.api.portfolio.portfolio_common import (
++    _EXPLICIT_NET_PNL_FIELD_KEYS as _EXPLICIT_NET_PNL_FIELD_KEYS,
++)
++from app.api.portfolio.portfolio_common import (
++    _GROSS_PNL_FIELD_KEYS as _GROSS_PNL_FIELD_KEYS,
++)
++from app.api.portfolio.portfolio_common import (
+     _PORTFOLIO_TIMEZONE as _PORTFOLIO_TIMEZONE,
+ )
+ from app.api.portfolio.portfolio_common import (
+@@ -146,8 +150,11 @@
+ 
+ from . import asset_spec_adapter as _asset_spec_adapter
+ from . import instance_resolution as _instance_resolution
++from . import portfolio_calculations as _portfolio_calculations
+ 
++_COMMISSION_FIELD_KEYS = _portfolio_calculations._COMMISSION_FIELD_KEYS
+ 
++
+ def _infer_started_day_from_log_dir(
+     log_dir: Path,
+     *,
+@@ -204,34 +211,6 @@
+ 
+ logger = logging.getLogger(__name__)
+ router = APIRouter()
+-_COMMISSION_FIELD_KEYS = (
+-    "commission",
+-    "comm",
+-    "commissionAmount",
+-    "fee",
+-    "fees",
+-    "feeAmount",
+-    "execFee",
+-    "exec_fee",
+-    "execFeeV2",
+-    "exec_fee_v2",
+-    "execCommission",
+-    "exec_commission",
+-    "open_fee",
+-    "openFee",
+-    "open_commission",
+-    "openCommission",
+-    "positionCommission",
+-    "position_fee",
+-    "position_commission",
+-    "tradeFee",
+-    "trade_fee",
+-    "trade_commission",
+-    "broker_commission",
+-    "brokerCommission",
+-    "commission_amount",
+-    "Commission",
+-)
+ 
+ 
+ def _get_manager() -> LiveTradingManager:
+@@ -244,10 +223,11 @@
+ 
+ 
+ def _leverage_from_margin_rate(value: Any) -> float | None:
+-    margin_rate = _safe_float(value)
+-    if margin_rate <= EPSILON:
+-        return None
+-    return round(1.0 / margin_rate, 8)
++    return _portfolio_calculations.leverage_from_margin_rate(
++        value,
++        safe_float_fn=_safe_float,
++        epsilon=EPSILON,
++    )
+ 
+ 
+ def _runtime_config_for_instance(inst: Mapping[str, object]) -> dict[str, Any]:
+@@ -771,56 +751,13 @@
+     *,
+     position_source: str,
+ ) -> list[str]:
+-    warnings: list[str] = []
+-    if (
+-        str(source.trading_mode or "").strip().lower() == "live"
+-        and str(source.status or "").strip().lower() == "running"
+-        and position_source != "gateway"
+-    ):
+-        warnings.append("未能从交易所网关确认当前持仓，当前数据来自本地日志/快照")
+-    if not getattr(spec, "has_multiplier", False) and not _has_any(
+-        row, "multiplier", "mult", "contract_multiplier", "contract_size"
+-    ):
+-        warnings.append("合约乘数未从交易所或本地资产信息确认，按 1 估算")
+-    if (
+-        not getattr(spec, "has_margin_rate", False)
+-        and not getattr(spec, "has_margin_amount", False)
+-        and not _has_any(
+-            row,
+-            "margin",
+-            "margin_rate",
+-            "margin_ratio",
+-            "leverage",
+-            "lever",
+-            "margin_value",
+-            "use_margin",
+-            "initial_margin",
+-            "imr",
+-            "margin_amount",
+-            "initial_margin_per_lot",
+-            "margin_initial",
+-            "maintain_margin",
+-            "mmr",
+-            "long_margin_amount",
+-            "short_margin_amount",
+-            "MARGIN_PER_LOT",
+-            "LONG_MARGIN_AMOUNT",
+-            "SHORT_MARGIN_AMOUNT",
+-        )
+-    ):
+-        warnings.append("保证金率未确认，按全额保证金估算")
+-    has_real_commission = _has_any(row, *_COMMISSION_FIELD_KEYS)
+-    if row.get("commission_currency_mismatch"):
+-        warnings.append("成交手续费币种与盈亏计价币种不一致，当前按资产费率估算手续费")
+-    if not getattr(spec, "has_commission", False) and not has_real_commission:
+-        warnings.append("手续费未确认，持仓盈亏未扣除真实手续费")
+-    elif (
+-        getattr(spec, "has_commission", False)
+-        and not has_real_commission
+-        and (row.get("generic_pnl_recalculated") or _has_any(row, *_GROSS_PNL_FIELD_KEYS))
+-    ):
+-        warnings.append("持仓手续费未从交易所成交/持仓回报确认，当前按资产费率估算")
+-    return warnings
++    return _portfolio_calculations.position_valuation_warnings(
++        source,
++        row,
++        spec,
++        position_source=position_source,
++        has_any_fn=_has_any,
++    )
+ 
+ 
+ def _position_row_should_recalculate_local_pnl(
+@@ -830,53 +767,13 @@
+     position_source: str,
+     force: bool = False,
+ ) -> bool:
+-    if not force and str(position_source or "").strip().lower() == "gateway":
+-        return False
+-    if not (
+-        getattr(spec, "has_multiplier", False)
+-        or getattr(spec, "has_commission", False)
+-        or getattr(spec, "has_margin_rate", False)
+-        or getattr(spec, "has_margin_amount", False)
+-    ):
+-        return False
+-    if not _has_any(
++    return _portfolio_calculations.position_row_should_recalculate_local_pnl(
+         row,
+-        "price",
+-        "avg_price",
+-        "average_price",
+-        "price_open",
+-        "entry_price",
+-        "avgCost",
+-        "avgPrice",
+-        "avgPx",
+-        "avg_entry_price",
+-        "avgEntryPrice",
+-        "entryPrice",
+-        "open_avg_price",
+-        "openAvgPrice",
+-        "Price",
+-        "AveragePrice",
+-    ):
+-        return False
+-    if not _has_any(
+-        row,
+-        "current_price",
+-        "latest_price",
+-        "last_price",
+-        "mark_price",
+-        "markPrice",
+-        "markPx",
+-        "market_price",
+-        "lastPrice",
+-        "LastPrice",
+-        "market_value",
+-        "marketValue",
+-        "positionValue",
+-        "position_value",
+-        "value",
+-    ):
+-        return False
+-    return _has_any(row, *_EXPLICIT_NET_PNL_FIELD_KEYS, *_GROSS_PNL_FIELD_KEYS, "pnl")
++        spec,
++        position_source=position_source,
++        force=force,
++        has_any_fn=_has_any,
++    )
+ 
+ 
+ def _position_row_for_valuation(
+@@ -885,96 +782,30 @@
+     *,
+     position_source: str,
+ ) -> dict[str, Any]:
+-    item = dict(row)
+-    force_recalculate = bool(item.pop("force_recalculate_position_pnl", False))
+-    if not _position_row_should_recalculate_local_pnl(
+-        item,
++    return _portfolio_calculations.position_row_for_valuation(
++        row,
+         spec,
+         position_source=position_source,
+-        force=force_recalculate,
+-    ):
+-        return item
+-    for key in (*_EXPLICIT_NET_PNL_FIELD_KEYS, *_GROSS_PNL_FIELD_KEYS, "pnl"):
+-        item.pop(key, None)
+-    if force_recalculate:
+-        item["market_value_estimated"] = True
+-    item["recalculated_position_pnl"] = True
+-    return item
++        should_recalculate_fn=_position_row_should_recalculate_local_pnl,
++    )
+ 
+ 
+ def _valued_source_positions(source: _PortfolioSource) -> list[dict[str, Any]]:
+-    positions: list[dict[str, Any]] = []
+-    for raw_row in _source_positions(source):
+-        for row in split_bidirectional_position_row(raw_row):
+-            symbol = str(row.get("data_name") or row.get("symbol") or "")
+-            spec = _contract_spec_for_position(symbol, row, source)
+-            position_source = str(
+-                row.get("position_source") or row.get("source") or source.position_source or "local"
+-            ).strip()
+-            if (
+-                source.live_positions is None
+-                and str(source.position_source or "").strip().lower() in {"log", "snapshot"}
+-                and position_source.lower() == "gateway"
+-            ):
+-                position_source = str(source.position_source)
+-                row = dict(row)
+-                row["force_recalculate_position_pnl"] = True
+-            valuation_row = _position_row_for_valuation(
+-                row,
+-                spec,
+-                position_source=position_source,
+-            )
+-            valued = value_position(valuation_row, spec=spec)
+-            if valued is None:
+-                continue
+-            asset_spec_source = str(
+-                row.get("asset_spec_source") or getattr(spec, "source", "") or ""
+-            ).strip()
+-            row_warnings = _position_valuation_warnings(
+-                source,
+-                valuation_row,
+-                spec,
+-                position_source=position_source,
+-            )
+-            if valuation_row.get("recalculated_position_pnl"):
+-                row_warnings.append("本地/快照持仓盈亏已按最新资产乘数、保证金和手续费设置重新计算")
+-            _append_unique(source.valuation_warnings, row_warnings)
+-            if asset_spec_source:
+-                source.asset_spec_source = _unique_text(
+-                    [source.asset_spec_source, asset_spec_source]
+-                )
+-            source.valuation_status = "estimated" if source.valuation_warnings else "confirmed"
+-            positions.append(
+-                {
+-                    "data_name": valued.data_name or symbol,
+-                    "size": valued.size,
+-                    "price": valued.entry_price,
+-                    "latest_price": valued.current_price,
+-                    "market_value": valued.market_value,
+-                    "signed_market_value": _signed_market_value(valued.size, valued.market_value),
+-                    "position_pnl": valued.pnl,
+-                    "gross_pnl": valued.gross_pnl,
+-                    "commission": valued.commission,
+-                    "commission_source": valuation_row.get("commission_source")
+-                    or row.get("commission_source"),
+-                    "multiplier": valued.multiplier,
+-                    "margin_rate": valued.margin_rate,
+-                    "leverage": _leverage_from_margin_rate(valued.margin_rate),
+-                    "margin_value": valued.margin_value,
+-                    "updated_at": _position_updated_at(row),
+-                    "data_time": _position_data_time(row),
+-                    "direction": valued.direction,
+-                    "position_source": position_source,
+-                    "asset_spec_source": asset_spec_source or None,
+-                    "valuation_status": "estimated" if row_warnings else "confirmed",
+-                    "valuation_warnings": row_warnings,
+-                }
+-            )
+-    if not positions and source.position_source == "gateway":
+-        source.valuation_status = "confirmed"
+-    elif not positions and source.valuation_warnings:
+-        source.valuation_status = "stale_fallback"
+-    return positions
++    return _portfolio_calculations.valued_source_positions(
++        source,
++        source_positions_fn=_source_positions,
++        split_bidirectional_position_row_fn=split_bidirectional_position_row,
++        contract_spec_for_position_fn=_contract_spec_for_position,
++        position_row_for_valuation_fn=_position_row_for_valuation,
++        value_position_fn=value_position,
++        position_valuation_warnings_fn=_position_valuation_warnings,
++        append_unique_fn=_append_unique,
++        unique_text_fn=_unique_text,
++        signed_market_value_fn=_signed_market_value,
++        leverage_from_margin_rate_fn=_leverage_from_margin_rate,
++        position_updated_at_fn=_position_updated_at,
++        position_data_time_fn=_position_data_time,
++    )
+ 
+ 
+ def _source_trades(
+@@ -1151,70 +982,21 @@
+     workspace snapshot is refreshed by the trading service, so it is the right
+     source for the page's initial metric cards.
+     """
+-    total_assets = 0.0
+-    total_cash = 0.0
+-    total_initial = 0.0
+-    total_position_gross = 0.0
+-    total_position_net = 0.0
+-    running_count = 0
+-    has_position_data = False
+ 
+-    # Sources from the live-manager path have already passed process validation,
+-    # while the fast landing-page path contains only persisted running units.
+-    # Requiring a process PID here would make the snapshot-only path discard all
+-    # valid first-screen data after an API-server restart.
+-    running_sources = [
+-        source for source in rows if str(source.status or "").strip().lower() == "running"
+-    ]
++    def safe_round(value: float, digits: int | None = None) -> float:
++        if digits is None:
++            return _safe_round(value)
++        return _safe_round(value, digits)
+ 
+-    for source in running_sources:
+-        snapshot = _safe_dict(source.snapshot)
+-        started_day = _source_started_day(source)
+-        long_value = max(
+-            _first_number(snapshot, "long_market_value", "long_value", "longMarketValue") or 0.0,
+-            0.0,
+-        )
+-        short_value = max(
+-            _first_number(snapshot, "short_market_value", "short_value", "shortMarketValue") or 0.0,
+-            0.0,
+-        )
+-        net_position_value = long_value - short_value
+-        value_summary = _compact_value_log_summary(source.log_dir, started_day=started_day)
+-        initial, assets, cash = value_summary if value_summary is not None else (0.0, 0.0, 0.0)
+-
+-        total_initial += initial
+-        total_assets += assets
+-        total_cash += cash
+-        total_position_gross += long_value + short_value
+-        total_position_net += net_position_value
+-        if (
+-            isinstance(snapshot.get("positions"), list)
+-            or long_value > EPSILON
+-            or short_value > EPSILON
+-        ):
+-            has_position_data = True
+-        running_count += 1
+-
+-    total_pnl = total_assets - total_initial
+-    total_pnl_pct = total_pnl / total_initial * 100 if total_initial > 0 else 0.0
+-    if not has_position_data:
+-        total_position_net = total_assets - total_cash
+-        total_position_gross = abs(total_position_net)
+-    return {
+-        "total_assets": _safe_round(total_assets),
+-        "total_cash": _safe_round(total_cash),
+-        "total_position_value": _safe_round(total_position_gross),
+-        "net_position_value": _safe_round(total_position_net),
+-        "total_initial_capital": _safe_round(total_initial),
+-        "total_pnl": _safe_round(total_pnl),
+-        "total_pnl_pct": _safe_round(total_pnl_pct, 2),
+-        "strategy_count": len(running_sources),
+-        "running_count": running_count,
+-        # Per-strategy metrics require scanning every value and trade log. They
+-        # are not rendered in the first screen and are intentionally omitted in
+-        # compact mode to keep the route DB-only.
+-        "strategies": [],
+-    }
++    return _portfolio_calculations.compact_workspace_overview(
++        rows,
++        safe_dict_fn=_safe_dict,
++        source_started_day_fn=_source_started_day,
++        compact_value_log_summary_fn=_compact_value_log_summary,
++        first_number_fn=_first_number,
++        safe_round_fn=safe_round,
++        epsilon=EPSILON,
++    )
+ 
+ 
+ async def _compact_portfolio_overview(

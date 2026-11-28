@@ -1,0 +1,256 @@
+--- /tmp/ai-investor-iter200-202-20261012.afLb99/workspace-service-before-completion.py	2026-10-12 13:55:53
++++ src/backend/app/services/trading_workspace_service.py	2026-10-12 22:19:37
+@@ -1519,11 +1519,9 @@
+ 
+     @staticmethod
+     def _position_row_direction(row: dict[str, Any]) -> str:
+-        direction = str(row.get("direction") or row.get("side") or "").strip().lower()
+-        if direction in {"short", "sell", "sold"}:
+-            return "short"
+-        raw_size = _safe_float(row.get("size"))
+-        return "short" if raw_size < 0 else "long"
++        return _position_normalization.position_row_direction(
++            row, dependencies=_position_normalization_dependencies()
++        )
+ 
+     @staticmethod
+     def _first_row_number(row: dict[str, Any], *keys: str) -> float | None:
+@@ -1536,15 +1534,9 @@
+ 
+     @classmethod
+     def _position_row_open_size(cls, row: dict[str, Any]) -> float:
+-        size_value = row.get("size")
+-        size = abs(_safe_float(size_value))
+-        if size > EPSILON:
+-            return size
+-        if size_value not in (None, ""):
+-            return 0.0
+-        long_position = cls._first_row_number(row, *LONG_POSITION_FIELD_KEYS)
+-        short_position = cls._first_row_number(row, *SHORT_POSITION_FIELD_KEYS)
+-        return max(long_position or 0.0, 0.0) + max(short_position or 0.0, 0.0)
++        return _position_normalization.position_row_open_size(
++            cls, row, dependencies=_position_normalization_dependencies()
++        )
+ 
+     @classmethod
+     def _position_row_needs_response_valuation(cls, row: dict[str, Any]) -> bool:
+@@ -1750,13 +1742,14 @@
+                 row_pnl_values: list[float] = []
+                 for row in active_position_rows:
+                     size = abs(_safe_float(row.get("size")))
+-                    long_size = self._first_row_number(row, *LONG_POSITION_FIELD_KEYS)
+-                    short_size = self._first_row_number(row, *SHORT_POSITION_FIELD_KEYS)
+-                    if size <= EPSILON and (
+-                        (long_size or 0.0) > EPSILON or (short_size or 0.0) > EPSILON
+-                    ):
+-                        row_long = max(long_size or 0.0, 0.0)
+-                        row_short = max(short_size or 0.0, 0.0)
++                    directional_sizes = _position_normalization.position_row_directional_sizes(
++                        row,
++                        size,
++                        first_row_number=self._first_row_number,
++                        dependencies=_position_normalization_dependencies(),
++                    )
++                    if directional_sizes is not None:
++                        row_long, row_short = directional_sizes
+                         derived_long_position += row_long
+                         derived_short_position += row_short
+                         row_market_value = self._first_row_number(row, "market_value")
+--- /tmp/ai-investor-iter200-202-20261012.afLb99/workspace-normalization-before-completion.py	2026-10-12 13:55:49
++++ src/backend/app/services/trading_workspace_position_normalization.py	2026-10-12 22:19:32
+@@ -8,6 +8,10 @@
+ from typing import TYPE_CHECKING, Any, Protocol
+ 
+ from app.models.workspace import StrategyUnit
++from app.services.trading_asset_info_service import (
++    LONG_POSITION_FIELD_KEYS,
++    SHORT_POSITION_FIELD_KEYS,
++)
+ 
+ if TYPE_CHECKING:
+     from app.services.live_trading.manager import LiveTradingManager
+@@ -22,6 +26,10 @@
+     def __call__(self, value: Any, default: int = 0) -> int: ...
+ 
+ 
++class FirstRowNumber(Protocol):
++    def __call__(self, row: dict[str, Any], *keys: str) -> float | None: ...
++
++
+ class NormalizeGatewayPosition(Protocol):
+     def __call__(
+         self,
+@@ -69,8 +77,53 @@
+     if text in {"sell", "short", "空", "空头"}:
+         return "short"
+     return "long" if size >= 0 else "short"
++
++
++def _position_row_direction(
++    row: dict[str, Any],
++    *,
++    dependencies: PositionNormalizationDependencies,
++) -> str:
++    direction = str(row.get("direction") or row.get("side") or "").strip().lower()
++    if direction in {"short", "sell", "sold"}:
++        return "short"
++    raw_size = dependencies.safe_float(row.get("size"))
++    return "short" if raw_size < 0 else "long"
++
++
++def _position_row_open_size(
++    cls: type[TradingWorkspaceService],
++    row: dict[str, Any],
++    *,
++    dependencies: PositionNormalizationDependencies,
++) -> float:
++    size_value = row.get("size")
++    size = abs(dependencies.safe_float(size_value))
++    if size > dependencies.epsilon:
++        return size
++    if size_value not in (None, ""):
++        return 0.0
++    long_position = cls._first_row_number(row, *LONG_POSITION_FIELD_KEYS)
++    short_position = cls._first_row_number(row, *SHORT_POSITION_FIELD_KEYS)
++    return max(long_position or 0.0, 0.0) + max(short_position or 0.0, 0.0)
+ 
+ 
++def _position_row_directional_sizes(
++    row: dict[str, Any],
++    size: float,
++    *,
++    first_row_number: FirstRowNumber,
++    dependencies: PositionNormalizationDependencies,
++) -> tuple[float, float] | None:
++    long_size = first_row_number(row, *LONG_POSITION_FIELD_KEYS)
++    short_size = first_row_number(row, *SHORT_POSITION_FIELD_KEYS)
++    if size <= dependencies.epsilon and (
++        (long_size or 0.0) > dependencies.epsilon or (short_size or 0.0) > dependencies.epsilon
++    ):
++        return max(long_size or 0.0, 0.0), max(short_size or 0.0, 0.0)
++    return None
++
++
+ def _normalize_trade_rows(
+     cls: type[TradingWorkspaceService],
+     raw_trades: list[Any],
+@@ -414,6 +467,9 @@
+ 
+ 
+ normalize_trade_direction = _normalize_trade_direction
++position_row_direction = _position_row_direction
++position_row_open_size = _position_row_open_size
++position_row_directional_sizes = _position_row_directional_sizes
+ normalize_trade_rows = _normalize_trade_rows
+ position_log_row_direction = _position_log_row_direction
+ latest_position_rows = _latest_position_rows
+--- /tmp/ai-investor-iter200-202-20261012.afLb99/workspace-test-before-completion.py	2026-10-12 13:44:51
++++ src/backend/tests/test_trading_workspace_service.py	2026-10-12 22:20:36
+@@ -4827,10 +4827,26 @@
+         raise AssertionError("hydrate_units should not run when hydrate=False")
+ 
+     monkeypatch.setattr(service, "hydrate_units", fail_hydrate)
++    original_open_size = service._position_row_open_size
++    original_direction = service._position_row_direction
++    method_calls = {"open_size": 0, "direction": 0}
++
++    def track_open_size(row):
++        method_calls["open_size"] += 1
++        return original_open_size(row)
++
++    def track_direction(row):
++        method_calls["direction"] += 1
++        return original_direction(row)
++
++    monkeypatch.setattr(service, "_position_row_open_size", track_open_size)
++    monkeypatch.setattr(service, "_position_row_direction", track_direction)
+ 
+     result = await service.build_positions_response([unit], "user-1", hydrate=False)
+     row = result.positions[0]
+ 
++    assert method_calls["open_size"] > 0
++    assert method_calls["direction"] > 0
+     assert row.symbol == "IF2609"
+     assert row.data_name == "IF2609"
+     assert row.long_position == 1.0
+@@ -4847,8 +4863,80 @@
+     assert row.valuation_status == "confirmed"
+     assert result.total_long_value == 1_500_300.0
+     assert result.total_pnl == pytest.approx(265.5)
++
++
++@pytest.mark.asyncio
++async def test_build_positions_response_normalizes_directional_quantity_aliases(monkeypatch):
++    service = TradingWorkspaceService()
++    unit = SimpleNamespace(
++        id="unit-directional-aliases",
++        strategy_name="Directional Alias Unit",
++        strategy_id="simulate/gateway_dual_ma",
++        symbol="IF2609",
++        symbol_name="沪深300",
++        trading_mode="live",
++        trading_snapshot={
++            "positions": [
++                {
++                    "data_name": "IF2609",
++                    "long_position": 2,
++                    "longPosition": 9,
++                    "short_position": 3,
++                    "shortPosition": 8,
++                    "market_value": 100.0,
++                    "pnl": 5.0,
++                    "position_source": "gateway",
++                }
++            ],
++            "position_source": "gateway",
++            "long_position": 0.0,
++            "short_position": 0.0,
++            "position_pnl": 0.0,
++            "long_market_value": 0.0,
++            "short_market_value": 0.0,
++        },
++    )
+ 
++    async def fail_hydrate(_units, _user_id):
++        raise AssertionError("hydrate_units should not run when hydrate=False")
+ 
++    monkeypatch.setattr(service, "hydrate_units", fail_hydrate)
++    monkeypatch.setattr(service, "_position_row_needs_response_valuation", lambda _row: False)
++    monkeypatch.setattr(
++        service,
++        "_position_row_needs_asset_spec_revaluation",
++        lambda _unit, _row: False,
++    )
++    original_first_row_number = service._first_row_number
++    directional_lookups: list[str] = []
++
++    def track_directional_first_row_number(row: dict[str, Any], *keys: str) -> float | None:
++        value = original_first_row_number(row, *keys)
++        if keys and keys[0] == "long_position":
++            directional_lookups.append("long")
++            return (value or 0.0) + 2.0
++        if keys and keys[0] == "short_position":
++            directional_lookups.append("short")
++            return (value or 0.0) + 6.0
++        return value
++
++    monkeypatch.setattr(service, "_first_row_number", track_directional_first_row_number)
++
++    result = await service.build_positions_response([unit], "user-1", hydrate=False)
++    row = result.positions[0]
++
++    assert directional_lookups == ["long", "short"]
++    assert row.long_position == pytest.approx(4.0)
++    assert row.short_position == pytest.approx(9.0)
++    assert row.market_value == pytest.approx(100.0)
++    assert row.long_market_value == pytest.approx(30.77)
++    assert row.short_market_value == pytest.approx(69.23)
++    assert row.position_pnl == pytest.approx(5.0)
++    assert result.total_long_value == pytest.approx(30.77)
++    assert result.total_short_value == pytest.approx(69.23)
++    assert result.total_pnl == pytest.approx(5.0)
++
++
+ @pytest.mark.asyncio
+ async def test_build_positions_response_values_raw_okx_snapshot_aliases(monkeypatch):
+     service = TradingWorkspaceService()

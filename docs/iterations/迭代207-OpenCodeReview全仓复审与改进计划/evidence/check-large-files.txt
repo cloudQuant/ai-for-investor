@@ -1,0 +1,10 @@
+large_file_ratchet: regressions detected:
+- src/backend/app/api/portfolio/api.py: 1863 lines exceeds baseline 1861
+- src/backend/app/services/asset_research/orchestrator.py: 3051 lines exceeds baseline 3044
+- src/backend/app/services/market_instrument_asset_adapter.py: 1235 lines exceeds baseline 1233
+- src/backend/app/services/monitoring_control.py: 1560 lines exceeds baseline 1558
+- src/backend/app/services/research/holdout_claim.py: 1480 lines exceeds baseline 1478
+- src/backend/app/services/research/holdout_finalize.py: 2180 lines exceeds baseline 2172
+- src/backend/app/services/stock_analysis/data_collector.py: 1264 lines exceeds baseline 1249
+- src/backend/app/services/sync_service.py: 2527 lines exceeds baseline 2525
+- src/backend/app/services/workspace/run_ops.py: 1671 lines exceeds baseline 1667

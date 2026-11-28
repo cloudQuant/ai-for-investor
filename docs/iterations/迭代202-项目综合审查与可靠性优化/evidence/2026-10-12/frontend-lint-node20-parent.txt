@@ -1,0 +1,220 @@
+
+> ai-for-investor-frontend@0.1.0 lint
+> eslint . --max-warnings 0
+
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/scripts/check-node-engine-compat.mjs
+  79:27  error  'URL' is not defined      no-undef
+  80:27  error  'URL' is not defined      no-undef
+  86:5   error  'console' is not defined  no-undef
+  87:40  error  'console' is not defined  no-undef
+  92:3   error  'console' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/scripts/verify-ai-research-approval-errors.mjs
+  113:3  error  'console' is not defined  no-undef
+  115:3  error  'console' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/aiResearch/ApprovalPanel.vue
+  383:33  error  'Event' is not defined              no-undef
+  384:34  error  'HTMLSelectElement' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/aiResearch/CandidatePanel.vue
+  225:23  error  'HTMLElement' is not defined    no-undef
+  227:25  error  'HTMLElement' is not defined    no-undef
+  311:68  error  'MouseEvent' is not defined     no-undef
+  318:55  error  'HTMLElement' is not defined    no-undef
+  337:33  error  'KeyboardEvent' is not defined  no-undef
+  341:29  error  'HTMLElement' is not defined    no-undef
+  351:25  error  'document' is not defined       no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/aichat/StockAnalysisReportCard.vue
+  205:37  error  'Blob' is not defined      no-undef
+  205:58  error  'Blob' is not defined      no-undef
+  206:17  error  'URL' is not defined       no-undef
+  207:18  error  'document' is not defined  no-undef
+  210:5   error  'document' is not defined  no-undef
+  213:5   error  'URL' is not defined       no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/charts/DrawdownChart.vue
+  37:3  warning  Prop "data" should be optional  vue/no-required-prop-with-default
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/charts/ReturnHeatmap.vue
+  24:3  warning  Prop "returns" should be optional  vue/no-required-prop-with-default
+  25:3  warning  Prop "years" should be optional    vue/no-required-prop-with-default
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/charts/TradeRecordsTable.vue
+  253:3   warning  Prop "trades" should be optional  vue/no-required-prop-with-default
+  307:20  error    'Blob' is not defined             no-undef
+  308:15  error    'URL' is not defined              no-undef
+  309:16  error    'document' is not defined         no-undef
+  313:3   error    'URL' is not defined              no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/charts/TradeSignalChart.vue
+   61:3   warning  Prop "klines" should be optional   vue/no-required-prop-with-default
+   62:3   warning  Prop "signals" should be optional  vue/no-required-prop-with-default
+  400:18  error    'document' is not defined          no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/AppLayout.vue
+  274:20  error  'window' is not defined  no-undef
+  284:3   error  'window' is not defined  no-undef
+  288:3   error  'window' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/ErrorBoundary.vue
+  66:3  error  'console' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/LogViewer.vue
+  192:24  error  'HTMLElement' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/common/MonacoEditor.vue
+  63:23  error  'HTMLDivElement' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/workspace/ImportTradingUnitsDialog.vue
+  180:26  error  'File' is not defined              no-undef
+  181:23  error  'HTMLInputElement' is not defined  no-undef
+  227:32  error  'Event' is not defined             no-undef
+  228:41  error  'HTMLInputElement' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/workspace/TradingWorkspaceUnitsTab.vue
+  453:21  error  'URLSearchParams' is not defined  no-undef
+  457:3   error  'window' is not defined           no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/workspace/UnitTable.vue
+  341:75  error  'Event' is not defined  no-undef
+  354:84  error  'Event' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/components/workspace/WorkspaceReportTab.vue
+   945:17  error  'document' is not defined          no-undef
+   949:31  error  'HTMLInputElement' is not defined  no-undef
+   994:20  error  'Blob' is not defined              no-undef
+   995:15  error  'URL' is not defined               no-undef
+   996:13  error  'document' is not defined          no-undef
+  1000:3   error  'URL' is not defined               no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/AIChatPage.vue
+  763:31  error  'HTMLElement' is not defined        no-undef
+  764:26  error  'HTMLElement' is not defined        no-undef
+  765:36  error  'HTMLButtonElement' is not defined  no-undef
+  766:31  error  'HTMLButtonElement' is not defined  no-undef
+  767:25  error  'HTMLElement' is not defined        no-undef
+  769:50  error  'HTMLElement' is not defined        no-undef
+  773:57  error  'HTMLButtonElement' is not defined  no-undef
+  777:59  error  'MouseEvent' is not defined         no-undef
+  778:55  error  'HTMLElement' is not defined        no-undef
+  794:42  error  'KeyboardEvent' is not defined      no-undef
+  805:41  error  'HTMLElement' is not defined        no-undef
+  813:25  error  'document' is not defined           no-undef
+  816:33  error  'document' is not defined           no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/BacktestResultPage.vue
+   560:30  error  'HTMLElement' is not defined        no-undef
+   561:35  error  'HTMLButtonElement' is not defined  no-undef
+   562:30  error  'HTMLElement' is not defined        no-undef
+   813:45  error  'MouseEvent' is not defined         no-undef
+   814:60  error  'HTMLElement' is not defined        no-undef
+   825:48  error  'KeyboardEvent' is not defined      no-undef
+   835:58  error  'HTMLElement' is not defined        no-undef
+   843:25  error  'document' is not defined           no-undef
+   846:33  error  'document' is not defined           no-undef
+  1009:9   error  'navigator' is not defined          no-undef
+  1010:13  error  'navigator' is not defined          no-undef
+  1015:3   error  'window' is not defined             no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/KnowledgeBaseDocumentPage.vue
+  342:23  error  'HTMLElement' is not defined        no-undef
+  343:28  error  'HTMLButtonElement' is not defined  no-undef
+  344:23  error  'HTMLElement' is not defined        no-undef
+  461:5   error  'window' is not defined             no-undef
+  464:5   error  'window' is not defined             no-undef
+  471:5   error  'URL' is not defined                no-undef
+  482:16  error  'window' is not defined             no-undef
+  493:43  error  'MouseEvent' is not defined         no-undef
+  494:53  error  'HTMLElement' is not defined        no-undef
+  505:46  error  'KeyboardEvent' is not defined      no-undef
+  515:51  error  'HTMLElement' is not defined        no-undef
+  523:25  error  'document' is not defined           no-undef
+  526:33  error  'document' is not defined           no-undef
+  544:30  error  'URL' is not defined                no-undef
+  587:7   error  'sessionStorage' is not defined     no-undef
+  599:3   error  'window' is not defined             no-undef
+  600:10  error  'window' is not defined             no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/LoginPage.vue
+  136:5  error  'console' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/NewsIntelligencePage.vue
+  799:3   error  'window' is not defined         no-undef
+  829:40  error  'setInterval' is not defined    no-undef
+  833:5   error  'clearInterval' is not defined  no-undef
+  840:21  error  'setInterval' is not defined    no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/PortfolioPage.vue
+   700:25  error  'HTMLElement' is not defined       no-undef
+   701:30  error  'HTMLElement' is not defined       no-undef
+   702:32  error  'HTMLElement' is not defined       no-undef
+  1137:10  error  'getComputedStyle' is not defined  no-undef
+  1137:27  error  'document' is not defined          no-undef
+  1343:3   error  'window' is not defined            no-undef
+  1347:3   error  'window' is not defined            no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/QuotePage.vue
+   966:39  error  'setTimeout' is not defined        no-undef
+   969:23  error  'clearTimeout' is not defined      no-undef
+   970:20  error  'setTimeout' is not defined        no-undef
+  1124:5   error  'localStorage' is not defined      no-undef
+  1125:5   error  'localStorage' is not defined      no-undef
+  1137:43  error  'setInterval' is not defined       no-undef
+  1153:7   error  'setTimeout' is not defined        no-undef
+  1269:31  error  'HTMLDivElement' is not defined    no-undef
+  1354:17  error  'getComputedStyle' is not defined  no-undef
+  1354:34  error  'document' is not defined          no-undef
+  1379:5   error  'clearInterval' is not defined     no-undef
+  1386:24  error  'setInterval' is not defined       no-undef
+  1428:3   error  'window' is not defined            no-undef
+  1435:3   error  'window' is not defined            no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataSyncPage.vue
+  567:19  error  'window' is not defined  no-undef
+  580:5   error  'window' is not defined  no-undef
+  595:49  error  'window' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/data/DataTopicsPage.vue
+  331:13  error  'WebSocket' is not defined     no-undef
+  462:16  error  'window' is not defined        no-undef
+  466:30  error  'MessageEvent' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/investment/AssetAnalysisPage.vue
+  1263:23  error  'URL' is not defined       no-undef
+  1264:18  error  'document' is not defined  no-undef
+  1268:5   error  'URL' is not defined       no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/investment/StockAnalysisPage.vue
+  746:18  error  'window' is not defined    no-undef
+  753:5   error  'window' is not defined    no-undef
+  853:37  error  'Blob' is not defined      no-undef
+  853:58  error  'Blob' is not defined      no-undef
+  854:17  error  'URL' is not defined       no-undef
+  855:18  error  'document' is not defined  no-undef
+  858:5   error  'document' is not defined  no-undef
+  861:5   error  'URL' is not defined       no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/strategy-components/StrategyEditDialog.vue
+  127:28  error  'Event' is not defined                no-undef
+  128:34  error  'HTMLTextAreaElement' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/workspace/WorkspaceDetailPage.vue
+  302:42  error  'setInterval' is not defined    no-undef
+  641:34  error  'document' is not defined       no-undef
+  642:36  error  'document' is not defined       no-undef
+  649:25  error  'setInterval' is not defined    no-undef
+  651:9   error  'clearInterval' is not defined  no-undef
+  660:5   error  'clearInterval' is not defined  no-undef
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/src/views/workspace/WorkspaceListPage.vue
+  402:42  error  'setInterval' is not defined    no-undef
+  675:36  error  'document' is not defined       no-undef
+  682:25  error  'setInterval' is not defined    no-undef
+  684:9   error  'clearInterval' is not defined  no-undef
+  693:5   error  'clearInterval' is not defined  no-undef
+
+✖ 151 problems (145 errors, 6 warnings)
+

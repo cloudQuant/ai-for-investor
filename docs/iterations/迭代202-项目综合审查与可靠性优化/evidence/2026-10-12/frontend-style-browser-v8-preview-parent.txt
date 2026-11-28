@@ -1,0 +1,151 @@
+
+Running 9 tests using 1 worker
+
+  ✘  1 [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile (2.1s)
+  ✓  2 [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:240:1 › register form renders all four input prefix icons (879ms)
+  ✘  3 [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable (2.7s)
+  ✘  4 [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile (4.9s)
+  ✓  5 [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:240:1 › register form renders all four input prefix icons (3.6s)
+  ✓  6 [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable (8.5s)
+  ✘  7 [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile (7.5s)
+  ✓  8 [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:240:1 › register form renders all four input prefix icons (1.5s)
+  ✘  9 [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable (2.6s)
+
+
+  1) [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m390[39m
+    Received:    [31m1257[39m
+
+      234 |   await page.setViewportSize({ width: 390, height: 844 })
+      235 |   await expect(loginForm).toBeVisible()
+    > 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+          |                                                                           ^
+      237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')
+      238 | })
+      239 |
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75
+
+    Error Context: ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-chromium-style-regression/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m390[39m
+    Received:    [31m1088[39m
+
+      401 |
+      402 |   await page.setViewportSize({ width: 390, height: 844 })
+    > 403 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+          |                                                                           ^
+      404 |   const mobileSassStyles = await readResponsiveSassStyles(page)
+      405 |   expect(mobileSassStyles).toMatchObject({
+      406 |     pagePadding: '12px',
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:403:75
+
+    Error Context: ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-chromium-style-regression/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-chromium-style-regression/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-chromium-style-regression/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m390[39m
+    Received:    [31m1257[39m
+
+      234 |   await page.setViewportSize({ width: 390, height: 844 })
+      235 |   await expect(loginForm).toBeVisible()
+    > 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+          |                                                                           ^
+      237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')
+      238 | })
+      239 |
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75
+
+    Error Context: ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-firefox-style-regression/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-firefox-style-regression/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-firefox-style-regression/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m390[39m
+    Received:    [31m1256[39m
+
+      234 |   await page.setViewportSize({ width: 390, height: 844 })
+      235 |   await expect(loginForm).toBeVisible()
+    > 236 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+          |                                                                           ^
+      237 |   await saveScreenshot(page, test.info().project.name, 'login-dark-mobile.png')
+      238 | })
+      239 |
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:236:75
+
+    Error Context: ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-webkit-style-regression/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-webkit-style-regression/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-login-for-e0040-tates-on-desktop-and-mobile-webkit-style-regression/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m390[39m
+    Received:    [31m1087[39m
+
+      401 |
+      402 |   await page.setViewportSize({ width: 390, height: 844 })
+    > 403 |   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+          |                                                                           ^
+      404 |   const mobileSassStyles = await readResponsiveSassStyles(page)
+      405 |   expect(mobileSassStyles).toMatchObject({
+      406 |     pagePadding: '12px',
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts:403:75
+
+    Error Context: ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-webkit-style-regression/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-webkit-style-regression/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../tmp/iteration202-tailwind4-compat/playwright-artifacts/style-regression-workspace-a2e3f-nd-dark-theme-remain-usable-webkit-style-regression/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5 failed
+    [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile 
+    [chromium-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable 
+    [firefox-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile 
+    [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:199:1 › login form keeps light and dark visual states on desktop and mobile 
+    [webkit-style-regression] › e2e/tailwind4/style-regression.spec.ts:248:1 › workspace layout, create form, utility compatibility and dark theme remain usable 
+  4 passed (59.4s)

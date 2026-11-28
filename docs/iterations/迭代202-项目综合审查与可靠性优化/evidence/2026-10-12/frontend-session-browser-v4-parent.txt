@@ -1,0 +1,109 @@
+[2m[WebServer] [22m(node:7161) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 7 tests using 1 worker
+
+  ✘  1 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry (1.3m)
+  ✓  2 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:446:1 › AC-D09: a real startup 401 clears the expired identity and returns to the login form (23.2s)
+  ✘  3 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:470:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B (2.0m)
+  ✓  4 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:526:1 › AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state (12.7s)
+  ✘  5 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:575:1 › AC-D10: logout clears A workspace data before B opens the same workspace route (51.2s)
+  ✓  6 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:676:1 › AC-D11: late A detail and units cannot replace B during same-route workspace navigation (13.3s)
+  ✓  7 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:751:1 › AC-D11: B detail and units remain active when they finish before late A responses (6.8s)
+
+
+  1) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByTestId('identity-retry-panel')
+    Expected: visible
+    Timeout: 60000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 60000ms[22m
+    [2m  - waiting for getByTestId('identity-retry-panel')[22m
+
+
+      421 |
+      422 |   await page.goto('/research/workspaces')
+    > 423 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+          |                                                          ^
+      424 |   expect(meCalls).toBe(4)
+      425 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
+      426 |   expect(workspaceRequests).toEqual([])
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:423:58
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:470:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:575:1 › AC-D10: logout clears A workspace data before B opens the same workspace route 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('#workspace-detail-title')
+    Expected: [32m"Workspace A fixture"[39m
+    Timeout: 30000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toHaveText" with timeout 30000ms[22m
+    [2m  - waiting for locator('#workspace-detail-title')[22m
+
+
+      640 |   await navigateInSpa(page, '/research/workspaces/shared')
+      641 |   await expect(page).toHaveURL(/\/research\/workspaces\/shared$/)
+    > 642 |   await expect(page.locator('#workspace-detail-title')).toHaveText('Workspace A fixture')
+          |                                                         ^
+      643 |   const aRow = page.getByRole('row').filter({ hasText: 'Unit A fixture' })
+      644 |   await expect(aRow).toBeVisible()
+      645 |   await aRow.locator('.el-checkbox__inner').click()
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:642:57
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-af65f-ns-the-same-workspace-route-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:470:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B 
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:575:1 › AC-D10: logout clears A workspace data before B opens the same workspace route 
+  4 passed (6.8m)

@@ -1,0 +1,162 @@
+# Redacted container log capture; started 2026-10-12T11:53:08.405Z UTC
+
+[stderr]
+2026-10-12T11:53:36.269456004Z [2026-10-12 11:53:36 +0000] [7] [INFO] Starting gunicorn 26.0.0
+2026-10-12T11:53:36.273277796Z [2026-10-12 11:53:36 +0000] [7] [INFO] Listening at: http://0.0.0.0:8000 (7)
+2026-10-12T11:53:36.273329087Z [2026-10-12 11:53:36 +0000] [7] [INFO] Using worker: uvicorn.workers.UvicornWorker
+2026-10-12T11:53:36.491559962Z [2026-10-12 11:53:36 +0000] [8] [INFO] Booting worker with pid: 8
+2026-10-12T11:53:36.669929963Z [2026-10-12 11:53:36 +0000] [9] [INFO] Booting worker with pid: 9
+2026-10-12T11:53:37.356695755Z [2026-10-12 11:53:37 +0000] [7] [INFO] Control socket listening at /home/appuser/.gunicorn/gunicorn.ctl
+
+
+[Failure final app log snapshot at 2026-10-12T11:53:46.200Z UTC]
+2026-10-12T11:53:36.269456004Z [2026-10-12 11:53:36 +0000] [7] [INFO] Starting gunicorn 26.0.0
+2026-10-12T11:53:36.273277796Z [2026-10-12 11:53:36 +0000] [7] [INFO] Listening at: http://0.0.0.0:8000 (7)
+2026-10-12T11:53:36.273329087Z [2026-10-12 11:53:36 +0000] [7] [INFO] Using worker: uvicorn.workers.UvicornWorker
+2026-10-12T11:53:36.491559962Z [2026-10-12 11:53:36 +0000] [8] [INFO] Booting worker with pid: 8
+2026-10-12T11:53:36.669929963Z [2026-10-12 11:53:36 +0000] [9] [INFO] Booting worker with pid: 9
+2026-10-12T11:53:37.356695755Z [2026-10-12 11:53:37 +0000] [7] [INFO] Control socket listening at /home/appuser/.gunicorn/gunicorn.ctl
+2026-10-12T11:53:43.501539507Z [2026-10-12 11:53:43 +0000] [9] [ERROR] Exception in worker process
+2026-10-12T11:53:43.502758799Z Traceback (most recent call last):
+2026-10-12T11:53:43.502766424Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 713, in spawn_worker
+2026-10-12T11:53:43.502768132Z     worker.init_process()
+2026-10-12T11:53:43.502769424Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/workers/base.py", line 136, in init_process
+2026-10-12T11:53:43.502770549Z     self.load_wsgi()
+2026-10-12T11:53:43.502771466Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/workers/base.py", line 148, in load_wsgi
+2026-10-12T11:53:43.502772507Z     self.wsgi = self.app.wsgi()
+2026-10-12T11:53:43.502843257Z                 ^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.502844382Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/base.py", line 66, in wsgi
+2026-10-12T11:53:43.502845382Z     self.callable = self.load()
+2026-10-12T11:53:43.502846257Z                     ^^^^^^^^^^^
+2026-10-12T11:53:43.502847299Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/wsgiapp.py", line 57, in load
+2026-10-12T11:53:43.502851466Z     return self.load_wsgiapp()
+2026-10-12T11:53:43.502856049Z            ^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.502857591Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/wsgiapp.py", line 47, in load_wsgiapp
+2026-10-12T11:53:43.502858591Z     return util.import_app(self.app_uri)
+2026-10-12T11:53:43.502859549Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.502908757Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/util.py", line 411, in import_app
+2026-10-12T11:53:43.502915216Z     mod = importlib.import_module(module)
+2026-10-12T11:53:43.502917382Z           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.502918841Z   File "/usr/local/lib/python3.12/importlib/__init__.py", line 90, in import_module
+2026-10-12T11:53:43.502920466Z     return _bootstrap._gcd_import(name[level:], package, level)
+2026-10-12T11:53:43.502924882Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.502927841Z   File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+2026-10-12T11:53:43.503307424Z   File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+2026-10-12T11:53:43.503315174Z   File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+2026-10-12T11:53:43.503320007Z   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+2026-10-12T11:53:43.503322632Z   File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+2026-10-12T11:53:43.503324132Z   File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+2026-10-12T11:53:43.503326341Z   File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+2026-10-12T11:53:43.503330882Z   File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+2026-10-12T11:53:43.503335049Z   File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+2026-10-12T11:53:43.503341091Z   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+2026-10-12T11:53:43.503345216Z   File "/opt/workspace/ai-for-investor/src/backend/app/__init__.py", line 8, in <module>
+2026-10-12T11:53:43.503346924Z     from . import api, config, db, services, utils
+2026-10-12T11:53:43.503350091Z   File "/opt/workspace/ai-for-investor/src/backend/app/db/__init__.py", line 3, in <module>
+2026-10-12T11:53:43.503352799Z     from app.db.akshare_data_database import get_akshare_data_db
+2026-10-12T11:53:43.503356799Z   File "/opt/workspace/ai-for-investor/src/backend/app/db/akshare_data_database.py", line 13, in <module>
+2026-10-12T11:53:43.503362466Z     settings = get_settings()
+2026-10-12T11:53:43.503364632Z                ^^^^^^^^^^^^^^
+2026-10-12T11:53:43.503369674Z   File "/opt/workspace/ai-for-investor/src/backend/app/config.py", line 1310, in get_settings
+2026-10-12T11:53:43.503374507Z     _settings = Settings()
+2026-10-12T11:53:43.503376132Z                 ^^^^^^^^^^
+2026-10-12T11:53:43.503377466Z   File "/usr/local/lib/python3.12/site-packages/pydantic_settings/main.py", line 247, in __init__
+2026-10-12T11:53:43.503379007Z     super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+2026-10-12T11:53:43.503380507Z   File "/usr/local/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+2026-10-12T11:53:43.503382007Z     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+2026-10-12T11:53:43.503383466Z                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.503384924Z pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+2026-10-12T11:53:43.503386424Z   Value error, Default admin password detected. Set ADMIN_PASSWORD to a secure password in production. [type=value_error, input_value={'APP_NAME': 'ai-for-inve....0.0.0', 'PORT': '8000'}, input_type=dict]
+2026-10-12T11:53:43.503454341Z     For further information visit https://errors.pydantic.dev/2.13/v/value_error
+2026-10-12T11:53:43.503615549Z 1 validation error for Settings
+2026-10-12T11:53:43.503912591Z   Value error, Default admin password detected. Set ADMIN_PASSWORD to a secure password in production. [type=value_error, input_value={'APP_NAME': 'ai-for-inve....0.0.0', 'PORT': '8000'}, input_type=dict]
+2026-10-12T11:53:43.503917966Z     For further information visit https://errors.pydantic.dev/2.13/v/value_error
+2026-10-12T11:53:43.503920132Z [2026-10-12 11:53:43 +0000] [9] [INFO] Worker exiting (pid: 9)
+2026-10-12T11:53:43.503921716Z [2026-10-12 11:53:43 +0000] [8] [ERROR] Exception in worker process
+2026-10-12T11:53:43.503923132Z Traceback (most recent call last):
+2026-10-12T11:53:43.503926132Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 713, in spawn_worker
+2026-10-12T11:53:43.503927716Z     worker.init_process()
+2026-10-12T11:53:43.503929174Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/workers/base.py", line 136, in init_process
+2026-10-12T11:53:43.503930716Z     self.load_wsgi()
+2026-10-12T11:53:43.503932091Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/workers/base.py", line 148, in load_wsgi
+2026-10-12T11:53:43.503933674Z     self.wsgi = self.app.wsgi()
+2026-10-12T11:53:43.503938341Z                 ^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.503943257Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/base.py", line 66, in wsgi
+2026-10-12T11:53:43.503947924Z     self.callable = self.load()
+2026-10-12T11:53:43.503949799Z                     ^^^^^^^^^^^
+2026-10-12T11:53:43.503955216Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/wsgiapp.py", line 57, in load
+2026-10-12T11:53:43.503960799Z     return self.load_wsgiapp()
+2026-10-12T11:53:43.503965257Z            ^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.503970882Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/wsgiapp.py", line 47, in load_wsgiapp
+2026-10-12T11:53:43.503975424Z     return util.import_app(self.app_uri)
+2026-10-12T11:53:43.503977507Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.503982507Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/util.py", line 411, in import_app
+2026-10-12T11:53:43.503985466Z     mod = importlib.import_module(module)
+2026-10-12T11:53:43.503987799Z           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.503992382Z   File "/usr/local/lib/python3.12/importlib/__init__.py", line 90, in import_module
+2026-10-12T11:53:43.503995257Z     return _bootstrap._gcd_import(name[level:], package, level)
+2026-10-12T11:53:43.504000174Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.504004799Z   File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+2026-10-12T11:53:43.504010466Z   File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+2026-10-12T11:53:43.504014757Z   File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+2026-10-12T11:53:43.504030466Z   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+2026-10-12T11:53:43.504035924Z   File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+2026-10-12T11:53:43.504040549Z   File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+2026-10-12T11:53:43.504045382Z   File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+2026-10-12T11:53:43.504048091Z   File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+2026-10-12T11:53:43.504052174Z   File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+2026-10-12T11:53:43.504053966Z   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+2026-10-12T11:53:43.504057049Z   File "/opt/workspace/ai-for-investor/src/backend/app/__init__.py", line 8, in <module>
+2026-10-12T11:53:43.504063549Z     from . import api, config, db, services, utils
+2026-10-12T11:53:43.504068424Z   File "/opt/workspace/ai-for-investor/src/backend/app/db/__init__.py", line 3, in <module>
+2026-10-12T11:53:43.504070674Z     from app.db.akshare_data_database import get_akshare_data_db
+2026-10-12T11:53:43.504231632Z   File "/opt/workspace/ai-for-investor/src/backend/app/db/akshare_data_database.py", line 13, in <module>
+2026-10-12T11:53:43.504236757Z     settings = get_settings()
+2026-10-12T11:53:43.504238299Z                ^^^^^^^^^^^^^^
+2026-10-12T11:53:43.504239632Z   File "/opt/workspace/ai-for-investor/src/backend/app/config.py", line 1310, in get_settings
+2026-10-12T11:53:43.504241174Z     _settings = Settings()
+2026-10-12T11:53:43.504242507Z                 ^^^^^^^^^^
+2026-10-12T11:53:43.504244007Z   File "/usr/local/lib/python3.12/site-packages/pydantic_settings/main.py", line 247, in __init__
+2026-10-12T11:53:43.504245507Z     super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+2026-10-12T11:53:43.504246966Z   File "/usr/local/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+2026-10-12T11:53:43.504248507Z     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+2026-10-12T11:53:43.504249966Z                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-12T11:53:43.504251424Z pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+2026-10-12T11:53:43.504253049Z   Value error, Default admin password detected. Set ADMIN_PASSWORD to a secure password in production. [type=value_error, input_value={'APP_NAME': 'ai-for-inve....0.0.0', 'PORT': '8000'}, input_type=dict]
+2026-10-12T11:53:43.504254882Z     For further information visit https://errors.pydantic.dev/2.13/v/value_error
+2026-10-12T11:53:43.504256341Z 1 validation error for Settings
+2026-10-12T11:53:43.504257674Z   Value error, Default admin password detected. Set ADMIN_PASSWORD to a secure password in production. [type=value_error, input_value={'APP_NAME': 'ai-for-inve....0.0.0', 'PORT': '8000'}, input_type=dict]
+2026-10-12T11:53:43.504262924Z     For further information visit https://errors.pydantic.dev/2.13/v/value_error
+2026-10-12T11:53:43.504264424Z [2026-10-12 11:53:43 +0000] [8] [INFO] Worker exiting (pid: 8)
+2026-10-12T11:53:44.178975633Z [2026-10-12 11:53:44 +0000] [7] [ERROR] Worker (pid:8) exited with code 3.
+2026-10-12T11:53:44.204469508Z [2026-10-12 11:53:44 +0000] [7] [ERROR] Worker (pid:9) exited with code 3.
+2026-10-12T11:53:44.205678633Z Traceback (most recent call last):
+2026-10-12T11:53:44.205696674Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 246, in run
+2026-10-12T11:53:44.210367091Z     handler()
+2026-10-12T11:53:44.210542799Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 271, in handle_chld
+2026-10-12T11:53:44.210560633Z     self.reap_workers()
+2026-10-12T11:53:44.210562799Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 641, in reap_workers
+2026-10-12T11:53:44.210892174Z     raise HaltServer(reason, self.WORKER_BOOT_ERROR)
+2026-10-12T11:53:44.211178549Z gunicorn.errors.HaltServer: <HaltServer 'Worker failed to boot.' 3>
+2026-10-12T11:53:44.211222883Z 
+2026-10-12T11:53:44.211228341Z During handling of the above exception, another exception occurred:
+2026-10-12T11:53:44.211229883Z 
+2026-10-12T11:53:44.211231049Z Traceback (most recent call last):
+2026-10-12T11:53:44.211232216Z   File "/usr/local/bin/gunicorn", line 8, in <module>
+2026-10-12T11:53:44.211667716Z     sys.exit(run())
+2026-10-12T11:53:44.212520508Z              ^^^^^
+2026-10-12T11:53:44.212608341Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/wsgiapp.py", line 66, in run
+2026-10-12T11:53:44.213270424Z     WSGIApplication("%(prog)s [OPTIONS] [APP_MODULE]", prog=prog).run()
+2026-10-12T11:53:44.213290299Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/base.py", line 235, in run
+2026-10-12T11:53:44.213295633Z     super().run()
+2026-10-12T11:53:44.213297258Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/app/base.py", line 71, in run
+2026-10-12T11:53:44.213330633Z     Arbiter(self).run()
+2026-10-12T11:53:44.213638591Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 254, in run
+2026-10-12T11:53:44.213665758Z     self.halt(reason=inst.reason, exit_status=inst.exit_status)
+2026-10-12T11:53:44.213668883Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 378, in halt
+2026-10-12T11:53:44.213964633Z     self.stop()
+2026-10-12T11:53:44.214451216Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 458, in stop
+2026-10-12T11:53:44.214456633Z     self.reap_workers()
+2026-10-12T11:53:44.214832966Z   File "/usr/local/lib/python3.12/site-packages/gunicorn/arbiter.py", line 641, in reap_workers
+2026-10-12T11:53:44.214849091Z     raise HaltServer(reason, self.WORKER_BOOT_ERROR)
+2026-10-12T11:53:44.214854633Z gunicorn.errors.HaltServer: <HaltServer 'Worker failed to boot.' 3>

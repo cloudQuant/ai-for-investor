@@ -1,0 +1,1 @@
+::error::mypy_ratchet: mypy version mismatch (baseline='mypy 1.20.2 (compiled: yes)', running='mypy 2.3.1 (compiled: yes)'); install the pinned version or regenerate the baseline intentionally.

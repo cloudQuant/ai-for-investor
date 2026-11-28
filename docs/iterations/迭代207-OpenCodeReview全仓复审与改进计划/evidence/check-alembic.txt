@@ -1,0 +1,103 @@
+============================================================
+Alembic Migration Chain Verification
+============================================================
+
+--- Check 1: Migration files exist ---
+Found 88 migration file(s):
+  - 0001_baseline.py
+  - 0002_add_performance_indexes.py
+  - 0003_add_trading_workspace_fields.py
+  - 0004_add_composite_listing_indexes.py
+  - 0005_add_ai_trading_logs.py
+  - 0006_add_ai_call_logs.py
+  - 0007_add_ai_budget_fields.py
+  - 0008_add_ai_model_preferences.py
+  - 0009_add_prompt_templates.py
+  - 0010_add_prompt_rollout_fields.py
+  - 0011_add_stock_analysis_tables.py
+  - 0012_add_scanner_plan_tables.py
+  - 0013_float_paper_trading_sizes.py
+  - 0014_add_paper_trading_margin_fields.py
+  - 0015_add_workspace_listing_indexes.py
+  - 20260705_b_data_backtest_trust.py
+  - 20260718_ai_research_audit_schema.py
+  - 20260718_paper_runtime_risk_schema.py
+  - 20260718_runtime_identity_lifecycle.py
+  - 20260801_stock_signal_predictions.py
+  - 20260802_asset_research_foundation.py
+  - 20260803_asset_research_schedule_reliability.py
+  - 20260804_asset_research_run_integrity.py
+  - 20260805_asset_research_outcome_reliability.py
+  - 20260806_asset_research_direct_run_prediction.py
+  - 20260807_asset_research_schedule_manifests.py
+  - 20260808_asset_research_manifest_evidence_required.py
+  - 20260809_asset_research_maturity_reason_contract.py
+  - 20260810_asset_research_option_context_binding.py
+  - 20260811_asset_research_task_leases.py
+  - 20260904_ai_research_forward_observation.py
+  - 20260904_ai_research_profile_quarantine.py
+  - 20260904_ai_research_protocol_v2.py
+  - 20260905_ai_research_budget_context.py
+  - 20260905_ai_research_data_prechecks.py
+  - 20260905_ai_research_dataset_identity.py
+  - 20260905_ai_research_dataset_storage_reference.py
+  - 20260905_ai_research_discovery_executions.py
+  - 20260905_ai_research_epoch_family_unique.py
+  - 20260905_ai_research_evidence_packages.py
+  - 20260905_ai_research_generation_materialization.py
+  - 20260905_ai_research_holdout_candidate_hash.py
+  - 20260905_ai_research_provider_model.py
+  - 20260905_ai_research_stage_artifact_binding.py
+  - 20260905_ai_research_task_events.py
+  - 20260906_ai_research_search_allocation.py
+  - 20260906_ai_research_workflow_version.py
+  - 20260907_ai_research_candidate_freeze_receipt.py
+  - 20260907_ai_research_holdout_claim.py
+  - 20260907_ai_research_holdout_finalize.py
+  - 20260907_ai_research_holdout_request.py
+  - 20260908_ai_research_approval_authority.py
+  - 20260908_ai_research_evidence_command.py
+  - 20260908_ai_research_holdout_executions.py
+  - 20260908_market_data_catalog.py
+  - 20260908_market_data_observations.py
+  - 20260908_market_data_shared_dataset_bindings.py
+  - 20260908_market_data_source_governance.py
+  - 20260908_market_data_source_receipt_evidence.py
+  - 20260908_market_data_visibility_anchor.py
+  - 20260909_ai_research_market_data_merge.py
+  - 20260909_market_data_constraint_name_portability.py
+  - 20260909_market_data_exact_identity_collation.py
+  - 20260909_market_data_fetch_leases.py
+  - 20260909_market_data_research_binding_consumers.py
+  - 20260909_market_data_research_bindings.py
+  - 20260910_market_data_capability_ledger.py
+  - 20260910_market_data_shared_source_payloads.py
+  - 20260911_market_data_b2_completeness_evidence.py
+  - 20260911_market_data_deferred_publications.py
+  - 20260911_market_data_semantic_record_keys.py
+  - 20261012_optimization_objective_direction.py
+  - 20261015_portfolio_composition_versions.py
+  - 20261015_portfolio_import_source_material.py
+  - 20261016_afi04_analytics_paper_merge.py
+  - 20261016_approved_target_http_operations.py
+  - 20261016_legacy_paper_cutover.py
+  - 20261016_legacy_paper_import.py
+  - 20261016_portfolio_analytics_datasets_v1.py
+  - 20261016_service_order_operations.py
+  - 20261016_strategy_approval_authority_sources.py
+  - 20261016_strategy_target_approvals.py
+  - 20261017_legacy_paper_import_cutover.py
+  - 20261030_stock_analysis_snapshot_grants.py
+  - 20261031_stock_daily_snapshot_grants.py
+  - 20261101_stock_analysis_report_evidence_vector.py
+  - 20261106_akshare_run_coordinator_claims.py
+  - 21d572b67d8e_align_dev_orm_schema.py
+
+--- Check 2: Single migration head (no branching) ---
+✓ Single migration head: 20261106_akshare_run_coordinator_claims (head)
+
+--- Check 3: Unbroken migration chain ---
+✓ Migration history is continuous (88 revision(s) found)
+
+============================================================
+✅ All migration checks passed

@@ -1,0 +1,1140 @@
+[2m[WebServer] [22m(node:4771) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 7 tests using 1 worker
+
+[2m[WebServer] [22mError:   Failed to scan for dependencies from entries:
+[2m[WebServer] [22m  /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/index.html
+[2m[WebServer] [22m
+[2m[WebServer] [22m  [31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:183:36:
+[2m[WebServer] [22m[37m      183 │ ...        component: () => import([32m'@/views/data/DataSyncPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                    [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14534:34
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14529:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/i18n/locales/ja-JP.ts:1:28:
+[2m[WebServer] [22m[37m      1 │ import { buildLocale } from [32m'./localeFactory'[37m
+[2m[WebServer] [22m        ╵                             [32m~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14534:34
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingP[2m[WebServer] [22macket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14529:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/i18n/locales/ru-RU.ts:1:28:
+[2m[WebServer] [22m[37m      1 │ import { buildLocale } from [32m'./localeFactory'[37m
+[2m[WebServer] [22m        ╵                             [32m~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14534:34
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14529:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/i18n/locales/it-IT.ts:1:28:
+[2m[WebServer] [22m[37m      1 │ import { buildLocale } from [32m'./localeFactory'[37m
+[2m[WebServer] [22m        ╵                             [32m~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modul[2m[WebServer] [22mes/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:188:36:
+[2m[WebServer] [22m[37m      188 │ ...  component: () => import([32m'@/views/data/DataInterfacesPage.vue'[37m),
+[2m[WebServer] [22m          ╵                              [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:193:36:
+[2m[WebServer] [22m[37m      193 │ ...  component: () => import([32m'@/views/data/DataGovernancePage.vue'[37m),
+[2m[WebServer] [22m          ╵                              [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14534:34
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14529:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/i18n/locales/de-DE.ts:1:28:
+[2m[WebServer] [22m[37m      1 │ import { buildLocale } from [32m'./localeFactory'[37m
+[2m[WebServer] [22m        ╵                             [32m~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/n[2m[WebServer] [22mode_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:198:36:
+[2m[WebServer] [22m[37m      198 │ ...     component: () => import([32m'@/views/data/AirflowDagsPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14534:34
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14529:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/i18n/locales/fr-FR.ts:1:28:
+[2m[WebServer] [22m[37m      1 │ import { buildLocale } from [32m'./localeFactory'[37m
+[2m[WebServer] [22m        ╵                             [32m~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Obj[2m[WebServer] [22mect.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:204:32:
+[2m[WebServer] [22m[37m      204 │ ...    component: () => import([32m'@/views/config/ConfigAILayout.vue'[37m),
+[2m[WebServer] [22m          ╵                                [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:214:36:
+[2m[WebServer] [22m[37m      214 │ ...mponent: () => import([32m'@/views/config/AIProviderConfigPage.vue'[37m),
+[2m[WebServer] [22m          ╵                          [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:219:36:
+[2m[WebServer] [22m[37m      219 │ ...      component: () => import([32m'@/views/PromptTemplatesPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                  [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/nod[2m[WebServer] [22me/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:224:36:
+[2m[WebServer] [22m[37m      224 │ ...      component: () => import([32m'@/views/AIObservabilityPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                  [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:231:32:
+[2m[WebServer] [22m[37m      231 │         component: () => import([32m'@/views/GatewayStatusPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules[2m[WebServer] [22m/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:258:32:
+[2m[WebServer] [22m[37m      258 │         component: () => import([32m'@/views/AITradingPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:285:32:
+[2m[WebServer] [22m[37m      285 │ ...   component: () => import([32m'@/views/PaperTradingDetailPage.vue'[37m),
+[2m[WebServer] [22m          ╵                               [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:290:32:
+[2m[WebServer] [22m[37m      290 │         component: () => import([32m'@/views/RiskControlPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/[2m[WebServer] [22mdep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:303:32:
+[2m[WebServer] [22m[37m      303 │         component: () => import([32m'@/views/data/DataLayout.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:313:36:
+[2m[WebServer] [22m[37m      313 │ ...      component: () => import([32m'@/views/data/DataMarketPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                  [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/fron[2m[WebServer] [22mtend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:318:36:
+[2m[WebServer] [22m[37m      318 │             component: () => import([32m'@/views/QuotePage.vue'[37m),
+[2m[WebServer] [22m          ╵                                     [32m~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:323:36:
+[2m[WebServer] [22m[37m      323 │ ...     component: () => import([32m'@/views/NewsIntelligencePage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:332:36:
+[2m[WebServer] [22m[37m      332 │             component: () => import([32m'@/views/ScannerPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                     [32m~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError [2m[WebServer] [22m(file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:357:36:
+[2m[WebServer] [22m[37m      357 │ ...      component: () => import([32m'@/views/data/DataTablesPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                  [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:362:36:
+[2m[WebServer] [22m[37m      362 │ ... component: () => import([32m'@/views/data/DataTableDetailPage.vue'[37m),
+[2m[WebServer] [22m          ╵                             [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise [2m[WebServer] [22m= [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:367:36:
+[2m[WebServer] [22m[37m      367 │ ...      component: () => import([32m'@/views/data/DataTopicsPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                  [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:462:32:
+[2m[WebServer] [22m[37m      462 │         component: () => import([32m'@/views/PortfolioPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mThe server is being restarted or closed. Request is outdated[0m [1m[35m[plugin vite:dep-scan][0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1217:27:
+[2m[WebServer] [22m[37m      1217 │         let result = await [32m[37mcallback({
+[2m[WebServer] [22m           ╵                            [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at throwClosedServerError (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42373:15)
+[2m[WebServer] [22m    at EnvironmentPluginContainer.resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:42552:9)
+[2m[WebServer] [22m    at resolveId (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14314:40)
+[2m[WebServer] [22m    at resolve (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14325:28)
+[2m[WebServer] [22m    at file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14380:32
+[2m[WebServer] [22m    at requestCallbacks.on-resolve (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1217:28)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+[2m[WebServer] [22m    at Socket.emit (node:events:524:28)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  This error came from the "onResolve" callback registered here:
+[2m[WebServer] [22m
+[2m[WebServer] [22m    node_modules/esbuild/lib/main.js:1141:20:
+[2m[WebServer] [22m[37m      1141 │       let promise = [32m[37msetup({
+[2m[WebServer] [22m           ╵                     [32m^[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at setup (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14379:13)
+[2m[WebServer] [22m    at handlePlugins (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1141:21)
+[2m[WebServer] [22m    at buildOrContextImpl (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:854:5)
+[2m[WebServer] [22m    at Object.buildOrContext (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:680:5)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:68
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:2035:27)
+[2m[WebServer] [22m    at Object.context (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1877:58)
+[2m[WebServer] [22m    at prepareEsbuildScanner (file:///Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/vite/dist/node/chunks/dep-3O3b9SCF.js:14266:24)
+[2m[WebServer] [22m
+[2m[WebServer] [22m  The plugin "vite:dep-scan" was triggered by this import
+[2m[WebServer] [22m
+[2m[WebServer] [22m    src/router/index.ts:516:32:
+[2m[WebServer] [22m[37m      516 │         component: () => import([32m'@/views/SettingsPage.vue'[37m),
+[2m[WebServer] [22m          ╵                                 [32m~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[2m[WebServer] [22m
+[2m[WebServer] [22m
+[2m[WebServer] [22m    at failureErrorWithLog (/Users/yunjinqi/Documents[2m[WebServer] [22m/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1467:15)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:926:25
+[2m[WebServer] [22m    at runOnEndCallbacks (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:1307:45)
+[2m[WebServer] [22m    at buildResponseToResult (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:924:7)
+[2m[WebServer] [22m    at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:936:9
+[2m[WebServer] [22m    at new Promise (<anonymous>)
+[2m[WebServer] [22m    at requestCallbacks.on-end (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:935:54)
+[2m[WebServer] [22m    at handleRequest (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:628:17)
+[2m[WebServer] [22m    at handleIncomingPacket (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:653:7)
+[2m[WebServer] [22m    at Socket.readFromStdout (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/esbuild/lib/main.js:581:7)
+  ✘  1 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry (1.3m)
+
+
+  1) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+
+    Test was interrupted.
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByTestId('identity-retry-panel')
+    Expected: visible
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 60000ms[22m
+    [2m  - waiting for getByTestId('identity-retry-panel')[22m
+
+
+      421 |
+      422 |   await page.goto('/research/workspaces')
+    > 423 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+          |                                                          ^
+      424 |   expect(meCalls).toBe(4)
+      425 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
+      426 |   expect(workspaceRequests).toEqual([])
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:423:58
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 interrupted
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+  6 did not run

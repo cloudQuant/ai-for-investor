@@ -1,0 +1,668 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 2.69kB 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 1.9s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 836B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+#4 resolve docker.io/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 13.28MB 2.8s done
+#5 DONE 3.0s
+
+#6 [ 2/11] WORKDIR /opt/workspace/ai-for-investor/src/backend
+#6 CACHED
+
+#7 [ 3/11] RUN apt-get update &&     apt-get install -y --no-install-recommends ca-certificates git &&     rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [ 4/11] COPY config/requirements-prod.lock ./requirements-prod.lock
+#8 CACHED
+
+#9 [ 5/11] COPY src/backend /opt/workspace/ai-for-investor/src/backend
+#9 DONE 39.3s
+
+#10 [ 6/11] COPY src/bt_api_py /opt/workspace/bt_api_py
+#10 DONE 0.6s
+
+#11 [ 7/11] COPY strategies /opt/workspace/ai-for-investor/strategies
+#11 DONE 0.8s
+
+#12 [ 8/11] RUN pip install --no-cache-dir -r requirements-prod.lock &&     pip install --no-cache-dir --no-deps -e .
+#12 4.143 Collecting backtrader@ git+https://github.com/cloudQuant/backtrader.git@04adc08c2deb02cbf240efbd495e5eee68b375d8 (from -r requirements-prod.lock (line 29))
+#12 4.144   Cloning https://github.com/cloudQuant/backtrader.git (to revision 04adc08c2deb02cbf240efbd495e5eee68b375d8) to /tmp/pip-install-7u37rn5_/backtrader_786e81ffd3b24e73ad81010521cb41cb
+#12 4.161   Running command git clone --filter=blob:none --quiet https://github.com/cloudQuant/backtrader.git /tmp/pip-install-7u37rn5_/backtrader_786e81ffd3b24e73ad81010521cb41cb
+#12 714.9   Running command git rev-parse -q --verify 'sha^04adc08c2deb02cbf240efbd495e5eee68b375d8'
+#12 715.0   Running command git fetch -q https://github.com/cloudQuant/backtrader.git 04adc08c2deb02cbf240efbd495e5eee68b375d8
+#12 715.9   Running command git checkout -q 04adc08c2deb02cbf240efbd495e5eee68b375d8
+#12 718.2   Resolved https://github.com/cloudQuant/backtrader.git to commit 04adc08c2deb02cbf240efbd495e5eee68b375d8
+#12 718.2   Installing build dependencies: started
+#12 724.3   Installing build dependencies: finished with status 'done'
+#12 724.3   Getting requirements to build wheel: started
+#12 724.8   Getting requirements to build wheel: finished with status 'done'
+#12 724.8   Preparing metadata (pyproject.toml): started
+#12 725.3   Preparing metadata (pyproject.toml): finished with status 'done'
+#12 725.6 Collecting aiomysql==0.3.2 (from -r requirements-prod.lock (line 3))
+#12 725.9   Downloading aiomysql-0.3.2-py3-none-any.whl.metadata (5.1 kB)
+#12 725.9 Collecting aiosqlite==0.22.1 (from -r requirements-prod.lock (line 5))
+#12 726.0   Downloading aiosqlite-0.22.1-py3-none-any.whl.metadata (4.3 kB)
+#12 726.3 Collecting akshare==1.18.97 (from -r requirements-prod.lock (line 7))
+#12 726.4   Downloading akshare-1.18.97-py3-none-any.whl.metadata (14 kB)
+#12 726.5 Collecting alembic==1.20.0 (from -r requirements-prod.lock (line 9))
+#12 726.6   Downloading alembic-1.20.0-py3-none-any.whl.metadata (7.3 kB)
+#12 726.7 Collecting annotated-doc==0.0.4 (from -r requirements-prod.lock (line 11))
+#12 726.8   Downloading annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+#12 726.8 Collecting annotated-types==0.7.0 (from -r requirements-prod.lock (line 13))
+#12 727.1   Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+#12 727.3 Collecting anyio==4.15.1 (from -r requirements-prod.lock (line 15))
+#12 727.3   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+#12 727.4 Collecting apscheduler==3.11.2 (from -r requirements-prod.lock (line 21))
+#12 727.5   Downloading apscheduler-3.11.2-py3-none-any.whl.metadata (6.4 kB)
+#12 728.1 Collecting asgiref==3.12.1 (from -r requirements-prod.lock (line 23))
+#12 728.1   Downloading asgiref-3.12.1-py3-none-any.whl.metadata (9.4 kB)
+#12 728.3 Collecting async-timeout==5.0.1 (from -r requirements-prod.lock (line 25))
+#12 728.4   Downloading async_timeout-5.0.1-py3-none-any.whl.metadata (5.1 kB)
+#12 729.0 Collecting asyncpg==0.31.0 (from -r requirements-prod.lock (line 27))
+#12 729.1   Downloading asyncpg-0.31.0-cp312-cp312-manylinux_2_28_aarch64.whl.metadata (4.4 kB)
+#12 729.6 Collecting bcrypt==5.0.0 (from -r requirements-prod.lock (line 31))
+#12 729.6   Downloading bcrypt-5.0.0-cp39-abi3-manylinux_2_34_aarch64.whl.metadata (10 kB)
+#12 729.8 Collecting beautifulsoup4==4.14.3 (from -r requirements-prod.lock (line 33))
+#12 729.9   Downloading beautifulsoup4-4.14.3-py3-none-any.whl.metadata (3.8 kB)
+#12 730.4 Collecting brotli==1.2.0 (from -r requirements-prod.lock (line 35))
+#12 730.5   Downloading brotli-1.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (6.1 kB)
+#12 730.7 Collecting certifi==2026.4.22 (from -r requirements-prod.lock (line 37))
+#12 730.8   Downloading certifi-2026.4.22-py3-none-any.whl.metadata (2.5 kB)
+#12 734.0 Collecting cffi==2.0.0 (from -r requirements-prod.lock (line 43))
+#12 734.1   Downloading cffi-2.0.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl.metadata (2.6 kB)
+#12 735.9 Collecting charset-normalizer==3.4.7 (from -r requirements-prod.lock (line 48))
+#12 736.0   Downloading charset_normalizer-3.4.7-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (40 kB)
+#12 736.3 Collecting click==8.4.0 (from -r requirements-prod.lock (line 50))
+#12 736.4   Downloading click-8.4.0-py3-none-any.whl.metadata (2.6 kB)
+#12 737.1 Collecting contourpy==1.3.3 (from -r requirements-prod.lock (line 52))
+#12 737.3   Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl.metadata (5.5 kB)
+#12 740.3 Collecting cryptography==50.0.0 (from -r requirements-prod.lock (line 54))
+#12 740.4   Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_aarch64.whl.metadata (4.3 kB)
+#12 740.5 Collecting cssselect2==0.9.0 (from -r requirements-prod.lock (line 58))
+#12 740.6   Downloading cssselect2-0.9.0-py3-none-any.whl.metadata (2.9 kB)
+#12 741.6 Collecting curl-cffi==0.15.0 (from -r requirements-prod.lock (line 60))
+#12 741.6   Downloading curl_cffi-0.15.0-cp310-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl.metadata (18 kB)
+#12 741.8 Collecting cycler==0.12.1 (from -r requirements-prod.lock (line 62))
+#12 741.9   Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+#12 742.1 Collecting decorator==5.3.1 (from -r requirements-prod.lock (line 64))
+#12 742.1   Downloading decorator-5.3.1-py3-none-any.whl.metadata (3.9 kB)
+#12 742.3 Collecting deprecated==1.3.1 (from -r requirements-prod.lock (line 66))
+#12 742.4   Downloading deprecated-1.3.1-py2.py3-none-any.whl.metadata (5.9 kB)
+#12 742.5 Collecting dnspython==2.8.0 (from -r requirements-prod.lock (line 68))
+#12 742.6   Downloading dnspython-2.8.0-py3-none-any.whl.metadata (5.7 kB)
+#12 742.8 Collecting email-validator==2.3.0 (from -r requirements-prod.lock (line 70))
+#12 742.9   Downloading email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+#12 743.0 Collecting et-xmlfile==2.0.0 (from -r requirements-prod.lock (line 72))
+#12 743.1   Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+#12 744.0 Collecting fastapi==0.136.1 (from -r requirements-prod.lock (line 74))
+#12 744.0   Downloading fastapi-0.136.1-py3-none-any.whl.metadata (28 kB)
+#12 744.3 Collecting fincore==0.5.0 (from -r requirements-prod.lock (line 76))
+#12 744.4   Downloading fincore-0.5.0-py3-none-any.whl.metadata (10 kB)
+#12 747.3 Collecting fonttools==4.63.0 (from -r requirements-prod.lock (line 78))
+#12 747.3   Downloading fonttools-4.63.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (118 kB)
+#12 747.8 Collecting formulaic==1.2.2 (from -r requirements-prod.lock (line 82))
+#12 747.9   Downloading formulaic-1.2.2-py3-none-any.whl.metadata (7.0 kB)
+#12 748.1 Collecting googleapis-common-protos==1.75.0 (from -r requirements-prod.lock (line 84))
+#12 748.2   Downloading googleapis_common_protos-1.75.0-py3-none-any.whl.metadata (8.6 kB)
+#12 750.8 Collecting greenlet==3.5.0 (from -r requirements-prod.lock (line 86))
+#12 750.9   Downloading greenlet-3.5.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl.metadata (3.7 kB)
+#12 761.7 Collecting grpcio==1.83.0 (from -r requirements-prod.lock (line 88))
+#12 761.7   Downloading grpcio-1.83.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl.metadata (3.7 kB)
+#12 762.1 Collecting gunicorn==26.0.0 (from -r requirements-prod.lock (line 90))
+#12 762.1   Downloading gunicorn-26.0.0-py3-none-any.whl.metadata (5.4 kB)
+#12 762.3 Collecting h11==0.16.0 (from -r requirements-prod.lock (line 92))
+#12 762.4   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+#12 762.5 Collecting html5lib==1.1 (from -r requirements-prod.lock (line 96))
+#12 762.6   Downloading html5lib-1.1-py2.py3-none-any.whl.metadata (16 kB)
+#12 763.2 Collecting httpcore==1.0.9 (from -r requirements-prod.lock (line 98))
+#12 763.4   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+#12 764.6 Collecting httptools==0.7.1 (from -r requirements-prod.lock (line 100))
+#12 764.7   Downloading httptools-0.7.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (3.5 kB)
+#12 765.2 Collecting httpx==0.28.1 (from -r requirements-prod.lock (line 102))
+#12 765.3   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+#12 765.6 Collecting idna==3.15 (from -r requirements-prod.lock (line 104))
+#12 765.6   Downloading idna-3.15-py3-none-any.whl.metadata (7.7 kB)
+#12 765.9 Collecting interface-meta==2.0.1 (from -r requirements-prod.lock (line 110))
+#12 765.9   Downloading interface_meta-2.0.1-py3-none-any.whl.metadata (6.4 kB)
+#12 766.2 Collecting jinja2==3.1.6 (from -r requirements-prod.lock (line 112))
+#12 766.3   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+#12 766.8 Collecting joblib==1.5.3 (from -r requirements-prod.lock (line 114))
+#12 766.9   Downloading joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+#12 767.0 Collecting jsonpath==0.82.2 (from -r requirements-prod.lock (line 116))
+#12 767.1   Downloading jsonpath-0.82.2.tar.gz (10 kB)
+#12 767.3   Installing build dependencies: started
+#12 773.8   Installing build dependencies: finished with status 'done'
+#12 773.8   Getting requirements to build wheel: started
+#12 775.1   Getting requirements to build wheel: finished with status 'done'
+#12 775.1   Preparing metadata (pyproject.toml): started
+#12 776.2   Preparing metadata (pyproject.toml): finished with status 'done'
+#12 778.1 Collecting kiwisolver==1.5.1 (from -r requirements-prod.lock (line 118))
+#12 778.2   Downloading kiwisolver-1.5.1-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl.metadata (5.2 kB)
+#12 778.7 Collecting limits==5.8.0 (from -r requirements-prod.lock (line 120))
+#12 778.9   Downloading limits-5.8.0-py3-none-any.whl.metadata (10 kB)
+#12 780.3 Collecting loguru==0.7.3 (from -r requirements-prod.lock (line 122))
+#12 780.7   Downloading loguru-0.7.3-py3-none-any.whl.metadata (22 kB)
+#12 787.8 Collecting lxml==6.1.1 (from -r requirements-prod.lock (line 124))
+#12 787.9   Downloading lxml-6.1.1-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl.metadata (3.5 kB)
+#12 788.1 Collecting mako==1.4.3 (from -r requirements-prod.lock (line 126))
+#12 788.2   Downloading mako-1.4.3-py3-none-any.whl.metadata (2.9 kB)
+#12 788.4 Collecting markdown-it-py==4.2.0 (from -r requirements-prod.lock (line 128))
+#12 788.4   Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+#12 789.6 Collecting markupsafe==3.0.3 (from -r requirements-prod.lock (line 132))
+#12 789.6   Downloading markupsafe-3.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.7 kB)
+#12 792.1 Collecting matplotlib==3.11.2 (from -r requirements-prod.lock (line 136))
+#12 792.2   Downloading matplotlib-3.11.2-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl.metadata (80 kB)
+#12 792.9 Collecting mdurl==0.1.2 (from -r requirements-prod.lock (line 138))
+#12 793.3   Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+#12 793.6 Collecting mini-racer==0.14.1 (from -r requirements-prod.lock (line 140))
+#12 793.6   Downloading mini_racer-0.14.1-py3-none-manylinux_2_27_aarch64.whl.metadata (22 kB)
+#12 794.3 Collecting mysql-connector-python==9.7.0 (from -r requirements-prod.lock (line 142))
+#12 794.5   Downloading mysql_connector_python-9.7.0-cp312-cp312-manylinux_2_28_aarch64.whl.metadata (11 kB)
+#12 795.1 Collecting narwhals==2.26.0 (from -r requirements-prod.lock (line 144))
+#12 795.1   Downloading narwhals-2.26.0-py3-none-any.whl.metadata (15 kB)
+#12 798.4 Collecting numpy==1.26.4 (from -r requirements-prod.lock (line 148))
+#12 798.6   Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (62 kB)
+#12 799.1 Collecting openpyxl==3.1.5 (from -r requirements-prod.lock (line 162))
+#12 799.3   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+#12 799.5 Collecting opentelemetry-api==1.44.0 (from -r requirements-prod.lock (line 164))
+#12 799.6   Downloading opentelemetry_api-1.44.0-py3-none-any.whl.metadata (1.4 kB)
+#12 799.8 Collecting opentelemetry-exporter-otlp-proto-common==1.44.0 (from -r requirements-prod.lock (line 175))
+#12 799.9   Downloading opentelemetry_exporter_otlp_proto_common-1.44.0-py3-none-any.whl.metadata (1.8 kB)
+#12 800.1 Collecting opentelemetry-exporter-otlp-proto-grpc==1.44.0 (from -r requirements-prod.lock (line 177))
+#12 800.2   Downloading opentelemetry_exporter_otlp_proto_grpc-1.44.0-py3-none-any.whl.metadata (2.6 kB)
+#12 800.4 Collecting opentelemetry-instrumentation==0.65b0 (from -r requirements-prod.lock (line 179))
+#12 800.5   Downloading opentelemetry_instrumentation-0.65b0-py3-none-any.whl.metadata (7.2 kB)
+#12 800.8 Collecting opentelemetry-instrumentation-asgi==0.65b0 (from -r requirements-prod.lock (line 185))
+#12 800.9   Downloading opentelemetry_instrumentation_asgi-0.65b0-py3-none-any.whl.metadata (2.0 kB)
+#12 801.1 Collecting opentelemetry-instrumentation-fastapi==0.65b0 (from -r requirements-prod.lock (line 187))
+#12 801.2   Downloading opentelemetry_instrumentation_fastapi-0.65b0-py3-none-any.whl.metadata (2.2 kB)
+#12 801.5 Collecting opentelemetry-instrumentation-httpx==0.65b0 (from -r requirements-prod.lock (line 189))
+#12 801.6   Downloading opentelemetry_instrumentation_httpx-0.65b0-py3-none-any.whl.metadata (9.0 kB)
+#12 801.8 Collecting opentelemetry-instrumentation-sqlalchemy==0.65b0 (from -r requirements-prod.lock (line 191))
+#12 801.9   Downloading opentelemetry_instrumentation_sqlalchemy-0.65b0-py3-none-any.whl.metadata (2.2 kB)
+#12 802.2 Collecting opentelemetry-proto==1.44.0 (from -r requirements-prod.lock (line 193))
+#12 802.3   Downloading opentelemetry_proto-1.44.0-py3-none-any.whl.metadata (2.3 kB)
+#12 802.5 Collecting opentelemetry-sdk==1.44.0 (from -r requirements-prod.lock (line 197))
+#12 802.6   Downloading opentelemetry_sdk-1.44.0-py3-none-any.whl.metadata (1.6 kB)
+#12 802.8 Collecting opentelemetry-semantic-conventions==0.65b0 (from -r requirements-prod.lock (line 201))
+#12 802.9   Downloading opentelemetry_semantic_conventions-0.65b0-py3-none-any.whl.metadata (2.4 kB)
+#12 803.1 Collecting opentelemetry-util-http==0.65b0 (from -r requirements-prod.lock (line 209))
+#12 803.2   Downloading opentelemetry_util_http-0.65b0-py3-none-any.whl.metadata (2.6 kB)
+#12 803.4 Collecting packaging==26.2 (from -r requirements-prod.lock (line 214))
+#12 803.5   Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+#12 805.2 Collecting pandas==3.0.3 (from -r requirements-prod.lock (line 224))
+#12 805.3   Downloading pandas-3.0.3-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl.metadata (79 kB)
+#12 806.3 Collecting passlib==1.7.4 (from -r requirements-prod.lock (line 233))
+#12 806.4   Downloading passlib-1.7.4-py2.py3-none-any.whl.metadata (1.7 kB)
+#12 806.5 Collecting patsy==1.0.3 (from -r requirements-prod.lock (line 235))
+#12 806.5   Downloading patsy-1.0.3-py2.py3-none-any.whl.metadata (3.7 kB)
+#12 809.6 Collecting pillow==12.3.0 (from -r requirements-prod.lock (line 237))
+#12 809.7   Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (9.1 kB)
+#12 812.4 Collecting protobuf==7.35.1 (from -r requirements-prod.lock (line 241))
+#12 812.5   Downloading protobuf-7.35.1-cp310-abi3-manylinux2014_aarch64.whl.metadata (595 bytes)
+#12 812.7 Collecting purgedcv==0.1.3 (from -r requirements-prod.lock (line 245))
+#12 812.7   Downloading purgedcv-0.1.3-py3-none-any.whl.metadata (26 kB)
+#12 813.0 Collecting pycparser==3.0 (from -r requirements-prod.lock (line 247))
+#12 813.1   Downloading pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+#12 815.1 Collecting pydantic==2.13.4 (from -r requirements-prod.lock (line 249))
+#12 815.2   Downloading pydantic-2.13.4-py3-none-any.whl.metadata (109 kB)
+#12 835.5 Collecting pydantic-core==2.46.4 (from -r requirements-prod.lock (line 254))
+#12 835.6   Downloading pydantic_core-2.46.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (6.6 kB)
+#12 835.9 Collecting pydantic-settings==2.14.2 (from -r requirements-prod.lock (line 256))
+#12 835.9   Downloading pydantic_settings-2.14.2-py3-none-any.whl.metadata (3.4 kB)
+#12 836.1 Collecting pydyf==0.12.1 (from -r requirements-prod.lock (line 258))
+#12 836.3   Downloading pydyf-0.12.1-py3-none-any.whl.metadata (2.5 kB)
+#12 836.5 Collecting pygments==2.20.0 (from -r requirements-prod.lock (line 260))
+#12 836.6   Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+#12 836.9 Collecting pyjwt==2.15.1 (from -r requirements-prod.lock (line 262))
+#12 837.0   Downloading pyjwt-2.15.1-py3-none-any.whl.metadata (3.5 kB)
+#12 837.2 Collecting pymysql==1.2.3 (from -r requirements-prod.lock (line 264))
+#12 837.3   Downloading pymysql-1.2.3-py3-none-any.whl.metadata (4.2 kB)
+#12 837.8 Collecting pyparsing==3.3.2 (from -r requirements-prod.lock (line 268))
+#12 837.9   Downloading pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
+#12 838.1 Collecting pyphen==0.17.2 (from -r requirements-prod.lock (line 270))
+#12 838.1   Downloading pyphen-0.17.2-py3-none-any.whl.metadata (3.2 kB)
+#12 838.4 Collecting python-dateutil==2.9.0.post0 (from -r requirements-prod.lock (line 272))
+#12 838.5   Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+#12 839.0 Collecting python-dotenv==1.2.2 (from -r requirements-prod.lock (line 276))
+#12 839.1   Downloading python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+#12 839.6 Collecting python-multipart==0.0.31 (from -r requirements-prod.lock (line 280))
+#12 839.7   Downloading python_multipart-0.0.31-py3-none-any.whl.metadata (2.1 kB)
+#12 841.0 Collecting pytz==2026.2 (from -r requirements-prod.lock (line 282))
+#12 841.0   Downloading pytz-2026.2-py2.py3-none-any.whl.metadata (22 kB)
+#12 842.1 Collecting pyyaml==6.0.3 (from -r requirements-prod.lock (line 286))
+#12 842.2   Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.4 kB)
+#12 842.5 Collecting redis==7.4.0 (from -r requirements-prod.lock (line 290))
+#12 842.6   Downloading redis-7.4.0-py3-none-any.whl.metadata (12 kB)
+#12 843.2 Collecting requests==2.34.2 (from -r requirements-prod.lock (line 292))
+#12 843.3   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+#12 844.0 Collecting rich==15.0.0 (from -r requirements-prod.lock (line 294))
+#12 844.0   Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+#12 847.0 Collecting scikit-learn==1.9.0 (from -r requirements-prod.lock (line 296))
+#12 847.0   Downloading scikit_learn-1.9.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (11 kB)
+#12 849.2 Collecting scipy==1.17.1 (from -r requirements-prod.lock (line 298))
+#12 849.2   Downloading scipy-1.17.1-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (62 kB)
+#12 850.3 Collecting six==1.17.0 (from -r requirements-prod.lock (line 306))
+#12 850.4   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+#12 850.5 Collecting slowapi==0.1.9 (from -r requirements-prod.lock (line 310))
+#12 850.6   Downloading slowapi-0.1.9-py3-none-any.whl.metadata (3.0 kB)
+#12 850.8 Collecting soupsieve==2.9.2 (from -r requirements-prod.lock (line 312))
+#12 850.8   Downloading soupsieve-2.9.2-py3-none-any.whl.metadata (4.6 kB)
+#12 858.6 Collecting sqlalchemy==2.0.54 (from -r requirements-prod.lock (line 316))
+#12 858.7   Downloading sqlalchemy-2.0.54-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (9.7 kB)
+#12 859.2 Collecting starlette==1.3.1 (from -r requirements-prod.lock (line 320))
+#12 859.3   Downloading starlette-1.3.1-py3-none-any.whl.metadata (6.4 kB)
+#12 860.4 Collecting statsmodels==0.15.0 (from -r requirements-prod.lock (line 324))
+#12 860.5   Downloading statsmodels-0.15.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (9.6 kB)
+#12 860.7 Collecting tabulate==0.10.0 (from -r requirements-prod.lock (line 326))
+#12 860.8   Downloading tabulate-0.10.0-py3-none-any.whl.metadata (40 kB)
+#12 861.4 Collecting threadpoolctl==3.6.0 (from -r requirements-prod.lock (line 328))
+#12 861.5   Downloading threadpoolctl-3.6.0-py3-none-any.whl.metadata (13 kB)
+#12 861.7 Collecting tinycss2==1.5.1 (from -r requirements-prod.lock (line 330))
+#12 861.8   Downloading tinycss2-1.5.1-py3-none-any.whl.metadata (3.0 kB)
+#12 862.1 Collecting tinyhtml5==2.1.0 (from -r requirements-prod.lock (line 334))
+#12 862.2   Downloading tinyhtml5-2.1.0-py3-none-any.whl.metadata (2.9 kB)
+#12 862.8 Collecting tqdm==4.67.3 (from -r requirements-prod.lock (line 336))
+#12 862.9   Downloading tqdm-4.67.3-py3-none-any.whl.metadata (57 kB)
+#12 863.8 Collecting typing-extensions==4.16.0 (from -r requirements-prod.lock (line 338))
+#12 863.9   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+#12 864.1 Collecting typing-inspection==0.4.2 (from -r requirements-prod.lock (line 356))
+#12 864.2   Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+#12 864.5 Collecting tzlocal==5.3.1 (from -r requirements-prod.lock (line 361))
+#12 864.6   Downloading tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
+#12 865.1 Collecting urllib3==2.8.0 (from -r requirements-prod.lock (line 363))
+#12 865.1   Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+#12 865.7 Collecting uvicorn==0.47.0 (from -r requirements-prod.lock (line 368))
+#12 865.8   Downloading uvicorn-0.47.0-py3-none-any.whl.metadata (6.7 kB)
+#12 866.9 Collecting uvloop==0.22.1 (from -r requirements-prod.lock (line 370))
+#12 867.0   Downloading uvloop-0.22.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (4.9 kB)
+#12 868.6 Collecting watchfiles==1.2.0 (from -r requirements-prod.lock (line 372))
+#12 868.7   Downloading watchfiles-1.2.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (4.9 kB)
+#12 869.1 Collecting weasyprint==70.0 (from -r requirements-prod.lock (line 374))
+#12 869.2   Downloading weasyprint-70.0-py3-none-any.whl.metadata (3.8 kB)
+#12 869.3 Collecting webencodings==0.5.1 (from -r requirements-prod.lock (line 376))
+#12 869.3   Downloading webencodings-0.5.1-py2.py3-none-any.whl.metadata (2.1 kB)
+#12 873.0 Collecting websockets==16.0 (from -r requirements-prod.lock (line 382))
+#12 873.1   Downloading websockets-16.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (6.8 kB)
+#12 879.7 Collecting wrapt==2.1.2 (from -r requirements-prod.lock (line 384))
+#12 879.8   Downloading wrapt-2.1.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (7.4 kB)
+#12 879.9 Collecting xlrd==2.0.2 (from -r requirements-prod.lock (line 391))
+#12 880.0   Downloading xlrd-2.0.2-py2.py3-none-any.whl.metadata (3.5 kB)
+#12 880.7 Collecting zopfli==0.4.3 (from -r requirements-prod.lock (line 393))
+#12 880.8   Downloading zopfli-0.4.3-cp310-abi3-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl.metadata (3.5 kB)
+#12 881.3 Collecting py-mini-racer>=0.6.0 (from akshare==1.18.97->-r requirements-prod.lock (line 7))
+#12 881.3   Downloading py_mini_racer-0.6.0.tar.gz (6.0 MB)
+#12 928.8      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.0/6.0 MB 130.0 kB/s eta 0:00:00
+#12 929.1   Installing build dependencies: started
+#12 935.5   Installing build dependencies: finished with status 'done'
+#12 935.5   Getting requirements to build wheel: started
+#12 935.8   Getting requirements to build wheel: finished with status 'done'
+#12 935.8   Preparing metadata (pyproject.toml): started
+#12 936.2   Preparing metadata (pyproject.toml): finished with status 'done'
+#12 936.3 Collecting akracer>=0.0.13 (from akshare==1.18.97->-r requirements-prod.lock (line 7))
+#12 936.4   Downloading akracer-0.0.14-py3-none-any.whl.metadata (3.3 kB)
+#12 937.1 Downloading aiomysql-0.3.2-py3-none-any.whl (71 kB)
+#12 937.7 Downloading aiosqlite-0.22.1-py3-none-any.whl (17 kB)
+#12 937.8 Downloading akshare-1.18.97-py3-none-any.whl (1.3 MB)
+#12 948.3    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 131.8 kB/s eta 0:00:00
+#12 948.4 Downloading alembic-1.20.0-py3-none-any.whl (268 kB)
+#12 950.8 Downloading annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+#12 950.9 Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+#12 951.0 Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+#12 951.9 Downloading apscheduler-3.11.2-py3-none-any.whl (64 kB)
+#12 952.4 Downloading asgiref-3.12.1-py3-none-any.whl (25 kB)
+#12 952.8 Downloading async_timeout-5.0.1-py3-none-any.whl (6.2 kB)
+#12 952.9 Downloading asyncpg-0.31.0-cp312-cp312-manylinux_2_28_aarch64.whl (3.4 MB)
+#12 978.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 139.4 kB/s eta 0:00:00
+#12 978.1 Downloading bcrypt-5.0.0-cp39-abi3-manylinux_2_34_aarch64.whl (275 kB)
+#12 980.4 Downloading beautifulsoup4-4.14.3-py3-none-any.whl (107 kB)
+#12 982.6 Downloading brotli-1.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (1.5 MB)
+#12 994.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 124.1 kB/s eta 0:00:00
+#12 995.0 Downloading certifi-2026.4.22-py3-none-any.whl (135 kB)
+#12 996.6 Downloading cffi-2.0.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl (220 kB)
+#12 998.4 Downloading charset_normalizer-3.4.7-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (208 kB)
+#12 999.4 Downloading click-8.4.0-py3-none-any.whl (116 kB)
+#12 1000.2 Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl (332 kB)
+#12 1002.0 Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_aarch64.whl (4.7 MB)
+#12 1050.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 97.6 kB/s eta 0:00:00
+#12 1050.5 Downloading cssselect2-0.9.0-py3-none-any.whl (15 kB)
+#12 1050.7 Downloading curl_cffi-0.15.0-cp310-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl (10.5 MB)
+#12 1151.2    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.5/10.5 MB 114.7 kB/s eta 0:00:00
+#12 1151.3 Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+#12 1151.4 Downloading decorator-5.3.1-py3-none-any.whl (10 kB)
+#12 1151.6 Downloading deprecated-1.3.1-py2.py3-none-any.whl (11 kB)
+#12 1151.7 Downloading dnspython-2.8.0-py3-none-any.whl (331 kB)
+#12 1153.6 Downloading email_validator-2.3.0-py3-none-any.whl (35 kB)
+#12 1154.0 Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+#12 1154.2 Downloading fastapi-0.136.1-py3-none-any.whl (117 kB)
+#12 1155.1 Downloading fincore-0.5.0-py3-none-any.whl (661 kB)
+#12 1159.8    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 661.0/661.0 kB 154.6 kB/s eta 0:00:00
+#12 1159.9 Downloading fonttools-4.63.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (5.0 MB)
+#12 1216.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.0/5.0 MB 72.8 kB/s eta 0:00:00
+#12 1216.2 Downloading formulaic-1.2.2-py3-none-any.whl (118 kB)
+#12 1218.9 Downloading googleapis_common_protos-1.75.0-py3-none-any.whl (300 kB)
+#12 1222.9 Downloading greenlet-3.5.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl (601 kB)
+#12 1228.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 601.8/601.8 kB 99.3 kB/s eta 0:00:00
+#12 1228.5 Downloading grpcio-1.83.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl (6.9 MB)
+#12 1291.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 99.5 kB/s eta 0:00:00
+#12 1291.2 Downloading gunicorn-26.0.0-py3-none-any.whl (212 kB)
+#12 1293.7 Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+#12 1294.0 Downloading html5lib-1.1-py2.py3-none-any.whl (112 kB)
+#12 1294.7 Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+#12 1295.3 Downloading httptools-0.7.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (511 kB)
+#12 1298.8 Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+#12 1299.4 Downloading idna-3.15-py3-none-any.whl (72 kB)
+#12 1300.1 Downloading interface_meta-2.0.1-py3-none-any.whl (15 kB)
+#12 1300.3 Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+#12 1301.1 Downloading joblib-1.5.3-py3-none-any.whl (309 kB)
+#12 1304.9 Downloading kiwisolver-1.5.1-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl (1.3 MB)
+#12 1314.2    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 145.8 kB/s eta 0:00:00
+#12 1314.4 Downloading limits-5.8.0-py3-none-any.whl (60 kB)
+#12 1314.9 Downloading loguru-0.7.3-py3-none-any.whl (61 kB)
+#12 1315.4 Downloading lxml-6.1.1-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl (5.0 MB)
+#12 1361.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.0/5.0 MB 107.2 kB/s eta 0:00:00
+#12 1362.2 Downloading mako-1.4.3-py3-none-any.whl (80 kB)
+#12 1362.7 Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+#12 1363.4 Downloading markupsafe-3.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (24 kB)
+#12 1363.6 Downloading matplotlib-3.11.2-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl (10.7 MB)
+#12 1448.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.7/10.7 MB 104.2 kB/s eta 0:00:00
+#12 1448.5 Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+#12 1448.7 Downloading mini_racer-0.14.1-py3-none-manylinux_2_27_aarch64.whl (21.9 MB)
+#12 1640.2    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 21.9/21.9 MB 148.9 kB/s eta 0:00:00
+#12 1640.3 Downloading mysql_connector_python-9.7.0-cp312-cp312-manylinux_2_28_aarch64.whl (21.9 MB)
+#12 1835.3    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 21.9/21.9 MB 92.5 kB/s eta 0:00:00
+#12 1835.5 Downloading narwhals-2.26.0-py3-none-any.whl (474 kB)
+#12 1839.3 Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (13.9 MB)
+#12 1942.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.9/13.9 MB 154.3 kB/s eta 0:00:00
+#12 1942.3 Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+#12 1944.1 Downloading opentelemetry_api-1.44.0-py3-none-any.whl (60 kB)
+#12 1944.7 Downloading opentelemetry_exporter_otlp_proto_common-1.44.0-py3-none-any.whl (17 kB)
+#12 1945.0 Downloading opentelemetry_exporter_otlp_proto_grpc-1.44.0-py3-none-any.whl (19 kB)
+#12 1945.2 Downloading opentelemetry_instrumentation-0.65b0-py3-none-any.whl (36 kB)
+#12 1945.5 Downloading opentelemetry_instrumentation_asgi-0.65b0-py3-none-any.whl (15 kB)
+#12 1945.7 Downloading opentelemetry_instrumentation_fastapi-0.65b0-py3-none-any.whl (13 kB)
+#12 1945.9 Downloading opentelemetry_instrumentation_httpx-0.65b0-py3-none-any.whl (17 kB)
+#12 1946.1 Downloading opentelemetry_instrumentation_sqlalchemy-0.65b0-py3-none-any.whl (14 kB)
+#12 1946.3 Downloading opentelemetry_proto-1.44.0-py3-none-any.whl (72 kB)
+#12 1946.9 Downloading opentelemetry_sdk-1.44.0-py3-none-any.whl (137 kB)
+#12 1947.9 Downloading opentelemetry_semantic_conventions-0.65b0-py3-none-any.whl (204 kB)
+#12 1949.7 Downloading opentelemetry_util_http-0.65b0-py3-none-any.whl (8.2 kB)
+#12 1950.0 Downloading packaging-26.2-py3-none-any.whl (100 kB)
+#12 1951.3 Downloading pandas-3.0.3-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl (10.4 MB)
+#12 2038.2    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.4/10.4 MB 148.7 kB/s eta 0:00:00
+#12 2038.3 Downloading passlib-1.7.4-py2.py3-none-any.whl (525 kB)
+#12 2042.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 525.6/525.6 kB 94.5 kB/s eta 0:00:00
+#12 2043.0 Downloading patsy-1.0.3-py2.py3-none-any.whl (233 kB)
+#12 2044.3 Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (6.3 MB)
+#12 2082.3    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.3/6.3 MB 160.5 kB/s eta 0:00:00
+#12 2082.5 Downloading protobuf-7.35.1-cp310-abi3-manylinux2014_aarch64.whl (328 kB)
+#12 2084.4 Downloading purgedcv-0.1.3-py3-none-any.whl (56 kB)
+#12 2085.0 Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+#12 2085.4 Downloading pydantic-2.13.4-py3-none-any.whl (472 kB)
+#12 2089.1 Downloading pydantic_core-2.46.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (2.0 MB)
+#12 2105.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 120.3 kB/s eta 0:00:00
+#12 2105.1 Downloading pydantic_settings-2.14.2-py3-none-any.whl (61 kB)
+#12 2105.7 Downloading pydyf-0.12.1-py3-none-any.whl (8.0 kB)
+#12 2105.8 Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
+#12 2115.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 132.8 kB/s eta 0:00:00
+#12 2115.1 Downloading pyjwt-2.15.1-py3-none-any.whl (33 kB)
+#12 2115.3 Downloading pymysql-1.2.3-py3-none-any.whl (46 kB)
+#12 2115.7 Downloading pyparsing-3.3.2-py3-none-any.whl (122 kB)
+#12 2116.6 Downloading pyphen-0.17.2-py3-none-any.whl (2.1 MB)
+#12 2131.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 140.1 kB/s eta 0:00:00
+#12 2131.8 Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+#12 2133.6 Downloading python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+#12 2133.9 Downloading python_multipart-0.0.31-py3-none-any.whl (29 kB)
+#12 2134.1 Downloading pytz-2026.2-py2.py3-none-any.whl (510 kB)
+#12 2138.1 Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (775 kB)
+#12 2144.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 775.1/775.1 kB 125.7 kB/s eta 0:00:00
+#12 2144.2 Downloading redis-7.4.0-py3-none-any.whl (409 kB)
+#12 2147.5 Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+#12 2148.1 Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+#12 2150.3 Downloading scikit_learn-1.9.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (8.8 MB)
+#12 2210.8    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.8/8.8 MB 156.7 kB/s eta 0:00:00
+#12 2210.9 Downloading scipy-1.17.1-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (32.9 MB)
+#12 2402.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 32.9/32.9 MB 159.2 kB/s eta 0:00:00
+#12 2402.5 Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+#12 2402.6 Downloading slowapi-0.1.9-py3-none-any.whl (14 kB)
+#12 2402.7 Downloading soupsieve-2.9.2-py3-none-any.whl (37 kB)
+#12 2403.0 Downloading sqlalchemy-2.0.54-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (3.4 MB)
+#12 2427.2    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 141.2 kB/s eta 0:00:00
+#12 2427.3 Downloading starlette-1.3.1-py3-none-any.whl (73 kB)
+#12 2427.7 Downloading statsmodels-0.15.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (11.7 MB)
+#12 2506.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.7/11.7 MB 147.9 kB/s eta 0:00:00
+#12 2506.1 Downloading tabulate-0.10.0-py3-none-any.whl (39 kB)
+#12 2506.5 Downloading threadpoolctl-3.6.0-py3-none-any.whl (18 kB)
+#12 2506.8 Downloading tinycss2-1.5.1-py3-none-any.whl (28 kB)
+#12 2507.2 Downloading tinyhtml5-2.1.0-py3-none-any.whl (39 kB)
+#12 2507.6 Downloading tqdm-4.67.3-py3-none-any.whl (78 kB)
+#12 2508.4 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+#12 2508.8 Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+#12 2509.0 Downloading tzlocal-5.3.1-py3-none-any.whl (18 kB)
+#12 2509.2 Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+#12 2510.0 Downloading uvicorn-0.47.0-py3-none-any.whl (71 kB)
+#12 2510.4 Downloading uvloop-0.22.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (4.3 MB)
+#12 2531.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 208.6 kB/s eta 0:00:00
+#12 2531.1 Downloading watchfiles-1.2.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (453 kB)
+#12 2534.1 Downloading weasyprint-70.0-py3-none-any.whl (328 kB)
+#12 2537.4 Downloading webencodings-0.5.1-py2.py3-none-any.whl (11 kB)
+#12 2537.5 Downloading websockets-16.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (186 kB)
+#12 2538.4 Downloading wrapt-2.1.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (123 kB)
+#12 2539.0 Downloading xlrd-2.0.2-py2.py3-none-any.whl (96 kB)
+#12 2539.4 Downloading zopfli-0.4.3-cp310-abi3-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl (818 kB)
+#12 2543.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 818.4/818.4 kB 181.1 kB/s eta 0:00:00
+#12 2543.8 Downloading akracer-0.0.14-py3-none-any.whl (10.1 MB)
+#12 2626.5    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.1/10.1 MB 125.1 kB/s eta 0:00:00
+#12 2631.6 Building wheels for collected packages: jsonpath, backtrader, py-mini-racer
+#12 2631.6   Building wheel for jsonpath (pyproject.toml): started
+#12 2633.4   Building wheel for jsonpath (pyproject.toml): finished with status 'done'
+#12 2633.5   Created wheel for jsonpath: filename=jsonpath-0.82.2-py3-none-any.whl size=5667 sha256=811b62ca189246e15571adae82f0015893d97ba631393cc71a6a3dcf5b0bcf96
+#12 2633.5   Stored in directory: /tmp/pip-ephem-wheel-cache-3yrdhyfc/wheels/73/76/e2/980a29341fe37a583ada29594ed529708d5e8e2c0f9d97c3cc
+#12 2633.5   Building wheel for backtrader (pyproject.toml): started
+#12 2644.9   Building wheel for backtrader (pyproject.toml): finished with status 'done'
+#12 2644.9   Created wheel for backtrader: filename=backtrader-1.3.0-py3-none-any.whl size=6994817 sha256=73cc505f2ae8ca67cb9893a8d6beb4a2336b9e8908a7c31986d51d3eb9b41af8
+#12 2644.9   Stored in directory: /tmp/pip-ephem-wheel-cache-3yrdhyfc/wheels/4b/c4/34/71b6ac74b0d6d89fafb3a180fa4969348fba8bc45c242286b7
+#12 2645.0   Building wheel for py-mini-racer (pyproject.toml): started
+#12 2649.7   Building wheel for py-mini-racer (pyproject.toml): finished with status 'done'
+#12 2649.7   Created wheel for py-mini-racer: filename=py_mini_racer-0.6.0-py3-none-any.whl size=5708144 sha256=b9d48e36e714cc4e6aefd27fb775cd8d7795d52281df84ea48c96703d62f6c63
+#12 2649.7   Stored in directory: /tmp/pip-ephem-wheel-cache-3yrdhyfc/wheels/df/45/bb/2e4a2e22ca2b4e77a885ed192c2acf8ad6fbf1275db0f0c993
+#12 2649.7 Successfully built jsonpath backtrader py-mini-racer
+#12 2650.3 Installing collected packages: webencodings, pytz, py-mini-racer, passlib, jsonpath, brotli, zopfli, xlrd, wrapt, websockets, uvloop, urllib3, tzlocal, typing-extensions, tqdm, tinyhtml5, tinycss2, threadpoolctl, tabulate, soupsieve, six, redis, pyyaml, python-multipart, python-dotenv, pyphen, pyparsing, pymysql, pyjwt, pygments, pydyf, pycparser, protobuf, pillow, packaging, opentelemetry-util-http, numpy, narwhals, mysql-connector-python, mini-racer, mdurl, markupsafe, lxml, loguru, kiwisolver, joblib, interface-meta, idna, httptools, h11, greenlet, fonttools, et-xmlfile, dnspython, decorator, cycler, click, charset-normalizer, certifi, bcrypt, asyncpg, async-timeout, asgiref, annotated-types, annotated-doc, akracer, aiosqlite, uvicorn, typing-inspection, sqlalchemy, scipy, requests, python-dateutil, pydantic-core, patsy, opentelemetry-proto, opentelemetry-api, openpyxl, markdown-it-py, mako, jinja2, httpcore, html5lib, gunicorn, grpcio, googleapis-common-protos, email-validator, deprecated, cssselect2, contourpy, cffi, beautifulsoup4, apscheduler, anyio, aiomysql, weasyprint, watchfiles, starlette, scikit-learn, rich, pydantic, pandas, opentelemetry-semantic-conventions, opentelemetry-exporter-otlp-proto-common, matplotlib, limits, httpx, cryptography, alembic, slowapi, pydantic-settings, purgedcv, opentelemetry-sdk, opentelemetry-instrumentation, formulaic, fincore, fastapi, curl-cffi, statsmodels, opentelemetry-instrumentation-sqlalchemy, opentelemetry-instrumentation-httpx, opentelemetry-instrumentation-asgi, opentelemetry-exporter-otlp-proto-grpc, akshare, opentelemetry-instrumentation-fastapi, backtrader
+#12 2711.0 Successfully installed aiomysql-0.3.2 aiosqlite-0.22.1 akracer-0.0.14 akshare-1.18.97 alembic-1.20.0 annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.15.1 apscheduler-3.11.2 asgiref-3.12.1 async-timeout-5.0.1 asyncpg-0.31.0 backtrader-1.3.0 bcrypt-5.0.0 beautifulsoup4-4.14.3 brotli-1.2.0 certifi-2026.4.22 cffi-2.0.0 charset-normalizer-3.4.7 click-8.4.0 contourpy-1.3.3 cryptography-50.0.0 cssselect2-0.9.0 curl-cffi-0.15.0 cycler-0.12.1 decorator-5.3.1 deprecated-1.3.1 dnspython-2.8.0 email-validator-2.3.0 et-xmlfile-2.0.0 fastapi-0.136.1 fincore-0.5.0 fonttools-4.63.0 formulaic-1.2.2 googleapis-common-protos-1.75.0 greenlet-3.5.0 grpcio-1.83.0 gunicorn-26.0.0 h11-0.16.0 html5lib-1.1 httpcore-1.0.9 httptools-0.7.1 httpx-0.28.1 idna-3.15 interface-meta-2.0.1 jinja2-3.1.6 joblib-1.5.3 jsonpath-0.82.2 kiwisolver-1.5.1 limits-5.8.0 loguru-0.7.3 lxml-6.1.1 mako-1.4.3 markdown-it-py-4.2.0 markupsafe-3.0.3 matplotlib-3.11.2 mdurl-0.1.2 mini-racer-0.14.1 mysql-connector-python-9.7.0 narwhals-2.26.0 numpy-1.26.4 openpyxl-3.1.5 opentelemetry-api-1.44.0 opentelemetry-exporter-otlp-proto-common-1.44.0 opentelemetry-exporter-otlp-proto-grpc-1.44.0 opentelemetry-instrumentation-0.65b0 opentelemetry-instrumentation-asgi-0.65b0 opentelemetry-instrumentation-fastapi-0.65b0 opentelemetry-instrumentation-httpx-0.65b0 opentelemetry-instrumentation-sqlalchemy-0.65b0 opentelemetry-proto-1.44.0 opentelemetry-sdk-1.44.0 opentelemetry-semantic-conventions-0.65b0 opentelemetry-util-http-0.65b0 packaging-26.2 pandas-3.0.3 passlib-1.7.4 patsy-1.0.3 pillow-12.3.0 protobuf-7.35.1 purgedcv-0.1.3 py-mini-racer-0.6.0 pycparser-3.0 pydantic-2.13.4 pydantic-core-2.46.4 pydantic-settings-2.14.2 pydyf-0.12.1 pygments-2.20.0 pyjwt-2.15.1 pymysql-1.2.3 pyparsing-3.3.2 pyphen-0.17.2 python-dateutil-2.9.0.post0 python-dotenv-1.2.2 python-multipart-0.0.31 pytz-2026.2 pyyaml-6.0.3 redis-7.4.0 requests-2.34.2 rich-15.0.0 scikit-learn-1.9.0 scipy-1.17.1 six-1.17.0 slowapi-0.1.9 soupsieve-2.9.2 sqlalchemy-2.0.54 starlette-1.3.1 statsmodels-0.15.0 tabulate-0.10.0 threadpoolctl-3.6.0 tinycss2-1.5.1 tinyhtml5-2.1.0 tqdm-4.67.3 typing-extensions-4.16.0 typing-inspection-0.4.2 tzlocal-5.3.1 urllib3-2.8.0 uvicorn-0.47.0 uvloop-0.22.1 watchfiles-1.2.0 weasyprint-70.0 webencodings-0.5.1 websockets-16.0 wrapt-2.1.2 xlrd-2.0.2 zopfli-0.4.3
+#12 2711.0 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#12 2717.5 Obtaining file:///opt/workspace/ai-for-investor/src/backend
+#12 2717.5   Installing build dependencies: started
+#12 2724.5   Installing build dependencies: finished with status 'done'
+#12 2724.5   Checking if build backend supports build_editable: started
+#12 2725.3   Checking if build backend supports build_editable: finished with status 'done'
+#12 2725.3   Getting requirements to build editable: started
+#12 2726.3   Getting requirements to build editable: finished with status 'done'
+#12 2726.3   Preparing editable metadata (pyproject.toml): started
+#12 2727.3   Preparing editable metadata (pyproject.toml): finished with status 'done'
+#12 2727.4 Building wheels for collected packages: ai-for-investor-backend
+#12 2727.4   Building editable for ai-for-investor-backend (pyproject.toml): started
+#12 2728.4   Building editable for ai-for-investor-backend (pyproject.toml): finished with status 'done'
+#12 2728.4   Created wheel for ai-for-investor-backend: filename=ai_for_investor_backend-0.1.0-0.editable-py3-none-any.whl size=6905 sha256=53b0c9f9edafcd4936a63cdc0618905668773a861e4ac913e0a3e00a26318f25
+#12 2728.4   Stored in directory: /tmp/pip-ephem-wheel-cache-03oxayaa/wheels/91/13/23/da54ec3589d3199f6da0b0bbd9c26c3d1f1709d4e46d02d2fa
+#12 2728.4 Successfully built ai-for-investor-backend
+#12 2728.4 Installing collected packages: ai-for-investor-backend
+#12 2728.4 Successfully installed ai-for-investor-backend-0.1.0
+#12 2728.4 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#12 DONE 2730.2s
+
+#13 [ 9/11] RUN apt-get update &&     apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 &&     rm -rf /var/lib/apt/lists/*
+#13 1.941 Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+#13 2.369 Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+#13 2.459 Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+#13 3.051 Get:4 http://deb.debian.org/debian trixie/main arm64 Packages [9614 kB]
+#13 59.49 Get:5 http://deb.debian.org/debian trixie-updates/main arm64 Packages [4424 B]
+#13 59.53 Get:6 http://deb.debian.org/debian-security trixie-security/main arm64 Packages [267 kB]
+#13 61.03 Fetched 10.1 MB in 59s (170 kB/s)
+#13 61.03 Reading package lists...
+#13 61.63 Reading package lists...
+#13 62.15 Building dependency tree...
+#13 62.29 Reading state information...
+#13 62.49 The following additional packages will be installed:
+#13 62.49   fontconfig fontconfig-config fonts-dejavu-core fonts-dejavu-mono libatomic1
+#13 62.49   libdatrie1 libfontconfig1 libfreetype6 libfribidi0 libglib2.0-0t64
+#13 62.49   libgraphite2-3 libharfbuzz0b libpng16-16t64 libthai-data libthai0
+#13 62.49 Suggested packages:
+#13 62.49   low-memory-monitor
+#13 62.49 Recommended packages:
+#13 62.49   libglib2.0-data shared-mime-info xdg-user-dirs
+#13 62.57 The following NEW packages will be installed:
+#13 62.57   fontconfig fontconfig-config fonts-dejavu-core fonts-dejavu-mono libatomic1
+#13 62.57   libdatrie1 libfontconfig1 libfreetype6 libfribidi0 libglib2.0-0t64
+#13 62.57   libgraphite2-3 libharfbuzz-subset0 libharfbuzz0b libpango-1.0-0
+#13 62.57   libpangoft2-1.0-0 libpng16-16t64 libthai-data libthai0
+#13 62.82 0 upgraded, 18 newly installed, 0 to remove and 1 not upgraded.
+#13 62.82 Need to get 6201 kB of archives.
+#13 62.82 After this operation, 17.5 MB of additional disk space will be used.
+#13 62.82 Get:1 http://deb.debian.org/debian-security trixie-security/main arm64 libpng16-16t64 arm64 1.6.48-1+deb13u6 [275 kB]
+#13 63.50 Get:2 http://deb.debian.org/debian trixie/main arm64 libfreetype6 arm64 2.13.3+dfsg-1+deb13u1 [422 kB]
+#13 65.69 Get:3 http://deb.debian.org/debian trixie/main arm64 fonts-dejavu-mono all 2.37-8 [489 kB]
+#13 67.85 Get:4 http://deb.debian.org/debian trixie/main arm64 fonts-dejavu-core all 2.37-8 [840 kB]
+#13 73.66 Get:5 http://deb.debian.org/debian trixie/main arm64 fontconfig-config arm64 2.15.0-2.3 [318 kB]
+#13 75.77 Get:6 http://deb.debian.org/debian trixie/main arm64 libfontconfig1 arm64 2.15.0-2.3 [387 kB]
+#13 78.08 Get:7 http://deb.debian.org/debian trixie/main arm64 fontconfig arm64 2.15.0-2.3 [463 kB]
+#13 80.77 Get:8 http://deb.debian.org/debian trixie/main arm64 libatomic1 arm64 14.2.0-19 [10.1 kB]
+#13 80.84 Get:9 http://deb.debian.org/debian trixie/main arm64 libdatrie1 arm64 0.2.13-3+b1 [37.6 kB]
+#13 81.04 Get:10 http://deb.debian.org/debian trixie/main arm64 libfribidi0 arm64 1.0.16-1 [26.5 kB]
+#13 81.19 Get:11 http://deb.debian.org/debian trixie/main arm64 libglib2.0-0t64 arm64 2.84.4-3~deb13u5 [1429 kB]
+#13 89.47 Get:12 http://deb.debian.org/debian trixie/main arm64 libgraphite2-3 arm64 1.3.14-2+deb13u1 [70.3 kB]
+#13 89.88 Get:13 http://deb.debian.org/debian trixie/main arm64 libharfbuzz0b arm64 10.2.0-1+deb13u1 [442 kB]
+#13 92.84 Get:14 http://deb.debian.org/debian trixie/main arm64 libharfbuzz-subset0 arm64 10.2.0-1+deb13u1 [509 kB]
+#13 95.36 Get:15 http://deb.debian.org/debian trixie/main arm64 libthai-data all 0.1.29-2 [168 kB]
+#13 96.41 Get:16 http://deb.debian.org/debian trixie/main arm64 libthai0 arm64 0.1.29-2+b1 [48.4 kB]
+#13 96.79 Get:17 http://deb.debian.org/debian trixie/main arm64 libpango-1.0-0 arm64 1.56.3-1 [213 kB]
+#13 98.26 Get:18 http://deb.debian.org/debian trixie/main arm64 libpangoft2-1.0-0 arm64 1.56.3-1 [52.9 kB]
+#13 99.11 debconf: unable to initialize frontend: Dialog
+#13 99.11 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#13 99.11 debconf: falling back to frontend: Readline
+#13 99.13 debconf: unable to initialize frontend: Readline
+#13 99.13 debconf: (This frontend requires a controlling tty.)
+#13 99.13 debconf: falling back to frontend: Teletype
+#13 99.14 debconf: unable to initialize frontend: Teletype
+#13 99.14 debconf: (This frontend requires a controlling tty.)
+#13 99.14 debconf: falling back to frontend: Noninteractive
+#13 100.3 Preconfiguring packages ...
+#13 100.4 Fetched 6201 kB in 36s (173 kB/s)
+#13 100.5 Selecting previously unselected package libpng16-16t64:arm64.
+#13 100.5 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 9203 files and directories currently installed.)
+#13 100.7 Preparing to unpack .../00-libpng16-16t64_1.6.48-1+deb13u6_arm64.deb ...
+#13 100.8 Unpacking libpng16-16t64:arm64 (1.6.48-1+deb13u6) ...
+#13 100.9 Selecting previously unselected package libfreetype6:arm64.
+#13 100.9 Preparing to unpack .../01-libfreetype6_2.13.3+dfsg-1+deb13u1_arm64.deb ...
+#13 100.9 Unpacking libfreetype6:arm64 (2.13.3+dfsg-1+deb13u1) ...
+#13 101.0 Selecting previously unselected package fonts-dejavu-mono.
+#13 101.0 Preparing to unpack .../02-fonts-dejavu-mono_2.37-8_all.deb ...
+#13 101.0 Unpacking fonts-dejavu-mono (2.37-8) ...
+#13 101.2 Selecting previously unselected package fonts-dejavu-core.
+#13 101.2 Preparing to unpack .../03-fonts-dejavu-core_2.37-8_all.deb ...
+#13 101.2 Unpacking fonts-dejavu-core (2.37-8) ...
+#13 101.4 Selecting previously unselected package fontconfig-config.
+#13 101.4 Preparing to unpack .../04-fontconfig-config_2.15.0-2.3_arm64.deb ...
+#13 101.4 Unpacking fontconfig-config (2.15.0-2.3) ...
+#13 101.5 Selecting previously unselected package libfontconfig1:arm64.
+#13 101.5 Preparing to unpack .../05-libfontconfig1_2.15.0-2.3_arm64.deb ...
+#13 101.5 Unpacking libfontconfig1:arm64 (2.15.0-2.3) ...
+#13 101.5 Selecting previously unselected package fontconfig.
+#13 101.5 Preparing to unpack .../06-fontconfig_2.15.0-2.3_arm64.deb ...
+#13 101.5 Unpacking fontconfig (2.15.0-2.3) ...
+#13 101.6 Selecting previously unselected package libatomic1:arm64.
+#13 101.6 Preparing to unpack .../07-libatomic1_14.2.0-19_arm64.deb ...
+#13 101.6 Unpacking libatomic1:arm64 (14.2.0-19) ...
+#13 101.6 Selecting previously unselected package libdatrie1:arm64.
+#13 101.6 Preparing to unpack .../08-libdatrie1_0.2.13-3+b1_arm64.deb ...
+#13 101.6 Unpacking libdatrie1:arm64 (0.2.13-3+b1) ...
+#13 101.6 Selecting previously unselected package libfribidi0:arm64.
+#13 101.6 Preparing to unpack .../09-libfribidi0_1.0.16-1_arm64.deb ...
+#13 101.6 Unpacking libfribidi0:arm64 (1.0.16-1) ...
+#13 101.7 Selecting previously unselected package libglib2.0-0t64:arm64.
+#13 101.7 Preparing to unpack .../10-libglib2.0-0t64_2.84.4-3~deb13u5_arm64.deb ...
+#13 101.7 Unpacking libglib2.0-0t64:arm64 (2.84.4-3~deb13u5) ...
+#13 101.9 Selecting previously unselected package libgraphite2-3:arm64.
+#13 101.9 Preparing to unpack .../11-libgraphite2-3_1.3.14-2+deb13u1_arm64.deb ...
+#13 101.9 Unpacking libgraphite2-3:arm64 (1.3.14-2+deb13u1) ...
+#13 102.1 Selecting previously unselected package libharfbuzz0b:arm64.
+#13 102.1 Preparing to unpack .../12-libharfbuzz0b_10.2.0-1+deb13u1_arm64.deb ...
+#13 102.1 Unpacking libharfbuzz0b:arm64 (10.2.0-1+deb13u1) ...
+#13 102.2 Selecting previously unselected package libharfbuzz-subset0:arm64.
+#13 102.2 Preparing to unpack .../13-libharfbuzz-subset0_10.2.0-1+deb13u1_arm64.deb ...
+#13 102.2 Unpacking libharfbuzz-subset0:arm64 (10.2.0-1+deb13u1) ...
+#13 102.3 Selecting previously unselected package libthai-data.
+#13 102.3 Preparing to unpack .../14-libthai-data_0.1.29-2_all.deb ...
+#13 102.3 Unpacking libthai-data (0.1.29-2) ...
+#13 102.4 Selecting previously unselected package libthai0:arm64.
+#13 102.4 Preparing to unpack .../15-libthai0_0.1.29-2+b1_arm64.deb ...
+#13 102.4 Unpacking libthai0:arm64 (0.1.29-2+b1) ...
+#13 102.5 Selecting previously unselected package libpango-1.0-0:arm64.
+#13 102.5 Preparing to unpack .../16-libpango-1.0-0_1.56.3-1_arm64.deb ...
+#13 102.5 Unpacking libpango-1.0-0:arm64 (1.56.3-1) ...
+#13 102.5 Selecting previously unselected package libpangoft2-1.0-0:arm64.
+#13 102.5 Preparing to unpack .../17-libpangoft2-1.0-0_1.56.3-1_arm64.deb ...
+#13 102.5 Unpacking libpangoft2-1.0-0:arm64 (1.56.3-1) ...
+#13 102.6 Setting up libgraphite2-3:arm64 (1.3.14-2+deb13u1) ...
+#13 102.6 Setting up libdatrie1:arm64 (0.2.13-3+b1) ...
+#13 102.6 Setting up libfribidi0:arm64 (1.0.16-1) ...
+#13 102.6 Setting up fonts-dejavu-mono (2.37-8) ...
+#13 102.6 Setting up libpng16-16t64:arm64 (1.6.48-1+deb13u6) ...
+#13 102.6 Setting up libatomic1:arm64 (14.2.0-19) ...
+#13 102.6 Setting up fonts-dejavu-core (2.37-8) ...
+#13 102.7 Setting up libthai-data (0.1.29-2) ...
+#13 102.7 Setting up fontconfig-config (2.15.0-2.3) ...
+#13 102.9 debconf: unable to initialize frontend: Dialog
+#13 102.9 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#13 102.9 debconf: falling back to frontend: Readline
+#13 102.9 debconf: unable to initialize frontend: Readline
+#13 102.9 debconf: (This frontend requires a controlling tty.)
+#13 102.9 debconf: falling back to frontend: Teletype
+#13 102.9 debconf: unable to initialize frontend: Teletype
+#13 102.9 debconf: (This frontend requires a controlling tty.)
+#13 102.9 debconf: falling back to frontend: Noninteractive
+#13 103.0 Setting up libthai0:arm64 (0.1.29-2+b1) ...
+#13 103.0 Setting up libglib2.0-0t64:arm64 (2.84.4-3~deb13u5) ...
+#13 103.0 No schema files found: doing nothing.
+#13 103.0 Setting up libfreetype6:arm64 (2.13.3+dfsg-1+deb13u1) ...
+#13 103.1 Setting up libharfbuzz0b:arm64 (10.2.0-1+deb13u1) ...
+#13 103.1 Setting up libfontconfig1:arm64 (2.15.0-2.3) ...
+#13 103.1 Setting up fontconfig (2.15.0-2.3) ...
+#13 103.1 Regenerating fonts cache... done.
+#13 105.1 Setting up libpango-1.0-0:arm64 (1.56.3-1) ...
+#13 105.1 Setting up libharfbuzz-subset0:arm64 (10.2.0-1+deb13u1) ...
+#13 105.2 Setting up libpangoft2-1.0-0:arm64 (1.56.3-1) ...
+#13 105.2 Processing triggers for libc-bin (2.41-12+deb13u4) ...
+#13 DONE 105.5s
+
+#14 [10/11] RUN mkdir -p     /opt/workspace/ai-for-investor/datas     /opt/workspace/ai-for-investor/workspace_units     /opt/workspace/ai-for-investor/src/backend/data     /opt/workspace/ai-for-investor/src/backend/logs
+#14 DONE 0.4s
+
+#15 [11/11] RUN useradd -m -u 1000 appuser &&     chown -R appuser:appuser /opt/workspace
+#15 DONE 141.5s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 134.8s done
+#16 exporting manifest sha256:4b315d553d3c6f8b908b77eb9185ea3b084eb44fbdffe99736b456af51267b77 0.0s done
+#16 exporting config sha256:51f42d46d641105c45ba847445fc1b044f05ad511856cfe9b99546c4d910c1f3 0.0s done
+#16 exporting attestation manifest sha256:d3034685006b71bdf1ca8840689ced2bc9dd6ee362cf57ee1d6f95af117c99d3 0.0s done
+#16 exporting manifest list sha256:ad00640ed6c2b51761b5b9e6d7b70030ecd809a868b3b301aa36c6bfd19732f2 0.0s done
+#16 naming to docker.io/library/iter202-d14-backend:20261012-source-final
+#16 naming to docker.io/library/iter202-d14-backend:20261012-source-final done
+#16 unpacking to docker.io/library/iter202-d14-backend:20261012-source-final
+#16 unpacking to docker.io/library/iter202-d14-backend:20261012-source-final 344.7s done
+#16 DONE 479.8s

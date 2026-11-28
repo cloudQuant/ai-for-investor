@@ -1,0 +1,32 @@
+{
+  "command": [
+    "npm",
+    "exec",
+    "playwright",
+    "test",
+    "--",
+    "--config=e2e/iteration202.config.ts"
+  ],
+  "cwd": "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend",
+  "started_at": "2026-10-12T11:01:03.891439+00:00",
+  "finished_at": "2026-10-12T11:08:39.024390+00:00",
+  "elapsed_seconds": 455.14,
+  "exit_code": 130,
+  "source_sha256": {
+    "package-lock.json": "6412512146fbf7fc6bd2f1bc04683f71db626f3967cd5dd4cdff1a18eaa4f44e",
+    "vite.config.ts": "28740e85ffb201726ae89f70ee7c5844cd7e86d0e5eef836fc2aa0d8526e64c4",
+    "e2e/iteration202.config.ts": "93f5cfb20313780431c525baee52f0b25d011dc3548433efdbc207257f521ac4",
+    "e2e/tests/iteration202-session-workspace.spec.ts": "0d119f3324d62903928452bc716d07197230bf58c35a3f488ad184eac160a01f",
+    "src/main.ts": "8d3adf702d5c3c017bbc1773d0e50327182ff5065f846beda1c13582e97a2bf0",
+    "src/stores/auth.ts": "4888e5d4fa9d06de04e3396ee92d4e44a16dba236d9d09d6a3a5f96d95ab94a0",
+    "src/stores/workspace.ts": "9c64fa6171d4917aa5a024db04b8fc5e7893255b658792495e78d25717da87cc",
+    "src/api/index.ts": "90ac8cdc2174a508b1b9cf124b6a011a0a0d42560e1b66ea6e29643153a85411",
+    "src/views/workspace/useWorkspaceDetailResources.ts": "c621623d0789db6953b993b993cc99833d8dfa049de8cd6b95d1b144f7c7515d"
+  },
+  "source_unchanged": true,
+  "dist_hash_manifest": "frontend-session-browser-v5-preview-parent-dist-manifest.json",
+  "dist_hash_manifest_sha256": "ab82c5a8f05a680f47cfc108ca19647a1d0430089f64ccb964196e0e6c5ff9cf",
+  "dist_files": 191,
+  "log": "frontend-session-browser-v5-preview-parent.txt",
+  "log_sha256": "0829520f65b554472fbc9dc21fc29156dd97c105a3b482bda43d2ecb27d75bd6"
+}

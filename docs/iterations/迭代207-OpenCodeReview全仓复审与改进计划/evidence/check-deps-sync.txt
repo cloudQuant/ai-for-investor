@@ -1,0 +1,1 @@
+OK: pyproject runtime dependencies and production extras satisfy the canonical lock; requirements.txt matches the marker-aware PEP 508 source list.

@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
+
+ ❯ src/__tests__/stores/persistence.test.ts (12 tests | 1 failed) 27ms
+       × auth store isAuthenticated computed reflects token state 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/stores/persistence.test.ts > Pinia Persistence > Auth Store persistence > auth store isAuthenticated computed reflects token state
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/__tests__/stores/persistence.test.ts:66:36
+     64|
+     65|       auth.token = 'valid-token'
+     66|       expect(auth.isAuthenticated).toBe(false)
+       |                                    ^
+     67|
+     68|       auth.user = {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 156 passed (157)
+      Tests  1 failed | 1720 passed (1721)
+   Start at  14:55:19
+   Duration  974.47s (transform 80.59s, setup 119.10s, import 170.51s, tests 294.83s, environment 271.69s)
+

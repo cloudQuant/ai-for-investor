@@ -1,0 +1,2435 @@
+{
+  "schema_version": "1",
+  "mode": "range",
+  "repository": "/Users/yunjinqi/Documents/new_projects/ai-for-investor",
+  "from": "5b9a3a280",
+  "to": "HEAD",
+  "merge_base": "5b9a3a2803badf2cb1233e44c88e5566e68b4d8b",
+  "total_files": 385,
+  "reviewable_count": 277,
+  "excluded_count": 108,
+  "total_insertions": 33697,
+  "total_deletions": 24551,
+  "reviewable_files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "status": "modified",
+      "insertions": 20,
+      "deletions": 12
+    },
+    {
+      "path": ".github/workflows/e2e.yml",
+      "status": "modified",
+      "insertions": 28,
+      "deletions": 4
+    },
+    {
+      "path": ".github/workflows/nightly.yml",
+      "status": "modified",
+      "insertions": 14,
+      "deletions": 4
+    },
+    {
+      "path": ".github/workflows/pr-check.yml",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "docker/compose/dev.yml",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 1
+    },
+    {
+      "path": "docker/compose/prod.yml",
+      "status": "modified",
+      "insertions": 18,
+      "deletions": 2
+    },
+    {
+      "path": "docker/entrypoint-dev.sh",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "scripts/ci/check_alembic_heads.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 3
+    },
+    {
+      "path": "scripts/ci/check_complexity_budget.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 0
+    },
+    {
+      "path": "scripts/ci/check_doc_links.py",
+      "status": "modified",
+      "insertions": 11,
+      "deletions": 5
+    },
+    {
+      "path": "scripts/ci/check_migration_safety.py",
+      "status": "modified",
+      "insertions": 36,
+      "deletions": 1
+    },
+    {
+      "path": "scripts/ci/complexity_baseline.json",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "scripts/ci/large_file_baseline.json",
+      "status": "modified",
+      "insertions": 34,
+      "deletions": 178
+    },
+    {
+      "path": "scripts/ops/docker_deploy.sh",
+      "status": "modified",
+      "insertions": 23,
+      "deletions": 10
+    },
+    {
+      "path": "scripts/ops/start_app.sh",
+      "status": "modified",
+      "insertions": 37,
+      "deletions": 19
+    },
+    {
+      "path": "scripts/ops/stop_app.sh",
+      "status": "modified",
+      "insertions": 37,
+      "deletions": 68
+    },
+    {
+      "path": "scripts/ops/validate_docker_env.py",
+      "status": "modified",
+      "insertions": 19,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/Dockerfile",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/airflow_callback.py",
+      "status": "modified",
+      "insertions": 46,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/api/airflow_dags.py",
+      "status": "modified",
+      "insertions": 54,
+      "deletions": 22
+    },
+    {
+      "path": "src/backend/app/api/analytics.py",
+      "status": "modified",
+      "insertions": 201,
+      "deletions": 150
+    },
+    {
+      "path": "src/backend/app/api/asset_research.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/auto_trading.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/comparison.py",
+      "status": "modified",
+      "insertions": 19,
+      "deletions": 13
+    },
+    {
+      "path": "src/backend/app/api/data/realtime.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/api/docs.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/live_trading/api.py",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/api/metrics.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/api/news_intelligence.py",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/optimization_api.py",
+      "status": "modified",
+      "insertions": 23,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/api/paper_trading.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 7
+    },
+    {
+      "path": "src/backend/app/api/portfolio/analytics_tasks.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/portfolio/api.py",
+      "status": "modified",
+      "insertions": 18,
+      "deletions": 112
+    },
+    {
+      "path": "src/backend/app/api/portfolio/paper_equity.py",
+      "status": "added",
+      "insertions": 157,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/api/risk_control.py",
+      "status": "modified",
+      "insertions": 53,
+      "deletions": 18
+    },
+    {
+      "path": "src/backend/app/api/risk_policy_budget.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/scanners.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/api/simulation.py",
+      "status": "modified",
+      "insertions": 131,
+      "deletions": 76
+    },
+    {
+      "path": "src/backend/app/api/status.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/api/strategy/base.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 18
+    },
+    {
+      "path": "src/backend/app/api/strategy_reduction.py",
+      "status": "modified",
+      "insertions": 66,
+      "deletions": 44
+    },
+    {
+      "path": "src/backend/app/config.py",
+      "status": "modified",
+      "insertions": 25,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/data_fetch/core/database.py",
+      "status": "modified",
+      "insertions": 69,
+      "deletions": 4
+    },
+    {
+      "path": "src/backend/app/data_fetch/core/mysql_base.py",
+      "status": "modified",
+      "insertions": 44,
+      "deletions": 24
+    },
+    {
+      "path": "src/backend/app/data_fetch/providers/akshare_provider.py",
+      "status": "modified",
+      "insertions": 77,
+      "deletions": 44
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/bonds/daily/bond_zh_hs_cov_daily.py",
+      "status": "modified",
+      "insertions": 81,
+      "deletions": 9
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/bonds/weekly/bond_info_cm.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/common/daily/akshare_catalog_endpoint.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/common/monthly/trading_days.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/hourly/reits_realtime_em.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/etf_fund_daily_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/etf_fund_hist_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/financial_fund_daily_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/financial_fund_hist_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_achivement_xq.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_dividend_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_dividend_rank_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_exchange_rank_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_hk_rank_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_individual_analysis_xq.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_lcx_rank_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_money_rank_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_new_found_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_rating_all.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_rating_ja.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_rating_sh.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_rating_zs.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_scale_close_sina.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_scale_open_sina.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_split_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/fund_value_estimation_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/graded_fund_daily_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/graded_fund_hist_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/hk_fund_dividend_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/money_fund_daily_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/money_fund_hist_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/open_fund_daily_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/open_fund_hist_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/funds/weekly/open_fund_rank_em.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/daily/index_zh_a_hist.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/daily/index_zh_a_hist_min_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/daily/stock_hk_index_spot_em.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/daily/stock_hk_index_spot_sina.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/daily/stock_zh_index_spot_sina.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/index_all_cni.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/index_global_hist_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/index_global_hist_sina.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/index_stock_info.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/index_us_stock_sina.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/stock_hk_index_daily_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/stock_hk_index_daily_sina.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/stock_zh_index_daily.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/stock_zh_index_daily_em.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/indexs/weekly/stock_zh_index_daily_tx.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/data_fetch/scripts/stocks/daily/stock_zh_a_hist.py",
+      "status": "modified",
+      "insertions": 162,
+      "deletions": 70
+    },
+    {
+      "path": "src/backend/app/data_fetch/utils/eastmoney_cookie_refresh.py",
+      "status": "added",
+      "insertions": 113,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/db/akshare_data_database.py",
+      "status": "modified",
+      "insertions": 47,
+      "deletions": 27
+    },
+    {
+      "path": "src/backend/app/db/cache.py",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/db/database.py",
+      "status": "modified",
+      "insertions": 108,
+      "deletions": 790
+    },
+    {
+      "path": "src/backend/app/db/schema_compatibility.py",
+      "status": "added",
+      "insertions": 701,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/main_routes.py",
+      "status": "modified",
+      "insertions": 33,
+      "deletions": 15
+    },
+    {
+      "path": "src/backend/app/schemas/live_trading_instance.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/services/ai_router/router.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_local_improver.py",
+      "status": "added",
+      "insertions": 664,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_pipeline_helpers.py",
+      "status": "added",
+      "insertions": 882,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/ai_strategy_research_service.py",
+      "status": "modified",
+      "insertions": 257,
+      "deletions": 1301
+    },
+    {
+      "path": "src/backend/app/services/ai_trading/trade_log.py",
+      "status": "added",
+      "insertions": 199,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/ai_trading_service.py",
+      "status": "modified",
+      "insertions": 144,
+      "deletions": 170
+    },
+    {
+      "path": "src/backend/app/services/akshare/data.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/akshare/script_worker_runtime.py",
+      "status": "modified",
+      "insertions": 54,
+      "deletions": 28
+    },
+    {
+      "path": "src/backend/app/services/analytics_service.py",
+      "status": "modified",
+      "insertions": 16,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/asset_info/gateway_specs.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/asset_info/normalization.py",
+      "status": "modified",
+      "insertions": 280,
+      "deletions": 271
+    },
+    {
+      "path": "src/backend/app/services/asset_info/positions.py",
+      "status": "modified",
+      "insertions": 225,
+      "deletions": 140
+    },
+    {
+      "path": "src/backend/app/services/asset_research/orchestrator.py",
+      "status": "modified",
+      "insertions": 42,
+      "deletions": 36
+    },
+    {
+      "path": "src/backend/app/services/asset_research/plugins/asset_quality_checks.py",
+      "status": "added",
+      "insertions": 540,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/asset_research/plugins/base.py",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 369
+    },
+    {
+      "path": "src/backend/app/services/auto_trading_scheduler.py",
+      "status": "modified",
+      "insertions": 32,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/backtest/analyzers.py",
+      "status": "modified",
+      "insertions": 30,
+      "deletions": 44
+    },
+    {
+      "path": "src/backend/app/services/backtest/list_queries.py",
+      "status": "added",
+      "insertions": 157,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/backtest/runner.py",
+      "status": "modified",
+      "insertions": 82,
+      "deletions": 4
+    },
+    {
+      "path": "src/backend/app/services/backtest/sanitize.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/services/backtest/service.py",
+      "status": "modified",
+      "insertions": 42,
+      "deletions": 52
+    },
+    {
+      "path": "src/backend/app/services/comparison_service.py",
+      "status": "modified",
+      "insertions": 112,
+      "deletions": 101
+    },
+    {
+      "path": "src/backend/app/services/data_topic_hub.py",
+      "status": "modified",
+      "insertions": 36,
+      "deletions": 11
+    },
+    {
+      "path": "src/backend/app/services/fincore_metrics_helper.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/gateway/launch_builder.py",
+      "status": "modified",
+      "insertions": 11,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/services/gateway/preset.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/gateway/runtime.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 7
+    },
+    {
+      "path": "src/backend/app/services/kb_chat_service.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/services/live_trading/execution.py",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/manual_gateway/ib_clientportal.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/services/market_data/calendar_importer.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/services/market_data/capability_ledger.py",
+      "status": "modified",
+      "insertions": 11,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/services/market_data/capability_ledger_admission.py",
+      "status": "modified",
+      "insertions": 31,
+      "deletions": 11
+    },
+    {
+      "path": "src/backend/app/services/market_data/opendata_instrument_reference.py",
+      "status": "modified",
+      "insertions": 47,
+      "deletions": 164
+    },
+    {
+      "path": "src/backend/app/services/market_data/opendata_instrument_reference_validation.py",
+      "status": "added",
+      "insertions": 238,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/market_data/opendata_provider.py",
+      "status": "modified",
+      "insertions": 86,
+      "deletions": 269
+    },
+    {
+      "path": "src/backend/app/services/market_data/opendata_snapshot_validators.py",
+      "status": "added",
+      "insertions": 336,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/market_data/opendata_stock_daily_snapshot.py",
+      "status": "modified",
+      "insertions": 58,
+      "deletions": 41
+    },
+    {
+      "path": "src/backend/app/services/market_data/publication.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 4
+    },
+    {
+      "path": "src/backend/app/services/market_data/scope_manifest.py",
+      "status": "modified",
+      "insertions": 28,
+      "deletions": 10
+    },
+    {
+      "path": "src/backend/app/services/market_data/ths_dump_importer.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/market_data/ths_history_runner.py",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/services/market_instrument_asset_adapter.py",
+      "status": "modified",
+      "insertions": 40,
+      "deletions": 38
+    },
+    {
+      "path": "src/backend/app/services/metrics_service.py",
+      "status": "modified",
+      "insertions": 10,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/mig03_boundary_helpers.py",
+      "status": "added",
+      "insertions": 632,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/mig03_boundary_inventory.py",
+      "status": "modified",
+      "insertions": 148,
+      "deletions": 627
+    },
+    {
+      "path": "src/backend/app/services/monitoring_control.py",
+      "status": "modified",
+      "insertions": 15,
+      "deletions": 19
+    },
+    {
+      "path": "src/backend/app/services/monitoring_service.py",
+      "status": "modified",
+      "insertions": 126,
+      "deletions": 52
+    },
+    {
+      "path": "src/backend/app/services/news_intelligence.py",
+      "status": "modified",
+      "insertions": 117,
+      "deletions": 20
+    },
+    {
+      "path": "src/backend/app/services/paper_trading_execution.py",
+      "status": "added",
+      "insertions": 368,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/paper_trading_service.py",
+      "status": "modified",
+      "insertions": 51,
+      "deletions": 72
+    },
+    {
+      "path": "src/backend/app/services/perf_attribution/brinson.py",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/perf_attribution/fama_french.py",
+      "status": "modified",
+      "insertions": 16,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/services/portfolio_analytics_v1_tasks.py",
+      "status": "modified",
+      "insertions": 223,
+      "deletions": 153
+    },
+    {
+      "path": "src/backend/app/services/portfolio_composition.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/services/portfolio_valuation_bindings.py",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 8
+    },
+    {
+      "path": "src/backend/app/services/position_valuation.py",
+      "status": "modified",
+      "insertions": 13,
+      "deletions": 477
+    },
+    {
+      "path": "src/backend/app/services/position_valuation_specs.py",
+      "status": "added",
+      "insertions": 472,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/reqdocs_migration_service.py",
+      "status": "modified",
+      "insertions": 57,
+      "deletions": 36
+    },
+    {
+      "path": "src/backend/app/services/research/discovery_execution_journal.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/services/research/evidence_package.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/services/research/generation_executor.py",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 4
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_claim.py",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_execution_journal.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 7
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_finalize.py",
+      "status": "modified",
+      "insertions": 25,
+      "deletions": 21
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_request.py",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/research/holdout_worker.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/services/research/llm_gateway.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/research/profile_migration.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/research/promotion.py",
+      "status": "modified",
+      "insertions": 56,
+      "deletions": 231
+    },
+    {
+      "path": "src/backend/app/services/research/promotion_authority_checks.py",
+      "status": "added",
+      "insertions": 602,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/research/quota.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/risk_analytics/benchmark_metrics.py",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 5
+    },
+    {
+      "path": "src/backend/app/services/risk_policy_budget.py",
+      "status": "modified",
+      "insertions": 131,
+      "deletions": 121
+    },
+    {
+      "path": "src/backend/app/services/robustness_validation_service.py",
+      "status": "modified",
+      "insertions": 27,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/scanner_service.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/services/semantic_retrieval_service.py",
+      "status": "modified",
+      "insertions": 15,
+      "deletions": 14
+    },
+    {
+      "path": "src/backend/app/services/service_read/access.py",
+      "status": "modified",
+      "insertions": 235,
+      "deletions": 286
+    },
+    {
+      "path": "src/backend/app/services/service_read/approved_target_authority.py",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 4
+    },
+    {
+      "path": "src/backend/app/services/service_read/contracts.py",
+      "status": "modified",
+      "insertions": 102,
+      "deletions": 121
+    },
+    {
+      "path": "src/backend/app/services/service_read/deployment.py",
+      "status": "modified",
+      "insertions": 81,
+      "deletions": 683
+    },
+    {
+      "path": "src/backend/app/services/service_read/deployment_validation.py",
+      "status": "added",
+      "insertions": 820,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/service_read/session.py",
+      "status": "modified",
+      "insertions": 47,
+      "deletions": 55
+    },
+    {
+      "path": "src/backend/app/services/service_read/worker.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/stock_analysis/data_collector.py",
+      "status": "modified",
+      "insertions": 23,
+      "deletions": 27
+    },
+    {
+      "path": "src/backend/app/services/stock_analysis/opendata_financial_archive.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/app/services/stock_analysis/opendata_sina_fzb_snapshot.py",
+      "status": "modified",
+      "insertions": 75,
+      "deletions": 190
+    },
+    {
+      "path": "src/backend/app/services/stock_analysis/opendata_sina_lrb_snapshot.py",
+      "status": "modified",
+      "insertions": 72,
+      "deletions": 193
+    },
+    {
+      "path": "src/backend/app/services/stock_analysis/opendata_sina_validators.py",
+      "status": "added",
+      "insertions": 345,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/stock_analysis/pipeline.py",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 14
+    },
+    {
+      "path": "src/backend/app/services/stock_signal/opendata_sse50_benchmark.py",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 4
+    },
+    {
+      "path": "src/backend/app/services/strategy/core.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/strategy_reduction_control.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/strategy_target_approvals.py",
+      "status": "modified",
+      "insertions": 10,
+      "deletions": 15
+    },
+    {
+      "path": "src/backend/app/services/sync/progress.py",
+      "status": "modified",
+      "insertions": 24,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/services/sync_service.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_service.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_snapshot.py",
+      "status": "modified",
+      "insertions": 105,
+      "deletions": 102
+    },
+    {
+      "path": "src/backend/app/services/trading_workspace_startup.py",
+      "status": "modified",
+      "insertions": 12,
+      "deletions": 10
+    },
+    {
+      "path": "src/backend/app/services/workspace/optimization.py",
+      "status": "modified",
+      "insertions": 104,
+      "deletions": 83
+    },
+    {
+      "path": "src/backend/app/services/workspace/run_ops.py",
+      "status": "modified",
+      "insertions": 21,
+      "deletions": 19
+    },
+    {
+      "path": "src/backend/app/services/workspace_unit_runtime.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/services/ws_gateway.py",
+      "status": "modified",
+      "insertions": 13,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/settings/broker_accounts.py",
+      "status": "modified",
+      "insertions": 18,
+      "deletions": 16
+    },
+    {
+      "path": "src/backend/app/settings/operations.py",
+      "status": "modified",
+      "insertions": 6,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/startup/__init__.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/startup/database.py",
+      "status": "modified",
+      "insertions": 10,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/app/startup/monitoring.py",
+      "status": "added",
+      "insertions": 13,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/startup/orchestration.py",
+      "status": "modified",
+      "insertions": 11,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/startup/reconcile.py",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/utils/async_tasks.py",
+      "status": "added",
+      "insertions": 61,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/utils/invariants.py",
+      "status": "added",
+      "insertions": 33,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/app/utils/logger.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 2
+    },
+    {
+      "path": "src/backend/app/utils/response_cache.py",
+      "status": "modified",
+      "insertions": 3,
+      "deletions": 1
+    },
+    {
+      "path": "src/backend/pyproject.toml",
+      "status": "modified",
+      "insertions": 0,
+      "deletions": 10
+    },
+    {
+      "path": "src/backend/scripts/audit_futures_daily_bars.py",
+      "status": "added",
+      "insertions": 509,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/scripts/audit_futures_daily_contracts.py",
+      "status": "added",
+      "insertions": 334,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/scripts/audit_futures_daily_trading_days.py",
+      "status": "added",
+      "insertions": 277,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/scripts/bond_convertible_history_controller.py",
+      "status": "modified",
+      "insertions": 92,
+      "deletions": 12
+    },
+    {
+      "path": "src/backend/scripts/ops/ac11_runtime_evidence.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 3
+    },
+    {
+      "path": "src/backend/scripts/run_futures_data_audit.sh",
+      "status": "added",
+      "insertions": 134,
+      "deletions": 0
+    },
+    {
+      "path": "src/backend/scripts/stock_full_history_controller.py",
+      "status": "modified",
+      "insertions": 32,
+      "deletions": 15
+    },
+    {
+      "path": "src/backend/tests/conftest.py",
+      "status": "modified",
+      "insertions": 44,
+      "deletions": 3
+    },
+    {
+      "path": "src/frontend/src/api/auth.ts",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/api/index.ts",
+      "status": "modified",
+      "insertions": 105,
+      "deletions": 15
+    },
+    {
+      "path": "src/frontend/src/composables/useBacktestRuntime.ts",
+      "status": "modified",
+      "insertions": 56,
+      "deletions": 43
+    },
+    {
+      "path": "src/frontend/src/composables/useDataTopicStream.ts",
+      "status": "added",
+      "insertions": 84,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/composables/useImportSourcesPagination.ts",
+      "status": "added",
+      "insertions": 81,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/composables/useOverfittingRuntime.ts",
+      "status": "modified",
+      "insertions": 51,
+      "deletions": 34
+    },
+    {
+      "path": "src/frontend/src/composables/usePortfolioAnalyticsTask.ts",
+      "status": "modified",
+      "insertions": 25,
+      "deletions": 1
+    },
+    {
+      "path": "src/frontend/src/composables/useStockAnalysisPolling.ts",
+      "status": "added",
+      "insertions": 49,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/main.ts",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1
+    },
+    {
+      "path": "src/frontend/src/stores/auth.ts",
+      "status": "modified",
+      "insertions": 18,
+      "deletions": 2
+    },
+    {
+      "path": "src/frontend/src/stores/quote.ts",
+      "status": "modified",
+      "insertions": 13,
+      "deletions": 3
+    },
+    {
+      "path": "src/frontend/src/types/index.d.ts",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/utils/auditTracker.ts",
+      "status": "modified",
+      "insertions": 31,
+      "deletions": 7
+    },
+    {
+      "path": "src/frontend/src/utils/html.ts",
+      "status": "added",
+      "insertions": 9,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/utils/session.ts",
+      "status": "modified",
+      "insertions": 40,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/utils/tokenRef.ts",
+      "status": "modified",
+      "insertions": 39,
+      "deletions": 1
+    },
+    {
+      "path": "src/frontend/src/utils/url.ts",
+      "status": "added",
+      "insertions": 38,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/AITradingPage.vue",
+      "status": "modified",
+      "insertions": 27,
+      "deletions": 8
+    },
+    {
+      "path": "src/frontend/src/views/BacktestPage.vue",
+      "status": "modified",
+      "insertions": 10,
+      "deletions": 3
+    },
+    {
+      "path": "src/frontend/src/views/BacktestResultPage.vue",
+      "status": "modified",
+      "insertions": 66,
+      "deletions": 94
+    },
+    {
+      "path": "src/frontend/src/views/KnowledgeBaseDocumentPage.vue",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 10
+    },
+    {
+      "path": "src/frontend/src/views/NewsIntelligencePage.vue",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 3
+    },
+    {
+      "path": "src/frontend/src/views/PortfolioPage.vue",
+      "status": "modified",
+      "insertions": 36,
+      "deletions": 57
+    },
+    {
+      "path": "src/frontend/src/views/QuotePage.vue",
+      "status": "modified",
+      "insertions": 12,
+      "deletions": 23
+    },
+    {
+      "path": "src/frontend/src/views/StrategyPage.vue",
+      "status": "modified",
+      "insertions": 8,
+      "deletions": 2800
+    },
+    {
+      "path": "src/frontend/src/views/data/DataTopicsPage.vue",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 44
+    },
+    {
+      "path": "src/frontend/src/views/data/marketDataCatalogSpecs.ts",
+      "status": "added",
+      "insertions": 453,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/marketDataFormatters.ts",
+      "status": "added",
+      "insertions": 560,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/marketDataTypes.ts",
+      "status": "added",
+      "insertions": 307,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/useDataPage.ts",
+      "status": "modified",
+      "insertions": 313,
+      "deletions": 4585
+    },
+    {
+      "path": "src/frontend/src/views/data/useMarketDataCatalog.ts",
+      "status": "added",
+      "insertions": 947,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/useMarketDataChart.ts",
+      "status": "added",
+      "insertions": 460,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/useMarketDataDirectKline.ts",
+      "status": "added",
+      "insertions": 280,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/useMarketDataLookup.ts",
+      "status": "added",
+      "insertions": 648,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/useMarketDataPresentation.ts",
+      "status": "added",
+      "insertions": 682,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/data/useMarketDataV2Query.ts",
+      "status": "added",
+      "insertions": 613,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/investment/StockAnalysisPage.vue",
+      "status": "modified",
+      "insertions": 17,
+      "deletions": 19
+    },
+    {
+      "path": "src/frontend/src/views/strategy-components/AIResearchConfigDialog.vue",
+      "status": "added",
+      "insertions": 833,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy-components/AIResearchLiveHandoffCard.vue",
+      "status": "added",
+      "insertions": 315,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy-components/AIResearchMandatePanel.vue",
+      "status": "added",
+      "insertions": 434,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy-components/AIResearchResultPanel.vue",
+      "status": "added",
+      "insertions": 839,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy-components/AIResearchRunHistoryPanel.vue",
+      "status": "added",
+      "insertions": 510,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchConstants.ts",
+      "status": "added",
+      "insertions": 196,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchFormatters.ts",
+      "status": "added",
+      "insertions": 763,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/aiResearchRunTransforms.ts",
+      "status": "added",
+      "insertions": 342,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/strategyPageContext.ts",
+      "status": "added",
+      "insertions": 14,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchConfigProfiles.ts",
+      "status": "added",
+      "insertions": 815,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchMandate.ts",
+      "status": "added",
+      "insertions": 632,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchPipelineSelectors.ts",
+      "status": "added",
+      "insertions": 857,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRequestBuilder.ts",
+      "status": "added",
+      "insertions": 656,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useAIResearchRunHistory.ts",
+      "status": "added",
+      "insertions": 675,
+      "deletions": 0
+    },
+    {
+      "path": "src/frontend/src/views/strategy/useStrategyPage.ts",
+      "status": "modified",
+      "insertions": 479,
+      "deletions": 5078
+    }
+  ],
+  "excluded_files": [
+    {
+      "path": "DISCLAIMER.md",
+      "status": "added",
+      "insertions": 46,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "LICENSE-REVIEW.md",
+      "status": "added",
+      "insertions": 142,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "LICENSE-SCOPE-DRAFT.md",
+      "status": "added",
+      "insertions": 69,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "LICENSE-SOURCE-AVAILABLE-DRAFT.md",
+      "status": "added",
+      "insertions": 69,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "README.en.md",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/guides/AI_STRATEGY_COPILOT.md",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 9,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-approved-target-identity-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 11,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/.gitattributes",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 1,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/cleanup-receipt.json",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 1,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/exit.txt",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 1,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/junit.xml",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 1,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/module-origins.json",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 1,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/r16-persisted-mapping-query.json",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 46,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/result.json",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 32,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 11,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi08-reduce-http-host-r17-20261017/test_strategy_reduction_http_host_integration.py",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 2191,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "docs/iteration10-afi08-stop-process-installed-root-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 15,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi10-gateway-operator-lifecycle-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 9,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi10-gateway-operator-ui-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 6,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi10-history-consumer-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 16,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi10-quote-read-no-auto-connect-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 19,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi10-service-market-close-retry-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 12,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/manifest.json",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 290,
+      "exclude_reason": "deleted"
+    },
+    {
+      "path": "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/raw-r6.zip",
+      "status": "binary",
+      "insertions": 0,
+      "deletions": 0,
+      "exclude_reason": "binary"
+    },
+    {
+      "path": "docs/iteration10-afi11-analytics-worker-failure-r263-20261016/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 9,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-afi13-strategy-service-source-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 16,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-mig03-afi12-receipt-writer-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 18,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iteration10-mig03-snapshot-import-fence-r1-20261017/round-record.md",
+      "status": "deleted",
+      "insertions": 0,
+      "deletions": 23,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/README.md",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代156-AI策略Copilot与生成式问答升级.md",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 9,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代157-StrategyCopilotAPI与工作区接入.md",
+      "status": "modified",
+      "insertions": 7,
+      "deletions": 7,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代158-AI策略闭环回测与报告编排.md",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 9,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代159-AI策略自动报告与复盘建议.md",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代161-执行状态Composable可测试性与依赖注入优化.md",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 2,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代205-全仓代码审查与质量门禁收口/evidence/full-suite-20261118.txt",
+      "status": "modified",
+      "insertions": 73,
+      "deletions": 73,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代206-OpenCodeReview全仓代码审阅与缺陷修复方案/AUDIT.md",
+      "status": "added",
+      "insertions": 361,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代206-OpenCodeReview全仓代码审阅与缺陷修复方案/README.md",
+      "status": "added",
+      "insertions": 87,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "docs/iterations/迭代206-OpenCodeReview全仓代码审阅与缺陷修复方案/TODO.md",
+      "status": "added",
+      "insertions": 143,
+      "deletions": 0,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "scripts/ci/tests/test_ocr42_gates.py",
+      "status": "added",
+      "insertions": 73,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/asset_research/test_api.py",
+      "status": "modified",
+      "insertions": 54,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/known_preexisting_failures.txt",
+      "status": "modified",
+      "insertions": 0,
+      "deletions": 14,
+      "exclude_reason": "unsupported_ext"
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_capability_ledger_admission.py",
+      "status": "modified",
+      "insertions": 76,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/market_data_platform/test_scope_manifest.py",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 2,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_ac11_runtime_evidence.py",
+      "status": "modified",
+      "insertions": 17,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_ai_strategy_research_service.py",
+      "status": "modified",
+      "insertions": 46,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_ai_trading.py",
+      "status": "modified",
+      "insertions": 95,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_airflow_dags_api.py",
+      "status": "modified",
+      "insertions": 84,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_akshare_management_api.py",
+      "status": "modified",
+      "insertions": 25,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_akshare_provider_storage.py",
+      "status": "modified",
+      "insertions": 66,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_akshare_script_service.py",
+      "status": "modified",
+      "insertions": 130,
+      "deletions": 3,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_akshare_script_worker_unit.py",
+      "status": "modified",
+      "insertions": 91,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_analytics.py",
+      "status": "modified",
+      "insertions": 135,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_analytics_service.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_api_edge_cases_113.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 1,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_app_lifecycle_scripts.py",
+      "status": "modified",
+      "insertions": 160,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_backtest_runner.py",
+      "status": "modified",
+      "insertions": 62,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_backtest_service.py",
+      "status": "modified",
+      "insertions": 109,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_backtest_service_utils.py",
+      "status": "modified",
+      "insertions": 18,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_bond_convertible_history_controller.py",
+      "status": "modified",
+      "insertions": 137,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_collection_script_row_narrowing_wave3.py",
+      "status": "modified",
+      "insertions": 4,
+      "deletions": 6,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_comparison_api.py",
+      "status": "modified",
+      "insertions": 33,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_comparison_service.py",
+      "status": "modified",
+      "insertions": 83,
+      "deletions": 4,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_config_validation.py",
+      "status": "modified",
+      "insertions": 62,
+      "deletions": 1,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_data_fetch_common_utils.py",
+      "status": "modified",
+      "insertions": 58,
+      "deletions": 2,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_data_fetch_write_receipts.py",
+      "status": "modified",
+      "insertions": 166,
+      "deletions": 2,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_data_topic_hub.py",
+      "status": "modified",
+      "insertions": 81,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_db.py",
+      "status": "modified",
+      "insertions": 63,
+      "deletions": 4,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_fama_french_attribution.py",
+      "status": "modified",
+      "insertions": 13,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_fincore_advanced_metrics.py",
+      "status": "modified",
+      "insertions": 16,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_iteration183_security.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_iteration206_security_rbac.py",
+      "status": "added",
+      "insertions": 273,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_live_trading_api.py",
+      "status": "modified",
+      "insertions": 45,
+      "deletions": 10,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_main_startup.py",
+      "status": "modified",
+      "insertions": 2,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_market_instrument_freshness.py",
+      "status": "modified",
+      "insertions": 25,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_monitoring_service.py",
+      "status": "modified",
+      "insertions": 45,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_news_intelligence.py",
+      "status": "modified",
+      "insertions": 144,
+      "deletions": 9,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_news_intelligence_type_boundaries.py",
+      "status": "modified",
+      "insertions": 26,
+      "deletions": 4,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_optimization_api.py",
+      "status": "modified",
+      "insertions": 46,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_orchestration/test_e2e_api.py",
+      "status": "modified",
+      "insertions": 109,
+      "deletions": 14,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_paper_trading_api.py",
+      "status": "modified",
+      "insertions": 34,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_paper_trading_service.py",
+      "status": "modified",
+      "insertions": 175,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_perf_attribution.py",
+      "status": "modified",
+      "insertions": 13,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_api.py",
+      "status": "modified",
+      "insertions": 85,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_compositions_api.py",
+      "status": "modified",
+      "insertions": 90,
+      "deletions": 5,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_projection_dimension_matrix.py",
+      "status": "modified",
+      "insertions": 12,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_scanners.py",
+      "status": "modified",
+      "insertions": 41,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_service_order_submission.py",
+      "status": "modified",
+      "insertions": 1,
+      "deletions": 1,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_status_capabilities.py",
+      "status": "modified",
+      "insertions": 36,
+      "deletions": 3,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_stock_analysis_data_collector.py",
+      "status": "modified",
+      "insertions": 65,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_stock_full_history_controller.py",
+      "status": "modified",
+      "insertions": 65,
+      "deletions": 1,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/backend/tests/test_ws_gateway.py",
+      "status": "modified",
+      "insertions": 31,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/api/auth.test.ts",
+      "status": "modified",
+      "insertions": 16,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/api/index.test.ts",
+      "status": "modified",
+      "insertions": 108,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/composables/useBacktestRuntime.test.ts",
+      "status": "modified",
+      "insertions": 24,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/composables/useOverfittingRuntime.test.ts",
+      "status": "modified",
+      "insertions": 28,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/composables/usePortfolioAnalyticsTask.test.ts",
+      "status": "added",
+      "insertions": 61,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/stores/auth.test.ts",
+      "status": "modified",
+      "insertions": 27,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/utils/auditTracker.test.ts",
+      "status": "modified",
+      "insertions": 38,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/AITradingPage.test.ts",
+      "status": "modified",
+      "insertions": 29,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/BacktestPage.test.ts",
+      "status": "modified",
+      "insertions": 31,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/BacktestResultPage.test.ts",
+      "status": "modified",
+      "insertions": 9,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/DataTopicsPage.test.ts",
+      "status": "modified",
+      "insertions": 5,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/KnowledgeBaseDocumentPage.test.ts",
+      "status": "modified",
+      "insertions": 16,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/NewsIntelligencePage.test.ts",
+      "status": "modified",
+      "insertions": 16,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+      "status": "modified",
+      "insertions": 46,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/QuotePage.test.ts",
+      "status": "modified",
+      "insertions": 28,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/StockAnalysisPage.test.ts",
+      "status": "modified",
+      "insertions": 18,
+      "deletions": 0,
+      "exclude_reason": "default_path"
+    }
+  ]
+}

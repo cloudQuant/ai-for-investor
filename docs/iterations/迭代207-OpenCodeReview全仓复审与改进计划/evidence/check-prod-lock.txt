@@ -1,0 +1,1 @@
+check_prod_lock_singleton: passed (single SSOT at config/requirements-prod.lock)

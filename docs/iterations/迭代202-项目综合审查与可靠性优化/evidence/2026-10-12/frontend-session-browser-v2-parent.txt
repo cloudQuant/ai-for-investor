@@ -1,0 +1,54 @@
+[2m[WebServer] [22m(node:3590) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 7 tests using 1 worker
+
+[2m[WebServer] [22mThe file does not exist at "/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/node_modules/.vite/deps/chunk-QT43MKE5.js?v=76786334" which is in the optimize deps directory. The dependency might be incompatible with the dep optimizer. Try adding it to `optimizeDeps.exclude`.
+[fixture browser error] 
+(node:3752) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[fixture browser error] 
+  ✘  1 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry (1.0m)
+  ✓  2 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:446:1 › AC-D09: a real startup 401 clears the expired identity and returns to the login form (6.4s)
+  ✘  3 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:470:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B (2.3s)
+
+
+  1) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m"/research/workspaces"[39m
+    Received: [31m"[7m/login?redirect=[27m/research/workspaces"[39m
+
+    Call Log:
+    - Timeout 30000ms exceeded while waiting on the predicate
+
+      435 |   await page.getByTestId('identity-retry').click()
+      436 |   await expect.poll(() => meCalls).toBe(9)
+    > 437 |   await expect.poll(async () => (await readAuthAppState(page)).currentRoute)
+          |   ^
+      438 |     .toBe('/research/workspaces')
+      439 |   await expect(page.locator('.user-dropdown-trigger')).toContainText('user-a')
+      440 |   await expect(page).toHaveURL(/\/research\/workspaces$/)
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:437:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:398:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+  1 interrupted
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:470:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B 
+  4 did not run
+  1 passed (1.8m)

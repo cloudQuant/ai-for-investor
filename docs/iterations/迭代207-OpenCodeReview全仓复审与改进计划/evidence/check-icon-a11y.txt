@@ -1,0 +1,1 @@
+frontend_icon_a11y: passed

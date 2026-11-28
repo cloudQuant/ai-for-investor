@@ -1,0 +1,13 @@
+
+> ai-for-investor-frontend@0.1.0 test
+> vitest --run src/__tests__/views/StrategyPage.test.ts -t debounces data precheck and ignores an older result after asset changes --bail=1 --maxWorkers=1
+
+
+ RUN  v4.1.11 /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 157 skipped (158)
+   Start at  18:26:17
+   Duration  32.79s (transform 23.12s, setup 1.03s, import 23.91s, tests 3.22s, environment 2.76s)
+

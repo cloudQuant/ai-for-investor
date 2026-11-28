@@ -1,0 +1,15 @@
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/iteration202.config.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4.config.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tailwind4/style-regression.spec.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts
+  0:0  warning  File ignored because of a matching ignore pattern. Use "--no-ignore" to disable file ignore settings or use "--no-warn-ignored" to suppress this warning
+
+✖ 4 problems (0 errors, 4 warnings)
+

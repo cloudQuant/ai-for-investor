@@ -1,0 +1,216 @@
+[2m[WebServer] [22m(node:23042) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 7 tests using 1 worker
+
+  ✘  1 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:436:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry (1.1m)
+  ✘  2 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:484:1 › AC-D09: a real startup 401 clears the expired identity and returns to the login form (35.2s)
+  ✘  3 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:508:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B (2.1m)
+  ✘  4 [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:564:1 › AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state (1.1m)
+
+
+  1) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:436:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByTestId('identity-retry-panel')
+    Expected: visible
+    Timeout: 60000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 60000ms[22m
+    [2m  - waiting for getByTestId('identity-retry-panel')[22m
+
+
+      459 |
+      460 |   await page.goto('/research/workspaces')
+    > 461 |   await expect(page.getByTestId('identity-retry-panel')).toBeVisible({ timeout: 60_000 })
+          |                                                          ^
+      462 |   expect(meCalls).toBe(4)
+      463 |   expect(await tokenInSessionStorage(page)).toBe(TOKEN_A)
+      464 |   expect(workspaceRequests).toEqual([])
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:461:58
+
+    Error: AC-D09: retains credentials through 503 and network failures, then confirms identity on retry emitted browser runtime diagnostics:
+    pageerror: ReferenceError: Cannot access 'de' before initialization
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  - 1[39m
+    [31m+ Received  + 8[39m
+
+    [32m- Array [][39m
+    [31m+ Array [[39m
+    [31m+   Object {[39m
+    [31m+     "message": "ReferenceError: Cannot access 'de' before initialization[39m
+    [31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)[39m
+    [31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666",[39m
+    [31m+     "source": "pageerror",[39m
+    [31m+   },[39m
+    [31m+ ][39m
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+        at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-7e3b0--confirms-identity-on-retry-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:484:1 › AC-D09: a real startup 401 clears the expired identity and returns to the login form 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByTestId('login-submit')
+    Expected: visible
+    Timeout: 30000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 30000ms[22m
+    [2m  - waiting for getByTestId('login-submit')[22m
+
+
+      499 |
+      500 |   await page.goto('/research/workspaces')
+    > 501 |   await expect(page.getByTestId('login-submit')).toBeVisible()
+          |                                                  ^
+      502 |   await expect(page.getByTestId('identity-retry-panel')).toHaveCount(0)
+      503 |   expect(await tokenInSessionStorage(page)).toBeNull()
+      504 |   expect(await expiredEventCount(page)).toBe(1)
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:501:50
+
+    Error: AC-D09: a real startup 401 clears the expired identity and returns to the login form emitted browser runtime diagnostics:
+    pageerror: ReferenceError: Cannot access 'de' before initialization
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  - 1[39m
+    [31m+ Received  + 8[39m
+
+    [32m- Array [][39m
+    [31m+ Array [[39m
+    [31m+   Object {[39m
+    [31m+     "message": "ReferenceError: Cannot access 'de' before initialization[39m
+    [31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)[39m
+    [31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666",[39m
+    [31m+     "source": "pageerror",[39m
+    [31m+   },[39m
+    [31m+ ][39m
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+        at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-ceaa3-d-returns-to-the-login-form-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:508:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: AC-D10: a late A 401 cannot log out B, while B own 401 still expires B emitted browser runtime diagnostics:
+    pageerror: ReferenceError: Cannot access 'de' before initialization
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  - 1[39m
+    [31m+ Received  + 8[39m
+
+    [32m- Array [][39m
+    [31m+ Array [[39m
+    [31m+   Object {[39m
+    [31m+     "message": "ReferenceError: Cannot access 'de' before initialization[39m
+    [31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)[39m
+    [31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666",[39m
+    [31m+     "source": "pageerror",[39m
+    [31m+   },[39m
+    [31m+ ][39m
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+        at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-82f3d-e-B-own-401-still-expires-B-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:564:1 › AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state 
+
+    Test was interrupted.
+
+    Error: AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state emitted browser runtime diagnostics:
+    pageerror: ReferenceError: Cannot access 'de' before initialization
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  - 1[39m
+    [31m+ Received  + 8[39m
+
+    [32m- Array [][39m
+    [31m+ Array [[39m
+    [31m+   Object {[39m
+    [31m+     "message": "ReferenceError: Cannot access 'de' before initialization[39m
+    [31m+     at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)[39m
+    [31m+     at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666",[39m
+    [31m+     "source": "pageerror",[39m
+    [31m+   },[39m
+    [31m+ ][39m
+        at U (http://127.0.0.1:4177/assets/el-dropdown-item-nlcteeRw.js:13:10817)
+        at http://127.0.0.1:4177/assets/application-vendor-z7VZdssI.js:13:10666
+        at assertNoRuntimeDiagnostics (/Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:54:87)
+        at /Users/yunjinqi/Documents/new_projects/ai-for-investor/src/frontend/e2e/tests/iteration202-session-workspace.spec.ts:433:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    e2e-results/iteration202/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/trace.zip
+    Usage:
+
+        npx playwright show-trace e2e-results/iteration202/iteration202-session-works-98329-t-replace-B-workspace-state-chromium-fixture/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:436:1 › AC-D09: retains credentials through 503 and network failures, then confirms identity on retry 
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:484:1 › AC-D09: a real startup 401 clears the expired identity and returns to the login form 
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:508:1 › AC-D10: a late A 401 cannot log out B, while B own 401 still expires B 
+  1 interrupted
+    [chromium-fixture] › e2e/tests/iteration202-session-workspace.spec.ts:564:1 › AC-D10: a delayed A retry keeps A authorization and cannot replace B workspace state 
+  3 did not run

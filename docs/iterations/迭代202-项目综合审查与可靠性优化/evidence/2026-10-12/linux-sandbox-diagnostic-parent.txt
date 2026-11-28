@@ -1,0 +1,48 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.17, pytest-9.0.3, pluggy-1.6.0
+rootdir: /work/src/backend/tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+timeout: 180.0s
+timeout method: thread
+timeout func_only: False
+collected 2 items
+
+tests/test_ai_strategy_research_service.py FF                            [100%]
+
+=================================== FAILURES ===================================
+___________ test_ai_strategy_code_validation_runs_preflight_backtest ___________
+app/services/research/robustness.py:33: in _validate_strategy_code_draft
+    StrategySandbox.validate_strategy_code(
+app/utils/sandbox.py:477: in validate_strategy_code
+    raise validation_error
+app/utils/sandbox.py:439: in validate_strategy_code
+    phase, message = _receive_validation_message(
+app/utils/sandbox.py:118: in _receive_validation_message
+    raise RuntimeError(timeout_message)
+E   RuntimeError: Strategy validator bootstrap timed out after 15 seconds
+
+The above exception was the direct cause of the following exception:
+tests/test_ai_strategy_research_service.py:1721: in test_ai_strategy_code_validation_runs_preflight_backtest
+    _validate_strategy_code_draft(code)
+app/services/research/robustness.py:44: in _validate_strategy_code_draft
+    raise ValueError(f"strategy code sandbox validation failed: {exc}") from exc
+E   ValueError: strategy code sandbox validation failed: Strategy validator bootstrap timed out after 15 seconds
+
+During handling of the above exception, another exception occurred:
+tests/test_ai_strategy_research_service.py:1720: in test_ai_strategy_code_validation_runs_preflight_backtest
+    with pytest.raises(ValueError, match="preflight backtest failed"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'preflight backtest failed'
+E     Actual message: 'strategy code sandbox validation failed: Strategy validator bootstrap timed out after 15 seconds'
+________ test_ai_strategy_improver_uses_model_json_to_rewrite_strategy _________
+tests/test_ai_strategy_research_service.py:1905: in test_ai_strategy_improver_uses_model_json_to_rewrite_strategy
+    assert result.draft.name == "AI改进趋势策略"
+E   AssertionError: assert 'AI策略 - 请生成一个均线趋势策略 v2' == 'AI改进趋势策略'
+E     
+E     - AI改进趋势策略
+E     + AI策略 - 请生成一个均线趋势策略 v2
+=========================== short test summary info ============================
+FAILED tests/test_ai_strategy_research_service.py::test_ai_strategy_code_validation_runs_preflight_backtest
+FAILED tests/test_ai_strategy_research_service.py::test_ai_strategy_improver_uses_model_json_to_rewrite_strategy
+========================= 2 failed in 73.36s (0:01:13) =========================
