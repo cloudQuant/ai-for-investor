@@ -1,249 +1,34 @@
 <template>
-  <el-dialog
+  <SharedUnitSettingsDialog
+    ref="innerRef"
     :model-value="modelValue"
+    :unit="mappedUnit"
     :title="dialogTitle"
-    width="820px"
-    @update:model-value="$emit('update:modelValue', $event)"
-    @open="initForm"
-  >
-    <div
-      v-if="unit"
-      class="space-y-4"
-    >
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.strategyUnit') }}
-          </div>
-          <div class="mt-1 text-sm font-semibold text-slate-700">
-            {{ unit.strategy_name || unit.strategy_id }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('tradingUnits.tradingMode') }}
-          </div>
-          <div class="mt-1 text-sm font-semibold text-slate-700">
-            {{ props.workspaceType === 'trading' ? (unit.trading_mode === 'live' ? t('workspaceDialogs.liveMode') : t('workspaceDialogs.paperMode')) : t('workspaceDialogs.researchMode') }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.lastUpdate') }}
-          </div>
-          <div class="mt-1 text-sm font-semibold text-slate-700">
-            {{ new Date(unit.updated_at).toLocaleString('zh-CN') }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.currentCash') }}
-          </div>
-          <div class="mt-1 text-sm font-semibold text-slate-700">
-            {{ form.initial_cash }}
-          </div>
-        </div>
-      </div>
-
-      <el-form
-        ref="formRef"
-        :model="form"
-        label-width="130px"
-        size="default"
-      >
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-          <div class="mb-4 text-sm font-medium text-slate-700">
-            {{ t('workspaceDialogs.margin') }} / {{ t('workspaceDialogs.interestRate') }}
-          </div>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item :label="t('workspaceDialogs.marginMethod')">
-                <el-select
-                  v-model="form.margin_rate_method"
-                  style="width: 100%"
-                >
-                  <el-option
-                    :label="t('workspaceDialogs.feeAmountPercent')"
-                    value="percent"
-                  />
-                  <el-option
-                    :label="t('workspaceDialogs.feeFixedPerHand')"
-                    value="fixed"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.marginLong') + '%'">
-                <el-input-number
-                  v-model="form.long_margin_rate"
-                  :min="0"
-                  :max="100"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.marginShort') + '%'">
-                <el-input-number
-                  v-model="form.short_margin_rate"
-                  :min="0"
-                  :max="100"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.riskFreeRate') + '%'">
-                <el-input-number
-                  v-model="form.risk_free_rate"
-                  :min="0"
-                  :max="100"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-          <div class="mb-4 text-sm font-medium text-slate-700">
-            {{ t('workspaceDialogs.formulaTrading') }}
-          </div>
-          <el-form-item :label="t('workspaceDialogs.initialCash')">
-            <el-input-number
-              v-model="form.initial_cash"
-              :min="1000"
-              :step="10000"
-              style="width: 260px"
-            />
-          </el-form-item>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-          <div class="mb-4 text-sm font-medium text-slate-700">
-            {{ t('workspaceDialogs.commission') }}
-          </div>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.commission')">
-                <el-select
-                  v-model="form.commission_method"
-                  style="width: 100%"
-                >
-                  <el-option
-                    :label="t('workspaceDialogs.feeAmountWanRate')"
-                    value="percent_10k"
-                  />
-                  <el-option
-                    :label="t('workspaceDialogs.feeFixedPerHand')"
-                    value="fixed_per_lot"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.feeOpen')">
-                <el-input-number
-                  v-model="form.open_commission_rate"
-                  :min="0"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.feeClose')">
-                <el-input-number
-                  v-model="form.close_commission_rate"
-                  :min="0"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.feeCloseToday')">
-                <el-input-number
-                  v-model="form.close_today_commission_rate"
-                  :min="0"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-          <div class="mb-4 text-sm font-medium text-slate-700">
-            {{ t('workspaceDialogs.slippage') }}
-          </div>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.slippageUnit')">
-                <el-select
-                  v-model="form.slippage_unit"
-                  style="width: 100%"
-                >
-                  <el-option
-                    :label="'tick/' + t('workspaceDialogs.handUnit')"
-                    value="tick"
-                  />
-                  <el-option
-                    :label="t('workspaceDialogs.fixedValue')"
-                    value="fixed"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item :label="t('workspaceDialogs.slippageValue')">
-                <el-input-number
-                  v-model="form.slippage_value"
-                  :min="0"
-                  :precision="2"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-      </el-form>
-    </div>
-
-    <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">
-        {{ t('workspaceDialogs.cancel') }}
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="saving"
-        @click="handleSave"
-      >
-        {{ t('workspaceDialogs.confirm') }}
-      </el-button>
-    </template>
-  </el-dialog>
+    schema-preset="backtest"
+    :show-ref-notice="false"
+    :on-save="handlePersist"
+    @update:model-value="emit('update:modelValue', $event)"
+    @saved="emit('saved')"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+import {
+  UnitSettingsDialog as SharedUnitSettingsDialog,
+  type UnitSettingsConfig,
+  type WorkspaceUnitRecord,
+} from '@bt-api/workspace-ui/core'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { getErrorMessage } from '@/api/index'
 import type { StrategyUnit, WorkspaceType } from '@/types/workspace'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
+
 const props = defineProps<{
   modelValue: boolean
   workspaceId: string
@@ -257,60 +42,54 @@ const emit = defineEmits<{
 }>()
 
 const store = useWorkspaceStore()
-const formRef = ref<FormInstance>()
-const saving = ref(false)
+const innerRef = ref<InstanceType<typeof SharedUnitSettingsDialog> | null>(null)
+
 const dialogTitle = computed(() =>
-  `${props.workspaceType === 'trading' ? t('workspaceDialogs.strategyTrading') : t('workspaceDialogs.strategyResearch')}--${t('workspaceDialogs.unitSettingsTitle')}`
+  `${props.workspaceType === 'trading' ? t('workspaceDialogs.strategyTrading') : t('workspaceDialogs.strategyResearch')}--${t('workspaceDialogs.unitSettingsTitle')}`,
 )
 
-const defaultSettings = () => ({
-  margin_rate_method: 'percent',
-  long_margin_rate: 8,
-  short_margin_rate: 8,
-  risk_free_rate: 0,
-  initial_cash: 1000000,
-  commission_method: 'percent_10k',
-  open_commission_rate: 2,
-  close_commission_rate: 2,
-  close_today_commission_rate: 2,
-  slippage_unit: 'tick',
-  slippage_value: 0,
+const mappedUnit = computed<WorkspaceUnitRecord | null>(() => {
+  if (!props.unit) return null
+  return {
+    unit: props.unit.id,
+    display_name: props.unit.strategy_name || props.unit.strategy_id || props.unit.id,
+    group_name: props.unit.group_name || '',
+    linked_group: '',
+    sort_order: props.unit.sort_order ?? 0,
+    notes: '',
+    pinned: false,
+    lock_trading: Boolean(props.unit.lock_trading),
+    lock_running: Boolean(props.unit.lock_running),
+    state: props.unit.run_status || 'idle',
+    symbols: props.unit.symbol ? [props.unit.symbol] : [],
+    exchanges: [],
+    unit_settings: (props.unit.unit_settings || {}) as UnitSettingsConfig,
+  }
 })
 
-const form = ref(defaultSettings())
+const form = computed(() => innerRef.value?.form)
 
-function initForm() {
-  if (!props.unit) return
-  const us = props.unit.unit_settings || {}
-  form.value = {
-    margin_rate_method: (us.margin_rate_method as string) || 'percent',
-    long_margin_rate: (us.long_margin_rate as number) ?? 8,
-    short_margin_rate: (us.short_margin_rate as number) ?? 8,
-    risk_free_rate: (us.risk_free_rate as number) ?? 0,
-    initial_cash: (us.initial_cash as number) ?? 1000000,
-    commission_method: (us.commission_method as string) || 'percent_10k',
-    open_commission_rate: (us.open_commission_rate as number) ?? 2,
-    close_commission_rate: (us.close_commission_rate as number) ?? 2,
-    close_today_commission_rate: (us.close_today_commission_rate as number) ?? 2,
-    slippage_unit: (us.slippage_unit as string) || 'tick',
-    slippage_value: (us.slippage_value as number) ?? 0,
-  }
+function initForm(): void {
+  innerRef.value?.initForm()
 }
 
-async function handleSave() {
+async function handleSave(): Promise<void> {
+  await innerRef.value?.handleSave()
+}
+
+async function handlePersist(_unitId: string, settings: UnitSettingsConfig): Promise<void> {
   if (!props.unit) return
-  saving.value = true
   try {
     await store.updateUnit(props.workspaceId, props.unit.id, {
-      unit_settings: { ...form.value },
+      unit_settings: { ...settings },
     })
     ElMessage.success(t('workspaceDialogs.unitSettingsSaved'))
-    emit('update:modelValue', false)
-    emit('saved')
   } catch (e: unknown) {
-    ElMessage.error(getErrorMessage(e, t('workspaceDialogs.saveFailed')))
-  } finally {
-    saving.value = false
+    const message = getErrorMessage(e, t('workspaceDialogs.saveFailed'))
+    ElMessage.error(message)
+    throw new Error(message)
   }
 }
+
+defineExpose({ dialogTitle, form, initForm, handleSave })
 </script>

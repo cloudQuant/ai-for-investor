@@ -1,107 +1,30 @@
 <template>
-  <el-dialog
-    v-model="visible"
+  <SharedGroupLinkDialog
+    :model-value="modelValue"
+    :units="selectedUnitRecords"
+    :existing-group-count="existingGroupCount"
+    :initial-group-name="initialGroupName"
     :title="t('workspaceDialogs.glTitle')"
-    width="720px"
-  >
-    <div class="space-y-4">
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.glSelectedUnits') }}
-          </div>
-          <div class="mt-1 text-lg font-semibold text-slate-700">
-            {{ props.unitIds.length }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ t('workspaceDialogs.glPendingScope') }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.glCurrentGroup') }}
-          </div>
-          <div class="mt-1 text-lg font-semibold text-slate-700">
-            {{ groupName.trim() || t('workspaceDialogs.glNotSet') }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ t('workspaceDialogs.glReusable') }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs text-slate-500">
-            {{ t('workspaceDialogs.glExistingGroups') }}
-          </div>
-          <div class="mt-1 text-lg font-semibold text-slate-700">
-            {{ existingGroupCount }}
-          </div>
-          <div class="text-xs text-slate-400">
-            {{ t('workspaceDialogs.glWorkspaceConfig') }}
-          </div>
-        </div>
-      </div>
-
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        :title="t('workspaceDialogs.glAlertText', { n: props.unitIds.length })"
-      />
-
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-        <el-form label-width="100px">
-          <el-form-item :label="t('workspaceDialogs.glGroupName')">
-            <el-input
-              v-model="groupName"
-              :placeholder="t('workspaceDialogs.glPlaceholderName')"
-            />
-          </el-form-item>
-        </el-form>
-      </div>
-
-      <div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
-        <div class="mb-2 text-sm font-medium text-gray-700">
-          {{ t('workspaceDialogs.glIncludedUnits') }}
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <el-tag
-            v-for="unit in selectedUnits"
-            :key="unit.id"
-            size="small"
-            effect="plain"
-          >
-            {{ unit.strategy_name || unit.strategy_id }}
-          </el-tag>
-        </div>
-      </div>
-    </div>
-
-    <template #footer>
-      <el-button @click="visible = false">
-        {{ t('common.cancel') }}
-      </el-button>
-      <el-button @click="handleClear">
-        {{ t('workspaceDialogs.glClear') }}
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="loading"
-        @click="handleSave"
-      >
-        {{ t('common.save') }}
-      </el-button>
-    </template>
-  </el-dialog>
+    :loading="loading"
+    :on-save="handleSave"
+    @update:model-value="emit('update:modelValue', $event)"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import {
+  GroupLinkDialog as SharedGroupLinkDialog,
+  type WorkspaceUnitRecord,
+} from '@bt-api/workspace-ui/core'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import { getErrorMessage } from '@/api/index'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
 
 const props = defineProps<{
   modelValue: boolean
@@ -115,76 +38,69 @@ const emit = defineEmits<{
 }>()
 
 const store = useWorkspaceStore()
-const visible = computed({
-  get: () => props.modelValue,
-  set: (value: boolean) => emit('update:modelValue', value),
-})
 const loading = computed(() => store.loading)
-const groupName = ref('')
+
+function readGroupLinks(): Record<string, string> {
+  const tradingConfig = (store.currentWorkspace?.trading_config || {}) as Record<string, unknown>
+  return (tradingConfig.group_links || {}) as Record<string, string>
+}
+
 const existingGroupCount = computed(() => new Set(Object.values(readGroupLinks()).filter(Boolean)).size)
 
-const selectedUnits = computed(() =>
-  store.units.filter(unit => props.unitIds.includes(unit.id)),
+const initialGroupName = computed(() => {
+  const links = readGroupLinks()
+  const values = props.unitIds.map(unitId => links[unitId]).filter(Boolean)
+  return values.length && values.every(val => val === values[0]) ? values[0] : ''
+})
+
+const selectedUnitRecords = computed<WorkspaceUnitRecord[]>(() =>
+  store.units
+    .filter(unit => props.unitIds.includes(unit.id))
+    .map(unit => ({
+      unit: unit.id,
+      display_name: unit.strategy_name || unit.strategy_id || unit.id,
+      group_name: unit.group_name || '',
+      linked_group: readGroupLinks()[unit.id] || '',
+      sort_order: unit.sort_order ?? 0,
+      notes: '',
+      pinned: false,
+      lock_trading: Boolean(unit.lock_trading),
+      lock_running: Boolean(unit.lock_running),
+      state: unit.run_status || 'idle',
+      symbols: unit.symbol ? [unit.symbol] : [],
+      exchanges: [],
+    })),
 )
 
-function readGroupLinks() {
-  const tradingConfig = (store.currentWorkspace?.trading_config || {}) as Record<string, unknown>
-  return ((tradingConfig.group_links || {}) as Record<string, string>)
-}
-
-watch(
-  () => props.modelValue,
-  (value) => {
-    if (!value) return
-    const links = readGroupLinks()
-    const values = props.unitIds.map(unitId => links[unitId]).filter(Boolean)
-    groupName.value = values.length && values.every(value => value === values[0]) ? values[0] : ''
-  },
-)
-
-async function saveLinks(nextLinks: Record<string, string>) {
-  const tradingConfig = {
-    ...((store.currentWorkspace?.trading_config || {}) as Record<string, unknown>),
-    group_links: nextLinks,
-  }
-  await store.updateWorkspace(props.workspaceId, { trading_config: tradingConfig })
-  emit('saved', tradingConfig)
-}
-
-async function handleSave() {
-  if (!props.unitIds.length) {
+async function handleSave(unitIds: string[], linkedGroup: string): Promise<void> {
+  if (!unitIds.length) {
     ElMessage.warning(t('workspaceDialogs.glSelectFirst'))
-    return
+    throw new Error(t('workspaceDialogs.glSelectFirst'))
   }
-  const trimmed = groupName.value.trim()
-  if (!trimmed) {
-    ElMessage.warning(t('workspaceDialogs.glInputName'))
-    return
-  }
-  try {
-    const links = { ...readGroupLinks() }
-    for (const unitId of props.unitIds) {
+  const links = { ...readGroupLinks() }
+  const trimmed = linkedGroup.trim()
+  for (const unitId of unitIds) {
+    if (trimmed) {
       links[unitId] = trimmed
-    }
-    await saveLinks(links)
-    ElMessage.success(t('workspaceDialogs.glSaved'))
-    visible.value = false
-  } catch (error: unknown) {
-    ElMessage.error(getErrorMessage(error, t('workspaceDialogs.glSaveFailed')))
-  }
-}
-
-async function handleClear() {
-  try {
-    const links = { ...readGroupLinks() }
-    for (const unitId of props.unitIds) {
+    } else {
       delete links[unitId]
     }
-    await saveLinks(links)
-    ElMessage.success(t('workspaceDialogs.glCleared'))
-    visible.value = false
+  }
+  const tradingConfig = {
+    ...((store.currentWorkspace?.trading_config || {}) as Record<string, unknown>),
+    group_links: links,
+  }
+  try {
+    await store.updateWorkspace(props.workspaceId, { trading_config: tradingConfig })
+    emit('saved', tradingConfig)
+    ElMessage.success(trimmed ? t('workspaceDialogs.glSaved') : t('workspaceDialogs.glCleared'))
   } catch (error: unknown) {
-    ElMessage.error(getErrorMessage(error, t('workspaceDialogs.glClearFailed')))
+    const message = getErrorMessage(
+      error,
+      trimmed ? t('workspaceDialogs.glSaveFailed') : t('workspaceDialogs.glClearFailed'),
+    )
+    ElMessage.error(message)
+    throw new Error(message)
   }
 }
 </script>

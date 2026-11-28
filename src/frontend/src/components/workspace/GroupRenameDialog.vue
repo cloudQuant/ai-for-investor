@@ -1,85 +1,26 @@
 <template>
-  <el-dialog
+  <SharedGroupRenameDialog
     :model-value="modelValue"
+    :unit-names="unitIds"
+    :modes="['custom', 'strategy', 'symbol', 'symbol_name', 'category', 'replace']"
     :title="t('workspaceDialogs.rnGroupTitle')"
-    width="480px"
-    @update:model-value="$emit('update:modelValue', $event)"
-  >
-    <el-form
-      :model="form"
-      label-width="120px"
-    >
-      <el-form-item :label="t('workspaceDialogs.rnMode')">
-        <el-radio-group
-          v-model="form.mode"
-          class="flex flex-col gap-2"
-        >
-          <el-radio value="custom">
-            {{ t('workspaceDialogs.rnModeCustom') }}
-            <el-input
-              v-model="form.value"
-              :disabled="form.mode !== 'custom'"
-              style="width: 200px; margin-left: 8px"
-              :placeholder="t('workspaceDialogs.rnInputNewGroupName')"
-            />
-          </el-radio>
-          <el-radio value="strategy">
-            {{ t('workspaceDialogs.rnModeStrategy') }}
-          </el-radio>
-          <el-radio value="symbol">
-            {{ t('workspaceDialogs.rnModeSymbol') }}
-          </el-radio>
-          <el-radio value="symbol_name">
-            {{ t('workspaceDialogs.rnModeSymbolName') }}
-          </el-radio>
-          <el-radio value="category">
-            {{ t('workspaceDialogs.rnModeCategory') }}
-          </el-radio>
-          <el-radio value="replace">
-            {{ t('workspaceDialogs.rnModeReplace') }}
-            <span
-              v-if="form.mode === 'replace'"
-              class="ml-2"
-            >
-              {{ t('workspaceDialogs.rnSearchLabel') }} <el-input
-                v-model="form.search"
-                style="width: 100px"
-                size="small"
-              />
-              {{ t('workspaceDialogs.rnReplaceLabel') }} <el-input
-                v-model="form.replace"
-                style="width: 100px"
-                size="small"
-              />
-            </span>
-          </el-radio>
-        </el-radio-group>
-      </el-form-item>
-    </el-form>
-
-    <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">
-        {{ t('common.cancel') }}
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="saving"
-        @click="handleSave"
-      >
-        {{ t('workspaceDialogs.rnConfirm') }}
-      </el-button>
-    </template>
-  </el-dialog>
+    :show-chips="false"
+    :on-save="handleSave"
+    @update:model-value="emit('update:modelValue', $event)"
+    @saved="emit('saved')"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { GroupRenameDialog as SharedGroupRenameDialog, type RenamePayload } from '@bt-api/workspace-ui/core'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { getErrorMessage } from '@/api/index'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
 
 const props = defineProps<{
   modelValue: boolean
@@ -93,35 +34,24 @@ const emit = defineEmits<{
 }>()
 
 const store = useWorkspaceStore()
-const saving = ref(false)
 
-type RenameMode = 'custom' | 'strategy' | 'symbol' | 'symbol_name' | 'category' | 'replace'
+type LocalRenameMode = 'custom' | 'strategy' | 'symbol' | 'symbol_name' | 'category' | 'replace'
 
-const form = ref({
-  mode: 'custom' as RenameMode,
-  value: '',
-  search: '',
-  replace: '',
-})
-
-async function handleSave() {
+async function handleSave(payload: RenamePayload): Promise<void> {
   if (!props.unitIds.length) return
-  saving.value = true
   try {
     await store.renameGroup(props.workspaceId, {
       unit_ids: [...props.unitIds],
-      mode: form.value.mode,
-      value: form.value.value,
-      search: form.value.search,
-      replace: form.value.replace,
+      mode: payload.mode as LocalRenameMode,
+      value: payload.value,
+      search: payload.search,
+      replace: payload.replace,
     })
     ElMessage.success(t('workspaceDialogs.rnGroupRenamed'))
-    emit('update:modelValue', false)
-    emit('saved')
   } catch (e: unknown) {
-    ElMessage.error(getErrorMessage(e, t('workspaceDialogs.rnRenameFailed')))
-  } finally {
-    saving.value = false
+    const message = getErrorMessage(e, t('workspaceDialogs.rnRenameFailed'))
+    ElMessage.error(message)
+    throw new Error(message)
   }
 }
 </script>

@@ -1,227 +1,28 @@
 <template>
-  <el-dialog
+  <SharedWorkspaceDataSourceDialog
+    ref="innerRef"
     :model-value="modelValue"
-    :title="t('workspaceDialogs.wsDataSourceTitle')"
-    width="720px"
-    @update:model-value="$emit('update:modelValue', $event)"
-    @open="initForm"
-  >
-    <el-form
-      :model="form"
-      label-width="110px"
-    >
-      <el-form-item :label="t('workspaceDialogs.dataSourceType')">
-        <el-radio-group v-model="form.type">
-          <el-radio value="csv">
-            {{ t('workspaceDialogs.local') }} CSV
-          </el-radio>
-          <el-radio value="mysql">
-            MySQL
-          </el-radio>
-          <el-radio value="postgresql">
-            PostgreSQL
-          </el-radio>
-          <el-radio value="mongodb">
-            MongoDB
-          </el-radio>
-        </el-radio-group>
-      </el-form-item>
-
-      <template v-if="form.type === 'csv'">
-        <el-form-item :label="t('workspaceDialogs.dataDir')">
-          <el-input
-            v-model="form.csv.directory_path"
-            :placeholder="t('workspaceDialogs.inputDirHint') + ' CSV ' + t('workspaceDialogs.dataDirSuffix')"
-          />
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.delimiter')">
-              <el-input
-                v-model="form.csv.delimiter"
-                maxlength="3"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.encoding')">
-              <el-input v-model="form.csv.encoding" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.includeHeader')">
-              <el-switch v-model="form.csv.has_header" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
-
-      <template v-else-if="form.type === 'mysql'">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.host')">
-              <el-input v-model="form.mysql.host" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.port')">
-              <el-input-number
-                v-model="form.mysql.port"
-                :min="1"
-                :max="65535"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.database')">
-              <el-input v-model="form.mysql.database" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.tableName')">
-              <el-input v-model="form.mysql.table" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.username')">
-              <el-input v-model="form.mysql.username" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.password')">
-              <el-input
-                v-model="form.mysql.password"
-                type="password"
-                show-password
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
-
-      <template v-else-if="form.type === 'postgresql'">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.host')">
-              <el-input v-model="form.postgresql.host" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.port')">
-              <el-input-number
-                v-model="form.postgresql.port"
-                :min="1"
-                :max="65535"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.database')">
-              <el-input v-model="form.postgresql.database" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="Schema">
-              <el-input v-model="form.postgresql.schema" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.tableName')">
-              <el-input v-model="form.postgresql.table" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.username')">
-              <el-input v-model="form.postgresql.username" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.password')">
-              <el-input
-                v-model="form.postgresql.password"
-                type="password"
-                show-password
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
-
-      <template v-else-if="form.type === 'mongodb'">
-        <el-form-item :label="t('workspaceDialogs.connection') + ' URI'">
-          <el-input v-model="form.mongodb.uri" />
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.database')">
-              <el-input v-model="form.mongodb.database" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('workspaceDialogs.collectionName')">
-              <el-input v-model="form.mongodb.collection" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.username')">
-              <el-input v-model="form.mongodb.username" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.password')">
-              <el-input
-                v-model="form.mongodb.password"
-                type="password"
-                show-password
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item :label="t('workspaceDialogs.authDb')">
-              <el-input v-model="form.mongodb.auth_source" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
-    </el-form>
-
-    <template #footer>
-      <el-button @click="$emit('update:modelValue', false)">
-        {{ t('workspaceDialogs.cancel') }}
-      </el-button>
-      <el-button
-        type="primary"
-        :loading="saving"
-        @click="handleSave"
-      >
-        {{ t('workspaceDialogs.save') }}
-      </el-button>
-    </template>
-  </el-dialog>
+    :config="workspace?.settings?.data_source ?? null"
+    :on-save="handlePersist"
+    @update:model-value="emit('update:modelValue', $event)"
+    @saved="emit('saved')"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createDefaultWorkspaceDataSourceConfig } from '@bt-api/workspace-ui/research'
 import { useI18n } from 'vue-i18n'
+import type { WorkspaceDataSourceConfig as SharedDataSourceConfig } from '@bt-api/workspace-ui/core'
+import { WorkspaceDataSourceDialog as SharedWorkspaceDataSourceDialog } from '@bt-api/workspace-ui/research'
+import { useWorkspaceUiBridge } from '@/composables/useWorkspaceUiBridge'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { getErrorMessage } from '@/api/index'
-import type { Workspace, WorkspaceDataSourceConfig } from '@/types/workspace'
+import type { Workspace } from '@/types/workspace'
 
 const { t } = useI18n()
+useWorkspaceUiBridge()
+
 const props = defineProps<{
   modelValue: boolean
   workspaceId: string
@@ -234,51 +35,33 @@ const emit = defineEmits<{
 }>()
 
 const store = useWorkspaceStore()
-const saving = ref(false)
+const innerRef = ref<InstanceType<typeof SharedWorkspaceDataSourceDialog> | null>(null)
 
-const form = ref<WorkspaceDataSourceConfig>(createDefaultWorkspaceDataSourceConfig())
+const form = computed(() => innerRef.value?.form)
+const saving = computed(() => Boolean(innerRef.value?.saving))
 
-function initForm() {
-  const defaultConfig = createDefaultWorkspaceDataSourceConfig()
-  const source = props.workspace?.settings?.data_source
-  if (!source) {
-    form.value = defaultConfig
-    return
-  }
-
-  const legacyCsv = source.csv as Record<string, unknown> | undefined
-  form.value = {
-    ...defaultConfig,
-    ...source,
-    csv: {
-      ...defaultConfig.csv,
-      ...(source.csv || {}),
-      directory_path:
-        source.csv?.directory_path ||
-        (typeof legacyCsv?.file_path === 'string' ? legacyCsv.file_path : '') ||
-        defaultConfig.csv.directory_path,
-    },
-    mysql: { ...defaultConfig.mysql, ...(source.mysql || {}) },
-    postgresql: { ...defaultConfig.postgresql, ...(source.postgresql || {}) },
-    mongodb: { ...defaultConfig.mongodb, ...(source.mongodb || {}) },
-  }
+function initForm(): void {
+  innerRef.value?.initForm()
 }
 
-async function handleSave() {
-  saving.value = true
+async function handleSave(): Promise<void> {
+  await innerRef.value?.handleSave()
+}
+
+async function handlePersist(payload: SharedDataSourceConfig): Promise<void> {
   try {
     await store.updateWorkspace(props.workspaceId, {
       settings: {
-        data_source: JSON.parse(JSON.stringify(form.value)),
+        data_source: JSON.parse(JSON.stringify(payload)),
       },
     })
     ElMessage.success(t('workspaceDialogs.wsDataSourceSaved'))
-    emit('update:modelValue', false)
-    emit('saved')
   } catch (e: unknown) {
-    ElMessage.error(getErrorMessage(e, t('workspaceDialogs.dataSourceSaveFailed')))
-  } finally {
-    saving.value = false
+    const message = getErrorMessage(e, t('workspaceDialogs.dataSourceSaveFailed'))
+    ElMessage.error(message)
+    throw new Error(message)
   }
 }
+
+defineExpose({ form, saving, initForm, handleSave })
 </script>
